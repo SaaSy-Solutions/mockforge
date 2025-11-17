@@ -141,4 +141,3 @@ impl ProtocolAdapter for HttpAdapter {
         Ok(())
     }
 }
-

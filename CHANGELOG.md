@@ -29,34 +29,51 @@
 ### Added
 
 - **[Cloud] Registry server improvements** with password reset functionality
+
+  **Why it matters**: Enable seamless team collaboration with secure registry access—teams can share and discover mock scenarios without friction, and password reset keeps workflows moving when credentials are lost.
+
 - **[Cloud] Enhanced metrics and marketplace features**
 - **[DevX] Comprehensive E2E test suite**
 - **[DevX] Custom routes implementation**
 - **[Reality] Template expansion improvements**
 - **[Reality] Latency injection enhancements**
 - **[Reality] Smart Personas** with array generation and relationship inference
+
+  **Why it matters**: Generate realistic, interconnected mock data automatically—arrays that make sense, relationships that stay consistent across endpoints, and personas that feel like real users without manual configuration.
+
 - **[DevX] Complete Java and .NET SDK implementations** with builder patterns
+
+  **Why it matters**: Bring MockForge to enterprise teams using Java and .NET—no more language barriers, no more custom integration work. Your entire stack can use the same mock infrastructure.
+
 - **[Cloud] Cloud monetization infrastructure and features**
+
+  **Why it matters**: Enable sustainable platform growth with flexible pricing models—teams can scale from free tier to enterprise without friction, and the platform can grow while serving developers.
+
 - **[Cloud] Organization management endpoints**
+
+  **Why it matters**: Scale from solo developer to enterprise team—manage users, permissions, and resources at the org level, not just individual accounts. Real teams need real organization tools.
+
 - **[Cloud] Security controls implementation** (Phase 3)
+
+  **Why it matters**: Protect production deployments with enterprise-grade security—fine-grained access controls, audit trails, and compliance features that let you trust MockForge with sensitive data and critical workflows.
 
 ### Changed
 
-- Upgraded wasmtime to 36.0.3 to fix RUSTSEC-2025-0118
-- Fixed Axum 0.8 route syntax compatibility across multiple modules
-- Updated all test files for new function signatures
+- **[DevX] Upgraded wasmtime to 36.0.3** to fix RUSTSEC-2025-0118
+- **[DevX] Fixed Axum 0.8 route syntax compatibility** across multiple modules
+- **[DevX] Updated all test files** for new function signatures
 
 ### Fixed
 
-- Fixed compilation errors across workspace
-- Fixed Axum 0.8 route syntax in state_machine_api.rs
-- Fixed file server route syntax for Axum 0.8 compatibility
-- Resolved all compilation errors for comprehensive test coverage
+- **[DevX] Fixed compilation errors** across workspace
+- **[DevX] Fixed Axum 0.8 route syntax** in state_machine_api.rs
+- **[DevX] Fixed file server route syntax** for Axum 0.8 compatibility
+- **[DevX] Resolved all compilation errors** for comprehensive test coverage
 
 ### Security
 
-- Upgraded wasmtime to 36.0.3 to address RUSTSEC-2025-0118
-- Completed Phase 3 security controls implementation
+- **[DevX] Upgraded wasmtime to 36.0.3** to address RUSTSEC-2025-0118
+- **[Cloud] Completed Phase 3 security controls implementation**
 
 ## [0.2.8] - 2025-11-10
 
@@ -104,15 +121,15 @@
 
 ### Changed
 
-- **SQLx Integration**: Configured SQLx and integrated mockforge-collab with mockforge-core
+- **[DevX] SQLx Integration**: Configured SQLx and integrated mockforge-collab with mockforge-core
 - **[Reality] Latency Recording**: Completed latency recording integration with WorkspaceConfig reality_level field support
 
 ### Fixed
 
-- Fixed test compilation errors in reality integration and hot-reload tests
-- Fixed test compilation errors in openapi_generator_tests
-- Fixed all compilation errors for AI Contract Diff feature
-- Applied rustfmt formatting to Chaos Lab code
+- **[DevX] Fixed test compilation errors** in reality integration and hot-reload tests
+- **[DevX] Fixed test compilation errors** in openapi_generator_tests
+- **[Contracts][DevX] Fixed all compilation errors** for AI Contract Diff feature
+- **[DevX] Applied rustfmt formatting** to Chaos Lab code
 
 ### Security
 
@@ -209,26 +226,26 @@
 
 ### Changed
 
-- **Version Bumps**: Updated all workspace crates from 0.2.5 to 0.2.6
+- **[DevX] Version Bumps**: Updated all workspace crates from 0.2.5 to 0.2.6
   - Updated all dependency versions across the workspace
   - Fixed version mismatches in mockforge-ui and mockforge-plugin-loader
 
-- **Publishing Improvements**: Enhanced crate publishing process
+- **[DevX] Publishing Improvements**: Enhanced crate publishing process
   - Added mockforge-tcp and mockforge-test to publish script
   - Enabled publishing for mockforge-test crate
   - Fixed mockforge-tcp to remove README requirement
 
 ### Fixed
 
-- **Documentation**: Fixed missing module-level documentation in test files
+- **[DevX] Documentation**: Fixed missing module-level documentation in test files
   - Added comprehensive module documentation to all test modules
   - Improved code documentation consistency
 
-- **Axum Compatibility**: Fixed Axum 0.8 compatibility issues in proxy server module
+- **[DevX] Axum Compatibility**: Fixed Axum 0.8 compatibility issues in proxy server module
   - Updated proxy server to work with latest Axum version
   - Resolved breaking changes from Axum upgrade
 
-- **MQTT Error Types**: Fixed MQTT publish handlers error types to be Send + Sync
+- **[Reality] MQTT Error Types**: Fixed MQTT publish handlers error types to be Send + Sync
   - Updated error types for proper async/await compatibility
   - Ensured thread-safety in MQTT handlers
 
@@ -304,24 +321,24 @@
 
 ### Fixed
 
-- **TypeScript Empty Object Types**: Fixed formatting issue where empty object schemas generated invalid TypeScript
+- **[DevX] TypeScript Empty Object Types**: Fixed formatting issue where empty object schemas generated invalid TypeScript
   - Empty objects now correctly generate as `[key: string]: any;` instead of malformed `Record<string, any>}`
 
-- **DELETE Operations with Query Params**: Fixed missing query parameter support in DELETE operations
+- **[DevX] DELETE Operations with Query Params**: Fixed missing query parameter support in DELETE operations
 
-- **Duplicate Operation IDs**: Fixed duplicate operation ID handling by appending numeric suffixes
+- **[DevX] Duplicate Operation IDs**: Fixed duplicate operation ID handling by appending numeric suffixes
 
-- **PKCE Code Challenge**: Fixed PKCE implementation to use proper SHA256 hash instead of plain encoding
+- **[DevX] PKCE Code Challenge**: Fixed PKCE implementation to use proper SHA256 hash instead of plain encoding
 
-- **Response Validation**: Replaced placeholder with actual implementation (type checking, structure validation)
+- **[Contracts][DevX] Response Validation**: Replaced placeholder with actual implementation (type checking, structure validation)
 
 ### Security
 
-- Added comprehensive security warnings for OAuth2 client secrets in browser code
-- Added XSS vulnerability warnings for localStorage token storage
-- Implemented CSRF protection via state parameter validation
-- Added token expiration checking to prevent use of expired tokens
-- Documented security best practices in generated client README
+- **[DevX] Added comprehensive security warnings** for OAuth2 client secrets in browser code
+- **[DevX] Added XSS vulnerability warnings** for localStorage token storage
+- **[DevX] Implemented CSRF protection** via state parameter validation
+- **[DevX] Added token expiration checking** to prevent use of expired tokens
+- **[DevX] Documented security best practices** in generated client README
 
 ## [0.2.4] - 2025-01-27
 
@@ -367,49 +384,49 @@
 
 ### Fixed
 
-- Remove tests that access private fields in mock data tests
-- Fix compilation issues in mockforge-collab and mockforge-ui
-- Update mockforge-plugin-core version to 0.1.6 in plugin-sdk
-- Enable SQLx offline mode for mockforge-collab publishing
-- Add description field to mockforge-analytics
-- Add version requirements to all mockforge path dependencies
-- Fix publish order dependencies (mockforge-chaos before mockforge-reporting)
-- Update Cargo.lock and format client generator tests
+- **[DevX] Remove tests that access private fields** in mock data tests
+- **[DevX] Fix compilation issues** in mockforge-collab and mockforge-ui
+- **[DevX] Update mockforge-plugin-core version** to 0.1.6 in plugin-sdk
+- **[DevX] Enable SQLx offline mode** for mockforge-collab publishing
+- **[DevX] Add description field** to mockforge-analytics
+- **[DevX] Add version requirements** to all mockforge path dependencies
+- **[DevX] Fix publish order dependencies** (mockforge-chaos before mockforge-reporting)
+- **[DevX] Update Cargo.lock** and format client generator tests
 
 ## [0.1.3] - 2025-10-22
 
 ### Changes
 
-- docs: prepare release 0.1.3
-- docs: update CHANGELOG for 0.1.3 release
-- docs: add roadmap completion summary
-- feat: add Kubernetes-style health endpoint aliases and dashboard shortcut
-- feat: add unified config & profiles with multi-format support
-- feat: add capture scrubbing and deterministic replay
-- feat: add native GraphQL operation handlers with advanced features
-- feat: add programmable WebSocket handlers
-- feat: add HTTP scenario switching for OpenAPI response examples
-- feat: add mockforge-test crate and integration testing examples
-- build: enable publishing for mockforge-ui and mockforge-cli
-- build: extend publish script for internal crates
-- build: parameterize publish script with workspace version
+- **[DevX] docs: prepare release 0.1.3**
+- **[DevX] docs: update CHANGELOG for 0.1.3 release**
+- **[DevX] docs: add roadmap completion summary**
+- **[DevX] feat: add Kubernetes-style health endpoint aliases and dashboard shortcut**
+- **[DevX] feat: add unified config & profiles with multi-format support**
+- **[Reality] feat: add capture scrubbing and deterministic replay**
+- **[DevX] feat: add native GraphQL operation handlers with advanced features**
+- **[Reality] feat: add programmable WebSocket handlers**
+- **[Reality] feat: add HTTP scenario switching for OpenAPI response examples**
+- **[DevX] feat: add mockforge-test crate and integration testing examples**
+- **[DevX] build: enable publishing for mockforge-ui and mockforge-cli**
+- **[DevX] build: extend publish script for internal crates**
+- **[DevX] build: parameterize publish script with workspace version**
 
 ## [0.1.2] - 2025-10-17
 
 ### Changes
 
-- build: make version update tolerant
-- build: manage version references via wrapper
-- build: mark example crates as non-publishable
-- build: drop publish-order for cargo-release 0.25
-- build: centralize release metadata in release.toml
-- build: remove per-crate release metadata
-- build: fix release metadata field name
-- build: move workspace release metadata into Cargo.toml
-- build: require execute flag for release wrapper
-- build: automate changelog generation during release
-- build: add release wrapper with changelog guard
-- build: align release tooling with cargo-release 0.25
+- **[DevX] build: make version update tolerant**
+- **[DevX] build: manage version references via wrapper**
+- **[DevX] build: mark example crates as non-publishable**
+- **[DevX] build: drop publish-order for cargo-release 0.25**
+- **[DevX] build: centralize release metadata in release.toml**
+- **[DevX] build: remove per-crate release metadata**
+- **[DevX] build: fix release metadata field name**
+- **[DevX] build: move workspace release metadata into Cargo.toml**
+- **[DevX] build: require execute flag for release wrapper**
+- **[DevX] build: automate changelog generation during release**
+- **[DevX] build: add release wrapper with changelog guard**
+- **[DevX] build: align release tooling with cargo-release 0.25**
 
 ## [0.1.1] - 2025-10-17
 
@@ -421,22 +438,22 @@
 - **[DevX] CLI flags and config options** to control validation (including `skip_admin_validation` and per-route `validation_overrides`).
 - **[DevX] New e2e tests** for 2xx/422 request validation and response example expansion across HTTP routes.
 - **[DevX] Templating reference docs** and examples; WS templating tests and demo update.
-- Initial release of MockForge
-- HTTP API mocking with OpenAPI support
-- gRPC service mocking with Protocol Buffers
-- WebSocket connection mocking with replay functionality
-- CLI tool for easy local development
-- Admin UI for managing mock servers
-- Comprehensive documentation with mdBook
-- GitHub Actions CI/CD pipeline
-- Security audit integration
-- Pre-commit hooks for code quality
+- **[Reality] Initial release of MockForge** - Multi-protocol mocking framework
+- **[Reality] HTTP API mocking** with OpenAPI support
+- **[Reality] gRPC service mocking** with Protocol Buffers
+- **[Reality] WebSocket connection mocking** with replay functionality
+- **[DevX] CLI tool** for easy local development
+- **[DevX] Admin UI** for managing mock servers
+- **[DevX] Comprehensive documentation** with mdBook
+- **[DevX] GitHub Actions CI/CD pipeline**
+- **[DevX] Security audit integration**
+- **[DevX] Pre-commit hooks** for code quality
 
 ### Changed
 
-- HTTP handlers now perform request validation before routing; invalid requests return 400 with structured details (when `enforce`).
-- Bump `jsonschema` to 0.33 and adapt validator API; enable draft selection and format checks internally.
-- Improve route registry and OpenAPI parameter parsing, including styles/explode and array coercion for query/header/cookie parameters.
+- **[Contracts] HTTP handlers now perform request validation** before routing; invalid requests return 400 with structured details (when `enforce`).
+- **[Contracts] Bump `jsonschema` to 0.33** and adapt validator API; enable draft selection and format checks internally.
+- **[Contracts] Improve route registry and OpenAPI parameter parsing**, including styles/explode and array coercion for query/header/cookie parameters.
 
 ### Deprecated
 
@@ -448,8 +465,8 @@
 
 ### Fixed
 
-- Resolve admin mount prefix from config and exclude admin routes from validation when configured.
-- Various small correctness fixes in OpenAPI schema mapping and parameter handling; clearer error messages.
+- **[DevX] Resolve admin mount prefix** from config and exclude admin routes from validation when configured.
+- **[Contracts] Various small correctness fixes** in OpenAPI schema mapping and parameter handling; clearer error messages.
 
 ### Security
 

@@ -65,6 +65,56 @@ pub struct BehavioralCloningConfig {
     pub min_sequence_frequency: f64,
     /// Minimum requests per trace for sequence discovery
     pub min_requests_per_trace: Option<i32>,
+    /// Flow recording configuration
+    #[serde(default)]
+    pub flow_recording: FlowRecordingConfig,
+    /// Scenario replay configuration
+    #[serde(default)]
+    pub scenario_replay: ScenarioReplayConfig,
+}
+
+/// Flow recording configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FlowRecordingConfig {
+    /// Whether flow recording is enabled
+    pub enabled: bool,
+    /// How to group requests into flows (trace_id, session_id, ip_time_window)
+    pub group_by: String,
+    /// Time window in seconds for IP-based grouping
+    pub time_window_seconds: u64,
+}
+
+impl Default for FlowRecordingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            group_by: "trace_id".to_string(),
+            time_window_seconds: 300, // 5 minutes
+        }
+    }
+}
+
+/// Scenario replay configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScenarioReplayConfig {
+    /// Whether scenario replay is enabled
+    pub enabled: bool,
+    /// Default replay mode (strict or flex)
+    pub default_mode: String,
+    /// List of scenario IDs to activate on startup
+    pub active_scenarios: Vec<String>,
+}
+
+impl Default for ScenarioReplayConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            default_mode: "strict".to_string(),
+            active_scenarios: Vec::new(),
+        }
+    }
 }
 
 impl Default for BehavioralCloningConfig {
@@ -75,6 +125,8 @@ impl Default for BehavioralCloningConfig {
             enable_middleware: false,
             min_sequence_frequency: 0.1, // 10% default
             min_requests_per_trace: None,
+            flow_recording: FlowRecordingConfig::default(),
+            scenario_replay: ScenarioReplayConfig::default(),
         }
     }
 }

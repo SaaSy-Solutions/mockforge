@@ -314,4 +314,3 @@ const StateRow: React.FC<StateRowProps> = ({ label, value, editable, onEdit }) =
 };
 
 export default XRayPanel;
-

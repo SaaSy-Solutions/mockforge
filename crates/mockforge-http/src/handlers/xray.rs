@@ -203,4 +203,3 @@ pub fn xray_router(state: XRayState) -> axum::Router {
         .route("/api/v1/xray/entities/:entity_type/:entity_id", get(get_entity))
         .with_state(state)
 }
-

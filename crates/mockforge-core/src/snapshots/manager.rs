@@ -370,4 +370,3 @@ impl Default for SnapshotManager {
         Self::new(None)
     }
 }
-

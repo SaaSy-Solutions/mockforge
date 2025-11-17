@@ -44,6 +44,7 @@
 //! - `README.md` - Documentation
 
 pub mod domain_pack;
+pub mod studio_pack;
 pub mod error;
 pub mod installer;
 pub mod manifest;
@@ -58,7 +59,15 @@ pub mod storage;
 pub mod vbr_integration;
 
 // Re-export commonly used types
-pub use domain_pack::{DomainPackInfo, DomainPackInstaller, DomainPackManifest, PackScenario};
+pub use domain_pack::{
+    DomainPackInfo, DomainPackInstaller, DomainPackManifest, FieldRealityRule, PackScenario,
+    StudioChaosRule, StudioContractDiff, StudioPersona, StudioRealityBlend,
+};
+pub use studio_pack::{StudioPackInstallResult, StudioPackInstaller};
+#[cfg(feature = "studio-packs")]
+pub use studio_pack::packs::{
+    create_ecommerce_peak_day_pack, create_fintech_fraud_lab_pack, create_healthcare_outage_drill_pack,
+};
 pub use error::{Result, ScenarioError};
 pub use installer::{InstallOptions, ScenarioInstaller};
 pub use manifest::{CompatibilityInfo, PluginDependency, ScenarioCategory, ScenarioManifest};

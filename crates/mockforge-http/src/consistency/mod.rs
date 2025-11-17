@@ -8,4 +8,3 @@ pub mod middleware;
 
 pub use http_adapter::HttpAdapter;
 pub use middleware::ConsistencyMiddlewareState;
-

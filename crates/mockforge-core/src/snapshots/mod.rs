@@ -10,4 +10,3 @@ pub use manager::SnapshotManager;
 pub use types::{
     SnapshotComponents, SnapshotManifest, SnapshotMetadata,
 };
-

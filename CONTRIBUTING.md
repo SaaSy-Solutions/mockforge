@@ -140,6 +140,31 @@ git push origin feature/your-feature-name
 
 Then create a Pull Request on GitHub.
 
+### Changelog Entries and Pillar Tagging
+
+When adding features or changes that should appear in the changelog, ensure they are tagged with the appropriate **pillars**:
+
+- **[Reality]** – Everything that makes mocks feel like a real, evolving backend
+- **[Contracts]** – Schema, drift, validation, and safety nets
+- **[DevX]** – SDKs, generators, playgrounds, ergonomics
+- **[Cloud]** – Registry, orgs, governance, monetization, marketplace
+- **[AI]** – LLM/voice flows, AI diff/assist, generative behaviors
+
+**Format:**
+```markdown
+- **[Pillar] Feature description**
+
+- **[Pillar1][Pillar2] Multi-pillar feature**
+```
+
+**Guidelines:**
+- Tag the primary pillar first, then secondary pillars
+- Every major feature should have at least one pillar tag
+- Minor fixes and internal changes may not need tags
+- See [docs/PILLARS.md](../docs/PILLARS.md) for detailed pillar definitions and examples
+
+The release process will automatically validate that new changelog entries have pillar tags.
+
 ## Submitting Changes
 
 ### Pull Request Guidelines

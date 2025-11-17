@@ -9,6 +9,7 @@
 - [Your First Mock API in 5 Minutes](getting-started/five-minute-api.md)
 - [Quick Start](getting-started/quick-start.md)
 - [Basic Concepts](getting-started/concepts.md)
+- [The Five Pillars](../../docs/PILLARS.md)
 
 ## Tutorials
 

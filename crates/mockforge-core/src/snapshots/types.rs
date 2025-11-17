@@ -140,4 +140,3 @@ impl From<SnapshotManifest> for SnapshotMetadata {
         }
     }
 }
-

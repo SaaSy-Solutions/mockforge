@@ -8,7 +8,9 @@ mod speech_to_text;
 
 use clap::Subcommand;
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
+use mockforge_core::multi_tenant::{MultiTenantConfig, MultiTenantWorkspaceRegistry};
 use mockforge_core::openapi::OpenApiSpec;
+use mockforge_core::voice::{ParsedWorkspaceCreation, WorkspaceBuilder};
 use mockforge_core::{ConversationManager, HookTranspiler, VoiceCommandParser, VoiceSpecGenerator};
 use speech_to_text::{InteractiveVoiceInput, SpeechToTextManager};
 use std::io::{self, Read, Write};
@@ -78,6 +80,21 @@ pub enum VoiceCommands {
         #[arg(long, default_value = "yaml")]
         format: String,
     },
+
+    /// Create a complete workspace from natural language description
+    ///
+    /// Examples:
+    ///   mockforge voice create-workspace --command "Create an e-commerce workspace with customers, orders, and payments"
+    ///   mockforge voice create-workspace
+    CreateWorkspace {
+        /// Text command (if not provided, will prompt or use voice input)
+        #[arg(short, long)]
+        command: Option<String>,
+
+        /// Skip confirmation prompt (auto-confirm)
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 /// Handle voice CLI commands
@@ -106,6 +123,9 @@ pub async fn handle_voice_command(
             format,
         } => {
             handle_transpile_hook(description, output, format).await?;
+        }
+        VoiceCommands::CreateWorkspace { command, yes } => {
+            handle_create_workspace(command, yes).await?;
         }
     }
 
@@ -559,6 +579,161 @@ async fn handle_transpile_hook(
         println!("{}", content);
         println!("{}", "─".repeat(60));
     }
+
+    Ok(())
+}
+
+/// Handle create-workspace command
+async fn handle_create_workspace(
+    command: Option<String>,
+    auto_confirm: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("🏗️  Workspace Creator - Natural Language to Complete Workspace");
+    println!();
+    println!("This will create a complete workspace with:");
+    println!("  • Endpoints and API structure");
+    println!("  • Personas with relationships");
+    println!("  • Behavioral scenarios (happy path, failure, slow path)");
+    println!("  • Reality continuum configuration");
+    println!("  • Drift budget configuration");
+    println!();
+
+    // Get command text
+    let command_text = if let Some(cmd) = command {
+        cmd
+    } else {
+        // Use speech-to-text manager to get input
+        let stt_manager = SpeechToTextManager::new();
+        let available_backends = stt_manager.list_backends();
+
+        if available_backends.len() > 1 {
+            println!("🎤 Available input methods: {}", available_backends.join(", "));
+        }
+
+        println!("🎤 Describe your workspace (or type your command):");
+        stt_manager.transcribe().map_err(|e| format!("Failed to get input: {}", e))?
+    };
+
+    if command_text.is_empty() {
+        return Err("No command provided".into());
+    }
+
+    println!("📝 Command: {}", command_text);
+    println!("🤖 Parsing workspace creation command with LLM...");
+
+    // Create parser with default config
+    let config = IntelligentBehaviorConfig::default();
+    let parser = VoiceCommandParser::new(config);
+
+    // Parse command
+    let parsed = match parser.parse_workspace_creation_command(&command_text).await {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            return Err(format!("Failed to parse command: {}", e).into());
+        }
+    };
+
+    println!("✅ Parsed command successfully");
+    println!();
+
+    // Display preview
+    println!("📋 Workspace Preview:");
+    println!("{}", "═".repeat(60));
+    println!("Name: {}", parsed.workspace_name);
+    println!("Description: {}", parsed.workspace_description);
+    println!();
+    println!("Entities: {}", parsed.entities.len());
+    for entity in &parsed.entities {
+        println!("  • {} ({} endpoints)", entity.name, entity.endpoints.len());
+    }
+    println!();
+    println!("Personas: {}", parsed.personas.len());
+    for persona in &parsed.personas {
+        println!("  • {} ({} relationships)", persona.name, persona.relationships.len());
+    }
+    println!();
+    println!("Scenarios: {}", parsed.scenarios.len());
+    for scenario in &parsed.scenarios {
+        println!("  • {} ({})", scenario.name, scenario.r#type);
+    }
+    if parsed.reality_continuum.is_some() {
+        println!();
+        println!("Reality Continuum: Configured");
+    }
+    if parsed.drift_budget.is_some() {
+        println!("Drift Budget: Configured");
+    }
+    println!("{}", "═".repeat(60));
+    println!();
+
+    // Confirmation
+    if !auto_confirm {
+        print!("Create this workspace? [y/N]: ");
+        io::stdout().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let response = input.trim().to_lowercase();
+        if response != "y" && response != "yes" {
+            println!("❌ Workspace creation cancelled.");
+            return Ok(());
+        }
+    }
+
+    println!("🏗️  Creating workspace...");
+    println!();
+
+    // Create workspace registry (in-memory for CLI)
+    let mt_config = MultiTenantConfig {
+        enabled: true,
+        default_workspace: "default".to_string(),
+        ..Default::default()
+    };
+    let mut registry = MultiTenantWorkspaceRegistry::new(mt_config);
+
+    // Create workspace builder
+    let mut builder = WorkspaceBuilder::new();
+
+    // Build workspace
+    let built = match builder.build_workspace(&mut registry, &parsed).await {
+        Ok(built) => built,
+        Err(e) => {
+            return Err(format!("Failed to create workspace: {}", e).into());
+        }
+    };
+
+    // Display creation log
+    println!("✅ Workspace created successfully!");
+    println!();
+    println!("📊 Creation Summary:");
+    println!("{}", "─".repeat(60));
+    for log_entry in &built.creation_log {
+        println!("  {}", log_entry);
+    }
+    println!("{}", "─".repeat(60));
+    println!();
+
+    println!("📦 Workspace Details:");
+    println!("  ID: {}", built.workspace_id);
+    println!("  Name: {}", built.name);
+    if let Some(ref spec) = built.openapi_spec {
+        println!("  OpenAPI Spec: {} endpoints", spec.all_paths_and_operations().len());
+    }
+    println!("  Personas: {}", built.personas.len());
+    println!("  Scenarios: {}", built.scenarios.len());
+    if built.reality_continuum.is_some() {
+        println!("  Reality Continuum: Enabled");
+    }
+    if built.drift_budget.is_some() {
+        println!("  Drift Budget: Configured");
+    }
+    println!();
+
+    println!("🎉 Workspace '{}' is ready to use!", built.workspace_id);
+    println!();
+    println!("💡 Next steps:");
+    println!("  • Start the MockForge server to use this workspace");
+    println!("  • Access the workspace via: /workspace/{}", built.workspace_id);
+    println!("  • View personas and scenarios in the Admin UI");
 
     Ok(())
 }

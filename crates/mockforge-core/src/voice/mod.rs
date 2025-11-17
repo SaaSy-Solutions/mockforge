@@ -36,14 +36,19 @@ pub mod command_parser;
 pub mod conversation;
 pub mod hook_transpiler;
 pub mod spec_generator;
+pub mod workspace_builder;
 pub mod workspace_scenario_generator;
 
 pub use command_parser::{
     ApiRequirement, ParsedCommand, ParsedWorkspaceScenario, VoiceCommandParser,
+    ParsedWorkspaceCreation, ParsedRealityContinuum, ParsedDriftBudget,
+    EntityRequirement, PersonaRequirement, ScenarioRequirement,
+    ParsedContinuumRule, ParsedServiceBudget,
 };
 pub use conversation::{ConversationContext, ConversationManager, ConversationState};
 pub use hook_transpiler::HookTranspiler;
 pub use spec_generator::VoiceSpecGenerator;
+pub use workspace_builder::{BuiltWorkspace, WorkspaceBuilder};
 pub use workspace_scenario_generator::{
     GeneratedWorkspaceScenario, WorkspaceConfigSummary, WorkspaceScenarioGenerator,
 };

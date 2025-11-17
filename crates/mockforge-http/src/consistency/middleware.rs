@@ -131,4 +131,3 @@ pub async fn consistency_middleware(
     // Continue without unified state if not available
     next.run(req).await
 }
-

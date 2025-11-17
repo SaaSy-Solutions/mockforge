@@ -21,6 +21,8 @@ pub mod persona;
 pub mod persona_graph;
 /// Persona lifecycle and time-aware state management
 pub mod persona_lifecycle;
+/// Lifecycle state response modifiers
+pub mod persona_lifecycle_response;
 /// Backstory generation for personas
 pub mod persona_backstory;
 /// Domain-specific persona templates
@@ -58,6 +60,9 @@ pub use persona_graph::{
 };
 pub use persona_lifecycle::{
     LifecycleScenarios, LifecycleState, PersonaLifecycle, TransitionRule,
+};
+pub use persona_lifecycle_response::{
+    apply_billing_lifecycle_effects, apply_lifecycle_effects, apply_support_lifecycle_effects,
 };
 pub use persona_backstory::{BackstoryGenerator, BackstoryTemplate};
 pub use persona_templates::{

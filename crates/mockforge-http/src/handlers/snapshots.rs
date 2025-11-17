@@ -223,4 +223,3 @@ pub fn snapshot_router(state: SnapshotState) -> axum::Router {
         .route("/api/v1/snapshots/:name/validate", get(validate_snapshot))
         .with_state(state)
 }
-

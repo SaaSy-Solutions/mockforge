@@ -365,6 +365,137 @@ impl PersonaGraph {
             relationship_types: relationship_type_counts,
         }
     }
+
+    /// Link personas across entity types automatically
+    ///
+    /// Creates relationships between personas based on common entity type patterns:
+    /// - user → has_orders → order
+    /// - user → has_accounts → account
+    /// - order → has_payments → payment
+    /// - user → has_webhooks → webhook
+    /// - user → has_tcp_messages → tcp_message
+    ///
+    /// # Arguments
+    /// * `from_persona_id` - Source persona ID
+    /// * `from_entity_type` - Source entity type (e.g., "user", "order")
+    /// * `to_persona_id` - Target persona ID
+    /// * `to_entity_type` - Target entity type (e.g., "order", "payment")
+    pub fn link_entity_types(
+        &self,
+        from_persona_id: &str,
+        from_entity_type: &str,
+        to_persona_id: &str,
+        to_entity_type: &str,
+    ) {
+        // Determine relationship type based on entity types
+        let relationship_type = match (from_entity_type, to_entity_type) {
+            ("user", "order") | ("user", "orders") => "has_orders",
+            ("user", "account") | ("user", "accounts") => "has_accounts",
+            ("user", "webhook") | ("user", "webhooks") => "has_webhooks",
+            ("user", "tcp_message") | ("user", "tcp_messages") => "has_tcp_messages",
+            ("order", "payment") | ("order", "payments") => "has_payments",
+            ("account", "order") | ("account", "orders") => "has_orders",
+            ("account", "payment") | ("account", "payments") => "has_payments",
+            _ => {
+                // Generic relationship: from_entity_type -> to_entity_type
+                format!("has_{}", to_entity_type.to_lowercase().trim_end_matches('s'))
+            }
+        };
+
+        // Ensure both nodes exist
+        if self.get_node(from_persona_id).is_none() {
+            let node = PersonaNode::new(from_persona_id.to_string(), from_entity_type.to_string());
+            self.add_node(node);
+        }
+
+        if self.get_node(to_persona_id).is_none() {
+            let node = PersonaNode::new(to_persona_id.to_string(), to_entity_type.to_string());
+            self.add_node(node);
+        }
+
+        // Add the edge
+        self.add_edge(
+            from_persona_id.to_string(),
+            to_persona_id.to_string(),
+            relationship_type.to_string(),
+        );
+    }
+
+    /// Find all related personas of a specific entity type
+    ///
+    /// Traverses the graph to find all personas of the specified entity type
+    /// that are related to the starting persona.
+    ///
+    /// # Arguments
+    /// * `start_persona_id` - Starting persona ID
+    /// * `target_entity_type` - Entity type to find (e.g., "order", "payment")
+    /// * `relationship_type` - Optional relationship type filter (e.g., "has_orders")
+    ///
+    /// # Returns
+    /// Vector of persona IDs matching the criteria
+    pub fn find_related_by_entity_type(
+        &self,
+        start_persona_id: &str,
+        target_entity_type: &str,
+        relationship_type: Option<&str>,
+    ) -> Vec<String> {
+        let related_ids = if let Some(rel_type) = relationship_type {
+            let rel_types = vec![rel_type.to_string()];
+            self.find_related_bfs(start_persona_id, Some(&rel_types), Some(2))
+        } else {
+            self.find_related_bfs(start_persona_id, None, Some(2))
+        };
+
+        // Filter by entity type
+        related_ids
+            .into_iter()
+            .filter_map(|persona_id| {
+                if let Some(node) = self.get_node(&persona_id) {
+                    if node.entity_type.to_lowercase() == target_entity_type.to_lowercase() {
+                        Some(persona_id)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get or create a persona node and link it to related entities
+    ///
+    /// This is a convenience method that creates a persona node if it doesn't exist
+    /// and automatically establishes relationships based on entity type patterns.
+    ///
+    /// # Arguments
+    /// * `persona_id` - Persona ID
+    /// * `entity_type` - Entity type (e.g., "user", "order", "payment")
+    /// * `related_entity_id` - Optional related entity ID to link to
+    /// * `related_entity_type` - Optional related entity type
+    pub fn get_or_create_node_with_links(
+        &self,
+        persona_id: &str,
+        entity_type: &str,
+        related_entity_id: Option<&str>,
+        related_entity_type: Option<&str>,
+    ) -> PersonaNode {
+        // Get or create the node
+        let node = if let Some(existing) = self.get_node(persona_id) {
+            existing
+        } else {
+            let new_node = PersonaNode::new(persona_id.to_string(), entity_type.to_string());
+            self.add_node(new_node.clone());
+            new_node
+        };
+
+        // Link to related entity if provided
+        if let (Some(related_id), Some(related_type)) = (related_entity_id, related_entity_type) {
+            self.link_entity_types(persona_id, entity_type, related_id, related_type);
+        }
+
+        node
+    }
 }
 
 impl Default for PersonaGraph {

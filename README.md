@@ -11,6 +11,18 @@
 
 MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebSockets. It provides a unified interface for creating, managing, and deploying mock servers across different protocols with advanced data generation capabilities.
 
+## 🏛️ The Five Pillars of MockForge
+
+MockForge is built on five foundational pillars that guide every feature: **[Reality]**, **[Contracts]**, **[DevX]**, **[Cloud]**, and **[AI]**. These pillars ensure MockForge delivers a cohesive, powerful mocking experience that scales from solo developers to enterprise teams.
+
+- **[Reality]** – Everything that makes mocks feel like a real, evolving backend
+- **[Contracts]** – Schema, drift, validation, and safety nets
+- **[DevX]** – SDKs, generators, playgrounds, ergonomics
+- **[Cloud]** – Registry, orgs, governance, monetization, marketplace
+- **[AI]** – LLM/voice flows, AI diff/assist, generative behaviors
+
+See the [complete Pillars documentation](docs/PILLARS.md) for detailed information about each pillar, feature mappings, and examples. All changelog entries are tagged with these pillars to make it clear what each release invests in.
+
 ## 🔄 Why MockForge?
 
 | Feature | MockForge | WireMock | MockServer | Mockoon |

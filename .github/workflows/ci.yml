@@ -202,6 +202,33 @@ jobs:
     - name: Check typos
       uses: crate-ci/typos@master
 
+  changelog-validation:
+    name: Changelog Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Validate changelog pillar tags
+      run: |
+        # Check if CHANGELOG.md was modified in this PR
+        if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "CHANGELOG.md"; then
+          echo "CHANGELOG.md modified, validating pillar tags..."
+          # Make script executable
+          chmod +x scripts/check-changelog.sh
+          # Run validation (will check for pillar tags in new version sections)
+          scripts/check-changelog.sh || {
+            echo "::error::Changelog validation failed. Ensure all new version sections have pillar tags."
+            echo "::error::See docs/PILLARS.md for pillar definitions: [Reality], [Contracts], [DevX], [Cloud], [AI]"
+            exit 1
+          }
+        else
+          echo "CHANGELOG.md not modified in this PR, skipping validation."
+        fi
+
   build-binaries:
     name: Build Release Binaries
     runs-on: ${{ matrix.os }}

@@ -160,6 +160,40 @@ pub enum PackCommands {
         /// Pack name
         name: String,
     },
+
+    /// Studio pack commands (full studio packs with personas, chaos rules, etc.)
+    Studio {
+        /// Studio pack subcommand
+        #[command(subcommand)]
+        command: StudioPackCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum StudioPackCommands {
+    /// Install a studio pack (applies personas, chaos rules, contract diffs, reality blends)
+    Install {
+        /// Studio pack name (e.g., "fintech-fraud-lab", "ecommerce-peak-day", "healthcare-outage-drill")
+        /// or path to pack manifest file
+        pack_name: String,
+
+        /// Workspace ID to install the pack to (defaults to "default")
+        #[arg(short, long, default_value = "default")]
+        workspace: String,
+    },
+
+    /// List available studio packs
+    List,
+
+    /// Create a new studio pack from the current workspace configuration
+    Create {
+        /// Name for the new studio pack
+        name: String,
+
+        /// Output path for the pack manifest (defaults to ./{name}-pack.yaml)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -748,10 +782,116 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                                 println!("       {}", desc);
                             }
                         }
+                        // Show studio pack components if present
+                        if !pack_info.manifest.personas.is_empty() {
+                            println!("   Personas ({}):", pack_info.manifest.personas.len());
+                            for persona in &pack_info.manifest.personas {
+                                println!("     - {} ({})", persona.name, persona.id);
+                            }
+                        }
+                        if !pack_info.manifest.chaos_rules.is_empty() {
+                            println!("   Chaos Rules ({}):", pack_info.manifest.chaos_rules.len());
+                            for rule in &pack_info.manifest.chaos_rules {
+                                println!("     - {}", rule.name);
+                            }
+                        }
+                        if !pack_info.manifest.contract_diffs.is_empty() {
+                            println!("   Contract Diffs ({}):", pack_info.manifest.contract_diffs.len());
+                            for diff in &pack_info.manifest.contract_diffs {
+                                println!("     - {}", diff.name);
+                            }
+                        }
+                        if !pack_info.manifest.reality_blends.is_empty() {
+                            println!("   Reality Blends ({}):", pack_info.manifest.reality_blends.len());
+                            for blend in &pack_info.manifest.reality_blends {
+                                println!("     - {} ({}% real)", blend.name, (blend.reality_ratio * 100.0) as u32);
+                            }
+                        }
                     }
                     None => {
                         eprintln!("❌ Pack '{}' not found", name);
                         std::process::exit(1);
+                    }
+                }
+            }
+
+            PackCommands::Studio { command } => {
+                use mockforge_scenarios::StudioPackInstaller;
+                use std::path::PathBuf;
+
+                let packs_dir = dirs::data_dir()
+                    .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
+                    .join("mockforge")
+                    .join("packs");
+                let studio_installer = StudioPackInstaller::new(packs_dir);
+
+                match command {
+                    StudioPackCommands::Install { pack_name, workspace } => {
+                        println!("🎨 Installing studio pack: {}", pack_name);
+
+                        // Check if it's a pre-built pack or a path
+                        let manifest = if pack_name == "fintech-fraud-lab" {
+                            Some(mockforge_scenarios::create_fintech_fraud_lab_pack())
+                        } else if pack_name == "ecommerce-peak-day" {
+                            Some(mockforge_scenarios::create_ecommerce_peak_day_pack())
+                        } else if pack_name == "healthcare-outage-drill" {
+                            Some(mockforge_scenarios::create_healthcare_outage_drill_pack())
+                        } else {
+                            // Try to load from file
+                            let manifest_path = Path::new(&pack_name);
+                            if manifest_path.exists() {
+                                Some(mockforge_scenarios::DomainPackManifest::from_file(manifest_path)?)
+                            } else {
+                                eprintln!("❌ Studio pack '{}' not found", pack_name);
+                                eprintln!("   Available pre-built packs: fintech-fraud-lab, ecommerce-peak-day, healthcare-outage-drill");
+                                eprintln!("   Or provide a path to a pack manifest file");
+                                std::process::exit(1);
+                            }
+                        };
+
+                        if let Some(manifest) = manifest {
+                            match studio_installer.install_studio_pack(&manifest, Some(&workspace)).await {
+                                Ok(result) => {
+                                    println!("✅ Studio pack installed successfully!");
+                                    println!("   Scenarios: {}", result.scenarios_installed);
+                                    println!("   Personas: {}", result.personas_configured);
+                                    println!("   Chaos Rules: {}", result.chaos_rules_applied);
+                                    println!("   Contract Diffs: {}", result.contract_diffs_configured);
+                                    println!("   Reality Blends: {}", result.reality_blends_configured);
+                                    if result.workspace_config_applied {
+                                        println!("   Workspace Config: Applied");
+                                    }
+                                    if !result.errors.is_empty() {
+                                        println!("\n⚠️  Warnings:");
+                                        for error in &result.errors {
+                                            println!("   - {}", error);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("❌ Failed to install studio pack: {}", e);
+                                    std::process::exit(1);
+                                }
+                            }
+                        }
+                    }
+
+                    StudioPackCommands::List => {
+                        println!("🎨 Available studio packs:");
+                        println!("   Pre-built packs:");
+                        println!("     - fintech-fraud-lab: Fraud detection and prevention scenarios");
+                        println!("     - ecommerce-peak-day: High-traffic e-commerce scenarios");
+                        println!("     - healthcare-outage-drill: Healthcare system outage scenarios");
+                        println!("\n   To install a pack, use:");
+                        println!("     mockforge scenario pack studio install <pack-name>");
+                    }
+
+                    StudioPackCommands::Create { name, output: _ } => {
+                        println!("🎨 Creating studio pack: {}", name);
+                        println!("   This feature will export the current workspace configuration");
+                        println!("   including personas, chaos rules, contract diffs, and reality blends.");
+                        println!("   (Implementation coming soon)");
+                        // TODO: Implement workspace export to studio pack
                     }
                 }
             }

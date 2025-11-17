@@ -516,18 +516,135 @@ impl PersonaGenerator {
         persona: &PersonaProfile,
         field_type: &str,
     ) -> Result<Value> {
+        // Generate with default reality ratio (0.0 = fully synthetic)
+        self.generate_for_persona_with_reality(persona, field_type, 0.0, None, None)
+    }
+
+    /// Generate data for a specific field type based on persona with reality awareness
+    ///
+    /// The reality ratio determines how much the generated data blends with recorded/real data:
+    /// - 0.0-0.3: Purely synthetic (persona-generated)
+    /// - 0.3-0.7: Blended with recorded snapshots
+    /// - 0.7-1.0: Blended with upstream/real data
+    ///
+    /// # Arguments
+    /// * `persona` - Persona profile to generate data for
+    /// * `field_type` - Type of field to generate (e.g., "name", "email", "amount")
+    /// * `reality_ratio` - Reality continuum ratio (0.0 = mock, 1.0 = real)
+    /// * `recorded_data` - Optional recorded/snapshot data to blend with
+    /// * `real_data` - Optional real/upstream data to blend with
+    pub fn generate_for_persona_with_reality(
+        &self,
+        persona: &PersonaProfile,
+        field_type: &str,
+        reality_ratio: f64,
+        recorded_data: Option<&Value>,
+        real_data: Option<&Value>,
+    ) -> Result<Value> {
         // Create a deterministic RNG from the persona's seed
         use rand::rngs::StdRng;
         use rand::SeedableRng;
         let mut rng = StdRng::seed_from_u64(persona.seed);
 
-        // Generate base value using domain generator
-        let mut value = self.domain_generator.generate(field_type)?;
+        // Generate base synthetic value using domain generator
+        let mut synthetic_value = self.domain_generator.generate(field_type)?;
 
         // Apply persona traits to influence the generated value
-        value = self.apply_persona_traits(persona, field_type, value, &mut rng)?;
+        synthetic_value = self.apply_persona_traits(persona, field_type, synthetic_value, &mut rng)?;
 
-        Ok(value)
+        // Apply reality continuum blending based on ratio
+        let reality_ratio = reality_ratio.clamp(0.0, 1.0);
+
+        if reality_ratio < 0.3 {
+            // Low reality: Purely synthetic
+            Ok(synthetic_value)
+        } else if reality_ratio < 0.7 {
+            // Medium reality: Blend with recorded snapshots
+            if let Some(recorded) = recorded_data {
+                self.blend_values(&synthetic_value, recorded, reality_ratio)
+            } else {
+                // No recorded data available, use synthetic
+                Ok(synthetic_value)
+            }
+        } else {
+            // High reality: Blend with upstream/real data
+            if let Some(real) = real_data {
+                self.blend_values(&synthetic_value, real, reality_ratio)
+            } else if let Some(recorded) = recorded_data {
+                // Fallback to recorded if real not available
+                self.blend_values(&synthetic_value, recorded, reality_ratio)
+            } else {
+                // No real or recorded data, use synthetic
+                Ok(synthetic_value)
+            }
+        }
+    }
+
+    /// Blend two values based on reality ratio
+    ///
+    /// Simple blending strategy: weighted average for numbers, weighted selection for strings/booleans
+    fn blend_values(&self, synthetic: &Value, other: &Value, ratio: f64) -> Result<Value> {
+        match (synthetic, other) {
+            // Both numbers - weighted average
+            (Value::Number(syn_num), Value::Number(other_num)) => {
+                if let (Some(syn_f64), Some(other_f64)) = (syn_num.as_f64(), other_num.as_f64()) {
+                    // Blend: synthetic * (1 - ratio) + other * ratio
+                    // But adjust ratio for medium reality (0.3-0.7) to favor recorded
+                    let adjusted_ratio = if ratio < 0.7 {
+                        // Medium reality: map 0.3-0.7 to 0.0-1.0 for recorded blending
+                        (ratio - 0.3) / 0.4
+                    } else {
+                        // High reality: map 0.7-1.0 to 0.0-1.0 for real blending
+                        (ratio - 0.7) / 0.3
+                    };
+                    let blended = syn_f64 * (1.0 - adjusted_ratio) + other_f64 * adjusted_ratio;
+                    Ok(Value::Number(
+                        serde_json::Number::from_f64(blended).unwrap_or(syn_num.clone())
+                    ))
+                } else {
+                    Ok(synthetic.clone())
+                }
+            }
+            // Both strings - weighted selection
+            (Value::String(_), Value::String(other_str)) => {
+                let adjusted_ratio = if ratio < 0.7 {
+                    (ratio - 0.3) / 0.4
+                } else {
+                    (ratio - 0.7) / 0.3
+                };
+                if adjusted_ratio >= 0.5 {
+                    Ok(Value::String(other_str.clone()))
+                } else {
+                    Ok(synthetic.clone())
+                }
+            }
+            // Both booleans - weighted selection
+            (Value::Bool(_), Value::Bool(other_bool)) => {
+                let adjusted_ratio = if ratio < 0.7 {
+                    (ratio - 0.3) / 0.4
+                } else {
+                    (ratio - 0.7) / 0.3
+                };
+                if adjusted_ratio >= 0.5 {
+                    Ok(Value::Bool(*other_bool))
+                } else {
+                    Ok(synthetic.clone())
+                }
+            }
+            // Type mismatch - prefer other if ratio is high enough
+            _ => {
+                let adjusted_ratio = if ratio < 0.7 {
+                    (ratio - 0.3) / 0.4
+                } else {
+                    (ratio - 0.7) / 0.3
+                };
+                if adjusted_ratio >= 0.5 {
+                    Ok(other.clone())
+                } else {
+                    Ok(synthetic.clone())
+                }
+            }
+        }
     }
 
     /// Generate traits from a persona's backstory

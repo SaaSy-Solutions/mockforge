@@ -116,6 +116,12 @@ pub enum MismatchSeverity {
     Info,
 }
 
+impl Default for MismatchSeverity {
+    fn default() -> Self {
+        Self::High
+    }
+}
+
 /// AI-generated recommendation for fixing a mismatch
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recommendation {

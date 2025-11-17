@@ -1,5 +1,6 @@
 //! HTTP middleware modules
 
+pub mod ab_testing;
 pub mod behavioral_cloning;
 pub mod deceptive_canary;
 pub mod drift_tracking;
@@ -8,6 +9,7 @@ pub mod rate_limit;
 pub mod response_buffer;
 pub mod security;
 
+pub use ab_testing::ab_testing_middleware;
 pub use behavioral_cloning::{
     behavioral_cloning_middleware, BehavioralCloningMiddlewareState,
 };

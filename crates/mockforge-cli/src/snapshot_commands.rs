@@ -218,4 +218,3 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
 
     Ok(())
 }
-

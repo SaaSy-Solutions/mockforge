@@ -1,5 +1,6 @@
 //! HTTP handlers module
 
+pub mod ab_testing;
 pub mod access_review;
 pub mod auth_helpers;
 pub mod behavioral_cloning;
@@ -19,10 +20,12 @@ pub mod privileged_access;
 pub mod webhook_test;
 pub mod risk_assessment;
 pub mod risk_simulation;
+pub mod scenario_studio;
 pub mod snapshots;
 pub mod token_lifecycle;
 pub mod xray;
 
+pub use ab_testing::{ab_testing_router, ABTestingState};
 pub use access_review::{
     access_review_router, AccessReviewState, ApproveAccessRequest, RevokeAccessRequest,
 };
@@ -42,13 +45,14 @@ pub use drift_budget::{drift_budget_router, DriftBudgetState};
 pub use failure_designer::{
     generate_scenario, preview_config, validate_rule, FailureDesignerState,
 };
-pub use fidelity::{calculate_fidelity, get_fidelity};
+pub use fidelity::{calculate_fidelity, fidelity_router, get_fidelity, FidelityState};
 pub use incident_replay::{
     generate_replay, import_and_generate, import_incident, IncidentReplayState,
 };
 pub use privileged_access::{privileged_access_router, PrivilegedAccessState};
 pub use pr_generation::{pr_generation_router, PRGenerationState};
 pub use risk_assessment::{risk_assessment_router, RiskAssessmentState};
+pub use scenario_studio::{scenario_studio_router, ScenarioStudioState};
 pub use snapshots::{snapshot_router, SnapshotState};
 pub use webhook_test::{webhook_test_router, WebhookTestState};
 pub use xray::xray_router;

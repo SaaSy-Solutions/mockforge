@@ -28,14 +28,14 @@ class XRayOverlay {
     private init() {
         // Create overlay element
         this.createOverlay();
-        
+
         // Listen for response headers from fetch/XHR
         this.interceptFetch();
         this.interceptXHR();
-        
+
         // Start polling for state updates
         this.startPolling();
-        
+
         // Listen for messages from background script
         chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
             if (message.type === 'XRAY_STATE_UPDATE') {
@@ -81,11 +81,11 @@ class XRayOverlay {
             padding-bottom: 8px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.2);
         `;
-        
+
         const title = document.createElement('div');
         title.textContent = '🔍 MockForge X-Ray';
         title.style.cssText = 'font-weight: 600; font-size: 14px;';
-        
+
         const toggle = document.createElement('button');
         toggle.textContent = '−';
         toggle.style.cssText = `
@@ -99,7 +99,7 @@ class XRayOverlay {
             height: 20px;
         `;
         toggle.addEventListener('click', () => this.toggleCollapse());
-        
+
         header.appendChild(title);
         header.appendChild(toggle);
         this.overlay.appendChild(header);
@@ -112,7 +112,7 @@ class XRayOverlay {
 
         // Append to document
         document.body.appendChild(this.overlay);
-        
+
         // Initial render
         this.render();
     }
@@ -233,7 +233,7 @@ class XRayOverlay {
 
     private extractStateFromHeaders(headers: Headers): Partial<XRayState> {
         const state: Partial<XRayState> = {};
-        
+
         const workspace = headers.get('X-MockForge-Workspace');
         if (workspace) state.workspace = workspace;
 
@@ -264,13 +264,13 @@ class XRayOverlay {
         const originalFetch = window.fetch;
         window.fetch = async (...args) => {
             const response = await originalFetch(...args);
-            
+
             // Extract state from response headers
             const state = this.extractStateFromHeaders(response.headers);
             if (Object.keys(state).length > 0) {
                 this.updateState(state);
             }
-            
+
             return response;
         };
     }
@@ -335,7 +335,7 @@ class XRayOverlay {
     private startPolling() {
         // Initial fetch
         this.fetchStateFromAPI();
-        
+
         // Poll periodically
         this.pollTimer = window.setInterval(() => {
             this.fetchStateFromAPI();
@@ -361,4 +361,3 @@ if (typeof window !== 'undefined') {
         (window as any).__mockforgeXRay = xray;
     });
 }
-

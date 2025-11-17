@@ -3,8 +3,9 @@
 //! Provides endpoints for processing voice commands and generating OpenAPI specs
 //! using natural language commands powered by LLM.
 
-use axum::{extract::Json, http::StatusCode, response::Json as ResponseJson};
+use axum::{extract::{Json, State}, http::StatusCode, response::Json as ResponseJson};
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
+use mockforge_core::voice::{ParsedWorkspaceCreation, WorkspaceBuilder};
 use mockforge_core::{
     GeneratedWorkspaceScenario, HookTranspiler, VoiceCommandParser, VoiceSpecGenerator,
     WorkspaceScenarioGenerator,
@@ -13,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::models::ApiResponse;
+use crate::handlers::workspaces::WorkspaceState;
 
 /// Request to process a voice command
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -264,6 +266,133 @@ pub async fn create_workspace_scenario(
     let response = CreateWorkspaceScenarioResponse {
         description: request.description,
         scenario,
+        error: None,
+    };
+
+    Ok(ResponseJson(ApiResponse::success(response)))
+}
+
+/// Request to create a workspace from natural language
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateWorkspaceRequest {
+    /// Natural language description of the workspace
+    pub description: String,
+}
+
+/// Response from parsing workspace creation command (preview)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateWorkspacePreviewResponse {
+    /// The original description
+    pub description: String,
+    /// Parsed workspace creation data (for preview)
+    pub parsed: ParsedWorkspaceCreation,
+    /// Optional error message
+    pub error: Option<String>,
+}
+
+/// Request to confirm and create workspace
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfirmCreateWorkspaceRequest {
+    /// Parsed workspace creation data (from preview)
+    pub parsed: ParsedWorkspaceCreation,
+}
+
+/// Response from creating a workspace
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateWorkspaceResponse {
+    /// Workspace ID
+    pub workspace_id: String,
+    /// Workspace name
+    pub name: String,
+    /// Creation log
+    pub creation_log: Vec<String>,
+    /// Number of endpoints created
+    pub endpoint_count: usize,
+    /// Number of personas created
+    pub persona_count: usize,
+    /// Number of scenarios created
+    pub scenario_count: usize,
+    /// Whether reality continuum is configured
+    pub has_reality_continuum: bool,
+    /// Whether drift budget is configured
+    pub has_drift_budget: bool,
+    /// Optional error message
+    pub error: Option<String>,
+}
+
+/// Parse workspace creation command and return preview
+///
+/// POST /api/v2/voice/create-workspace-preview
+pub async fn create_workspace_preview(
+    Json(request): Json<CreateWorkspaceRequest>,
+) -> Result<ResponseJson<ApiResponse<CreateWorkspacePreviewResponse>>, StatusCode> {
+    if request.description.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Create parser with default config
+    let config = IntelligentBehaviorConfig::default();
+    let parser = VoiceCommandParser::new(config);
+
+    // Parse the workspace creation command
+    let parsed = match parser.parse_workspace_creation_command(&request.description).await {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            return Ok(ResponseJson(ApiResponse::error(format!(
+                "Failed to parse workspace creation command: {}",
+                e
+            ))));
+        }
+    };
+
+    let response = CreateWorkspacePreviewResponse {
+        description: request.description,
+        parsed,
+        error: None,
+    };
+
+    Ok(ResponseJson(ApiResponse::success(response)))
+}
+
+/// Confirm and create workspace from parsed command
+///
+/// POST /api/v2/voice/create-workspace-confirm
+pub async fn create_workspace_confirm(
+    State(state): State<WorkspaceState>,
+    Json(request): Json<ConfirmCreateWorkspaceRequest>,
+) -> Result<ResponseJson<ApiResponse<CreateWorkspaceResponse>>, StatusCode> {
+    // Create workspace builder
+    let mut builder = WorkspaceBuilder::new();
+
+    // Get mutable access to workspace registry from state
+    let mut registry = state.registry.write().await;
+
+    // Build workspace
+    let built = match builder.build_workspace(&mut registry, &request.parsed).await {
+        Ok(built) => built,
+        Err(e) => {
+            return Ok(ResponseJson(ApiResponse::error(format!(
+                "Failed to create workspace: {}",
+                e
+            ))));
+        }
+    };
+
+    let endpoint_count = built
+        .openapi_spec
+        .as_ref()
+        .map(|s| s.all_paths_and_operations().len())
+        .unwrap_or(0);
+
+    let response = CreateWorkspaceResponse {
+        workspace_id: built.workspace_id,
+        name: built.name,
+        creation_log: built.creation_log,
+        endpoint_count,
+        persona_count: built.personas.len(),
+        scenario_count: built.scenarios.len(),
+        has_reality_continuum: built.reality_continuum.is_some(),
+        has_drift_budget: built.drift_budget.is_some(),
         error: None,
     };
 

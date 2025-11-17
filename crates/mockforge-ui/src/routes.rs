@@ -137,12 +137,8 @@ pub fn create_admin_router(
         .route("/__mockforge/plugins/{id}", get(get_plugin_details))
         .route("/__mockforge/plugins/{id}", delete(delete_plugin))
         .route("/__mockforge/plugins/reload", post(reload_plugin))
-        // Workspace management routes
-        .route("/__mockforge/workspaces", get(get_workspaces))
-        .route("/__mockforge/workspaces", post(create_workspace))
-        .route("/__mockforge/workspaces/{workspace_id}", get(get_workspace))
-        .route("/__mockforge/workspaces/{workspace_id}", delete(delete_workspace))
-        .route("/__mockforge/workspaces/{workspace_id}/activate", post(set_active_workspace))
+        // Workspace management routes (moved to workspace router with WorkspaceState)
+        // These routes are now handled by the workspace router below
         // Environment management routes
         .route("/__mockforge/workspaces/{workspace_id}/environments", get(get_environments))
         .route("/__mockforge/workspaces/{workspace_id}/environments", post(create_environment))
@@ -260,6 +256,15 @@ pub fn create_admin_router(
             "/__mockforge/voice/create-workspace-scenario",
             post(voice::create_workspace_scenario),
         )
+        .route(
+            "/api/v2/voice/create-workspace-preview",
+            post(voice::create_workspace_preview),
+        )
+        .route(
+            "/__mockforge/voice/create-workspace-preview",
+            post(voice::create_workspace_preview),
+        )
+        // create-workspace-confirm route moved to workspace router with WorkspaceState
         // Failure analysis routes
         .route("/api/v2/failures/analyze", post(failure_analysis::analyze_failure))
         .route("/api/v2/failures/{request_id}", get(failure_analysis::get_failure_analysis))
@@ -308,6 +313,38 @@ pub fn create_admin_router(
         .with_state(analytics_state);
 
     router = router.merge(analytics_router);
+
+    // Add workspace router with WorkspaceState
+    {
+        use crate::handlers::workspaces::WorkspaceState;
+        use mockforge_core::multi_tenant::{MultiTenantConfig, MultiTenantWorkspaceRegistry};
+        use std::sync::Arc;
+
+        // Create workspace registry
+        let mt_config = MultiTenantConfig {
+            enabled: true,
+            default_workspace: "default".to_string(),
+            ..Default::default()
+        };
+        let registry = MultiTenantWorkspaceRegistry::new(mt_config);
+        let workspace_state = WorkspaceState::new(Arc::new(tokio::sync::RwLock::new(registry)));
+
+        // Create workspace router with state
+        use crate::handlers::workspaces;
+        let workspace_router = Router::new()
+            .route("/__mockforge/workspaces", get(workspaces::list_workspaces))
+            .route("/__mockforge/workspaces", post(workspaces::create_workspace))
+            .route("/__mockforge/workspaces/{workspace_id}", get(workspaces::get_workspace))
+            .route("/__mockforge/workspaces/{workspace_id}", axum::routing::put(workspaces::update_workspace))
+            .route("/__mockforge/workspaces/{workspace_id}", delete(workspaces::delete_workspace))
+            .route("/__mockforge/workspaces/{workspace_id}/activate", post(workspaces::set_active_workspace))
+            .route("/api/v2/voice/create-workspace-confirm", post(voice::create_workspace_confirm))
+            .route("/__mockforge/voice/create-workspace-confirm", post(voice::create_workspace_confirm))
+            .with_state(workspace_state);
+
+        router = router.merge(workspace_router);
+        tracing::info!("Workspace router mounted with WorkspaceState");
+    }
 
     // Add UI Builder router
     // This provides a low-code visual interface for creating mock endpoints

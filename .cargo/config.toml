@@ -1,3 +1,10 @@
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+# Cargo configuration for MockForge
+# This file helps with sqlx offline mode for mockforge-collab
+
+[env]
+# Enable sqlx offline mode to avoid database connection requirements during compilation
+# Set this to true if you don't have a database connection available
+# SQLX_OFFLINE = true
+
+# Note: If you need to update sqlx query metadata, run:
+# cd crates/mockforge-collab && cargo sqlx prepare --database-url postgresql://user:pass@localhost/dbname
