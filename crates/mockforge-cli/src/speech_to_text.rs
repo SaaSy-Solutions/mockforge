@@ -495,77 +495,25 @@ impl VoskBackend {
             .map_err(|e| SttError::AudioCapture(format!("Failed to read audio samples: {}", e)))?;
 
         // Process audio - accept_waveform expects &[i16] and returns Result<DecodingState, AcceptWaveformError>
-        // Note: Based on vosk-rs 0.3 API, CompleteResult and PartialResult are likely newtype wrappers or structs
-        // that can be converted to strings. Let's try using Debug format and extracting JSON, or accessing fields.
         match recognizer.accept_waveform(&samples) {
             Ok(_) => {
-                // Get final result
+                // Get final result - CompleteResult is an enum with Single/Multiple variants
                 let result = recognizer.final_result();
-                // Try to get JSON string - CompleteResult might be a newtype wrapper or have a method
-                // Let's try using Debug format and extracting JSON, or try common patterns
-                let result_str = format!("{:?}", result);
-                // The Debug format might contain the JSON string - try to extract it
-                // Or, if CompleteResult implements Deref to str, we can use &*result
-                // For now, let's try a simpler approach: check if result can be dereferenced to str
-                let json_str = if let Ok(s) = std::str::from_utf8(result_str.as_bytes()) {
-                    // Try to find JSON in the debug output, or use the whole string if it's JSON
-                    if s.starts_with('{') || s.starts_with('[') {
-                        s
-                    } else {
-                        // Try to extract JSON from debug format
-                        if let Some(start) = s.find('{') {
-                            if let Some(end) = s.rfind('}') {
-                                &s[start..=end]
-                            } else {
-                                s
-                            }
-                        } else {
-                            s
-                        }
+                // Extract text from CompleteResult
+                let text = match result {
+                    vosk::CompleteResult::Single(single) => single.text,
+                    vosk::CompleteResult::Multiple(multiple) => {
+                        // Get text from the first (most likely) alternative
+                        multiple.alternatives.first().map(|alt| alt.text).unwrap_or("")
                     }
-                } else {
-                    &result_str
                 };
 
-                // Parse JSON result
-                let result_json: serde_json::Value =
-                    serde_json::from_str(json_str).map_err(|e| {
-                        SttError::Transcription(format!("Failed to parse result: {}", e))
-                    })?;
-
-                result_json["text"]
-                    .as_str()
-                    .ok_or_else(|| SttError::Transcription("No text in result".to_string()))
-                    .map(|s| s.to_string())
+                Ok(text.to_string())
             }
             Err(_) => {
-                // On error, try to get partial result
+                // On error, try to get partial result - PartialResult has a partial field
                 let partial = recognizer.partial_result();
-                let partial_str = format!("{:?}", partial);
-                let json_str = if let Ok(s) = std::str::from_utf8(partial_str.as_bytes()) {
-                    if s.starts_with('{') || s.starts_with('[') {
-                        s
-                    } else {
-                        if let Some(start) = s.find('{') {
-                            if let Some(end) = s.rfind('}') {
-                                &s[start..=end]
-                            } else {
-                                s
-                            }
-                        } else {
-                            s
-                        }
-                    }
-                } else {
-                    &partial_str
-                };
-
-                let partial_json: serde_json::Value =
-                    serde_json::from_str(json_str).map_err(|e| {
-                        SttError::Transcription(format!("Failed to parse partial: {}", e))
-                    })?;
-
-                Ok(partial_json["partial"].as_str().unwrap_or("").to_string())
+                Ok(partial.partial.to_string())
             }
         }
     }
