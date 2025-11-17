@@ -209,18 +209,18 @@ appropriate condition structures."#;
                 let variable = parsed.variable.ok_or_else(|| {
                     crate::Error::generic("Missing variable in greater_than condition")
                 })?;
-                let value = parsed
-                    .numeric_value
-                    .ok_or_else(|| crate::Error::generic("Missing numeric_value in greater_than condition"))?;
+                let value = parsed.numeric_value.ok_or_else(|| {
+                    crate::Error::generic("Missing numeric_value in greater_than condition")
+                })?;
                 Ok(Condition::GreaterThan { variable, value })
             }
             "less_than" => {
                 let variable = parsed.variable.ok_or_else(|| {
                     crate::Error::generic("Missing variable in less_than condition")
                 })?;
-                let value = parsed
-                    .numeric_value
-                    .ok_or_else(|| crate::Error::generic("Missing numeric_value in less_than condition"))?;
+                let value = parsed.numeric_value.ok_or_else(|| {
+                    crate::Error::generic("Missing numeric_value in less_than condition")
+                })?;
                 Ok(Condition::LessThan { variable, value })
             }
             "exists" => {
@@ -261,10 +261,7 @@ appropriate condition structures."#;
                     condition: Box::new(self.convert_condition(*condition)?),
                 })
             }
-            _ => Err(crate::Error::generic(format!(
-                "Unknown condition type: {}",
-                parsed.r#type
-            ))),
+            _ => Err(crate::Error::generic(format!("Unknown condition type: {}", parsed.r#type))),
         }
     }
 
@@ -284,11 +281,7 @@ appropriate condition structures."#;
                 let message = parsed
                     .message
                     .ok_or_else(|| crate::Error::generic("Missing message in log action"))?;
-                let level = parsed
-                    .level
-                    .as_deref()
-                    .unwrap_or("info")
-                    .to_lowercase();
+                let level = parsed.level.as_deref().unwrap_or("info").to_lowercase();
                 let log_level = match level.as_str() {
                     "trace" => LogLevel::Trace,
                     "debug" => LogLevel::Debug,
@@ -297,17 +290,16 @@ appropriate condition structures."#;
                     "error" => LogLevel::Error,
                     _ => LogLevel::Info,
                 };
-                Ok(HookAction::Log { message, level: log_level })
+                Ok(HookAction::Log {
+                    message,
+                    level: log_level,
+                })
             }
             "http_request" => {
                 let url = parsed
                     .url
                     .ok_or_else(|| crate::Error::generic("Missing url in http_request action"))?;
-                let method = parsed
-                    .method
-                    .as_deref()
-                    .unwrap_or("POST")
-                    .to_uppercase();
+                let method = parsed.method.as_deref().unwrap_or("POST").to_uppercase();
                 let body = parsed.body.map(|b| {
                     // If body is already a string, use it; otherwise serialize to string
                     if let JsonValue::String(s) = b {
@@ -316,11 +308,7 @@ appropriate condition structures."#;
                         serde_json::to_string(&b).unwrap_or_default()
                     }
                 });
-                Ok(HookAction::HttpRequest {
-                    url,
-                    method,
-                    body,
-                })
+                Ok(HookAction::HttpRequest { url, method, body })
             }
             "command" => {
                 let command = parsed
@@ -333,15 +321,12 @@ appropriate condition structures."#;
                 let name = parsed
                     .name
                     .ok_or_else(|| crate::Error::generic("Missing name in record_metric action"))?;
-                let value = parsed
-                    .numeric_value
-                    .ok_or_else(|| crate::Error::generic("Missing numeric_value in record_metric action"))?;
+                let value = parsed.numeric_value.ok_or_else(|| {
+                    crate::Error::generic("Missing numeric_value in record_metric action")
+                })?;
                 Ok(HookAction::RecordMetric { name, value })
             }
-            _ => Err(crate::Error::generic(format!(
-                "Unknown action type: {}",
-                parsed.r#type
-            ))),
+            _ => Err(crate::Error::generic(format!("Unknown action type: {}", parsed.r#type))),
         }
     }
 }
@@ -426,4 +411,3 @@ mod tests {
         assert!(result.is_ok());
     }
 }
-

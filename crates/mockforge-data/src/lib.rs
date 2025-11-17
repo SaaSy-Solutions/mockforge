@@ -17,14 +17,14 @@ pub mod mock_generator;
 pub mod mock_server;
 /// Persona profile system for consistent data generation
 pub mod persona;
+/// Backstory generation for personas
+pub mod persona_backstory;
 /// Persona graph and relationship management
 pub mod persona_graph;
 /// Persona lifecycle and time-aware state management
 pub mod persona_lifecycle;
 /// Lifecycle state response modifiers
 pub mod persona_lifecycle_response;
-/// Backstory generation for personas
-pub mod persona_backstory;
 /// Domain-specific persona templates
 pub mod persona_templates;
 /// Provider utilities for faker and data generation
@@ -54,17 +54,15 @@ pub use mock_server::{
     MockServerConfig,
 };
 pub use persona::{PersonaGenerator, PersonaProfile, PersonaRegistry};
+pub use persona_backstory::{BackstoryGenerator, BackstoryTemplate};
 pub use persona_graph::{
     Edge, GraphStats, GraphVisualization, PersonaGraph, PersonaNode, VisualizationEdge,
     VisualizationNode,
 };
-pub use persona_lifecycle::{
-    LifecycleScenarios, LifecycleState, PersonaLifecycle, TransitionRule,
-};
+pub use persona_lifecycle::{LifecycleScenarios, LifecycleState, PersonaLifecycle, TransitionRule};
 pub use persona_lifecycle_response::{
     apply_billing_lifecycle_effects, apply_lifecycle_effects, apply_support_lifecycle_effects,
 };
-pub use persona_backstory::{BackstoryGenerator, BackstoryTemplate};
 pub use persona_templates::{
     EcommercePersonaTemplate, FinancePersonaTemplate, HealthcarePersonaTemplate, PersonaTemplate,
     PersonaTemplateRegistry,

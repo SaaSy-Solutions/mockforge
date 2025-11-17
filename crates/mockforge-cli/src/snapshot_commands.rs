@@ -75,16 +75,22 @@ pub enum SnapshotCommands {
 /// Parse component list from string vector
 fn parse_components(components: Option<Vec<String>>) -> SnapshotComponents {
     if let Some(comp_list) = components {
-        let comp_set: std::collections::HashSet<String> = comp_list
-            .iter()
-            .map(|s| s.to_lowercase())
-            .collect();
+        let comp_set: std::collections::HashSet<String> =
+            comp_list.iter().map(|s| s.to_lowercase()).collect();
 
         SnapshotComponents {
-            unified_state: comp_set.is_empty() || comp_set.contains("unified_state") || comp_set.contains("unified-state"),
-            vbr_state: comp_set.is_empty() || comp_set.contains("vbr_state") || comp_set.contains("vbr-state"),
-            recorder_state: comp_set.is_empty() || comp_set.contains("recorder_state") || comp_set.contains("recorder-state"),
-            workspace_config: comp_set.is_empty() || comp_set.contains("workspace_config") || comp_set.contains("workspace-config"),
+            unified_state: comp_set.is_empty()
+                || comp_set.contains("unified_state")
+                || comp_set.contains("unified-state"),
+            vbr_state: comp_set.is_empty()
+                || comp_set.contains("vbr_state")
+                || comp_set.contains("vbr-state"),
+            recorder_state: comp_set.is_empty()
+                || comp_set.contains("recorder_state")
+                || comp_set.contains("recorder-state"),
+            workspace_config: comp_set.is_empty()
+                || comp_set.contains("workspace_config")
+                || comp_set.contains("workspace-config"),
             protocols: Vec::new(), // Empty = all protocols
         }
     } else {
@@ -95,9 +101,7 @@ fn parse_components(components: Option<Vec<String>>) -> SnapshotComponents {
 /// Handle snapshot commands
 pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
     // Initialize snapshot manager
-    let snapshot_dir = std::env::var("MOCKFORGE_SNAPSHOT_DIR")
-        .ok()
-        .map(PathBuf::from);
+    let snapshot_dir = std::env::var("MOCKFORGE_SNAPSHOT_DIR").ok().map(PathBuf::from);
     let manager = SnapshotManager::new(snapshot_dir);
 
     match command {
@@ -170,7 +174,10 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
                     if let Some(desc) = &snapshot.description {
                         println!("    Description: {}", desc);
                     }
-                    println!("    Created: {}", snapshot.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                    println!(
+                        "    Created: {}",
+                        snapshot.created_at.format("%Y-%m-%d %H:%M:%S UTC")
+                    );
                     println!("    Size: {} bytes", snapshot.size_bytes);
                     println!();
                 }

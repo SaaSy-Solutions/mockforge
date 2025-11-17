@@ -49,10 +49,7 @@ impl ScenarioRegistry {
             .filter(|scenario| {
                 scenario.name.to_lowercase().contains(&query_lower)
                     || scenario.id.to_lowercase().contains(&query_lower)
-                    || scenario
-                        .tags
-                        .iter()
-                        .any(|tag| tag.to_lowercase().contains(&query_lower))
+                    || scenario.tags.iter().any(|tag| tag.to_lowercase().contains(&query_lower))
                     || scenario
                         .description
                         .as_ref()

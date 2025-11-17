@@ -8,19 +8,21 @@
 //! - Reality continuum configuration
 //! - Drift budget configuration
 
-use crate::openapi::OpenApiSpec;
-use crate::reality_continuum::config::{ContinuumConfig, ContinuumRule, MergeStrategy, TransitionMode};
 use crate::contract_drift::{DriftBudget, DriftBudgetConfig};
-use crate::scenarios::types::{ScenarioDefinition, ScenarioStep, ScenarioParameter};
-use crate::Result;
+use crate::multi_tenant::{MultiTenantWorkspaceRegistry, Workspace};
+use crate::openapi::OpenApiSpec;
+use crate::reality_continuum::config::{
+    ContinuumConfig, ContinuumRule, MergeStrategy, TransitionMode,
+};
+use crate::scenarios::types::{ScenarioDefinition, ScenarioParameter, ScenarioStep};
+use crate::voice::command_parser::{EndpointRequirement, ModelRequirement, ParsedCommand};
 use crate::voice::command_parser::{
-    ParsedWorkspaceCreation, EntityRequirement, PersonaRequirement, ScenarioRequirement,
-    ParsedRealityContinuum, ParsedDriftBudget,
+    EntityRequirement, ParsedDriftBudget, ParsedRealityContinuum, ParsedWorkspaceCreation,
+    PersonaRequirement, ScenarioRequirement,
 };
 use crate::voice::spec_generator::VoiceSpecGenerator;
-use crate::voice::command_parser::{EndpointRequirement, ModelRequirement, ParsedCommand};
-use crate::multi_tenant::{MultiTenantWorkspaceRegistry, Workspace};
-use mockforge_data::{PersonaProfile, Domain};
+use crate::Result;
+use mockforge_data::{Domain, PersonaProfile};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -198,7 +200,10 @@ impl WorkspaceBuilder {
         let spec_generator = VoiceSpecGenerator::new();
         let spec = spec_generator.generate_spec(&parsed_command).await?;
 
-        self.log(&format!("✓ Generated OpenAPI spec with {} endpoints", spec.all_paths_and_operations().len()));
+        self.log(&format!(
+            "✓ Generated OpenAPI spec with {} endpoints",
+            spec.all_paths_and_operations().len()
+        ));
 
         Ok(Some(spec))
     }
@@ -254,10 +259,8 @@ impl WorkspaceBuilder {
             let scenario_id = Self::sanitize_id(&scenario_req.name);
 
             // Create scenario
-            let mut scenario = ScenarioDefinition::new(
-                scenario_id.clone(),
-                scenario_req.name.clone(),
-            );
+            let mut scenario =
+                ScenarioDefinition::new(scenario_id.clone(), scenario_req.name.clone());
             scenario.description = Some(scenario_req.description.clone());
 
             // Add tags based on type
@@ -274,7 +277,11 @@ impl WorkspaceBuilder {
                     method,
                     path,
                 )
-                .expect_status(if scenario_req.r#type == "failure" { 400 } else { 200 });
+                .expect_status(if scenario_req.r#type == "failure" {
+                    400
+                } else {
+                    200
+                });
 
                 // Add delay for slow_path scenarios
                 if scenario_req.r#type == "slow_path" {
@@ -291,10 +298,7 @@ impl WorkspaceBuilder {
     }
 
     /// Apply reality continuum configuration
-    fn apply_reality_config(
-        &mut self,
-        parsed: &ParsedRealityContinuum,
-    ) -> Result<ContinuumConfig> {
+    fn apply_reality_config(&mut self, parsed: &ParsedRealityContinuum) -> Result<ContinuumConfig> {
         let mut config = ContinuumConfig::default();
 
         if parsed.enabled {
@@ -367,7 +371,13 @@ impl WorkspaceBuilder {
     fn sanitize_workspace_id(name: &str) -> String {
         name.to_lowercase()
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect::<String>()
             .trim_matches('-')
             .to_string()
@@ -377,7 +387,13 @@ impl WorkspaceBuilder {
     fn sanitize_id(name: &str) -> String {
         name.to_lowercase()
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect::<String>()
             .trim_matches('-')
             .to_string()
@@ -386,9 +402,15 @@ impl WorkspaceBuilder {
     /// Infer domain from description
     fn infer_domain(description: &str) -> Domain {
         let desc_lower = description.to_lowercase();
-        if desc_lower.contains("e-commerce") || desc_lower.contains("ecommerce") || desc_lower.contains("shop") {
+        if desc_lower.contains("e-commerce")
+            || desc_lower.contains("ecommerce")
+            || desc_lower.contains("shop")
+        {
             Domain::Ecommerce
-        } else if desc_lower.contains("bank") || desc_lower.contains("finance") || desc_lower.contains("payment") {
+        } else if desc_lower.contains("bank")
+            || desc_lower.contains("finance")
+            || desc_lower.contains("payment")
+        {
             Domain::Finance
         } else if desc_lower.contains("health") || desc_lower.contains("medical") {
             Domain::Healthcare
@@ -460,7 +482,8 @@ impl WorkspaceBuilder {
         }
 
         // Validate scenario types (should have at least one of each type: happy_path, failure, slow_path)
-        let scenario_types: Vec<&str> = parsed.scenarios.iter().map(|s| s.r#type.as_str()).collect();
+        let scenario_types: Vec<&str> =
+            parsed.scenarios.iter().map(|s| s.r#type.as_str()).collect();
         let has_happy = scenario_types.contains(&"happy_path");
         let has_failure = scenario_types.contains(&"failure");
         let has_slow = scenario_types.contains(&"slow_path");

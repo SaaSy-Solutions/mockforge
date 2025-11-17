@@ -58,9 +58,7 @@ impl AccessJustification {
 
     /// Check if justification is expired
     pub fn is_expired(&self) -> bool {
-        self.expires_at
-            .map(|exp| Utc::now() > exp)
-            .unwrap_or(false)
+        self.expires_at.map(|exp| Utc::now() > exp).unwrap_or(false)
     }
 
     /// Check if justification is approved
@@ -73,10 +71,16 @@ impl AccessJustification {
 #[async_trait::async_trait]
 pub trait JustificationStorage: Send + Sync {
     /// Get justification for a user
-    async fn get_justification(&self, user_id: Uuid) -> Result<Option<AccessJustification>, crate::Error>;
+    async fn get_justification(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<AccessJustification>, crate::Error>;
 
     /// Set justification for a user
-    async fn set_justification(&self, justification: AccessJustification) -> Result<(), crate::Error>;
+    async fn set_justification(
+        &self,
+        justification: AccessJustification,
+    ) -> Result<(), crate::Error>;
 
     /// Get all justifications
     async fn get_all_justifications(&self) -> Result<Vec<AccessJustification>, crate::Error>;
@@ -110,12 +114,18 @@ impl Default for InMemoryJustificationStorage {
 
 #[async_trait::async_trait]
 impl JustificationStorage for InMemoryJustificationStorage {
-    async fn get_justification(&self, user_id: Uuid) -> Result<Option<AccessJustification>, crate::Error> {
+    async fn get_justification(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<AccessJustification>, crate::Error> {
         let justifications = self.justifications.read().await;
         Ok(justifications.get(&user_id).cloned())
     }
 
-    async fn set_justification(&self, justification: AccessJustification) -> Result<(), crate::Error> {
+    async fn set_justification(
+        &self,
+        justification: AccessJustification,
+    ) -> Result<(), crate::Error> {
         let mut justifications = self.justifications.write().await;
         justifications.insert(justification.user_id, justification);
         Ok(())
@@ -128,11 +138,7 @@ impl JustificationStorage for InMemoryJustificationStorage {
 
     async fn get_expired_justifications(&self) -> Result<Vec<AccessJustification>, crate::Error> {
         let justifications = self.justifications.read().await;
-        Ok(justifications
-            .values()
-            .filter(|j| j.is_expired())
-            .cloned()
-            .collect())
+        Ok(justifications.values().filter(|j| j.is_expired()).cloned().collect())
     }
 
     async fn delete_justification(&self, user_id: Uuid) -> Result<(), crate::Error> {

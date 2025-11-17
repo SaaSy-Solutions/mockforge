@@ -7,8 +7,8 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use mockforge_core::snapshots::{SnapshotComponents, SnapshotManager, SnapshotMetadata};
 use mockforge_core::consistency::ConsistencyEngine;
+use mockforge_core::snapshots::{SnapshotComponents, SnapshotManager, SnapshotMetadata};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -124,14 +124,10 @@ pub async fn list_snapshots(
     State(state): State<SnapshotState>,
     Query(params): Query<SnapshotQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    let snapshots = state
-        .manager
-        .list_snapshots(&params.workspace)
-        .await
-        .map_err(|e| {
-            error!("Failed to list snapshots: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let snapshots = state.manager.list_snapshots(&params.workspace).await.map_err(|e| {
+        error!("Failed to list snapshots: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(serde_json::json!({
         "workspace": params.workspace,

@@ -218,7 +218,10 @@ and include a "question" or "confirmation" field in the response."#;
     ///
     /// This method extracts information about creating a complete workspace scenario,
     /// including domain, chaos characteristics, initial data, and API requirements.
-    pub async fn parse_workspace_scenario_command(&self, command: &str) -> Result<ParsedWorkspaceScenario> {
+    pub async fn parse_workspace_scenario_command(
+        &self,
+        command: &str,
+    ) -> Result<ParsedWorkspaceScenario> {
         // Build system prompt for workspace scenario parsing
         let system_prompt = r#"You are an expert at parsing natural language descriptions of workspace scenarios
 and extracting structured information for creating complete mock environments.
@@ -327,7 +330,10 @@ Be specific and extract all details mentioned in the command."#;
     /// - Behavioral scenarios (happy path, failure, slow path)
     /// - Reality continuum preferences
     /// - Drift budget preferences
-    pub async fn parse_workspace_creation_command(&self, command: &str) -> Result<ParsedWorkspaceCreation> {
+    pub async fn parse_workspace_creation_command(
+        &self,
+        command: &str,
+    ) -> Result<ParsedWorkspaceCreation> {
         // Build system prompt for workspace creation parsing
         let system_prompt = r#"You are an expert at parsing natural language descriptions of workspace creation
 and extracting structured information for creating complete mock backends with personas, scenarios, and configuration.
@@ -452,7 +458,10 @@ Be specific and extract all details mentioned in the command. Ensure at least 2-
     ///
     /// This method extracts reality continuum preferences from natural language,
     /// such as "80% mock, 20% real prod for catalog only".
-    pub async fn parse_reality_continuum_command(&self, command: &str) -> Result<ParsedRealityContinuum> {
+    pub async fn parse_reality_continuum_command(
+        &self,
+        command: &str,
+    ) -> Result<ParsedRealityContinuum> {
         // Build system prompt for reality continuum parsing
         let system_prompt = r#"You are an expert at parsing natural language descriptions of reality continuum
 configuration and extracting structured blend ratio settings.
@@ -483,10 +492,8 @@ Examples:
 - "100% mock for now" → default_ratio: 0.0, enabled: true"#;
 
         // Build user prompt with the command
-        let user_prompt = format!(
-            "Parse this reality continuum configuration command:\n\n{}",
-            command
-        );
+        let user_prompt =
+            format!("Parse this reality continuum configuration command:\n\n{}", command);
 
         // Create LLM request
         let llm_request = LlmGenerationRequest {
@@ -550,10 +557,7 @@ Examples:
 - "lenient, allow up to 5 breaking changes" → strictness: "lenient", max_breaking_changes: 5"#;
 
         // Build user prompt with the command
-        let user_prompt = format!(
-            "Parse this drift budget configuration command:\n\n{}",
-            command
-        );
+        let user_prompt = format!("Parse this drift budget configuration command:\n\n{}", command);
 
         // Create LLM request
         let llm_request = LlmGenerationRequest {

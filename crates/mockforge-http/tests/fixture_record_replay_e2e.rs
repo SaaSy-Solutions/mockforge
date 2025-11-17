@@ -42,13 +42,7 @@ async fn test_fixture_record_and_replay_e2e() {
 
     record_replay
         .record_handler()
-        .record_request(
-            &fingerprint,
-            200,
-            &response_headers,
-            response_body,
-            None,
-        )
+        .record_request(&fingerprint, 200, &response_headers, response_body, None)
         .await
         .unwrap();
 
@@ -99,10 +93,7 @@ async fn test_fixture_record_and_replay_e2e() {
     assert_eq!(recorded.status_code, 200);
     assert_eq!(recorded.response_body, response_body);
     assert_eq!(
-        recorded
-            .response_headers
-            .get("content-type")
-            .map(|v| v.as_str()),
+        recorded.response_headers.get("content-type").map(|v| v.as_str()),
         Some("application/json")
     );
 }
@@ -113,12 +104,7 @@ async fn test_fixture_record_multiple_and_replay() {
     let temp_dir = TempDir::new().unwrap();
     let fixtures_dir = temp_dir.path().to_path_buf();
 
-    let record_replay = RecordReplayHandler::new(
-        fixtures_dir.clone(),
-        false,
-        true,
-        false,
-    );
+    let record_replay = RecordReplayHandler::new(fixtures_dir.clone(), false, true, false);
 
     // Record multiple different requests
     let requests = vec![
@@ -229,11 +215,7 @@ async fn test_record_different_methods() {
 
         // Verify fixture was created in method-specific directory
         let method_dir = fixtures_dir.join("http").join(method.as_str().to_lowercase());
-        assert!(
-            method_dir.exists(),
-            "Method directory should exist for {}",
-            method.as_str()
-        );
+        assert!(method_dir.exists(), "Method directory should exist for {}", method.as_str());
     }
 }
 
@@ -313,16 +295,10 @@ async fn test_import_manual_fixture_file() {
     assert!(recorded.response_body.contains("manually imported"));
     assert!(recorded.response_body.contains("manual"));
     assert_eq!(
-        recorded
-            .response_headers
-            .get("content-type")
-            .map(|v| v.as_str()),
+        recorded.response_headers.get("content-type").map(|v| v.as_str()),
         Some("application/json")
     );
-    assert_eq!(
-        recorded.metadata.get("imported"),
-        Some(&"true".to_string())
-    );
+    assert_eq!(recorded.metadata.get("imported"), Some(&"true".to_string()));
 }
 
 /// Test that recording respects record_get_only flag
@@ -370,10 +346,12 @@ async fn test_record_get_only_flag() {
 
     // POST directory might exist but should be empty or not have our fixture
     if post_dir.exists() {
-        let entries: Vec<_> = std::fs::read_dir(&post_dir)
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .collect();
-        assert_eq!(entries.len(), 0, "POST fixtures directory should be empty when record_get_only is true");
+        let entries: Vec<_> =
+            std::fs::read_dir(&post_dir).unwrap().filter_map(|e| e.ok()).collect();
+        assert_eq!(
+            entries.len(),
+            0,
+            "POST fixtures directory should be empty when record_get_only is true"
+        );
     }
 }

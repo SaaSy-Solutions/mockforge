@@ -248,9 +248,10 @@ impl SyncService {
                 info!("Starting automatic sync from upstream: {}", upstream_url);
 
                 let config_guard = config.read().await;
-                let traffic_analyzer = config_guard.traffic_aware.as_ref().map(|ta_config| {
-                    crate::sync_traffic::TrafficAnalyzer::new(ta_config.clone())
-                });
+                let traffic_analyzer = config_guard
+                    .traffic_aware
+                    .as_ref()
+                    .map(|ta_config| crate::sync_traffic::TrafficAnalyzer::new(ta_config.clone()));
                 drop(config_guard);
 
                 match Self::sync_once(
@@ -306,7 +307,9 @@ impl SyncService {
         sync_get_only: bool,
         headers: &HashMap<String, String>,
         traffic_analyzer: Option<&crate::sync_traffic::TrafficAnalyzer>,
-        continuum_engine: Option<&mockforge_core::reality_continuum::engine::RealityContinuumEngine>,
+        continuum_engine: Option<
+            &mockforge_core::reality_continuum::engine::RealityContinuumEngine,
+        >,
     ) -> Result<(Vec<DetectedChange>, usize)> {
         // Generate sync cycle ID for grouping snapshots from this sync operation
         let sync_cycle_id = format!("sync_{}", Uuid::new_v4());
@@ -320,10 +323,8 @@ impl SyncService {
             let usage_stats = analyzer.aggregate_usage_stats_from_db(database).await;
 
             // Get endpoint list for reality ratio lookup
-            let endpoints: Vec<(&str, &str)> = recorded_requests
-                .iter()
-                .map(|r| (r.method.as_str(), r.path.as_str()))
-                .collect();
+            let endpoints: Vec<(&str, &str)> =
+                recorded_requests.iter().map(|r| (r.method.as_str(), r.path.as_str())).collect();
 
             // Get reality ratios
             let reality_ratios = analyzer.get_reality_ratios(&endpoints, continuum_engine).await;
@@ -332,10 +333,8 @@ impl SyncService {
             let priorities = analyzer.calculate_priorities(&usage_stats, &reality_ratios);
 
             // Filter requests based on priorities
-            let prioritized_endpoints: std::collections::HashSet<String> = priorities
-                .iter()
-                .map(|p| format!("{} {}", p.method, p.endpoint))
-                .collect();
+            let prioritized_endpoints: std::collections::HashSet<String> =
+                priorities.iter().map(|p| format!("{} {}", p.method, p.endpoint)).collect();
 
             recorded_requests.retain(|req| {
                 let key = format!("{} {}", req.method, req.path);
@@ -520,9 +519,10 @@ impl SyncService {
         // Generate sync cycle ID
         let sync_cycle_id = format!("sync_{}", Uuid::new_v4());
 
-        let traffic_analyzer = config.traffic_aware.as_ref().map(|ta_config| {
-            crate::sync_traffic::TrafficAnalyzer::new(ta_config.clone())
-        });
+        let traffic_analyzer = config
+            .traffic_aware
+            .as_ref()
+            .map(|ta_config| crate::sync_traffic::TrafficAnalyzer::new(ta_config.clone()));
 
         let result = Self::sync_once(
             &self.http_client,
@@ -712,9 +712,10 @@ impl SyncService {
             status.is_running = true;
         }
 
-        let traffic_analyzer = config.traffic_aware.as_ref().map(|ta_config| {
-            crate::sync_traffic::TrafficAnalyzer::new(ta_config.clone())
-        });
+        let traffic_analyzer = config
+            .traffic_aware
+            .as_ref()
+            .map(|ta_config| crate::sync_traffic::TrafficAnalyzer::new(ta_config.clone()));
 
         let result = Self::sync_once(
             &self.http_client,

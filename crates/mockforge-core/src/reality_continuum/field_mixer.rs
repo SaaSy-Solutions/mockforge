@@ -179,8 +179,7 @@ impl FieldRealityConfig {
     /// Returns the blend ratio (0.0 to 1.0) for the given path,
     /// or None if field mixing is disabled or no pattern matches.
     pub fn get_blend_ratio_for_path(&self, json_path: &str) -> Option<f64> {
-        self.get_source_for_path(json_path)
-            .map(|source| source.to_blend_ratio())
+        self.get_source_for_path(json_path).map(|source| source.to_blend_ratio())
     }
 }
 
@@ -237,14 +236,8 @@ mod tests {
             priority: 5,
         });
 
-        assert_eq!(
-            config.get_source_for_path("id"),
-            Some(RealitySource::Recorded)
-        );
-        assert_eq!(
-            config.get_source_for_path("user.pii"),
-            Some(RealitySource::Synthetic)
-        );
+        assert_eq!(config.get_source_for_path("id"), Some(RealitySource::Recorded));
+        assert_eq!(config.get_source_for_path("user.pii"), Some(RealitySource::Synthetic));
     }
 
     #[test]
@@ -255,17 +248,10 @@ mod tests {
             source: RealitySource::Real,
             field_overrides: HashMap::new(),
         };
-        rule.field_overrides
-            .insert("rate".to_string(), RealitySource::Real);
+        rule.field_overrides.insert("rate".to_string(), RealitySource::Real);
         config = config.add_entity_rule("currency".to_string(), rule);
 
-        assert_eq!(
-            config.get_source_for_path("currency"),
-            Some(RealitySource::Real)
-        );
-        assert_eq!(
-            config.get_source_for_path("currency.rate"),
-            Some(RealitySource::Real)
-        );
+        assert_eq!(config.get_source_for_path("currency"), Some(RealitySource::Real));
+        assert_eq!(config.get_source_for_path("currency.rate"), Some(RealitySource::Real));
     }
 }

@@ -3,9 +3,9 @@
 //! This module provides storage, versioning, and export/import functionality
 //! for behavioral scenarios.
 
+use super::scenario_types::BehavioralScenario;
 use crate::database::RecorderDatabase;
 use anyhow::Result;
-use super::scenario_types::BehavioralScenario;
 use std::path::Path;
 use tracing::info;
 
@@ -21,11 +21,7 @@ impl ScenarioStorage {
     }
 
     /// Store a scenario with version
-    pub async fn store_scenario(
-        &self,
-        scenario: &BehavioralScenario,
-        version: &str,
-    ) -> Result<()> {
+    pub async fn store_scenario(&self, scenario: &BehavioralScenario, version: &str) -> Result<()> {
         self.db
             .store_scenario(scenario, version)
             .await
@@ -107,25 +103,17 @@ impl ScenarioStorage {
     }
 
     /// Export scenario to YAML/JSON
-    pub async fn export_scenario(
-        &self,
-        scenario_id: &str,
-        format: &str,
-    ) -> Result<String> {
+    pub async fn export_scenario(&self, scenario_id: &str, format: &str) -> Result<String> {
         let scenario = self
             .get_scenario(scenario_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Scenario not found: {}", scenario_id))?;
 
         match format.to_lowercase().as_str() {
-            "yaml" | "yml" => {
-                serde_yaml::to_string(&scenario)
-                    .map_err(|e| anyhow::anyhow!("Failed to serialize to YAML: {}", e))
-            }
-            "json" => {
-                serde_json::to_string_pretty(&scenario)
-                    .map_err(|e| anyhow::anyhow!("Failed to serialize to JSON: {}", e))
-            }
+            "yaml" | "yml" => serde_yaml::to_string(&scenario)
+                .map_err(|e| anyhow::anyhow!("Failed to serialize to YAML: {}", e)),
+            "json" => serde_json::to_string_pretty(&scenario)
+                .map_err(|e| anyhow::anyhow!("Failed to serialize to JSON: {}", e)),
             _ => Err(anyhow::anyhow!("Unsupported format: {}", format)),
         }
     }
@@ -136,10 +124,7 @@ impl ScenarioStorage {
         scenario_id: &str,
         output_path: &Path,
     ) -> Result<()> {
-        let format = output_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("yaml");
+        let format = output_path.extension().and_then(|ext| ext.to_str()).unwrap_or("yaml");
         let content = self.export_scenario(scenario_id, format).await?;
         tokio::fs::write(output_path, content)
             .await
@@ -150,14 +135,10 @@ impl ScenarioStorage {
     /// Import scenario from YAML/JSON string
     pub async fn import_scenario(&self, data: &str, format: &str) -> Result<BehavioralScenario> {
         let scenario = match format.to_lowercase().as_str() {
-            "yaml" | "yml" => {
-                serde_yaml::from_str(data)
-                    .map_err(|e| anyhow::anyhow!("Failed to parse YAML: {}", e))?
-            }
-            "json" => {
-                serde_json::from_str(data)
-                    .map_err(|e| anyhow::anyhow!("Failed to parse JSON: {}", e))?
-            }
+            "yaml" | "yml" => serde_yaml::from_str(data)
+                .map_err(|e| anyhow::anyhow!("Failed to parse YAML: {}", e))?,
+            "json" => serde_json::from_str(data)
+                .map_err(|e| anyhow::anyhow!("Failed to parse JSON: {}", e))?,
             _ => return Err(anyhow::anyhow!("Unsupported format: {}", format)),
         };
 
@@ -165,18 +146,12 @@ impl ScenarioStorage {
     }
 
     /// Import scenario from file
-    pub async fn import_scenario_from_file(
-        &self,
-        input_path: &Path,
-    ) -> Result<BehavioralScenario> {
+    pub async fn import_scenario_from_file(&self, input_path: &Path) -> Result<BehavioralScenario> {
         let content = tokio::fs::read_to_string(input_path)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
 
-        let format = input_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("yaml");
+        let format = input_path.extension().and_then(|ext| ext.to_str()).unwrap_or("yaml");
 
         self.import_scenario(&content, format).await
     }
@@ -216,14 +191,8 @@ fn increment_version(version: &str) -> String {
 
 // Simple version comparison helper
 fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
-    let a_parts: Vec<u64> = a
-        .split('.')
-        .filter_map(|p| p.parse().ok())
-        .collect();
-    let b_parts: Vec<u64> = b
-        .split('.')
-        .filter_map(|p| p.parse().ok())
-        .collect();
+    let a_parts: Vec<u64> = a.split('.').filter_map(|p| p.parse().ok()).collect();
+    let b_parts: Vec<u64> = b.split('.').filter_map(|p| p.parse().ok()).collect();
 
     for (a_val, b_val) in a_parts.iter().zip(b_parts.iter()) {
         match a_val.cmp(b_val) {
@@ -234,4 +203,3 @@ fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
 
     a_parts.len().cmp(&b_parts.len())
 }
-

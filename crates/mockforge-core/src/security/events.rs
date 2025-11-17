@@ -464,10 +464,7 @@ mod tests {
 
     #[test]
     fn test_event_severity() {
-        assert_eq!(
-            SecurityEventType::AuthSuccess.default_severity(),
-            SecurityEventSeverity::Low
-        );
+        assert_eq!(SecurityEventType::AuthSuccess.default_severity(), SecurityEventSeverity::Low);
         assert_eq!(
             SecurityEventType::AuthFailure.default_severity(),
             SecurityEventSeverity::Medium
@@ -525,10 +522,7 @@ mod tests {
         assert!(event.actor.is_some());
         assert!(event.target.is_some());
         assert!(event.outcome.is_some());
-        assert_eq!(
-            event.metadata.get("attempt_count"),
-            Some(&serde_json::json!(3))
-        );
+        assert_eq!(event.metadata.get("attempt_count"), Some(&serde_json::json!(3)));
     }
 
     #[test]

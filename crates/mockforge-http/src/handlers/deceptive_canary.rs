@@ -1,8 +1,8 @@
 //! Deceptive Canary API handlers
 
+use crate::middleware::DeceptiveCanaryState;
 use axum::extract::State;
 use axum::response::Json;
-use crate::middleware::DeceptiveCanaryState;
 use mockforge_core::deceptive_canary::DeceptiveCanaryConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -28,9 +28,7 @@ pub struct CanaryStatsResponse {
 /// Get current canary configuration
 ///
 /// GET /api/v1/deceptive-canary/config
-pub async fn get_canary_config(
-    State(state): State<DeceptiveCanaryState>,
-) -> Json<Value> {
+pub async fn get_canary_config(State(state): State<DeceptiveCanaryState>) -> Json<Value> {
     let config = state.router.config();
     Json(json!({
         "success": true,
@@ -58,13 +56,9 @@ pub async fn update_canary_config(
 /// Get canary routing statistics
 ///
 /// GET /api/v1/deceptive-canary/stats
-pub async fn get_canary_stats(
-    State(state): State<DeceptiveCanaryState>,
-) -> Json<Value> {
+pub async fn get_canary_stats(State(state): State<DeceptiveCanaryState>) -> Json<Value> {
     let stats = state.router.stats();
-    let canary_percentage = stats
-        .map(|s| s.canary_percentage())
-        .unwrap_or(0.0);
+    let canary_percentage = stats.map(|s| s.canary_percentage()).unwrap_or(0.0);
 
     Json(json!({
         "success": true,

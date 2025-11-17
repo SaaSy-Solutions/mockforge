@@ -19,12 +19,7 @@ pub fn format_slack_message(incident: &DriftIncident) -> Value {
         IncidentType::ThresholdExceeded => "⚠️",
     };
 
-    let title = format!(
-        "{} Drift Incident: {} {}",
-        emoji,
-        incident.method,
-        incident.endpoint
-    );
+    let title = format!("{} Drift Incident: {} {}", emoji, incident.method, incident.endpoint);
 
     let mut fields = vec![
         json!({
@@ -113,7 +108,7 @@ pub fn format_slack_message(incident: &DriftIncident) -> Value {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": format!("*Incident ID:* `{}`\n*Detected:* <!date^{}|{{date_pretty}} {{time}}|{}>", 
+                    "text": format!("*Incident ID:* `{}`\n*Detected:* <!date^{}|{{date_pretty}} {{time}}|{}>",
                         incident.id,
                         incident.detected_at,
                         chrono::DateTime::from_timestamp(incident.detected_at, 0)
@@ -131,7 +126,7 @@ pub fn format_slack_message(incident: &DriftIncident) -> Value {
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": format!("*Details:*\n```{}```", 
+                            "text": format!("*Details:*\n```{}```",
                                 serde_json::to_string_pretty(&incident.details).unwrap_or_else(|_| "N/A".to_string())
                             )
                         }
@@ -149,4 +144,3 @@ pub fn format_slack_webhook(incident: &DriftIncident) -> Value {
         "blocks": format_slack_message(incident).get("blocks").cloned().unwrap_or_else(|| json!([]))
     })
 }
-

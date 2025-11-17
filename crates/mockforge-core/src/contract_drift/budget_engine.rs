@@ -4,9 +4,7 @@
 
 use crate::ai_contract_diff::ContractDiffResult;
 use crate::contract_drift::field_tracking::FieldCountTracker;
-use crate::contract_drift::types::{
-    DriftBudget, DriftBudgetConfig, DriftResult,
-};
+use crate::contract_drift::types::{DriftBudget, DriftBudgetConfig, DriftResult};
 use std::sync::Arc;
 
 /// Engine for evaluating drift budgets
@@ -38,7 +36,10 @@ impl DriftBudgetEngine {
     }
 
     /// Set the field count tracker
-    pub fn set_field_tracker(&mut self, field_tracker: Arc<tokio::sync::RwLock<FieldCountTracker>>) {
+    pub fn set_field_tracker(
+        &mut self,
+        field_tracker: Arc<tokio::sync::RwLock<FieldCountTracker>>,
+    ) {
         self.field_tracker = Some(field_tracker);
     }
 
@@ -92,7 +93,8 @@ impl DriftBudgetEngine {
         }
 
         // Get budget for this endpoint using priority hierarchy
-        let budget = self.get_budget_for_endpoint(endpoint, method, workspace_id, service_name, tags);
+        let budget =
+            self.get_budget_for_endpoint(endpoint, method, workspace_id, service_name, tags);
 
         if !budget.enabled {
             // Budget disabled for this endpoint
@@ -160,7 +162,7 @@ impl DriftBudgetEngine {
     }
 
     /// Get budget for a specific endpoint
-    /// 
+    ///
     /// Priority order: workspace > service/tag > endpoint > default
     pub fn get_budget_for_endpoint(
         &self,
@@ -204,10 +206,7 @@ impl DriftBudgetEngine {
         }
 
         // Priority 5: Default budget
-        self.config
-            .default_budget
-            .clone()
-            .unwrap_or_else(DriftBudget::default)
+        self.config.default_budget.clone().unwrap_or_else(DriftBudget::default)
     }
 
     /// Get budget for a specific endpoint (backward compatibility)

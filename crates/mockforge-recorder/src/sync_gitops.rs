@@ -10,7 +10,7 @@ use crate::{
     Result,
 };
 use mockforge_core::pr_generation::{
-    PRGenerator, PRFileChange, PRFileChangeType, PRProvider, PRRequest,
+    PRFileChange, PRFileChangeType, PRGenerator, PRProvider, PRRequest,
 };
 use std::path::PathBuf;
 use tracing::{debug, info, warn};
@@ -76,17 +76,11 @@ impl GitOpsSyncHandler {
             return Ok(None);
         }
 
-        let pr_generator = self
-            .pr_generator
-            .as_ref()
-            .ok_or_else(|| {
-                crate::RecorderError::InvalidFilter("PR generator not configured".to_string())
-            })?;
+        let pr_generator = self.pr_generator.as_ref().ok_or_else(|| {
+            crate::RecorderError::InvalidFilter("PR generator not configured".to_string())
+        })?;
 
-        info!(
-            "Processing {} changes for GitOps PR creation",
-            changes.len()
-        );
+        info!("Processing {} changes for GitOps PR creation", changes.len());
 
         // Collect file changes
         let mut file_changes = Vec::new();
@@ -116,10 +110,8 @@ impl GitOpsSyncHandler {
             sync_cycle_id.split('_').last().unwrap_or(sync_cycle_id)
         );
 
-        let title = format!(
-            "Auto-sync: Update fixtures from upstream API changes ({})",
-            sync_cycle_id
-        );
+        let title =
+            format!("Auto-sync: Update fixtures from upstream API changes ({})", sync_cycle_id);
 
         let body = self.generate_pr_body(changes);
 
@@ -139,10 +131,7 @@ impl GitOpsSyncHandler {
             }
             Err(e) => {
                 warn!("Failed to create GitOps PR: {}", e);
-                Err(crate::RecorderError::InvalidFilter(format!(
-                    "Failed to create PR: {}",
-                    e
-                )))
+                Err(crate::RecorderError::InvalidFilter(format!("Failed to create PR: {}", e)))
             }
         }
     }
@@ -158,15 +147,12 @@ impl GitOpsSyncHandler {
         let fixture_path = self.get_fixture_path(request);
 
         // Get the updated response from the database
-        let response = database
-            .get_response(&change.request_id)
-            .await?
-            .ok_or_else(|| {
-                crate::RecorderError::NotFound(format!(
-                    "Response not found for request {}",
-                    change.request_id
-                ))
-            })?;
+        let response = database.get_response(&change.request_id).await?.ok_or_else(|| {
+            crate::RecorderError::NotFound(format!(
+                "Response not found for request {}",
+                change.request_id
+            ))
+        })?;
 
         // Serialize the updated fixture
         let fixture_content = serde_json::to_string_pretty(&serde_json::json!({
@@ -221,7 +207,10 @@ impl GitOpsSyncHandler {
 
         body.push_str("### Summary\n\n");
         body.push_str(&format!("- **Total changes**: {}\n", changes.len()));
-        body.push_str(&format!("- **Endpoints affected**: {}\n", self.count_unique_endpoints(changes)));
+        body.push_str(&format!(
+            "- **Endpoints affected**: {}\n",
+            self.count_unique_endpoints(changes)
+        ));
 
         body.push_str("\n### Changes\n\n");
         for change in changes {

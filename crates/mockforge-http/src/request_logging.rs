@@ -30,11 +30,7 @@ pub async fn log_http_requests(
     let query_params: HashMap<String, String> = req
         .uri()
         .query()
-        .map(|q| {
-            url::form_urlencoded::parse(q.as_bytes())
-                .into_owned()
-                .collect()
-        })
+        .map(|q| url::form_urlencoded::parse(q.as_bytes()).into_owned().collect())
         .unwrap_or_default();
 
     // Extract headers (filter sensitive ones)

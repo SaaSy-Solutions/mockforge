@@ -12,11 +12,7 @@
 //! # Database Integration
 //! See `auth/database.rs` for database-backed user store implementation.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-};
+use axum::{extract::State, http::StatusCode, response::Json};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
@@ -205,10 +201,7 @@ impl RateLimiter {
         }
 
         // Record this attempt
-        attempts
-            .entry(key.to_string())
-            .or_insert_with(Vec::new)
-            .push(now);
+        attempts.entry(key.to_string()).or_insert_with(Vec::new).push(now);
 
         Ok(())
     }
@@ -319,7 +312,8 @@ impl UserStore {
         // Validate password against policy
         #[cfg(feature = "password-policy")]
         {
-            self.password_policy.validate(&password, Some(&username))
+            self.password_policy
+                .validate(&password, Some(&username))
                 .map_err(|e| e.to_string())?;
         }
 
@@ -330,8 +324,8 @@ impl UserStore {
         }
 
         // Hash password
-        let password_hash = hash(&password, DEFAULT_COST)
-            .map_err(|e| format!("Failed to hash password: {}", e))?;
+        let password_hash =
+            hash(&password, DEFAULT_COST).map_err(|e| format!("Failed to hash password: {}", e))?;
 
         // Create user
         let user = User {
@@ -366,7 +360,10 @@ pub fn get_global_user_store() -> Option<Arc<UserStore>> {
 }
 
 /// Generate JWT token
-pub fn generate_token(user: &User, expires_in_seconds: i64) -> Result<String, jsonwebtoken::errors::Error> {
+pub fn generate_token(
+    user: &User,
+    expires_in_seconds: i64,
+) -> Result<String, jsonwebtoken::errors::Error> {
     let now = Utc::now();
     let exp = now + Duration::seconds(expires_in_seconds);
     let secret = JWT_SECRET;
@@ -380,11 +377,7 @@ pub fn generate_token(user: &User, expires_in_seconds: i64) -> Result<String, js
         exp: exp.timestamp(),
     };
 
-    encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(&secret),
-    )
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(&secret))
 }
 
 /// Generate refresh token
@@ -396,11 +389,8 @@ pub fn generate_refresh_token(user: &User) -> Result<String, jsonwebtoken::error
 /// Validate JWT token
 pub fn validate_token(token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
     let secret = JWT_SECRET;
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(&secret),
-        &Validation::default(),
-    )?;
+    let token_data =
+        decode::<Claims>(token, &DecodingKey::from_secret(&secret), &Validation::default())?;
 
     Ok(token_data.claims)
 }
@@ -410,24 +400,25 @@ pub async fn login(
     State(_state): State<AdminState>,
     Json(request): Json<LoginRequest>,
 ) -> Result<Json<ApiResponse<LoginResponse>>, StatusCode> {
-    let user_store = get_global_user_store()
-        .ok_or_else(|| {
-            tracing::error!("User store not initialized");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user_store = get_global_user_store().ok_or_else(|| {
+        tracing::error!("User store not initialized");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Authenticate user
-    let user = user_store.authenticate(&request.username, &request.password)
-        .await
-        .map_err(|e| {
-            tracing::warn!("Authentication failed for user {}: {}", request.username, e);
-            // Return appropriate status code based on error
-            if e.contains("Too many") {
-                StatusCode::TOO_MANY_REQUESTS
-            } else {
-                StatusCode::UNAUTHORIZED
-            }
-        })?;
+    let user =
+        user_store
+            .authenticate(&request.username, &request.password)
+            .await
+            .map_err(|e| {
+                tracing::warn!("Authentication failed for user {}: {}", request.username, e);
+                // Return appropriate status code based on error
+                if e.contains("Too many") {
+                    StatusCode::TOO_MANY_REQUESTS
+                } else {
+                    StatusCode::UNAUTHORIZED
+                }
+            })?;
 
     // Generate tokens
     let access_token = generate_token(&user, 24 * 60 * 60) // 24 hours
@@ -436,11 +427,10 @@ pub async fn login(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let refresh_token = generate_refresh_token(&user)
-        .map_err(|e| {
-            tracing::error!("Failed to generate refresh token: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let refresh_token = generate_refresh_token(&user).map_err(|e| {
+        tracing::error!("Failed to generate refresh token: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let user_info = UserInfo {
         id: user.id,
@@ -463,25 +453,21 @@ pub async fn refresh_token(
     Json(request): Json<RefreshTokenRequest>,
 ) -> Result<Json<ApiResponse<LoginResponse>>, StatusCode> {
     // Validate refresh token
-    let claims = validate_token(&request.refresh_token)
-        .map_err(|_| {
-            tracing::warn!("Invalid refresh token");
-            StatusCode::UNAUTHORIZED
-        })?;
+    let claims = validate_token(&request.refresh_token).map_err(|_| {
+        tracing::warn!("Invalid refresh token");
+        StatusCode::UNAUTHORIZED
+    })?;
 
-    let user_store = get_global_user_store()
-        .ok_or_else(|| {
-            tracing::error!("User store not initialized");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let user_store = get_global_user_store().ok_or_else(|| {
+        tracing::error!("User store not initialized");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Get user
-    let user = user_store.get_user_by_id(&claims.sub)
-        .await
-        .ok_or_else(|| {
-            tracing::warn!("User not found: {}", claims.sub);
-            StatusCode::UNAUTHORIZED
-        })?;
+    let user = user_store.get_user_by_id(&claims.sub).await.ok_or_else(|| {
+        tracing::warn!("User not found: {}", claims.sub);
+        StatusCode::UNAUTHORIZED
+    })?;
 
     // Generate new tokens
     let access_token = generate_token(&user, 24 * 60 * 60) // 24 hours
@@ -490,11 +476,10 @@ pub async fn refresh_token(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let refresh_token = generate_refresh_token(&user)
-        .map_err(|e| {
-            tracing::error!("Failed to generate refresh token: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let refresh_token = generate_refresh_token(&user).map_err(|e| {
+        tracing::error!("Failed to generate refresh token: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let user_info = UserInfo {
         id: user.id,
@@ -521,9 +506,7 @@ pub async fn get_current_user(
 }
 
 /// Logout endpoint (client-side token removal, but can invalidate refresh tokens)
-pub async fn logout(
-    State(_state): State<AdminState>,
-) -> Json<ApiResponse<String>> {
+pub async fn logout(State(_state): State<AdminState>) -> Json<ApiResponse<String>> {
     // In production, invalidate refresh token in database
     // For now, just return success (client removes token)
     Json(ApiResponse::success("Logged out successfully".to_string()))

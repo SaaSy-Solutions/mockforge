@@ -2,7 +2,7 @@
 
 use crate::chain_execution::{ChainExecutionEngine, ChainExecutionResult, ChainExecutionStatus};
 use crate::request_chaining::{
-    ChainConfig, ChainDefinition, ChainLink, ChainRequest, RequestChainRegistry, RequestBody,
+    ChainConfig, ChainDefinition, ChainLink, ChainRequest, RequestBody, RequestChainRegistry,
 };
 use crate::scenarios::registry::ScenarioRegistry;
 use crate::scenarios::types::{ScenarioDefinition, ScenarioResult, ScenarioStep, StepResult};
@@ -80,10 +80,8 @@ impl ScenarioExecutor {
 
             for step in remaining_steps.iter() {
                 // Check if dependencies are satisfied
-                let deps_satisfied = step
-                    .depends_on
-                    .iter()
-                    .all(|dep_id| executed_steps.contains(dep_id));
+                let deps_satisfied =
+                    step.depends_on.iter().all(|dep_id| executed_steps.contains(dep_id));
 
                 if !deps_satisfied {
                     continue;

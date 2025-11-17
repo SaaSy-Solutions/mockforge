@@ -140,11 +140,8 @@ mod tests {
         };
         init_global_siem_emitter(config).await.unwrap();
 
-        let event = crate::security::events::SecurityEvent::new(
-            SecurityEventType::AuthSuccess,
-            None,
-            None,
-        );
+        let event =
+            crate::security::events::SecurityEvent::new(SecurityEventType::AuthSuccess, None, None);
 
         // Should not panic even with disabled emitter
         emit_security_event(event).await;

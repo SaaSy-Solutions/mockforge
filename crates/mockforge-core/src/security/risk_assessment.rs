@@ -253,7 +253,9 @@ impl Risk {
         self.risk_score = self.likelihood.value() * self.impact.value();
         self.risk_level = RiskLevel::from_score(self.risk_score);
 
-        if let (Some(res_likelihood), Some(res_impact)) = (self.residual_likelihood, self.residual_impact) {
+        if let (Some(res_likelihood), Some(res_impact)) =
+            (self.residual_likelihood, self.residual_impact)
+        {
             self.residual_risk_score = Some(res_likelihood.value() * res_impact.value());
             self.residual_risk_level = self.residual_risk_score.map(RiskLevel::from_score);
         }
@@ -317,7 +319,7 @@ impl Default for RiskAssessmentConfig {
             enabled: true,
             default_review_frequency: RiskReviewFrequency::Quarterly,
             risk_tolerance: RiskTolerance {
-                max_acceptable_score: 5, // Low risks acceptable
+                max_acceptable_score: 5,     // Low risks acceptable
                 require_treatment_above: 11, // Medium and above require treatment
             },
         }
@@ -361,7 +363,15 @@ impl RiskAssessmentEngine {
         created_by: Uuid,
     ) -> Result<Risk, Error> {
         let risk_id = self.generate_risk_id().await;
-        let mut risk = Risk::new(risk_id.clone(), title, description, category, likelihood, impact, created_by);
+        let mut risk = Risk::new(
+            risk_id.clone(),
+            title,
+            description,
+            category,
+            likelihood,
+            impact,
+            created_by,
+        );
         risk.review_frequency = self.config.default_review_frequency;
         risk.calculate_next_review();
 
@@ -386,31 +396,22 @@ impl RiskAssessmentEngine {
     /// Get risks by level
     pub async fn get_risks_by_level(&self, level: RiskLevel) -> Result<Vec<Risk>, Error> {
         let risks = self.risks.read().await;
-        Ok(risks
-            .values()
-            .filter(|r| r.risk_level == level)
-            .cloned()
-            .collect())
+        Ok(risks.values().filter(|r| r.risk_level == level).cloned().collect())
     }
 
     /// Get risks by category
     pub async fn get_risks_by_category(&self, category: RiskCategory) -> Result<Vec<Risk>, Error> {
         let risks = self.risks.read().await;
-        Ok(risks
-            .values()
-            .filter(|r| r.category == category)
-            .cloned()
-            .collect())
+        Ok(risks.values().filter(|r| r.category == category).cloned().collect())
     }
 
     /// Get risks by treatment status
-    pub async fn get_risks_by_treatment_status(&self, status: TreatmentStatus) -> Result<Vec<Risk>, Error> {
+    pub async fn get_risks_by_treatment_status(
+        &self,
+        status: TreatmentStatus,
+    ) -> Result<Vec<Risk>, Error> {
         let risks = self.risks.read().await;
-        Ok(risks
-            .values()
-            .filter(|r| r.treatment_status == status)
-            .cloned()
-            .collect())
+        Ok(risks.values().filter(|r| r.treatment_status == status).cloned().collect())
     }
 
     /// Update risk
@@ -558,11 +559,7 @@ impl RiskAssessmentEngine {
 
         Ok(risks
             .values()
-            .filter(|r| {
-                r.next_review
-                    .map(|next| next <= now)
-                    .unwrap_or(false)
-            })
+            .filter(|r| r.next_review.map(|next| next <= now).unwrap_or(false))
             .cloned()
             .collect())
     }

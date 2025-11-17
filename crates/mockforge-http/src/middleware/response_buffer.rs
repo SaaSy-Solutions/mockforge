@@ -3,12 +3,7 @@
 //! This middleware buffers response bodies so they can be read multiple times,
 //! enabling downstream middleware to access the response body for analysis.
 
-use axum::{
-    body::Body,
-    extract::Request,
-    http::Response,
-    middleware::Next,
-};
+use axum::{body::Body, extract::Request, http::Response, middleware::Next};
 use serde_json::Value;
 
 /// Buffered response body
@@ -39,10 +34,7 @@ impl BufferedResponse {
 /// This middleware reads the entire response body into memory so it can be
 /// accessed multiple times by downstream middleware. The buffered response
 /// is stored in request extensions.
-pub async fn buffer_response_middleware(
-    req: Request,
-    next: Next,
-) -> Response<Body> {
+pub async fn buffer_response_middleware(req: Request, next: Next) -> Response<Body> {
     // Process request
     let response = next.run(req).await;
 
@@ -75,9 +67,7 @@ pub async fn buffer_response_middleware(
     // For now, we'll just recreate the response with the buffered body
 
     // Recreate response with buffered body
-    let mut response_builder = Response::builder()
-        .status(parts.status)
-        .version(parts.version);
+    let mut response_builder = Response::builder().status(parts.status).version(parts.version);
 
     // Copy headers
     for (name, value) in parts.headers.iter() {
@@ -85,9 +75,7 @@ pub async fn buffer_response_middleware(
     }
 
     // Add buffered response to response extensions
-    let mut response = response_builder
-        .body(Body::from(body_bytes))
-        .unwrap();
+    let mut response = response_builder.body(Body::from(body_bytes)).unwrap();
 
     // Store buffered response in response extensions
     response.extensions_mut().insert(buffered);

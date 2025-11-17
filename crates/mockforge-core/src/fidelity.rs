@@ -192,14 +192,10 @@ impl SampleComparator {
         // Simplified distribution comparison
         // In a real implementation, this would compare statistical distributions
         // For now, just check if value types match
-        let mock_types: std::collections::HashSet<String> = mock_samples
-            .iter()
-            .map(|v| Self::type_of(v))
-            .collect();
-        let real_types: std::collections::HashSet<String> = real_samples
-            .iter()
-            .map(|v| Self::type_of(v))
-            .collect();
+        let mock_types: std::collections::HashSet<String> =
+            mock_samples.iter().map(|v| Self::type_of(v)).collect();
+        let real_types: std::collections::HashSet<String> =
+            real_samples.iter().map(|v| Self::type_of(v)).collect();
 
         let intersection = mock_types.intersection(&real_types).count();
         let union = mock_types.union(&real_types).count();
@@ -265,10 +261,8 @@ impl FidelityCalculator {
         );
 
         // Calculate error pattern similarity (10% weight)
-        let error_pattern_similarity = self.compare_error_patterns(
-            mock_error_patterns,
-            real_error_patterns,
-        );
+        let error_pattern_similarity =
+            self.compare_error_patterns(mock_error_patterns, real_error_patterns);
 
         // Calculate overall score with weights
         let overall = (schema_similarity * 0.4

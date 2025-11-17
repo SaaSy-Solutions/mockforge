@@ -43,10 +43,7 @@ impl IncidentStore {
         // Update endpoint index
         {
             let mut index = self.endpoint_index.write().await;
-            index
-                .entry(endpoint_key)
-                .or_insert_with(Vec::new)
-                .push(id.clone());
+            index.entry(endpoint_key).or_insert_with(Vec::new).push(id.clone());
         }
 
         // Update status index
@@ -166,11 +163,7 @@ impl IncidentStore {
 
         status_index
             .get(&status)
-            .map(|ids| {
-                ids.iter()
-                    .filter_map(|id| cache.get(id).cloned())
-                    .collect()
-            })
+            .map(|ids| ids.iter().filter_map(|id| cache.get(id).cloned()).collect())
             .unwrap_or_default()
     }
 
@@ -222,9 +215,7 @@ impl IncidentStore {
                 incident.status == IncidentStatus::Resolved
                     || incident.status == IncidentStatus::Closed
             })
-            .filter(|incident| {
-                incident.resolved_at.map(|t| t < cutoff).unwrap_or(false)
-            })
+            .filter(|incident| incident.resolved_at.map(|t| t < cutoff).unwrap_or(false))
             .map(|incident| incident.id.clone())
             .collect();
 
@@ -238,10 +229,7 @@ impl IncidentStore {
     /// Get count of incidents by status
     pub async fn count_by_status(&self) -> HashMap<IncidentStatus, usize> {
         let status_index = self.status_index.read().await;
-        status_index
-            .iter()
-            .map(|(status, ids)| (*status, ids.len()))
-            .collect()
+        status_index.iter().map(|(status, ids)| (*status, ids.len())).collect()
     }
 }
 

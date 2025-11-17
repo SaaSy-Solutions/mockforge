@@ -21,7 +21,9 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::handlers::auth_helpers::{extract_user_id_with_fallback, extract_username_from_claims, OptionalAuthClaims};
+use crate::handlers::auth_helpers::{
+    extract_user_id_with_fallback, extract_username_from_claims, OptionalAuthClaims,
+};
 
 /// State for change management handlers
 #[derive(Clone)]
@@ -199,14 +201,20 @@ pub async fn approve_change(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract approver ID and name from authentication claims, or use defaults for mock server
     let approver_id = extract_user_id_with_fallback(&claims);
-    let approver = extract_username_from_claims(&claims)
-        .unwrap_or_else(|| format!("user-{}", approver_id));
+    let approver =
+        extract_username_from_claims(&claims).unwrap_or_else(|| format!("user-{}", approver_id));
 
     let engine = state.engine.write().await;
 
     if request.approved {
         engine
-            .approve_change(&change_id, &approver, approver_id, request.comments, request.conditions)
+            .approve_change(
+                &change_id,
+                &approver,
+                approver_id,
+                request.comments,
+                request.conditions,
+            )
             .await
             .map_err(|e| {
                 error!("Failed to approve change: {}", e);
@@ -290,7 +298,12 @@ pub async fn start_implementation(
 
     let engine = state.engine.write().await;
     engine
-        .start_implementation(&change_id, implementer_id, request.implementation_plan, request.scheduled_time)
+        .start_implementation(
+            &change_id,
+            implementer_id,
+            request.implementation_plan,
+            request.scheduled_time,
+        )
         .await
         .map_err(|e| {
             error!("Failed to start implementation: {}", e);
@@ -338,7 +351,12 @@ pub async fn complete_change(
 
     let engine = state.engine.write().await;
     engine
-        .complete_change(&change_id, implementer_id, request.test_results, request.post_implementation_review)
+        .complete_change(
+            &change_id,
+            implementer_id,
+            request.test_results,
+            request.post_implementation_review,
+        )
         .await
         .map_err(|e| {
             error!("Failed to complete change: {}", e);
@@ -416,32 +434,21 @@ pub async fn list_changes(
             "rolled_back" => ChangeStatus::RolledBack,
             _ => return Err(StatusCode::BAD_REQUEST),
         };
-        engine
-            .get_changes_by_status(status)
-            .await
-            .map_err(|e| {
-                error!("Failed to get changes by status: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        engine.get_changes_by_status(status).await.map_err(|e| {
+            error!("Failed to get changes by status: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     } else if let Some(requester_str) = params.get("requester_id") {
-        let requester_id = requester_str
-            .parse::<Uuid>()
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
-        engine
-            .get_changes_by_requester(requester_id)
-            .await
-            .map_err(|e| {
-                error!("Failed to get changes by requester: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        let requester_id = requester_str.parse::<Uuid>().map_err(|_| StatusCode::BAD_REQUEST)?;
+        engine.get_changes_by_requester(requester_id).await.map_err(|e| {
+            error!("Failed to get changes by requester: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     } else {
-        engine
-            .get_all_changes()
-            .await
-            .map_err(|e| {
-                error!("Failed to get all changes: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        engine.get_all_changes().await.map_err(|e| {
+            error!("Failed to get all changes: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     };
 
     let summaries: Vec<ChangeSummary> = changes
@@ -455,9 +462,7 @@ pub async fn list_changes(
         })
         .collect();
 
-    Ok(Json(ChangeListResponse {
-        changes: summaries,
-    }))
+    Ok(Json(ChangeListResponse { changes: summaries }))
 }
 
 /// Get change history

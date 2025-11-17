@@ -44,13 +44,10 @@ pub async fn enrich_user_response(
 
     // Find user persona ID
     let user_persona_id = format!("user:{}", user_id);
-    
+
     // Find related orders via persona graph
-    let related_order_ids = graph.find_related_by_entity_type(
-        &user_persona_id,
-        "order",
-        Some("has_orders"),
-    );
+    let related_order_ids =
+        graph.find_related_by_entity_type(&user_persona_id, "order", Some("has_orders"));
 
     // Enrich response with related order IDs
     if let Some(obj) = response.as_object_mut() {
@@ -60,29 +57,28 @@ pub async fn enrich_user_response(
                 .iter()
                 .filter_map(|pid| pid.strip_prefix("order:").map(|s| s.to_string()))
                 .collect();
-            
-            obj.insert("order_ids".to_string(), Value::Array(
-                order_ids.iter().map(|id| Value::String(id.clone())).collect()
-            ));
+
+            obj.insert(
+                "order_ids".to_string(),
+                Value::Array(order_ids.iter().map(|id| Value::String(id.clone())).collect()),
+            );
             obj.insert("order_count".to_string(), Value::Number(order_ids.len().into()));
         }
 
         // Find related accounts
-        let related_account_ids = graph.find_related_by_entity_type(
-            &user_persona_id,
-            "account",
-            Some("has_accounts"),
-        );
+        let related_account_ids =
+            graph.find_related_by_entity_type(&user_persona_id, "account", Some("has_accounts"));
 
         if !related_account_ids.is_empty() {
             let account_ids: Vec<String> = related_account_ids
                 .iter()
                 .filter_map(|pid| pid.strip_prefix("account:").map(|s| s.to_string()))
                 .collect();
-            
-            obj.insert("account_ids".to_string(), Value::Array(
-                account_ids.iter().map(|id| Value::String(id.clone())).collect()
-            ));
+
+            obj.insert(
+                "account_ids".to_string(),
+                Value::Array(account_ids.iter().map(|id| Value::String(id.clone())).collect()),
+            );
         }
     }
 }
@@ -118,13 +114,10 @@ pub async fn get_user_orders_via_graph(
 
     // Find user persona ID
     let user_persona_id = format!("user:{}", user_id);
-    
+
     // Find related order personas via graph
-    let related_order_persona_ids = graph.find_related_by_entity_type(
-        &user_persona_id,
-        "order",
-        Some("has_orders"),
-    );
+    let related_order_persona_ids =
+        graph.find_related_by_entity_type(&user_persona_id, "order", Some("has_orders"));
 
     // Convert persona IDs to entity states
     let mut orders = Vec::new();
@@ -178,13 +171,10 @@ pub async fn enrich_order_response(
 
     // Find order persona ID
     let order_persona_id = format!("order:{}", order_id);
-    
+
     // Find related payments via persona graph
-    let related_payment_ids = graph.find_related_by_entity_type(
-        &order_persona_id,
-        "payment",
-        Some("has_payments"),
-    );
+    let related_payment_ids =
+        graph.find_related_by_entity_type(&order_persona_id, "payment", Some("has_payments"));
 
     // Enrich response with related payment IDs
     if let Some(obj) = response.as_object_mut() {
@@ -193,10 +183,11 @@ pub async fn enrich_order_response(
                 .iter()
                 .filter_map(|pid| pid.strip_prefix("payment:").map(|s| s.to_string()))
                 .collect();
-            
-            obj.insert("payment_ids".to_string(), Value::Array(
-                payment_ids.iter().map(|id| Value::String(id.clone())).collect()
-            ));
+
+            obj.insert(
+                "payment_ids".to_string(),
+                Value::Array(payment_ids.iter().map(|id| Value::String(id.clone())).collect()),
+            );
         }
 
         // Find user by traversing backwards in the graph
@@ -240,7 +231,7 @@ pub async fn enrich_response_via_graph(
 ) {
     // Extract entity type and ID from path
     let path_lower = path.to_lowercase();
-    
+
     if path_lower.contains("/users/") {
         if let Some(id) = entity_id {
             enrich_user_response(engine, workspace_id, id, response).await;
@@ -298,4 +289,3 @@ pub async fn enrich_response_via_graph(
 ) {
     // No-op when feature is disabled
 }
-

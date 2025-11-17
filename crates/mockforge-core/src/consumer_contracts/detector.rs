@@ -31,10 +31,7 @@ impl ConsumerBreakingChangeDetector {
         incident_id: Option<String>,
     ) -> Vec<ConsumerViolation> {
         // Get consumer usage for this endpoint
-        let usage = self
-            .usage_recorder
-            .get_endpoint_usage(consumer_id, endpoint, method)
-            .await;
+        let usage = self.usage_recorder.get_endpoint_usage(consumer_id, endpoint, method).await;
 
         if usage.is_none() {
             // No usage recorded, can't detect violations

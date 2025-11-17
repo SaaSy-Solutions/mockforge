@@ -11,4 +11,3 @@ pub mod types;
 pub use context_collector::FailureContextCollector;
 pub use narrative_generator::FailureNarrativeGenerator;
 pub use types::*;
-

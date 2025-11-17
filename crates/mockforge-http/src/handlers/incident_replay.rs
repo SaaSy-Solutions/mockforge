@@ -129,10 +129,8 @@ pub async fn import_and_generate(
             .map_err(|e| format!("Failed to parse PagerDuty format: {}", e))?,
         "datadog" => IncidentFormatAdapter::from_datadog(&request.data)
             .map_err(|e| format!("Failed to parse Datadog format: {}", e))?,
-        "custom" => {
-            serde_json::from_value::<IncidentTimeline>(request.data)
-                .map_err(|e| format!("Failed to parse custom format: {}", e))?
-        }
+        "custom" => serde_json::from_value::<IncidentTimeline>(request.data)
+            .map_err(|e| format!("Failed to parse custom format: {}", e))?,
         _ => return Err(format!("Unsupported format: {}", request.format)),
     };
 

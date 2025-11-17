@@ -207,8 +207,6 @@ pub mod ai_response;
 /// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
 pub mod behavioral_cloning;
 pub mod cache;
-/// Cross-protocol consistency engine for unified state across all protocols
-pub mod consistency;
 pub mod chain_execution;
 pub mod chaos_utilities;
 pub mod codegen;
@@ -216,26 +214,28 @@ pub mod codegen;
 pub mod collection_export;
 pub mod conditions;
 pub mod config;
+/// Cross-protocol consistency engine for unified state across all protocols
+pub mod consistency;
 /// Consumer-driven contracts for tracking usage and detecting consumer-specific breaking changes
 pub mod consumer_contracts;
 /// Contract validation for ensuring API contracts match specifications
 pub mod contract_drift;
 /// Contract validation for ensuring API contracts match specifications
 pub mod contract_validation;
-/// GitOps integration for drift budget violations
-pub mod drift_gitops;
 /// Contract webhooks for notifying external systems about contract changes
 pub mod contract_webhooks;
-/// Runtime validation for SDKs (request/response validation at runtime)
-pub mod runtime_validation;
+pub mod custom_fixture;
 /// Data source abstraction for loading test data from multiple sources
 pub mod data_source;
 /// Deceptive canary mode for routing team traffic to deceptive deploys
 pub mod deceptive_canary;
 /// Docker Compose integration for containerized mock deployments
 pub mod docker_compose;
+/// GitOps integration for drift budget violations
+pub mod drift_gitops;
 pub mod encryption;
 pub mod error;
+pub mod failure_analysis;
 pub mod failure_injection;
 pub mod fidelity;
 pub mod generate_config;
@@ -254,13 +254,12 @@ pub mod openapi_routes;
 pub mod output_control;
 pub mod overrides;
 pub mod performance;
-pub mod priority_handler;
 pub mod pr_generation;
+pub mod priority_handler;
 pub mod protocol_abstraction;
 pub mod proxy;
 pub mod reality;
 pub mod reality_continuum;
-pub mod custom_fixture;
 pub mod record_replay;
 pub mod request_capture;
 pub mod request_chaining;
@@ -269,14 +268,16 @@ pub mod request_logger;
 pub mod request_scripting;
 pub mod route_chaos;
 pub mod routing;
-pub mod scenarios;
+/// Runtime validation for SDKs (request/response validation at runtime)
+pub mod runtime_validation;
 /// Scenario Studio - Visual editor for co-editing business flows
 pub mod scenario_studio;
+pub mod scenarios;
+pub mod schema_diff;
 pub mod security;
+pub mod server_utils;
 /// Time travel and snapshot functionality for saving and restoring system states
 pub mod snapshots;
-pub mod schema_diff;
-pub mod server_utils;
 pub mod spec_parser;
 pub mod stateful_handler;
 pub mod sync_watcher;
@@ -289,45 +290,32 @@ pub mod traffic_shaping;
 pub mod validation;
 pub mod verification;
 pub mod voice;
-pub mod failure_analysis;
 pub mod workspace;
 pub mod workspace_import;
 pub mod workspace_persistence;
 pub mod ws_proxy;
 
+pub use ab_testing::{
+    apply_variant_to_response, select_variant, ABTestConfig, ABTestReport,
+    ABTestingMiddlewareState, MockVariant, VariantAllocation, VariantAnalytics, VariantComparison,
+    VariantManager, VariantSelectionStrategy,
+};
 pub use behavioral_cloning::{
     AmplificationScope, BehavioralSequence, EdgeAmplificationConfig, EdgeAmplifier,
     EndpointProbabilityModel, ErrorPattern, LatencyDistribution, PayloadVariation,
     ProbabilisticModel, SequenceLearner, SequenceStep,
 };
-pub use consistency::{
-    ConsistencyEngine, EntityState, ProtocolState, SessionInfo, StateChangeEvent, UnifiedState,
-};
-pub use ab_testing::{
-    ABTestConfig, ABTestReport, ABTestingMiddlewareState, MockVariant, VariantAllocation,
-    VariantAnalytics, VariantComparison, VariantManager, VariantSelectionStrategy,
-    apply_variant_to_response, select_variant,
-};
-pub use snapshots::{
-    SnapshotComponents, SnapshotManager, SnapshotManifest, SnapshotMetadata,
-};
 pub use chain_execution::{ChainExecutionEngine, ChainExecutionResult, ChainExecutionStatus};
-pub use scenarios::{
-    ScenarioDefinition, ScenarioExecutor, ScenarioParameter, ScenarioRegistry, ScenarioResult,
-    ScenarioStep,
-};
-pub use scenarios::types::StepResult;
-pub use scenario_studio::{
-    ConditionOperator, FlowCondition, FlowConnection, FlowDefinition, FlowExecutor,
-    FlowExecutionResult, FlowPosition, FlowStep, FlowStepResult, FlowType, FlowVariant,
-    StepType,
-};
 pub use chaos_utilities::{ChaosConfig, ChaosEngine, ChaosResult, ChaosStatistics};
 pub use conditions::{evaluate_condition, ConditionContext, ConditionError};
 pub use config::{
     apply_env_overrides, load_config, load_config_with_fallback, save_config, ApiKeyConfig,
     AuthConfig, ServerConfig,
 };
+pub use consistency::{
+    ConsistencyEngine, EntityState, ProtocolState, SessionInfo, StateChangeEvent, UnifiedState,
+};
+pub use custom_fixture::{CustomFixture, CustomFixtureLoader};
 pub use data_source::{
     DataSource, DataSourceConfig, DataSourceContent, DataSourceFactory, DataSourceManager,
     DataSourceType, GitDataSource, HttpDataSource, LocalDataSource,
@@ -337,10 +325,14 @@ pub use deceptive_canary::{
     TeamIdentifiers,
 };
 pub use error::{Error, Result};
-pub use fidelity::{FidelityCalculator, FidelityScore, SampleComparator, SchemaComparator};
+pub use failure_analysis::{
+    ContributingFactor, FailureContext, FailureContextCollector, FailureNarrative,
+    FailureNarrativeGenerator, NarrativeFrame,
+};
 pub use failure_injection::{
     create_failure_injector, FailureConfig, FailureInjector, TagFailureConfig,
 };
+pub use fidelity::{FidelityCalculator, FidelityScore, SampleComparator, SchemaComparator};
 pub use generate_config::{
     discover_config_file, load_generate_config, load_generate_config_with_fallback,
     save_generate_config, BarrelType, GenerateConfig, GenerateOptions, InputConfig, OutputConfig,
@@ -386,7 +378,6 @@ pub use reality_continuum::{
     ContinuumConfig, ContinuumRule, MergeStrategy, RealityContinuumEngine, ResponseBlender,
     TimeSchedule, TransitionCurve, TransitionMode,
 };
-pub use custom_fixture::{CustomFixture, CustomFixtureLoader};
 pub use record_replay::{
     clean_old_fixtures, list_fixtures, list_ready_fixtures, list_smoke_endpoints, RecordHandler,
     RecordReplayHandler, RecordedRequest, ReplayHandler,
@@ -404,9 +395,22 @@ pub use request_logger::{
 };
 pub use route_chaos::{RouteChaosInjector, RouteFaultResponse, RouteMatcher};
 pub use routing::{HttpMethod, Route, RouteRegistry};
+pub use runtime_validation::{
+    RuntimeValidationError, RuntimeValidationResult, RuntimeValidatorConfig, SchemaMetadata,
+};
+pub use scenario_studio::{
+    ConditionOperator, FlowCondition, FlowConnection, FlowDefinition, FlowExecutionResult,
+    FlowExecutor, FlowPosition, FlowStep, FlowStepResult, FlowType, FlowVariant, StepType,
+};
+pub use scenarios::types::StepResult;
+pub use scenarios::{
+    ScenarioDefinition, ScenarioExecutor, ScenarioParameter, ScenarioRegistry, ScenarioResult,
+    ScenarioStep,
+};
 pub use schema_diff::{to_enhanced_422_json, validation_diff, ValidationError};
 pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
+pub use snapshots::{SnapshotComponents, SnapshotManager, SnapshotManifest, SnapshotMetadata};
 pub use spec_parser::{GraphQLValidator, OpenApiValidator, SpecFormat};
 pub use stateful_handler::{
     ResourceIdExtract, StateInfo, StateResponse, StatefulConfig, StatefulResponse,
@@ -436,12 +440,8 @@ pub use verification::{
 };
 pub use voice::{
     ConversationContext, ConversationManager, ConversationState, GeneratedWorkspaceScenario,
-    HookTranspiler, ParsedCommand, ParsedWorkspaceScenario, VoiceCommandParser,
-    VoiceSpecGenerator, WorkspaceConfigSummary, WorkspaceScenarioGenerator,
-};
-pub use failure_analysis::{
-    ContributingFactor, FailureContext, FailureContextCollector, FailureNarrative,
-    FailureNarrativeGenerator, NarrativeFrame,
+    HookTranspiler, ParsedCommand, ParsedWorkspaceScenario, VoiceCommandParser, VoiceSpecGenerator,
+    WorkspaceConfigSummary, WorkspaceScenarioGenerator,
 };
 pub use workspace::{EntityId, Folder, MockRequest, Workspace, WorkspaceConfig, WorkspaceRegistry};
 pub use workspace_import::{
@@ -451,9 +451,6 @@ pub use workspace_import::{
 };
 pub use workspace_persistence::WorkspacePersistence;
 pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
-pub use runtime_validation::{
-    RuntimeValidationError, RuntimeValidationResult, RuntimeValidatorConfig, SchemaMetadata,
-};
 // Note: ValidationError and ValidationResult from spec_parser conflict with schema_diff::ValidationError
 // Use qualified paths: spec_parser::ValidationError, spec_parser::ValidationResult
 

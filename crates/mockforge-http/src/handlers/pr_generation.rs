@@ -2,11 +2,7 @@
 //!
 //! This module provides HTTP handlers for triggering PR generation when contract changes are detected.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-};
+use axum::{extract::State, http::StatusCode, response::Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -77,10 +73,7 @@ pub async fn generate_pr(
     State(state): State<PRGenerationState>,
     Json(request): Json<GeneratePRRequest>,
 ) -> Result<Json<GeneratePRResponse>, StatusCode> {
-    let generator = state
-        .generator
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let generator = state.generator.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
     // Convert file change requests to PR file changes
     let file_changes: Vec<PRFileChange> = request
@@ -131,15 +124,13 @@ pub async fn generate_pr(
             success: true,
             error: None,
         })),
-        Err(e) => {
-            Ok(Json(GeneratePRResponse {
-                pr_number: None,
-                pr_url: None,
-                branch: None,
-                success: false,
-                error: Some(e.to_string()),
-            }))
-        }
+        Err(e) => Ok(Json(GeneratePRResponse {
+            pr_number: None,
+            pr_url: None,
+            branch: None,
+            success: false,
+            error: Some(e.to_string()),
+        })),
     }
 }
 

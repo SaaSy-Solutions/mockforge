@@ -7,8 +7,8 @@ use crate::{
     RecordReplayHandler, RequestFingerprint, ResponsePriority, ResponseSource, Result,
     RouteChaosInjector,
 };
-use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use async_trait::async_trait;
+use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -181,10 +181,8 @@ impl PriorityHttpHandler {
             if let Some(custom_fixture) = custom_loader.load_fixture(&fingerprint) {
                 // Apply delay if specified
                 if custom_fixture.delay_ms > 0 {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(
-                        custom_fixture.delay_ms,
-                    ))
-                    .await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(custom_fixture.delay_ms))
+                        .await;
                 }
 
                 // Convert response to JSON string if it's not already a string
@@ -192,7 +190,10 @@ impl PriorityHttpHandler {
                     custom_fixture.response.as_str().unwrap().to_string()
                 } else {
                     serde_json::to_string(&custom_fixture.response).map_err(|e| {
-                        Error::generic(format!("Failed to serialize custom fixture response: {}", e))
+                        Error::generic(format!(
+                            "Failed to serialize custom fixture response: {}",
+                            e
+                        ))
                     })?
                 };
 

@@ -58,9 +58,7 @@ impl SequenceLearner {
         min_requests_per_trace: Option<usize>,
     ) -> Result<Vec<BehavioralSequence>> {
         // Query database for requests grouped by trace_id
-        let trace_groups = provider
-            .get_requests_by_trace(min_requests_per_trace)
-            .await?;
+        let trace_groups = provider.get_requests_by_trace(min_requests_per_trace).await?;
 
         if trace_groups.is_empty() {
             return Ok(Vec::new());
@@ -82,10 +80,8 @@ impl SequenceLearner {
             for (idx, request) in sorted_requests.iter().enumerate() {
                 let delay = if idx > 0 {
                     let prev_timestamp = sorted_requests[idx - 1].timestamp;
-                    let duration = request
-                        .timestamp
-                        .signed_duration_since(prev_timestamp)
-                        .num_milliseconds();
+                    let duration =
+                        request.timestamp.signed_duration_since(prev_timestamp).num_milliseconds();
                     if duration > 0 {
                         Some(duration as u64)
                     } else {
@@ -95,11 +91,7 @@ impl SequenceLearner {
                     None
                 };
 
-                sequence.push((
-                    request.path.clone(),
-                    request.method.clone(),
-                    delay,
-                ));
+                sequence.push((request.path.clone(), request.method.clone(), delay));
             }
 
             if !sequence.is_empty() {
@@ -211,24 +203,23 @@ impl SequenceLearner {
             let mut steps = Vec::new();
             let mut total_variance = 0.0;
             for (pos, (method, endpoint)) in pattern.iter().enumerate() {
-                let avg_delay = if pos < delays_by_position.len()
-                    && !delays_by_position[pos].is_empty()
-                {
-                    let delays = &delays_by_position[pos];
-                    let avg = delays.iter().sum::<u64>() as f64 / delays.len() as f64;
-                    let variance = delays
-                        .iter()
-                        .map(|&d| {
-                            let diff = d as f64 - avg;
-                            diff * diff
-                        })
-                        .sum::<f64>()
-                        / delays.len() as f64;
-                    total_variance += variance;
-                    Some(avg as u64)
-                } else {
-                    None
-                };
+                let avg_delay =
+                    if pos < delays_by_position.len() && !delays_by_position[pos].is_empty() {
+                        let delays = &delays_by_position[pos];
+                        let avg = delays.iter().sum::<u64>() as f64 / delays.len() as f64;
+                        let variance = delays
+                            .iter()
+                            .map(|&d| {
+                                let diff = d as f64 - avg;
+                                diff * diff
+                            })
+                            .sum::<f64>()
+                            / delays.len() as f64;
+                        total_variance += variance;
+                        Some(avg as u64)
+                    } else {
+                        None
+                    };
 
                 let mut step = crate::behavioral_cloning::types::SequenceStep::new(
                     endpoint.clone(),
@@ -246,7 +237,9 @@ impl SequenceLearner {
                     let matching_sequences = normalized
                         .iter()
                         .filter(|seq| {
-                            seq.len() > pos && seq[..pos] == *prev_pattern && seq[pos] == (method.clone(), endpoint.clone())
+                            seq.len() > pos
+                                && seq[..pos] == *prev_pattern
+                                && seq[pos] == (method.clone(), endpoint.clone())
                         })
                         .count();
                     matching_sequences as f64 / count as f64
@@ -266,17 +259,11 @@ impl SequenceLearner {
                 pattern[0].0.to_lowercase(),
                 pattern[0].1.replace('/', "_").replace('{', "").replace('}', "")
             );
-            let sequence_name = format!(
-                "{} {} → {} steps",
-                pattern[0].0,
-                pattern[0].1,
-                pattern.len()
-            );
+            let sequence_name =
+                format!("{} {} → {} steps", pattern[0].0, pattern[0].1, pattern.len());
 
-            let learned_from: Vec<String> = indices
-                .iter()
-                .map(|&idx| format!("trace_{}", idx))
-                .collect();
+            let learned_from: Vec<String> =
+                indices.iter().map(|&idx| format!("trace_{}", idx)).collect();
 
             let sequence = BehavioralSequence::new(sequence_id, sequence_name)
                 .with_frequency(frequency)
@@ -298,9 +285,7 @@ impl SequenceLearner {
                 .partial_cmp(&a.frequency)
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| {
-                    b.confidence
-                        .partial_cmp(&a.confidence)
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal)
                 })
         });
 
@@ -314,8 +299,8 @@ impl SequenceLearner {
     pub fn generate_sequence_scenario(sequence: &BehavioralSequence) -> ScenarioDefinition {
         use crate::scenarios::ScenarioStep;
 
-        let mut scenario = ScenarioDefinition::new(&sequence.id, &sequence.name)
-            .with_tags(sequence.tags.clone());
+        let mut scenario =
+            ScenarioDefinition::new(&sequence.id, &sequence.name).with_tags(sequence.tags.clone());
 
         if let Some(description) = &sequence.description {
             scenario.description = Some(description.clone());

@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use mockforge_core::consumer_contracts::{
-    Consumer, ConsumerBreakingChangeDetector, ConsumerIdentifier, ConsumerRegistry,
-    ConsumerType, ConsumerUsage, ConsumerViolation, UsageRecorder,
+    Consumer, ConsumerBreakingChangeDetector, ConsumerIdentifier, ConsumerRegistry, ConsumerType,
+    ConsumerUsage, ConsumerViolation, UsageRecorder,
 };
 
 /// State for consumer contracts handlers
@@ -147,9 +147,7 @@ pub async fn list_consumers(
 
     // Apply filters
     if let Some(workspace_id) = params.get("workspace_id") {
-        consumers.retain(|c| {
-            c.workspace_id.as_ref().map(|w| w == workspace_id).unwrap_or(false)
-        });
+        consumers.retain(|c| c.workspace_id.as_ref().map(|w| w == workspace_id).unwrap_or(false));
     }
 
     if let Some(consumer_type_str) = params.get("consumer_type") {
@@ -166,14 +164,8 @@ pub async fn list_consumers(
     let total = consumers.len();
 
     // Apply pagination
-    let offset = params
-        .get("offset")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    let limit = params
-        .get("limit")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(100);
+    let offset = params.get("offset").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let limit = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(100);
 
     consumers = consumers.into_iter().skip(offset).take(limit).collect();
 
@@ -202,11 +194,7 @@ pub async fn get_consumer(
     State(state): State<ConsumerContractsState>,
     Path(id): Path<String>,
 ) -> Result<Json<ConsumerResponse>, StatusCode> {
-    let consumer = state
-        .registry
-        .get_by_id(&id)
-        .await
-        .ok_or(StatusCode::NOT_FOUND)?;
+    let consumer = state.registry.get_by_id(&id).await.ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(ConsumerResponse {
         id: consumer.id,
@@ -226,11 +214,7 @@ pub async fn get_consumer_usage(
     Path(id): Path<String>,
 ) -> Result<Json<ConsumerUsageResponse>, StatusCode> {
     // Verify consumer exists
-    state
-        .registry
-        .get_by_id(&id)
-        .await
-        .ok_or(StatusCode::NOT_FOUND)?;
+    state.registry.get_by_id(&id).await.ok_or(StatusCode::NOT_FOUND)?;
 
     let usage = state.usage_recorder.get_usage(&id).await;
 

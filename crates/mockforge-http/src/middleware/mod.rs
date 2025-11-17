@@ -10,9 +10,7 @@ pub mod response_buffer;
 pub mod security;
 
 pub use ab_testing::ab_testing_middleware;
-pub use behavioral_cloning::{
-    behavioral_cloning_middleware, BehavioralCloningMiddlewareState,
-};
+pub use behavioral_cloning::{behavioral_cloning_middleware, BehavioralCloningMiddlewareState};
 pub use deceptive_canary::{deceptive_canary_middleware, DeceptiveCanaryState};
 pub use drift_tracking::drift_tracking_middleware_with_extensions;
 pub use production_headers::production_headers_middleware;

@@ -7,4 +7,3 @@
 pub mod handler;
 
 pub use handler::DriftGitOpsHandler;
-

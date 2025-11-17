@@ -3,7 +3,11 @@
 //! Provides endpoints for processing voice commands and generating OpenAPI specs
 //! using natural language commands powered by LLM.
 
-use axum::{extract::{Json, State}, http::StatusCode, response::Json as ResponseJson};
+use axum::{
+    extract::{Json, State},
+    http::StatusCode,
+    response::Json as ResponseJson,
+};
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 use mockforge_core::voice::{ParsedWorkspaceCreation, WorkspaceBuilder};
 use mockforge_core::{
@@ -13,8 +17,8 @@ use mockforge_core::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::models::ApiResponse;
 use crate::handlers::workspaces::WorkspaceState;
+use crate::models::ApiResponse;
 
 /// Request to process a voice command
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -238,10 +242,7 @@ pub async fn create_workspace_scenario(
     let parser = VoiceCommandParser::new(config);
 
     // Parse the scenario description
-    let parsed = match parser
-        .parse_workspace_scenario_command(&request.description)
-        .await
-    {
+    let parsed = match parser.parse_workspace_scenario_command(&request.description).await {
         Ok(parsed) => parsed,
         Err(e) => {
             return Ok(ResponseJson(ApiResponse::error(format!(

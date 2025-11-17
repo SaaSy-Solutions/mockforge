@@ -75,7 +75,8 @@ impl FlowDefinition {
     pub fn remove_step(&mut self, step_id: &str) {
         self.steps.retain(|s| s.id != step_id);
         // Remove connections involving this step
-        self.connections.retain(|c| c.from_step_id != step_id && c.to_step_id != step_id);
+        self.connections
+            .retain(|c| c.from_step_id != step_id && c.to_step_id != step_id);
         self.updated_at = Utc::now();
     }
 
@@ -87,9 +88,8 @@ impl FlowDefinition {
 
     /// Remove a connection between steps
     pub fn remove_connection(&mut self, from_step_id: &str, to_step_id: &str) {
-        self.connections.retain(|c| {
-            !(c.from_step_id == from_step_id && c.to_step_id == to_step_id)
-        });
+        self.connections
+            .retain(|c| !(c.from_step_id == from_step_id && c.to_step_id == to_step_id));
         self.updated_at = Utc::now();
     }
 }
@@ -156,11 +156,7 @@ pub struct FlowStep {
 
 impl FlowStep {
     /// Create a new API call step
-    pub fn new_api_call(
-        name: String,
-        method: String,
-        endpoint: String,
-    ) -> Self {
+    pub fn new_api_call(name: String, method: String, endpoint: String) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             name,
@@ -368,4 +364,3 @@ impl FlowVariant {
         }
     }
 }
-

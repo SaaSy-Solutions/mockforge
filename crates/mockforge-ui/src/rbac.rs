@@ -9,8 +9,8 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use mockforge_collab::permissions::{Permission, PermissionChecker, RolePermissions};
 use mockforge_collab::models::UserRole;
+use mockforge_collab::permissions::{Permission, PermissionChecker, RolePermissions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -36,7 +36,11 @@ impl AdminActionPermissions {
     pub fn get_required_permissions(action: &str) -> Vec<Permission> {
         match action {
             // Configuration changes require ManageSettings
-            "update_latency" | "update_faults" | "update_proxy" | "update_traffic_shaping" | "update_validation" => {
+            "update_latency"
+            | "update_faults"
+            | "update_proxy"
+            | "update_traffic_shaping"
+            | "update_validation" => {
                 vec![Permission::ManageSettings]
             }
 
@@ -92,7 +96,8 @@ impl AdminActionPermissions {
             }
 
             // Read operations require appropriate read permissions
-            "get_dashboard" | "get_logs" | "get_metrics" | "get_routes" | "get_fixtures" | "get_config" => {
+            "get_dashboard" | "get_logs" | "get_metrics" | "get_routes" | "get_fixtures"
+            | "get_config" => {
                 vec![Permission::WorkspaceRead, Permission::MockRead]
             }
 
@@ -136,16 +141,14 @@ pub fn extract_user_context(headers: &HeaderMap) -> Option<UserContext> {
         user_id,
         username,
         role,
-        email: headers.get("x-user-email")
-            .and_then(|h| h.to_str().ok())
-            .map(|s| s.to_string()),
+        email: headers.get("x-user-email").and_then(|h| h.to_str().ok()).map(|s| s.to_string()),
     })
 }
 
 /// Parse JWT token and extract user context
 /// Uses production JWT library (jsonwebtoken)
 fn parse_jwt_token(token: &str) -> Option<UserContext> {
-    use crate::auth::{validate_token, claims_to_user_context};
+    use crate::auth::{claims_to_user_context, validate_token};
 
     // Try to validate as production JWT token
     if let Ok(claims) = validate_token(token) {
@@ -165,7 +168,7 @@ fn parse_jwt_token(token: &str) -> Option<UserContext> {
             let padded = format!("{}{}", base64_str, "=".repeat(padding));
 
             // Decode base64
-            use base64::{Engine as _, engine::general_purpose};
+            use base64::{engine::general_purpose, Engine as _};
             if let Ok(decoded) = general_purpose::STANDARD.decode(&padded) {
                 if let Ok(payload_str) = String::from_utf8(decoded) {
                     return parse_jwt_payload(&payload_str);
@@ -223,10 +226,7 @@ pub fn get_default_user_context() -> Option<UserContext> {
 }
 
 /// RBAC middleware to enforce permissions on admin endpoints
-pub async fn rbac_middleware(
-    mut request: Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
+pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Response, StatusCode> {
     // Extract action name from request path and HTTP method
     let path = request.uri().path();
     let method = request.method().as_str();
@@ -264,8 +264,7 @@ pub async fn rbac_middleware(
     };
 
     // Extract user context from request
-    let user_context = extract_user_context(headers)
-        .or_else(get_default_user_context);
+    let user_context = extract_user_context(headers).or_else(get_default_user_context);
 
     // If no user context and authentication is required, deny access
     let user_context = match user_context {
@@ -291,9 +290,9 @@ pub async fn rbac_middleware(
     let required_permissions = AdminActionPermissions::get_required_permissions(action_name);
 
     // Check if user has at least one of the required permissions
-    let has_permission = required_permissions.iter().any(|&perm| {
-        RolePermissions::has_permission(user_context.role, perm)
-    });
+    let has_permission = required_permissions
+        .iter()
+        .any(|&perm| RolePermissions::has_permission(user_context.role, perm));
 
     if !has_permission {
         // Log authorization failure

@@ -175,7 +175,11 @@ impl ScenarioStep {
     }
 
     /// Add a variable extraction rule
-    pub fn extract_variable(mut self, var_name: impl Into<String>, json_path: impl Into<String>) -> Self {
+    pub fn extract_variable(
+        mut self,
+        var_name: impl Into<String>,
+        json_path: impl Into<String>,
+    ) -> Self {
         self.extract.insert(var_name.into(), json_path.into());
         self
     }

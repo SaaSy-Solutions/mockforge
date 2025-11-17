@@ -27,10 +27,7 @@ pub struct Relationship {
 
 impl Relationship {
     /// Create a new relationship
-    pub fn new(
-        parent_entity: String,
-        child_entity: String,
-    ) -> Self {
+    pub fn new(parent_entity: String, child_entity: String) -> Self {
         Self {
             parent_entity,
             child_entity,
@@ -108,7 +105,9 @@ impl RelationshipInference {
                 let id_part = parts.get(2);
                 let child_part = parts.get(3);
 
-                if let (Some(parent), Some(id_param), Some(child)) = (parent_part, id_part, child_part) {
+                if let (Some(parent), Some(id_param), Some(child)) =
+                    (parent_part, id_part, child_part)
+                {
                     // Check if middle part is an ID parameter (starts with { and ends with })
                     if id_param.starts_with('{') && id_param.ends_with('}') {
                         // Extract entity names
@@ -117,9 +116,7 @@ impl RelationshipInference {
 
                         // Check if this path has a GET operation
                         let has_get = match path_item {
-                            ReferenceOr::Item(item) => {
-                                item.get.is_some() || item.post.is_some()
-                            }
+                            ReferenceOr::Item(item) => item.get.is_some() || item.post.is_some(),
                             ReferenceOr::Reference { .. } => false,
                         };
 
@@ -181,10 +178,8 @@ impl RelationshipInference {
 
                 // Pattern: {entity}_count indicates relationship to {entity}
                 if prop_lower.ends_with("_count") {
-                    let related_entity = prop_lower
-                        .strip_suffix("_count")
-                        .unwrap_or("")
-                        .to_string();
+                    let related_entity =
+                        prop_lower.strip_suffix("_count").unwrap_or("").to_string();
 
                     if !related_entity.is_empty() && related_entity != entity_name {
                         // Check if we already have this relationship
@@ -193,12 +188,10 @@ impl RelationshipInference {
                         });
 
                         if !exists {
-                            let relationship = Relationship::new(
-                                entity_name.clone(),
-                                related_entity.clone(),
-                            )
-                            .with_count_field(prop_name.clone())
-                            .with_foreign_key_field(format!("{}_id", entity_name));
+                            let relationship =
+                                Relationship::new(entity_name.clone(), related_entity.clone())
+                                    .with_count_field(prop_name.clone())
+                                    .with_foreign_key_field(format!("{}_id", entity_name));
 
                             tracing::debug!(
                                 "Inferred relationship from count field: {} -> {} (count_field: {})",
@@ -214,10 +207,7 @@ impl RelationshipInference {
 
                 // Pattern: {entity}_id indicates foreign key to {entity}
                 if prop_lower.ends_with("_id") && prop_lower != "id" {
-                    let parent_entity = prop_lower
-                        .strip_suffix("_id")
-                        .unwrap_or("")
-                        .to_string();
+                    let parent_entity = prop_lower.strip_suffix("_id").unwrap_or("").to_string();
 
                     if !parent_entity.is_empty() && parent_entity != entity_name {
                         // This entity has a foreign key to parent_entity
@@ -227,11 +217,9 @@ impl RelationshipInference {
                         });
 
                         if !exists {
-                            let relationship = Relationship::new(
-                                parent_entity.clone(),
-                                entity_name.clone(),
-                            )
-                            .with_foreign_key_field(prop_name.clone());
+                            let relationship =
+                                Relationship::new(parent_entity.clone(), entity_name.clone())
+                                    .with_foreign_key_field(prop_name.clone());
 
                             tracing::debug!(
                                 "Inferred relationship from foreign key: {} -> {} (fk_field: {})",
@@ -252,10 +240,7 @@ impl RelationshipInference {
 
     /// Get relationships for a specific parent entity
     pub fn get_relationships_for_parent(&self, parent_entity: &str) -> Vec<&Relationship> {
-        self.relationships
-            .iter()
-            .filter(|r| r.parent_entity == parent_entity)
-            .collect()
+        self.relationships.iter().filter(|r| r.parent_entity == parent_entity).collect()
     }
 
     /// Get all relationships

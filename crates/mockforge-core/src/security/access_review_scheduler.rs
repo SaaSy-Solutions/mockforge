@@ -3,11 +3,9 @@
 //! This module provides a scheduler that automatically runs access reviews
 //! based on configured frequencies and schedules.
 
-use crate::security::access_review::{
-    AccessReviewConfig, ReviewFrequency, ReviewType,
-};
+use crate::security::access_review::{AccessReviewConfig, ReviewFrequency, ReviewType};
 use crate::security::access_review_notifications::AccessReviewNotificationService;
-use crate::security::access_review_service::{AccessReviewService, is_review_due};
+use crate::security::access_review_service::{is_review_due, AccessReviewService};
 use crate::Error;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -195,14 +193,19 @@ impl AccessReviewScheduler {
 
                     match result {
                         Ok(review_id) => {
-                            info!("Started automatic {} review: {}",
-                                format!("{:?}", review_type), review_id);
+                            info!(
+                                "Started automatic {} review: {}",
+                                format!("{:?}", review_type),
+                                review_id
+                            );
 
                             // Send notification if configured
                             if let Some(ref notif_service) = notification_service {
                                 let service_guard = service.read().await;
                                 if let Some(review) = service_guard.get_review(&review_id) {
-                                    if let Err(e) = notif_service.notify_review_started(review).await {
+                                    if let Err(e) =
+                                        notif_service.notify_review_started(review).await
+                                    {
                                         warn!("Failed to send review notification: {}", e);
                                     }
                                 }
@@ -217,8 +220,11 @@ impl AccessReviewScheduler {
                             }
                         }
                         Err(e) => {
-                            error!("Failed to start automatic {} review: {}",
-                                format!("{:?}", review_type), e);
+                            error!(
+                                "Failed to start automatic {} review: {}",
+                                format!("{:?}", review_type),
+                                e
+                            );
                         }
                     }
                 }
@@ -228,7 +234,10 @@ impl AccessReviewScheduler {
                 match service_guard.check_auto_revocations().await {
                     Ok(revoked) => {
                         if !revoked.is_empty() {
-                            info!("Auto-revoked {} user(s) due to expired approvals", revoked.len());
+                            info!(
+                                "Auto-revoked {} user(s) due to expired approvals",
+                                revoked.len()
+                            );
 
                             // Send notifications for auto-revocations
                             if let Some(ref notif_service) = notification_service {
@@ -241,13 +250,18 @@ impl AccessReviewScheduler {
                                         let reason = review_item
                                             .rejection_reason
                                             .clone()
-                                            .unwrap_or_else(|| "Auto-revoked due to missing approval".to_string());
+                                            .unwrap_or_else(|| {
+                                                "Auto-revoked due to missing approval".to_string()
+                                            });
 
                                         if let Err(e) = notif_service
                                             .notify_auto_revocation(review_id, *user_id, &reason)
                                             .await
                                         {
-                                            warn!("Failed to send auto-revocation notification: {}", e);
+                                            warn!(
+                                                "Failed to send auto-revocation notification: {}",
+                                                e
+                                            );
                                         }
                                     }
                                 }
@@ -281,10 +295,7 @@ impl AccessReviewScheduler {
     /// Get all schedules
     pub async fn get_schedules(&self) -> Vec<(ReviewType, DateTime<Utc>, Option<DateTime<Utc>>)> {
         let schedules = self.schedules.read().await;
-        schedules
-            .iter()
-            .map(|(t, s)| (*t, s.next_review, s.last_review))
-            .collect()
+        schedules.iter().map(|(t, s)| (*t, s.next_review, s.last_review)).collect()
     }
 
     /// Manually trigger a review (for testing or manual execution)
@@ -300,7 +311,9 @@ impl AccessReviewScheduler {
             }
             ReviewType::PrivilegedAccess => {
                 if !self.config.privileged_review.enabled {
-                    return Err(Error::Generic("Privileged access review is not enabled".to_string()));
+                    return Err(Error::Generic(
+                        "Privileged access review is not enabled".to_string(),
+                    ));
                 }
                 service.start_privileged_access_review().await?
             }
@@ -311,7 +324,9 @@ impl AccessReviewScheduler {
                 service.start_token_review().await?
             }
             ReviewType::ResourceAccess => {
-                return Err(Error::Generic("Resource access reviews not yet implemented".to_string()));
+                return Err(Error::Generic(
+                    "Resource access reviews not yet implemented".to_string(),
+                ));
             }
         };
 

@@ -554,13 +554,10 @@ async fn handle_transpile_hook(
 
     // Serialize hook
     let content = match format.to_lowercase().as_str() {
-        "yaml" | "yml" => {
-            serde_yaml::to_string(&hook).map_err(|e| format!("Failed to serialize hook to YAML: {}", e))?
-        }
-        "json" => {
-            serde_json::to_string_pretty(&hook)
-                .map_err(|e| format!("Failed to serialize hook to JSON: {}", e))?
-        }
+        "yaml" | "yml" => serde_yaml::to_string(&hook)
+            .map_err(|e| format!("Failed to serialize hook to YAML: {}", e))?,
+        "json" => serde_json::to_string_pretty(&hook)
+            .map_err(|e| format!("Failed to serialize hook to JSON: {}", e))?,
         _ => {
             return Err(format!("Unsupported format: {}. Use 'yaml' or 'json'", format).into());
         }

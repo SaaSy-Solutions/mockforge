@@ -3137,20 +3137,20 @@ async fn generate_openapi_from_traffic(
     // Note: We need to convert from mockforge-recorder's HttpExchange to mockforge-core's HttpExchange
     // to avoid version mismatch issues. The converter returns the version from mockforge-recorder's
     // dependency, so we need to manually convert to the local version.
-    let exchanges_from_recorder = match RecordingsToOpenApi::query_http_exchanges(&db, Some(query_filters)).await
-    {
-        Ok(exchanges) => exchanges,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": "Query error",
-                    "message": format!("Failed to query HTTP exchanges: {}", e)
-                })),
-            )
-                .into_response();
-        }
-    };
+    let exchanges_from_recorder =
+        match RecordingsToOpenApi::query_http_exchanges(&db, Some(query_filters)).await {
+            Ok(exchanges) => exchanges,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": "Query error",
+                        "message": format!("Failed to query HTTP exchanges: {}", e)
+                    })),
+                )
+                    .into_response();
+            }
+        };
 
     if exchanges_from_recorder.is_empty() {
         return (
@@ -3599,7 +3599,10 @@ async fn update_chaos_config(
     #[cfg(feature = "chaos")]
     {
         if let Some(chaos_state) = &state.chaos_api_state {
-            use mockforge_chaos::config::{ChaosConfig, FaultInjectionConfig, LatencyConfig, RateLimitConfig, TrafficShapingConfig};
+            use mockforge_chaos::config::{
+                ChaosConfig, FaultInjectionConfig, LatencyConfig, RateLimitConfig,
+                TrafficShapingConfig,
+            };
 
             let mut config = chaos_state.config.write().await;
 
@@ -3724,7 +3727,8 @@ async fn apply_network_profile(
             // NetworkProfile uses mockforge_core::traffic_shaping::TrafficShapingConfig
             // which has bandwidth and burst_loss fields
             let network_shaping = NetworkShapingConfig {
-                enabled: profile.traffic_shaping.bandwidth.enabled || profile.traffic_shaping.burst_loss.enabled,
+                enabled: profile.traffic_shaping.bandwidth.enabled
+                    || profile.traffic_shaping.burst_loss.enabled,
                 bandwidth_limit_bps: profile.traffic_shaping.bandwidth.max_bytes_per_sec * 8, // Convert bytes to bits
                 packet_loss_percent: profile.traffic_shaping.burst_loss.loss_rate_during_burst,
                 max_connections: 1000, // Default value
@@ -3761,7 +3765,8 @@ async fn apply_network_profile(
                 let mut chaos_config = chaos_state.config.write().await;
                 // Apply profile's traffic shaping to chaos API state
                 let chaos_traffic_shaping = TrafficShapingConfig {
-                    enabled: profile.traffic_shaping.bandwidth.enabled || profile.traffic_shaping.burst_loss.enabled,
+                    enabled: profile.traffic_shaping.bandwidth.enabled
+                        || profile.traffic_shaping.burst_loss.enabled,
                     bandwidth_limit_bps: profile.traffic_shaping.bandwidth.max_bytes_per_sec * 8, // Convert bytes to bits
                     packet_loss_percent: profile.traffic_shaping.burst_loss.loss_rate_during_burst,
                     max_connections: 0,

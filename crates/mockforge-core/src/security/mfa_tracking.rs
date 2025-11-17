@@ -55,7 +55,10 @@ pub trait MfaStorage: Send + Sync {
     async fn get_users_with_mfa(&self) -> Result<Vec<Uuid>, crate::Error>;
 
     /// Get all privileged users without MFA
-    async fn get_privileged_users_without_mfa(&self, privileged_user_ids: &[Uuid]) -> Result<Vec<Uuid>, crate::Error>;
+    async fn get_privileged_users_without_mfa(
+        &self,
+        privileged_user_ids: &[Uuid],
+    ) -> Result<Vec<Uuid>, crate::Error>;
 }
 
 /// In-memory MFA storage (for development/testing)
@@ -100,15 +103,15 @@ impl MfaStorage for InMemoryMfaStorage {
             .collect())
     }
 
-    async fn get_privileged_users_without_mfa(&self, privileged_user_ids: &[Uuid]) -> Result<Vec<Uuid>, crate::Error> {
+    async fn get_privileged_users_without_mfa(
+        &self,
+        privileged_user_ids: &[Uuid],
+    ) -> Result<Vec<Uuid>, crate::Error> {
         let statuses = self.mfa_statuses.read().await;
         Ok(privileged_user_ids
             .iter()
             .filter(|user_id| {
-                statuses
-                    .get(user_id)
-                    .map(|s| !s.enabled)
-                    .unwrap_or(true) // If no status, assume MFA not enabled
+                statuses.get(user_id).map(|s| !s.enabled).unwrap_or(true) // If no status, assume MFA not enabled
             })
             .copied()
             .collect())

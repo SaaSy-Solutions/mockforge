@@ -129,4 +129,3 @@ pub fn format_jira_webhook(incident: &DriftIncident) -> Value {
         }
     })
 }
-

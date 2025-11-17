@@ -10,7 +10,5 @@ pub mod usage_recorder;
 
 pub use detector::ConsumerBreakingChangeDetector;
 pub use registry::ConsumerRegistry;
-pub use types::{
-    Consumer, ConsumerIdentifier, ConsumerType, ConsumerUsage, ConsumerViolation,
-};
+pub use types::{Consumer, ConsumerIdentifier, ConsumerType, ConsumerUsage, ConsumerViolation};
 pub use usage_recorder::UsageRecorder;

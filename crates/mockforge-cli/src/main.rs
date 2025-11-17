@@ -25,6 +25,8 @@ mod cloud_commands;
 mod contract_diff_commands;
 mod contract_sync_commands;
 mod deploy_commands;
+mod error_helpers;
+mod flow_commands;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
 mod git_watch_commands;
@@ -34,22 +36,20 @@ mod kafka_commands;
 mod mockai_commands;
 #[cfg(feature = "mqtt")]
 mod mqtt_commands;
-mod flow_commands;
 mod plugin_commands;
 mod progress;
 mod recorder_commands;
 mod scenario_commands;
-mod snapshot_commands;
 #[cfg(feature = "smtp")]
 mod smtp_commands;
+mod snapshot_commands;
 mod template_commands;
 mod time_commands;
 mod tunnel_commands;
 mod vbr_commands;
 mod voice_commands;
-mod workspace_commands;
 mod wizard;
-mod error_helpers;
+mod workspace_commands;
 
 #[cfg(test)]
 mod tests;
@@ -3330,7 +3330,9 @@ pub async fn handle_serve(
     tokio::spawn(async {
         use mockforge_core::request_capture::init_global_capture_manager;
         init_global_capture_manager(1000); // Keep last 1000 requests
-        tracing::info!("Request capture manager initialized for contract diff analysis (lazy-loaded)");
+        tracing::info!(
+            "Request capture manager initialized for contract diff analysis (lazy-loaded)"
+        );
     });
 
     // Initialize SIEM emitter lazily (defer until first use to improve startup time)
@@ -3342,7 +3344,10 @@ pub async fn handle_serve(
             if let Err(e) = init_global_siem_emitter(siem_config.clone()).await {
                 tracing::warn!("Failed to initialize SIEM emitter: {}", e);
             } else {
-                tracing::info!("SIEM emitter initialized with {} destinations (lazy-loaded)", siem_config.destinations.len());
+                tracing::info!(
+                    "SIEM emitter initialized with {} destinations (lazy-loaded)",
+                    siem_config.destinations.len()
+                );
             }
         });
     }
@@ -3374,23 +3379,43 @@ pub async fn handle_serve(
         struct SimpleUserDataProvider;
         #[async_trait::async_trait]
         impl mockforge_core::security::UserDataProvider for SimpleUserDataProvider {
-            async fn get_all_users(&self) -> Result<Vec<mockforge_core::security::UserAccessInfo>, mockforge_core::Error> {
+            async fn get_all_users(
+                &self,
+            ) -> Result<Vec<mockforge_core::security::UserAccessInfo>, mockforge_core::Error>
+            {
                 // Return empty list - would be populated from actual user management system
                 Ok(Vec::new())
             }
-            async fn get_privileged_users(&self) -> Result<Vec<mockforge_core::security::PrivilegedAccessInfo>, mockforge_core::Error> {
+            async fn get_privileged_users(
+                &self,
+            ) -> Result<Vec<mockforge_core::security::PrivilegedAccessInfo>, mockforge_core::Error>
+            {
                 Ok(Vec::new())
             }
-            async fn get_api_tokens(&self) -> Result<Vec<mockforge_core::security::ApiTokenInfo>, mockforge_core::Error> {
+            async fn get_api_tokens(
+                &self,
+            ) -> Result<Vec<mockforge_core::security::ApiTokenInfo>, mockforge_core::Error>
+            {
                 Ok(Vec::new())
             }
-            async fn get_user(&self, _user_id: uuid::Uuid) -> Result<Option<mockforge_core::security::UserAccessInfo>, mockforge_core::Error> {
+            async fn get_user(
+                &self,
+                _user_id: uuid::Uuid,
+            ) -> Result<Option<mockforge_core::security::UserAccessInfo>, mockforge_core::Error>
+            {
                 Ok(None)
             }
-            async fn get_last_login(&self, _user_id: uuid::Uuid) -> Result<Option<chrono::DateTime<chrono::Utc>>, mockforge_core::Error> {
+            async fn get_last_login(
+                &self,
+                _user_id: uuid::Uuid,
+            ) -> Result<Option<chrono::DateTime<chrono::Utc>>, mockforge_core::Error> {
                 Ok(None)
             }
-            async fn revoke_user_access(&self, _user_id: uuid::Uuid, _reason: String) -> Result<(), mockforge_core::Error> {
+            async fn revoke_user_access(
+                &self,
+                _user_id: uuid::Uuid,
+                _reason: String,
+            ) -> Result<(), mockforge_core::Error> {
                 Ok(())
             }
             async fn update_user_permissions(
@@ -3429,7 +3454,8 @@ pub async fn handle_serve(
             recipients: review_config.notifications.recipients,
             channel_config: std::collections::HashMap::new(),
         };
-        let notification_service = Arc::new(AccessReviewNotificationService::new(notification_config));
+        let notification_service =
+            Arc::new(AccessReviewNotificationService::new(notification_config));
 
         // Initialize global access review service for HTTP API
         use mockforge_core::security::init_global_access_review_service;
@@ -3503,7 +3529,9 @@ pub async fn handle_serve(
 
     // Initialize change management engine if enabled
     let change_management_engine = if config.security.monitoring.change_management.enabled {
-        use mockforge_core::security::change_management::{ChangeManagementConfig, ChangeManagementEngine};
+        use mockforge_core::security::change_management::{
+            ChangeManagementConfig, ChangeManagementEngine,
+        };
         use std::sync::Arc;
 
         let change_config = config.security.monitoring.change_management.clone();
@@ -3526,7 +3554,9 @@ pub async fn handle_serve(
 
     // Initialize compliance dashboard engine if enabled
     let compliance_dashboard_engine = if config.security.monitoring.compliance_dashboard.enabled {
-        use mockforge_core::security::compliance_dashboard::{ComplianceDashboardConfig, ComplianceDashboardEngine};
+        use mockforge_core::security::compliance_dashboard::{
+            ComplianceDashboardConfig, ComplianceDashboardEngine,
+        };
         use std::sync::Arc;
 
         let dashboard_config = config.security.monitoring.compliance_dashboard.clone();
@@ -3549,7 +3579,9 @@ pub async fn handle_serve(
 
     // Initialize risk assessment engine if enabled
     let risk_assessment_engine = if config.security.monitoring.risk_assessment.enabled {
-        use mockforge_core::security::risk_assessment::{RiskAssessmentConfig, RiskAssessmentEngine};
+        use mockforge_core::security::risk_assessment::{
+            RiskAssessmentConfig, RiskAssessmentEngine,
+        };
         use std::sync::Arc;
 
         let risk_config = config.security.monitoring.risk_assessment.clone();
@@ -3733,7 +3765,8 @@ pub async fn handle_serve(
             if let Some(ref spec_path) = spec_path {
                 match mockforge_core::openapi::OpenApiSpec::from_file(spec_path).await {
                     Ok(openapi_spec) => {
-                        match MockAI::from_openapi(&openapi_spec, behavior_config_for_upgrade).await {
+                        match MockAI::from_openapi(&openapi_spec, behavior_config_for_upgrade).await
+                        {
                             Ok(instance) => {
                                 *mockai_for_upgrade.write().await = instance;
                                 info!("✅ MockAI upgraded with OpenAPI spec (background initialization)");
@@ -3758,7 +3791,7 @@ pub async fn handle_serve(
     };
 
     // Create ValidationOptions from config for template expansion
-    use mockforge_core::openapi_routes::{ValidationOptions, ValidationMode};
+    use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
     let request_mode = if let Some(ref validation) = config.http.validation {
         match validation.mode.as_str() {
             "off" | "disable" | "disabled" => ValidationMode::Disabled,
@@ -3996,11 +4029,12 @@ pub async fn handle_serve(
 
     // Start WebSocket server
     let ws_port = config.websocket.port;
+    let ws_host = config.websocket.host.clone();
     let ws_shutdown = shutdown_token.clone();
     let ws_handle = tokio::spawn(async move {
-        println!("🔌 WebSocket server listening on ws://localhost:{}", ws_port);
+        println!("🔌 WebSocket server listening on ws://{}:{}", ws_host, ws_port);
         tokio::select! {
-            result = mockforge_ws::start_with_latency(ws_port, None) => {
+            result = mockforge_ws::start_with_latency_and_host(ws_port, &ws_host, None) => {
                 result.map_err(|e| format!("WebSocket server error: {}", e))
             }
             _ = ws_shutdown.cancelled() => {
@@ -6222,7 +6256,8 @@ async fn handle_init(
             ""
         };
 
-        let config_content = format!(r#"# MockForge Configuration
+        let config_content = format!(
+            r#"# MockForge Configuration
 # Full configuration reference: https://docs.mockforge.dev/config
 
 # HTTP Server
@@ -6292,7 +6327,9 @@ logging:
   json_format: false
   max_file_size_mb: 10
   max_files: 5
-"#, openapi_spec_line);
+"#,
+            openapi_spec_line
+        );
         fs::write(&config_path, config_content)?;
         println!("✅ Created mockforge.yaml");
     }

@@ -96,8 +96,11 @@ pub async fn calculate_fidelity(
         scores.insert(workspace_id.clone(), score.clone());
     }
 
-    info!("Calculated fidelity score for workspace: {} - Overall: {:.2}%",
-          workspace_id, score.overall * 100.0);
+    info!(
+        "Calculated fidelity score for workspace: {} - Overall: {:.2}%",
+        workspace_id,
+        score.overall * 100.0
+    );
 
     Ok(Json(json!({
         "success": true,
@@ -160,6 +163,9 @@ pub fn fidelity_router(state: FidelityState) -> axum::Router {
     use axum::routing::{get, post};
 
     axum::Router::new()
-        .route("/api/v1/workspace/:workspace_id/fidelity", get(get_fidelity).post(calculate_fidelity))
+        .route(
+            "/api/v1/workspace/:workspace_id/fidelity",
+            get(get_fidelity).post(calculate_fidelity),
+        )
         .with_state(state)
 }

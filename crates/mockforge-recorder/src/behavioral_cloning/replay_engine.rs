@@ -131,10 +131,7 @@ impl BehavioralScenarioReplayEngine {
                         },
                     );
 
-                    debug!(
-                        "Replayed step {} of scenario {}",
-                        instance.current_step, scenario.id
-                    );
+                    debug!("Replayed step {} of scenario {}", instance.current_step, scenario.id);
 
                     return Ok(Some(response));
                 }
@@ -148,7 +145,11 @@ impl BehavioralScenarioReplayEngine {
 
                         // Extract state variables
                         let mut new_state = instance.state.clone();
-                        Self::extract_state_variables(&response.body, &step.extracts, &mut new_state);
+                        Self::extract_state_variables(
+                            &response.body,
+                            &step.extracts,
+                            &mut new_state,
+                        );
 
                         // Update instance
                         instances.insert(
@@ -305,10 +306,12 @@ impl BehavioralScenarioReplayEngine {
         // Fill the dp table
         for i in 1..=n {
             for j in 1..=m {
-                let cost = if s1_chars[i - 1] == s2_chars[j - 1] { 0 } else { 1 };
-                dp[i][j] = (dp[i - 1][j] + 1)
-                    .min(dp[i][j - 1] + 1)
-                    .min(dp[i - 1][j - 1] + cost);
+                let cost = if s1_chars[i - 1] == s2_chars[j - 1] {
+                    0
+                } else {
+                    1
+                };
+                dp[i][j] = (dp[i - 1][j] + 1).min(dp[i][j - 1] + 1).min(dp[i - 1][j - 1] + cost);
             }
         }
 
@@ -342,8 +345,8 @@ impl BehavioralScenarioReplayEngine {
         }
 
         // Parse response headers
-        let headers: HashMap<String, String> = serde_json::from_str(&step.response.headers)
-            .unwrap_or_default();
+        let headers: HashMap<String, String> =
+            serde_json::from_str(&step.response.headers).unwrap_or_default();
 
         Ok(ReplayResponse {
             status_code: step.response.status_code as u16,
@@ -433,7 +436,8 @@ impl mockforge_core::priority_handler::BehavioralScenarioReplay for BehavioralSc
         headers: &axum::http::HeaderMap,
         body: Option<&[u8]>,
         session_id: Option<&str>,
-    ) -> mockforge_core::Result<Option<mockforge_core::priority_handler::BehavioralReplayResponse>> {
+    ) -> mockforge_core::Result<Option<mockforge_core::priority_handler::BehavioralReplayResponse>>
+    {
         match self.try_replay(method, uri, headers, body, session_id).await {
             Ok(Some(response)) => {
                 let content_type = response
@@ -467,4 +471,3 @@ pub struct ReplayResponse {
     /// Timing delay in milliseconds
     pub timing_ms: Option<u64>,
 }
-

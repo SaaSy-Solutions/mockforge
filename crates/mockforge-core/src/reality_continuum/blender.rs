@@ -112,9 +112,8 @@ impl ResponseBlender {
                     let real_val = real_obj.get(&key);
 
                     // Get field-specific blend ratio
-                    let field_ratio = field_config
-                        .get_blend_ratio_for_path(&json_path)
-                        .unwrap_or(global_ratio);
+                    let field_ratio =
+                        field_config.get_blend_ratio_for_path(&json_path).unwrap_or(global_ratio);
 
                     match (mock_val, real_val) {
                         (Some(m), Some(r)) => {

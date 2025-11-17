@@ -2,14 +2,14 @@
 //!
 //! This module provides HTTP handlers for managing business flows in the Scenario Studio.
 
+use axum::response::Response as AxumResponse;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
 };
-use axum::response::Response as AxumResponse;
 use mockforge_core::scenario_studio::{
-    FlowDefinition, FlowExecutor, FlowExecutionResult, FlowType, FlowVariant,
+    FlowDefinition, FlowExecutionResult, FlowExecutor, FlowType, FlowVariant,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -283,11 +283,8 @@ pub async fn list_flow_variants(
     Path(id): Path<String>,
 ) -> Result<Json<Vec<FlowVariant>>, StatusCode> {
     let variants = state.variants.read().await;
-    let flow_variants: Vec<FlowVariant> = variants
-        .values()
-        .filter(|v| v.flow_id == id)
-        .cloned()
-        .collect();
+    let flow_variants: Vec<FlowVariant> =
+        variants.values().filter(|v| v.flow_id == id).cloned().collect();
     Ok(Json(flow_variants))
 }
 
@@ -302,14 +299,10 @@ pub fn scenario_studio_router(state: ScenarioStudioState) -> axum::Router {
             "/api/v1/scenario-studio/flows/:id",
             get(get_flow).put(update_flow).delete(delete_flow),
         )
-        .route(
-            "/api/v1/scenario-studio/flows/:id/execute",
-            post(execute_flow),
-        )
+        .route("/api/v1/scenario-studio/flows/:id/execute", post(execute_flow))
         .route(
             "/api/v1/scenario-studio/flows/:id/variants",
             post(create_flow_variant).get(list_flow_variants),
         )
         .with_state(state)
 }
-

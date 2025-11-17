@@ -206,16 +206,25 @@ impl EventFilter {
             for pattern in excludes {
                 if pattern.starts_with("severity:") {
                     let severity_str = pattern.strip_prefix("severity:").unwrap_or("");
-                    if severity_str == "low" && event.severity == crate::security::events::SecurityEventSeverity::Low {
+                    if severity_str == "low"
+                        && event.severity == crate::security::events::SecurityEventSeverity::Low
+                    {
                         return false;
                     }
-                    if severity_str == "medium" && event.severity == crate::security::events::SecurityEventSeverity::Medium {
+                    if severity_str == "medium"
+                        && event.severity == crate::security::events::SecurityEventSeverity::Medium
+                    {
                         return false;
                     }
-                    if severity_str == "high" && event.severity == crate::security::events::SecurityEventSeverity::High {
+                    if severity_str == "high"
+                        && event.severity == crate::security::events::SecurityEventSeverity::High
+                    {
                         return false;
                     }
-                    if severity_str == "critical" && event.severity == crate::security::events::SecurityEventSeverity::Critical {
+                    if severity_str == "critical"
+                        && event.severity
+                            == crate::security::events::SecurityEventSeverity::Critical
+                    {
                         return false;
                     }
                 } else if self.matches_pattern(&event.event_type, pattern) {
@@ -483,17 +492,23 @@ impl SiemTransport for SyslogTransport {
             // TCP syslog
             use tokio::net::TcpStream;
             let addr = format!("{}:{}", self.host, self.port);
-            let mut stream = TcpStream::connect(&addr).await
-                .map_err(|e| Error::Generic(format!("Failed to connect to syslog server: {}", e)))?;
-            stream.write_all(message.as_bytes()).await
+            let mut stream = TcpStream::connect(&addr).await.map_err(|e| {
+                Error::Generic(format!("Failed to connect to syslog server: {}", e))
+            })?;
+            stream
+                .write_all(message.as_bytes())
+                .await
                 .map_err(|e| Error::Generic(format!("Failed to send syslog message: {}", e)))?;
         } else {
             // UDP syslog
             use tokio::net::UdpSocket;
-            let socket = UdpSocket::bind("0.0.0.0:0").await
+            let socket = UdpSocket::bind("0.0.0.0:0")
+                .await
                 .map_err(|e| Error::Generic(format!("Failed to bind UDP socket: {}", e)))?;
             let addr = format!("{}:{}", self.host, self.port);
-            socket.send_to(message.as_bytes(), &addr).await
+            socket
+                .send_to(message.as_bytes(), &addr)
+                .await
                 .map_err(|e| Error::Generic(format!("Failed to send UDP syslog message: {}", e)))?;
         }
 
@@ -571,25 +586,20 @@ impl SiemTransport for HttpTransport {
         let mut last_error = None;
         for attempt in 0..=self.retry.max_attempts {
             match request.try_clone() {
-                Some(mut req) => {
-                    match req.send().await {
-                        Ok(response) => {
-                            if response.status().is_success() {
-                                debug!("Sent HTTP event to {}: {}", self.url, event.event_type);
-                                return Ok(());
-                            } else {
-                                let status = response.status();
-                                last_error = Some(Error::Generic(format!(
-                                    "HTTP error: {}",
-                                    status
-                                )));
-                            }
-                        }
-                        Err(e) => {
-                            last_error = Some(Error::Generic(format!("HTTP request failed: {}", e)));
+                Some(mut req) => match req.send().await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            debug!("Sent HTTP event to {}: {}", self.url, event.event_type);
+                            return Ok(());
+                        } else {
+                            let status = response.status();
+                            last_error = Some(Error::Generic(format!("HTTP error: {}", status)));
                         }
                     }
-                }
+                    Err(e) => {
+                        last_error = Some(Error::Generic(format!("HTTP request failed: {}", e)));
+                    }
+                },
                 None => {
                     // Request body was consumed, recreate
                     let event_json = event.to_json()?;
@@ -649,7 +659,8 @@ impl FileTransport {
 
         // Create parent directory if it doesn't exist
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await
+            tokio::fs::create_dir_all(parent)
+                .await
                 .map_err(|e| Error::Generic(format!("Failed to create directory: {}", e)))?;
         }
 
@@ -684,10 +695,14 @@ impl SiemTransport for FileTransport {
                 format!("{}\n", event.to_json()?)
             };
 
-            writer.write_all(line.as_bytes()).await
+            writer
+                .write_all(line.as_bytes())
+                .await
                 .map_err(|e| Error::Generic(format!("Failed to write to file: {}", e)))?;
 
-            writer.flush().await
+            writer
+                .flush()
+                .await
                 .map_err(|e| Error::Generic(format!("Failed to flush file: {}", e)))?;
 
             debug!("Wrote event to file {}: {}", self.path.display(), event.event_type);
@@ -807,11 +822,8 @@ mod tests {
             conditions: None,
         };
 
-        let event = crate::security::events::SecurityEvent::new(
-            SecurityEventType::AuthSuccess,
-            None,
-            None,
-        );
+        let event =
+            crate::security::events::SecurityEvent::new(SecurityEventType::AuthSuccess, None, None);
 
         assert!(filter.should_include(&event));
 
@@ -832,19 +844,13 @@ mod tests {
             conditions: None,
         };
 
-        let event = crate::security::events::SecurityEvent::new(
-            SecurityEventType::AuthSuccess,
-            None,
-            None,
-        );
+        let event =
+            crate::security::events::SecurityEvent::new(SecurityEventType::AuthSuccess, None, None);
 
         assert!(!filter.should_include(&event));
 
-        let event = crate::security::events::SecurityEvent::new(
-            SecurityEventType::AuthFailure,
-            None,
-            None,
-        );
+        let event =
+            crate::security::events::SecurityEvent::new(SecurityEventType::AuthFailure, None, None);
 
         assert!(filter.should_include(&event));
     }
@@ -859,11 +865,8 @@ mod tests {
             "mockforge".to_string(),
         );
 
-        let event = crate::security::events::SecurityEvent::new(
-            SecurityEventType::AuthSuccess,
-            None,
-            None,
-        );
+        let event =
+            crate::security::events::SecurityEvent::new(SecurityEventType::AuthSuccess, None, None);
 
         let message = transport.format_syslog_message(&event);
         assert!(message.starts_with("<"));

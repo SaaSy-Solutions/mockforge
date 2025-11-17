@@ -200,7 +200,10 @@ impl OpenApiRouteRegistry {
     }
 
     /// Generate routes from the OpenAPI specification with optional persona
-    fn generate_routes_with_persona(spec: &Arc<OpenApiSpec>, persona: Option<Arc<crate::intelligent_behavior::config::Persona>>) -> Vec<OpenApiRoute> {
+    fn generate_routes_with_persona(
+        spec: &Arc<OpenApiSpec>,
+        persona: Option<Arc<crate::intelligent_behavior::config::Persona>>,
+    ) -> Vec<OpenApiRoute> {
         let mut routes = Vec::new();
 
         let all_paths_ops = spec.all_paths_and_operations();
@@ -271,7 +274,8 @@ impl OpenApiRouteRegistry {
                     }
 
                     // Build query string
-                    let query_string = raw_query.as_ref().map(|q| q.to_string()).unwrap_or_default();
+                    let query_string =
+                        raw_query.as_ref().map(|q| q.to_string()).unwrap_or_default();
 
                     // Create URI for fingerprint
                     // Note: RequestFingerprint only uses the path, not the full URI with query
@@ -283,13 +287,22 @@ impl OpenApiRouteRegistry {
                     };
 
                     if let Ok(uri) = uri_str.parse::<Uri>() {
-                        let http_method = Method::from_bytes(method.as_bytes())
-                            .unwrap_or(Method::GET);
-                        let body_slice = if body.is_empty() { None } else { Some(body.as_ref()) };
-                        let fingerprint = RequestFingerprint::new(http_method, &uri, &headers, body_slice);
+                        let http_method =
+                            Method::from_bytes(method.as_bytes()).unwrap_or(Method::GET);
+                        let body_slice = if body.is_empty() {
+                            None
+                        } else {
+                            Some(body.as_ref())
+                        };
+                        let fingerprint =
+                            RequestFingerprint::new(http_method, &uri, &headers, body_slice);
 
                         if let Some(custom_fixture) = loader.load_fixture(&fingerprint) {
-                            tracing::debug!("Using custom fixture for {} {}", method, path_template);
+                            tracing::debug!(
+                                "Using custom fixture for {} {}",
+                                method,
+                                path_template
+                            );
 
                             // Apply delay if specified
                             if custom_fixture.delay_ms > 0 {
@@ -308,14 +321,16 @@ impl OpenApiRouteRegistry {
                             };
 
                             // Parse response body as JSON
-                            let json_value: serde_json::Value = serde_json::from_str(&response_body)
-                                .unwrap_or_else(|_| serde_json::json!({}));
+                            let json_value: serde_json::Value =
+                                serde_json::from_str(&response_body)
+                                    .unwrap_or_else(|_| serde_json::json!({}));
 
                             // Build response with status and JSON body
                             let status = axum::http::StatusCode::from_u16(custom_fixture.status)
                                 .unwrap_or(axum::http::StatusCode::OK);
 
-                            let mut response = (status, axum::response::Json(json_value)).into_response();
+                            let mut response =
+                                (status, axum::response::Json(json_value)).into_response();
 
                             // Add custom headers to response
                             let response_headers = response.headers_mut();

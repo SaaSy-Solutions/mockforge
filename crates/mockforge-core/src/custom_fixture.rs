@@ -86,20 +86,15 @@ impl CustomFixtureLoader {
         })?;
 
         let mut loaded_count = 0;
-        while let Some(entry) = entries.next_entry().await.map_err(|e| {
-            Error::generic(format!(
-                "Failed to read directory entry: {}",
-                e
-            ))
-        })? {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?
+        {
             let path = entry.path();
             if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
                 if let Err(e) = self.load_fixture_file(&path).await {
-                    tracing::warn!(
-                        "Failed to load fixture file {}: {}",
-                        path.display(),
-                        e
-                    );
+                    tracing::warn!("Failed to load fixture file {}: {}", path.display(), e);
                 } else {
                     loaded_count += 1;
                 }
@@ -122,11 +117,7 @@ impl CustomFixtureLoader {
         })?;
 
         let fixture: CustomFixture = serde_json::from_str(&content).map_err(|e| {
-            Error::generic(format!(
-                "Failed to parse fixture file {}: {}",
-                path.display(),
-                e
-            ))
+            Error::generic(format!("Failed to parse fixture file {}: {}", path.display(), e))
         })?;
 
         // Validate fixture
@@ -194,7 +185,8 @@ impl CustomFixtureLoader {
         // Simple pattern matching without full regex (for performance)
         // Split both paths into segments
         let pattern_segments: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
-        let request_segments: Vec<&str> = request_path.split('/').filter(|s| !s.is_empty()).collect();
+        let request_segments: Vec<&str> =
+            request_path.split('/').filter(|s| !s.is_empty()).collect();
 
         if pattern_segments.len() != request_segments.len() {
             return false;
@@ -238,18 +230,11 @@ mod tests {
     #[test]
     fn test_path_matching_with_parameters() {
         let loader = CustomFixtureLoader::new(PathBuf::from("/tmp"), true);
-        assert!(loader.path_matches(
-            "/api/v1/hives/{hiveId}",
-            "/api/v1/hives/hive_001"
-        ));
-        assert!(loader.path_matches(
-            "/api/v1/hives/{hiveId}",
-            "/api/v1/hives/123"
-        ));
-        assert!(!loader.path_matches(
-            "/api/v1/hives/{hiveId}",
-            "/api/v1/hives/hive_001/inspections"
-        ));
+        assert!(loader.path_matches("/api/v1/hives/{hiveId}", "/api/v1/hives/hive_001"));
+        assert!(loader.path_matches("/api/v1/hives/{hiveId}", "/api/v1/hives/123"));
+        assert!(
+            !loader.path_matches("/api/v1/hives/{hiveId}", "/api/v1/hives/hive_001/inspections")
+        );
     }
 
     #[test]
@@ -334,24 +319,33 @@ mod tests {
 
         // Create multiple fixture files
         let fixtures = vec![
-            ("apiaries-list.json", r#"{
+            (
+                "apiaries-list.json",
+                r#"{
   "method": "GET",
   "path": "/api/v1/apiaries",
   "status": 200,
   "response": {"items": []}
-}"#),
-            ("hive-detail.json", r#"{
+}"#,
+            ),
+            (
+                "hive-detail.json",
+                r#"{
   "method": "GET",
   "path": "/api/v1/hives/{hiveId}",
   "status": 200,
   "response": {"id": "hive_001"}
-}"#),
-            ("user-profile.json", r#"{
+}"#,
+            ),
+            (
+                "user-profile.json",
+                r#"{
   "method": "GET",
   "path": "/api/v1/users/me",
   "status": 200,
   "response": {"id": "user_001"}
-}"#),
+}"#,
+            ),
         ];
 
         for (filename, content) in fixtures {
@@ -391,9 +385,7 @@ mod tests {
         let mut loader = CustomFixtureLoader::new(fixtures_dir, true);
         loader.load_fixtures().await.unwrap();
 
-        let fixture = loader
-            .load_fixture(&create_test_fingerprint("GET", "/api/v1/test"))
-            .unwrap();
+        let fixture = loader.load_fixture(&create_test_fingerprint("GET", "/api/v1/test")).unwrap();
 
         assert_eq!(fixture.status, 201);
         assert_eq!(fixture.headers.get("content-type"), Some(&"application/json".to_string()));
@@ -406,9 +398,12 @@ mod tests {
         let fixtures_dir = temp_dir.path().to_path_buf();
 
         let fixture_file = fixtures_dir.join("test.json");
-        fs::write(&fixture_file, r#"{"method": "GET", "path": "/test", "status": 200, "response": {}}"#)
-            .await
-            .unwrap();
+        fs::write(
+            &fixture_file,
+            r#"{"method": "GET", "path": "/test", "status": 200, "response": {}}"#,
+        )
+        .await
+        .unwrap();
 
         let mut loader = CustomFixtureLoader::new(fixtures_dir, false);
         loader.load_fixtures().await.unwrap();

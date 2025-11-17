@@ -31,17 +31,12 @@ impl DeceptiveCanaryState {
 ///
 /// Intercepts requests and routes a percentage to deceptive deploy endpoints
 /// based on team identification criteria.
-pub async fn deceptive_canary_middleware(
-    req: Request,
-    next: Next,
-) -> Response {
+pub async fn deceptive_canary_middleware(req: Request, next: Next) -> Response {
     // Extract state from extensions (set by router)
-    let state = req.extensions().get::<DeceptiveCanaryState>()
-        .cloned()
-        .unwrap_or_else(|| {
-            // Return default state if not found (canary disabled)
-            DeceptiveCanaryState::new(DeceptiveCanaryRouter::default())
-        });
+    let state = req.extensions().get::<DeceptiveCanaryState>().cloned().unwrap_or_else(|| {
+        // Return default state if not found (canary disabled)
+        DeceptiveCanaryState::new(DeceptiveCanaryRouter::default())
+    });
     // Extract request information
     let user_agent = req
         .headers()
@@ -99,11 +94,7 @@ pub async fn deceptive_canary_middleware(
     );
 
     if should_route {
-        debug!(
-            "Routing request to deceptive canary: {} {}",
-            req.method(),
-            req.uri().path()
-        );
+        debug!("Routing request to deceptive canary: {} {}", req.method(), req.uri().path());
 
         // Get deceptive deploy URL from router config
         let canary_url = &state.router.config().deceptive_deploy_url;
@@ -113,10 +104,7 @@ pub async fn deceptive_canary_middleware(
             // For now, we'll just add a header indicating canary routing
             // Full proxying would require more complex logic
             let mut response = next.run(req).await;
-            response.headers_mut().insert(
-                "X-Deceptive-Canary",
-                "true".parse().unwrap(),
-            );
+            response.headers_mut().insert("X-Deceptive-Canary", "true".parse().unwrap());
             return response;
         }
     }

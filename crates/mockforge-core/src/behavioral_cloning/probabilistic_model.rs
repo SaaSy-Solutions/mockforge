@@ -99,11 +99,8 @@ impl ProbabilisticModel {
         }
 
         // Detect payload variations
-        let payload_variations = Self::detect_payload_variations(
-            request_payloads,
-            response_payloads,
-            status_codes,
-        );
+        let payload_variations =
+            Self::detect_payload_variations(request_payloads, response_payloads, status_codes);
 
         EndpointProbabilityModel {
             endpoint: endpoint.to_string(),
@@ -154,9 +151,8 @@ impl ProbabilisticModel {
                 signature.clone()
             };
 
-            let entry = variation_groups.entry(key).or_insert_with(|| {
-                (0, payload.clone(), status_code)
-            });
+            let entry =
+                variation_groups.entry(key).or_insert_with(|| (0, payload.clone(), status_code));
             entry.0 += 1;
         }
 
@@ -165,14 +161,13 @@ impl ProbabilisticModel {
             let signature = Self::payload_signature(payload);
             let key = format!("request:{}", signature);
 
-            let entry = variation_groups.entry(key).or_insert_with(|| {
-                (0, payload.clone(), None)
-            });
+            let entry = variation_groups.entry(key).or_insert_with(|| (0, payload.clone(), None));
             entry.0 += 1;
         }
 
         // Convert groups to PayloadVariation structs
-        let total_samples = variation_groups.values().map(|(count, _, _)| *count).sum::<usize>() as f64;
+        let total_samples =
+            variation_groups.values().map(|(count, _, _)| *count).sum::<usize>() as f64;
         if total_samples == 0.0 {
             return Vec::new();
         }
@@ -200,7 +195,9 @@ impl ProbabilisticModel {
         }
 
         // Sort by probability (descending)
-        variations.sort_by(|a, b| b.probability.partial_cmp(&a.probability).unwrap_or(std::cmp::Ordering::Equal));
+        variations.sort_by(|a, b| {
+            b.probability.partial_cmp(&a.probability).unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         variations
     }
@@ -332,16 +329,12 @@ impl ProbabilisticModel {
             *prob = (*prob * total) / new_total;
         }
 
-        let status_prob = model
-            .status_code_distribution
-            .entry(status_code)
-            .or_insert(0.0);
+        let status_prob = model.status_code_distribution.entry(status_code).or_insert(0.0);
         *status_prob = (*status_prob * total + 1.0) / new_total;
 
         // Update latency distribution (simplified - would need proper percentile tracking)
         let old_mean = model.latency_distribution.mean;
-        model.latency_distribution.mean =
-            (old_mean * total + latency_ms as f64) / new_total;
+        model.latency_distribution.mean = (old_mean * total + latency_ms as f64) / new_total;
 
         // Update min/max
         if latency_ms < model.latency_distribution.min {

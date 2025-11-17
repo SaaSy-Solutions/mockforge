@@ -80,14 +80,10 @@ impl MergeService {
 
         // Implement sophisticated common ancestor finding by walking commit history
         // This finds the Lowest Common Ancestor (LCA) by walking both commit histories
-        let source_commits = self
-            .version_control
-            .get_history(source_workspace_id, Some(1000))
-            .await?;
-        let target_commits = self
-            .version_control
-            .get_history(target_workspace_id, Some(1000))
-            .await?;
+        let source_commits =
+            self.version_control.get_history(source_workspace_id, Some(1000)).await?;
+        let target_commits =
+            self.version_control.get_history(target_workspace_id, Some(1000)).await?;
 
         // Build commit ID sets for fast lookup
         let source_commit_ids: std::collections::HashSet<Uuid> =
@@ -105,10 +101,9 @@ impl MergeService {
 
         // If no direct match, try walking parent chains
         // Get the latest commits
-        if let (Some(source_latest), Some(target_latest)) = (
-            source_commits.first(),
-            target_commits.first(),
-        ) {
+        if let (Some(source_latest), Some(target_latest)) =
+            (source_commits.first(), target_commits.first())
+        {
             // Build ancestor sets by walking parent chains
             let source_ancestors = self.build_ancestor_set(source_latest.id).await?;
             let target_ancestors = self.build_ancestor_set(target_latest.id).await?;
@@ -553,10 +548,16 @@ impl MergeService {
                         .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
                     target_commit_id: Uuid::parse_str(&row.target_commit_id)
                         .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
-                    merge_commit_id: row.merge_commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
+                    merge_commit_id: row
+                        .merge_commit_id
+                        .as_ref()
+                        .and_then(|s| Uuid::parse_str(s).ok()),
                     status: serde_json::from_str(&row.status)
                         .map_err(|e| CollabError::Internal(format!("Invalid status: {}", e)))?,
-                    conflict_data: row.conflict_data.as_ref().and_then(|s| serde_json::from_str(s).ok()),
+                    conflict_data: row
+                        .conflict_data
+                        .as_ref()
+                        .and_then(|s| serde_json::from_str(s).ok()),
                     merged_by: row.merged_by.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
                     merged_at: row
                         .merged_at

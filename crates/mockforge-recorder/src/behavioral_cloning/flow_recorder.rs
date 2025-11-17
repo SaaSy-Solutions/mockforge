@@ -155,7 +155,8 @@ impl FlowRecorder {
         };
 
         // Add step to flow
-        let step_index = self.db
+        let step_index = self
+            .db
             .get_flow_step_count(&flow_id)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get flow step count: {}", e))?;
@@ -165,8 +166,7 @@ impl FlowRecorder {
             .map_err(|e| anyhow::anyhow!("Failed to add step to flow: {}", e))?;
 
         // Update last request timestamp
-        self.last_request_timestamps
-            .insert(flow_id, request.timestamp);
+        self.last_request_timestamps.insert(flow_id, request.timestamp);
 
         Ok(())
     }
@@ -174,18 +174,18 @@ impl FlowRecorder {
     /// Get the group key for a request based on the grouping strategy
     fn get_group_key(&self, request: &RecordedRequest) -> Result<String> {
         match self.config.group_by {
-            FlowGroupingStrategy::TraceId => {
-                Ok(request.trace_id.clone().unwrap_or_default())
-            }
+            FlowGroupingStrategy::TraceId => Ok(request.trace_id.clone().unwrap_or_default()),
             FlowGroupingStrategy::SessionId => {
                 // Try to extract session_id from headers or cookies
                 let headers: HashMap<String, String> =
                     serde_json::from_str(&request.headers).unwrap_or_default();
 
                 // Check for common session ID headers
-                if let Some(session_id) = headers.get("x-session-id")
+                if let Some(session_id) = headers
+                    .get("x-session-id")
                     .or_else(|| headers.get("session-id"))
-                    .or_else(|| headers.get("authorization")) // Could use auth token as session
+                    .or_else(|| headers.get("authorization"))
+                // Could use auth token as session
                 {
                     Ok(session_id.clone())
                 } else {
@@ -219,7 +219,6 @@ impl FlowRecorder {
             }
         }
     }
-
 
     /// Get a flow by ID
     pub async fn get_flow(&self, flow_id: &str) -> Result<Option<Flow>> {
@@ -312,4 +311,3 @@ impl FlowRecorder {
         Ok(())
     }
 }
-

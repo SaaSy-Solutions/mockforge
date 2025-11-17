@@ -478,12 +478,8 @@ impl MutationRuleManager {
             // Check condition if specified
             if let Some(ref condition) = rule.condition {
                 // Convert HashMap to Value for JSONPath evaluation
-                let record_value = Value::Object(
-                    record
-                        .iter()
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect(),
-                );
+                let record_value =
+                    Value::Object(record.iter().map(|(k, v)| (k.clone(), v.clone())).collect());
 
                 // Evaluate JSONPath condition
                 // Condition should be a JSONPath expression that evaluates to a truthy value

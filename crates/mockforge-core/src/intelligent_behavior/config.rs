@@ -79,7 +79,9 @@ impl Persona {
         self.traits.get(key).and_then(|value| {
             // Try to parse as range (e.g., "20-40")
             if let Some((min_str, max_str)) = value.split_once('-') {
-                if let (Ok(min), Ok(max)) = (min_str.trim().parse::<u64>(), max_str.trim().parse::<u64>()) {
+                if let (Ok(min), Ok(max)) =
+                    (min_str.trim().parse::<u64>(), max_str.trim().parse::<u64>())
+                {
                     // Return midpoint for ranges
                     return Some((min + max) / 2);
                 }

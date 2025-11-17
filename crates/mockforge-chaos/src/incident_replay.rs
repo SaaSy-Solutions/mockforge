@@ -4,10 +4,10 @@
 //! status codes, latency spikes, error rates) and auto-generate chaos scenarios that
 //! reproduce the incident conditions in mock environments.
 
-use crate::scenarios::ChaosScenario;
+use crate::config::{ChaosConfig, FaultInjectionConfig, LatencyConfig};
 use crate::scenario_orchestrator::{OrchestratedScenario, ScenarioStep};
-use crate::config::{ChaosConfig, LatencyConfig, FaultInjectionConfig};
-use chrono::{DateTime, Utc, Duration};
+use crate::scenarios::ChaosScenario;
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -126,18 +126,13 @@ impl IncidentReplayGenerator {
             let chaos_config = self.create_chaos_config_for_events(&event_refs);
 
             // Create scenario for this window
-            let scenario = ChaosScenario::new(
-                format!("incident_window_{}", delay_seconds),
-                chaos_config,
-            )
-            .with_duration(self.calculate_window_duration(&event_refs, timeline));
+            let scenario =
+                ChaosScenario::new(format!("incident_window_{}", delay_seconds), chaos_config)
+                    .with_duration(self.calculate_window_duration(&event_refs, timeline));
 
             // Create scenario step
-            let step = ScenarioStep::new(
-                format!("step_at_{}s", delay_seconds),
-                scenario,
-            )
-            .with_delay_before(delay_seconds);
+            let step = ScenarioStep::new(format!("step_at_{}s", delay_seconds), scenario)
+                .with_delay_before(delay_seconds);
 
             steps.push(step);
         }
@@ -176,7 +171,8 @@ impl IncidentReplayGenerator {
             // Calculate which window this event belongs to
             let event_offset = (event.timestamp - timeline.start_time).num_seconds();
             let window_index = (event_offset / window_size_seconds) as i64;
-            let window_start = timeline.start_time + Duration::seconds(window_index * window_size_seconds);
+            let window_start =
+                timeline.start_time + Duration::seconds(window_index * window_size_seconds);
 
             if window_start != current_window_start {
                 // Save current window and start new one
@@ -218,7 +214,10 @@ impl IncidentReplayGenerator {
                     min_delay_ms = min_delay_ms.max(*latency_ms);
                     max_delay_ms = max_delay_ms.max(*latency_ms);
                 }
-                IncidentEventType::ErrorRateIncrease { rate, error_codes: codes } => {
+                IncidentEventType::ErrorRateIncrease {
+                    rate,
+                    error_codes: codes,
+                } => {
                     error_rate = error_rate.max(*rate);
                     if let Some(codes) = codes {
                         status_codes.extend(codes.iter().copied());
@@ -485,20 +484,19 @@ impl IncidentFormatAdapter {
             for metric in metrics {
                 if let Some(points) = metric.get("points").and_then(|p| p.as_array()) {
                     for point in points {
-                        if let Some((timestamp, value)) = point.as_array()
-                            .and_then(|arr| {
-                                Some((
-                                    arr.get(0)?.as_i64()?,
-                                    arr.get(1)?.as_f64()?,
-                                ))
-                            })
+                        if let Some((timestamp, value)) = point
+                            .as_array()
+                            .and_then(|arr| Some((arr.get(0)?.as_i64()?, arr.get(1)?.as_f64()?)))
                         {
                             let timestamp = DateTime::from_timestamp(timestamp, 0)
                                 .unwrap_or_else(|| Utc::now());
 
                             // Check metric name to determine event type
-                            if let Some(metric_name) = metric.get("metric").and_then(|m| m.as_str()) {
-                                if metric_name.contains("latency") || metric_name.contains("duration") {
+                            if let Some(metric_name) = metric.get("metric").and_then(|m| m.as_str())
+                            {
+                                if metric_name.contains("latency")
+                                    || metric_name.contains("duration")
+                                {
                                     events.push(IncidentEvent {
                                         timestamp,
                                         event_type: IncidentEventType::LatencySpike {
@@ -509,7 +507,9 @@ impl IncidentFormatAdapter {
                                         method: None,
                                         metadata: HashMap::new(),
                                     });
-                                } else if metric_name.contains("error") || metric_name.contains("status") {
+                                } else if metric_name.contains("error")
+                                    || metric_name.contains("status")
+                                {
                                     events.push(IncidentEvent {
                                         timestamp,
                                         event_type: IncidentEventType::ErrorRateIncrease {

@@ -3,9 +3,8 @@
 //! This module provides a UserDataProvider implementation that integrates
 //! the access review system with the collaboration database.
 
-use mockforge_core::security::access_review::{
-    ApiTokenInfo, PrivilegedAccessInfo, UserAccessInfo,
-};
+use chrono::{DateTime, Utc};
+use mockforge_core::security::access_review::{ApiTokenInfo, PrivilegedAccessInfo, UserAccessInfo};
 use mockforge_core::security::{
     ApiTokenStorage, JustificationStorage, MfaStorage, UserDataProvider,
 };
@@ -13,7 +12,6 @@ use mockforge_core::Error;
 use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 /// User data provider for collaboration system
 pub struct CollabUserDataProvider {
@@ -108,43 +106,35 @@ impl UserDataProvider for CollabUserDataProvider {
             .map_err(|e| Error::Generic(format!("Failed to fetch memberships: {}", e)))?;
 
             // Collect roles and permissions
-            let roles: Vec<String> = memberships
-                .iter()
-                .map(|m| format!("{:?}", m.role))
-                .collect();
+            let roles: Vec<String> = memberships.iter().map(|m| format!("{:?}", m.role)).collect();
 
             // Map roles to permissions (simplified - in reality would use PermissionChecker)
             let permissions: Vec<String> = memberships
                 .iter()
-                .flat_map(|m| {
-                    match m.role {
-                        crate::models::UserRole::Admin => vec![
-                            "WorkspaceCreate".to_string(),
-                            "WorkspaceRead".to_string(),
-                            "WorkspaceUpdate".to_string(),
-                            "WorkspaceDelete".to_string(),
-                            "WorkspaceManageMembers".to_string(),
-                            "MockCreate".to_string(),
-                            "MockRead".to_string(),
-                            "MockUpdate".to_string(),
-                            "MockDelete".to_string(),
-                        ],
-                        crate::models::UserRole::Editor => vec![
-                            "MockCreate".to_string(),
-                            "MockRead".to_string(),
-                            "MockUpdate".to_string(),
-                            "MockDelete".to_string(),
-                        ],
-                        crate::models::UserRole::Viewer => vec!["MockRead".to_string()],
-                    }
+                .flat_map(|m| match m.role {
+                    crate::models::UserRole::Admin => vec![
+                        "WorkspaceCreate".to_string(),
+                        "WorkspaceRead".to_string(),
+                        "WorkspaceUpdate".to_string(),
+                        "WorkspaceDelete".to_string(),
+                        "WorkspaceManageMembers".to_string(),
+                        "MockCreate".to_string(),
+                        "MockRead".to_string(),
+                        "MockUpdate".to_string(),
+                        "MockDelete".to_string(),
+                    ],
+                    crate::models::UserRole::Editor => vec![
+                        "MockCreate".to_string(),
+                        "MockRead".to_string(),
+                        "MockUpdate".to_string(),
+                        "MockDelete".to_string(),
+                    ],
+                    crate::models::UserRole::Viewer => vec!["MockRead".to_string()],
                 })
                 .collect();
 
             // Get most recent activity
-            let last_activity = memberships
-                .iter()
-                .map(|m| m.last_activity)
-                .max();
+            let last_activity = memberships.iter().map(|m| m.last_activity).max();
 
             // Calculate days inactive
             let days_inactive = last_activity.map(|activity| {
@@ -153,11 +143,8 @@ impl UserDataProvider for CollabUserDataProvider {
             });
 
             // Access granted date is the earliest membership join date
-            let access_granted = memberships
-                .iter()
-                .map(|m| m.joined_at)
-                .min()
-                .unwrap_or(user.created_at);
+            let access_granted =
+                memberships.iter().map(|m| m.joined_at).min().unwrap_or(user.created_at);
 
             user_access_list.push(UserAccessInfo {
                 user_id: user.id,
@@ -217,8 +204,10 @@ impl UserDataProvider for CollabUserDataProvider {
 
         for (user_id, roles) in user_roles {
             // Get user details
-            let user = self.user_service.get_user(user_id).await
-                .map_err(|e| Error::Generic(format!("Failed to get user {}: {}", user_id, e)))?;
+            let user =
+                self.user_service.get_user(user_id).await.map_err(|e| {
+                    Error::Generic(format!("Failed to get user {}: {}", user_id, e))
+                })?;
 
             let activities = user_activities.get(&user_id).cloned().unwrap_or_default();
             let last_activity = activities.iter().max().copied();
@@ -237,17 +226,18 @@ impl UserDataProvider for CollabUserDataProvider {
             };
 
             // Get justification
-            let (justification, justification_expires) = if let Some(ref just_storage) = self.justification_storage {
-                just_storage
-                    .get_justification(user_id)
-                    .await
-                    .ok()
-                    .flatten()
-                    .map(|j| (Some(j.justification), j.expires_at))
-                    .unwrap_or((None, None))
-            } else {
-                (None, None)
-            };
+            let (justification, justification_expires) =
+                if let Some(ref just_storage) = self.justification_storage {
+                    just_storage
+                        .get_justification(user_id)
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|j| (Some(j.justification), j.expires_at))
+                        .unwrap_or((None, None))
+                } else {
+                    (None, None)
+                };
 
             privileged_list.push(PrivilegedAccessInfo {
                 user_id,
@@ -299,52 +289,41 @@ impl UserDataProvider for CollabUserDataProvider {
         .await
         .map_err(|e| Error::Generic(format!("Failed to fetch memberships: {}", e)))?;
 
-        let roles: Vec<String> = memberships
-            .iter()
-            .map(|m| format!("{:?}", m.role))
-            .collect();
+        let roles: Vec<String> = memberships.iter().map(|m| format!("{:?}", m.role)).collect();
 
         let permissions: Vec<String> = memberships
             .iter()
-            .flat_map(|m| {
-                match m.role {
-                    crate::models::UserRole::Admin => vec![
-                        "WorkspaceCreate".to_string(),
-                        "WorkspaceRead".to_string(),
-                        "WorkspaceUpdate".to_string(),
-                        "WorkspaceDelete".to_string(),
-                        "WorkspaceManageMembers".to_string(),
-                        "MockCreate".to_string(),
-                        "MockRead".to_string(),
-                        "MockUpdate".to_string(),
-                        "MockDelete".to_string(),
-                    ],
-                    crate::models::UserRole::Editor => vec![
-                        "MockCreate".to_string(),
-                        "MockRead".to_string(),
-                        "MockUpdate".to_string(),
-                        "MockDelete".to_string(),
-                    ],
-                    crate::models::UserRole::Viewer => vec!["MockRead".to_string()],
-                }
+            .flat_map(|m| match m.role {
+                crate::models::UserRole::Admin => vec![
+                    "WorkspaceCreate".to_string(),
+                    "WorkspaceRead".to_string(),
+                    "WorkspaceUpdate".to_string(),
+                    "WorkspaceDelete".to_string(),
+                    "WorkspaceManageMembers".to_string(),
+                    "MockCreate".to_string(),
+                    "MockRead".to_string(),
+                    "MockUpdate".to_string(),
+                    "MockDelete".to_string(),
+                ],
+                crate::models::UserRole::Editor => vec![
+                    "MockCreate".to_string(),
+                    "MockRead".to_string(),
+                    "MockUpdate".to_string(),
+                    "MockDelete".to_string(),
+                ],
+                crate::models::UserRole::Viewer => vec!["MockRead".to_string()],
             })
             .collect();
 
-        let last_activity = memberships
-            .iter()
-            .map(|m| m.last_activity)
-            .max();
+        let last_activity = memberships.iter().map(|m| m.last_activity).max();
 
         let days_inactive = last_activity.map(|activity| {
             let duration = Utc::now() - activity;
             duration.num_days() as u64
         });
 
-        let access_granted = memberships
-            .iter()
-            .map(|m| m.joined_at)
-            .min()
-            .unwrap_or(user.created_at);
+        let access_granted =
+            memberships.iter().map(|m| m.joined_at).min().unwrap_or(user.created_at);
 
         Ok(Some(UserAccessInfo {
             user_id: user.id,
@@ -396,10 +375,7 @@ impl UserDataProvider for CollabUserDataProvider {
     ) -> Result<(), Error> {
         // TODO: Implement permission updates
         // This would involve updating workspace memberships
-        tracing::warn!(
-            "update_user_permissions not yet fully implemented for user {}",
-            user_id
-        );
+        tracing::warn!("update_user_permissions not yet fully implemented for user {}", user_id);
         Ok(())
     }
 }

@@ -9,17 +9,22 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
 
-static GLOBAL_CHANGE_MANAGEMENT_ENGINE: Lazy<Arc<RwLock<Option<Arc<RwLock<ChangeManagementEngine>>>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(None)));
+static GLOBAL_CHANGE_MANAGEMENT_ENGINE: Lazy<
+    Arc<RwLock<Option<Arc<RwLock<ChangeManagementEngine>>>>>,
+> = Lazy::new(|| Arc::new(RwLock::new(None)));
 
 /// Initialize the global change management engine
 ///
 /// This should be called once during application startup.
 /// Takes an Arc<RwLock<ChangeManagementEngine>> to share the same instance.
-pub async fn init_global_change_management_engine(engine: Arc<RwLock<ChangeManagementEngine>>) -> Result<(), crate::Error> {
+pub async fn init_global_change_management_engine(
+    engine: Arc<RwLock<ChangeManagementEngine>>,
+) -> Result<(), crate::Error> {
     let mut global = GLOBAL_CHANGE_MANAGEMENT_ENGINE.write().await;
     if global.is_some() {
-        return Err(crate::Error::Generic("Global change management engine already initialized".to_string()));
+        return Err(crate::Error::Generic(
+            "Global change management engine already initialized".to_string(),
+        ));
     }
     *global = Some(engine);
     debug!("Global change management engine initialized");

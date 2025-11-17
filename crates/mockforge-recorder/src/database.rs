@@ -538,7 +538,10 @@ impl RecorderDatabase {
     }
 
     /// Insert a sync snapshot
-    pub async fn insert_sync_snapshot(&self, snapshot: &crate::sync_snapshots::SyncSnapshot) -> Result<()> {
+    pub async fn insert_sync_snapshot(
+        &self,
+        snapshot: &crate::sync_snapshots::SyncSnapshot,
+    ) -> Result<()> {
         let before_headers_json = serde_json::to_string(&snapshot.before.headers)?;
         let after_headers_json = serde_json::to_string(&snapshot.after.headers)?;
         let before_body_encoded = base64::Engine::encode(
@@ -580,7 +583,10 @@ impl RecorderDatabase {
         .execute(&self.pool)
         .await?;
 
-        debug!("Inserted sync snapshot: {} for {} {}", snapshot.id, snapshot.method, snapshot.endpoint);
+        debug!(
+            "Inserted sync snapshot: {} for {} {}",
+            snapshot.id, snapshot.method, snapshot.endpoint
+        );
         Ok(())
     }
 
@@ -708,7 +714,11 @@ impl RecorderDatabase {
         .execute(&self.pool)
         .await?;
 
-        info!("Deleted {} old snapshots (kept {} per endpoint)", result.rows_affected(), keep_per_endpoint);
+        info!(
+            "Deleted {} old snapshots (kept {} per endpoint)",
+            result.rows_affected(),
+            keep_per_endpoint
+        );
         Ok(result.rows_affected())
     }
 
@@ -744,7 +754,9 @@ impl RecorderDatabase {
     }
 
     /// Get all behavioral sequences
-    pub async fn get_behavioral_sequences(&self) -> Result<Vec<mockforge_core::behavioral_cloning::BehavioralSequence>> {
+    pub async fn get_behavioral_sequences(
+        &self,
+    ) -> Result<Vec<mockforge_core::behavioral_cloning::BehavioralSequence>> {
         let rows = sqlx::query(
             r#"
             SELECT id, name, steps, frequency, confidence, learned_from, description, tags
@@ -842,7 +854,8 @@ impl RecorderDatabase {
                 status_code_distribution: serde_json::from_str(&status_code_dist_json)?,
                 latency_distribution: serde_json::from_str(&latency_dist_json)?,
                 error_patterns: serde_json::from_str(&error_patterns_json).unwrap_or_default(),
-                payload_variations: serde_json::from_str(&payload_variations_json).unwrap_or_default(),
+                payload_variations: serde_json::from_str(&payload_variations_json)
+                    .unwrap_or_default(),
                 sample_count: row.try_get::<i64, _>("sample_count")? as u64,
                 updated_at: row.try_get("updated_at")?,
                 original_error_probabilities: None,
@@ -881,7 +894,8 @@ impl RecorderDatabase {
                 status_code_distribution: serde_json::from_str(&status_code_dist_json)?,
                 latency_distribution: serde_json::from_str(&latency_dist_json)?,
                 error_patterns: serde_json::from_str(&error_patterns_json).unwrap_or_default(),
-                payload_variations: serde_json::from_str(&payload_variations_json).unwrap_or_default(),
+                payload_variations: serde_json::from_str(&payload_variations_json)
+                    .unwrap_or_default(),
                 sample_count: row.try_get::<i64, _>("sample_count")? as u64,
                 original_error_probabilities: None,
                 updated_at: row.try_get("updated_at")?,
@@ -911,7 +925,8 @@ impl RecorderDatabase {
         .await?;
 
         // Group by trace_id
-        let mut grouped: std::collections::HashMap<String, Vec<RecordedRequest>> = std::collections::HashMap::new();
+        let mut grouped: std::collections::HashMap<String, Vec<RecordedRequest>> =
+            std::collections::HashMap::new();
         for request in requests {
             if let Some(trace_id) = &request.trace_id {
                 grouped.entry(trace_id.clone()).or_insert_with(Vec::new).push(request);
@@ -977,7 +992,8 @@ impl RecorderDatabase {
         tags: &[String],
     ) -> Result<()> {
         let tags_json = serde_json::to_string(tags)?;
-        let metadata_json = serde_json::to_string(&std::collections::HashMap::<String, serde_json::Value>::new())?;
+        let metadata_json =
+            serde_json::to_string(&std::collections::HashMap::<String, serde_json::Value>::new())?;
 
         sqlx::query(
             r#"
@@ -1027,12 +1043,11 @@ impl RecorderDatabase {
 
     /// Get the number of steps in a flow
     pub async fn get_flow_step_count(&self, flow_id: &str) -> Result<usize> {
-        let count: Option<i64> = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM flow_steps WHERE flow_id = ?",
-        )
-        .bind(flow_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let count: Option<i64> =
+            sqlx::query_scalar("SELECT COUNT(*) FROM flow_steps WHERE flow_id = ?")
+                .bind(flow_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         Ok(count.unwrap_or(0) as usize)
     }
@@ -1235,10 +1250,7 @@ impl RecorderDatabase {
     }
 
     /// List all scenarios
-    pub async fn list_scenarios(
-        &self,
-        limit: Option<i64>,
-    ) -> Result<Vec<ScenarioMetadataRow>> {
+    pub async fn list_scenarios(&self, limit: Option<i64>) -> Result<Vec<ScenarioMetadataRow>> {
         let limit = limit.unwrap_or(100);
         let rows = sqlx::query_as::<_, ScenarioMetadataRow>(
             r#"
@@ -1341,11 +1353,11 @@ impl SyncSnapshotRow {
         )
         .map_err(|e| crate::RecorderError::InvalidFilter(format!("Invalid base64: {}", e)))?;
 
-        let after_body = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            &self.after_body,
-        )
-        .map_err(|e| crate::RecorderError::InvalidFilter(format!("Invalid base64: {}", e)))?;
+        let after_body =
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &self.after_body)
+                .map_err(|e| {
+                    crate::RecorderError::InvalidFilter(format!("Invalid base64: {}", e))
+                })?;
 
         let before_body_json = serde_json::from_slice(&before_body).ok();
         let after_body_json = serde_json::from_slice(&after_body).ok();

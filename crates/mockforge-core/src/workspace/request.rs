@@ -393,7 +393,14 @@ impl RequestProcessor {
 
                 // Capture failure context if collector is available (for future storage/analysis)
                 if let Some(ref collector) = self.failure_collector {
-                    let _failure_context = collector.collect_context("UNKNOWN", &request_id.to_string(), None, Some(error_msg.clone())).ok();
+                    let _failure_context = collector
+                        .collect_context(
+                            "UNKNOWN",
+                            &request_id.to_string(),
+                            None,
+                            Some(error_msg.clone()),
+                        )
+                        .ok();
                     // TODO: Store failure_context in global failure store for API access
                 }
 
@@ -416,7 +423,9 @@ impl RequestProcessor {
 
                 // Capture failure context (for future storage/analysis)
                 if let Some(ref collector) = self.failure_collector {
-                    let _failure_context = collector.collect_context(method, &path, None, Some(error_msg.clone())).ok();
+                    let _failure_context = collector
+                        .collect_context(method, &path, None, Some(error_msg.clone()))
+                        .ok();
                     // TODO: Store failure_context in global failure store for API access
                 }
 
@@ -432,13 +441,12 @@ impl RequestProcessor {
 
             // Capture failure context (for future storage/analysis)
             if let Some(ref collector) = self.failure_collector {
-                let _failure_context = collector.collect_context(method, &path, None, Some(error_msg.clone())).ok();
+                let _failure_context =
+                    collector.collect_context(method, &path, None, Some(error_msg.clone())).ok();
                 // TODO: Store failure_context in global failure store for API access
             }
 
-            return Err(Error::Validation {
-                message: error_msg,
-            });
+            return Err(Error::Validation { message: error_msg });
         }
 
         // Get active response
@@ -452,7 +460,9 @@ impl RequestProcessor {
 
                 // Capture failure context (for future storage/analysis)
                 if let Some(ref collector) = self.failure_collector {
-                    let _failure_context = collector.collect_context(method, &path, None, Some(error_msg.clone())).ok();
+                    let _failure_context = collector
+                        .collect_context(method, &path, None, Some(error_msg.clone()))
+                        .ok();
                     // TODO: Store failure_context in global failure store for API access
                 }
 
@@ -471,7 +481,9 @@ impl RequestProcessor {
 
                 // Capture failure context (for future storage/analysis)
                 if let Some(ref collector) = self.failure_collector {
-                    let _failure_context = collector.collect_context(method, &path, None, Some(error_msg.clone())).ok();
+                    let _failure_context = collector
+                        .collect_context(method, &path, None, Some(error_msg.clone()))
+                        .ok();
                     // TODO: Store failure_context in global failure store for API access
                 }
 

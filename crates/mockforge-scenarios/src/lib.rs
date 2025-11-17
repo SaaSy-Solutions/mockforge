@@ -44,7 +44,6 @@
 //! - `README.md` - Documentation
 
 pub mod domain_pack;
-pub mod studio_pack;
 pub mod error;
 pub mod installer;
 pub mod manifest;
@@ -56,17 +55,13 @@ pub mod schema_alignment;
 pub mod source;
 pub mod state_machine;
 pub mod storage;
+pub mod studio_pack;
 pub mod vbr_integration;
 
 // Re-export commonly used types
 pub use domain_pack::{
     DomainPackInfo, DomainPackInstaller, DomainPackManifest, FieldRealityRule, PackScenario,
     StudioChaosRule, StudioContractDiff, StudioPersona, StudioRealityBlend,
-};
-pub use studio_pack::{StudioPackInstallResult, StudioPackInstaller};
-#[cfg(feature = "studio-packs")]
-pub use studio_pack::packs::{
-    create_ecommerce_peak_day_pack, create_fintech_fraud_lab_pack, create_healthcare_outage_drill_pack,
 };
 pub use error::{Result, ScenarioError};
 pub use installer::{InstallOptions, ScenarioInstaller};
@@ -88,6 +83,12 @@ pub use schema_alignment::{
 pub use source::{ScenarioSource, SourceType};
 pub use state_machine::{ScenarioStateMachineManager, StateHistoryEntry, StateInstance};
 pub use storage::{InstalledScenario, ScenarioStorage};
+#[cfg(feature = "studio-packs")]
+pub use studio_pack::packs::{
+    create_ecommerce_peak_day_pack, create_fintech_fraud_lab_pack,
+    create_healthcare_outage_drill_pack,
+};
+pub use studio_pack::{StudioPackInstallResult, StudioPackInstaller};
 pub use vbr_integration::{
     apply_vbr_entities, VbrEntityDefinition, VbrIntegrationConfig, VbrMergeMode,
 };

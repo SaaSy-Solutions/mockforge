@@ -159,4 +159,3 @@ pub struct ContributingFactor {
     /// Impact level (high, medium, low)
     pub impact: String,
 }
-

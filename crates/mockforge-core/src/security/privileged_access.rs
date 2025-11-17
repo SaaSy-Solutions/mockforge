@@ -140,12 +140,9 @@ impl PrivilegedAccessRequest {
 
     /// Check if request is expired
     pub fn is_expired(&self) -> bool {
-        self.expires_at
-            .map(|exp| Utc::now() > exp)
-            .unwrap_or(false)
+        self.expires_at.map(|exp| Utc::now() > exp).unwrap_or(false)
     }
 }
-
 
 /// Privileged action record
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -289,11 +286,7 @@ impl PrivilegedAccessManager {
     }
 
     /// Approve privileged access request (manager approval)
-    pub async fn approve_manager(
-        &self,
-        request_id: Uuid,
-        approver_id: Uuid,
-    ) -> Result<(), Error> {
+    pub async fn approve_manager(&self, request_id: Uuid, approver_id: Uuid) -> Result<(), Error> {
         let mut requests = self.requests.write().await;
         let request = requests
             .get_mut(&request_id)
@@ -347,11 +340,7 @@ impl PrivilegedAccessManager {
     }
 
     /// Deny privileged access request
-    pub async fn deny_request(
-        &self,
-        request_id: Uuid,
-        reason: String,
-    ) -> Result<(), Error> {
+    pub async fn deny_request(&self, request_id: Uuid, reason: String) -> Result<(), Error> {
         let mut requests = self.requests.write().await;
         let request = requests
             .get_mut(&request_id)
@@ -430,10 +419,8 @@ impl PrivilegedAccessManager {
 
         // Check concurrent session limit
         let sessions = self.sessions.read().await;
-        let active_sessions = sessions
-            .values()
-            .filter(|s| s.user_id == user_id && s.is_active)
-            .count();
+        let active_sessions =
+            sessions.values().filter(|s| s.user_id == user_id && s.is_active).count();
 
         if active_sessions >= self.config.max_concurrent_sessions as usize {
             return Err(Error::Generic("Maximum concurrent sessions reached".to_string()));
@@ -495,37 +482,31 @@ impl PrivilegedAccessManager {
     /// Get all privileged actions for a user
     pub async fn get_user_actions(&self, user_id: Uuid) -> Result<Vec<PrivilegedAction>, Error> {
         let actions = self.actions.read().await;
-        Ok(actions
-            .iter()
-            .filter(|a| a.user_id == user_id)
-            .cloned()
-            .collect())
+        Ok(actions.iter().filter(|a| a.user_id == user_id).cloned().collect())
     }
 
     /// Get all active privileged sessions
     pub async fn get_active_sessions(&self) -> Result<Vec<PrivilegedSession>, Error> {
         let sessions = self.sessions.read().await;
-        Ok(sessions
-            .values()
-            .filter(|s| s.is_active)
-            .cloned()
-            .collect())
+        Ok(sessions.values().filter(|s| s.is_active).cloned().collect())
     }
 
     /// Get access request by ID
-    pub async fn get_request(&self, request_id: Uuid) -> Result<Option<PrivilegedAccessRequest>, Error> {
+    pub async fn get_request(
+        &self,
+        request_id: Uuid,
+    ) -> Result<Option<PrivilegedAccessRequest>, Error> {
         let requests = self.requests.read().await;
         Ok(requests.get(&request_id).cloned())
     }
 
     /// Get all requests for a user
-    pub async fn get_user_requests(&self, user_id: Uuid) -> Result<Vec<PrivilegedAccessRequest>, Error> {
+    pub async fn get_user_requests(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<PrivilegedAccessRequest>, Error> {
         let requests = self.requests.read().await;
-        Ok(requests
-            .values()
-            .filter(|r| r.user_id == user_id)
-            .cloned()
-            .collect())
+        Ok(requests.values().filter(|r| r.user_id == user_id).cloned().collect())
     }
 }
 
@@ -539,11 +520,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_privileged_access_request() {
-        let manager = PrivilegedAccessManager::new(
-            PrivilegedAccessConfig::default(),
-            None,
-            None,
-        );
+        let manager = PrivilegedAccessManager::new(PrivilegedAccessConfig::default(), None, None);
 
         let request = manager
             .request_privileged_access(

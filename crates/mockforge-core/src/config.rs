@@ -1590,9 +1590,12 @@ impl Default for SecurityMonitoringConfig {
         Self {
             siem: crate::security::siem::SiemConfig::default(),
             access_review: crate::security::access_review::AccessReviewConfig::default(),
-            privileged_access: crate::security::privileged_access::PrivilegedAccessConfig::default(),
-            change_management: crate::security::change_management::ChangeManagementConfig::default(),
-            compliance_dashboard: crate::security::compliance_dashboard::ComplianceDashboardConfig::default(),
+            privileged_access: crate::security::privileged_access::PrivilegedAccessConfig::default(
+            ),
+            change_management: crate::security::change_management::ChangeManagementConfig::default(
+            ),
+            compliance_dashboard:
+                crate::security::compliance_dashboard::ComplianceDashboardConfig::default(),
             risk_assessment: crate::security::risk_assessment::RiskAssessmentConfig::default(),
         }
     }

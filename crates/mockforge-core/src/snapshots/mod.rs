@@ -7,6 +7,4 @@ pub mod manager;
 pub mod types;
 
 pub use manager::SnapshotManager;
-pub use types::{
-    SnapshotComponents, SnapshotManifest, SnapshotMetadata,
-};
+pub use types::{SnapshotComponents, SnapshotManifest, SnapshotMetadata};

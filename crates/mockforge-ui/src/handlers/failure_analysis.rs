@@ -210,4 +210,3 @@ pub struct FailureSummary {
     /// Whether a narrative was generated
     pub has_narrative: bool,
 }
-

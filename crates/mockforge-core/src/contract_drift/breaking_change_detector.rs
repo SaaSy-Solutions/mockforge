@@ -3,7 +3,9 @@
 //! This module provides utilities for detecting breaking changes based on configurable rules.
 
 use crate::ai_contract_diff::Mismatch;
-use crate::contract_drift::types::{BreakingChangeRule, BreakingChangeRuleConfig, BreakingChangeRuleType};
+use crate::contract_drift::types::{
+    BreakingChangeRule, BreakingChangeRuleConfig, BreakingChangeRuleType,
+};
 
 /// Detector for breaking changes
 #[derive(Debug, Clone)]
@@ -19,10 +21,7 @@ impl BreakingChangeDetector {
 
     /// Check if a mismatch represents a breaking change
     pub fn is_breaking(&self, mismatch: &Mismatch) -> bool {
-        self.rules
-            .iter()
-            .filter(|rule| rule.enabled)
-            .any(|rule| rule.matches(mismatch))
+        self.rules.iter().filter(|rule| rule.enabled).any(|rule| rule.matches(mismatch))
     }
 
     /// Classify mismatches into breaking and non-breaking
@@ -46,7 +45,10 @@ impl BreakingChangeDetector {
     /// - **Non-breaking**: Additive changes, documentation-only, unexpected fields (additive)
     /// - **Potentially breaking**: Medium severity changes, format mismatches, constraint violations
     /// - **Definitely breaking**: Critical/High severity, missing required fields, type changes, removals
-    pub fn classify_three_way(&self, mismatches: &[Mismatch]) -> (Vec<Mismatch>, Vec<Mismatch>, Vec<Mismatch>) {
+    pub fn classify_three_way(
+        &self,
+        mismatches: &[Mismatch],
+    ) -> (Vec<Mismatch>, Vec<Mismatch>, Vec<Mismatch>) {
         let mut non_breaking = Vec::new();
         let mut potentially_breaking = Vec::new();
         let mut definitely_breaking = Vec::new();
@@ -63,7 +65,8 @@ impl BreakingChangeDetector {
                     crate::ai_contract_diff::MismatchType::FormatMismatch
                         | crate::ai_contract_diff::MismatchType::ConstraintViolation
                         | crate::ai_contract_diff::MismatchType::TypeMismatch
-                ) {
+                )
+            {
                 potentially_breaking.push(mismatch.clone());
             }
             // Non-breaking: additive changes, documentation, unexpected fields
@@ -122,10 +125,7 @@ mod tests {
     use super::*;
     use crate::ai_contract_diff::{MismatchSeverity, MismatchType};
 
-    fn create_test_mismatch(
-        mismatch_type: MismatchType,
-        severity: MismatchSeverity,
-    ) -> Mismatch {
+    fn create_test_mismatch(mismatch_type: MismatchType, severity: MismatchSeverity) -> Mismatch {
         Mismatch {
             mismatch_type,
             path: "body.field".to_string(),
@@ -143,13 +143,16 @@ mod tests {
     fn test_severity_based_detection() {
         let detector = BreakingChangeDetector::default();
 
-        let critical_mismatch = create_test_mismatch(MismatchType::TypeMismatch, MismatchSeverity::Critical);
+        let critical_mismatch =
+            create_test_mismatch(MismatchType::TypeMismatch, MismatchSeverity::Critical);
         assert!(detector.is_breaking(&critical_mismatch));
 
-        let high_mismatch = create_test_mismatch(MismatchType::TypeMismatch, MismatchSeverity::High);
+        let high_mismatch =
+            create_test_mismatch(MismatchType::TypeMismatch, MismatchSeverity::High);
         assert!(detector.is_breaking(&high_mismatch));
 
-        let medium_mismatch = create_test_mismatch(MismatchType::TypeMismatch, MismatchSeverity::Medium);
+        let medium_mismatch =
+            create_test_mismatch(MismatchType::TypeMismatch, MismatchSeverity::Medium);
         assert!(!detector.is_breaking(&medium_mismatch));
     }
 
@@ -157,10 +160,12 @@ mod tests {
     fn test_mismatch_type_based_detection() {
         let detector = BreakingChangeDetector::default();
 
-        let missing_field = create_test_mismatch(MismatchType::MissingRequiredField, MismatchSeverity::Medium);
+        let missing_field =
+            create_test_mismatch(MismatchType::MissingRequiredField, MismatchSeverity::Medium);
         assert!(detector.is_breaking(&missing_field));
 
-        let unexpected_field = create_test_mismatch(MismatchType::UnexpectedField, MismatchSeverity::Medium);
+        let unexpected_field =
+            create_test_mismatch(MismatchType::UnexpectedField, MismatchSeverity::Medium);
         assert!(!detector.is_breaking(&unexpected_field));
     }
 

@@ -90,11 +90,7 @@ impl ApiTokenStorage for InMemoryApiTokenStorage {
 
     async fn get_tokens_by_owner(&self, owner_id: Uuid) -> Result<Vec<ApiTokenInfo>, Error> {
         let tokens = self.tokens.read().await;
-        Ok(tokens
-            .values()
-            .filter(|t| t.owner_id == owner_id)
-            .cloned()
-            .collect())
+        Ok(tokens.values().filter(|t| t.owner_id == owner_id).cloned().collect())
     }
 }
 

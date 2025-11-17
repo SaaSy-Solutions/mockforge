@@ -235,15 +235,7 @@ impl SequenceStep {
 
 impl LatencyDistribution {
     /// Create a new latency distribution
-    pub fn new(
-        p50: u64,
-        p95: u64,
-        p99: u64,
-        mean: f64,
-        std_dev: f64,
-        min: u64,
-        max: u64,
-    ) -> Self {
+    pub fn new(p50: u64, p95: u64, p99: u64, mean: f64, std_dev: f64, min: u64, max: u64) -> Self {
         Self {
             p50,
             p95,

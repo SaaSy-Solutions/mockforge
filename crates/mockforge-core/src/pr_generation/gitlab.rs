@@ -90,8 +90,7 @@ impl GitLabPRClient {
             if !error_text.contains("already exists") {
                 return Err(Error::generic(format!(
                     "Failed to create branch: {} - {}",
-                    status,
-                    error_text
+                    status, error_text
                 )));
             }
         }
@@ -136,8 +135,7 @@ impl GitLabPRClient {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::generic(format!(
                 "Failed to commit file: {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
@@ -176,8 +174,7 @@ impl GitLabPRClient {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::generic(format!(
                 "Failed to create file: {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
@@ -212,8 +209,7 @@ impl GitLabPRClient {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::generic(format!(
                 "Failed to delete file: {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
@@ -252,8 +248,7 @@ impl GitLabPRClient {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::generic(format!(
                 "Failed to create MR: {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
@@ -263,9 +258,7 @@ impl GitLabPRClient {
             .map_err(|e| Error::generic(format!("Failed to parse response: {}", e)))?;
 
         Ok(PRResult {
-            number: json["iid"]
-                .as_u64()
-                .ok_or_else(|| Error::generic("Missing MR number"))?,
+            number: json["iid"].as_u64().ok_or_else(|| Error::generic("Missing MR number"))?,
             url: json["web_url"]
                 .as_str()
                 .ok_or_else(|| Error::generic("Missing MR URL"))?
@@ -303,10 +296,7 @@ impl GitLabPRClient {
 
         let status = response.status();
         if !status.is_success() {
-            return Err(Error::generic(format!(
-                "Failed to add labels: {}",
-                status
-            )));
+            return Err(Error::generic(format!("Failed to add labels: {}", status)));
         }
 
         Ok(())

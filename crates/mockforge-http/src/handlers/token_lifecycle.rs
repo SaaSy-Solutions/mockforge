@@ -185,9 +185,7 @@ pub async fn rotate_keys(
 }
 
 /// Get active keys
-pub async fn get_active_keys(
-    State(state): State<TokenLifecycleState>,
-) -> Json<serde_json::Value> {
+pub async fn get_active_keys(State(state): State<TokenLifecycleState>) -> Json<serde_json::Value> {
     let keys = state.manager.key_rotation.get_active_keys().await;
     Json(serde_json::json!({
         "keys": keys.iter().map(|k| serde_json::json!({
@@ -224,9 +222,7 @@ pub async fn set_clock_skew(
 }
 
 /// Get clock skew
-pub async fn get_clock_skew(
-    State(state): State<TokenLifecycleState>,
-) -> Json<serde_json::Value> {
+pub async fn get_clock_skew(State(state): State<TokenLifecycleState>) -> Json<serde_json::Value> {
     let skew = state.manager.clock_skew.get_skew().await;
     let adjusted_time = state.manager.clock_skew.get_adjusted_time().await;
     let server_time = chrono::Utc::now().timestamp();

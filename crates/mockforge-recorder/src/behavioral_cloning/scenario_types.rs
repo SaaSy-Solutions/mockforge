@@ -137,7 +137,11 @@ impl BehavioralScenarioStep {
     }
 
     /// Add a variable extraction
-    pub fn add_extract(mut self, variable_name: impl Into<String>, json_path: impl Into<String>) -> Self {
+    pub fn add_extract(
+        mut self,
+        variable_name: impl Into<String>,
+        json_path: impl Into<String>,
+    ) -> Self {
         self.extracts.insert(variable_name.into(), json_path.into());
         self
     }
@@ -170,4 +174,3 @@ impl StateVariable {
         self
     }
 }
-

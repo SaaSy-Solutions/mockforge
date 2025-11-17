@@ -91,7 +91,7 @@ pub use distributed_coordinator::{
     NodeExecutionState, NodeStatus, TaskStatus,
 };
 pub use failure_designer::{
-    ConditionOperator, ConditionType, FailureCondition, FailureDesigner, FailureDesignRule,
+    ConditionOperator, ConditionType, FailureCondition, FailureDesignRule, FailureDesigner,
     FailureTarget, FailureType,
 };
 pub use fault::{FaultInjector, FaultType};

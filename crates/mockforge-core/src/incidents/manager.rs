@@ -86,7 +86,8 @@ impl IncidentManager {
         after_sample: Option<serde_json::Value>,
     ) -> DriftIncident {
         let id = Uuid::new_v4().to_string();
-        let mut incident = DriftIncident::new(id, endpoint, method, incident_type, severity, details);
+        let mut incident =
+            DriftIncident::new(id, endpoint, method, incident_type, severity, details);
         incident.budget_id = budget_id;
         incident.workspace_id = workspace_id;
         incident.sync_cycle_id = sync_cycle_id;
@@ -185,11 +186,14 @@ impl IncidentManager {
             }
 
             // Determine webhook format based on URL or headers
-            let payload = if webhook.url.contains("slack.com") || webhook.url.contains("hooks.slack.com") {
+            let payload = if webhook.url.contains("slack.com")
+                || webhook.url.contains("hooks.slack.com")
+            {
                 // Format as Slack message
                 use crate::incidents::slack_formatter::format_slack_webhook;
                 format_slack_webhook(incident)
-            } else if webhook.url.contains("jira") || webhook.headers.contains_key("X-Jira-Project") {
+            } else if webhook.url.contains("jira") || webhook.headers.contains_key("X-Jira-Project")
+            {
                 // Format as Jira webhook
                 use crate::incidents::jira_formatter::format_jira_webhook;
                 format_jira_webhook(incident)

@@ -151,13 +151,10 @@ pub async fn approve_manager(
     let approver_id = extract_user_id_with_fallback(&claims);
 
     let manager = state.manager.write().await;
-    manager
-        .approve_manager(request_id, approver_id)
-        .await
-        .map_err(|e| {
-            error!("Failed to approve privileged access request: {}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+    manager.approve_manager(request_id, approver_id).await.map_err(|e| {
+        error!("Failed to approve privileged access request: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     info!("Privileged access request approved by manager: {}", request_id);
 
@@ -248,13 +245,10 @@ pub async fn get_user_actions(
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<PrivilegedActionsResponse>, StatusCode> {
     let manager = state.manager.read().await;
-    let actions = manager
-        .get_user_actions(user_id)
-        .await
-        .map_err(|e| {
-            error!("Failed to get user actions: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let actions = manager.get_user_actions(user_id).await.map_err(|e| {
+        error!("Failed to get user actions: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let summaries: Vec<PrivilegedActionSummary> = actions
         .into_iter()
@@ -266,9 +260,7 @@ pub async fn get_user_actions(
         })
         .collect();
 
-    Ok(Json(PrivilegedActionsResponse {
-        actions: summaries,
-    }))
+    Ok(Json(PrivilegedActionsResponse { actions: summaries }))
 }
 
 /// Get active privileged sessions
@@ -278,13 +270,10 @@ pub async fn get_active_sessions(
     State(state): State<PrivilegedAccessState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let manager = state.manager.read().await;
-    let sessions = manager
-        .get_active_sessions()
-        .await
-        .map_err(|e| {
-            error!("Failed to get active sessions: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let sessions = manager.get_active_sessions().await.map_err(|e| {
+        error!("Failed to get active sessions: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(serde_json::json!({
         "sessions": sessions

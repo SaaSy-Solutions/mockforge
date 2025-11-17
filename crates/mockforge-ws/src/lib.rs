@@ -226,6 +226,15 @@ pub async fn start_with_latency(
     port: u16,
     latency: Option<LatencyProfile>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    start_with_latency_and_host(port, "0.0.0.0", latency).await
+}
+
+/// Start WebSocket server with latency simulation and custom host
+pub async fn start_with_latency_and_host(
+    port: u16,
+    host: &str,
+    latency: Option<LatencyProfile>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let latency_injector = latency.map(|profile| LatencyInjector::new(profile, Default::default()));
     let router = if let Some(injector) = latency_injector {
         router_with_latency(injector)
@@ -233,7 +242,7 @@ pub async fn start_with_latency(
         router()
     };
 
-    let addr: std::net::SocketAddr = format!("127.0.0.1:{}", port).parse()?;
+    let addr: std::net::SocketAddr = format!("{}:{}", host, port).parse()?;
     info!("WebSocket server listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {

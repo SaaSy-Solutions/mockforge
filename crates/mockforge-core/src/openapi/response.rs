@@ -3,11 +3,11 @@
 //! This module provides functionality for generating mock responses
 //! based on OpenAPI specifications.
 
+use crate::intelligent_behavior::config::Persona;
 use crate::{
     ai_response::{expand_prompt_template, AiResponseConfig, RequestContext},
     OpenApiSpec, Result,
 };
-use crate::intelligent_behavior::config::Persona;
 use async_trait::async_trait;
 use chrono;
 use openapiv3::{Operation, ReferenceOr, Response, Responses, Schema};
@@ -638,7 +638,8 @@ impl ResponseGenerator {
     ) -> Value {
         // Try to find items array and pagination metadata in the example
         // Support both nested (data.items) and flat (items) structures
-        let has_nested_items = example.get("data")
+        let has_nested_items = example
+            .get("data")
             .and_then(|v| v.as_object())
             .map(|obj| obj.contains_key("items"))
             .unwrap_or(false);
@@ -650,22 +651,21 @@ impl ResponseGenerator {
         }
 
         // Extract pagination metadata
-        let total = example.get("data")
+        let total = example
+            .get("data")
             .and_then(|d| d.get("total"))
             .or_else(|| example.get("total"))
-            .and_then(|v| {
-                v.as_u64().or_else(|| v.as_i64().map(|i| i as u64))
-            });
+            .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)));
 
-        let limit = example.get("data")
+        let limit = example
+            .get("data")
             .and_then(|d| d.get("limit"))
             .or_else(|| example.get("limit"))
-            .and_then(|v| {
-                v.as_u64().or_else(|| v.as_i64().map(|i| i as u64))
-            });
+            .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)));
 
         // Get current items array
-        let items_array = example.get("data")
+        let items_array = example
+            .get("data")
             .and_then(|d| d.get("items"))
             .or_else(|| example.get("items"))
             .and_then(|v| v.as_array())
@@ -733,7 +733,11 @@ impl ResponseGenerator {
     /// 2. Property-level examples when generating objects
     /// 3. Generated values based on schema type
     /// 4. Persona traits (if persona provided)
-    fn generate_example_from_schema(spec: &OpenApiSpec, schema: &Schema, persona: Option<&Persona>) -> Value {
+    fn generate_example_from_schema(
+        spec: &OpenApiSpec,
+        schema: &Schema,
+        persona: Option<&Persona>,
+    ) -> Value {
         // First, check for schema-level example in schema_data
         // OpenAPI v3 stores examples in schema_data.example
         if let Some(example) = schema.schema_data.example.as_ref() {
@@ -761,8 +765,8 @@ impl ResponseGenerator {
 
                 // Check if this looks like a paginated response by scanning properties
                 // Look for "items" array property and pagination fields
-                let has_items = obj.properties.iter()
-                    .any(|(name, _)| name.to_lowercase() == "items");
+                let has_items =
+                    obj.properties.iter().any(|(name, _)| name.to_lowercase() == "items");
 
                 if has_items {
                     // Try to extract pagination metadata from schema properties
@@ -775,7 +779,9 @@ impl ResponseGenerator {
                         // Convert ReferenceOr<Box<Schema>> to ReferenceOr<Schema> for extraction
                         let schema_ref: ReferenceOr<Schema> = match prop_schema {
                             ReferenceOr::Item(boxed) => ReferenceOr::Item(boxed.as_ref().clone()),
-                            ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference: reference.clone() },
+                            ReferenceOr::Reference { reference } => ReferenceOr::Reference {
+                                reference: reference.clone(),
+                            },
                         };
                         if prop_lower == "total" || prop_lower == "count" || prop_lower == "size" {
                             total_opt = Self::extract_numeric_value_from_schema(&schema_ref);
@@ -793,7 +799,9 @@ impl ResponseGenerator {
                         pagination_metadata = Some((total, page, limit));
                         tracing::debug!(
                             "Detected pagination metadata: total={}, page={}, limit={}",
-                            total, page, limit
+                            total,
+                            page,
+                            limit
                         );
                     } else {
                         // Phase 3: If no total found in schema, try to infer from parent entity
@@ -802,7 +810,9 @@ impl ResponseGenerator {
                             // Try to infer parent/child relationship from schema names
                             // This is a heuristic: if we're generating a paginated response,
                             // check if we can find a parent entity schema with a count field
-                            if let Some(inferred_total) = Self::try_infer_total_from_context(spec, obj) {
+                            if let Some(inferred_total) =
+                                Self::try_infer_total_from_context(spec, obj)
+                            {
                                 let page = page_opt.unwrap_or(1);
                                 let limit = limit_opt.unwrap_or(20);
                                 pagination_metadata = Some((inferred_total, page, limit));
@@ -815,7 +825,8 @@ impl ResponseGenerator {
                                 if let Some(persona) = persona {
                                     // Look for count-related traits (e.g., "hive_count", "apiary_count")
                                     // Try common patterns
-                                    let count_keys = ["hive_count", "apiary_count", "item_count", "total_count"];
+                                    let count_keys =
+                                        ["hive_count", "apiary_count", "item_count", "total_count"];
                                     for key in &count_keys {
                                         if let Some(count) = persona.get_numeric_trait(key) {
                                             let page = page_opt.unwrap_or(1);
@@ -853,7 +864,9 @@ impl ResponseGenerator {
                                     pagination_metadata.unwrap(),
                                     persona,
                                 )
-                            } else if let Some(prop_example) = prop_schema.schema_data.example.as_ref() {
+                            } else if let Some(prop_example) =
+                                prop_schema.schema_data.example.as_ref()
+                            {
                                 // Check for property-level example (only if not items array)
                                 tracing::debug!(
                                     "Using example for property '{}': {:?}",
@@ -862,7 +875,11 @@ impl ResponseGenerator {
                                 );
                                 prop_example.clone()
                             } else {
-                                Self::generate_example_from_schema(spec, prop_schema.as_ref(), persona)
+                                Self::generate_example_from_schema(
+                                    spec,
+                                    prop_schema.as_ref(),
+                                    persona,
+                                )
                             }
                         }
                         ReferenceOr::Reference { reference } => {
@@ -930,7 +947,11 @@ impl ResponseGenerator {
                             ReferenceOr::Item(item_schema) => {
                                 // Recursively generate example for array item
                                 // This will check for item-level examples
-                                Self::generate_example_from_schema(spec, item_schema.as_ref(), persona)
+                                Self::generate_example_from_schema(
+                                    spec,
+                                    item_schema.as_ref(),
+                                    persona,
+                                )
                             }
                             ReferenceOr::Reference { reference } => {
                                 // Try to resolve reference and generate example
@@ -957,9 +978,7 @@ impl ResponseGenerator {
 
     /// Extract numeric value from a schema (from example or default)
     /// Returns None if no numeric value can be extracted
-    fn extract_numeric_value_from_schema(
-        schema_ref: &ReferenceOr<Schema>,
-    ) -> Option<u64> {
+    fn extract_numeric_value_from_schema(schema_ref: &ReferenceOr<Schema>) -> Option<u64> {
         match schema_ref {
             ReferenceOr::Item(schema) => {
                 // Check for example value first
@@ -1009,12 +1028,7 @@ impl ResponseGenerator {
         let max_items = 100;
         let count = std::cmp::min(count, max_items);
 
-        tracing::debug!(
-            "Generating array with count={} (total={}, limit={})",
-            count,
-            total,
-            limit
-        );
+        tracing::debug!("Generating array with count={} (total={}, limit={})", count, total, limit);
 
         // Check if array schema has an example with items
         if let Some(example) = array_schema.schema_data.example.as_ref() {
@@ -1036,13 +1050,18 @@ impl ResponseGenerator {
         }
 
         // Generate items from schema
-        if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(arr)) = &array_schema.schema_kind {
+        if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(arr)) = &array_schema.schema_kind
+        {
             if let Some(item_schema) = &arr.items {
                 let items: Vec<Value> = match item_schema {
                     ReferenceOr::Item(item_schema) => {
                         (0..count)
                             .map(|i| {
-                                let mut item = Self::generate_example_from_schema(spec, item_schema.as_ref(), persona);
+                                let mut item = Self::generate_example_from_schema(
+                                    spec,
+                                    item_schema.as_ref(),
+                                    persona,
+                                );
                                 // Add variation to make items unique
                                 Self::add_item_variation(&mut item, i + 1);
                                 item
@@ -1073,11 +1092,7 @@ impl ResponseGenerator {
         }
 
         // Fallback: generate simple items
-        Value::Array(
-            (0..count)
-                .map(|i| Value::String(format!("item_{}", i + 1)))
-                .collect(),
-        )
+        Value::Array((0..count).map(|i| Value::String(format!("item_{}", i + 1))).collect())
     }
 
     /// Add variation to an item to make it unique (for array generation)
@@ -1106,33 +1121,82 @@ impl ResponseGenerator {
                         // 60+ unique apiary names with geographic diversity for realistic demo
                         let apiary_names = [
                             // Midwest/Prairie names
-                            "Meadow Apiary", "Prairie Apiary", "Sunset Valley Apiary", "Golden Fields Apiary",
-                            "Miller Family Apiary", "Heartland Honey Co.", "Cornfield Apiary", "Harvest Moon Apiary",
-                            "Prairie Winds Apiary", "Amber Fields Apiary",
+                            "Meadow Apiary",
+                            "Prairie Apiary",
+                            "Sunset Valley Apiary",
+                            "Golden Fields Apiary",
+                            "Miller Family Apiary",
+                            "Heartland Honey Co.",
+                            "Cornfield Apiary",
+                            "Harvest Moon Apiary",
+                            "Prairie Winds Apiary",
+                            "Amber Fields Apiary",
                             // California/Coastal names
-                            "Coastal Apiary", "Sunset Coast Apiary", "Pacific Grove Apiary", "Golden Gate Apiary",
-                            "Napa Valley Apiary", "Coastal Breeze Apiary", "Pacific Heights Apiary", "Bay Area Apiary",
-                            "Sunset Valley Honey Co.", "Coastal Harvest Apiary",
+                            "Coastal Apiary",
+                            "Sunset Coast Apiary",
+                            "Pacific Grove Apiary",
+                            "Golden Gate Apiary",
+                            "Napa Valley Apiary",
+                            "Coastal Breeze Apiary",
+                            "Pacific Heights Apiary",
+                            "Bay Area Apiary",
+                            "Sunset Valley Honey Co.",
+                            "Coastal Harvest Apiary",
                             // Texas/Ranch names
-                            "Lone Star Apiary", "Texas Ranch Apiary", "Big Sky Apiary", "Prairie Rose Apiary",
-                            "Hill Country Apiary", "Lone Star Honey Co.", "Texas Pride Apiary", "Wildflower Ranch",
-                            "Desert Bloom Apiary", "Cactus Creek Apiary",
+                            "Lone Star Apiary",
+                            "Texas Ranch Apiary",
+                            "Big Sky Apiary",
+                            "Prairie Rose Apiary",
+                            "Hill Country Apiary",
+                            "Lone Star Honey Co.",
+                            "Texas Pride Apiary",
+                            "Wildflower Ranch",
+                            "Desert Bloom Apiary",
+                            "Cactus Creek Apiary",
                             // Florida/Grove names
-                            "Orange Grove Apiary", "Citrus Grove Apiary", "Palm Grove Apiary", "Tropical Breeze Apiary",
-                            "Everglades Apiary", "Sunshine State Apiary", "Florida Keys Apiary", "Grove View Apiary",
-                            "Tropical Harvest Apiary", "Palm Coast Apiary",
+                            "Orange Grove Apiary",
+                            "Citrus Grove Apiary",
+                            "Palm Grove Apiary",
+                            "Tropical Breeze Apiary",
+                            "Everglades Apiary",
+                            "Sunshine State Apiary",
+                            "Florida Keys Apiary",
+                            "Grove View Apiary",
+                            "Tropical Harvest Apiary",
+                            "Palm Coast Apiary",
                             // Northeast/Valley names
-                            "Mountain View Apiary", "Valley Apiary", "Riverside Apiary", "Hilltop Apiary",
-                            "Forest Apiary", "Mountain Apiary", "Lakeside Apiary", "Ridge Apiary",
-                            "Brook Apiary", "Hillside Apiary",
+                            "Mountain View Apiary",
+                            "Valley Apiary",
+                            "Riverside Apiary",
+                            "Hilltop Apiary",
+                            "Forest Apiary",
+                            "Mountain Apiary",
+                            "Lakeside Apiary",
+                            "Ridge Apiary",
+                            "Brook Apiary",
+                            "Hillside Apiary",
                             // Generic/Professional names
-                            "Field Apiary", "Creek Apiary", "Woodland Apiary", "Farm Apiary",
-                            "Orchard Apiary", "Pasture Apiary", "Green Valley Apiary", "Blue Sky Apiary",
-                            "Sweet Honey Apiary", "Nature's Best Apiary",
+                            "Field Apiary",
+                            "Creek Apiary",
+                            "Woodland Apiary",
+                            "Farm Apiary",
+                            "Orchard Apiary",
+                            "Pasture Apiary",
+                            "Green Valley Apiary",
+                            "Blue Sky Apiary",
+                            "Sweet Honey Apiary",
+                            "Nature's Best Apiary",
                             // Business/Commercial names
-                            "Premium Honey Co.", "Artisan Apiary", "Heritage Apiary", "Summit Apiary",
-                            "Crystal Springs Apiary", "Maple Grove Apiary", "Wildflower Apiary", "Thistle Apiary",
-                            "Clover Field Apiary", "Honeycomb Apiary"
+                            "Premium Honey Co.",
+                            "Artisan Apiary",
+                            "Heritage Apiary",
+                            "Summit Apiary",
+                            "Crystal Springs Apiary",
+                            "Maple Grove Apiary",
+                            "Wildflower Apiary",
+                            "Thistle Apiary",
+                            "Clover Field Apiary",
+                            "Honeycomb Apiary",
                         ];
                         let name_index = (item_index - 1) as usize % apiary_names.len();
                         *name_val = Value::String(apiary_names[name_index].to_string());
@@ -1149,12 +1213,15 @@ impl ResponseGenerator {
                             // Extract street number if present, otherwise add variation
                             if let Some(num_str) = address_str.split_whitespace().next() {
                                 if let Ok(num) = num_str.parse::<u64>() {
-                                    *address_val = Value::String(format!("{} Farm Road", num + item_index));
+                                    *address_val =
+                                        Value::String(format!("{} Farm Road", num + item_index));
                                 } else {
-                                    *address_val = Value::String(format!("{} Farm Road", 100 + item_index));
+                                    *address_val =
+                                        Value::String(format!("{} Farm Road", 100 + item_index));
                                 }
                             } else {
-                                *address_val = Value::String(format!("{} Farm Road", 100 + item_index));
+                                *address_val =
+                                    Value::String(format!("{} Farm Road", 100 + item_index));
                             }
                         }
                     }
@@ -1162,21 +1229,29 @@ impl ResponseGenerator {
                     // Vary coordinates slightly
                     if let Some(lat_val) = location_obj.get_mut("latitude") {
                         if let Some(lat) = lat_val.as_f64() {
-                            *lat_val = Value::Number(serde_json::Number::from_f64(lat + (item_index as f64 * 0.01)).unwrap());
+                            *lat_val = Value::Number(
+                                serde_json::Number::from_f64(lat + (item_index as f64 * 0.01))
+                                    .unwrap(),
+                            );
                         }
                     }
                     if let Some(lng_val) = location_obj.get_mut("longitude") {
                         if let Some(lng) = lng_val.as_f64() {
-                            *lng_val = Value::Number(serde_json::Number::from_f64(lng + (item_index as f64 * 0.01)).unwrap());
+                            *lng_val = Value::Number(
+                                serde_json::Number::from_f64(lng + (item_index as f64 * 0.01))
+                                    .unwrap(),
+                            );
                         }
                     }
                 } else if let Some(address_str) = location_val.as_str() {
                     // Flat address string
                     if let Some(num_str) = address_str.split_whitespace().next() {
                         if let Ok(num) = num_str.parse::<u64>() {
-                            *location_val = Value::String(format!("{} Farm Road", num + item_index));
+                            *location_val =
+                                Value::String(format!("{} Farm Road", num + item_index));
                         } else {
-                            *location_val = Value::String(format!("{} Farm Road", 100 + item_index));
+                            *location_val =
+                                Value::String(format!("{} Farm Road", 100 + item_index));
                         }
                     }
                 }
@@ -1198,7 +1273,14 @@ impl ResponseGenerator {
             // Vary status fields (common enum values)
             if let Some(status_val) = obj.get_mut("status") {
                 if let Some(status_str) = status_val.as_str() {
-                    let statuses = ["healthy", "sick", "needs_attention", "quarantined", "active", "inactive"];
+                    let statuses = [
+                        "healthy",
+                        "sick",
+                        "needs_attention",
+                        "quarantined",
+                        "active",
+                        "inactive",
+                    ];
                     let status_index = (item_index - 1) as usize % statuses.len();
                     // Bias towards "healthy" and "active" (70% of items)
                     let final_status = if (item_index - 1) % 10 < 7 {
@@ -1224,7 +1306,8 @@ impl ResponseGenerator {
                 if let Some(queen_obj) = queen_val.as_object_mut() {
                     if let Some(breed_val) = queen_obj.get_mut("breed") {
                         if let Some(_) = breed_val.as_str() {
-                            let breeds = ["italian", "carniolan", "russian", "buckfast", "caucasian"];
+                            let breeds =
+                                ["italian", "carniolan", "russian", "buckfast", "caucasian"];
                             let breed_index = (item_index - 1) as usize % breeds.len();
                             *breed_val = Value::String(breeds[breed_index].to_string());
                         }
@@ -1234,7 +1317,8 @@ impl ResponseGenerator {
                         if let Some(base_age) = age_val.as_u64() {
                             *age_val = Value::Number((base_age + (item_index * 10) % 200).into());
                         } else if let Some(base_age) = age_val.as_i64() {
-                            *age_val = Value::Number((base_age + (item_index as i64 * 10) % 200).into());
+                            *age_val =
+                                Value::Number((base_age + (item_index as i64 * 10) % 200).into());
                         }
                     }
                     // Vary queen mark color
@@ -1256,7 +1340,7 @@ impl ResponseGenerator {
                         "Research apiary",
                         "Commercial operation",
                         "Backyard apiary",
-                        "Educational apiary"
+                        "Educational apiary",
                     ];
                     let desc_index = (item_index - 1) as usize % descriptions.len();
                     *desc_val = Value::String(descriptions[desc_index].to_string());
@@ -1265,7 +1349,14 @@ impl ResponseGenerator {
 
             // Vary timestamp fields (created_at, updated_at, timestamp, date) for realistic time-series data
             // Generate timestamps spanning 12-24 months with proper distribution
-            let timestamp_fields = ["created_at", "updated_at", "timestamp", "date", "forecastDate", "predictedDate"];
+            let timestamp_fields = [
+                "created_at",
+                "updated_at",
+                "timestamp",
+                "date",
+                "forecastDate",
+                "predictedDate",
+            ];
             for field_name in &timestamp_fields {
                 if let Some(timestamp_val) = obj.get_mut(*field_name) {
                     if let Some(_timestamp_str) = timestamp_val.as_str() {
@@ -1295,12 +1386,9 @@ impl ResponseGenerator {
                         let target_day = std::cmp::min(28, 1 + days_offset as u8); // Start from day 1, cap at 28
 
                         // Format as ISO 8601
-                        let timestamp = format!("{:04}-{:02}-{:02}T{:02}:{:02}:00Z",
-                            target_year,
-                            target_month,
-                            target_day,
-                            hours_offset,
-                            minutes_offset
+                        let timestamp = format!(
+                            "{:04}-{:02}-{:02}T{:02}:{:02}:00Z",
+                            target_year, target_month, target_day, hours_offset, minutes_offset
                         );
                         *timestamp_val = Value::String(timestamp);
                     }
@@ -1325,18 +1413,28 @@ impl ResponseGenerator {
                 // that might have count fields matching the items type
                 for (schema_name, schema_ref) in schemas {
                     if let ReferenceOr::Item(schema) = schema_ref {
-                        if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) = &schema.schema_kind {
+                        if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) =
+                            &schema.schema_kind
+                        {
                             // Look for count fields that might match
                             for (prop_name, prop_schema) in &obj.properties {
                                 let prop_lower = prop_name.to_lowercase();
                                 if prop_lower.ends_with("_count") {
                                     // Convert ReferenceOr<Box<Schema>> to ReferenceOr<Schema>
                                     let schema_ref: ReferenceOr<Schema> = match prop_schema {
-                                        ReferenceOr::Item(boxed) => ReferenceOr::Item(boxed.as_ref().clone()),
-                                        ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference: reference.clone() },
+                                        ReferenceOr::Item(boxed) => {
+                                            ReferenceOr::Item(boxed.as_ref().clone())
+                                        }
+                                        ReferenceOr::Reference { reference } => {
+                                            ReferenceOr::Reference {
+                                                reference: reference.clone(),
+                                            }
+                                        }
                                     };
                                     // Found a count field, try to extract its value
-                                    if let Some(count) = Self::extract_numeric_value_from_schema(&schema_ref) {
+                                    if let Some(count) =
+                                        Self::extract_numeric_value_from_schema(&schema_ref)
+                                    {
                                         // Use a reasonable default if count is very large
                                         if count > 0 && count <= 1000 {
                                             tracing::debug!(
@@ -1379,13 +1477,21 @@ impl ResponseGenerator {
                 if schema_name_lower.contains(&parent_entity_name.to_lowercase()) {
                     if let ReferenceOr::Item(schema) = schema_ref {
                         // Check if this schema has the count field
-                        if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) = &schema.schema_kind {
+                        if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) =
+                            &schema.schema_kind
+                        {
                             for (prop_name, prop_schema) in &obj.properties {
                                 if prop_name.to_lowercase() == count_field_name.to_lowercase() {
                                     // Convert ReferenceOr<Box<Schema>> to ReferenceOr<Schema>
                                     let schema_ref: ReferenceOr<Schema> = match prop_schema {
-                                        ReferenceOr::Item(boxed) => ReferenceOr::Item(boxed.as_ref().clone()),
-                                        ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference: reference.clone() },
+                                        ReferenceOr::Item(boxed) => {
+                                            ReferenceOr::Item(boxed.as_ref().clone())
+                                        }
+                                        ReferenceOr::Reference { reference } => {
+                                            ReferenceOr::Reference {
+                                                reference: reference.clone(),
+                                            }
+                                        }
                                     };
                                     // Extract count value from schema
                                     return Self::extract_numeric_value_from_schema(&schema_ref);

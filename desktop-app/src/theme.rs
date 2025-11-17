@@ -51,9 +51,8 @@ fn detect_system_theme() -> SystemTheme {
     {
         use std::process::Command;
 
-        if let Ok(output) = Command::new("defaults")
-            .args(&["read", "-g", "AppleInterfaceStyle"])
-            .output()
+        if let Ok(output) =
+            Command::new("defaults").args(&["read", "-g", "AppleInterfaceStyle"]).output()
         {
             let theme = String::from_utf8_lossy(&output.stdout);
             if theme.trim() == "Dark" {

@@ -16,10 +16,14 @@ static GLOBAL_ACCESS_REVIEW_SERVICE: Lazy<Arc<RwLock<Option<Arc<RwLock<AccessRev
 ///
 /// This should be called once during application startup.
 /// Takes an Arc<RwLock<AccessReviewService>> to share the same instance with the scheduler.
-pub async fn init_global_access_review_service(service: Arc<RwLock<AccessReviewService>>) -> Result<(), crate::Error> {
+pub async fn init_global_access_review_service(
+    service: Arc<RwLock<AccessReviewService>>,
+) -> Result<(), crate::Error> {
     let mut global = GLOBAL_ACCESS_REVIEW_SERVICE.write().await;
     if global.is_some() {
-        return Err(crate::Error::Generic("Global access review service already initialized".to_string()));
+        return Err(crate::Error::Generic(
+            "Global access review service already initialized".to_string(),
+        ));
     }
     *global = Some(service);
     debug!("Global access review service initialized");

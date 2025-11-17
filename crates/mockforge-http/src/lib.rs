@@ -260,7 +260,8 @@ async fn load_persona_from_config() -> Option<Arc<Persona>> {
         if let Ok(config) = load_config(path).await {
             // Access intelligent_behavior through mockai config
             // Note: Config structure is mockai.intelligent_behavior.personas
-            if let Some(persona) = config.mockai.intelligent_behavior.personas.get_active_persona() {
+            if let Some(persona) = config.mockai.intelligent_behavior.personas.get_active_persona()
+            {
                 tracing::info!(
                     "Loaded active persona '{}' from config file: {}",
                     persona.name,
@@ -286,11 +287,11 @@ async fn load_persona_from_config() -> Option<Arc<Persona>> {
 use axum::middleware::from_fn_with_state;
 use axum::{extract::State, response::Json, Router};
 use mockforge_core::failure_injection::{FailureConfig, FailureInjector};
+use mockforge_core::intelligent_behavior::config::Persona;
 use mockforge_core::latency::LatencyInjector;
 use mockforge_core::openapi::OpenApiSpec;
 use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 use mockforge_core::openapi_routes::ValidationOptions;
-use mockforge_core::intelligent_behavior::config::Persona;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -888,9 +889,14 @@ pub async fn build_router_with_multi_tenant(
     {
         use mockforge_core::security::get_global_privileged_access_manager;
         if let Some(manager) = get_global_privileged_access_manager().await {
-            use crate::handlers::privileged_access::{privileged_access_router, PrivilegedAccessState};
+            use crate::handlers::privileged_access::{
+                privileged_access_router, PrivilegedAccessState,
+            };
             let privileged_state = PrivilegedAccessState { manager };
-            app = app.nest("/api/v1/security/privileged-access", privileged_access_router(privileged_state));
+            app = app.nest(
+                "/api/v1/security/privileged-access",
+                privileged_access_router(privileged_state),
+            );
             debug!("Privileged access API mounted at /api/v1/security/privileged-access");
         }
     }
@@ -899,7 +905,9 @@ pub async fn build_router_with_multi_tenant(
     {
         use mockforge_core::security::get_global_change_management_engine;
         if let Some(engine) = get_global_change_management_engine().await {
-            use crate::handlers::change_management::{change_management_router, ChangeManagementState};
+            use crate::handlers::change_management::{
+                change_management_router, ChangeManagementState,
+            };
             let change_state = ChangeManagementState { engine };
             app = app.nest("/api/v1/change-management", change_management_router(change_state));
             debug!("Change management API mounted at /api/v1/change-management");
@@ -948,11 +956,11 @@ pub async fn build_router_with_multi_tenant(
 
     // Add consent screen endpoints
     {
+        use crate::auth::oidc::{load_oidc_state, OidcState};
         use crate::auth::risk_engine::RiskEngine;
         use crate::auth::token_lifecycle::TokenLifecycleManager;
         use crate::handlers::consent::{consent_router, ConsentState};
         use crate::handlers::oauth2_server::OAuth2ServerState;
-        use crate::auth::oidc::{load_oidc_state, OidcState};
         // Load OIDC state from configuration (environment variables or config file)
         let oidc_state = Arc::new(RwLock::new(load_oidc_state()));
         let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
@@ -1440,9 +1448,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
     use mockforge_core::Overrides;
 
     // Extract template expansion setting before options is moved (used in OpenAPI routes and custom routes)
-    let template_expand = options.as_ref()
-        .map(|o| o.response_template_expand)
-        .unwrap_or_else(|| {
+    let template_expand =
+        options.as_ref().map(|o| o.response_template_expand).unwrap_or_else(|| {
             std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false)
@@ -1530,7 +1537,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
     }
 
     // Helper function to recursively expand templates in JSON values
-    fn expand_templates_in_json(value: &serde_json::Value, context: &mockforge_core::ai_response::RequestContext) -> serde_json::Value {
+    fn expand_templates_in_json(
+        value: &serde_json::Value,
+        context: &mockforge_core::ai_response::RequestContext,
+    ) -> serde_json::Value {
         use mockforge_core::ai_response::expand_prompt_template;
         use serde_json::Value;
 
@@ -1553,11 +1563,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
                     // We need to find {{... || "..."}} and split it
                     if let Some(open_idx) = normalized.find("{{") {
                         if let Some(close_idx) = normalized[open_idx..].find("}}") {
-                            let template_block = &normalized[open_idx..open_idx+close_idx+2];
+                            let template_block = &normalized[open_idx..open_idx + close_idx + 2];
                             if let Some(pipe_idx) = template_block.find("||") {
                                 // Split: "{{query.name || \"world\"}}" -> "{{query.name " and " \"world\"}}"
                                 let before_pipe = &template_block[..pipe_idx].trim();
-                                let after_pipe = &template_block[pipe_idx+2..].trim();
+                                let after_pipe = &template_block[pipe_idx + 2..].trim();
 
                                 // Extract template variable name (remove {{ and trim)
                                 let template_var = before_pipe.trim_start_matches("{{").trim();
@@ -1566,9 +1576,14 @@ pub async fn build_router_with_chains_and_multi_tenant(
                                 let template = normalized.replace(template_block, &replacement);
 
                                 // Extract default value: " \"world\"}}" -> "world"
-                                let mut default = after_pipe.trim_end_matches("}}").trim().to_string();
+                                let mut default =
+                                    after_pipe.trim_end_matches("}}").trim().to_string();
                                 // Remove quotes
-                                default = default.trim_matches('"').trim_matches('\'').trim_matches('\\').to_string();
+                                default = default
+                                    .trim_matches('"')
+                                    .trim_matches('\'')
+                                    .trim_matches('\\')
+                                    .to_string();
                                 default = default.trim().to_string();
 
                                 (template, Some(default))
@@ -1590,8 +1605,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
                 // If template wasn't fully expanded and we have a default, use default
                 // Otherwise use the expanded value
-                let final_expanded = if (expanded.contains("{{query.") || expanded.contains("{{path.") || expanded.contains("{{headers."))
-                    && default_value.is_some() {
+                let final_expanded = if (expanded.contains("{{query.")
+                    || expanded.contains("{{path.")
+                    || expanded.contains("{{headers."))
+                    && default_value.is_some()
+                {
                     default_value.unwrap()
                 } else {
                     // Clean up any stray closing braces that might remain
@@ -1640,137 +1658,144 @@ pub async fn build_router_with_chains_and_multi_tenant(
             // ({{request.query.name}}, {{request.path.id}}, {{request.headers.name}})
             // Register route using `any()` since we need full Request access for template expansion
             let expected_method = method.to_uppercase();
-            app = app.route(&path, axum::routing::any(move |req: axum::http::Request<axum::body::Body>| {
-                let body = body.clone();
-                let headers = headers.clone();
-                let expand = template_expand;
-                let latency = latency_config.clone();
-                let expected = expected_method.clone();
-                let status_code = status;
+            app = app.route(
+                &path,
+                axum::routing::any(move |req: axum::http::Request<axum::body::Body>| {
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let expand = template_expand;
+                    let latency = latency_config.clone();
+                    let expected = expected_method.clone();
+                    let status_code = status;
 
-                async move {
-                    // Check if request method matches expected method
-                    if req.method().as_str() != expected.as_str() {
-                        // Return 405 Method Not Allowed for wrong method
-                        return axum::response::Response::builder()
-                            .status(axum::http::StatusCode::METHOD_NOT_ALLOWED)
-                            .header("Allow", &expected)
-                            .body(axum::body::Body::empty())
-                            .unwrap()
-                            .into_response();
-                    }
+                    async move {
+                        // Check if request method matches expected method
+                        if req.method().as_str() != expected.as_str() {
+                            // Return 405 Method Not Allowed for wrong method
+                            return axum::response::Response::builder()
+                                .status(axum::http::StatusCode::METHOD_NOT_ALLOWED)
+                                .header("Allow", &expected)
+                                .body(axum::body::Body::empty())
+                                .unwrap()
+                                .into_response();
+                        }
 
-                    // Apply latency injection if configured
-                    // Calculate delay before any await to avoid Send issues
-                    let delay_ms = if let Some(ref lat) = latency {
-                        if lat.enabled {
-                            use rand::{rng, Rng};
+                        // Apply latency injection if configured
+                        // Calculate delay before any await to avoid Send issues
+                        let delay_ms = if let Some(ref lat) = latency {
+                            if lat.enabled {
+                                use rand::{rng, Rng};
 
-                            // Check probability - generate all random values before await
-                            let mut rng = rng();
-                            let roll: f64 = rng.random();
+                                // Check probability - generate all random values before await
+                                let mut rng = rng();
+                                let roll: f64 = rng.random();
 
-                            if roll < lat.probability {
-                                if let Some(fixed) = lat.fixed_delay_ms {
-                                    // Fixed delay with optional jitter
-                                    let jitter = (fixed as f64 * lat.jitter_percent / 100.0) as u64;
-                                    let jitter_amount = if jitter > 0 {
-                                        rng.random_range(0..=jitter)
+                                if roll < lat.probability {
+                                    if let Some(fixed) = lat.fixed_delay_ms {
+                                        // Fixed delay with optional jitter
+                                        let jitter =
+                                            (fixed as f64 * lat.jitter_percent / 100.0) as u64;
+                                        let jitter_amount = if jitter > 0 {
+                                            rng.random_range(0..=jitter)
+                                        } else {
+                                            0
+                                        };
+                                        Some(fixed + jitter_amount)
+                                    } else if let Some((min, max)) = lat.random_delay_range_ms {
+                                        // Random delay range
+                                        Some(rng.random_range(min..=max))
                                     } else {
-                                        0
-                                    };
-                                    Some(fixed + jitter_amount)
-                                } else if let Some((min, max)) = lat.random_delay_range_ms {
-                                    // Random delay range
-                                    Some(rng.random_range(min..=max))
+                                        // Default to 0 if no delay specified
+                                        Some(0)
+                                    }
                                 } else {
-                                    // Default to 0 if no delay specified
-                                    Some(0)
+                                    None
                                 }
                             } else {
                                 None
                             }
                         } else {
                             None
-                        }
-                    } else {
-                        None
-                    };
+                        };
 
-                    // Apply delay if calculated (after all random generation is done)
-                    if let Some(delay) = delay_ms {
-                        if delay > 0 {
-                            use tokio::time::{sleep, Duration};
-                            sleep(Duration::from_millis(delay)).await;
-                        }
-                    }
-
-                    // Create JSON response from body, or empty object if None
-                    let mut body_value = body.unwrap_or(serde_json::json!({}));
-
-                    // Apply template expansion if enabled
-                    if expand {
-                        use mockforge_core::ai_response::RequestContext;
-                        use std::collections::HashMap;
-                        use serde_json::Value;
-
-                        // Extract request data for template expansion
-                        let method = req.method().to_string();
-                        let path = req.uri().path().to_string();
-
-                        // Extract query parameters
-                        let query_params: HashMap<String, Value> = req
-                            .uri()
-                            .query()
-                            .map(|q| {
-                                url::form_urlencoded::parse(q.as_bytes())
-                                    .into_owned()
-                                    .map(|(k, v)| (k, Value::String(v)))
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-
-                        // Extract headers
-                        let request_headers: HashMap<String, Value> = req
-                            .headers()
-                            .iter()
-                            .filter_map(|(name, value)| {
-                                value.to_str().ok().map(|v| {
-                                    (name.to_string(), Value::String(v.to_string()))
-                                })
-                            })
-                            .collect();
-
-                        // Note: Request body extraction for {{request.body.field}} would go here
-                        // For now, we skip it to avoid consuming the body
-
-                        // Build request context
-                        let context = RequestContext::new(method.clone(), path.clone())
-                            .with_query_params(query_params)
-                            .with_headers(request_headers);
-
-                        // Recursively expand templates in JSON structure
-                        body_value = expand_templates_in_json(&body_value, &context);
-                    }
-
-                    let mut response = axum::Json(body_value).into_response();
-
-                    // Set status code
-                    *response.status_mut() = StatusCode::from_u16(status_code)
-                        .unwrap_or(StatusCode::OK);
-
-                    // Add custom headers
-                    for (key, value) in headers {
-                        if let Ok(header_name) = axum::http::HeaderName::from_bytes(key.as_bytes()) {
-                            if let Ok(header_value) = axum::http::HeaderValue::from_str(&value) {
-                                response.headers_mut().insert(header_name, header_value);
+                        // Apply delay if calculated (after all random generation is done)
+                        if let Some(delay) = delay_ms {
+                            if delay > 0 {
+                                use tokio::time::{sleep, Duration};
+                                sleep(Duration::from_millis(delay)).await;
                             }
                         }
-                    }
 
-                    response
-                }
-            }));
+                        // Create JSON response from body, or empty object if None
+                        let mut body_value = body.unwrap_or(serde_json::json!({}));
+
+                        // Apply template expansion if enabled
+                        if expand {
+                            use mockforge_core::ai_response::RequestContext;
+                            use serde_json::Value;
+                            use std::collections::HashMap;
+
+                            // Extract request data for template expansion
+                            let method = req.method().to_string();
+                            let path = req.uri().path().to_string();
+
+                            // Extract query parameters
+                            let query_params: HashMap<String, Value> = req
+                                .uri()
+                                .query()
+                                .map(|q| {
+                                    url::form_urlencoded::parse(q.as_bytes())
+                                        .into_owned()
+                                        .map(|(k, v)| (k, Value::String(v)))
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+
+                            // Extract headers
+                            let request_headers: HashMap<String, Value> =
+                                req.headers()
+                                    .iter()
+                                    .filter_map(|(name, value)| {
+                                        value.to_str().ok().map(|v| {
+                                            (name.to_string(), Value::String(v.to_string()))
+                                        })
+                                    })
+                                    .collect();
+
+                            // Note: Request body extraction for {{request.body.field}} would go here
+                            // For now, we skip it to avoid consuming the body
+
+                            // Build request context
+                            let context = RequestContext::new(method.clone(), path.clone())
+                                .with_query_params(query_params)
+                                .with_headers(request_headers);
+
+                            // Recursively expand templates in JSON structure
+                            body_value = expand_templates_in_json(&body_value, &context);
+                        }
+
+                        let mut response = axum::Json(body_value).into_response();
+
+                        // Set status code
+                        *response.status_mut() =
+                            StatusCode::from_u16(status_code).unwrap_or(StatusCode::OK);
+
+                        // Add custom headers
+                        for (key, value) in headers {
+                            if let Ok(header_name) =
+                                axum::http::HeaderName::from_bytes(key.as_bytes())
+                            {
+                                if let Ok(header_value) = axum::http::HeaderValue::from_str(&value)
+                                {
+                                    response.headers_mut().insert(header_name, header_value);
+                                }
+                            }
+                        }
+
+                        response
+                    }
+                }),
+            );
 
             debug!("Registered route: {} {}", method, path);
         }
@@ -1899,9 +1924,14 @@ pub async fn build_router_with_chains_and_multi_tenant(
     {
         use mockforge_core::security::get_global_privileged_access_manager;
         if let Some(manager) = get_global_privileged_access_manager().await {
-            use crate::handlers::privileged_access::{privileged_access_router, PrivilegedAccessState};
+            use crate::handlers::privileged_access::{
+                privileged_access_router, PrivilegedAccessState,
+            };
             let privileged_state = PrivilegedAccessState { manager };
-            app = app.nest("/api/v1/security/privileged-access", privileged_access_router(privileged_state));
+            app = app.nest(
+                "/api/v1/security/privileged-access",
+                privileged_access_router(privileged_state),
+            );
             debug!("Privileged access API mounted at /api/v1/security/privileged-access");
         }
     }
@@ -1910,7 +1940,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
     {
         use mockforge_core::security::get_global_change_management_engine;
         if let Some(engine) = get_global_change_management_engine().await {
-            use crate::handlers::change_management::{change_management_router, ChangeManagementState};
+            use crate::handlers::change_management::{
+                change_management_router, ChangeManagementState,
+            };
             let change_state = ChangeManagementState { engine };
             app = app.nest("/api/v1/change-management", change_management_router(change_state));
             debug!("Change management API mounted at /api/v1/change-management");
@@ -1959,11 +1991,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add consent screen endpoints
     {
+        use crate::auth::oidc::{load_oidc_state, OidcState};
         use crate::auth::risk_engine::RiskEngine;
         use crate::auth::token_lifecycle::TokenLifecycleManager;
         use crate::handlers::consent::{consent_router, ConsentState};
         use crate::handlers::oauth2_server::OAuth2ServerState;
-        use crate::auth::oidc::{load_oidc_state, OidcState};
         // Load OIDC state from configuration (environment variables or config file)
         let oidc_state = Arc::new(RwLock::new(load_oidc_state()));
         let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
@@ -2019,8 +2051,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
         use crate::handlers::drift_budget::{drift_budget_router, DriftBudgetState};
         use crate::middleware::drift_tracking::DriftTrackingState;
         use mockforge_core::ai_contract_diff::ContractDiffAnalyzer;
-        use mockforge_core::contract_drift::{DriftBudgetConfig, DriftBudgetEngine};
         use mockforge_core::consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder};
+        use mockforge_core::contract_drift::{DriftBudgetConfig, DriftBudgetEngine};
         use mockforge_core::incidents::{IncidentManager, IncidentStore};
         use std::sync::Arc;
 
@@ -2034,11 +2066,14 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
         // Initialize usage recorder and consumer detector
         let usage_recorder = Arc::new(UsageRecorder::default());
-        let consumer_detector = Arc::new(ConsumerBreakingChangeDetector::new(usage_recorder.clone()));
+        let consumer_detector =
+            Arc::new(ConsumerBreakingChangeDetector::new(usage_recorder.clone()));
 
         // Initialize contract diff analyzer if enabled
         let diff_analyzer = if drift_config.enabled {
-            match ContractDiffAnalyzer::new(mockforge_core::ai_contract_diff::ContractDiffConfig::default()) {
+            match ContractDiffAnalyzer::new(
+                mockforge_core::ai_contract_diff::ContractDiffConfig::default(),
+            ) {
                 Ok(analyzer) => Some(Arc::new(analyzer)),
                 Err(e) => {
                     warn!("Failed to create contract diff analyzer: {}", e);
@@ -2080,17 +2115,26 @@ pub async fn build_router_with_chains_and_multi_tenant(
         // Add drift tracking middleware (after response buffering)
         // Use a wrapper that inserts state into extensions before calling the middleware
         let drift_tracking_state_clone = drift_tracking_state.clone();
-        app = app.layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
-            let state = drift_tracking_state_clone.clone();
-            async move {
-                // Insert state into extensions if not already present
-                if req.extensions().get::<crate::middleware::drift_tracking::DriftTrackingState>().is_none() {
-                    req.extensions_mut().insert(state);
+        app = app.layer(axum::middleware::from_fn(
+            move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                let state = drift_tracking_state_clone.clone();
+                async move {
+                    // Insert state into extensions if not already present
+                    if req
+                        .extensions()
+                        .get::<crate::middleware::drift_tracking::DriftTrackingState>()
+                        .is_none()
+                    {
+                        req.extensions_mut().insert(state);
+                    }
+                    // Call the middleware function
+                    crate::middleware::drift_tracking::drift_tracking_middleware_with_extensions(
+                        req, next,
+                    )
+                    .await
                 }
-                // Call the middleware function
-                crate::middleware::drift_tracking::drift_tracking_middleware_with_extensions(req, next).await
-            }
-        }));
+            },
+        ));
 
         let drift_state = DriftBudgetState {
             engine: drift_engine,
@@ -2111,11 +2155,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let db_path = std::env::var("RECORDER_DATABASE_PATH")
             .ok()
             .map(PathBuf::from)
-            .or_else(|| {
-                std::env::current_dir()
-                    .ok()
-                    .map(|p| p.join("recordings.db"))
-            });
+            .or_else(|| std::env::current_dir().ok().map(|p| p.join("recordings.db")));
 
         let bc_middleware_state = if let Some(path) = db_path {
             BehavioralCloningMiddlewareState::with_database_path(path)
@@ -2131,24 +2171,31 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
         if enabled {
             let bc_state_clone = bc_middleware_state.clone();
-            app = app.layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
-                let state = bc_state_clone.clone();
-                async move {
-                    // Insert state into extensions if not already present
-                    if req.extensions().get::<BehavioralCloningMiddlewareState>().is_none() {
-                        req.extensions_mut().insert(state);
+            app = app.layer(axum::middleware::from_fn(
+                move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                    let state = bc_state_clone.clone();
+                    async move {
+                        // Insert state into extensions if not already present
+                        if req.extensions().get::<BehavioralCloningMiddlewareState>().is_none() {
+                            req.extensions_mut().insert(state);
+                        }
+                        // Call the middleware function
+                        crate::middleware::behavioral_cloning::behavioral_cloning_middleware(
+                            req, next,
+                        )
+                        .await
                     }
-                    // Call the middleware function
-                    crate::middleware::behavioral_cloning::behavioral_cloning_middleware(req, next).await
-                }
-            }));
+                },
+            ));
             debug!("Behavioral cloning middleware enabled (applies learned behavior to requests)");
         }
     }
 
     // Add consumer contracts endpoints
     {
-        use crate::handlers::consumer_contracts::{consumer_contracts_router, ConsumerContractsState};
+        use crate::handlers::consumer_contracts::{
+            consumer_contracts_router, ConsumerContractsState,
+        };
         use mockforge_core::consumer_contracts::{
             ConsumerBreakingChangeDetector, ConsumerRegistry, UsageRecorder,
         };
@@ -2175,18 +2222,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add behavioral cloning endpoints
     {
-        use crate::handlers::behavioral_cloning::{behavioral_cloning_router, BehavioralCloningState};
+        use crate::handlers::behavioral_cloning::{
+            behavioral_cloning_router, BehavioralCloningState,
+        };
         use std::path::PathBuf;
 
         // Determine database path (defaults to ./recordings.db)
         let db_path = std::env::var("RECORDER_DATABASE_PATH")
             .ok()
             .map(PathBuf::from)
-            .or_else(|| {
-                std::env::current_dir()
-                    .ok()
-                    .map(|p| p.join("recordings.db"))
-            });
+            .or_else(|| std::env::current_dir().ok().map(|p| p.join("recordings.db")));
 
         let bc_state = if let Some(path) = db_path {
             BehavioralCloningState::with_database_path(path)
@@ -2200,7 +2245,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add consistency engine and cross-protocol state management
     {
-        use crate::consistency::{HttpAdapter, ConsistencyMiddlewareState};
+        use crate::consistency::{ConsistencyMiddlewareState, HttpAdapter};
         use crate::handlers::consistency::{consistency_router, ConsistencyState};
         use mockforge_core::consistency::ConsistencyEngine;
         use std::sync::Arc;
@@ -2225,17 +2270,19 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
         // Add consistency middleware (before other middleware to inject state early)
         let consistency_middleware_state_clone = consistency_middleware_state.clone();
-        app = app.layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
-            let state = consistency_middleware_state_clone.clone();
-            async move {
-                // Insert state into extensions if not already present
-                if req.extensions().get::<ConsistencyMiddlewareState>().is_none() {
-                    req.extensions_mut().insert(state);
+        app = app.layer(axum::middleware::from_fn(
+            move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                let state = consistency_middleware_state_clone.clone();
+                async move {
+                    // Insert state into extensions if not already present
+                    if req.extensions().get::<ConsistencyMiddlewareState>().is_none() {
+                        req.extensions_mut().insert(state);
+                    }
+                    // Call the middleware function
+                    crate::consistency::middleware::consistency_middleware(req, next).await
                 }
-                // Call the middleware function
-                crate::consistency::middleware::consistency_middleware(req, next).await
-            }
-        }));
+            },
+        ));
 
         // Add consistency API endpoints
         app = app.merge(consistency_router(consistency_state));
@@ -2263,9 +2310,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             use mockforge_core::snapshots::SnapshotManager;
             use std::path::PathBuf;
 
-            let snapshot_dir = std::env::var("MOCKFORGE_SNAPSHOT_DIR")
-                .ok()
-                .map(PathBuf::from);
+            let snapshot_dir = std::env::var("MOCKFORGE_SNAPSHOT_DIR").ok().map(PathBuf::from);
             let snapshot_manager = Arc::new(SnapshotManager::new(snapshot_dir));
 
             let snapshot_state = SnapshotState {
@@ -2346,11 +2391,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
             None
         };
 
-        let pr_state = PRGenerationState { generator: generator.clone() };
+        let pr_state = PRGenerationState {
+            generator: generator.clone(),
+        };
 
         app = app.merge(pr_generation_router(pr_state));
         if generator.is_some() {
-            debug!("PR generation endpoints mounted at /api/v1/pr (configured for {:?})", pr_config.provider);
+            debug!(
+                "PR generation endpoints mounted at /api/v1/pr (configured for {:?})",
+                pr_config.provider
+            );
         } else {
             debug!("PR generation endpoints mounted at /api/v1/pr (not configured - set GITHUB_TOKEN/GITLAB_TOKEN and PR_REPO_OWNER/PR_REPO_NAME)");
         }

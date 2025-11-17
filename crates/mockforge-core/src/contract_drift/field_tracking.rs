@@ -54,10 +54,7 @@ impl FieldCountTracker {
             recorded_at: Utc::now(),
         };
 
-        self.records
-            .entry(key)
-            .or_insert_with(Vec::new)
-            .push(record);
+        self.records.entry(key).or_insert_with(Vec::new).push(record);
     }
 
     /// Get the baseline field count for an endpoint
@@ -76,19 +73,13 @@ impl FieldCountTracker {
 
         // Filter by time if specified
         let filtered: Vec<&FieldCountRecord> = if let Some(before_time) = before {
-            records
-                .iter()
-                .filter(|r| r.recorded_at <= before_time)
-                .collect()
+            records.iter().filter(|r| r.recorded_at <= before_time).collect()
         } else {
             records.iter().collect()
         };
 
         // Get the most recent record
-        filtered
-            .iter()
-            .max_by_key(|r| r.recorded_at)
-            .map(|r| r.field_count)
+        filtered.iter().max_by_key(|r| r.recorded_at).map(|r| r.field_count)
     }
 
     /// Get average field count over a time window
@@ -105,10 +96,8 @@ impl FieldCountTracker {
         let records = self.records.get(&key)?;
 
         let cutoff = Utc::now() - chrono::Duration::days(window_days as i64);
-        let window_records: Vec<&FieldCountRecord> = records
-            .iter()
-            .filter(|r| r.recorded_at >= cutoff)
-            .collect();
+        let window_records: Vec<&FieldCountRecord> =
+            records.iter().filter(|r| r.recorded_at >= cutoff).collect();
 
         if window_records.is_empty() {
             return None;
@@ -215,4 +204,3 @@ mod tests {
         assert!((avg_value - 12.0).abs() < 0.1); // Average of 10, 12, 14
     }
 }
-

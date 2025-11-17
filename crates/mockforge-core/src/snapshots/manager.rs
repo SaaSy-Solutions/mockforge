@@ -69,7 +69,8 @@ impl SnapshotManager {
         let temp_dir = snapshot_dir.join(".tmp");
         fs::create_dir_all(&temp_dir).await?;
 
-        let mut manifest = SnapshotManifest::new(name.clone(), workspace_id.clone(), components.clone());
+        let mut manifest =
+            SnapshotManifest::new(name.clone(), workspace_id.clone(), components.clone());
 
         // Save unified state if requested
         if components.unified_state {
@@ -103,7 +104,13 @@ impl SnapshotManager {
             if let Some(_engine) = consistency_engine {
                 // Save all protocol states
                 let protocols: Vec<String> = if components.protocols.is_empty() {
-                    vec!["http".to_string(), "graphql".to_string(), "grpc".to_string(), "websocket".to_string(), "tcp".to_string()]
+                    vec![
+                        "http".to_string(),
+                        "graphql".to_string(),
+                        "grpc".to_string(),
+                        "websocket".to_string(),
+                        "tcp".to_string(),
+                    ]
                 } else {
                     components.protocols.clone()
                 };
@@ -181,10 +188,7 @@ impl SnapshotManager {
         // Validate checksum
         let (size, checksum) = self.calculate_snapshot_checksum(&snapshot_dir).await?;
         if checksum != manifest.checksum {
-            warn!(
-                "Snapshot checksum mismatch: expected {}, got {}",
-                manifest.checksum, checksum
-            );
+            warn!("Snapshot checksum mismatch: expected {}, got {}", manifest.checksum, checksum);
             // Continue anyway, but log warning
         }
 
@@ -244,7 +248,10 @@ impl SnapshotManager {
                                 snapshots.push(SnapshotMetadata::from(manifest));
                             }
                             Err(e) => {
-                                warn!("Failed to parse manifest for snapshot {}: {}", snapshot_name, e);
+                                warn!(
+                                    "Failed to parse manifest for snapshot {}: {}",
+                                    snapshot_name, e
+                                );
                             }
                         }
                     }
@@ -297,11 +304,7 @@ impl SnapshotManager {
     }
 
     /// Validate snapshot integrity
-    pub async fn validate_snapshot(
-        &self,
-        name: String,
-        workspace_id: String,
-    ) -> Result<bool> {
+    pub async fn validate_snapshot(&self, name: String, workspace_id: String) -> Result<bool> {
         let snapshot_dir = self.snapshot_dir(&workspace_id, &name);
         let manifest_path = snapshot_dir.join("manifest.json");
         if !manifest_path.exists() {
@@ -332,7 +335,8 @@ impl SnapshotManager {
 
                 if metadata.is_dir() {
                     // Skip temp directories
-                    if path.file_name()
+                    if path
+                        .file_name()
                         .and_then(|n| n.to_str())
                         .map(|s| s.starts_with('.'))
                         .unwrap_or(false)
@@ -342,7 +346,8 @@ impl SnapshotManager {
                     stack.push(path);
                 } else if metadata.is_file() {
                     // Skip manifest.json from checksum calculation (it contains the checksum)
-                    if path.file_name()
+                    if path
+                        .file_name()
                         .and_then(|n| n.to_str())
                         .map(|s| s == "manifest.json")
                         .unwrap_or(false)
@@ -355,7 +360,8 @@ impl SnapshotManager {
 
                     let content = fs::read(&path).await?;
                     hasher.update(&content);
-                    hasher.update(path.file_name().unwrap_or_default().to_string_lossy().as_bytes());
+                    hasher
+                        .update(path.file_name().unwrap_or_default().to_string_lossy().as_bytes());
                 }
             }
         }

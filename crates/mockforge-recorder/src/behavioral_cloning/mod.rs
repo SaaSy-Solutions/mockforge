@@ -10,8 +10,7 @@ pub mod scenario_types;
 pub mod storage;
 
 pub use flow_compiler::FlowCompiler;
-pub use flow_recorder::{Flow, FlowRecorder, FlowRecordingConfig, FlowStep, FlowGroupingStrategy};
+pub use flow_recorder::{Flow, FlowGroupingStrategy, FlowRecorder, FlowRecordingConfig, FlowStep};
 pub use replay_engine::{BehavioralScenarioReplayEngine, ReplayResponse};
 pub use scenario_types::{BehavioralScenario, BehavioralScenarioStep, StateVariable};
 pub use storage::{ScenarioInfo, ScenarioStorage};
-

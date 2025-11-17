@@ -30,10 +30,7 @@ impl Database {
             if url.is_empty() {
                 None
             } else {
-                let pool = PgPoolOptions::new()
-                    .max_connections(10)
-                    .connect(url)
-                    .await?;
+                let pool = PgPoolOptions::new().max_connections(10).connect(url).await?;
                 Some(Arc::new(pool))
             }
         } else {
@@ -65,8 +62,13 @@ impl Database {
                 Err(e) => {
                     // If migration was manually applied, log warning but continue
                     if e.to_string().contains("previously applied but is missing") {
-                        tracing::warn!("Migration tracking issue (manually applied migration): {:?}", e);
-                        tracing::info!("Continuing despite migration tracking issue - database is up to date");
+                        tracing::warn!(
+                            "Migration tracking issue (manually applied migration): {:?}",
+                            e
+                        );
+                        tracing::info!(
+                            "Continuing despite migration tracking issue - database is up to date"
+                        );
                         Ok(())
                     } else {
                         Err(e.into())

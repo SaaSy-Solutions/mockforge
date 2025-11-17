@@ -142,12 +142,8 @@ impl ConsistencyStore {
 
         // Add persona node to graph
         let entity_type_str = entity_type.as_str();
-        self.persona_graph.get_or_create_node_with_links(
-            &persona_id,
-            entity_type_str,
-            None,
-            None,
-        );
+        self.persona_graph
+            .get_or_create_node_with_links(&persona_id, entity_type_str, None, None);
 
         // If this is not a generic type, establish relationships with the base entity
         if entity_type != EntityType::Generic {
@@ -156,12 +152,8 @@ impl ConsistencyStore {
             let base_persona_id = base_persona.id.clone();
 
             // Add base persona to graph if not already present
-            self.persona_graph.get_or_create_node_with_links(
-                &base_persona_id,
-                "base",
-                None,
-                None,
-            );
+            self.persona_graph
+                .get_or_create_node_with_links(&base_persona_id, "base", None, None);
 
             // Link personas based on entity type relationships
             let mut base_persona_mut = base_persona.clone();

@@ -148,10 +148,7 @@ Be thorough but concise. Focus on actionable insights."#;
         if !context.chaos_configs.is_empty() {
             summary.push_str("## Active Chaos Configurations\n");
             for config in &context.chaos_configs {
-                summary.push_str(&format!(
-                    "- {}: enabled={}\n",
-                    config.name, config.enabled
-                ));
+                summary.push_str(&format!("- {}: enabled={}\n", config.name, config.enabled));
             }
             summary.push('\n');
         }
@@ -214,4 +211,3 @@ Be thorough but concise. Focus on actionable insights."#;
         summary
     }
 }
-

@@ -333,7 +333,10 @@ impl BackupService {
                     storage_backend: serde_json::from_str(&row.storage_backend).map_err(|e| {
                         CollabError::Internal(format!("Invalid storage_backend: {}", e))
                     })?,
-                    storage_config: row.storage_config.as_ref().and_then(|s| serde_json::from_str(s).ok()),
+                    storage_config: row
+                        .storage_config
+                        .as_ref()
+                        .and_then(|s| serde_json::from_str(s).ok()),
                     size_bytes: row.size_bytes,
                     backup_format: row.backup_format,
                     encrypted: row.encrypted != 0,
@@ -434,16 +437,14 @@ impl BackupService {
                 }
             }
             StorageBackend::S3 => {
-                self.delete_from_s3(&backup.backup_url, backup.storage_config.as_ref())
-                    .await?;
+                self.delete_from_s3(&backup.backup_url, backup.storage_config.as_ref()).await?;
             }
             StorageBackend::Azure => {
                 self.delete_from_azure(&backup.backup_url, backup.storage_config.as_ref())
                     .await?;
             }
             StorageBackend::Gcs => {
-                self.delete_from_gcs(&backup.backup_url, backup.storage_config.as_ref())
-                    .await?;
+                self.delete_from_gcs(&backup.backup_url, backup.storage_config.as_ref()).await?;
             }
             StorageBackend::Custom => {
                 return Err(CollabError::Internal(
@@ -506,18 +507,13 @@ impl BackupService {
     ) -> Result<()> {
         // Parse S3 URL (format: s3://bucket-name/path/to/file)
         if !backup_url.starts_with("s3://") {
-            return Err(CollabError::Internal(format!(
-                "Invalid S3 URL format: {}",
-                backup_url
-            )));
+            return Err(CollabError::Internal(format!("Invalid S3 URL format: {}", backup_url)));
         }
 
-        let url_parts: Vec<&str> = backup_url.strip_prefix("s3://").unwrap().splitn(2, '/').collect();
+        let url_parts: Vec<&str> =
+            backup_url.strip_prefix("s3://").unwrap().splitn(2, '/').collect();
         if url_parts.len() != 2 {
-            return Err(CollabError::Internal(format!(
-                "Invalid S3 URL format: {}",
-                backup_url
-            )));
+            return Err(CollabError::Internal(format!("Invalid S3 URL format: {}", backup_url)));
         }
 
         let bucket = url_parts[0];
@@ -536,7 +532,9 @@ impl BackupService {
             .and_then(|c| c.get("secret_access_key"))
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
-                CollabError::Internal("S3 secret_access_key not found in storage_config".to_string())
+                CollabError::Internal(
+                    "S3 secret_access_key not found in storage_config".to_string(),
+                )
             })?;
 
         // Note: In production, you would use the aws-sdk-s3 crate here
@@ -555,7 +553,8 @@ impl BackupService {
         // client.delete_object().bucket(bucket).key(key).send().await?;
 
         Err(CollabError::Internal(
-            "S3 deletion requires aws-sdk-s3 dependency. Please install it to enable S3 support.".to_string(),
+            "S3 deletion requires aws-sdk-s3 dependency. Please install it to enable S3 support."
+                .to_string(),
         ))
     }
 
@@ -610,10 +609,7 @@ impl BackupService {
             })?;
 
         // Note: In production, you would use the azure_storage_blobs crate here
-        tracing::warn!(
-            "Azure deletion requires azure-storage-blobs. Backup URL: {}",
-            backup_url
-        );
+        tracing::warn!("Azure deletion requires azure-storage-blobs. Backup URL: {}", backup_url);
 
         // TODO: Implement actual Azure deletion using azure-storage-blobs
         Err(CollabError::Internal(
@@ -629,18 +625,13 @@ impl BackupService {
     ) -> Result<()> {
         // Parse GCS URL (format: gs://bucket-name/path/to/file)
         if !backup_url.starts_with("gs://") {
-            return Err(CollabError::Internal(format!(
-                "Invalid GCS URL format: {}",
-                backup_url
-            )));
+            return Err(CollabError::Internal(format!("Invalid GCS URL format: {}", backup_url)));
         }
 
-        let url_parts: Vec<&str> = backup_url.strip_prefix("gs://").unwrap().splitn(2, '/').collect();
+        let url_parts: Vec<&str> =
+            backup_url.strip_prefix("gs://").unwrap().splitn(2, '/').collect();
         if url_parts.len() != 2 {
-            return Err(CollabError::Internal(format!(
-                "Invalid GCS URL format: {}",
-                backup_url
-            )));
+            return Err(CollabError::Internal(format!("Invalid GCS URL format: {}", backup_url)));
         }
 
         let _bucket = url_parts[0];
@@ -656,10 +647,7 @@ impl BackupService {
             })?;
 
         // Note: In production, you would use the google-cloud-storage crate here
-        tracing::warn!(
-            "GCS deletion requires google-cloud-storage. Backup URL: {}",
-            backup_url
-        );
+        tracing::warn!("GCS deletion requires google-cloud-storage. Backup URL: {}", backup_url);
 
         // TODO: Implement actual GCS deletion using google-cloud-storage
         Err(CollabError::Internal(

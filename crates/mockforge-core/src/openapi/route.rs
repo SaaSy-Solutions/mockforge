@@ -3,9 +3,9 @@
 //! This module provides functionality for generating Axum routes
 //! from OpenAPI path definitions.
 
+use crate::intelligent_behavior::config::Persona;
 use crate::openapi::response_selection::{ResponseSelectionMode, ResponseSelector};
 use crate::{ai_response::AiResponseConfig, openapi::spec::OpenApiSpec, Result};
-use crate::intelligent_behavior::config::Persona;
 use openapiv3::{Operation, PathItem, ReferenceOr};
 use std::collections::BTreeMap;
 use std::sync::Arc;

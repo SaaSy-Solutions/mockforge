@@ -12,9 +12,7 @@ use axum::{
     response::Json,
 };
 use mockforge_core::security::{
-    access_review::{
-        AccessReview, ReviewType, UserReviewItem,
-    },
+    access_review::{AccessReview, ReviewType, UserReviewItem},
     access_review_service::AccessReviewService,
     emit_security_event, EventActor, EventOutcome, EventTarget, SecurityEvent, SecurityEventType,
 };
@@ -167,12 +165,12 @@ pub async fn approve_access(
     // Extract approver ID from authentication claims, or use default for mock server
     let approver_id = extract_user_id_with_fallback(&claims);
 
-    match service.approve_user_access(&review_id, request.user_id, approver_id, request.justification).await {
+    match service
+        .approve_user_access(&review_id, request.user_id, approver_id, request.justification)
+        .await
+    {
         Ok(()) => {
-            info!(
-                "Access approved for user {} in review {}",
-                request.user_id, review_id
-            );
+            info!("Access approved for user {} in review {}", request.user_id, review_id);
 
             // Emit security event
             let event = SecurityEvent::new(SecurityEventType::AuthzAccessGranted, None, None)
@@ -223,12 +221,12 @@ pub async fn revoke_access(
     // Extract revoker ID from authentication claims, or use default for mock server
     let revoker_id = extract_user_id_with_fallback(&claims);
 
-    match service.revoke_user_access(&review_id, request.user_id, revoker_id, request.reason.clone()).await {
+    match service
+        .revoke_user_access(&review_id, request.user_id, revoker_id, request.reason.clone())
+        .await
+    {
         Ok(()) => {
-            info!(
-                "Access revoked for user {} in review {}",
-                request.user_id, review_id
-            );
+            info!("Access revoked for user {} in review {}", request.user_id, review_id);
 
             // Emit security event
             let event = SecurityEvent::new(SecurityEventType::AccessUserSuspended, None, None)
@@ -275,12 +273,10 @@ pub async fn get_review_report(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let service = state.service.read().await;
 
-    let review = service
-        .get_review(&review_id)
-        .ok_or_else(|| {
-            error!("Review {} not found", review_id);
-            StatusCode::NOT_FOUND
-        })?;
+    let review = service.get_review(&review_id).ok_or_else(|| {
+        error!("Review {} not found", review_id);
+        StatusCode::NOT_FOUND
+    })?;
 
     // Convert review to JSON report format
     let report = serde_json::json!({
@@ -310,27 +306,20 @@ pub async fn start_review(
 
     // Start review based on type
     let review_id = match request.review_type {
-        ReviewType::UserAccess => {
-            service.start_user_access_review().await
-                .map_err(|e| {
-                    error!("Failed to start user access review: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?
-        }
+        ReviewType::UserAccess => service.start_user_access_review().await.map_err(|e| {
+            error!("Failed to start user access review: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?,
         ReviewType::PrivilegedAccess => {
-            service.start_privileged_access_review().await
-                .map_err(|e| {
-                    error!("Failed to start privileged access review: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?
+            service.start_privileged_access_review().await.map_err(|e| {
+                error!("Failed to start privileged access review: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
         }
-        ReviewType::ApiToken => {
-            service.start_token_review().await
-                .map_err(|e| {
-                    error!("Failed to start token review: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?
-        }
+        ReviewType::ApiToken => service.start_token_review().await.map_err(|e| {
+            error!("Failed to start token review: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?,
         ReviewType::ResourceAccess => {
             return Err(StatusCode::NOT_IMPLEMENTED);
         }
@@ -339,7 +328,8 @@ pub async fn start_review(
     info!("Started access review: {}", review_id);
 
     // Get the review details
-    let review = service.get_review(&review_id)
+    let review = service
+        .get_review(&review_id)
         .ok_or_else(|| {
             error!("Review {} not found after creation", review_id);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -364,10 +354,7 @@ pub async fn start_review(
         .get_review_items(&review_id)
         .map(|items_map| items_map.values().cloned().collect());
 
-    Ok(Json(ReviewDetailResponse {
-        review,
-        items,
-    }))
+    Ok(Json(ReviewDetailResponse { review, items }))
 }
 
 /// Request to start a review

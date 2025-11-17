@@ -252,28 +252,24 @@ pub struct LifecycleScenarios;
 impl LifecycleScenarios {
     /// New signup scenario - fresh user with no history
     pub fn new_signup_scenario(persona_id: String) -> PersonaLifecycle {
-        let rules = vec![
-            TransitionRule {
-                to: LifecycleState::Active,
-                after_days: Some(7),
-                condition: None,
-                on_transition: None,
-            },
-        ];
+        let rules = vec![TransitionRule {
+            to: LifecycleState::Active,
+            after_days: Some(7),
+            condition: None,
+            on_transition: None,
+        }];
 
         PersonaLifecycle::with_rules(persona_id, LifecycleState::NewSignup, rules)
     }
 
     /// Power user scenario - high activity, many orders
     pub fn power_user_scenario(persona_id: String) -> PersonaLifecycle {
-        let rules = vec![
-            TransitionRule {
-                to: LifecycleState::ChurnRisk,
-                after_days: Some(90),
-                condition: Some("order_count < 5".to_string()),
-                on_transition: None,
-            },
-        ];
+        let rules = vec![TransitionRule {
+            to: LifecycleState::ChurnRisk,
+            after_days: Some(90),
+            condition: Some("order_count < 5".to_string()),
+            on_transition: None,
+        }];
 
         PersonaLifecycle::with_rules(persona_id, LifecycleState::PowerUser, rules)
     }

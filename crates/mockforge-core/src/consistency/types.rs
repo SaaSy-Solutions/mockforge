@@ -7,9 +7,9 @@ use crate::protocol_abstraction::Protocol;
 use crate::reality::RealityLevel;
 use chrono::{DateTime, Utc};
 use mockforge_chaos::ChaosScenario;
-pub use mockforge_data::PersonaProfile;
 #[cfg(feature = "persona-graph")]
 pub use mockforge_data::PersonaGraph;
+pub use mockforge_data::PersonaProfile;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

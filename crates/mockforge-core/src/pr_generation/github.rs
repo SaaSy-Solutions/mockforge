@@ -81,10 +81,7 @@ impl GitHubPRClient {
             .map_err(|e| Error::generic(format!("Failed to get branch: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
-                "Failed to get branch: {}",
-                response.status()
-            )));
+            return Err(Error::generic(format!("Failed to get branch: {}", response.status())));
         }
 
         let json: serde_json::Value = response
@@ -100,10 +97,7 @@ impl GitHubPRClient {
     }
 
     async fn create_branch(&self, branch: &str, sha: &str) -> crate::Result<()> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/git/refs",
-            self.owner, self.repo
-        );
+        let url = format!("https://api.github.com/repos/{}/{}/git/refs", self.owner, self.repo);
 
         let body = serde_json::json!({
             "ref": format!("refs/heads/{}", branch),
@@ -125,8 +119,7 @@ impl GitHubPRClient {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::generic(format!(
                 "Failed to create branch: {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
@@ -143,17 +136,11 @@ impl GitHubPRClient {
         let blob_sha = self.create_blob(&file_change.content).await?;
 
         // Then, create tree with the new file
-        let tree_sha = self
-            .create_tree(parent_sha, &file_change.path, &blob_sha, "100644")
-            .await?;
+        let tree_sha = self.create_tree(parent_sha, &file_change.path, &blob_sha, "100644").await?;
 
         // Finally, create commit
         let commit_sha = self
-            .create_commit(
-                parent_sha,
-                &tree_sha,
-                &format!("Update {}", file_change.path),
-            )
+            .create_commit(parent_sha, &tree_sha, &format!("Update {}", file_change.path))
             .await?;
 
         // Update branch reference
@@ -173,11 +160,7 @@ impl GitHubPRClient {
 
         // Create commit
         let commit_sha = self
-            .create_commit(
-                parent_sha,
-                &tree_sha,
-                &format!("Delete {}", file_change.path),
-            )
+            .create_commit(parent_sha, &tree_sha, &format!("Delete {}", file_change.path))
             .await?;
 
         // Update branch reference
@@ -187,10 +170,7 @@ impl GitHubPRClient {
     }
 
     async fn create_blob(&self, content: &str) -> crate::Result<String> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/git/blobs",
-            self.owner, self.repo
-        );
+        let url = format!("https://api.github.com/repos/{}/{}/git/blobs", self.owner, self.repo);
 
         let body = serde_json::json!({
             "content": content,
@@ -208,10 +188,7 @@ impl GitHubPRClient {
             .map_err(|e| Error::generic(format!("Failed to create blob: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
-                "Failed to create blob: {}",
-                response.status()
-            )));
+            return Err(Error::generic(format!("Failed to create blob: {}", response.status())));
         }
 
         let json: serde_json::Value = response
@@ -233,10 +210,7 @@ impl GitHubPRClient {
         blob_sha: &str,
         mode: &str,
     ) -> crate::Result<String> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/git/trees",
-            self.owner, self.repo
-        );
+        let url = format!("https://api.github.com/repos/{}/{}/git/trees", self.owner, self.repo);
 
         let body = serde_json::json!({
             "base_tree": base_tree_sha,
@@ -259,10 +233,7 @@ impl GitHubPRClient {
             .map_err(|e| Error::generic(format!("Failed to create tree: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
-                "Failed to create tree: {}",
-                response.status()
-            )));
+            return Err(Error::generic(format!("Failed to create tree: {}", response.status())));
         }
 
         let json: serde_json::Value = response
@@ -278,10 +249,7 @@ impl GitHubPRClient {
     }
 
     async fn create_tree_delete(&self, base_tree_sha: &str, path: &str) -> crate::Result<String> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/git/trees",
-            self.owner, self.repo
-        );
+        let url = format!("https://api.github.com/repos/{}/{}/git/trees", self.owner, self.repo);
 
         let body = serde_json::json!({
             "base_tree": base_tree_sha,
@@ -304,10 +272,7 @@ impl GitHubPRClient {
             .map_err(|e| Error::generic(format!("Failed to create tree: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
-                "Failed to create tree: {}",
-                response.status()
-            )));
+            return Err(Error::generic(format!("Failed to create tree: {}", response.status())));
         }
 
         let json: serde_json::Value = response
@@ -328,10 +293,7 @@ impl GitHubPRClient {
         tree_sha: &str,
         message: &str,
     ) -> crate::Result<String> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/git/commits",
-            self.owner, self.repo
-        );
+        let url = format!("https://api.github.com/repos/{}/{}/git/commits", self.owner, self.repo);
 
         let body = serde_json::json!({
             "message": message,
@@ -350,10 +312,7 @@ impl GitHubPRClient {
             .map_err(|e| Error::generic(format!("Failed to create commit: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
-                "Failed to create commit: {}",
-                response.status()
-            )));
+            return Err(Error::generic(format!("Failed to create commit: {}", response.status())));
         }
 
         let json: serde_json::Value = response
@@ -390,10 +349,7 @@ impl GitHubPRClient {
             .map_err(|e| Error::generic(format!("Failed to update branch: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
-                "Failed to update branch: {}",
-                response.status()
-            )));
+            return Err(Error::generic(format!("Failed to update branch: {}", response.status())));
         }
 
         Ok(())
@@ -404,10 +360,7 @@ impl GitHubPRClient {
         request: &PRRequest,
         head_sha: &str,
     ) -> crate::Result<PRResult> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/pulls",
-            self.owner, self.repo
-        );
+        let url = format!("https://api.github.com/repos/{}/{}/pulls", self.owner, self.repo);
 
         let body = serde_json::json!({
             "title": request.title,
@@ -431,8 +384,7 @@ impl GitHubPRClient {
             let error_text = response.text().await.unwrap_or_default();
             return Err(Error::generic(format!(
                 "Failed to create PR: {} - {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
 
@@ -442,9 +394,7 @@ impl GitHubPRClient {
             .map_err(|e| Error::generic(format!("Failed to parse response: {}", e)))?;
 
         Ok(PRResult {
-            number: json["number"]
-                .as_u64()
-                .ok_or_else(|| Error::generic("Missing PR number"))?,
+            number: json["number"].as_u64().ok_or_else(|| Error::generic("Missing PR number"))?,
             url: json["html_url"]
                 .as_str()
                 .ok_or_else(|| Error::generic("Missing PR URL"))?
@@ -475,10 +425,7 @@ impl GitHubPRClient {
             .map_err(|e| Error::generic(format!("Failed to add labels: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
-                "Failed to add labels: {}",
-                response.status()
-            )));
+            return Err(Error::generic(format!("Failed to add labels: {}", response.status())));
         }
 
         Ok(())

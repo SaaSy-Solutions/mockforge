@@ -60,10 +60,7 @@ pub async fn get_consent_screen(
     // For mock server, use empty risk factors (can be overridden via risk simulation API)
     // In production, extract risk factors from request context (IP, device fingerprint, etc.)
     let risk_factors = HashMap::new();
-    let risk_assessment = state
-        .risk_engine
-        .assess_risk("user-default", &risk_factors)
-        .await;
+    let risk_assessment = state.risk_engine.assess_risk("user-default", &risk_factors).await;
 
     // If risk is too high, block or require additional verification
     if risk_assessment.recommended_action == RiskAction::Block {

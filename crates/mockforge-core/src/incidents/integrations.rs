@@ -82,11 +82,7 @@ pub trait ExternalIntegration: Send + Sync {
     async fn create_ticket(&self, incident: &DriftIncident) -> Result<ExternalTicket, String>;
 
     /// Update ticket status
-    async fn update_ticket_status(
-        &self,
-        ticket_id: &str,
-        status: &str,
-    ) -> Result<(), String>;
+    async fn update_ticket_status(&self, ticket_id: &str, status: &str) -> Result<(), String>;
 }
 
 /// Jira integration implementation
@@ -164,9 +160,7 @@ impl ExternalIntegration for JiraIntegration {
 
         // Convert result to HashMap
         let metadata = if let serde_json::Value::Object(map) = result {
-            map.into_iter()
-                .map(|(k, v)| (k, v))
-                .collect()
+            map.into_iter().map(|(k, v)| (k, v)).collect()
         } else {
             std::collections::HashMap::new()
         };
@@ -179,11 +173,7 @@ impl ExternalIntegration for JiraIntegration {
         })
     }
 
-    async fn update_ticket_status(
-        &self,
-        ticket_id: &str,
-        status: &str,
-    ) -> Result<(), String> {
+    async fn update_ticket_status(&self, ticket_id: &str, status: &str) -> Result<(), String> {
         // Jira status updates require transitions
         // This is a simplified implementation
         let url = format!("{}/rest/api/3/issue/{}/transitions", self.config.url, ticket_id);
@@ -237,11 +227,7 @@ impl WebhookIntegration {
             .client
             .request(
                 reqwest::Method::from_bytes(
-                    self.config
-                        .method
-                        .as_deref()
-                        .unwrap_or("POST")
-                        .as_bytes(),
+                    self.config.method.as_deref().unwrap_or("POST").as_bytes(),
                 )
                 .unwrap_or(reqwest::Method::POST),
                 &self.config.url,
@@ -270,10 +256,8 @@ impl WebhookIntegration {
             request = request.header("X-Webhook-Signature", format!("sha256={}", signature));
         }
 
-        let response = request
-            .send()
-            .await
-            .map_err(|e| format!("Failed to send webhook: {}", e))?;
+        let response =
+            request.send().await.map_err(|e| format!("Failed to send webhook: {}", e))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
@@ -293,14 +277,8 @@ pub async fn send_webhook(
 
     let mut request = client
         .request(
-            reqwest::Method::from_bytes(
-                config
-                    .method
-                    .as_deref()
-                    .unwrap_or("POST")
-                    .as_bytes(),
-            )
-            .unwrap_or(reqwest::Method::POST),
+            reqwest::Method::from_bytes(config.method.as_deref().unwrap_or("POST").as_bytes())
+                .unwrap_or(reqwest::Method::POST),
             &config.url,
         )
         .json(payload);
@@ -327,10 +305,7 @@ pub async fn send_webhook(
         request = request.header("X-Webhook-Signature", format!("sha256={}", signature));
     }
 
-    let response = request
-        .send()
-        .await
-        .map_err(|e| format!("Failed to send webhook: {}", e))?;
+    let response = request.send().await.map_err(|e| format!("Failed to send webhook: {}", e))?;
 
     if !response.status().is_success() {
         let error_text = response.text().await.unwrap_or_default();

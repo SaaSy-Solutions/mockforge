@@ -174,7 +174,9 @@ impl FailureDesigner {
                     return Err("Timeout must be greater than 0".to_string());
                 }
             }
-            FailureType::PartialResponse { truncate_percentage } => {
+            FailureType::PartialResponse {
+                truncate_percentage,
+            } => {
                 if *truncate_percentage < 0.0 || *truncate_percentage > 1.0 {
                     return Err("Truncate percentage must be between 0.0 and 1.0".to_string());
                 }
@@ -300,7 +302,9 @@ impl FailureDesigner {
                     bulkhead: None,
                 }
             }
-            FailureType::PartialResponse { truncate_percentage } => {
+            FailureType::PartialResponse {
+                truncate_percentage,
+            } => {
                 let fault_config = FaultInjectionConfig {
                     enabled: true,
                     http_errors: vec![],
@@ -367,10 +371,7 @@ impl FailureDesigner {
     ///
     /// Converts failure design rules into route-specific chaos configurations
     /// that can be used with RouteChaosInjector.
-    pub fn generate_route_chaos_config(
-        &self,
-        rule: &FailureDesignRule,
-    ) -> Result<Value, String> {
+    pub fn generate_route_chaos_config(&self, rule: &FailureDesignRule) -> Result<Value, String> {
         // Validate rule
         self.validate_rule(rule)?;
 
@@ -415,7 +416,9 @@ impl FailureDesigner {
                         "connection_error": true,
                     });
                 }
-                FailureType::PartialResponse { truncate_percentage } => {
+                FailureType::PartialResponse {
+                    truncate_percentage,
+                } => {
                     route_config["fault_injection"] = json!({
                         "enabled": true,
                         "partial_response": true,

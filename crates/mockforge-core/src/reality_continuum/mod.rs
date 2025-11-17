@@ -14,7 +14,5 @@ pub mod schedule;
 pub use blender::ResponseBlender;
 pub use config::{ContinuumConfig, ContinuumRule, MergeStrategy, TransitionMode};
 pub use engine::RealityContinuumEngine;
-pub use field_mixer::{
-    EntityRealityRule, FieldPattern, FieldRealityConfig, RealitySource,
-};
+pub use field_mixer::{EntityRealityRule, FieldPattern, FieldRealityConfig, RealitySource};
 pub use schedule::{TimeSchedule, TransitionCurve};

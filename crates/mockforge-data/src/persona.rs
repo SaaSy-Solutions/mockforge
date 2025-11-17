@@ -424,11 +424,8 @@ impl PersonaRegistry {
             persona.add_relationship(relationship_type.clone(), to_persona_id.clone());
 
             // Also add to graph
-            self.graph.add_edge(
-                from_persona_id.to_string(),
-                to_persona_id,
-                relationship_type,
-            );
+            self.graph
+                .add_edge(from_persona_id.to_string(), to_persona_id, relationship_type);
 
             Ok(())
         } else {
@@ -550,7 +547,8 @@ impl PersonaGenerator {
         let mut synthetic_value = self.domain_generator.generate(field_type)?;
 
         // Apply persona traits to influence the generated value
-        synthetic_value = self.apply_persona_traits(persona, field_type, synthetic_value, &mut rng)?;
+        synthetic_value =
+            self.apply_persona_traits(persona, field_type, synthetic_value, &mut rng)?;
 
         // Apply reality continuum blending based on ratio
         let reality_ratio = reality_ratio.clamp(0.0, 1.0);
@@ -599,7 +597,7 @@ impl PersonaGenerator {
                     };
                     let blended = syn_f64 * (1.0 - adjusted_ratio) + other_f64 * adjusted_ratio;
                     Ok(Value::Number(
-                        serde_json::Number::from_f64(blended).unwrap_or(syn_num.clone())
+                        serde_json::Number::from_f64(blended).unwrap_or(syn_num.clone()),
                     ))
                 } else {
                     Ok(synthetic.clone())

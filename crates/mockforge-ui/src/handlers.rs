@@ -52,6 +52,7 @@ pub mod behavioral_cloning;
 pub mod chains;
 pub mod community;
 pub mod contract_diff;
+pub mod failure_analysis;
 pub mod graph;
 pub mod health;
 pub mod migration;
@@ -59,7 +60,6 @@ pub mod playground;
 pub mod plugin;
 pub mod verification;
 pub mod voice;
-pub mod failure_analysis;
 
 // Re-export commonly used types
 pub use assets::*;
@@ -1278,15 +1278,13 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
     };
 
     // Build time-series latency data (last 100 data points)
-    let latency_over_time: Vec<(chrono::DateTime<chrono::Utc>, u64)> = if let Some(global_logger) = mockforge_core::get_global_logger() {
-        let all_logs = global_logger.get_recent_logs(Some(100)).await;
-        all_logs
-            .iter()
-            .map(|log| (log.timestamp, log.response_time_ms))
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let latency_over_time: Vec<(chrono::DateTime<chrono::Utc>, u64)> =
+        if let Some(global_logger) = mockforge_core::get_global_logger() {
+            let all_logs = global_logger.get_recent_logs(Some(100)).await;
+            all_logs.iter().map(|log| (log.timestamp, log.response_time_ms)).collect()
+        } else {
+            Vec::new()
+        };
 
     let metrics_data = MetricsData {
         requests_by_endpoint: metrics.requests_by_endpoint,
@@ -1352,15 +1350,14 @@ pub async fn update_latency(
         );
 
         // Extract user context from headers
-        if let Some(user_ctx) = extract_user_context(&headers)
-            .or_else(get_default_user_context)
-        {
+        if let Some(user_ctx) = extract_user_context(&headers).or_else(get_default_user_context) {
             audit_log.user_id = Some(user_ctx.user_id);
             audit_log.username = Some(user_ctx.username);
         }
 
         // Extract IP address from headers
-        if let Some(ip) = headers.get("x-forwarded-for")
+        if let Some(ip) = headers
+            .get("x-forwarded-for")
             .or_else(|| headers.get("x-real-ip"))
             .and_then(|h| h.to_str().ok())
         {
@@ -1368,9 +1365,7 @@ pub async fn update_latency(
         }
 
         // Extract user agent
-        if let Some(ua) = headers.get("user-agent")
-            .and_then(|h| h.to_str().ok())
-        {
+        if let Some(ua) = headers.get("user-agent").and_then(|h| h.to_str().ok()) {
             audit_log.user_agent = Some(ua.to_string());
         }
 

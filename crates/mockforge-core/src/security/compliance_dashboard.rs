@@ -242,7 +242,8 @@ pub struct ComplianceDashboardEngine {
     /// Compliance alerts
     alerts: std::sync::Arc<tokio::sync::RwLock<HashMap<String, ComplianceAlert>>>,
     /// Control effectiveness cache
-    control_effectiveness: std::sync::Arc<tokio::sync::RwLock<HashMap<ControlCategory, ControlEffectiveness>>>,
+    control_effectiveness:
+        std::sync::Arc<tokio::sync::RwLock<HashMap<ControlCategory, ControlEffectiveness>>>,
 }
 
 impl ComplianceDashboardEngine {
@@ -315,7 +316,9 @@ impl ComplianceDashboardEngine {
     }
 
     /// Get control effectiveness metrics
-    async fn get_control_effectiveness(&self) -> Result<HashMap<ControlCategory, ControlEffectiveness>, Error> {
+    async fn get_control_effectiveness(
+        &self,
+    ) -> Result<HashMap<ControlCategory, ControlEffectiveness>, Error> {
         let mut effectiveness = HashMap::new();
 
         // Access Control
@@ -494,11 +497,7 @@ impl ComplianceDashboardEngine {
     }
 
     /// Update gap status
-    pub async fn update_gap_status(
-        &self,
-        gap_id: &str,
-        status: GapStatus,
-    ) -> Result<(), Error> {
+    pub async fn update_gap_status(&self, gap_id: &str, status: GapStatus) -> Result<(), Error> {
         let mut gaps = self.gaps.write().await;
         if let Some(gap) = gaps.get_mut(gap_id) {
             gap.status = status;
@@ -550,17 +549,19 @@ impl ComplianceDashboardEngine {
     }
 
     /// Get gaps by severity
-    pub async fn get_gaps_by_severity(&self, severity: GapSeverity) -> Result<Vec<ComplianceGap>, Error> {
+    pub async fn get_gaps_by_severity(
+        &self,
+        severity: GapSeverity,
+    ) -> Result<Vec<ComplianceGap>, Error> {
         let gaps = self.gaps.read().await;
-        Ok(gaps
-            .values()
-            .filter(|g| g.severity == severity)
-            .cloned()
-            .collect())
+        Ok(gaps.values().filter(|g| g.severity == severity).cloned().collect())
     }
 
     /// Get alerts by severity
-    pub async fn get_alerts_by_severity(&self, severity: GapSeverity) -> Result<Vec<ComplianceAlert>, Error> {
+    pub async fn get_alerts_by_severity(
+        &self,
+        severity: GapSeverity,
+    ) -> Result<Vec<ComplianceAlert>, Error> {
         let alerts = self.alerts.read().await;
         Ok(alerts
             .values()

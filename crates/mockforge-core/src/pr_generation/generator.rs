@@ -2,8 +2,8 @@
 //!
 //! This module provides a unified interface for generating PRs across different providers.
 
-use crate::pr_generation::types::{PRProvider, PRRequest, PRResult};
 use crate::pr_generation::templates::{PRTemplate, PRTemplateContext};
+use crate::pr_generation::types::{PRProvider, PRRequest, PRResult};
 use crate::pr_generation::{GitHubPRClient, GitLabPRClient};
 
 /// PR generator that works with multiple providers
@@ -16,12 +16,7 @@ pub struct PRGenerator {
 
 impl PRGenerator {
     /// Create a new PR generator for GitHub
-    pub fn new_github(
-        owner: String,
-        repo: String,
-        token: String,
-        base_branch: String,
-    ) -> Self {
+    pub fn new_github(owner: String, repo: String, token: String, base_branch: String) -> Self {
         Self {
             provider: PRProvider::GitHub,
             github_client: Some(GitHubPRClient::new(owner, repo, token, base_branch)),
@@ -30,12 +25,7 @@ impl PRGenerator {
     }
 
     /// Create a new PR generator for GitLab
-    pub fn new_gitlab(
-        owner: String,
-        repo: String,
-        token: String,
-        base_branch: String,
-    ) -> Self {
+    pub fn new_gitlab(owner: String, repo: String, token: String, base_branch: String) -> Self {
         Self {
             provider: PRProvider::GitLab,
             github_client: None,

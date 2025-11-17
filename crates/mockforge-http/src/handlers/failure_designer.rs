@@ -107,7 +107,10 @@ pub async fn generate_scenario(
         .map_err(|e| format!("Failed to generate route chaos config: {}", e))?;
 
     // Generate webhook hook if applicable
-    let webhook_hook = if matches!(request.rule.failure_type, mockforge_chaos::failure_designer::FailureType::WebhookFailure { .. }) {
+    let webhook_hook = if matches!(
+        request.rule.failure_type,
+        mockforge_chaos::failure_designer::FailureType::WebhookFailure { .. }
+    ) {
         Some(
             designer
                 .generate_webhook_hook(&request.rule)
@@ -148,7 +151,10 @@ pub async fn preview_config(
         .generate_route_chaos_config(&request.rule)
         .map_err(|e| format!("Failed to generate route chaos config: {}", e))?;
 
-    let webhook_hook = if matches!(request.rule.failure_type, mockforge_chaos::failure_designer::FailureType::WebhookFailure { .. }) {
+    let webhook_hook = if matches!(
+        request.rule.failure_type,
+        mockforge_chaos::failure_designer::FailureType::WebhookFailure { .. }
+    ) {
         Some(
             designer
                 .generate_webhook_hook(&request.rule)

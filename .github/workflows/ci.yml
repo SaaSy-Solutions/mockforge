@@ -89,6 +89,44 @@ jobs:
       run: cargo doc --workspace --no-deps
       if: matrix.rust == 'stable'
 
+  changelog-validation:
+    name: Validate Changelog Pillar Tags
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+
+    - name: Validate pillar tags in changelog
+      run: |
+        # Check if CHANGELOG.md exists and has pillar tags in the latest version section
+        if [ ! -f CHANGELOG.md ]; then
+          echo "ERROR: CHANGELOG.md not found"
+          exit 1
+        fi
+
+        # Extract the first version section (most recent release, skip [Unreleased])
+        VERSION_SECTION=$(awk '/^## \[[0-9]/{p=1} p{print} /^## \[[0-9]/ && NR>1{exit}' CHANGELOG.md 2>/dev/null || true)
+
+        if [ -z "$VERSION_SECTION" ]; then
+          echo "⚠️  No version section found (only [Unreleased] section exists). Skipping validation."
+          exit 0
+        fi
+
+        # Check if the version section contains at least one pillar tag
+        if echo "$VERSION_SECTION" | grep -qE '\[(Reality|Contracts|DevX|Cloud|AI)\]'; then
+          echo "✅ Changelog validation passed: pillar tags found in latest version section."
+        else
+          echo "ERROR: The latest version section in CHANGELOG.md has no pillar tags!" >&2
+          echo "       All changelog entries must be tagged with at least one pillar:" >&2
+          echo "       [Reality], [Contracts], [DevX], [Cloud], or [AI]" >&2
+          echo "       See docs/PILLARS.md for pillar definitions and examples." >&2
+          echo "" >&2
+          echo "       Example format:" >&2
+          echo "       - **[Reality] Feature description**" >&2
+          echo "       - **[Contracts][DevX] Multi-pillar feature**" >&2
+          exit 1
+        fi
+
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest

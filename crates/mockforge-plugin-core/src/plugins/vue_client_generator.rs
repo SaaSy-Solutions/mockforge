@@ -69,13 +69,9 @@ impl VueClientGenerator {
                     let value = h.param(0).ok_or_else(|| {
                         handlebars::RenderError::new("json helper requires a parameter")
                     })?;
-                    let json_str = serde_json::to_string(&value.value())
-                        .map_err(|e| {
-                            handlebars::RenderError::new(&format!(
-                                "Failed to serialize to JSON: {}",
-                                e
-                            ))
-                        })?;
+                    let json_str = serde_json::to_string(&value.value()).map_err(|e| {
+                        handlebars::RenderError::new(&format!("Failed to serialize to JSON: {}", e))
+                    })?;
                     out.write(&json_str)?;
                     Ok(())
                 },

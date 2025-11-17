@@ -78,7 +78,7 @@ pub struct LearningResource {
     pub description: String,
     pub category: String,
     pub resource_type: String, // tutorial, example, video, guide
-    pub difficulty: String, // beginner, intermediate, advanced
+    pub difficulty: String,    // beginner, intermediate, advanced
     pub tags: Vec<String>,
     pub content_url: Option<String>,
     pub video_url: Option<String>,
@@ -105,47 +105,44 @@ pub async fn get_showcase_projects(
 ) -> Json<ApiResponse<Vec<ShowcaseProject>>> {
     let category = params.get("category");
     let featured = params.get("featured").map(|s| s == "true");
-    let limit = params
-        .get("limit")
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(20);
-    let offset = params
-        .get("offset")
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(0);
+    let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(20);
+    let offset = params.get("offset").and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
 
     // TODO: Fetch from database or storage
     // For now, return mock data
-    let projects = vec![
-        ShowcaseProject {
-            id: "ecommerce-platform".to_string(),
-            title: "E-commerce Platform Mock".to_string(),
-            author: "community-user".to_string(),
-            author_avatar: None,
-            description: "Complete e-commerce API mock with shopping carts, orders, and payments".to_string(),
-            category: "ecommerce".to_string(),
-            tags: vec!["ecommerce".to_string(), "shopping-cart".to_string(), "payments".to_string()],
-            featured: true,
-            screenshot: Some("https://example.com/screenshot.png".to_string()),
-            demo_url: Some("https://demo.mockforge.dev/ecommerce".to_string()),
-            source_url: Some("https://github.com/user/ecommerce-mock".to_string()),
-            template_id: Some("ecommerce-store@1.0.0".to_string()),
-            scenario_id: Some("ecommerce-scenario@1.0.0".to_string()),
-            stats: ShowcaseStats {
-                downloads: 1250,
-                stars: 45,
-                forks: 12,
-                rating: 4.8,
-            },
-            testimonials: vec![Testimonial {
-                author: "John Doe".to_string(),
-                company: Some("Acme Corp".to_string()),
-                text: "This template saved us weeks of development time!".to_string(),
-            }],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+    let projects = vec![ShowcaseProject {
+        id: "ecommerce-platform".to_string(),
+        title: "E-commerce Platform Mock".to_string(),
+        author: "community-user".to_string(),
+        author_avatar: None,
+        description: "Complete e-commerce API mock with shopping carts, orders, and payments"
+            .to_string(),
+        category: "ecommerce".to_string(),
+        tags: vec![
+            "ecommerce".to_string(),
+            "shopping-cart".to_string(),
+            "payments".to_string(),
+        ],
+        featured: true,
+        screenshot: Some("https://example.com/screenshot.png".to_string()),
+        demo_url: Some("https://demo.mockforge.dev/ecommerce".to_string()),
+        source_url: Some("https://github.com/user/ecommerce-mock".to_string()),
+        template_id: Some("ecommerce-store@1.0.0".to_string()),
+        scenario_id: Some("ecommerce-scenario@1.0.0".to_string()),
+        stats: ShowcaseStats {
+            downloads: 1250,
+            stars: 45,
+            forks: 12,
+            rating: 4.8,
         },
-    ];
+        testimonials: vec![Testimonial {
+            author: "John Doe".to_string(),
+            company: Some("Acme Corp".to_string()),
+            text: "This template saved us weeks of development time!".to_string(),
+        }],
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    }];
 
     Json(ApiResponse {
         success: true,
@@ -219,10 +216,7 @@ pub async fn get_success_stories(
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<ApiResponse<Vec<SuccessStory>>> {
     let featured = params.get("featured").map(|s| s == "true");
-    let limit = params
-        .get("limit")
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(10);
+    let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
 
     // TODO: Fetch from database
     let stories = vec![
@@ -260,36 +254,32 @@ pub async fn get_learning_resources(
     let category = params.get("category");
     let resource_type = params.get("type");
     let difficulty = params.get("difficulty");
-    let limit = params
-        .get("limit")
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(20);
+    let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(20);
 
     // TODO: Fetch from database or content storage
-    let resources = vec![
-        LearningResource {
-            id: "getting-started".to_string(),
-            title: "Getting Started with MockForge".to_string(),
-            description: "Learn how to create your first mock API in minutes".to_string(),
-            category: "tutorial".to_string(),
-            resource_type: "tutorial".to_string(),
-            difficulty: "beginner".to_string(),
-            tags: vec!["getting-started".to_string(), "tutorial".to_string()],
-            content_url: Some("/docs/getting-started".to_string()),
-            video_url: None,
-            code_examples: vec![CodeExample {
-                title: "Basic REST API".to_string(),
-                language: "yaml".to_string(),
-                code: "http:\n  port: 3000\n  routes:\n    - path: /users\n      method: GET".to_string(),
-                description: Some("Simple REST endpoint".to_string()),
-            }],
-            author: "MockForge Team".to_string(),
-            views: 1500,
-            rating: 4.9,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        },
-    ];
+    let resources = vec![LearningResource {
+        id: "getting-started".to_string(),
+        title: "Getting Started with MockForge".to_string(),
+        description: "Learn how to create your first mock API in minutes".to_string(),
+        category: "tutorial".to_string(),
+        resource_type: "tutorial".to_string(),
+        difficulty: "beginner".to_string(),
+        tags: vec!["getting-started".to_string(), "tutorial".to_string()],
+        content_url: Some("/docs/getting-started".to_string()),
+        video_url: None,
+        code_examples: vec![CodeExample {
+            title: "Basic REST API".to_string(),
+            language: "yaml".to_string(),
+            code: "http:\n  port: 3000\n  routes:\n    - path: /users\n      method: GET"
+                .to_string(),
+            description: Some("Simple REST endpoint".to_string()),
+        }],
+        author: "MockForge Team".to_string(),
+        views: 1500,
+        rating: 4.9,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    }];
 
     Json(ApiResponse {
         success: true,

@@ -34,15 +34,9 @@ impl PRTemplate {
     /// Generate PR title
     pub fn generate_title(context: &PRTemplateContext) -> String {
         if context.is_breaking {
-            format!(
-                "🚨 [BREAKING] Update contract for {} {}",
-                context.method, context.endpoint
-            )
+            format!("🚨 [BREAKING] Update contract for {} {}", context.method, context.endpoint)
         } else {
-            format!(
-                "📝 Update contract for {} {}",
-                context.method, context.endpoint
-            )
+            format!("📝 Update contract for {} {}", context.method, context.endpoint)
         }
     }
 
@@ -75,7 +69,10 @@ impl PRTemplate {
         body.push_str("### Statistics\n\n");
         body.push_str(&format!("- Breaking changes: {}\n", context.breaking_changes));
         body.push_str(&format!("- Non-breaking changes: {}\n", context.non_breaking_changes));
-        body.push_str(&format!("- Total changes: {}\n\n", context.breaking_changes + context.non_breaking_changes));
+        body.push_str(&format!(
+            "- Total changes: {}\n\n",
+            context.breaking_changes + context.non_breaking_changes
+        ));
 
         // Affected files
         if !context.affected_files.is_empty() {

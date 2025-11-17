@@ -4,9 +4,7 @@
 //! that persona, scenario, reality level, and entity state are synchronized.
 
 use crate::consistency::adapters::ProtocolAdapter;
-use crate::consistency::types::{
-    EntityState, ProtocolState, StateChangeEvent, UnifiedState,
-};
+use crate::consistency::types::{EntityState, ProtocolState, StateChangeEvent, UnifiedState};
 use crate::protocol_abstraction::Protocol;
 use crate::reality::RealityLevel;
 use crate::Result;
@@ -96,11 +94,7 @@ impl ConsistencyEngine {
     }
 
     /// Set active scenario for a workspace
-    pub async fn set_active_scenario(
-        &self,
-        workspace_id: &str,
-        scenario_id: String,
-    ) -> Result<()> {
+    pub async fn set_active_scenario(&self, workspace_id: &str, scenario_id: String) -> Result<()> {
         let mut states = self.states.write().await;
         let state = states
             .entry(workspace_id.to_string())
@@ -122,11 +116,7 @@ impl ConsistencyEngine {
     }
 
     /// Set reality level for a workspace
-    pub async fn set_reality_level(
-        &self,
-        workspace_id: &str,
-        level: RealityLevel,
-    ) -> Result<()> {
+    pub async fn set_reality_level(&self, workspace_id: &str, level: RealityLevel) -> Result<()> {
         let mut states = self.states.write().await;
         let state = states
             .entry(workspace_id.to_string())
@@ -175,35 +165,26 @@ impl ConsistencyEngine {
     /// Entities are tracked across all protocols. When an entity is created
     /// via HTTP, it becomes immediately available in GraphQL, gRPC, etc.
     /// Also automatically adds the entity to the persona graph if a persona_id is present.
-    pub async fn register_entity(
-        &self,
-        workspace_id: &str,
-        entity: EntityState,
-    ) -> Result<()> {
+    pub async fn register_entity(&self, workspace_id: &str, entity: EntityState) -> Result<()> {
         let mut states = self.states.write().await;
         let state = states
             .entry(workspace_id.to_string())
             .or_insert_with(|| UnifiedState::new(workspace_id.to_string()));
 
-        let is_new = !state.entity_state.contains_key(&UnifiedState::entity_key(
-            &entity.entity_type,
-            &entity.entity_id,
-        ));
+        let is_new = !state
+            .entity_state
+            .contains_key(&UnifiedState::entity_key(&entity.entity_type, &entity.entity_id));
 
         // Add entity to persona graph if persona_id is present
         #[cfg(feature = "persona-graph")]
         if let Some(ref persona_id) = entity.persona_id {
             let graph = state.get_or_create_persona_graph();
-            graph.get_or_create_node_with_links(
-                persona_id,
-                &entity.entity_type,
-                None,
-                None,
-            );
+            graph.get_or_create_node_with_links(persona_id, &entity.entity_type, None, None);
 
             // If entity data contains related entity IDs, link them in the graph
             #[cfg(feature = "persona-graph")]
-            if let Some(user_id) = entity.data.get("user_id").or_else(|| entity.data.get("userId")) {
+            if let Some(user_id) = entity.data.get("user_id").or_else(|| entity.data.get("userId"))
+            {
                 if let Some(user_id_str) = user_id.as_str() {
                     let user_persona_id = format!("user:{}", user_id_str);
                     graph.link_entity_types(
@@ -218,15 +199,12 @@ impl ConsistencyEngine {
             // Link orders to payments
             #[cfg(feature = "persona-graph")]
             if entity.entity_type == "payment" {
-                if let Some(order_id) = entity.data.get("order_id").or_else(|| entity.data.get("orderId")) {
+                if let Some(order_id) =
+                    entity.data.get("order_id").or_else(|| entity.data.get("orderId"))
+                {
                     if let Some(order_id_str) = order_id.as_str() {
                         let order_persona_id = format!("order:{}", order_id_str);
-                        graph.link_entity_types(
-                            &order_persona_id,
-                            "order",
-                            persona_id,
-                            "payment",
-                        );
+                        graph.link_entity_types(&order_persona_id, "order", persona_id, "payment");
                     }
                 }
             }
@@ -265,10 +243,7 @@ impl ConsistencyEngine {
         entity_id: &str,
     ) -> Option<EntityState> {
         let states = self.states.read().await;
-        states
-            .get(workspace_id)?
-            .get_entity(entity_type, entity_id)
-            .cloned()
+        states.get(workspace_id)?.get_entity(entity_type, entity_id).cloned()
     }
 
     /// Find related entities using the persona graph
@@ -305,11 +280,8 @@ impl ConsistencyEngine {
 
         // Find related persona IDs in the graph
         #[cfg(feature = "persona-graph")]
-        let related_persona_ids = graph.find_related_by_entity_type(
-            persona_id,
-            target_entity_type,
-            relationship_type,
-        );
+        let related_persona_ids =
+            graph.find_related_by_entity_type(persona_id, target_entity_type, relationship_type);
 
         #[cfg(not(feature = "persona-graph"))]
         let related_persona_ids: Vec<String> = Vec::new();
@@ -329,20 +301,14 @@ impl ConsistencyEngine {
     }
 
     /// Activate a chaos rule
-    pub async fn activate_chaos_rule(
-        &self,
-        workspace_id: &str,
-        rule: ChaosScenario,
-    ) -> Result<()> {
+    pub async fn activate_chaos_rule(&self, workspace_id: &str, rule: ChaosScenario) -> Result<()> {
         let mut states = self.states.write().await;
         let state = states
             .entry(workspace_id.to_string())
             .or_insert_with(|| UnifiedState::new(workspace_id.to_string()));
 
         // Remove existing rule with same name if present
-        state
-            .active_chaos_rules
-            .retain(|r| r.name != rule.name);
+        state.active_chaos_rules.retain(|r| r.name != rule.name);
         state.active_chaos_rules.push(rule.clone());
         state.increment_version();
 
@@ -359,20 +325,13 @@ impl ConsistencyEngine {
     }
 
     /// Deactivate a chaos rule
-    pub async fn deactivate_chaos_rule(
-        &self,
-        workspace_id: &str,
-        rule_name: &str,
-    ) -> Result<()> {
+    pub async fn deactivate_chaos_rule(&self, workspace_id: &str, rule_name: &str) -> Result<()> {
         let mut states = self.states.write().await;
         let state = states
             .entry(workspace_id.to_string())
             .or_insert_with(|| UnifiedState::new(workspace_id.to_string()));
 
-        let removed = state
-            .active_chaos_rules
-            .iter()
-            .any(|r| r.name == rule_name);
+        let removed = state.active_chaos_rules.iter().any(|r| r.name == rule_name);
 
         if removed {
             state.active_chaos_rules.retain(|r| r.name != rule_name);
@@ -417,11 +376,7 @@ impl ConsistencyEngine {
         protocol: Protocol,
     ) -> Option<ProtocolState> {
         let states = self.states.read().await;
-        states
-            .get(workspace_id)?
-            .protocol_states
-            .get(&protocol)
-            .cloned()
+        states.get(workspace_id)?.protocol_states.get(&protocol).cloned()
     }
 
     /// Subscribe to state change events

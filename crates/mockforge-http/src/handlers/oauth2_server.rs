@@ -112,7 +112,6 @@ pub async fn authorize(
     State(state): State<OAuth2ServerState>,
     Query(params): Query<AuthorizationRequest>,
 ) -> Result<Redirect, StatusCode> {
-
     // Validate response_type
     if params.response_type != "code" {
         return Err(StatusCode::BAD_REQUEST);
@@ -155,11 +154,9 @@ pub async fn authorize(
     }
 
     // Build redirect URL with authorization code
-    let mut redirect_url = url::Url::parse(&params.redirect_uri)
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
-    redirect_url
-        .query_pairs_mut()
-        .append_pair("code", &auth_code);
+    let mut redirect_url =
+        url::Url::parse(&params.redirect_uri).map_err(|_| StatusCode::BAD_REQUEST)?;
+    redirect_url.query_pairs_mut().append_pair("code", &auth_code);
     if let Some(state) = params.state {
         redirect_url.query_pairs_mut().append_pair("state", &state);
     }
@@ -175,15 +172,9 @@ pub async fn token(
     use chrono::Utc;
 
     match request.grant_type.as_str() {
-        "authorization_code" => {
-            handle_authorization_code_grant(state, request).await
-        }
-        "client_credentials" => {
-            handle_client_credentials_grant(state, request).await
-        }
-        "refresh_token" => {
-            handle_refresh_token_grant(state, request).await
-        }
+        "authorization_code" => handle_authorization_code_grant(state, request).await,
+        "client_credentials" => handle_client_credentials_grant(state, request).await,
+        "refresh_token" => handle_refresh_token_grant(state, request).await,
         _ => Err(StatusCode::BAD_REQUEST),
     }
 }
@@ -193,7 +184,6 @@ async fn handle_authorization_code_grant(
     state: OAuth2ServerState,
     request: TokenRequest,
 ) -> Result<Json<TokenResponse>, StatusCode> {
-
     let code = request.code.ok_or(StatusCode::BAD_REQUEST)?;
     let redirect_uri = request.redirect_uri.ok_or(StatusCode::BAD_REQUEST)?;
 
@@ -215,9 +205,7 @@ async fn handle_authorization_code_grant(
 
     // Generate access token using OIDC
     let oidc_state_guard = state.oidc_state.read().await;
-    let oidc_state = oidc_state_guard
-        .as_ref()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let oidc_state = oidc_state_guard.as_ref().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Build claims
     let mut additional_claims = HashMap::new();
@@ -268,9 +256,7 @@ async fn handle_client_credentials_grant(
 
     // Generate access token
     let oidc_state_guard = state.oidc_state.read().await;
-    let oidc_state = oidc_state_guard
-        .as_ref()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let oidc_state = oidc_state_guard.as_ref().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut additional_claims = HashMap::new();
     additional_claims.insert("client_id".to_string(), serde_json::json!(client_id));
@@ -314,9 +300,7 @@ async fn handle_refresh_token_grant(
 
     // Generate new access token
     let oidc_state_guard = state.oidc_state.read().await;
-    let oidc_state = oidc_state_guard
-        .as_ref()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let oidc_state = oidc_state_guard.as_ref().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut additional_claims = HashMap::new();
     additional_claims.insert("client_id".to_string(), json!(client_id));

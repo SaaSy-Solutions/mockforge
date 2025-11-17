@@ -80,24 +80,16 @@ impl WorkspaceScenarioGenerator {
 
             // Add sample counts from initial data
             if let Some(user_count) = parsed.initial_data.users {
-                parsed_command
-                    .sample_counts
-                    .insert("User".to_string(), user_count);
+                parsed_command.sample_counts.insert("User".to_string(), user_count);
             }
             if let Some(dispute_count) = parsed.initial_data.disputes {
-                parsed_command
-                    .sample_counts
-                    .insert("Dispute".to_string(), dispute_count);
+                parsed_command.sample_counts.insert("Dispute".to_string(), dispute_count);
             }
             if let Some(order_count) = parsed.initial_data.orders {
-                parsed_command
-                    .sample_counts
-                    .insert("Order".to_string(), order_count);
+                parsed_command.sample_counts.insert("Order".to_string(), order_count);
             }
             for (entity, count) in &parsed.initial_data.custom {
-                parsed_command
-                    .sample_counts
-                    .insert(entity.clone(), *count);
+                parsed_command.sample_counts.insert(entity.clone(), *count);
             }
 
             // Generate spec
@@ -208,9 +200,9 @@ impl WorkspaceScenarioGenerator {
                         fault.insert(
                             serde_yaml::Value::String("http_error_probability".to_string()),
                             serde_yaml::Value::Number(
-                                num_str.parse::<serde_yaml::Number>().unwrap_or_else(|_| {
-                                    serde_yaml::Number::from(0.1)
-                                }),
+                                num_str
+                                    .parse::<serde_yaml::Number>()
+                                    .unwrap_or_else(|_| serde_yaml::Number::from(0.1)),
                             ),
                         );
                     } else {
@@ -248,10 +240,7 @@ impl WorkspaceScenarioGenerator {
                 _ => {
                     // Generic characteristic - add to config as-is
                     if let Ok(value) = serde_yaml::to_value(&char.config) {
-                        chaos.insert(
-                            serde_yaml::Value::String(char.r#type.clone()),
-                            value,
-                        );
+                        chaos.insert(serde_yaml::Value::String(char.r#type.clone()), value);
                     }
                 }
             }
@@ -341,4 +330,3 @@ impl Default for WorkspaceScenarioGenerator {
         Self::new()
     }
 }
-

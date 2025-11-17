@@ -8,11 +8,11 @@
 
 use axum::extract::{Path, Query, State};
 use axum::response::Json;
+use mockforge_core::behavioral_cloning::types::BehavioralSequence;
 use mockforge_core::behavioral_cloning::{
     EdgeAmplificationConfig, EdgeAmplifier, EndpointProbabilityModel, ProbabilisticModel,
     SequenceLearner,
 };
-use mockforge_core::behavioral_cloning::types::BehavioralSequence;
 use mockforge_recorder::database::RecorderDatabase;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -49,15 +49,11 @@ impl BehavioralCloningState {
 
     /// Open database connection
     async fn open_database(&self) -> Result<RecorderDatabase, String> {
-        let db_path = self
-            .database_path
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join("recordings.db")
-            });
+        let db_path = self.database_path.as_ref().cloned().unwrap_or_else(|| {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("recordings.db")
+        });
 
         RecorderDatabase::new(&db_path)
             .await
@@ -255,12 +251,7 @@ pub async fn get_probability_model(
         .get_endpoint_probability_model(&endpoint, &method)
         .await
         .map_err(|e| format!("Failed to query probability model: {}", e))?
-        .ok_or_else(|| {
-            format!(
-                "No probability model found for {} {}",
-                method, endpoint
-            )
-        })?;
+        .ok_or_else(|| format!("No probability model found for {} {}", method, endpoint))?;
 
     Ok(Json(json!({
         "success": true,
@@ -338,8 +329,9 @@ pub async fn discover_sequences(
     }
 
     // Learn sequence patterns
-    let learned_sequences = SequenceLearner::learn_sequence_pattern(&sequences, request.min_frequency)
-        .map_err(|e| format!("Failed to learn sequences: {}", e))?;
+    let learned_sequences =
+        SequenceLearner::learn_sequence_pattern(&sequences, request.min_frequency)
+            .map_err(|e| format!("Failed to learn sequences: {}", e))?;
 
     // Store sequences in database
     for sequence in &learned_sequences {
@@ -418,15 +410,11 @@ pub async fn apply_amplification(
 
     // Determine which models to update based on scope
     let models_to_update = match &request.config.scope {
-        mockforge_core::behavioral_cloning::AmplificationScope::Global => {
-            db.get_all_endpoint_probability_models()
-                .await
-                .map_err(|e| format!("Failed to query models: {}", e))?
-        }
-        mockforge_core::behavioral_cloning::AmplificationScope::Endpoint {
-            endpoint,
-            method,
-        } => {
+        mockforge_core::behavioral_cloning::AmplificationScope::Global => db
+            .get_all_endpoint_probability_models()
+            .await
+            .map_err(|e| format!("Failed to query models: {}", e))?,
+        mockforge_core::behavioral_cloning::AmplificationScope::Endpoint { endpoint, method } => {
             if let Some(model) = db
                 .get_endpoint_probability_model(endpoint, method)
                 .await
@@ -434,10 +422,7 @@ pub async fn apply_amplification(
             {
                 vec![model]
             } else {
-                return Err(format!(
-                    "No probability model found for {} {}",
-                    method, endpoint
-                ));
+                return Err(format!("No probability model found for {} {}", method, endpoint));
             }
         }
         mockforge_core::behavioral_cloning::AmplificationScope::Sequence { .. } => {
@@ -482,17 +467,9 @@ pub async fn get_rare_edges(
         .get_endpoint_probability_model(&endpoint, &method)
         .await
         .map_err(|e| format!("Failed to query model: {}", e))?
-        .ok_or_else(|| {
-            format!(
-                "No probability model found for {} {}",
-                method, endpoint
-            )
-        })?;
+        .ok_or_else(|| format!("No probability model found for {} {}", method, endpoint))?;
 
-    let threshold: f64 = params
-        .get("threshold")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0.01); // Default 1%
+    let threshold: f64 = params.get("threshold").and_then(|s| s.parse().ok()).unwrap_or(0.01); // Default 1%
 
     let rare_patterns = EdgeAmplifier::identify_rare_edges(&model, threshold);
 
@@ -518,12 +495,7 @@ pub async fn sample_status_code(
         .get_endpoint_probability_model(&endpoint, &method)
         .await
         .map_err(|e| format!("Failed to query model: {}", e))?
-        .ok_or_else(|| {
-            format!(
-                "No probability model found for {} {}",
-                method, endpoint
-            )
-        })?;
+        .ok_or_else(|| format!("No probability model found for {} {}", method, endpoint))?;
 
     let sampled_code = ProbabilisticModel::sample_status_code(&model);
 
@@ -548,12 +520,7 @@ pub async fn sample_latency(
         .get_endpoint_probability_model(&endpoint, &method)
         .await
         .map_err(|e| format!("Failed to query model: {}", e))?
-        .ok_or_else(|| {
-            format!(
-                "No probability model found for {} {}",
-                method, endpoint
-            )
-        })?;
+        .ok_or_else(|| format!("No probability model found for {} {}", method, endpoint))?;
 
     let sampled_latency = ProbabilisticModel::sample_latency(&model);
 

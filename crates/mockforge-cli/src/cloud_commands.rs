@@ -354,23 +354,21 @@ async fn handle_login(
     info!("Authenticating with MockForge Cloud at {}", service_url);
 
     // Get API token from various sources
-    let api_token = token
-        .or_else(|| std::env::var("MOCKFORGE_API_KEY").ok())
-        .or_else(|| {
-            // Try to read from config file
-            let config_path = dirs::home_dir()
-                .map(|p| p.join(".mockforge").join("cloud.json"))
-                .unwrap_or_else(|| PathBuf::from(".mockforge/cloud.json"));
+    let api_token = token.or_else(|| std::env::var("MOCKFORGE_API_KEY").ok()).or_else(|| {
+        // Try to read from config file
+        let config_path = dirs::home_dir()
+            .map(|p| p.join(".mockforge").join("cloud.json"))
+            .unwrap_or_else(|| PathBuf::from(".mockforge/cloud.json"));
 
-            if config_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&config_path) {
-                    if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
-                        return config.get("api_key").and_then(|v| v.as_str()).map(|s| s.to_string());
-                    }
+        if config_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&config_path) {
+                if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
+                    return config.get("api_key").and_then(|v| v.as_str()).map(|s| s.to_string());
                 }
             }
-            None
-        });
+        }
+        None
+    });
 
     if let Some(provider_name) = provider {
         // OAuth flow
@@ -378,7 +376,10 @@ async fn handle_login(
         println!("   Provider: {}", provider_name);
         println!("   Service URL: {}", service_url);
         println!();
-        println!("{}", "Please use --token or set MOCKFORGE_API_KEY environment variable".yellow());
+        println!(
+            "{}",
+            "Please use --token or set MOCKFORGE_API_KEY environment variable".yellow()
+        );
         return Ok(());
     }
 
@@ -398,8 +399,7 @@ async fn handle_login(
                 .map(|p| p.join(".mockforge"))
                 .unwrap_or_else(|| PathBuf::from(".mockforge"));
 
-            std::fs::create_dir_all(&config_dir)
-                .context("Failed to create config directory")?;
+            std::fs::create_dir_all(&config_dir).context("Failed to create config directory")?;
 
             let config_path = config_dir.join("cloud.json");
             let config = json!({
@@ -442,10 +442,10 @@ async fn handle_whoami(service_url: String) -> Result<()> {
         return Ok(());
     }
 
-    let config_content = std::fs::read_to_string(&config_path)
-        .context("Failed to read config file")?;
-    let config: serde_json::Value = serde_json::from_str(&config_content)
-        .context("Failed to parse config file")?;
+    let config_content =
+        std::fs::read_to_string(&config_path).context("Failed to read config file")?;
+    let config: serde_json::Value =
+        serde_json::from_str(&config_content).context("Failed to parse config file")?;
 
     let api_key = config
         .get("api_key")
@@ -484,8 +484,7 @@ async fn handle_logout() -> Result<()> {
         .unwrap_or_else(|| PathBuf::from(".mockforge/cloud.json"));
 
     if config_path.exists() {
-        std::fs::remove_file(&config_path)
-            .context("Failed to remove config file")?;
+        std::fs::remove_file(&config_path).context("Failed to remove config file")?;
         println!("{}", "✅ Logged out successfully".green());
     } else {
         println!("{}", "ℹ️  Not logged in".yellow());
@@ -507,11 +506,22 @@ async fn handle_sync_command(cmd: SyncCommands) -> Result<()> {
             local_dir,
             service_url,
         } => {
-            handle_sync_start(workspace, all, project, watch, strategy, direction, local_dir, service_url).await
+            handle_sync_start(
+                workspace,
+                all,
+                project,
+                watch,
+                strategy,
+                direction,
+                local_dir,
+                service_url,
+            )
+            .await
         }
-        SyncCommands::Status { workspace, service_url } => {
-            handle_sync_status(workspace, service_url).await
-        }
+        SyncCommands::Status {
+            workspace,
+            service_url,
+        } => handle_sync_status(workspace, service_url).await,
         SyncCommands::History {
             workspace,
             service_url,
@@ -578,8 +588,8 @@ async fn handle_sync_start(
         sync_direction,
     };
 
-    let local_workspace_dir = local_dir
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let local_workspace_dir =
+        local_dir.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
     if all {
         println!("{}", "🔄 Syncing all workspaces...".cyan());
@@ -593,13 +603,13 @@ async fn handle_sync_start(
         let sync_service = SyncService::new(&local_workspace_dir);
 
         // Start sync service
-        sync_service.start().await
-            .context("Failed to start sync service")?;
+        sync_service.start().await.context("Failed to start sync service")?;
 
         // Start monitoring workspace if watch is enabled
         if watch {
             println!("{}", "👀 Watching for file changes...".cyan());
-            sync_service.monitor_workspace(&workspace_id, &local_workspace_dir.to_string_lossy())
+            sync_service
+                .monitor_workspace(&workspace_id, &local_workspace_dir.to_string_lossy())
                 .await
                 .context("Failed to start monitoring workspace")?;
             println!("{}", "✅ File watching started".green());
@@ -614,9 +624,7 @@ async fn handle_sync_start(
         // Note: Actual sync implementation would go here
         // This is a placeholder for the cloud sync functionality
     } else {
-        return Err(anyhow::anyhow!(
-            "Either --workspace or --all must be specified"
-        ));
+        return Err(anyhow::anyhow!("Either --workspace or --all must be specified"));
     }
 
     Ok(())
@@ -809,7 +817,10 @@ async fn handle_cloud_workspace_link(
         .context("Failed to create .mockforge directory")?;
 
     // TODO: Read existing config and update it
-    println!("{}", format!("🔗 Linking local workspace to cloud workspace: {}", cloud_workspace_id).cyan());
+    println!(
+        "{}",
+        format!("🔗 Linking local workspace to cloud workspace: {}", cloud_workspace_id).cyan()
+    );
     println!("   Local: {}", local_workspace.display());
     println!("   Cloud: {}", cloud_workspace_id);
     println!("{}", "⚠️  Workspace linking not yet fully implemented".yellow());
@@ -858,9 +869,10 @@ async fn handle_cloud_workspace_info(workspace_id: String, service_url: String) 
 /// Handle team commands
 async fn handle_team_command(cmd: TeamCommands) -> Result<()> {
     match cmd {
-        TeamCommands::Members { workspace, service_url } => {
-            handle_team_members(workspace, service_url).await
-        }
+        TeamCommands::Members {
+            workspace,
+            service_url,
+        } => handle_team_members(workspace, service_url).await,
         TeamCommands::Invite {
             email,
             workspace,
@@ -933,11 +945,7 @@ async fn handle_team_invite(
 }
 
 /// Handle team remove command
-async fn handle_team_remove(
-    email: String,
-    workspace: String,
-    service_url: String,
-) -> Result<()> {
+async fn handle_team_remove(email: String, workspace: String, service_url: String) -> Result<()> {
     let api_key = get_api_key()?;
     let client = reqwest::Client::new();
 
@@ -959,11 +967,7 @@ async fn handle_team_remove(
 }
 
 /// Handle activity command
-async fn handle_activity(
-    workspace: Option<String>,
-    service_url: String,
-    limit: u32,
-) -> Result<()> {
+async fn handle_activity(workspace: Option<String>, service_url: String, limit: u32) -> Result<()> {
     let api_key = get_api_key()?;
     let client = reqwest::Client::new();
 
@@ -1003,10 +1007,10 @@ fn get_api_key() -> Result<String> {
         .unwrap_or_else(|| PathBuf::from(".mockforge/cloud.json"));
 
     if config_path.exists() {
-        let config_content = std::fs::read_to_string(&config_path)
-            .context("Failed to read config file")?;
-        let config: serde_json::Value = serde_json::from_str(&config_content)
-            .context("Failed to parse config file")?;
+        let config_content =
+            std::fs::read_to_string(&config_path).context("Failed to read config file")?;
+        let config: serde_json::Value =
+            serde_json::from_str(&config_content).context("Failed to parse config file")?;
 
         if let Some(api_key) = config.get("api_key").and_then(|v| v.as_str()) {
             return Ok(api_key.to_string());

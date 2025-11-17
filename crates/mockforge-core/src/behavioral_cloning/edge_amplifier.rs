@@ -69,10 +69,8 @@ impl EdgeAmplifier {
         }
 
         // Calculate total probability of rare patterns
-        let rare_total: f64 = rare_patterns
-            .iter()
-            .map(|&idx| model.error_patterns[idx].probability)
-            .sum();
+        let rare_total: f64 =
+            rare_patterns.iter().map(|&idx| model.error_patterns[idx].probability).sum();
 
         // Calculate total probability of non-rare patterns
         let non_rare_total: f64 = model

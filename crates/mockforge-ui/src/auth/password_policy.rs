@@ -68,11 +68,10 @@ impl PasswordPolicy {
     /// Common passwords to forbid
     fn common_passwords() -> HashSet<String> {
         [
-            "password", "123456", "12345678", "1234", "qwerty",
-            "abc123", "monkey", "1234567", "letmein", "trustno1",
-            "dragon", "baseball", "iloveyou", "master", "sunshine",
-            "ashley", "bailey", "passw0rd", "shadow", "123123",
-            "654321", "superman", "qazwsx", "michael", "football",
+            "password", "123456", "12345678", "1234", "qwerty", "abc123", "monkey", "1234567",
+            "letmein", "trustno1", "dragon", "baseball", "iloveyou", "master", "sunshine",
+            "ashley", "bailey", "passw0rd", "shadow", "123123", "654321", "superman", "qazwsx",
+            "michael", "football",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -80,7 +79,11 @@ impl PasswordPolicy {
     }
 
     /// Validate a password against the policy
-    pub fn validate(&self, password: &str, username: Option<&str>) -> Result<(), PasswordValidationError> {
+    pub fn validate(
+        &self,
+        password: &str,
+        username: Option<&str>,
+    ) -> Result<(), PasswordValidationError> {
         // Check length
         if password.len() < self.min_length {
             return Err(PasswordValidationError::TooShort(self.min_length));
@@ -93,9 +96,7 @@ impl PasswordPolicy {
         let has_uppercase = password.chars().any(|c| c.is_uppercase());
         let has_lowercase = password.chars().any(|c| c.is_lowercase());
         let has_number = password.chars().any(|c| c.is_ascii_digit());
-        let has_special = password.chars().any(|c| {
-            "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c)
-        });
+        let has_special = password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
 
         if self.require_uppercase && !has_uppercase {
             return Err(PasswordValidationError::MissingUppercase);

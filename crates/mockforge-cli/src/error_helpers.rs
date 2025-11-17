@@ -3,8 +3,8 @@
 //! This module provides utilities for creating better error messages
 //! with actionable suggestions and context-aware help.
 
-use colored::Colorize;
 use crate::progress::{CliError, ExitCode};
+use colored::Colorize;
 use std::path::PathBuf;
 
 /// Enhanced error builder with context
@@ -108,9 +108,7 @@ pub fn config_not_found_error(path: &PathBuf) -> CliError {
     )
     .with_suggestion("Create a configuration file: mockforge init .".to_string())
     .with_suggestion("Or use the wizard: mockforge wizard".to_string())
-    .with_suggestion(format!(
-        "Or specify a different config: mockforge serve --config <path>"
-    ))
+    .with_suggestion(format!("Or specify a different config: mockforge serve --config <path>"))
     .with_help_url("https://docs.mockforge.dev/getting-started/five-minute-api.html")
     .build()
 }
@@ -130,15 +128,12 @@ pub fn invalid_openapi_error(path: &PathBuf, error: &str) -> CliError {
 
 /// Missing required field error
 pub fn missing_field_error(field: &str, context: &str) -> CliError {
-    ErrorBuilder::new(
-        format!("Missing required field: '{}'", field),
-        ExitCode::ConfigurationError,
-    )
-    .with_context(context.to_string())
-    .with_suggestion(format!("Add '{}' to your configuration", field))
-    .with_suggestion("Or provide it via command-line argument".to_string())
-    .with_help_url("https://docs.mockforge.dev/config.html")
-    .build()
+    ErrorBuilder::new(format!("Missing required field: '{}'", field), ExitCode::ConfigurationError)
+        .with_context(context.to_string())
+        .with_suggestion(format!("Add '{}' to your configuration", field))
+        .with_suggestion("Or provide it via command-line argument".to_string())
+        .with_help_url("https://docs.mockforge.dev/config.html")
+        .build()
 }
 
 /// Network error with retry suggestion

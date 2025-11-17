@@ -941,22 +941,28 @@ impl MetricsRegistry {
     // ==================== Marketplace metrics ====================
 
     /// Record a marketplace publish operation
-    pub fn record_marketplace_publish(&self, item_type: &str, success: bool, duration_seconds: f64) {
+    pub fn record_marketplace_publish(
+        &self,
+        item_type: &str,
+        success: bool,
+        duration_seconds: f64,
+    ) {
         let status = if success { "success" } else { "error" };
-        self.marketplace_publish_total
-            .with_label_values(&[item_type, status])
-            .inc();
+        self.marketplace_publish_total.with_label_values(&[item_type, status]).inc();
         self.marketplace_publish_duration_seconds
             .with_label_values(&[item_type])
             .observe(duration_seconds);
     }
 
     /// Record a marketplace download operation
-    pub fn record_marketplace_download(&self, item_type: &str, success: bool, duration_seconds: f64) {
+    pub fn record_marketplace_download(
+        &self,
+        item_type: &str,
+        success: bool,
+        duration_seconds: f64,
+    ) {
         let status = if success { "success" } else { "error" };
-        self.marketplace_download_total
-            .with_label_values(&[item_type, status])
-            .inc();
+        self.marketplace_download_total.with_label_values(&[item_type, status]).inc();
         self.marketplace_download_duration_seconds
             .with_label_values(&[item_type])
             .observe(duration_seconds);
@@ -965,9 +971,7 @@ impl MetricsRegistry {
     /// Record a marketplace search operation
     pub fn record_marketplace_search(&self, item_type: &str, success: bool, duration_seconds: f64) {
         let status = if success { "success" } else { "error" };
-        self.marketplace_search_total
-            .with_label_values(&[item_type, status])
-            .inc();
+        self.marketplace_search_total.with_label_values(&[item_type, status]).inc();
         self.marketplace_search_duration_seconds
             .with_label_values(&[item_type])
             .observe(duration_seconds);
@@ -975,16 +979,12 @@ impl MetricsRegistry {
 
     /// Record a marketplace error
     pub fn record_marketplace_error(&self, item_type: &str, error_code: &str) {
-        self.marketplace_errors_total
-            .with_label_values(&[item_type, error_code])
-            .inc();
+        self.marketplace_errors_total.with_label_values(&[item_type, error_code]).inc();
     }
 
     /// Update the total number of marketplace items
     pub fn update_marketplace_items_total(&self, item_type: &str, count: i64) {
-        self.marketplace_items_total
-            .with_label_values(&[item_type])
-            .set(count);
+        self.marketplace_items_total.with_label_values(&[item_type]).set(count);
     }
 }
 

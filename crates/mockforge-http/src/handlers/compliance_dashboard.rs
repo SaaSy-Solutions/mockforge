@@ -9,7 +9,8 @@ use axum::{
     response::Json,
 };
 use mockforge_core::security::compliance_dashboard::{
-    ComplianceDashboardEngine, ComplianceGap, ComplianceAlert, GapSeverity, AlertType, ComplianceStandard,
+    AlertType, ComplianceAlert, ComplianceDashboardEngine, ComplianceGap, ComplianceStandard,
+    GapSeverity,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -68,13 +69,10 @@ pub async fn get_dashboard(
     State(state): State<ComplianceDashboardState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let engine = state.engine.read().await;
-    let dashboard = engine
-        .get_dashboard_data()
-        .await
-        .map_err(|e| {
-            error!("Failed to get dashboard data: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let dashboard = engine.get_dashboard_data().await.map_err(|e| {
+        error!("Failed to get dashboard data: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(serde_json::to_value(&dashboard).unwrap()))
 }
@@ -96,21 +94,15 @@ pub async fn get_gaps(
             "low" => GapSeverity::Low,
             _ => return Err(StatusCode::BAD_REQUEST),
         };
-        engine
-            .get_gaps_by_severity(severity)
-            .await
-            .map_err(|e| {
-                error!("Failed to get gaps by severity: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        engine.get_gaps_by_severity(severity).await.map_err(|e| {
+            error!("Failed to get gaps by severity: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     } else {
-        engine
-            .get_all_gaps()
-            .await
-            .map_err(|e| {
-                error!("Failed to get all gaps: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        engine.get_all_gaps().await.map_err(|e| {
+            error!("Failed to get all gaps: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     };
 
     Ok(Json(serde_json::to_value(&gaps).unwrap()))
@@ -158,13 +150,10 @@ pub async fn update_gap_status(
     Json(request): Json<UpdateGapStatusRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let engine = state.engine.write().await;
-    engine
-        .update_gap_status(&gap_id, request.status)
-        .await
-        .map_err(|e| {
-            error!("Failed to update gap status: {}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+    engine.update_gap_status(&gap_id, request.status).await.map_err(|e| {
+        error!("Failed to update gap status: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     info!("Gap status updated: {}", gap_id);
 
@@ -191,21 +180,15 @@ pub async fn get_alerts(
             "low" => GapSeverity::Low,
             _ => return Err(StatusCode::BAD_REQUEST),
         };
-        engine
-            .get_alerts_by_severity(severity)
-            .await
-            .map_err(|e| {
-                error!("Failed to get alerts by severity: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        engine.get_alerts_by_severity(severity).await.map_err(|e| {
+            error!("Failed to get alerts by severity: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     } else {
-        engine
-            .get_all_alerts()
-            .await
-            .map_err(|e| {
-                error!("Failed to get all alerts: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        engine.get_all_alerts().await.map_err(|e| {
+            error!("Failed to get all alerts: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     };
 
     Ok(Json(serde_json::to_value(&alerts).unwrap()))
@@ -246,7 +229,7 @@ pub async fn add_alert(
 
 /// Create compliance dashboard router
 pub fn compliance_dashboard_router(state: ComplianceDashboardState) -> axum::Router {
-    use axum::routing::{get, post, patch};
+    use axum::routing::{get, patch, post};
 
     axum::Router::new()
         .route("/dashboard", get(get_dashboard))

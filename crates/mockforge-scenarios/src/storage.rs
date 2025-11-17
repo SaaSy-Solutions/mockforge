@@ -107,13 +107,13 @@ impl ScenarioStorage {
 
     /// Initialize the storage (create directories if needed)
     pub async fn init(&self) -> Result<()> {
-        fs::create_dir_all(&self.scenarios_dir)
-            .await
-            .map_err(|e| ScenarioError::Storage(format!("Failed to create scenarios directory: {}", e)))?;
+        fs::create_dir_all(&self.scenarios_dir).await.map_err(|e| {
+            ScenarioError::Storage(format!("Failed to create scenarios directory: {}", e))
+        })?;
 
-        fs::create_dir_all(&self.metadata_dir)
-            .await
-            .map_err(|e| ScenarioError::Storage(format!("Failed to create metadata directory: {}", e)))?;
+        fs::create_dir_all(&self.metadata_dir).await.map_err(|e| {
+            ScenarioError::Storage(format!("Failed to create metadata directory: {}", e))
+        })?;
 
         Ok(())
     }
@@ -123,9 +123,9 @@ impl ScenarioStorage {
         self.init().await?;
 
         // Load metadata files
-        let mut entries = fs::read_dir(&self.metadata_dir)
-            .await
-            .map_err(|e| ScenarioError::Storage(format!("Failed to read metadata directory: {}", e)))?;
+        let mut entries = fs::read_dir(&self.metadata_dir).await.map_err(|e| {
+            ScenarioError::Storage(format!("Failed to read metadata directory: {}", e))
+        })?;
 
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
@@ -141,7 +141,11 @@ impl ScenarioStorage {
                     self.cache.insert(id, scenario);
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to load scenario metadata from {}: {}", path.display(), e);
+                    tracing::warn!(
+                        "Failed to load scenario metadata from {}: {}",
+                        path.display(),
+                        e
+                    );
                 }
             }
         }
@@ -156,8 +160,8 @@ impl ScenarioStorage {
             .await
             .map_err(|e| ScenarioError::Storage(format!("Failed to read metadata file: {}", e)))?;
 
-        let scenario: InstalledScenario = serde_json::from_str(&content)
-            .map_err(|e| ScenarioError::Serde(e))?;
+        let scenario: InstalledScenario =
+            serde_json::from_str(&content).map_err(|e| ScenarioError::Serde(e))?;
 
         Ok(scenario)
     }
@@ -167,8 +171,7 @@ impl ScenarioStorage {
         self.init().await?;
 
         let file_path = self.metadata_file_path(&scenario.name, &scenario.version);
-        let json = serde_json::to_string_pretty(&scenario)
-            .map_err(|e| ScenarioError::Serde(e))?;
+        let json = serde_json::to_string_pretty(&scenario).map_err(|e| ScenarioError::Serde(e))?;
 
         fs::write(&file_path, json)
             .await
@@ -189,10 +192,7 @@ impl ScenarioStorage {
 
     /// Get scenario by name (latest version)
     pub fn get_latest(&self, name: &str) -> Option<&InstalledScenario> {
-        self.cache
-            .values()
-            .filter(|s| s.name == name)
-            .max_by_key(|s| &s.version)
+        self.cache.values().filter(|s| s.name == name).max_by_key(|s| &s.version)
     }
 
     /// List all installed scenarios
@@ -207,9 +207,9 @@ impl ScenarioStorage {
         // Remove metadata file
         let file_path = self.metadata_file_path(name, version);
         if file_path.exists() {
-            fs::remove_file(&file_path)
-                .await
-                .map_err(|e| ScenarioError::Storage(format!("Failed to remove metadata file: {}", e)))?;
+            fs::remove_file(&file_path).await.map_err(|e| {
+                ScenarioError::Storage(format!("Failed to remove metadata file: {}", e))
+            })?;
         }
 
         // Remove from cache

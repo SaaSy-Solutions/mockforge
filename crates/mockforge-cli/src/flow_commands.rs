@@ -138,8 +138,8 @@ pub enum FlowCommands {
 
 pub async fn handle_flow_command(command: FlowCommands) -> anyhow::Result<()> {
     // Get database path from environment or use default
-    let db_path = std::env::var("MOCKFORGE_RECORDER_DB")
-        .unwrap_or_else(|_| "recordings.db".to_string());
+    let db_path =
+        std::env::var("MOCKFORGE_RECORDER_DB").unwrap_or_else(|_| "recordings.db".to_string());
     let db = RecorderDatabase::new(&db_path).await?;
 
     match command {
@@ -208,17 +208,8 @@ async fn handle_view(db: RecorderDatabase, flow_id: String, verbose: bool) -> an
 
     for (idx, step) in flow.steps.iter().enumerate() {
         let label = step.step_label.as_deref().unwrap_or("-");
-        let timing = step
-            .timing_ms
-            .map(|t| format!("{}ms", t))
-            .unwrap_or_else(|| "-".to_string());
-        println!(
-            "  {:4} | {:10} | {:7} | {}",
-            idx + 1,
-            label,
-            timing,
-            step.request_id
-        );
+        let timing = step.timing_ms.map(|t| format!("{}ms", t)).unwrap_or_else(|| "-".to_string());
+        println!("  {:4} | {:10} | {:7} | {}", idx + 1, label, timing, step.request_id);
 
         if verbose {
             // Fetch and display request details
@@ -295,9 +286,7 @@ async fn handle_compile(
 
     let compiler = FlowCompiler::new(db.clone());
     let strict_mode = !flex_mode;
-    let scenario = compiler
-        .compile_flow(&flow, scenario_name.clone(), strict_mode)
-        .await?;
+    let scenario = compiler.compile_flow(&flow, scenario_name.clone(), strict_mode).await?;
 
     // Store the scenario
     let storage = ScenarioStorage::new(db);
@@ -318,10 +307,7 @@ async fn handle_scenarios(db: RecorderDatabase, limit: usize) -> anyhow::Result<
 
     println!("Found {} scenarios:\n", scenarios.len());
     for scenario in scenarios {
-        println!(
-            "  {} - {} v{}",
-            scenario.id, scenario.name, scenario.version
-        );
+        println!("  {} - {} v{}", scenario.id, scenario.name, scenario.version);
         if let Some(desc) = &scenario.description {
             println!("    {}", desc);
         }
@@ -393,4 +379,3 @@ async fn handle_replay(
 
     Ok(())
 }
-

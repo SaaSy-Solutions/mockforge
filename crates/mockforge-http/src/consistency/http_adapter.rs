@@ -4,8 +4,8 @@
 //! ensuring HTTP responses reflect the unified state (persona, scenario, etc.)
 
 use mockforge_core::consistency::adapters::ProtocolAdapter;
-use mockforge_core::consistency::ConsistencyEngine;
 use mockforge_core::consistency::types::{PersonaProfile, ProtocolState, StateChangeEvent};
+use mockforge_core::consistency::ConsistencyEngine;
 use mockforge_core::protocol_abstraction::Protocol;
 use mockforge_core::Result;
 use std::sync::Arc;
@@ -56,7 +56,10 @@ impl ProtocolAdapter for HttpAdapter {
 
     async fn on_state_change(&self, event: &StateChangeEvent) -> Result<()> {
         match event {
-            StateChangeEvent::PersonaChanged { workspace_id, persona } => {
+            StateChangeEvent::PersonaChanged {
+                workspace_id,
+                persona,
+            } => {
                 let mut personas = self.workspace_personas.write().await;
                 personas.insert(workspace_id.clone(), Some(persona.clone()));
                 info!(
@@ -64,7 +67,10 @@ impl ProtocolAdapter for HttpAdapter {
                     workspace_id, persona.id
                 );
             }
-            StateChangeEvent::ScenarioChanged { workspace_id, scenario_id } => {
+            StateChangeEvent::ScenarioChanged {
+                workspace_id,
+                scenario_id,
+            } => {
                 let mut scenarios = self.workspace_scenarios.write().await;
                 scenarios.insert(workspace_id.clone(), Some(scenario_id.clone()));
                 info!(
@@ -80,14 +86,20 @@ impl ProtocolAdapter for HttpAdapter {
                 debug!("HTTP adapter: Reality ratio changed for workspace {}", workspace_id);
                 // HTTP responses will use reality ratio from unified state when blending responses
             }
-            StateChangeEvent::EntityCreated { workspace_id, entity } => {
+            StateChangeEvent::EntityCreated {
+                workspace_id,
+                entity,
+            } => {
                 debug!(
                     "HTTP adapter: Entity created {}:{} for workspace {}",
                     entity.entity_type, entity.entity_id, workspace_id
                 );
                 // Entity is now available for HTTP endpoints to query
             }
-            StateChangeEvent::EntityUpdated { workspace_id, entity } => {
+            StateChangeEvent::EntityUpdated {
+                workspace_id,
+                entity,
+            } => {
                 debug!(
                     "HTTP adapter: Entity updated {}:{} for workspace {}",
                     entity.entity_type, entity.entity_id, workspace_id
@@ -101,7 +113,10 @@ impl ProtocolAdapter for HttpAdapter {
                 );
                 // Chaos rule will be applied to HTTP responses via chaos middleware
             }
-            StateChangeEvent::ChaosRuleDeactivated { workspace_id, rule_name } => {
+            StateChangeEvent::ChaosRuleDeactivated {
+                workspace_id,
+                rule_name,
+            } => {
                 info!(
                     "HTTP adapter: Chaos rule '{}' deactivated for workspace {}",
                     rule_name, workspace_id
@@ -112,10 +127,7 @@ impl ProtocolAdapter for HttpAdapter {
         Ok(())
     }
 
-    async fn get_current_state(
-        &self,
-        workspace_id: &str,
-    ) -> Result<Option<ProtocolState>> {
+    async fn get_current_state(&self, workspace_id: &str) -> Result<Option<ProtocolState>> {
         // Get protocol state from consistency engine
         let state = self.engine.get_protocol_state(workspace_id, Protocol::Http).await;
         Ok(state)
@@ -124,20 +136,14 @@ impl ProtocolAdapter for HttpAdapter {
     async fn apply_persona(&self, workspace_id: &str, persona: &PersonaProfile) -> Result<()> {
         let mut personas = self.workspace_personas.write().await;
         personas.insert(workspace_id.to_string(), Some(persona.clone()));
-        info!(
-            "HTTP adapter: Applied persona {} to workspace {}",
-            persona.id, workspace_id
-        );
+        info!("HTTP adapter: Applied persona {} to workspace {}", persona.id, workspace_id);
         Ok(())
     }
 
     async fn apply_scenario(&self, workspace_id: &str, scenario_id: &str) -> Result<()> {
         let mut scenarios = self.workspace_scenarios.write().await;
         scenarios.insert(workspace_id.to_string(), Some(scenario_id.to_string()));
-        info!(
-            "HTTP adapter: Applied scenario {} to workspace {}",
-            scenario_id, workspace_id
-        );
+        info!("HTTP adapter: Applied scenario {} to workspace {}", scenario_id, workspace_id);
         Ok(())
     }
 }

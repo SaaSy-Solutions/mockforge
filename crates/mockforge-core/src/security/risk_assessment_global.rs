@@ -16,10 +16,14 @@ static GLOBAL_RISK_ASSESSMENT_ENGINE: Lazy<Arc<RwLock<Option<Arc<RwLock<RiskAsse
 ///
 /// This should be called once during application startup.
 /// Takes an Arc<RwLock<RiskAssessmentEngine>> to share the same instance.
-pub async fn init_global_risk_assessment_engine(engine: Arc<RwLock<RiskAssessmentEngine>>) -> Result<(), crate::Error> {
+pub async fn init_global_risk_assessment_engine(
+    engine: Arc<RwLock<RiskAssessmentEngine>>,
+) -> Result<(), crate::Error> {
     let mut global = GLOBAL_RISK_ASSESSMENT_ENGINE.write().await;
     if global.is_some() {
-        return Err(crate::Error::Generic("Global risk assessment engine already initialized".to_string()));
+        return Err(crate::Error::Generic(
+            "Global risk assessment engine already initialized".to_string(),
+        ));
     }
     *global = Some(engine);
     debug!("Global risk assessment engine initialized");

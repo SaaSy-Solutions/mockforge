@@ -43,14 +43,10 @@ pub async fn get_state_summary(
     State(state): State<XRayState>,
     Query(params): Query<XRayQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    let unified_state = state
-        .engine
-        .get_state(&params.workspace)
-        .await
-        .ok_or_else(|| {
-            debug!("No state found for workspace: {}", params.workspace);
-            StatusCode::NOT_FOUND
-        })?;
+    let unified_state = state.engine.get_state(&params.workspace).await.ok_or_else(|| {
+        debug!("No state found for workspace: {}", params.workspace);
+        StatusCode::NOT_FOUND
+    })?;
 
     // Build lightweight summary
     let summary = serde_json::json!({
@@ -77,14 +73,10 @@ pub async fn get_state(
     State(state): State<XRayState>,
     Query(params): Query<XRayQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    let unified_state = state
-        .engine
-        .get_state(&params.workspace)
-        .await
-        .ok_or_else(|| {
-            debug!("No state found for workspace: {}", params.workspace);
-            StatusCode::NOT_FOUND
-        })?;
+    let unified_state = state.engine.get_state(&params.workspace).await.ok_or_else(|| {
+        debug!("No state found for workspace: {}", params.workspace);
+        StatusCode::NOT_FOUND
+    })?;
 
     Ok(Json(serde_json::to_value(&unified_state).unwrap()))
 }
@@ -117,14 +109,10 @@ pub async fn get_workspace_summary(
     State(state): State<XRayState>,
     Path(workspace_id): Path<String>,
 ) -> Result<Json<Value>, StatusCode> {
-    let unified_state = state
-        .engine
-        .get_state(&workspace_id)
-        .await
-        .ok_or_else(|| {
-            debug!("No state found for workspace: {}", workspace_id);
-            StatusCode::NOT_FOUND
-        })?;
+    let unified_state = state.engine.get_state(&workspace_id).await.ok_or_else(|| {
+        debug!("No state found for workspace: {}", workspace_id);
+        StatusCode::NOT_FOUND
+    })?;
 
     let summary = serde_json::json!({
         "workspace_id": unified_state.workspace_id,
@@ -148,14 +136,10 @@ pub async fn list_entities(
     State(state): State<XRayState>,
     Query(params): Query<XRayQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    let unified_state = state
-        .engine
-        .get_state(&params.workspace)
-        .await
-        .ok_or_else(|| {
-            debug!("No state found for workspace: {}", params.workspace);
-            StatusCode::NOT_FOUND
-        })?;
+    let unified_state = state.engine.get_state(&params.workspace).await.ok_or_else(|| {
+        debug!("No state found for workspace: {}", params.workspace);
+        StatusCode::NOT_FOUND
+    })?;
 
     let entities: Vec<&mockforge_core::consistency::EntityState> =
         unified_state.entity_state.values().collect();

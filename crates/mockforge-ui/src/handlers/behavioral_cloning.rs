@@ -30,10 +30,7 @@ pub async fn get_flows(
         .cloned()
         .unwrap_or_else(|| "./mockforge-recordings.db".to_string());
 
-    let limit = params
-        .get("limit")
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(50);
+    let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(50);
 
     match RecorderDatabase::new(&db_path).await {
         Ok(db) => {
@@ -300,10 +297,7 @@ pub async fn get_scenarios(
         .cloned()
         .unwrap_or_else(|| "./mockforge-recordings.db".to_string());
 
-    let limit = params
-        .get("limit")
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(50);
+    let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(50);
 
     match RecorderDatabase::new(&db_path).await {
         Ok(db) => {
@@ -464,4 +458,3 @@ pub async fn export_scenario(
         }),
     }
 }
-

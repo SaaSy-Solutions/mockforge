@@ -796,15 +796,25 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                             }
                         }
                         if !pack_info.manifest.contract_diffs.is_empty() {
-                            println!("   Contract Diffs ({}):", pack_info.manifest.contract_diffs.len());
+                            println!(
+                                "   Contract Diffs ({}):",
+                                pack_info.manifest.contract_diffs.len()
+                            );
                             for diff in &pack_info.manifest.contract_diffs {
                                 println!("     - {}", diff.name);
                             }
                         }
                         if !pack_info.manifest.reality_blends.is_empty() {
-                            println!("   Reality Blends ({}):", pack_info.manifest.reality_blends.len());
+                            println!(
+                                "   Reality Blends ({}):",
+                                pack_info.manifest.reality_blends.len()
+                            );
                             for blend in &pack_info.manifest.reality_blends {
-                                println!("     - {} ({}% real)", blend.name, (blend.reality_ratio * 100.0) as u32);
+                                println!(
+                                    "     - {} ({}% real)",
+                                    blend.name,
+                                    (blend.reality_ratio * 100.0) as u32
+                                );
                             }
                         }
                     }
@@ -826,7 +836,10 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                 let studio_installer = StudioPackInstaller::new(packs_dir);
 
                 match command {
-                    StudioPackCommands::Install { pack_name, workspace } => {
+                    StudioPackCommands::Install {
+                        pack_name,
+                        workspace,
+                    } => {
                         println!("🎨 Installing studio pack: {}", pack_name);
 
                         // Check if it's a pre-built pack or a path
@@ -840,7 +853,9 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                             // Try to load from file
                             let manifest_path = Path::new(&pack_name);
                             if manifest_path.exists() {
-                                Some(mockforge_scenarios::DomainPackManifest::from_file(manifest_path)?)
+                                Some(mockforge_scenarios::DomainPackManifest::from_file(
+                                    manifest_path,
+                                )?)
                             } else {
                                 eprintln!("❌ Studio pack '{}' not found", pack_name);
                                 eprintln!("   Available pre-built packs: fintech-fraud-lab, ecommerce-peak-day, healthcare-outage-drill");
@@ -850,14 +865,23 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                         };
 
                         if let Some(manifest) = manifest {
-                            match studio_installer.install_studio_pack(&manifest, Some(&workspace)).await {
+                            match studio_installer
+                                .install_studio_pack(&manifest, Some(&workspace))
+                                .await
+                            {
                                 Ok(result) => {
                                     println!("✅ Studio pack installed successfully!");
                                     println!("   Scenarios: {}", result.scenarios_installed);
                                     println!("   Personas: {}", result.personas_configured);
                                     println!("   Chaos Rules: {}", result.chaos_rules_applied);
-                                    println!("   Contract Diffs: {}", result.contract_diffs_configured);
-                                    println!("   Reality Blends: {}", result.reality_blends_configured);
+                                    println!(
+                                        "   Contract Diffs: {}",
+                                        result.contract_diffs_configured
+                                    );
+                                    println!(
+                                        "   Reality Blends: {}",
+                                        result.reality_blends_configured
+                                    );
                                     if result.workspace_config_applied {
                                         println!("   Workspace Config: Applied");
                                     }
@@ -879,9 +903,13 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                     StudioPackCommands::List => {
                         println!("🎨 Available studio packs:");
                         println!("   Pre-built packs:");
-                        println!("     - fintech-fraud-lab: Fraud detection and prevention scenarios");
+                        println!(
+                            "     - fintech-fraud-lab: Fraud detection and prevention scenarios"
+                        );
                         println!("     - ecommerce-peak-day: High-traffic e-commerce scenarios");
-                        println!("     - healthcare-outage-drill: Healthcare system outage scenarios");
+                        println!(
+                            "     - healthcare-outage-drill: Healthcare system outage scenarios"
+                        );
                         println!("\n   To install a pack, use:");
                         println!("     mockforge scenario pack studio install <pack-name>");
                     }

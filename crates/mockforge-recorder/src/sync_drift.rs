@@ -3,11 +3,7 @@
 //! This module provides functionality to evaluate drift budgets when sync changes are detected
 //! and create incidents with before/after samples.
 
-use crate::{
-    database::RecorderDatabase,
-    sync::DetectedChange,
-    Result,
-};
+use crate::{database::RecorderDatabase, sync::DetectedChange, Result};
 use mockforge_core::{
     contract_drift::{DriftBudgetEngine, DriftResult},
     incidents::{IncidentManager, IncidentSeverity, IncidentType},
@@ -53,21 +49,15 @@ impl SyncDriftEvaluator {
 
         for change in changes {
             // Get before/after samples from database
-            let (before_sample, after_sample) = self
-                .get_before_after_samples(change)
-                .await
-                .unwrap_or((None, None));
+            let (before_sample, after_sample) =
+                self.get_before_after_samples(change).await.unwrap_or((None, None));
 
             // Evaluate drift budget for this change
             // Note: We need to convert DetectedChange to a format that can be evaluated
             // For now, we'll create a simplified evaluation based on the comparison result
-            let drift_result = self.evaluate_change_against_budget(
-                change,
-                workspace_id,
-                service_name,
-                tags,
-            )
-            .await;
+            let drift_result = self
+                .evaluate_change_against_budget(change, workspace_id, service_name, tags)
+                .await;
 
             // Create incident if budget is exceeded
             if drift_result.should_create_incident {
@@ -120,9 +110,7 @@ impl SyncDriftEvaluator {
             .iter()
             .filter(|diff| {
                 // Heuristic: structural changes, missing fields, type changes are breaking
-                diff.description
-                    .to_lowercase()
-                    .contains("missing")
+                diff.description.to_lowercase().contains("missing")
                     || diff.description.to_lowercase().contains("type")
                     || diff.description.to_lowercase().contains("removed")
             })
@@ -181,27 +169,16 @@ impl SyncDriftEvaluator {
         change: &DetectedChange,
     ) -> Result<(Option<Value>, Option<Value>)> {
         // Get the request and response from database
-        let request = self
-            .database
-            .get_request(&change.request_id)
-            .await?
-            .ok_or_else(|| {
-                crate::RecorderError::NotFound(format!(
-                    "Request {} not found",
-                    change.request_id
-                ))
-            })?;
+        let request = self.database.get_request(&change.request_id).await?.ok_or_else(|| {
+            crate::RecorderError::NotFound(format!("Request {} not found", change.request_id))
+        })?;
 
-        let response = self
-            .database
-            .get_response(&change.request_id)
-            .await?
-            .ok_or_else(|| {
-                crate::RecorderError::NotFound(format!(
-                    "Response for request {} not found",
-                    change.request_id
-                ))
-            })?;
+        let response = self.database.get_response(&change.request_id).await?.ok_or_else(|| {
+            crate::RecorderError::NotFound(format!(
+                "Response for request {} not found",
+                change.request_id
+            ))
+        })?;
 
         // Create before sample (original state)
         let before_sample = serde_json::json!({
@@ -305,4 +282,3 @@ impl SyncDriftEvaluator {
         }
     }
 }
-

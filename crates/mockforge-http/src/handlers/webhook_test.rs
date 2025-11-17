@@ -3,14 +3,10 @@
 //! This module provides endpoints for testing webhook notifications
 //! and utilities for validating webhook payloads.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-};
+use axum::{extract::State, http::StatusCode, response::Json};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// State for webhook testing
 #[derive(Clone)]
@@ -98,14 +94,12 @@ pub async fn test_webhook(
                 error: None,
             }))
         }
-        Err(e) => {
-            Ok(Json(TestWebhookResponse {
-                success: false,
-                status_code: None,
-                response_body: None,
-                error: Some(e.to_string()),
-            }))
-        }
+        Err(e) => Ok(Json(TestWebhookResponse {
+            success: false,
+            status_code: None,
+            response_body: None,
+            error: Some(e.to_string()),
+        })),
     }
 }
 

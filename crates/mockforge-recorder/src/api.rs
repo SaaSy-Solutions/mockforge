@@ -785,9 +785,7 @@ async fn list_snapshots(
     // Get all unique endpoints to list snapshots
     // For simplicity, we'll get snapshots for all endpoints
     // In a real implementation, you might want to paginate differently
-    let snapshots = database
-        .get_snapshots_for_endpoint("", None, Some(limit))
-        .await?;
+    let snapshots = database.get_snapshots_for_endpoint("", None, Some(limit)).await?;
 
     Ok(Json(serde_json::json!({
         "snapshots": snapshots,
@@ -830,15 +828,16 @@ async fn get_endpoint_timeline(
         // Track error patterns
         if snapshot.after.status_code >= 400 {
             let key = format!("{}", snapshot.after.status_code);
-            let pattern = error_patterns.entry(key).or_insert_with(|| {
-                crate::sync_snapshots::ErrorPattern {
-                    status_code: snapshot.after.status_code,
-                    message_pattern: None,
-                    occurrences: 0,
-                    first_seen: snapshot.timestamp,
-                    last_seen: snapshot.timestamp,
-                }
-            });
+            let pattern =
+                error_patterns
+                    .entry(key)
+                    .or_insert_with(|| crate::sync_snapshots::ErrorPattern {
+                        status_code: snapshot.after.status_code,
+                        message_pattern: None,
+                        occurrences: 0,
+                        first_seen: snapshot.timestamp,
+                        last_seen: snapshot.timestamp,
+                    });
             pattern.occurrences += 1;
             if snapshot.timestamp < pattern.first_seen {
                 pattern.first_seen = snapshot.timestamp;
@@ -868,9 +867,7 @@ async fn get_snapshots_by_cycle(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let database = state.recorder.database();
 
-    let snapshots = database
-        .get_snapshots_by_cycle(&cycle_id)
-        .await?;
+    let snapshots = database.get_snapshots_by_cycle(&cycle_id).await?;
 
     Ok(Json(serde_json::json!({
         "sync_cycle_id": cycle_id,

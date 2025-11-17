@@ -209,16 +209,12 @@ impl ChangeRequest {
 
     /// Check if all approvals are complete
     pub fn is_fully_approved(&self) -> bool {
-        self.approval_status
-            .values()
-            .all(|status| *status == ApprovalStatus::Approved)
+        self.approval_status.values().all(|status| *status == ApprovalStatus::Approved)
     }
 
     /// Check if any approval was rejected
     pub fn is_rejected(&self) -> bool {
-        self.approval_status
-            .values()
-            .any(|status| *status == ApprovalStatus::Rejected)
+        self.approval_status.values().any(|status| *status == ApprovalStatus::Rejected)
     }
 
     /// Add history entry
@@ -295,22 +291,32 @@ impl Default for ChangeManagementConfig {
             enabled: true,
             approval_workflow: ApprovalWorkflowConfig {
                 emergency: ApprovalLevelConfig {
-                    approvers: vec!["security-team-lead".to_string(), "engineering-manager".to_string()],
+                    approvers: vec![
+                        "security-team-lead".to_string(),
+                        "engineering-manager".to_string(),
+                    ],
                     approval_timeout_hours: 1,
                 },
                 high: ApprovalLevelConfig {
-                    approvers: vec!["security-team".to_string(), "engineering-manager".to_string(), "change-manager".to_string()],
+                    approvers: vec![
+                        "security-team".to_string(),
+                        "engineering-manager".to_string(),
+                        "change-manager".to_string(),
+                    ],
                     approval_timeout_hours: 24,
                 },
                 medium: ApprovalLevelConfig {
-                    approvers: vec!["engineering-manager".to_string(), "change-manager".to_string()],
+                    approvers: vec![
+                        "engineering-manager".to_string(),
+                        "change-manager".to_string(),
+                    ],
                     approval_timeout_hours: 72,
                 },
                 low: ApprovalLevelConfig {
                     approvers: vec!["change-manager".to_string()],
                     approval_timeout_hours: 168, // 7 days
                 },
-                },
+            },
             testing: TestingConfig {
                 required_for: vec![ChangeType::Security, ChangeType::Infrastructure],
                 test_environments: vec!["staging".to_string(), "production-like".to_string()],
@@ -319,7 +325,11 @@ impl Default for ChangeManagementConfig {
             notifications: NotificationConfig {
                 enabled: true,
                 channels: vec!["email".to_string(), "slack".to_string()],
-                recipients: vec!["change-manager".to_string(), "security-team".to_string(), "engineering-team".to_string()],
+                recipients: vec![
+                    "change-manager".to_string(),
+                    "security-team".to_string(),
+                    "engineering-team".to_string(),
+                ],
             },
         }
     }
@@ -475,7 +485,11 @@ impl ChangeManagementEngine {
 
         change.approval_status.insert(approver.to_string(), ApprovalStatus::Rejected);
         change.status = ChangeStatus::Rejected;
-        change.add_history("rejected".to_string(), approver_id, format!("Change rejected: {}", reason));
+        change.add_history(
+            "rejected".to_string(),
+            approver_id,
+            format!("Change rejected: {}", reason),
+        );
 
         Ok(())
     }
@@ -494,7 +508,9 @@ impl ChangeManagementEngine {
             .ok_or_else(|| Error::Generic("Change request not found".to_string()))?;
 
         if change.status != ChangeStatus::Approved {
-            return Err(Error::Generic("Change request must be approved before implementation".to_string()));
+            return Err(Error::Generic(
+                "Change request must be approved before implementation".to_string(),
+            ));
         }
 
         change.status = ChangeStatus::Implementing;
@@ -525,7 +541,9 @@ impl ChangeManagementEngine {
             .ok_or_else(|| Error::Generic("Change request not found".to_string()))?;
 
         if change.status != ChangeStatus::Implementing {
-            return Err(Error::Generic("Change request must be in implementing status".to_string()));
+            return Err(Error::Generic(
+                "Change request must be in implementing status".to_string(),
+            ));
         }
 
         change.status = ChangeStatus::Completed;
@@ -555,34 +573,41 @@ impl ChangeManagementEngine {
     }
 
     /// Get changes by status
-    pub async fn get_changes_by_status(&self, status: ChangeStatus) -> Result<Vec<ChangeRequest>, Error> {
+    pub async fn get_changes_by_status(
+        &self,
+        status: ChangeStatus,
+    ) -> Result<Vec<ChangeRequest>, Error> {
         let changes = self.changes.read().await;
-        Ok(changes
-            .values()
-            .filter(|c| c.status == status)
-            .cloned()
-            .collect())
+        Ok(changes.values().filter(|c| c.status == status).cloned().collect())
     }
 
     /// Get changes by requester
-    pub async fn get_changes_by_requester(&self, requester_id: Uuid) -> Result<Vec<ChangeRequest>, Error> {
+    pub async fn get_changes_by_requester(
+        &self,
+        requester_id: Uuid,
+    ) -> Result<Vec<ChangeRequest>, Error> {
         let changes = self.changes.read().await;
-        Ok(changes
-            .values()
-            .filter(|c| c.requester_id == requester_id)
-            .cloned()
-            .collect())
+        Ok(changes.values().filter(|c| c.requester_id == requester_id).cloned().collect())
     }
 
     /// Cancel a change request
-    pub async fn cancel_change(&self, change_id: &str, user_id: Uuid, reason: String) -> Result<(), Error> {
+    pub async fn cancel_change(
+        &self,
+        change_id: &str,
+        user_id: Uuid,
+        reason: String,
+    ) -> Result<(), Error> {
         let mut changes = self.changes.write().await;
         let change = changes
             .get_mut(change_id)
             .ok_or_else(|| Error::Generic("Change request not found".to_string()))?;
 
         change.status = ChangeStatus::Cancelled;
-        change.add_history("cancelled".to_string(), user_id, format!("Change cancelled: {}", reason));
+        change.add_history(
+            "cancelled".to_string(),
+            user_id,
+            format!("Change cancelled: {}", reason),
+        );
 
         Ok(())
     }

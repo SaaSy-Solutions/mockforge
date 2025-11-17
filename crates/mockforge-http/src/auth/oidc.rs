@@ -3,11 +3,7 @@
 //! This module provides OIDC-compliant endpoints for simulating identity providers,
 //! including discovery documents and JSON Web Key Set (JWKS) endpoints.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-};
+use axum::{extract::State, http::StatusCode, response::Json};
 use chrono::Utc;
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
@@ -182,16 +178,15 @@ impl OidcState {
             if let Some(ref private_key) = key.private_key {
                 let encoding_key = match key.alg.as_str() {
                     "RS256" | "RS384" | "RS512" => {
-                        EncodingKey::from_rsa_pem(private_key.as_bytes())
-                            .map_err(|e| Error::generic(format!("Failed to load RSA key {}: {}", key.kid, e)))?
+                        EncodingKey::from_rsa_pem(private_key.as_bytes()).map_err(|e| {
+                            Error::generic(format!("Failed to load RSA key {}: {}", key.kid, e))
+                        })?
                     }
-                    "ES256" | "ES384" | "ES512" => {
-                        EncodingKey::from_ec_pem(private_key.as_bytes())
-                            .map_err(|e| Error::generic(format!("Failed to load EC key {}: {}", key.kid, e)))?
-                    }
-                    "HS256" | "HS384" | "HS512" => {
-                        EncodingKey::from_secret(private_key.as_bytes())
-                    }
+                    "ES256" | "ES384" | "ES512" => EncodingKey::from_ec_pem(private_key.as_bytes())
+                        .map_err(|e| {
+                            Error::generic(format!("Failed to load EC key {}: {}", key.kid, e))
+                        })?,
+                    "HS256" | "HS384" | "HS512" => EncodingKey::from_secret(private_key.as_bytes()),
                     _ => {
                         return Err(Error::generic(format!("Unsupported algorithm: {}", key.alg)));
                     }
@@ -214,11 +209,10 @@ impl OidcState {
         use std::env;
 
         // Get issuer from environment or use default
-        let issuer = env::var("MOCKFORGE_OIDC_ISSUER")
-            .unwrap_or_else(|_| {
-                env::var("MOCKFORGE_BASE_URL")
-                    .unwrap_or_else(|_| "https://mockforge.example.com".to_string())
-            });
+        let issuer = env::var("MOCKFORGE_OIDC_ISSUER").unwrap_or_else(|_| {
+            env::var("MOCKFORGE_BASE_URL")
+                .unwrap_or_else(|_| "https://mockforge.example.com".to_string())
+        });
 
         // Create default HS256 key for signing (suitable for development/testing)
         let default_secret = env::var("MOCKFORGE_OIDC_SECRET")
@@ -343,9 +337,7 @@ pub async fn get_oidc_discovery() -> Json<OidcDiscoveryDocument> {
 pub async fn get_jwks() -> Json<JwksResponse> {
     // Return empty JWKS by default
     // Use get_jwks_from_state() when OIDC state is available from request context
-    let jwks = JwksResponse {
-        keys: vec![],
-    };
+    let jwks = JwksResponse { keys: vec![] };
 
     Json(jwks)
 }

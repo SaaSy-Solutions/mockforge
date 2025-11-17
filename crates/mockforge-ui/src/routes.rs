@@ -335,11 +335,20 @@ pub fn create_admin_router(
             .route("/__mockforge/workspaces", get(workspaces::list_workspaces))
             .route("/__mockforge/workspaces", post(workspaces::create_workspace))
             .route("/__mockforge/workspaces/{workspace_id}", get(workspaces::get_workspace))
-            .route("/__mockforge/workspaces/{workspace_id}", axum::routing::put(workspaces::update_workspace))
+            .route(
+                "/__mockforge/workspaces/{workspace_id}",
+                axum::routing::put(workspaces::update_workspace),
+            )
             .route("/__mockforge/workspaces/{workspace_id}", delete(workspaces::delete_workspace))
-            .route("/__mockforge/workspaces/{workspace_id}/activate", post(workspaces::set_active_workspace))
+            .route(
+                "/__mockforge/workspaces/{workspace_id}/activate",
+                post(workspaces::set_active_workspace),
+            )
             .route("/api/v2/voice/create-workspace-confirm", post(voice::create_workspace_confirm))
-            .route("/__mockforge/voice/create-workspace-confirm", post(voice::create_workspace_confirm))
+            .route(
+                "/__mockforge/voice/create-workspace-confirm",
+                post(voice::create_workspace_confirm),
+            )
             .with_state(workspace_state);
 
         router = router.merge(workspace_router);

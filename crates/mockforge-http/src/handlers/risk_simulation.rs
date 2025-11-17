@@ -3,11 +3,7 @@
 //! This module provides API endpoints for simulating risk scenarios
 //! and managing risk engine configuration.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-};
+use axum::{extract::State, http::StatusCode, response::Json};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -111,10 +107,7 @@ pub async fn trigger_mfa(
     Json(request): Json<TriggerMfaRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Set risk score high enough to trigger MFA
-    state
-        .risk_engine
-        .set_simulated_risk(request.user_id.clone(), Some(0.8))
-        .await;
+    state.risk_engine.set_simulated_risk(request.user_id.clone(), Some(0.8)).await;
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -130,10 +123,7 @@ pub async fn block_user(
     Json(request): Json<BlockUserRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Set risk score high enough to block
-    state
-        .risk_engine
-        .set_simulated_risk(request.user_id.clone(), Some(0.95))
-        .await;
+    state.risk_engine.set_simulated_risk(request.user_id.clone(), Some(0.95)).await;
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -149,10 +139,7 @@ pub async fn get_risk_assessment(
     axum::extract::Path(user_id): axum::extract::Path<String>,
 ) -> Json<serde_json::Value> {
     let risk_factors = HashMap::new();
-    let assessment = state
-        .risk_engine
-        .assess_risk(&user_id, &risk_factors)
-        .await;
+    let assessment = state.risk_engine.assess_risk(&user_id, &risk_factors).await;
 
     Json(serde_json::json!({
         "user_id": user_id,
@@ -164,7 +151,7 @@ pub async fn get_risk_assessment(
 
 /// Create risk simulation router
 pub fn risk_simulation_router(state: RiskSimulationState) -> axum::Router {
-    use axum::routing::{get, post, delete};
+    use axum::routing::{delete, get, post};
 
     axum::Router::new()
         .route("/risk/simulate", post(set_risk_score))

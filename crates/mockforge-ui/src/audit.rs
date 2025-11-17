@@ -253,8 +253,8 @@ pub fn create_audit_log(
         id: Uuid::new_v4(),
         timestamp: Utc::now(),
         action_type,
-        user_id: None, // Will be set by middleware
-        username: None, // Will be set by middleware
+        user_id: None,    // Will be set by middleware
+        username: None,   // Will be set by middleware
         ip_address: None, // Will be set by middleware
         user_agent: None, // Will be set by middleware
         description,
@@ -270,7 +270,9 @@ static GLOBAL_AUDIT_STORE: std::sync::OnceLock<Arc<AuditLogStore>> = std::sync::
 
 /// Initialize the global audit log store
 pub fn init_global_audit_store(max_logs: usize) -> Arc<AuditLogStore> {
-    GLOBAL_AUDIT_STORE.get_or_init(|| Arc::new(AuditLogStore::new(max_logs))).clone()
+    GLOBAL_AUDIT_STORE
+        .get_or_init(|| Arc::new(AuditLogStore::new(max_logs)))
+        .clone()
 }
 
 /// Get the global audit log store

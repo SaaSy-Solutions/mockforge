@@ -45,10 +45,7 @@ impl PersonaNode {
 
     /// Get all related personas for a relationship type
     pub fn get_related(&self, relationship_type: &str) -> Vec<String> {
-        self.relationships
-            .get(relationship_type)
-            .cloned()
-            .unwrap_or_default()
+        self.relationships.get(relationship_type).cloned().unwrap_or_default()
     }
 
     /// Get all relationship types for this node
@@ -291,10 +288,8 @@ impl PersonaGraph {
         let nodes = self.nodes.read().unwrap();
         let edges = self.edges.read().unwrap();
 
-        let subgraph_nodes: Vec<PersonaNode> = all_ids
-            .iter()
-            .filter_map(|id| nodes.get(id).cloned())
-            .collect();
+        let subgraph_nodes: Vec<PersonaNode> =
+            all_ids.iter().filter_map(|id| nodes.get(id).cloned()).collect();
 
         let subgraph_edges: Vec<Edge> = all_ids
             .iter()
@@ -353,9 +348,7 @@ impl PersonaGraph {
         let mut relationship_type_counts = HashMap::new();
         for edges_list in edges.values() {
             for edge in edges_list {
-                *relationship_type_counts
-                    .entry(edge.relationship_type.clone())
-                    .or_insert(0) += 1;
+                *relationship_type_counts.entry(edge.relationship_type.clone()).or_insert(0) += 1;
             }
         }
 

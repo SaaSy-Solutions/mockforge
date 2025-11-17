@@ -211,13 +211,10 @@ pub async fn list_risks(
             "low" => RiskLevel::Low,
             _ => return Err(StatusCode::BAD_REQUEST),
         };
-        engine
-            .get_risks_by_level(level)
-            .await
-            .map_err(|e| {
-                error!("Failed to get risks by level: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        engine.get_risks_by_level(level).await.map_err(|e| {
+            error!("Failed to get risks by level: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     } else if let Some(category_str) = params.get("category") {
         let category = match category_str.as_str() {
             "technical" => RiskCategory::Technical,
@@ -226,13 +223,10 @@ pub async fn list_risks(
             "business" => RiskCategory::Business,
             _ => return Err(StatusCode::BAD_REQUEST),
         };
-        engine
-            .get_risks_by_category(category)
-            .await
-            .map_err(|e| {
-                error!("Failed to get risks by category: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        engine.get_risks_by_category(category).await.map_err(|e| {
+            error!("Failed to get risks by category: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     } else if let Some(status_str) = params.get("treatment_status") {
         let status = match status_str.as_str() {
             "not_started" => TreatmentStatus::NotStarted,
@@ -241,30 +235,21 @@ pub async fn list_risks(
             "on_hold" => TreatmentStatus::OnHold,
             _ => return Err(StatusCode::BAD_REQUEST),
         };
-        engine
-            .get_risks_by_treatment_status(status)
-            .await
-            .map_err(|e| {
-                error!("Failed to get risks by treatment status: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        engine.get_risks_by_treatment_status(status).await.map_err(|e| {
+            error!("Failed to get risks by treatment status: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     } else {
-        engine
-            .get_all_risks()
-            .await
-            .map_err(|e| {
-                error!("Failed to get all risks: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+        engine.get_all_risks().await.map_err(|e| {
+            error!("Failed to get all risks: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
     };
 
-    let summary = engine
-        .get_risk_summary()
-        .await
-        .map_err(|e| {
-            error!("Failed to get risk summary: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let summary = engine.get_risk_summary().await.map_err(|e| {
+        error!("Failed to get risk summary: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(RiskListResponse { risks, summary }))
 }
@@ -397,13 +382,10 @@ pub async fn update_treatment_status(
     };
 
     let engine = state.engine.write().await;
-    engine
-        .update_treatment_status(&risk_id, status)
-        .await
-        .map_err(|e| {
-            error!("Failed to update treatment status: {}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+    engine.update_treatment_status(&risk_id, status).await.map_err(|e| {
+        error!("Failed to update treatment status: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     info!("Treatment status updated: {}", risk_id);
 
@@ -454,13 +436,10 @@ pub async fn review_risk(
     let reviewed_by = extract_user_id_with_fallback(&claims);
 
     let engine = state.engine.write().await;
-    engine
-        .review_risk(&risk_id, reviewed_by)
-        .await
-        .map_err(|e| {
-            error!("Failed to review risk: {}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+    engine.review_risk(&risk_id, reviewed_by).await.map_err(|e| {
+        error!("Failed to review risk: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     info!("Risk reviewed: {}", risk_id);
 
@@ -477,13 +456,10 @@ pub async fn get_risks_due_for_review(
     State(state): State<RiskAssessmentState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let engine = state.engine.read().await;
-    let risks = engine
-        .get_risks_due_for_review()
-        .await
-        .map_err(|e| {
-            error!("Failed to get risks due for review: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let risks = engine.get_risks_due_for_review().await.map_err(|e| {
+        error!("Failed to get risks due for review: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(serde_json::to_value(&risks).unwrap()))
 }
@@ -495,20 +471,17 @@ pub async fn get_risk_summary(
     State(state): State<RiskAssessmentState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let engine = state.engine.read().await;
-    let summary = engine
-        .get_risk_summary()
-        .await
-        .map_err(|e| {
-            error!("Failed to get risk summary: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let summary = engine.get_risk_summary().await.map_err(|e| {
+        error!("Failed to get risk summary: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(Json(serde_json::to_value(&summary).unwrap()))
 }
 
 /// Create risk assessment router
 pub fn risk_assessment_router(state: RiskAssessmentState) -> axum::Router {
-    use axum::routing::{get, post, put, patch};
+    use axum::routing::{get, patch, post, put};
 
     axum::Router::new()
         .route("/risks", get(list_risks))

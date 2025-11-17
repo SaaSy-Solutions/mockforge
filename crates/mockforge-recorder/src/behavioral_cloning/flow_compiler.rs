@@ -2,15 +2,15 @@
 //!
 //! This module converts recorded flows into behavioral scenarios that can be replayed.
 
+use super::{
+    flow_recorder::Flow,
+    scenario_types::{BehavioralScenario, BehavioralScenarioStep, StateVariable},
+};
 use crate::database::RecorderDatabase;
 use crate::models::{RecordedRequest, RecordedResponse};
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::HashMap;
-use super::{
-    flow_recorder::Flow,
-    scenario_types::{BehavioralScenario, BehavioralScenarioStep, StateVariable},
-};
 
 /// Compiler that converts flows to behavioral scenarios
 pub struct FlowCompiler {
@@ -31,8 +31,8 @@ impl FlowCompiler {
         strict_mode: bool,
     ) -> Result<BehavioralScenario> {
         let scenario_id = uuid::Uuid::new_v4().to_string();
-        let mut scenario = BehavioralScenario::new(&scenario_id, &scenario_name)
-            .with_strict_mode(strict_mode);
+        let mut scenario =
+            BehavioralScenario::new(&scenario_id, &scenario_name).with_strict_mode(strict_mode);
         if let Some(ref desc) = flow.description {
             scenario = scenario.with_description(desc.clone());
         }
@@ -48,28 +48,26 @@ impl FlowCompiler {
                 .get_request(&flow_step.request_id)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to get request: {}", e))?
-                .ok_or_else(|| {
-                    anyhow::anyhow!("Request not found: {}", flow_step.request_id)
-                })?;
+                .ok_or_else(|| anyhow::anyhow!("Request not found: {}", flow_step.request_id))?;
 
             let response = self
                 .db
                 .get_response(&flow_step.request_id)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to get response: {}", e))?
-                .ok_or_else(|| {
-                    anyhow::anyhow!("Response not found: {}", flow_step.request_id)
-                })?;
+                .ok_or_else(|| anyhow::anyhow!("Response not found: {}", flow_step.request_id))?;
 
             // Create scenario step
             let step_id = format!("step_{}", idx);
             let mut scenario_step = BehavioralScenarioStep::new(step_id.clone(), request, response);
 
             // Apply step label (use flow step label or generate heuristically)
-            let label = flow_step
-                .step_label
-                .clone()
-                .or_else(|| Self::heuristic_step_label(&scenario_step.request.method, &scenario_step.request.path));
+            let label = flow_step.step_label.clone().or_else(|| {
+                Self::heuristic_step_label(
+                    &scenario_step.request.method,
+                    &scenario_step.request.path,
+                )
+            });
             if let Some(label) = label {
                 scenario_step = scenario_step.with_label(label);
             }
@@ -80,17 +78,16 @@ impl FlowCompiler {
             }
 
             // Extract state variables from response
-            if let Some(extracted_vars) = Self::extract_state_variables(&scenario_step.response, &step_id) {
+            if let Some(extracted_vars) =
+                Self::extract_state_variables(&scenario_step.response, &step_id)
+            {
                 for (var_name, (json_path, var_value)) in extracted_vars {
                     // Add extraction to step
                     scenario_step = scenario_step.add_extract(var_name.clone(), json_path.clone());
 
                     // Add state variable to scenario
-                    let state_var = StateVariable::new(
-                        var_name.clone(),
-                        json_path.clone(),
-                        step_id.clone(),
-                    );
+                    let state_var =
+                        StateVariable::new(var_name.clone(), json_path.clone(), step_id.clone());
                     state_variables.insert(var_name, state_var);
                 }
             }
@@ -226,4 +223,3 @@ impl FlowCompiler {
         None
     }
 }
-

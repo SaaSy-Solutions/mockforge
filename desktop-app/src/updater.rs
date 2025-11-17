@@ -106,7 +106,10 @@ pub fn start_periodic_update_check(app: AppHandle) {
             match check_for_updates(&app).await {
                 Ok(update_info) => {
                     if update_info.available {
-                        tracing::info!("Update available: {}", update_info.latest_version.as_deref().unwrap_or("unknown"));
+                        tracing::info!(
+                            "Update available: {}",
+                            update_info.latest_version.as_deref().unwrap_or("unknown")
+                        );
 
                         // Emit event to frontend
                         if let Some(window) = app.get_window("main") {

@@ -26,6 +26,11 @@ pub mod sync_traffic;
 pub mod test_generation;
 
 pub use api::create_api_router;
+pub use behavioral_cloning::{
+    BehavioralScenario, BehavioralScenarioReplayEngine, BehavioralScenarioStep, Flow, FlowCompiler,
+    FlowGroupingStrategy, FlowRecorder, FlowRecordingConfig, FlowStep, ReplayResponse,
+    ScenarioInfo, ScenarioStorage, StateVariable,
+};
 pub use database::RecorderDatabase;
 pub use diff::{ComparisonResult, Difference, DifferenceType, ResponseComparator};
 pub use har_export::export_to_har;
@@ -47,19 +52,14 @@ pub use stub_mapping::{
 };
 pub use sync::{GitOpsConfig, SyncConfig, SyncService, SyncStatus, TrafficAwareConfig};
 pub use sync_drift::SyncDriftEvaluator;
-pub use sync_traffic::{EndpointPriority, EndpointUsageStats, TrafficAnalyzer};
 pub use sync_gitops::GitOpsSyncHandler;
 pub use sync_snapshots::{
     EndpointEvolutionSummary, EndpointTimeline, ErrorPattern, SnapshotData, SyncSnapshot,
 };
+pub use sync_traffic::{EndpointPriority, EndpointUsageStats, TrafficAnalyzer};
 pub use test_generation::{
     GeneratedTest, LlmConfig, TestFormat, TestGenerationConfig, TestGenerationResult,
     TestGenerator, TestSuiteMetadata,
-};
-pub use behavioral_cloning::{
-    Flow, FlowCompiler, FlowRecorder, FlowRecordingConfig, FlowStep, FlowGroupingStrategy,
-    BehavioralScenario, BehavioralScenarioReplayEngine, BehavioralScenarioStep, ReplayResponse,
-    ScenarioInfo, ScenarioStorage, StateVariable,
 };
 
 use thiserror::Error;

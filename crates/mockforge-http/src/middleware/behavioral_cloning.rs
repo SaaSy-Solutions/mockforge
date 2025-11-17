@@ -9,9 +9,7 @@ use axum::{
     http::{Request, Response, StatusCode},
     middleware::Next,
 };
-use mockforge_core::behavioral_cloning::{
-    ProbabilisticModel, SequenceLearner,
-};
+use mockforge_core::behavioral_cloning::{ProbabilisticModel, SequenceLearner};
 use mockforge_recorder::database::RecorderDatabase;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -28,7 +26,11 @@ pub struct BehavioralCloningMiddlewareState {
     /// Whether behavioral cloning is enabled
     pub enabled: bool,
     /// Cache for loaded probability models (to avoid repeated DB queries)
-    pub model_cache: Arc<tokio::sync::RwLock<HashMap<String, mockforge_core::behavioral_cloning::EndpointProbabilityModel>>>,
+    pub model_cache: Arc<
+        tokio::sync::RwLock<
+            HashMap<String, mockforge_core::behavioral_cloning::EndpointProbabilityModel>,
+        >,
+    >,
 }
 
 impl BehavioralCloningMiddlewareState {
@@ -52,15 +54,11 @@ impl BehavioralCloningMiddlewareState {
 
     /// Open database connection
     async fn open_database(&self) -> Option<RecorderDatabase> {
-        let db_path = self
-            .database_path
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| {
-                std::env::current_dir()
-                    .unwrap_or_else(|_| PathBuf::from("."))
-                    .join("recordings.db")
-            });
+        let db_path = self.database_path.as_ref().cloned().unwrap_or_else(|| {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("recordings.db")
+        });
 
         RecorderDatabase::new(&db_path).await.ok()
     }
@@ -107,10 +105,7 @@ impl Default for BehavioralCloningMiddlewareState {
 /// - Samples status codes from probability models
 /// - Applies latency based on learned distributions
 /// - Injects error patterns based on learned probabilities
-pub async fn behavioral_cloning_middleware(
-    req: Request<Body>,
-    next: Next,
-) -> Response<Body> {
+pub async fn behavioral_cloning_middleware(req: Request<Body>, next: Next) -> Response<Body> {
     // Extract state from extensions (set by router)
     let state = req.extensions().get::<BehavioralCloningMiddlewareState>().cloned();
 
@@ -128,10 +123,7 @@ pub async fn behavioral_cloning_middleware(
     let model = state.get_probability_model(&path, &method).await;
 
     if let Some(model) = model {
-        debug!(
-            "Applying behavioral cloning to {} {}",
-            method, path
-        );
+        debug!("Applying behavioral cloning to {} {}", method, path);
 
         // Sample status code
         let sampled_status = ProbabilisticModel::sample_status_code(&model);
@@ -167,8 +159,8 @@ pub async fn behavioral_cloning_middleware(
 
         // Modify response status if we sampled a different status code
         if sampled_status != response.status().as_u16() {
-            *response.status_mut() = StatusCode::from_u16(sampled_status)
-                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            *response.status_mut() =
+                StatusCode::from_u16(sampled_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         }
 
         response

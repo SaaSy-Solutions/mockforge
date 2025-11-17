@@ -11,8 +11,8 @@ use axum::{
 };
 use mockforge_core::{
     ai_contract_diff::ContractDiffAnalyzer,
-    contract_drift::{DriftBudgetEngine, DriftResult},
     consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder},
+    contract_drift::{DriftBudgetEngine, DriftResult},
     incidents::{IncidentManager, IncidentSeverity, IncidentType},
     openapi::OpenApiSpec,
 };
@@ -76,10 +76,7 @@ pub async fn drift_tracking_middleware_with_extensions(
     // Record consumer usage if consumer is identified
     if let Some(ref consumer_id) = consumer_id {
         if let Some(body) = &response_body {
-            state
-                .usage_recorder
-                .record_usage(consumer_id, &path, &method, Some(body))
-                .await;
+            state.usage_recorder.record_usage(consumer_id, &path, &method, Some(body)).await;
         }
     }
 
@@ -88,8 +85,12 @@ pub async fn drift_tracking_middleware_with_extensions(
         // Create captured request from the actual request
         // Note: In a full implementation, we'd need to capture the request body
         // For now, we'll analyze based on path and method
-        let captured = mockforge_core::ai_contract_diff::CapturedRequest::new(&method, &path, "drift_tracking")
-            .with_response(response.status().as_u16(), response_body.clone());
+        let captured = mockforge_core::ai_contract_diff::CapturedRequest::new(
+            &method,
+            &path,
+            "drift_tracking",
+        )
+        .with_response(response.status().as_u16(), response_body.clone());
 
         // Analyze request against contract
         match analyzer.analyze(&captured, spec).await {
@@ -184,20 +185,12 @@ pub async fn drift_tracking_middleware_with_extensions(
 fn extract_consumer_id(req: &Request<Body>) -> Option<String> {
     // Try to extract from various sources:
     // 1. X-Consumer-ID header
-    if let Some(consumer_id) = req
-        .headers()
-        .get("x-consumer-id")
-        .and_then(|h| h.to_str().ok())
-    {
+    if let Some(consumer_id) = req.headers().get("x-consumer-id").and_then(|h| h.to_str().ok()) {
         return Some(consumer_id.to_string());
     }
 
     // 2. X-Workspace-ID header (for workspace-based consumers)
-    if let Some(workspace_id) = req
-        .headers()
-        .get("x-workspace-id")
-        .and_then(|h| h.to_str().ok())
-    {
+    if let Some(workspace_id) = req.headers().get("x-workspace-id").and_then(|h| h.to_str().ok()) {
         return Some(format!("workspace:{}", workspace_id));
     }
 

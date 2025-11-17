@@ -80,19 +80,12 @@ pub fn hmac_to_jwk(secret: &str, kid: &str, alg: &str) -> Result<JwkPublicKey, E
 /// Convert JwkKey to JwkPublicKey for JWKS endpoint
 pub fn jwk_key_to_public(jwk_key: &JwkKey) -> Result<JwkPublicKey, Error> {
     match jwk_key.kty.as_str() {
-        "RSA" => {
-            rsa_pem_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg)
-        }
-        "EC" => {
-            ecdsa_pem_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg)
-        }
-        "oct" => {
-            hmac_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg)
-        }
+        "RSA" => rsa_pem_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg),
+        "EC" => ecdsa_pem_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg),
+        "oct" => hmac_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg),
         _ => Err(Error::generic(format!("Unsupported key type: {}", jwk_key.kty))),
     }
 }
-
 
 /// Simplified JWK conversion that works with base64-encoded key material
 /// This is a fallback when full ASN.1 parsing isn't available
@@ -172,9 +165,7 @@ pub fn convert_jwk_key_simple(jwk_key: &JwkKey) -> Result<JwkPublicKey, Error> {
                 y: None, // Would need ASN.1 parsing from PEM
             })
         }
-        "oct" => {
-            hmac_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg)
-        }
+        "oct" => hmac_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg),
         _ => Err(Error::generic(format!("Unsupported key type: {}", jwk_key.kty))),
     }
 }

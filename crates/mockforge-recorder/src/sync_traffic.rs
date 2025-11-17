@@ -4,7 +4,7 @@
 //! based on usage statistics and Reality Continuum blend ratios.
 
 use crate::sync::{DetectedChange, TrafficAwareConfig};
-use chrono::{DateTime, Utc, Duration};
+use chrono::{DateTime, Duration, Utc};
 use std::collections::HashMap;
 
 /// Endpoint usage statistics aggregated across all consumers
@@ -72,14 +72,12 @@ impl TrafficAnalyzer {
                     None
                 };
 
-                let stats = aggregated.entry(key.clone()).or_insert_with(|| {
-                    EndpointUsageStats {
-                        endpoint: request.path.clone(),
-                        method: request.method.clone(),
-                        total_requests: 0,
-                        last_used_at: None,
-                        unique_consumers: 0,
-                    }
+                let stats = aggregated.entry(key.clone()).or_insert_with(|| EndpointUsageStats {
+                    endpoint: request.path.clone(),
+                    method: request.method.clone(),
+                    total_requests: 0,
+                    last_used_at: None,
+                    unique_consumers: 0,
                 });
 
                 stats.total_requests += 1;
@@ -151,7 +149,8 @@ impl TrafficAnalyzer {
         }
 
         // Sort by priority score (descending)
-        priorities.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        priorities
+            .sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
         priorities
     }
@@ -170,22 +169,22 @@ impl TrafficAnalyzer {
         let mut prioritized_endpoints = std::collections::HashSet::new();
 
         // Apply threshold filters
-        let filtered_priorities: Vec<&EndpointPriority> = if let Some(min_requests) = self.config.min_requests_threshold {
-            priorities
-                .iter()
-                .filter(|p| p.request_count >= min_requests as u64)
-                .collect()
-        } else {
-            priorities.iter().collect()
-        };
+        let filtered_priorities: Vec<&EndpointPriority> =
+            if let Some(min_requests) = self.config.min_requests_threshold {
+                priorities.iter().filter(|p| p.request_count >= min_requests as u64).collect()
+            } else {
+                priorities.iter().collect()
+            };
 
         // Apply top percentage filter
-        let selected_priorities: Vec<&EndpointPriority> = if let Some(top_pct) = self.config.top_percentage {
-            let count = ((filtered_priorities.len() as f64 * top_pct / 100.0).ceil() as usize).max(1);
-            filtered_priorities.into_iter().take(count).collect()
-        } else {
-            filtered_priorities
-        };
+        let selected_priorities: Vec<&EndpointPriority> =
+            if let Some(top_pct) = self.config.top_percentage {
+                let count =
+                    ((filtered_priorities.len() as f64 * top_pct / 100.0).ceil() as usize).max(1);
+                filtered_priorities.into_iter().take(count).collect()
+            } else {
+                filtered_priorities
+            };
 
         // Build set of endpoints to sync
         for priority in selected_priorities {
@@ -207,7 +206,9 @@ impl TrafficAnalyzer {
     pub async fn get_reality_ratios(
         &self,
         endpoints: &[(&str, &str)],
-        continuum_engine: Option<&mockforge_core::reality_continuum::engine::RealityContinuumEngine>,
+        continuum_engine: Option<
+            &mockforge_core::reality_continuum::engine::RealityContinuumEngine,
+        >,
     ) -> HashMap<String, f64> {
         let mut ratios = HashMap::new();
 

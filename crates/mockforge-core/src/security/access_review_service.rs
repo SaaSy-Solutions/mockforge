@@ -58,10 +58,7 @@ pub struct AccessReviewService {
 
 impl AccessReviewService {
     /// Create a new access review service
-    pub fn new(
-        engine: AccessReviewEngine,
-        user_provider: Box<dyn UserDataProvider>,
-    ) -> Self {
+    pub fn new(engine: AccessReviewEngine, user_provider: Box<dyn UserDataProvider>) -> Self {
         Self {
             engine,
             user_provider,
@@ -97,9 +94,7 @@ impl AccessReviewService {
                 permissions: vec![], // Would need to fetch from permissions system
                 last_login: p.last_privileged_action,
                 access_granted: Utc::now() - Duration::days(90), // Placeholder
-                days_inactive: p.last_privileged_action.map(|d| {
-                    (Utc::now() - d).num_days() as u64
-                }),
+                days_inactive: p.last_privileged_action.map(|d| (Utc::now() - d).num_days() as u64),
                 is_active: true,
             })
             .collect();
@@ -117,9 +112,7 @@ impl AccessReviewService {
 
         // For now, token reviews are not fully implemented in the engine
         // This is a placeholder for future implementation
-        Err(Error::Generic(
-            "Token review not yet implemented in review engine".to_string(),
-        ))
+        Err(Error::Generic("Token review not yet implemented in review engine".to_string()))
     }
 
     /// Approve user access in a review
@@ -151,15 +144,16 @@ impl AccessReviewService {
             .map_err(|e| Error::Generic(e.to_string()))?;
 
         // Actually revoke the user's access
-        self.user_provider
-            .revoke_user_access(user_id, reason)
-            .await?;
+        self.user_provider.revoke_user_access(user_id, reason).await?;
 
         Ok(())
     }
 
     /// Get review by ID
-    pub fn get_review(&self, review_id: &str) -> Option<&crate::security::access_review::AccessReview> {
+    pub fn get_review(
+        &self,
+        review_id: &str,
+    ) -> Option<&crate::security::access_review::AccessReview> {
         self.engine.get_review(review_id)
     }
 
@@ -177,10 +171,8 @@ impl AccessReviewService {
 
         // Actually revoke access for auto-revoked users
         for (review_id, user_id) in &revoked {
-            if let Some(review_item) = self
-                .engine
-                .get_review_items(review_id)
-                .and_then(|items| items.get(user_id))
+            if let Some(review_item) =
+                self.engine.get_review_items(review_id).and_then(|items| items.get(user_id))
             {
                 let reason = review_item
                     .rejection_reason
@@ -208,10 +200,7 @@ impl AccessReviewService {
 }
 
 /// Check if a review is due based on frequency and last review date
-pub fn is_review_due(
-    frequency: ReviewFrequency,
-    last_review_date: Option<DateTime<Utc>>,
-) -> bool {
+pub fn is_review_due(frequency: ReviewFrequency, last_review_date: Option<DateTime<Utc>>) -> bool {
     let now = Utc::now();
 
     if let Some(last_review) = last_review_date {

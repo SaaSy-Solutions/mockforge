@@ -229,29 +229,31 @@ impl DriftResult {
         let non_breaking_changes = non_breaking_mismatches.len() as u32;
         let total_changes = breaking_changes + potentially_breaking_changes + non_breaking_changes;
 
-                // Check if budget is exceeded
-                // If percentage-based budget is set, use that; otherwise use absolute counts
-                let budget_exceeded = if let Some(max_churn_percent) = budget.max_field_churn_percent {
-                    // Calculate field churn percentage using baseline from field tracker
-                    if let Some(baseline) = baseline_field_count {
-                        if baseline > 0.0 {
-                            let churn_percent = (total_changes as f64 / baseline) * 100.0;
-                            churn_percent > max_churn_percent
-                                || breaking_changes > budget.max_breaking_changes
-                        } else {
-                            // If baseline is 0, any changes represent 100% churn
-                            total_changes > 0 && (100.0 > max_churn_percent || breaking_changes > budget.max_breaking_changes)
-                        }
-                    } else {
-                        // No baseline available - fall back to absolute counts
-                        breaking_changes > budget.max_breaking_changes
-                            || non_breaking_changes > budget.max_non_breaking_changes
-                    }
+        // Check if budget is exceeded
+        // If percentage-based budget is set, use that; otherwise use absolute counts
+        let budget_exceeded = if let Some(max_churn_percent) = budget.max_field_churn_percent {
+            // Calculate field churn percentage using baseline from field tracker
+            if let Some(baseline) = baseline_field_count {
+                if baseline > 0.0 {
+                    let churn_percent = (total_changes as f64 / baseline) * 100.0;
+                    churn_percent > max_churn_percent
+                        || breaking_changes > budget.max_breaking_changes
                 } else {
-                    // Use absolute counts
-                    breaking_changes > budget.max_breaking_changes
-                        || non_breaking_changes > budget.max_non_breaking_changes
-                };
+                    // If baseline is 0, any changes represent 100% churn
+                    total_changes > 0
+                        && (100.0 > max_churn_percent
+                            || breaking_changes > budget.max_breaking_changes)
+                }
+            } else {
+                // No baseline available - fall back to absolute counts
+                breaking_changes > budget.max_breaking_changes
+                    || non_breaking_changes > budget.max_non_breaking_changes
+            }
+        } else {
+            // Use absolute counts
+            breaking_changes > budget.max_breaking_changes
+                || non_breaking_changes > budget.max_non_breaking_changes
+        };
 
         // Determine if incident should be created
         let should_create_incident = budget_exceeded || breaking_changes > 0;
@@ -288,16 +290,23 @@ impl BreakingChangeRule {
         }
 
         match (&self.rule_type, &self.config) {
-            (BreakingChangeRuleType::Severity, BreakingChangeRuleConfig::Severity { severity, include_higher }) => {
+            (
+                BreakingChangeRuleType::Severity,
+                BreakingChangeRuleConfig::Severity {
+                    severity,
+                    include_higher,
+                },
+            ) => {
                 if *include_higher {
                     mismatch.severity >= *severity
                 } else {
                     mismatch.severity == *severity
                 }
             }
-            (BreakingChangeRuleType::MismatchType, BreakingChangeRuleConfig::MismatchType { mismatch_type }) => {
-                mismatch.mismatch_type == *mismatch_type
-            }
+            (
+                BreakingChangeRuleType::MismatchType,
+                BreakingChangeRuleConfig::MismatchType { mismatch_type },
+            ) => mismatch.mismatch_type == *mismatch_type,
             (BreakingChangeRuleType::Custom, BreakingChangeRuleConfig::Custom { .. }) => {
                 // Custom rules would need custom evaluation logic
                 // For now, return false

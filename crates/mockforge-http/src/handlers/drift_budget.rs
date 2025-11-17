@@ -14,10 +14,10 @@ use std::sync::Arc;
 use mockforge_core::contract_drift::{
     DriftBudget, DriftBudgetConfig, DriftBudgetEngine, DriftResult,
 };
+use mockforge_core::incidents::types::DriftIncident;
 use mockforge_core::incidents::{
     IncidentManager, IncidentQuery, IncidentSeverity, IncidentStatus, IncidentType,
 };
-use mockforge_core::incidents::types::DriftIncident;
 
 /// State for drift budget handlers
 #[derive(Clone)]
@@ -201,11 +201,10 @@ pub async fn get_budget_for_endpoint(
     State(state): State<DriftBudgetState>,
     Query(params): Query<GetBudgetQuery>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let tags = params.tags.as_ref().map(|t| {
-        t.split(',')
-            .map(|s| s.trim().to_string())
-            .collect::<Vec<_>>()
-    });
+    let tags = params
+        .tags
+        .as_ref()
+        .map(|t| t.split(',').map(|s| s.trim().to_string()).collect::<Vec<_>>());
 
     let budget = state.engine.get_budget_for_endpoint(
         &params.endpoint,
@@ -262,7 +261,9 @@ pub async fn create_workspace_budget(
     };
 
     let mut config = state.engine.config().clone();
-    config.per_workspace_budgets.insert(request.workspace_id.clone(), budget.clone());
+    config
+        .per_workspace_budgets
+        .insert(request.workspace_id.clone(), budget.clone());
 
     // Note: In a full implementation, this would persist to database
     // state.engine.update_config(config);
@@ -316,23 +317,18 @@ pub async fn generate_gitops_pr(
     State(state): State<DriftBudgetState>,
     Json(request): Json<GeneratePRRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let handler = state
-        .gitops_handler
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let handler = state.gitops_handler.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
     // Get incidents to include in PR
     let mut query = IncidentQuery::default();
-    
+
     if let Some(incident_ids) = &request.incident_ids {
         // Filter by specific incident IDs
         // Note: IncidentQuery doesn't support ID filtering yet, so we'll get all and filter
         let all_incidents = state.incident_manager.query_incidents(query).await;
-        let incidents: Vec<_> = all_incidents
-            .into_iter()
-            .filter(|inc| incident_ids.contains(&inc.id))
-            .collect();
-        
+        let incidents: Vec<_> =
+            all_incidents.into_iter().filter(|inc| incident_ids.contains(&inc.id)).collect();
+
         match handler.generate_pr_from_incidents(&incidents).await {
             Ok(Some(pr_result)) => Ok(Json(serde_json::json!({
                 "success": true,
@@ -356,7 +352,7 @@ pub async fn generate_gitops_pr(
         }
 
         let incidents = state.incident_manager.query_incidents(query).await;
-        
+
         match handler.generate_pr_from_incidents(&incidents).await {
             Ok(Some(pr_result)) => Ok(Json(serde_json::json!({
                 "success": true,
@@ -395,7 +391,7 @@ pub async fn get_drift_metrics(
     query.endpoint = params.endpoint;
     query.method = params.method;
     query.workspace_id = params.workspace_id;
-    
+
     // Filter by date range if days specified
     if let Some(days) = params.days {
         let start_date = chrono::Utc::now()
@@ -415,9 +411,8 @@ pub async fn get_drift_metrics(
         .count();
     let threshold_exceeded = total_incidents - breaking_changes;
 
-    let by_severity: std::collections::HashMap<String, usize> = incidents
-        .iter()
-        .fold(std::collections::HashMap::new(), |mut acc, inc| {
+    let by_severity: std::collections::HashMap<String, usize> =
+        incidents.iter().fold(std::collections::HashMap::new(), |mut acc, inc| {
             let key = format!("{:?}", inc.severity).to_lowercase();
             *acc.entry(key).or_insert(0) += 1;
             acc
@@ -522,22 +517,31 @@ pub async fn update_incident(
     Path(id): Path<String>,
     Json(request): Json<UpdateIncidentRequest>,
 ) -> Result<Json<DriftIncident>, StatusCode> {
-    let mut incident = state
-        .incident_manager
-        .get_incident(&id)
-        .await
-        .ok_or(StatusCode::NOT_FOUND)?;
+    let mut incident =
+        state.incident_manager.get_incident(&id).await.ok_or(StatusCode::NOT_FOUND)?;
 
     if let Some(status_str) = request.status {
         match status_str.as_str() {
             "acknowledged" => {
-                incident = state.incident_manager.acknowledge_incident(&id).await.ok_or(StatusCode::NOT_FOUND)?;
+                incident = state
+                    .incident_manager
+                    .acknowledge_incident(&id)
+                    .await
+                    .ok_or(StatusCode::NOT_FOUND)?;
             }
             "resolved" => {
-                incident = state.incident_manager.resolve_incident(&id).await.ok_or(StatusCode::NOT_FOUND)?;
+                incident = state
+                    .incident_manager
+                    .resolve_incident(&id)
+                    .await
+                    .ok_or(StatusCode::NOT_FOUND)?;
             }
             "closed" => {
-                incident = state.incident_manager.close_incident(&id).await.ok_or(StatusCode::NOT_FOUND)?;
+                incident = state
+                    .incident_manager
+                    .close_incident(&id)
+                    .await
+                    .ok_or(StatusCode::NOT_FOUND)?;
             }
             _ => {}
         }

@@ -7,13 +7,13 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
+use mockforge_chaos::ChaosScenario;
 use mockforge_core::consistency::{
     enrich_order_response, enrich_response_via_graph, enrich_user_response,
     get_user_orders_via_graph, ConsistencyEngine, EntityState, UnifiedState,
 };
 use mockforge_core::reality::RealityLevel;
-use mockforge_chaos::ChaosScenario;
-use mockforge_data::{PersonaProfile, PersonaLifecycle, LifecycleState};
+use mockforge_data::{LifecycleState, PersonaLifecycle, PersonaProfile};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -110,14 +110,10 @@ pub async fn get_state(
     State(state): State<ConsistencyState>,
     Query(params): Query<WorkspaceQuery>,
 ) -> Result<Json<UnifiedState>, StatusCode> {
-    let unified_state = state
-        .engine
-        .get_state(&params.workspace)
-        .await
-        .ok_or_else(|| {
-            error!("State not found for workspace: {}", params.workspace);
-            StatusCode::NOT_FOUND
-        })?;
+    let unified_state = state.engine.get_state(&params.workspace).await.ok_or_else(|| {
+        error!("State not found for workspace: {}", params.workspace);
+        StatusCode::NOT_FOUND
+    })?;
 
     Ok(Json(unified_state))
 }
@@ -183,14 +179,10 @@ pub async fn set_reality_level(
         StatusCode::BAD_REQUEST
     })?;
 
-    state
-        .engine
-        .set_reality_level(&params.workspace, level)
-        .await
-        .map_err(|e| {
-            error!("Failed to set reality level: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    state.engine.set_reality_level(&params.workspace, level).await.map_err(|e| {
+        error!("Failed to set reality level: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     info!("Set reality level for workspace: {}", params.workspace);
     Ok(Json(serde_json::json!({
@@ -237,11 +229,7 @@ pub async fn register_entity(
     Query(params): Query<WorkspaceQuery>,
     Json(request): Json<RegisterEntityRequest>,
 ) -> Result<Json<Value>, StatusCode> {
-    let mut entity = EntityState::new(
-        request.entity_type,
-        request.entity_id,
-        request.data,
-    );
+    let mut entity = EntityState::new(request.entity_type, request.entity_id, request.data);
     if let Some(persona_id) = request.persona_id {
         entity.persona_id = Some(persona_id);
     }
@@ -296,14 +284,10 @@ pub async fn list_entities(
     State(state): State<ConsistencyState>,
     Query(params): Query<WorkspaceQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    let unified_state = state
-        .engine
-        .get_state(&params.workspace)
-        .await
-        .ok_or_else(|| {
-            error!("State not found for workspace: {}", params.workspace);
-            StatusCode::NOT_FOUND
-        })?;
+    let unified_state = state.engine.get_state(&params.workspace).await.ok_or_else(|| {
+        error!("State not found for workspace: {}", params.workspace);
+        StatusCode::NOT_FOUND
+    })?;
 
     let entities: Vec<&EntityState> = unified_state.entity_state.values().collect();
     Ok(Json(serde_json::json!({
@@ -386,14 +370,10 @@ pub async fn set_persona_lifecycle(
     };
 
     // Get unified state to access active persona
-    let unified_state = state
-        .engine
-        .get_state(&params.workspace)
-        .await
-        .ok_or_else(|| {
-            error!("State not found for workspace: {}", params.workspace);
-            StatusCode::NOT_FOUND
-        })?;
+    let unified_state = state.engine.get_state(&params.workspace).await.ok_or_else(|| {
+        error!("State not found for workspace: {}", params.workspace);
+        StatusCode::NOT_FOUND
+    })?;
 
     // Update persona lifecycle if active persona matches
     if let Some(ref persona) = unified_state.active_persona {
@@ -401,7 +381,7 @@ pub async fn set_persona_lifecycle(
             let mut persona_mut = persona.clone();
             let lifecycle = PersonaLifecycle::new(request.persona_id.clone(), lifecycle_state);
             persona_mut.set_lifecycle(lifecycle);
-            
+
             // Apply lifecycle effects to persona traits
             if let Some(ref lifecycle) = persona_mut.lifecycle {
                 let effects = lifecycle.apply_lifecycle_effects();
@@ -420,9 +400,11 @@ pub async fn set_persona_lifecycle(
                     StatusCode::INTERNAL_SERVER_ERROR
                 })?;
 
-            info!("Set lifecycle state {} for persona {} in workspace: {}", 
-                  request.initial_state, request.persona_id, params.workspace);
-            
+            info!(
+                "Set lifecycle state {} for persona {} in workspace: {}",
+                request.initial_state, request.persona_id, params.workspace
+            );
+
             return Ok(Json(serde_json::json!({
                 "success": true,
                 "workspace": params.workspace,
@@ -432,8 +414,10 @@ pub async fn set_persona_lifecycle(
         }
     }
 
-    error!("Persona {} not found or not active in workspace: {}", 
-           request.persona_id, params.workspace);
+    error!(
+        "Persona {} not found or not active in workspace: {}",
+        request.persona_id, params.workspace
+    );
     Err(StatusCode::NOT_FOUND)
 }
 

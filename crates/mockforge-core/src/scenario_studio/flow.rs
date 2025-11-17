@@ -109,10 +109,7 @@ impl FlowExecutor {
                 executed_step_ids.insert(step_id.clone());
 
                 // Find next steps based on connections
-                let connections = flow
-                    .connections
-                    .iter()
-                    .filter(|c| c.from_step_id == step_id);
+                let connections = flow.connections.iter().filter(|c| c.from_step_id == step_id);
 
                 for connection in connections {
                     // Check connection condition if present
@@ -140,10 +137,7 @@ impl FlowExecutor {
         let error = if success {
             None
         } else {
-            step_results
-                .iter()
-                .find_map(|r| r.error.as_ref())
-                .map(|e| e.clone())
+            step_results.iter().find_map(|r| r.error.as_ref()).map(|e| e.clone())
         };
 
         Ok(FlowExecutionResult {
@@ -158,11 +152,8 @@ impl FlowExecutor {
 
     /// Find the starting steps in a flow (steps with no incoming connections)
     fn find_start_steps(&self, flow: &FlowDefinition) -> Vec<String> {
-        let mut has_incoming: std::collections::HashSet<String> = flow
-            .connections
-            .iter()
-            .map(|c| c.to_step_id.clone())
-            .collect();
+        let mut has_incoming: std::collections::HashSet<String> =
+            flow.connections.iter().map(|c| c.to_step_id.clone()).collect();
 
         flow.steps
             .iter()
@@ -268,4 +259,3 @@ impl Default for FlowExecutor {
         Self::new()
     }
 }
-

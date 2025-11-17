@@ -24,6 +24,70 @@
 
 - Nothing yet.
 
+## [0.3.0] - 2025-11-17
+
+### Added
+
+- **[DevX] Pillars & Tagged Changelog**: Complete pillar system implementation with documentation and tooling
+  - Defined five foundational pillars: [Reality], [Contracts], [DevX], [Cloud], [AI]
+  - Added comprehensive PILLARS.md documentation with feature mappings
+  - Implemented CI validation for pillar tags in changelog entries
+  - Added pillar tagging instructions to release tooling
+  - Updated README and getting-started guide with pillars section
+
+  **Why it matters**: Clear product story spine that makes it obvious what each release invests in. Pillar tags help users understand product direction and find features relevant to their needs.
+
+- **[Reality] Smart Personas & Reality Continuum v2**: Complete persona graph and lifecycle system
+  - Persona graphs with relationship linking across entities
+  - Lifecycle states (NewSignup, Active, PowerUser, ChurnRisk, Churned, etc.)
+  - Reality Continuum integration with field-level and entity-level mixing
+  - Fidelity score calculation and API endpoint
+  - Comprehensive PERSONAS.md documentation
+
+  **Why it matters**: Upgrade from "random-but-consistent fake data" to "coherent world simulation." Personas maintain relationships across endpoints, and fidelity scores quantify how real your mock environment is.
+
+- **[Contracts] Drift Budget & GitOps for API Sync**: Complete drift management system
+  - Hierarchical drift budget configuration (global, workspace, service, endpoint)
+  - Breaking change detection and classification
+  - Incident management with webhook integration
+  - GitOps PR generation for contract updates
+  - Comprehensive DRIFT_BUDGETS.md documentation
+
+  **Why it matters**: Make MockForge the "drift nerve center" for contracts. Define acceptable drift, get alerts when budgets are exceeded, and automatically generate PRs to update contracts and fixtures.
+
+- **[Reality] Behavioral Cloning v1**: Multi-step flow recording and replay
+  - Flow recording with request/response capture and timing
+  - Flow viewer with timeline visualization
+  - Scenario replay engine with strict/flex modes
+  - Scenario storage and export/import (YAML/JSON)
+  - Comprehensive BEHAVIORAL_CLONING.md documentation
+
+  **Why it matters**: Move from endpoint-level mocks to journey-level simulations. Record realistic flows from real systems and replay them as named scenarios for comprehensive testing.
+
+- **[AI][DevX] LLM/Voice Interface for Workspace Creation**: Natural language to complete workspace
+  - Natural language workspace creation from descriptions
+  - Automatic persona and relationship generation
+  - Behavioral scenario generation (happy path, failure, slow path)
+  - Reality continuum and drift budget configuration from NL
+  - Voice and text input support
+  - Comprehensive LLM Studio documentation
+
+  **Why it matters**: The golden path: "Describe the system in natural language → MockForge builds a realistic mock backend with personas, behaviors, and reality level config." No manual configuration required.
+
+### Changed
+
+- Changelog entries now require pillar tags for all major features
+- Release process includes automated pillar tag validation
+- Documentation structure updated to highlight pillars
+
+### Fixed
+
+- Nothing yet.
+
+### Security
+
+- Nothing yet.
+
 ## [0.2.9] - 2025-11-14
 
 ### Added

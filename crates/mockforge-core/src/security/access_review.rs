@@ -419,14 +419,13 @@ impl AccessReviewEngine {
         users: Vec<UserAccessInfo>,
     ) -> Result<AccessReview, crate::Error> {
         if !self.config.enabled || !self.config.user_review.enabled {
-            return Err(crate::Error::Generic(
-                "User access review is not enabled".to_string(),
-            ));
+            return Err(crate::Error::Generic("User access review is not enabled".to_string()));
         }
 
         let now = Utc::now();
         let review_id = self.generate_review_id(ReviewType::UserAccess, now);
-        let due_date = now + chrono::Duration::days(self.config.user_review.approval_timeout_days as i64);
+        let due_date =
+            now + chrono::Duration::days(self.config.user_review.approval_timeout_days as i64);
         let next_review = self.config.user_review.frequency.next_review_date(now);
 
         // Analyze users and generate findings
@@ -452,7 +451,9 @@ impl AccessReviewEngine {
             }
 
             // Check for no recent access
-            if user.last_login.is_none() || user.last_login.unwrap() < now - chrono::Duration::days(90) {
+            if user.last_login.is_none()
+                || user.last_login.unwrap() < now - chrono::Duration::days(90)
+            {
                 findings.no_recent_access += 1;
             }
 
@@ -519,14 +520,13 @@ impl AccessReviewEngine {
             .get_mut(review_id)
             .ok_or_else(|| crate::Error::Generic(format!("Review {} not found", review_id)))?;
 
-        let items = self
-            .user_review_items
-            .get_mut(review_id)
-            .ok_or_else(|| crate::Error::Generic(format!("Review items for {} not found", review_id)))?;
+        let items = self.user_review_items.get_mut(review_id).ok_or_else(|| {
+            crate::Error::Generic(format!("Review items for {} not found", review_id))
+        })?;
 
-        let item = items
-            .get_mut(&user_id)
-            .ok_or_else(|| crate::Error::Generic(format!("User {} not found in review", user_id)))?;
+        let item = items.get_mut(&user_id).ok_or_else(|| {
+            crate::Error::Generic(format!("User {} not found in review", user_id))
+        })?;
 
         item.status = "approved".to_string();
         item.approved_by = Some(approved_by);
@@ -558,14 +558,13 @@ impl AccessReviewEngine {
             .get_mut(review_id)
             .ok_or_else(|| crate::Error::Generic(format!("Review {} not found", review_id)))?;
 
-        let items = self
-            .user_review_items
-            .get_mut(review_id)
-            .ok_or_else(|| crate::Error::Generic(format!("Review items for {} not found", review_id)))?;
+        let items = self.user_review_items.get_mut(review_id).ok_or_else(|| {
+            crate::Error::Generic(format!("Review items for {} not found", review_id))
+        })?;
 
-        let item = items
-            .get_mut(&user_id)
-            .ok_or_else(|| crate::Error::Generic(format!("User {} not found in review", user_id)))?;
+        let item = items.get_mut(&user_id).ok_or_else(|| {
+            crate::Error::Generic(format!("User {} not found in review", user_id))
+        })?;
 
         item.status = "revoked".to_string();
         item.rejection_reason = Some(reason.clone());
@@ -734,14 +733,14 @@ mod tests {
         };
 
         // Start review
-        let review = futures::executor::block_on(engine.start_user_access_review(vec![user.clone()])).unwrap();
+        let review =
+            futures::executor::block_on(engine.start_user_access_review(vec![user.clone()]))
+                .unwrap();
         let review_id = review.review_id.clone();
 
         // Approve access
         let approver_id = Uuid::new_v4();
-        engine
-            .approve_user_access(&review_id, user.user_id, approver_id, None)
-            .unwrap();
+        engine.approve_user_access(&review_id, user.user_id, approver_id, None).unwrap();
 
         let review = engine.get_review(&review_id).unwrap();
         assert_eq!(review.items_reviewed, 1);
@@ -769,13 +768,20 @@ mod tests {
         };
 
         // Start review
-        let review = futures::executor::block_on(engine.start_user_access_review(vec![user.clone()])).unwrap();
+        let review =
+            futures::executor::block_on(engine.start_user_access_review(vec![user.clone()]))
+                .unwrap();
         let review_id = review.review_id.clone();
 
         // Revoke access
         let revoker_id = Uuid::new_v4();
         engine
-            .revoke_user_access(&review_id, user.user_id, revoker_id, "No longer needed".to_string())
+            .revoke_user_access(
+                &review_id,
+                user.user_id,
+                revoker_id,
+                "No longer needed".to_string(),
+            )
             .unwrap();
 
         let review = engine.get_review(&review_id).unwrap();

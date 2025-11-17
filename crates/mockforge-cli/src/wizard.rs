@@ -174,10 +174,7 @@ pub async fn run_wizard() -> Result<WizardConfig, Box<dyn std::error::Error + Se
 
     // Step 4: Protocol selection (if custom template)
     let protocols = if template.is_none() {
-        let protocol_names: Vec<&str> = Protocol::all()
-            .iter()
-            .map(|p| p.name())
-            .collect();
+        let protocol_names: Vec<&str> = Protocol::all().iter().map(|p| p.name()).collect();
 
         let selections = MultiSelect::with_theme(&theme)
             .with_prompt("Select protocols to enable")
@@ -185,10 +182,7 @@ pub async fn run_wizard() -> Result<WizardConfig, Box<dyn std::error::Error + Se
             .defaults(&[true, false, false, false, false, false, false]) // HTTP selected by default
             .interact()?;
 
-        selections
-            .into_iter()
-            .map(|i| Protocol::all()[i])
-            .collect()
+        selections.into_iter().map(|i| Protocol::all()[i]).collect()
     } else {
         // Auto-select protocols based on template
         match template.unwrap() {
@@ -228,7 +222,9 @@ pub async fn run_wizard() -> Result<WizardConfig, Box<dyn std::error::Error + Se
 }
 
 /// Generate project files based on wizard configuration
-pub async fn generate_project(config: &WizardConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn generate_project(
+    config: &WizardConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Create project directory
     if !config.project_dir.exists() {
         fs::create_dir_all(&config.project_dir)?;

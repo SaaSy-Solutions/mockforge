@@ -24,6 +24,18 @@
 
 - Nothing yet.
 
+## [0.3.0] - 2025-11-17
+
+### Added
+
+- **[DevX] Pillars & Tagged Changelog**: Complete pillar system implementation with documentation and tooling
+- **[Reality] Smart Personas & Reality Continuum v2**: Complete persona graph and lifecycle system
+- **[Contracts] Drift Budget & GitOps for API Sync**: Complete drift management system
+- **[Reality] Behavioral Cloning v1**: Multi-step flow recording and replay
+- **[AI][DevX] LLM/Voice Interface for Workspace Creation**: Natural language to complete workspace
+
+See [CHANGELOG.md](../../../CHANGELOG.md) for detailed release notes.
+
 ## [0.2.0] - 2025-10-29
 
 ### Added

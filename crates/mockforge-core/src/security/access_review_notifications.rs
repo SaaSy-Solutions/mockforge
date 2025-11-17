@@ -102,10 +102,7 @@ impl AccessReviewNotificationService {
             Review ID: {}\n\
             Due Date: {}\n\n\
             Please review and approve or revoke access for these users.",
-            pending_count,
-            review.review_id,
-            review.review_id,
-            review.due_date
+            pending_count, review.review_id, review.review_id, review.due_date
         );
 
         self.send_notification(&subject, &message, &self.config.recipients).await
@@ -127,9 +124,7 @@ impl AccessReviewNotificationService {
             "User {} has been automatically revoked from review {}.\n\n\
             Reason: {}\n\n\
             This action was taken because the approval deadline was exceeded.",
-            user_id,
-            review_id,
-            reason
+            user_id, review_id, reason
         );
 
         self.send_notification(&subject, &message, &self.config.recipients).await

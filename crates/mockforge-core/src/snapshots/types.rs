@@ -37,11 +37,7 @@ pub struct SnapshotManifest {
 
 impl SnapshotManifest {
     /// Create a new snapshot manifest
-    pub fn new(
-        name: String,
-        workspace_id: String,
-        components: SnapshotComponents,
-    ) -> Self {
+    pub fn new(name: String, workspace_id: String, components: SnapshotComponents) -> Self {
         Self {
             version: "1.0".to_string(),
             name,

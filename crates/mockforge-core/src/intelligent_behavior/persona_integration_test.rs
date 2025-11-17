@@ -188,8 +188,10 @@ components:
         println!("Response: {}", serde_json::to_string_pretty(&response).unwrap());
 
         // The response should have pagination metadata
-        assert!(response.get("total").is_some() || items_array.len() > 0,
-                "Response should have total or items");
+        assert!(
+            response.get("total").is_some() || items_array.len() > 0,
+            "Response should have total or items"
+        );
     }
 
     #[test]
@@ -242,7 +244,8 @@ components:
         let operation = match path_item {
             Some(ReferenceOr::Item(item)) => item.get.as_ref(),
             _ => None,
-        }.unwrap();
+        }
+        .unwrap();
 
         // Generate response - should use persona trait for count
         let result = ResponseGenerator::generate_response_with_expansion_and_mode_and_persona(
@@ -260,7 +263,10 @@ components:
         let response: Value = result.unwrap();
 
         // Log the response for debugging
-        println!("Response without explicit total: {}", serde_json::to_string_pretty(&response).unwrap());
+        println!(
+            "Response without explicit total: {}",
+            serde_json::to_string_pretty(&response).unwrap()
+        );
 
         // Verify response structure
         if let Some(items) = response.get("items").and_then(|v| v.as_array()) {

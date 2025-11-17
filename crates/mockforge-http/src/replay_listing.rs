@@ -35,12 +35,12 @@ pub fn list_all(fixtures_root: &str) -> anyhow::Result<Vec<ReplayItem>> {
             let p = entry?.path().to_path_buf();
             if p.extension().map(|e| e == "json").unwrap_or(false) {
                 // Get relative path from fixtures_root for consistent path handling
-                let relative_path = p.strip_prefix(fixtures_path)
-                    .unwrap_or(&p)
-                    .to_path_buf();
+                let relative_path = p.strip_prefix(fixtures_path).unwrap_or(&p).to_path_buf();
 
-                let comps: Vec<_> =
-                    relative_path.components().map(|c| c.as_os_str().to_string_lossy().to_string()).collect();
+                let comps: Vec<_> = relative_path
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().to_string())
+                    .collect();
                 let len = comps.len();
                 let (op_id, ts) = if len >= 2 {
                     (comps[len - 2].clone(), comps[len - 1].replace(".json", ""))

@@ -6,8 +6,8 @@
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use mockforge_core::custom_fixture::CustomFixtureLoader;
-use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 use mockforge_core::openapi::OpenApiSpec;
+use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 use serde_json::json;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -113,8 +113,7 @@ async fn test_custom_fixture_integration_exact_match() {
 
     // Create OpenAPI registry with custom fixture loader
     let spec = create_test_spec();
-    let registry = OpenApiRouteRegistry::new(spec)
-        .with_custom_fixture_loader(Arc::new(loader));
+    let registry = OpenApiRouteRegistry::new(spec).with_custom_fixture_loader(Arc::new(loader));
 
     // Build router
     let router = registry.build_router();
@@ -133,15 +132,10 @@ async fn test_custom_fixture_integration_exact_match() {
 
     // Check custom header
     let headers = response.headers();
-    assert_eq!(
-        headers.get("x-custom-header").and_then(|h| h.to_str().ok()),
-        Some("test-value")
-    );
+    assert_eq!(headers.get("x-custom-header").and_then(|h| h.to_str().ok()), Some("test-value"));
 
     // Check response body
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(body_json["message"], "Custom fixture response");
 }
@@ -174,8 +168,7 @@ async fn test_custom_fixture_integration_path_parameter() {
 
     // Create OpenAPI registry with custom fixture loader
     let spec = create_test_spec();
-    let registry = OpenApiRouteRegistry::new(spec)
-        .with_custom_fixture_loader(Arc::new(loader));
+    let registry = OpenApiRouteRegistry::new(spec).with_custom_fixture_loader(Arc::new(loader));
 
     // Build router
     let router = registry.build_router();
@@ -193,9 +186,7 @@ async fn test_custom_fixture_integration_path_parameter() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // Check response body
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(body_json["id"], "hive_001");
     assert_eq!(body_json["name"], "Test Hive");
@@ -229,8 +220,7 @@ async fn test_custom_fixture_priority_over_mock() {
 
     // Create OpenAPI registry with custom fixture loader
     let spec = create_test_spec();
-    let registry = OpenApiRouteRegistry::new(spec)
-        .with_custom_fixture_loader(Arc::new(loader));
+    let registry = OpenApiRouteRegistry::new(spec).with_custom_fixture_loader(Arc::new(loader));
 
     // Build router
     let router = registry.build_router();
@@ -248,9 +238,7 @@ async fn test_custom_fixture_priority_over_mock() {
     assert_eq!(response.status(), StatusCode::CREATED);
 
     // Verify response body contains fixture data
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(body_json["source"], "custom_fixture");
 }
@@ -282,8 +270,7 @@ async fn test_custom_fixture_disabled_falls_back_to_mock() {
 
     // Create OpenAPI registry with disabled custom fixture loader
     let spec = create_test_spec();
-    let registry = OpenApiRouteRegistry::new(spec)
-        .with_custom_fixture_loader(Arc::new(loader));
+    let registry = OpenApiRouteRegistry::new(spec).with_custom_fixture_loader(Arc::new(loader));
 
     // Build router
     let router = registry.build_router();
@@ -301,9 +288,7 @@ async fn test_custom_fixture_disabled_falls_back_to_mock() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // Verify response body does NOT contain fixture data
-    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_ne!(body_json.get("source"), Some(&json!("custom_fixture")));
 }

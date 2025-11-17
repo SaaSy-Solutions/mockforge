@@ -8,10 +8,10 @@
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use sha2::{Digest, Sha256};
 
 use mockforge_core::Error;
 
@@ -102,9 +102,7 @@ impl TokenRevocationStore {
     pub async fn cleanup_expired(&self) {
         let now = Utc::now().timestamp();
         let mut tokens = self.revoked_tokens.write().await;
-        tokens.retain(|_, revoked| {
-            revoked.expires_at.map_or(true, |exp| exp > now)
-        });
+        tokens.retain(|_, revoked| revoked.expires_at.map_or(true, |exp| exp > now));
     }
 }
 
@@ -189,9 +187,7 @@ impl KeyRotationState {
         let now = Utc::now().timestamp();
         let keys = self.active_keys.read().await;
         keys.values()
-            .filter(|key| {
-                key.inactive_at.map_or(true, |inactive_at| inactive_at > now)
-            })
+            .filter(|key| key.inactive_at.map_or(true, |inactive_at| inactive_at > now))
             .cloned()
             .collect()
     }
@@ -199,18 +195,14 @@ impl KeyRotationState {
     /// Get primary key
     pub async fn get_primary_key(&self) -> Option<ActiveKey> {
         let keys = self.active_keys.read().await;
-        keys.values()
-            .find(|key| key.is_primary)
-            .cloned()
+        keys.values().find(|key| key.is_primary).cloned()
     }
 
     /// Remove old keys (after grace period)
     pub async fn cleanup_old_keys(&self) {
         let now = Utc::now().timestamp();
         let mut keys = self.active_keys.write().await;
-        keys.retain(|_, key| {
-            key.inactive_at.map_or(true, |inactive_at| inactive_at > now)
-        });
+        keys.retain(|_, key| key.inactive_at.map_or(true, |inactive_at| inactive_at > now));
     }
 }
 
