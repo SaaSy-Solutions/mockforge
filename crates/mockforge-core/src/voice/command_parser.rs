@@ -213,6 +213,110 @@ and include a "question" or "confirmation" field in the response."#;
 
         Ok(parsed)
     }
+
+    /// Parse a workspace scenario description
+    ///
+    /// This method extracts information about creating a complete workspace scenario,
+    /// including domain, chaos characteristics, initial data, and API requirements.
+    pub async fn parse_workspace_scenario_command(&self, command: &str) -> Result<ParsedWorkspaceScenario> {
+        // Build system prompt for workspace scenario parsing
+        let system_prompt = r#"You are an expert at parsing natural language descriptions of workspace scenarios
+and extracting structured information for creating complete mock environments.
+
+Extract the following information from the command:
+1. Domain/industry (e.g., bank, e-commerce, healthcare, etc.)
+2. Chaos/failure characteristics (flaky rates, slow KYC, high latency, etc.)
+3. Initial data requirements (number of users, disputes, orders, etc.)
+4. API endpoints needed for the domain
+5. Behavioral rules (failure rates, latency patterns, etc.)
+6. Data models and relationships
+
+Return your response as a JSON object with this structure:
+{
+  "domain": "string (e.g., bank, e-commerce, healthcare)",
+  "title": "string (workspace title)",
+  "description": "string (workspace description)",
+  "chaos_characteristics": [
+    {
+      "type": "string (latency|failure|rate_limit|etc.)",
+      "description": "string (e.g., flaky foreign exchange rates)",
+      "config": {
+        "probability": 0.0-1.0,
+        "delay_ms": number,
+        "error_rate": 0.0-1.0,
+        "error_codes": [500, 502, 503],
+        "details": "additional configuration details"
+      }
+    }
+  ],
+  "initial_data": {
+    "users": number,
+    "disputes": number,
+    "orders": number,
+    "custom": {
+      "entity_name": number
+    }
+  },
+  "api_requirements": {
+    "endpoints": [
+      {
+        "path": "string",
+        "method": "string",
+        "description": "string"
+      }
+    ],
+    "models": [
+      {
+        "name": "string",
+        "fields": [
+          {
+            "name": "string",
+            "type": "string"
+          }
+        ]
+      }
+    ]
+  },
+  "behavioral_rules": [
+    {
+      "description": "string",
+      "type": "string",
+      "config": {}
+    }
+  ]
+}
+
+Be specific and extract all details mentioned in the command."#;
+
+        // Build user prompt with the command
+        let user_prompt = format!(
+            "Parse this workspace scenario description and extract all requirements:\n\n{}",
+            command
+        );
+
+        // Create LLM request
+        let llm_request = LlmGenerationRequest {
+            system_prompt: system_prompt.to_string(),
+            user_prompt,
+            temperature: 0.3,
+            max_tokens: 3000,
+            schema: None,
+        };
+
+        // Generate response from LLM
+        let response = self.llm_client.generate(&llm_request).await?;
+
+        // Parse the response into ParsedWorkspaceScenario
+        let response_str = serde_json::to_string(&response).unwrap_or_default();
+        let parsed: ParsedWorkspaceScenario = serde_json::from_value(response).map_err(|e| {
+            crate::Error::generic(format!(
+                "Failed to parse LLM response as ParsedWorkspaceScenario: {}. Response: {}",
+                e, response_str
+            ))
+        })?;
+
+        Ok(parsed)
+    }
 }
 
 /// Parsed command structure containing extracted API requirements
@@ -341,3 +445,78 @@ pub struct FlowRequirement {
 
 /// Alias for API requirement (for backwards compatibility)
 pub type ApiRequirement = ParsedCommand;
+
+/// Parsed workspace scenario structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedWorkspaceScenario {
+    /// Domain/industry
+    pub domain: String,
+    /// Workspace title
+    pub title: String,
+    /// Workspace description
+    pub description: String,
+    /// Chaos characteristics
+    #[serde(default)]
+    pub chaos_characteristics: Vec<ChaosCharacteristic>,
+    /// Initial data requirements
+    #[serde(default)]
+    pub initial_data: InitialDataRequirements,
+    /// API requirements
+    #[serde(default)]
+    pub api_requirements: ApiRequirements,
+    /// Behavioral rules
+    #[serde(default)]
+    pub behavioral_rules: Vec<BehavioralRule>,
+}
+
+/// Chaos characteristic
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChaosCharacteristic {
+    /// Type of chaos (latency, failure, rate_limit, etc.)
+    pub r#type: String,
+    /// Description
+    pub description: String,
+    /// Configuration details
+    #[serde(default)]
+    pub config: serde_json::Value,
+}
+
+/// Initial data requirements
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct InitialDataRequirements {
+    /// Number of users
+    #[serde(default)]
+    pub users: Option<usize>,
+    /// Number of disputes
+    #[serde(default)]
+    pub disputes: Option<usize>,
+    /// Number of orders
+    #[serde(default)]
+    pub orders: Option<usize>,
+    /// Custom entity counts
+    #[serde(default)]
+    pub custom: HashMap<String, usize>,
+}
+
+/// API requirements for the scenario
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ApiRequirements {
+    /// List of endpoints
+    #[serde(default)]
+    pub endpoints: Vec<EndpointRequirement>,
+    /// List of models
+    #[serde(default)]
+    pub models: Vec<ModelRequirement>,
+}
+
+/// Behavioral rule
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BehavioralRule {
+    /// Rule description
+    pub description: String,
+    /// Rule type
+    pub r#type: String,
+    /// Rule configuration
+    #[serde(default)]
+    pub config: serde_json::Value,
+}

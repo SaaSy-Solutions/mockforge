@@ -9,9 +9,9 @@ mod speech_to_text;
 use clap::Subcommand;
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 use mockforge_core::openapi::OpenApiSpec;
-use mockforge_core::{ConversationManager, VoiceCommandParser, VoiceSpecGenerator};
+use mockforge_core::{ConversationManager, HookTranspiler, VoiceCommandParser, VoiceSpecGenerator};
 use speech_to_text::{InteractiveVoiceInput, SpeechToTextManager};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -59,6 +59,25 @@ pub enum VoiceCommands {
         #[arg(long, default_value = "3000")]
         port: u16,
     },
+
+    /// Transpile a natural language hook description to hook configuration
+    ///
+    /// Examples:
+    ///   mockforge voice transpile-hook --description "For VIP users, webhooks fire instantly"
+    ///   mockforge voice transpile-hook --output hook.yaml
+    TranspileHook {
+        /// Natural language description of the hook logic
+        #[arg(short, long)]
+        description: Option<String>,
+
+        /// Output file for generated hook configuration (YAML format)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Output format: yaml or json (default: yaml)
+        #[arg(long, default_value = "yaml")]
+        format: String,
+    },
 }
 
 /// Handle voice CLI commands
@@ -80,6 +99,13 @@ pub async fn handle_voice_command(
             port,
         } => {
             handle_interactive(output, serve, port).await?;
+        }
+        VoiceCommands::TranspileHook {
+            description,
+            output,
+            format,
+        } => {
+            handle_transpile_hook(description, output, format).await?;
         }
     }
 
@@ -453,6 +479,85 @@ async fn handle_interactive(
         }
     } else {
         println!("ℹ️  No API was created. Exiting.");
+    }
+
+    Ok(())
+}
+
+/// Handle transpile-hook command
+async fn handle_transpile_hook(
+    description: Option<String>,
+    output: Option<PathBuf>,
+    format: String,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("🔧 Hook Transpiler - Natural Language to Hook Configuration");
+    println!();
+
+    // Get description text
+    let description_text = if let Some(desc) = description {
+        desc
+    } else {
+        // Prompt for description
+        print!("Enter hook description: ");
+        io::stdout().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        input.trim().to_string()
+    };
+
+    if description_text.is_empty() {
+        return Err("No description provided".into());
+    }
+
+    println!("📝 Description: {}", description_text);
+    println!("🤖 Transpiling hook description with LLM...");
+
+    // Create transpiler with default config
+    let config = IntelligentBehaviorConfig::default();
+    let transpiler = HookTranspiler::new(config);
+
+    // Transpile the description
+    let hook = match transpiler.transpile(&description_text).await {
+        Ok(hook) => hook,
+        Err(e) => {
+            return Err(format!("Failed to transpile hook: {}", e).into());
+        }
+    };
+
+    println!("✅ Hook transpiled successfully");
+    println!("   - Name: {}", hook.name);
+    println!("   - Type: {:?}", hook.hook_type);
+    println!("   - Actions: {}", hook.actions.len());
+    if hook.condition.is_some() {
+        println!("   - Has condition: Yes");
+    }
+
+    // Serialize hook
+    let content = match format.to_lowercase().as_str() {
+        "yaml" | "yml" => {
+            serde_yaml::to_string(&hook).map_err(|e| format!("Failed to serialize hook to YAML: {}", e))?
+        }
+        "json" => {
+            serde_json::to_string_pretty(&hook)
+                .map_err(|e| format!("Failed to serialize hook to JSON: {}", e))?
+        }
+        _ => {
+            return Err(format!("Unsupported format: {}. Use 'yaml' or 'json'", format).into());
+        }
+    };
+
+    // Output hook configuration
+    if let Some(output_path) = output {
+        // Write to file
+        tokio::fs::write(&output_path, content).await?;
+        println!("💾 Saved hook configuration to: {}", output_path.display());
+    } else {
+        // Print to stdout
+        println!();
+        println!("📄 Generated Hook Configuration:");
+        println!("{}", "─".repeat(60));
+        println!("{}", content);
+        println!("{}", "─".repeat(60));
     }
 
     Ok(())

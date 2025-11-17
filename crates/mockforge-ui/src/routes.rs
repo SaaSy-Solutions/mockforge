@@ -250,6 +250,23 @@ pub fn create_admin_router(
         // Voice + LLM Interface routes
         .route("/api/v2/voice/process", post(voice::process_voice_command))
         .route("/__mockforge/voice/process", post(voice::process_voice_command))
+        .route("/api/v2/voice/transpile-hook", post(voice::transpile_hook))
+        .route("/__mockforge/voice/transpile-hook", post(voice::transpile_hook))
+        .route(
+            "/api/v2/voice/create-workspace-scenario",
+            post(voice::create_workspace_scenario),
+        )
+        .route(
+            "/__mockforge/voice/create-workspace-scenario",
+            post(voice::create_workspace_scenario),
+        )
+        // Failure analysis routes
+        .route("/api/v2/failures/analyze", post(failure_analysis::analyze_failure))
+        .route("/api/v2/failures/{request_id}", get(failure_analysis::get_failure_analysis))
+        .route("/api/v2/failures/recent", get(failure_analysis::list_recent_failures))
+        .route("/__mockforge/failures/analyze", post(failure_analysis::analyze_failure))
+        .route("/__mockforge/failures/{request_id}", get(failure_analysis::get_failure_analysis))
+        .route("/__mockforge/failures/recent", get(failure_analysis::list_recent_failures))
         // Community portal routes
         .route("/__mockforge/community/showcase/projects", get(community::get_showcase_projects))
         .route("/__mockforge/community/showcase/projects/{id}", get(community::get_showcase_project))

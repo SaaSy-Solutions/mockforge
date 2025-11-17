@@ -201,6 +201,7 @@
 
 #![allow(deprecated)]
 
+pub mod ab_testing;
 pub mod ai_contract_diff;
 pub mod ai_response;
 /// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
@@ -267,6 +268,8 @@ pub mod request_scripting;
 pub mod route_chaos;
 pub mod routing;
 pub mod scenarios;
+/// Scenario Studio - Visual editor for co-editing business flows
+pub mod scenario_studio;
 pub mod security;
 /// Time travel and snapshot functionality for saving and restoring system states
 pub mod snapshots;
@@ -284,6 +287,7 @@ pub mod traffic_shaping;
 pub mod validation;
 pub mod verification;
 pub mod voice;
+pub mod failure_analysis;
 pub mod workspace;
 pub mod workspace_import;
 pub mod workspace_persistence;
@@ -297,6 +301,11 @@ pub use behavioral_cloning::{
 pub use consistency::{
     ConsistencyEngine, EntityState, ProtocolState, SessionInfo, StateChangeEvent, UnifiedState,
 };
+pub use ab_testing::{
+    ABTestConfig, ABTestReport, ABTestingMiddlewareState, MockVariant, VariantAllocation,
+    VariantAnalytics, VariantComparison, VariantManager, VariantSelectionStrategy,
+    apply_variant_to_response, select_variant,
+};
 pub use snapshots::{
     SnapshotComponents, SnapshotManager, SnapshotManifest, SnapshotMetadata,
 };
@@ -306,6 +315,11 @@ pub use scenarios::{
     ScenarioStep,
 };
 pub use scenarios::types::StepResult;
+pub use scenario_studio::{
+    ConditionOperator, FlowCondition, FlowConnection, FlowDefinition, FlowExecutor,
+    FlowExecutionResult, FlowPosition, FlowStep, FlowStepResult, FlowType, FlowVariant,
+    StepType,
+};
 pub use chaos_utilities::{ChaosConfig, ChaosEngine, ChaosResult, ChaosStatistics};
 pub use conditions::{evaluate_condition, ConditionContext, ConditionError};
 pub use config::{
@@ -419,8 +433,13 @@ pub use verification::{
     VerificationCount, VerificationRequest, VerificationResult,
 };
 pub use voice::{
-    ConversationContext, ConversationManager, ConversationState, ParsedCommand, VoiceCommandParser,
-    VoiceSpecGenerator,
+    ConversationContext, ConversationManager, ConversationState, GeneratedWorkspaceScenario,
+    HookTranspiler, ParsedCommand, ParsedWorkspaceScenario, VoiceCommandParser,
+    VoiceSpecGenerator, WorkspaceConfigSummary, WorkspaceScenarioGenerator,
+};
+pub use failure_analysis::{
+    ContributingFactor, FailureContext, FailureContextCollector, FailureNarrative,
+    FailureNarrativeGenerator, NarrativeFrame,
 };
 pub use workspace::{EntityId, Folder, MockRequest, Workspace, WorkspaceConfig, WorkspaceRegistry};
 pub use workspace_import::{
