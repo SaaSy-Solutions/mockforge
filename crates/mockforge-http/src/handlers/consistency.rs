@@ -591,13 +591,13 @@ pub fn consistency_router(state: ConsistencyState) -> axum::Router {
         // Entity management
         .route("/api/v1/consistency/entities", get(list_entities).post(register_entity))
         .route(
-            "/api/v1/consistency/entities/:entity_type/:entity_id",
+            "/api/v1/consistency/entities/{entity_type}/{entity_id}",
             get(get_entity),
         )
         // Persona graph-enabled endpoints
-        .route("/api/v1/consistency/users/:id", get(get_user_with_graph))
-        .route("/api/v1/consistency/users/:id/orders", get(get_user_orders_with_graph))
-        .route("/api/v1/consistency/orders/:id", get(get_order_with_graph))
+        .route("/api/v1/consistency/users/{id}", get(get_user_with_graph))
+        .route("/api/v1/consistency/users/{id}/orders", get(get_user_orders_with_graph))
+        .route("/api/v1/consistency/orders/{id}", get(get_order_with_graph))
         // Chaos rule management
         .route("/api/v1/consistency/chaos/activate", post(activate_chaos_rule))
         .route("/api/v1/consistency/chaos/deactivate", post(deactivate_chaos_rule))

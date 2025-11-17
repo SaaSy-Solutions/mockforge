@@ -214,8 +214,8 @@ pub fn snapshot_router(state: SnapshotState) -> axum::Router {
 
     axum::Router::new()
         .route("/api/v1/snapshots", get(list_snapshots).post(save_snapshot))
-        .route("/api/v1/snapshots/:name", get(get_snapshot_info).delete(delete_snapshot))
-        .route("/api/v1/snapshots/:name/load", post(load_snapshot))
-        .route("/api/v1/snapshots/:name/validate", get(validate_snapshot))
+        .route("/api/v1/snapshots/{name}", get(get_snapshot_info).delete(delete_snapshot))
+        .route("/api/v1/snapshots/{name}/load", post(load_snapshot))
+        .route("/api/v1/snapshots/{name}/validate", get(validate_snapshot))
         .with_state(state)
 }

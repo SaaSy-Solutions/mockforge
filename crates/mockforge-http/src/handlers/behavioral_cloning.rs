@@ -572,15 +572,15 @@ pub fn behavioral_cloning_router(state: BehavioralCloningState) -> axum::Router 
             post(build_probability_model).get(list_probability_models),
         )
         .route(
-            "/api/v1/behavioral-cloning/probability-models/:endpoint/:method",
+            "/api/v1/behavioral-cloning/probability-models/{endpoint}/{method}",
             get(get_probability_model),
         )
         .route(
-            "/api/v1/behavioral-cloning/probability-models/:endpoint/:method/sample/status-code",
+            "/api/v1/behavioral-cloning/probability-models/{endpoint}/{method}/sample/status-code",
             post(sample_status_code),
         )
         .route(
-            "/api/v1/behavioral-cloning/probability-models/:endpoint/:method/sample/latency",
+            "/api/v1/behavioral-cloning/probability-models/{endpoint}/{method}/sample/latency",
             post(sample_latency),
         )
         // Sequence endpoints
@@ -593,11 +593,11 @@ pub fn behavioral_cloning_router(state: BehavioralCloningState) -> axum::Router 
             post(discover_sequences),
         )
         .route(
-            "/api/v1/behavioral-cloning/sequences/:sequence_id",
+            "/api/v1/behavioral-cloning/sequences/{sequence_id}",
             get(get_sequence),
         )
         .route(
-            "/api/v1/behavioral-cloning/sequences/:sequence_id/scenario",
+            "/api/v1/behavioral-cloning/sequences/{sequence_id}/scenario",
             post(generate_sequence_scenario),
         )
         // Amplification endpoints
@@ -606,7 +606,7 @@ pub fn behavioral_cloning_router(state: BehavioralCloningState) -> axum::Router 
             post(apply_amplification),
         )
         .route(
-            "/api/v1/behavioral-cloning/amplification/rare-edges/:endpoint/:method",
+            "/api/v1/behavioral-cloning/amplification/rare-edges/{endpoint}/{method}",
             get(get_rare_edges),
         )
         .with_state(state)

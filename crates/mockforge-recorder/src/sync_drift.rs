@@ -160,6 +160,8 @@ impl SyncDriftEvaluator {
                 last_updated: chrono::Utc::now().timestamp(),
             },
             should_create_incident: budget_exceeded || breaking_changes > 0,
+            fitness_test_results: vec![],
+            consumer_impact: None,
         }
     }
 

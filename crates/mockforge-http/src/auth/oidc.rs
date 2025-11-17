@@ -4,7 +4,7 @@
 //! including discovery documents and JSON Web Key Set (JWKS) endpoints.
 
 use axum::{extract::State, http::StatusCode, response::Json};
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -536,9 +536,9 @@ pub fn generate_oidc_token(
 
 /// Create OIDC router with well-known endpoints
 pub fn oidc_router() -> axum::Router {
-    use axum::routing::get;
+    use axum::{routing::get, Router};
 
-    axum::Router::new()
+    Router::new()
         .route("/.well-known/openid-configuration", get(get_oidc_discovery))
         .route("/.well-known/jwks.json", get(get_jwks))
 }

@@ -9,7 +9,9 @@ import {
   XCircle,
   ExternalLink,
   Activity,
+  TestTube,
 } from 'lucide-react';
+import { ConsumerImpactPanel } from '../components/ConsumerImpactPanel';
 import {
   useDriftIncidents,
   useDriftIncidentStatistics,
@@ -167,6 +169,58 @@ function IncidentRow({
               </div>
             )}
 
+            {/* Fitness Test Results */}
+            {incident.details.fitness_test_results &&
+             Array.isArray(incident.details.fitness_test_results) &&
+             incident.details.fitness_test_results.length > 0 && (
+              <details className="mt-2">
+                <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-900 dark:hover:text-gray-200 flex items-center gap-1">
+                  <TestTube className="w-3 h-3" />
+                  Fitness Test Results ({incident.details.fitness_test_results.length})
+                </summary>
+                <div className="mt-2 space-y-2">
+                  {(incident.details.fitness_test_results as any[]).map((result: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className={`p-2 rounded text-xs ${
+                        result.passed
+                          ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                          : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-1">
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">
+                          {result.function_name || `Test ${idx + 1}`}
+                        </span>
+                        {result.passed ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-gray-700 dark:text-gray-300 mb-1">
+                        {result.message}
+                      </p>
+                      {result.metrics && Object.keys(result.metrics).length > 0 && (
+                        <div className="mt-1 pt-1 border-t border-gray-200 dark:border-gray-700">
+                          <div className="grid grid-cols-2 gap-1">
+                            {Object.entries(result.metrics).map(([key, value]) => (
+                              <div key={key} className="text-xs">
+                                <span className="text-gray-500 dark:text-gray-400">{key}:</span>{' '}
+                                <span className="font-mono font-semibold">
+                                  {typeof value === 'number' ? value.toFixed(2) : String(value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
             {Object.keys(incident.details).length > 0 && (
               <details className="mt-2">
                 <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-900 dark:hover:text-gray-200">
@@ -177,6 +231,15 @@ function IncidentRow({
                 </pre>
               </details>
             )}
+
+            {/* Consumer Impact Panel */}
+            <div className="mt-4">
+              <ConsumerImpactPanel
+                incidentId={incident.id}
+                endpoint={incident.endpoint}
+                method={incident.method}
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-2">

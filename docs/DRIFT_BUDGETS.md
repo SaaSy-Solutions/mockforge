@@ -48,7 +48,7 @@ When a drift budget is exceeded, an incident is created with:
 ```yaml
 drift_budget:
   enabled: true
-  
+
   # Default budget applied to all endpoints
   default_budget:
     max_breaking_changes: 0
@@ -58,14 +58,14 @@ drift_budget:
     # Optional: percentage-based budget
     # max_field_churn_percent: 10.0
     # time_window_days: 30
-  
+
   # Per-workspace budgets
   per_workspace_budgets:
     "workspace-1":
       max_breaking_changes: 0
       max_non_breaking_changes: 5
       enabled: true
-  
+
   # Per-service budgets (by OpenAPI tag or service name)
   per_service_budgets:
     "user-service":
@@ -74,21 +74,21 @@ drift_budget:
       max_field_churn_percent: 5.0
       time_window_days: 30
       enabled: true
-  
+
   # Per-tag budgets (OpenAPI tags)
   per_tag_budgets:
     "users":
       max_breaking_changes: 0
       max_non_breaking_changes: 8
       enabled: true
-  
+
   # Per-endpoint budgets
   per_endpoint_budgets:
     "POST /api/users":
       max_breaking_changes: 0
       max_non_breaking_changes: 3
       enabled: true
-  
+
   # Breaking change detection rules
   breaking_change_rules:
     - type: "severity"
@@ -98,7 +98,7 @@ drift_budget:
     - type: "mismatch_type"
       mismatch_type: "missing_required_field"
       enabled: true
-  
+
   incident_retention_days: 90
 ```
 
@@ -429,7 +429,7 @@ drift_budget:
   default_budget:
     max_breaking_changes: 0
     max_non_breaking_changes: 10
-  
+
   per_service_budgets:
     "user-service":
       max_breaking_changes: 0
@@ -469,6 +469,154 @@ When sync detects changes exceeding the budget:
 3. Check fixture changes
 4. Merge PR to update contracts
 
+## Fitness Functions
+
+Fitness functions allow teams to register custom tests that run against each new contract version. These tests enforce contract quality and evolution rules beyond simple drift detection.
+
+### Fitness Function Types
+
+#### Response Size
+
+Limit the growth of response payloads:
+
+```json
+{
+  "name": "Response size limit",
+  "type": "response_size",
+  "config": {
+    "max_increase_percent": 25.0
+  },
+  "scope": {
+    "type": "service",
+    "service_name": "user-service"
+  }
+}
+```
+
+This ensures response sizes don't increase by more than 25% between versions.
+
+#### Required Field Protection
+
+Prevent new required fields in specific paths:
+
+```json
+{
+  "name": "No new required fields in mobile API",
+  "type": "required_field",
+  "config": {
+    "path_pattern": "/v1/mobile/*",
+    "allow_new_required": false
+  },
+  "scope": {
+    "type": "global"
+  }
+}
+```
+
+This prevents breaking changes to mobile clients by disallowing new required fields under `/v1/mobile/*`.
+
+#### Field Count Limit
+
+Limit the total number of fields in responses:
+
+```json
+{
+  "name": "Keep responses simple",
+  "type": "field_count",
+  "config": {
+    "max_fields": 50
+  },
+  "scope": {
+    "type": "endpoint",
+    "pattern": "/api/v1/users"
+  }
+}
+```
+
+#### Schema Complexity
+
+Limit schema depth to maintain simplicity:
+
+```json
+{
+  "name": "Limit schema nesting",
+  "type": "schema_complexity",
+  "config": {
+    "max_depth": 5
+  },
+  "scope": {
+    "type": "workspace",
+    "workspace_id": "prod"
+  }
+}
+```
+
+### Fitness Function Scopes
+
+Fitness functions can be scoped to:
+- **Global**: Apply to all contracts
+- **Workspace**: Apply to all contracts in a workspace
+- **Service**: Apply to all endpoints in a service
+- **Endpoint**: Apply to a specific endpoint pattern
+
+### Creating Fitness Functions
+
+```http
+POST /api/v1/drift/fitness-functions
+Content-Type: application/json
+
+{
+  "name": "Response size limit",
+  "description": "Prevent response size from growing too large",
+  "type": "response_size",
+  "config": {
+    "max_increase_percent": 25.0
+  },
+  "scope": {
+    "type": "service",
+    "service_name": "user-service"
+  },
+  "enabled": true
+}
+```
+
+### Fitness Test Results
+
+When contract drift is detected, fitness functions are evaluated and results are included in drift incidents:
+
+```json
+{
+  "fitness_test_results": [
+    {
+      "function_id": "fitness-123",
+      "name": "Response size limit",
+      "passed": false,
+      "message": "Response size increased by 30%, exceeding 25% limit",
+      "metrics": {
+        "old_size": 1024,
+        "new_size": 1331,
+        "increase_percent": 30.0
+      }
+    }
+  ]
+}
+```
+
+### Viewing Fitness Test Results
+
+Fitness test results are displayed in the Incident Dashboard:
+- ✅ **Passed**: Green badge with checkmark
+- ❌ **Failed**: Red badge with X
+- Each result shows the function name, pass/fail status, message, and metrics
+
+### Best Practices
+
+1. **Start Conservative**: Begin with lenient thresholds and tighten over time
+2. **Scope Appropriately**: Use service or endpoint scopes for targeted rules
+3. **Document Intent**: Provide clear descriptions for each fitness function
+4. **Monitor Trends**: Review fitness test results to identify patterns
+5. **Iterate**: Adjust thresholds based on actual contract evolution patterns
+
 ## Best Practices
 
 1. **Start with strict budgets**: Begin with `max_breaking_changes: 0` and gradually relax as needed
@@ -498,4 +646,3 @@ When sync detects changes exceeding the budget:
 - Check webhook is enabled
 - Verify event subscription matches incident type
 - Check webhook logs for errors
-

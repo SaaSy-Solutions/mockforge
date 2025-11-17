@@ -97,6 +97,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics_middleware_records_success() {
+        use axum::Router;
         let app = Router::new()
             .route("/test", axum::routing::get(test_handler))
             .layer(middleware::from_fn(collect_http_metrics));
@@ -113,6 +114,7 @@ mod tests {
             (StatusCode::INTERNAL_SERVER_ERROR, "error")
         }
 
+        use axum::Router;
         let app = Router::new()
             .route("/error", axum::routing::get(error_handler))
             .layer(middleware::from_fn(collect_http_metrics));

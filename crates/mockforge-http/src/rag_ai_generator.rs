@@ -4,6 +4,9 @@
 //! using the RAG engine from mockforge-data.
 
 use async_trait::async_trait;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::Json;
 use mockforge_core::{ai_response::AiResponseConfig, openapi::response::AiGenerator, Result};
 use mockforge_data::rag::{LlmProvider, RagConfig, RagEngine};
 use serde_json::Value;

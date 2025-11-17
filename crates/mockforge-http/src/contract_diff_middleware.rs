@@ -3,7 +3,10 @@
 //! This middleware captures incoming HTTP requests for contract diff analysis.
 //! It extracts request data and stores it in the capture manager.
 
-use axum::{extract::Request, http::HeaderMap, middleware::Next, response::Response};
+use axum::extract::State;
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::Json;
+use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 use mockforge_core::{
     ai_contract_diff::CapturedRequest,
     request_capture::{get_global_capture_manager, CaptureManager},
@@ -14,7 +17,7 @@ use std::collections::HashMap;
 use tracing::debug;
 
 /// Middleware to capture requests for contract diff analysis
-pub async fn capture_for_contract_diff(req: Request, next: Next) -> Response {
+pub async fn capture_for_contract_diff(req: Request<Body>, next: Next) -> Response {
     let method = req.method().to_string();
     let uri = req.uri().clone();
     let path = uri.path().to_string();

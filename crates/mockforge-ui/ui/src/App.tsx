@@ -15,6 +15,7 @@ const MetricsPage = lazy(() => import('./pages/MetricsPage').then(m => ({ defaul
 const VerificationPage = lazy(() => import('./pages/VerificationPage').then(m => ({ default: m.VerificationPage })));
 const ContractDiffPage = lazy(() => import('./pages/ContractDiffPage').then(m => ({ default: m.ContractDiffPage })));
 const IncidentDashboardPage = lazy(() => import('./pages/IncidentDashboardPage').then(m => ({ default: m.IncidentDashboardPage })));
+const FitnessFunctionsPage = lazy(() => import('./pages/FitnessFunctionsPage').then(m => ({ default: m.FitnessFunctionsPage })));
 const FixturesPage = lazy(() => import('./pages/FixturesPage').then(m => ({ default: m.FixturesPage })));
 const ConfigPage = lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
 const TestingPage = lazy(() => import('./pages/TestingPage').then(m => ({ default: m.TestingPage })));
@@ -179,6 +180,8 @@ function App() {
       case 'incidents':
       case 'incident-dashboard':
         return <IncidentDashboardPage />;
+      case 'fitness-functions':
+        return <FitnessFunctionsPage />;
 
       // Testing
       case 'testing':

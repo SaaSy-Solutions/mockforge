@@ -9,7 +9,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-// Import types - we use local versions for API types and convert when interacting with manager
 use mockforge_core::intelligent_behavior::{rules::StateMachine, visual_layout::VisualLayout};
 use mockforge_scenarios::{
     state_machine::{ScenarioStateMachineManager, StateInstance},
@@ -546,9 +545,12 @@ pub async fn import_state_machines(
 /// This function creates routes that use ManagementState, so they can be
 /// nested within the management router.
 pub fn create_state_machine_routes() -> axum::Router<ManagementState> {
-    use axum::routing::{delete, get, post, put};
+    use axum::{
+        routing::{delete, get, post, put},
+        Router,
+    };
 
-    axum::Router::new()
+    Router::new()
         // State machine CRUD
         .route("/", get(list_state_machines))
         .route("/", post(create_state_machine))

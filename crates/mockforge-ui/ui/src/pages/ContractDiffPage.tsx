@@ -12,9 +12,13 @@ import {
   FileCode,
   Download,
   Upload,
-  Filter
+  Filter,
+  Plus,
+  Network
 } from 'lucide-react';
 import { contractDiffApi, type CapturedRequest, type ContractDiffResult, type AnalyzeRequestPayload } from '../services/api';
+import { protocolContractsApi, type ProtocolType } from '../services/protocolContractsApi';
+import { ProtocolContractEditor } from '../components/ProtocolContractEditor';
 import {
   PageHeader,
   ModernCard,
@@ -223,6 +227,8 @@ export function ContractDiffPage() {
   const [filterSource, setFilterSource] = useState<string>('all');
   const [filterMethod, setFilterMethod] = useState<string>('all');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [selectedProtocol, setSelectedProtocol] = useState<'http' | ProtocolType>('http');
+  const [showProtocolEditor, setShowProtocolEditor] = useState(false);
 
   // Fetch captured requests
   const { data: capturesData, isLoading: capturesLoading, refetch: refetchCaptures } = useQuery({
@@ -240,6 +246,18 @@ export function ContractDiffPage() {
     queryKey: ['contract-diff-statistics'],
     queryFn: () => contractDiffApi.getStatistics(),
     refetchInterval: 5000, // Refresh every 5 seconds
+  });
+
+  // Fetch protocol contracts
+  const { data: protocolContractsData } = useQuery({
+    queryKey: ['protocol-contracts', selectedProtocol !== 'http' ? selectedProtocol : undefined],
+    queryFn: () => {
+      if (selectedProtocol === 'http') {
+        return Promise.resolve({ contracts: [], total: 0 });
+      }
+      return protocolContractsApi.listContracts(selectedProtocol as ProtocolType);
+    },
+    enabled: selectedProtocol !== 'http',
   });
 
   // Analyze mutation
@@ -297,13 +315,78 @@ export function ContractDiffPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <PageHeader
-        title="Contract Diff Analysis"
-        description="Analyze front-end requests against backend contract specifications"
-        icon={FileText}
-      />
+      <div className="flex items-center justify-between">
+        <PageHeader
+          title="Contract Diff Analysis"
+          description="Analyze front-end requests against backend contract specifications"
+          icon={FileText}
+        />
+        <div className="flex items-center gap-4">
+          <Select value={selectedProtocol} onValueChange={(value) => setSelectedProtocol(value as 'http' | ProtocolType)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="http">HTTP/REST</SelectItem>
+              <SelectItem value="grpc">gRPC</SelectItem>
+              <SelectItem value="websocket">WebSocket</SelectItem>
+              <SelectItem value="mqtt">MQTT</SelectItem>
+              <SelectItem value="kafka">Kafka</SelectItem>
+            </SelectContent>
+          </Select>
+          {selectedProtocol !== 'http' && (
+            <Button onClick={() => setShowProtocolEditor(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              New {selectedProtocol.toUpperCase()} Contract
+            </Button>
+          )}
+        </div>
+      </div>
 
-      {/* Statistics Cards */}
+      {/* Protocol Contract Editor Modal */}
+      {showProtocolEditor && (
+        <ModernCard className="p-6">
+          <ProtocolContractEditor
+            onClose={() => setShowProtocolEditor(false)}
+            onSuccess={() => {
+              setShowProtocolEditor(false);
+              queryClient.invalidateQueries({ queryKey: ['protocol-contracts'] });
+            }}
+          />
+        </ModernCard>
+      )}
+
+      {/* Protocol-specific content */}
+      {selectedProtocol !== 'http' && (
+        <Section title={`${selectedProtocol.toUpperCase()} Contracts`}>
+          {protocolContractsData?.contracts.length === 0 ? (
+            <EmptyState
+              icon={Network}
+              title="No Contracts"
+              description={`No ${selectedProtocol.toUpperCase()} contracts found. Create one to get started.`}
+            />
+          ) : (
+            <div className="space-y-4">
+              {protocolContractsData?.contracts.map((contract) => (
+                <ModernCard key={contract.contract_id} className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold">{contract.contract_id}</h3>
+                      <p className="text-sm text-gray-600">Version: {contract.version}</p>
+                    </div>
+                    <ModernBadge variant="outline">{contract.protocol.toUpperCase()}</ModernBadge>
+                  </div>
+                </ModernCard>
+              ))}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* HTTP/REST specific content */}
+      {selectedProtocol === 'http' && (
+        <>
+          {/* Statistics Cards */}
       {statistics && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <ModernCard>
@@ -537,6 +620,8 @@ export function ContractDiffPage() {
             </div>
           </Section>
         </div>
+      )}
+        </>
       )}
     </div>
   );

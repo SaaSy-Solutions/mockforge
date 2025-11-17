@@ -203,6 +203,12 @@ pub struct DriftResult {
     pub metrics: DriftMetrics,
     /// Whether an incident should be created
     pub should_create_incident: bool,
+    /// Results from fitness function tests
+    #[serde(default)]
+    pub fitness_test_results: Vec<crate::contract_drift::fitness::FitnessTestResult>,
+    /// Consumer impact analysis (optional)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumer_impact: Option<crate::contract_drift::consumer_mapping::ConsumerImpact>,
 }
 
 impl DriftResult {
@@ -278,6 +284,8 @@ impl DriftResult {
             non_breaking_mismatches,
             metrics,
             should_create_incident,
+            fitness_test_results: Vec::new(),
+            consumer_impact: None,
         }
     }
 }

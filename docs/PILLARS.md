@@ -62,6 +62,9 @@ Every feature in MockForge maps to one or more pillars. This structure helps us:
 - Automatic API sync and change detection
 - Schema-driven mock generation
 - Cross-endpoint validation and referential integrity
+- Multi-protocol contract support (HTTP, gRPC, WebSocket, MQTT, Kafka)
+- Contract fitness functions for quality enforcement
+- Consumer impact analysis for downstream dependencies
 
 **Example Features:**
 - **AI Contract Diff**: Compare and visualize API contract changes
@@ -71,6 +74,10 @@ Every feature in MockForge maps to one or more pillars. This structure helps us:
 - **Schema Validation**: Composite schemas (oneOf/anyOf/allOf) support
 - **Validation Modes**: Runtime admin UI to view/toggle validation mode
 - **Contract Testing**: Verify API contracts match specifications
+- **Protocol Contracts**: gRPC, WebSocket, MQTT, and Kafka contract management
+- **Fitness Functions**: Custom tests to enforce contract quality and evolution rules
+- **Consumer Impact Analysis**: Map endpoints to SDK methods and consuming applications
+- **Drift Budgets**: Configurable thresholds for acceptable contract changes
 
 **Use Cases:**
 - Catch breaking changes before they reach production

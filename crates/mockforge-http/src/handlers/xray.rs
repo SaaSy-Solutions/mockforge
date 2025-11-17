@@ -186,9 +186,9 @@ pub fn xray_router(state: XRayState) -> axum::Router {
     axum::Router::new()
         .route("/api/v1/xray/state/summary", get(get_state_summary))
         .route("/api/v1/xray/state", get(get_state))
-        .route("/api/v1/xray/request-context/:request_id", get(get_request_context))
-        .route("/api/v1/xray/workspace/:workspace_id/summary", get(get_workspace_summary))
+        .route("/api/v1/xray/request-context/{request_id}", get(get_request_context))
+        .route("/api/v1/xray/workspace/{workspace_id}/summary", get(get_workspace_summary))
         .route("/api/v1/xray/entities", get(list_entities))
-        .route("/api/v1/xray/entities/:entity_type/:entity_id", get(get_entity))
+        .route("/api/v1/xray/entities/{entity_type}/{entity_id}", get(get_entity))
         .with_state(state)
 }

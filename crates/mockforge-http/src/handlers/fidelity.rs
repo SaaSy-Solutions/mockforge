@@ -164,7 +164,7 @@ pub fn fidelity_router(state: FidelityState) -> axum::Router {
 
     axum::Router::new()
         .route(
-            "/api/v1/workspace/:workspace_id/fidelity",
+            "/api/v1/workspace/{workspace_id}/fidelity",
             get(get_fidelity).post(calculate_fidelity),
         )
         .with_state(state)

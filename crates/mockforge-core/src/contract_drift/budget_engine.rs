@@ -3,16 +3,23 @@
 //! This module provides the core logic for evaluating contract drift against configured budgets.
 
 use crate::ai_contract_diff::ContractDiffResult;
+use crate::contract_drift::consumer_mapping::ConsumerImpactAnalyzer;
 use crate::contract_drift::field_tracking::FieldCountTracker;
+use crate::contract_drift::fitness::FitnessFunctionRegistry;
 use crate::contract_drift::types::{DriftBudget, DriftBudgetConfig, DriftResult};
+use crate::openapi::OpenApiSpec;
 use std::sync::Arc;
 
 /// Engine for evaluating drift budgets
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DriftBudgetEngine {
     config: DriftBudgetConfig,
     /// Optional field count tracker for percentage-based budgets
     field_tracker: Option<Arc<tokio::sync::RwLock<FieldCountTracker>>>,
+    /// Optional fitness function registry for running fitness tests
+    fitness_registry: Option<Arc<tokio::sync::RwLock<FitnessFunctionRegistry>>>,
+    /// Optional consumer impact analyzer for determining affected consumers
+    consumer_analyzer: Option<Arc<tokio::sync::RwLock<ConsumerImpactAnalyzer>>>,
 }
 
 impl DriftBudgetEngine {
@@ -21,6 +28,8 @@ impl DriftBudgetEngine {
         Self {
             config,
             field_tracker: None,
+            fitness_registry: None,
+            consumer_analyzer: None,
         }
     }
 
@@ -32,7 +41,25 @@ impl DriftBudgetEngine {
         Self {
             config,
             field_tracker: Some(field_tracker),
+            fitness_registry: None,
+            consumer_analyzer: None,
         }
+    }
+
+    /// Set the fitness function registry
+    pub fn set_fitness_registry(
+        &mut self,
+        fitness_registry: Arc<tokio::sync::RwLock<FitnessFunctionRegistry>>,
+    ) {
+        self.fitness_registry = Some(fitness_registry);
+    }
+
+    /// Set the consumer impact analyzer
+    pub fn set_consumer_analyzer(
+        &mut self,
+        consumer_analyzer: Arc<tokio::sync::RwLock<ConsumerImpactAnalyzer>>,
+    ) {
+        self.consumer_analyzer = Some(consumer_analyzer);
     }
 
     /// Set the field count tracker
@@ -89,6 +116,8 @@ impl DriftBudgetEngine {
                     last_updated: chrono::Utc::now().timestamp(),
                 },
                 should_create_incident: false,
+                fitness_test_results: Vec::new(),
+                consumer_impact: None,
             };
         }
 
@@ -116,6 +145,8 @@ impl DriftBudgetEngine {
                     last_updated: chrono::Utc::now().timestamp(),
                 },
                 should_create_incident: false,
+                fitness_test_results: Vec::new(),
+                consumer_impact: None,
             };
         }
 
@@ -151,14 +182,186 @@ impl DriftBudgetEngine {
         };
 
         // Evaluate against budget
-        DriftResult::from_diff_result(
+        let mut result = DriftResult::from_diff_result(
             diff_result,
             endpoint.to_string(),
             method.to_string(),
             &budget,
             &self.config.breaking_change_rules,
             baseline_field_count,
-        )
+        );
+
+        // Note: Fitness tests are not run in this method because we don't have access to
+        // the OpenAPI specs. Use evaluate_with_specs() instead if you need fitness test evaluation.
+
+        // Analyze consumer impact if analyzer is available
+        if let Some(ref analyzer) = self.consumer_analyzer {
+            let rt = tokio::runtime::Handle::try_current();
+            if let Ok(handle) = rt {
+                let impact = handle.block_on(async {
+                    let guard = analyzer.read().await;
+                    guard.analyze_impact(endpoint, method)
+                });
+                if let Some(impact) = impact {
+                    result.consumer_impact = Some(impact);
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Evaluate contract diff result with OpenAPI specs for fitness function support
+    ///
+    /// This method is similar to `evaluate_with_context` but accepts old and new OpenAPI specs
+    /// to enable fitness function evaluation.
+    pub fn evaluate_with_specs(
+        &self,
+        old_spec: Option<&OpenApiSpec>,
+        new_spec: &OpenApiSpec,
+        diff_result: &ContractDiffResult,
+        endpoint: &str,
+        method: &str,
+        workspace_id: Option<&str>,
+        service_name: Option<&str>,
+        tags: Option<&[String]>,
+    ) -> DriftResult {
+        if !self.config.enabled {
+            // If drift tracking is disabled, return a result indicating no issues
+            return DriftResult {
+                budget_exceeded: false,
+                breaking_changes: 0,
+                potentially_breaking_changes: 0,
+                non_breaking_changes: 0,
+                breaking_mismatches: vec![],
+                potentially_breaking_mismatches: vec![],
+                non_breaking_mismatches: diff_result.mismatches.clone(),
+                metrics: crate::contract_drift::types::DriftMetrics {
+                    endpoint: endpoint.to_string(),
+                    method: method.to_string(),
+                    breaking_changes: 0,
+                    non_breaking_changes: diff_result.mismatches.len() as u32,
+                    total_changes: diff_result.mismatches.len() as u32,
+                    budget_exceeded: false,
+                    last_updated: chrono::Utc::now().timestamp(),
+                },
+                should_create_incident: false,
+                fitness_test_results: Vec::new(),
+                consumer_impact: None,
+            };
+        }
+
+        // Get budget for this endpoint using priority hierarchy
+        let budget =
+            self.get_budget_for_endpoint(endpoint, method, workspace_id, service_name, tags);
+
+        if !budget.enabled {
+            // Budget disabled for this endpoint
+            return DriftResult {
+                budget_exceeded: false,
+                breaking_changes: 0,
+                potentially_breaking_changes: 0,
+                non_breaking_changes: 0,
+                breaking_mismatches: vec![],
+                potentially_breaking_mismatches: vec![],
+                non_breaking_mismatches: diff_result.mismatches.clone(),
+                metrics: crate::contract_drift::types::DriftMetrics {
+                    endpoint: endpoint.to_string(),
+                    method: method.to_string(),
+                    breaking_changes: 0,
+                    non_breaking_changes: diff_result.mismatches.len() as u32,
+                    total_changes: diff_result.mismatches.len() as u32,
+                    budget_exceeded: false,
+                    last_updated: chrono::Utc::now().timestamp(),
+                },
+                should_create_incident: false,
+                fitness_test_results: Vec::new(),
+                consumer_impact: None,
+            };
+        }
+
+        // Calculate baseline field count if percentage-based budget is enabled and tracker is available
+        let baseline_field_count = if budget.max_field_churn_percent.is_some() {
+            if let Some(ref tracker) = self.field_tracker {
+                // Use blocking call to get baseline (evaluate_with_context is sync)
+                // This is safe because we're in a tokio runtime context
+                let rt = tokio::runtime::Handle::try_current();
+                if let Ok(handle) = rt {
+                    if let Some(time_window) = budget.time_window_days {
+                        // Use blocking call to get baseline (average over time window)
+                        handle.block_on(async {
+                            let guard = tracker.read().await;
+                            guard.get_average_count(
+                                None, // workspace_id - could be passed through if needed
+                                endpoint,
+                                method,
+                                time_window,
+                            )
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Evaluate against budget
+        let mut result = DriftResult::from_diff_result(
+            diff_result,
+            endpoint.to_string(),
+            method.to_string(),
+            &budget,
+            &self.config.breaking_change_rules,
+            baseline_field_count,
+        );
+
+        // Run fitness tests if registry is available
+        if let Some(ref registry) = self.fitness_registry {
+            let rt = tokio::runtime::Handle::try_current();
+            if let Ok(handle) = rt {
+                let fitness_results = handle.block_on(async {
+                    let guard = registry.read().await;
+                    guard.evaluate_all(
+                        old_spec,
+                        new_spec,
+                        diff_result,
+                        endpoint,
+                        method,
+                        workspace_id,
+                        service_name,
+                    )
+                });
+                if let Ok(results) = fitness_results {
+                    result.fitness_test_results = results;
+                    // If any fitness test fails, we should consider creating an incident
+                    if result.fitness_test_results.iter().any(|r| !r.passed) {
+                        result.should_create_incident = true;
+                    }
+                }
+            }
+        }
+
+        // Analyze consumer impact if analyzer is available
+        if let Some(ref analyzer) = self.consumer_analyzer {
+            let rt = tokio::runtime::Handle::try_current();
+            if let Ok(handle) = rt {
+                let impact = handle.block_on(async {
+                    let guard = analyzer.read().await;
+                    guard.analyze_impact(endpoint, method)
+                });
+                if let Some(impact) = impact {
+                    result.consumer_impact = Some(impact);
+                }
+            }
+        }
+
+        result
     }
 
     /// Get budget for a specific endpoint
