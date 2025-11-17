@@ -60,7 +60,7 @@ mockforge-scenarios = { path = "../mockforge-scenarios", version = "0.2.8" }
 mockforge-tracing = "0.2.8"
 mockforge-mqtt = { version = "0.2.0", path = "../mockforge-mqtt", optional = true }
 opentelemetry = "0.21"
-rustls = "0.21"
+rustls = "0.23"
 rustls-pemfile = "1.0"
 tokio-rustls = "0.24"
 
