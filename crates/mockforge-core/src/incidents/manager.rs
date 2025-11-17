@@ -54,10 +54,45 @@ impl IncidentManager {
         budget_id: Option<String>,
         workspace_id: Option<String>,
     ) -> DriftIncident {
+        self.create_incident_with_samples(
+            endpoint,
+            method,
+            incident_type,
+            severity,
+            details,
+            budget_id,
+            workspace_id,
+            None, // sync_cycle_id
+            None, // contract_diff_id
+            None, // before_sample
+            None, // after_sample
+        )
+        .await
+    }
+
+    /// Create a new incident with before/after samples and traceability
+    pub async fn create_incident_with_samples(
+        &self,
+        endpoint: String,
+        method: String,
+        incident_type: IncidentType,
+        severity: IncidentSeverity,
+        details: serde_json::Value,
+        budget_id: Option<String>,
+        workspace_id: Option<String>,
+        sync_cycle_id: Option<String>,
+        contract_diff_id: Option<String>,
+        before_sample: Option<serde_json::Value>,
+        after_sample: Option<serde_json::Value>,
+    ) -> DriftIncident {
         let id = Uuid::new_v4().to_string();
         let mut incident = DriftIncident::new(id, endpoint, method, incident_type, severity, details);
         incident.budget_id = budget_id;
         incident.workspace_id = workspace_id;
+        incident.sync_cycle_id = sync_cycle_id;
+        incident.contract_diff_id = contract_diff_id;
+        incident.before_sample = before_sample;
+        incident.after_sample = after_sample;
 
         self.store.store(incident.clone()).await;
 
@@ -149,19 +184,31 @@ impl IncidentManager {
                 continue;
             }
 
-            let payload = json!({
-                "event": event_type,
-                "incident": {
-                    "id": incident.id,
-                    "endpoint": incident.endpoint,
-                    "method": incident.method,
-                    "type": format!("{:?}", incident.incident_type),
-                    "severity": format!("{:?}", incident.severity),
-                    "status": format!("{:?}", incident.status),
-                    "details": incident.details,
-                    "created_at": incident.created_at,
-                }
-            });
+            // Determine webhook format based on URL or headers
+            let payload = if webhook.url.contains("slack.com") || webhook.url.contains("hooks.slack.com") {
+                // Format as Slack message
+                use crate::incidents::slack_formatter::format_slack_webhook;
+                format_slack_webhook(incident)
+            } else if webhook.url.contains("jira") || webhook.headers.contains_key("X-Jira-Project") {
+                // Format as Jira webhook
+                use crate::incidents::jira_formatter::format_jira_webhook;
+                format_jira_webhook(incident)
+            } else {
+                // Generic webhook format
+                json!({
+                    "event": event_type,
+                    "incident": {
+                        "id": incident.id,
+                        "endpoint": incident.endpoint,
+                        "method": incident.method,
+                        "type": format!("{:?}", incident.incident_type),
+                        "severity": format!("{:?}", incident.severity),
+                        "status": format!("{:?}", incident.status),
+                        "details": incident.details,
+                        "created_at": incident.created_at,
+                    }
+                })
+            };
 
             // Send webhook asynchronously (fire and forget)
             let webhook_clone = webhook.clone();

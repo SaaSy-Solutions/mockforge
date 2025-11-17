@@ -18,6 +18,7 @@ pub mod replay;
 pub mod scrubbing;
 pub mod stub_mapping;
 pub mod sync;
+pub mod sync_drift;
 pub mod sync_gitops;
 pub mod sync_snapshots;
 pub mod sync_traffic;
@@ -44,6 +45,7 @@ pub use stub_mapping::{
     RequestMatcher, ResponseTemplate, StubFormat, StubMapping, StubMappingConverter,
 };
 pub use sync::{GitOpsConfig, SyncConfig, SyncService, SyncStatus, TrafficAwareConfig};
+pub use sync_drift::SyncDriftEvaluator;
 pub use sync_traffic::{EndpointPriority, EndpointUsageStats, TrafficAnalyzer};
 pub use sync_gitops::GitOpsSyncHandler;
 pub use sync_snapshots::{

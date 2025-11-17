@@ -7,15 +7,31 @@ use std::collections::HashMap;
 /// Configuration for acceptable drift levels
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DriftBudget {
-    /// Maximum number of breaking changes allowed
+    /// Maximum number of breaking changes allowed (used if percentage not set)
+    #[serde(default)]
     pub max_breaking_changes: u32,
-    /// Maximum number of non-breaking changes allowed
+    /// Maximum number of non-breaking changes allowed (used if percentage not set)
+    #[serde(default)]
     pub max_non_breaking_changes: u32,
+    /// Maximum percentage of field churn allowed (0.0-100.0)
+    /// If set, this takes precedence over absolute counts
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_field_churn_percent: Option<f64>,
+    /// Time window in days for percentage calculations (e.g., 30 for monthly)
+    /// Only used when max_field_churn_percent is set
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_window_days: Option<u32>,
     /// Severity threshold for considering changes as breaking
     /// Changes at or above this severity are considered breaking
+    #[serde(default)]
     pub severity_threshold: MismatchSeverity,
     /// Whether this budget is enabled
+    #[serde(default = "default_true")]
     pub enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for DriftBudget {
@@ -23,6 +39,8 @@ impl Default for DriftBudget {
         Self {
             max_breaking_changes: 0,
             max_non_breaking_changes: 10,
+            max_field_churn_percent: None,
+            time_window_days: None,
             severity_threshold: MismatchSeverity::High,
             enabled: true,
         }
@@ -33,15 +51,35 @@ impl Default for DriftBudget {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DriftBudgetConfig {
     /// Whether drift budget tracking is enabled
+    #[serde(default = "default_true")]
     pub enabled: bool,
     /// Default budget applied to all endpoints
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_budget: Option<DriftBudget>,
+    /// Per-workspace budgets (key: workspace_id)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub per_workspace_budgets: HashMap<String, DriftBudget>,
+    /// Per-service budgets (key: service_name or OpenAPI tag)
+    /// Service names can be explicit or match OpenAPI operation tags
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub per_service_budgets: HashMap<String, DriftBudget>,
+    /// Per-tag budgets (key: OpenAPI tag name)
+    /// Alternative to per_service_budgets, uses OpenAPI tags directly
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub per_tag_budgets: HashMap<String, DriftBudget>,
     /// Per-endpoint budgets (key: "{method} {endpoint}")
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub per_endpoint_budgets: HashMap<String, DriftBudget>,
     /// Breaking change detection rules
+    #[serde(default)]
     pub breaking_change_rules: Vec<BreakingChangeRule>,
     /// Number of days to retain incident history
+    #[serde(default = "default_retention_days")]
     pub incident_retention_days: u32,
+}
+
+fn default_retention_days() -> u32 {
+    90
 }
 
 impl Default for DriftBudgetConfig {
@@ -49,6 +87,9 @@ impl Default for DriftBudgetConfig {
         Self {
             enabled: true,
             default_budget: Some(DriftBudget::default()),
+            per_workspace_budgets: HashMap::new(),
+            per_service_budgets: HashMap::new(),
+            per_tag_budgets: HashMap::new(),
             per_endpoint_budgets: HashMap::new(),
             breaking_change_rules: vec![
                 // Default rules: Critical and High severity are breaking
@@ -144,12 +185,18 @@ pub struct DriftMetrics {
 pub struct DriftResult {
     /// Whether budget is exceeded
     pub budget_exceeded: bool,
-    /// Number of breaking changes
+    /// Number of breaking changes (definitely breaking)
     pub breaking_changes: u32,
+    /// Number of potentially breaking changes (requires review)
+    #[serde(default)]
+    pub potentially_breaking_changes: u32,
     /// Number of non-breaking changes
     pub non_breaking_changes: u32,
-    /// Mismatches that are considered breaking
+    /// Mismatches that are considered breaking (definitely breaking)
     pub breaking_mismatches: Vec<Mismatch>,
+    /// Mismatches that are potentially breaking (requires review)
+    #[serde(default)]
+    pub potentially_breaking_mismatches: Vec<Mismatch>,
     /// Mismatches that are non-breaking
     pub non_breaking_mismatches: Vec<Mismatch>,
     /// Current drift metrics
@@ -160,37 +207,51 @@ pub struct DriftResult {
 
 impl DriftResult {
     /// Create a new drift result from contract diff result
+    ///
+    /// `baseline_field_count` is optional and used for percentage-based budget calculations.
+    /// If provided, it represents the historical baseline field count for the endpoint.
     pub fn from_diff_result(
         diff_result: &ContractDiffResult,
         endpoint: String,
         method: String,
         budget: &DriftBudget,
         breaking_rules: &[BreakingChangeRule],
+        baseline_field_count: Option<f64>,
     ) -> Self {
-        let mut breaking_mismatches = Vec::new();
-        let mut non_breaking_mismatches = Vec::new();
-
-        // Classify mismatches as breaking or non-breaking
-        for mismatch in &diff_result.mismatches {
-            let is_breaking = breaking_rules
-                .iter()
-                .filter(|rule| rule.enabled)
-                .any(|rule| rule.matches(mismatch));
-
-            if is_breaking {
-                breaking_mismatches.push(mismatch.clone());
-            } else {
-                non_breaking_mismatches.push(mismatch.clone());
-            }
-        }
+        // Use three-way classification for better categorization
+        use crate::contract_drift::BreakingChangeDetector;
+        let detector = BreakingChangeDetector::new(breaking_rules.to_vec());
+        let (non_breaking_mismatches, potentially_breaking_mismatches, breaking_mismatches) =
+            detector.classify_three_way(&diff_result.mismatches);
 
         let breaking_changes = breaking_mismatches.len() as u32;
+        let potentially_breaking_changes = potentially_breaking_mismatches.len() as u32;
         let non_breaking_changes = non_breaking_mismatches.len() as u32;
-        let total_changes = breaking_changes + non_breaking_changes;
+        let total_changes = breaking_changes + potentially_breaking_changes + non_breaking_changes;
 
-        // Check if budget is exceeded
-        let budget_exceeded = breaking_changes > budget.max_breaking_changes
-            || non_breaking_changes > budget.max_non_breaking_changes;
+                // Check if budget is exceeded
+                // If percentage-based budget is set, use that; otherwise use absolute counts
+                let budget_exceeded = if let Some(max_churn_percent) = budget.max_field_churn_percent {
+                    // Calculate field churn percentage using baseline from field tracker
+                    if let Some(baseline) = baseline_field_count {
+                        if baseline > 0.0 {
+                            let churn_percent = (total_changes as f64 / baseline) * 100.0;
+                            churn_percent > max_churn_percent
+                                || breaking_changes > budget.max_breaking_changes
+                        } else {
+                            // If baseline is 0, any changes represent 100% churn
+                            total_changes > 0 && (100.0 > max_churn_percent || breaking_changes > budget.max_breaking_changes)
+                        }
+                    } else {
+                        // No baseline available - fall back to absolute counts
+                        breaking_changes > budget.max_breaking_changes
+                            || non_breaking_changes > budget.max_non_breaking_changes
+                    }
+                } else {
+                    // Use absolute counts
+                    breaking_changes > budget.max_breaking_changes
+                        || non_breaking_changes > budget.max_non_breaking_changes
+                };
 
         // Determine if incident should be created
         let should_create_incident = budget_exceeded || breaking_changes > 0;
@@ -208,8 +269,10 @@ impl DriftResult {
         Self {
             budget_exceeded,
             breaking_changes,
+            potentially_breaking_changes,
             non_breaking_changes,
             breaking_mismatches,
+            potentially_breaking_mismatches,
             non_breaking_mismatches,
             metrics,
             should_create_incident,

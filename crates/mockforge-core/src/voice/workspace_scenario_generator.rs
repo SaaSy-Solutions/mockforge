@@ -16,7 +16,7 @@ use super::command_parser::ParsedWorkspaceScenario;
 use super::spec_generator::VoiceSpecGenerator;
 
 /// Generated workspace scenario
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct GeneratedWorkspaceScenario {
     /// Workspace ID
     pub workspace_id: String,
@@ -24,7 +24,7 @@ pub struct GeneratedWorkspaceScenario {
     pub name: String,
     /// Workspace description
     pub description: String,
-    /// Generated OpenAPI specification
+    /// Generated OpenAPI specification (not serialized - OpenApiSpec doesn't implement Serialize)
     pub openapi_spec: Option<OpenApiSpec>,
     /// Chaos configuration (YAML)
     pub chaos_config: Option<String>,
@@ -203,10 +203,14 @@ impl WorkspaceScenarioGenerator {
 
                     // Extract error rate and codes
                     if let Some(rate) = char.config.get("error_rate").and_then(|v| v.as_f64()) {
+                        // serde_yaml::Number doesn't have from_f64, so we convert to string and parse
+                        let num_str = rate.to_string();
                         fault.insert(
                             serde_yaml::Value::String("http_error_probability".to_string()),
                             serde_yaml::Value::Number(
-                                serde_yaml::Number::from_f64(rate).unwrap_or(0.1.into()),
+                                num_str.parse::<serde_yaml::Number>().unwrap_or_else(|_| {
+                                    serde_yaml::Number::from(0.1)
+                                }),
                             ),
                         );
                     } else {

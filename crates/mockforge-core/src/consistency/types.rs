@@ -8,6 +8,8 @@ use crate::reality::RealityLevel;
 use chrono::{DateTime, Utc};
 use mockforge_chaos::ChaosScenario;
 pub use mockforge_data::PersonaProfile;
+#[cfg(feature = "persona-graph")]
+pub use mockforge_data::PersonaGraph;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -56,6 +58,18 @@ pub struct UnifiedState {
     /// Each protocol can store its own state (sessions, connections, etc.)
     /// while still being coordinated by the unified state.
     pub protocol_states: HashMap<Protocol, ProtocolState>,
+    /// Persona graph for managing entity relationships
+    ///
+    /// Maintains relationships between personas across different entity types
+    /// (user → orders → payments → webhooks → TCP messages), enabling
+    /// coherent data generation across endpoints.
+    #[cfg(feature = "persona-graph")]
+    #[serde(skip)]
+    pub persona_graph: Option<PersonaGraph>,
+    #[cfg(not(feature = "persona-graph"))]
+    #[serde(skip)]
+    #[allow(dead_code)]
+    persona_graph: Option<()>,
     /// Timestamp of last state update
     pub last_updated: DateTime<Utc>,
     /// State version for conflict resolution
@@ -77,9 +91,43 @@ impl UnifiedState {
             active_chaos_rules: Vec::new(),
             entity_state: HashMap::new(),
             protocol_states: HashMap::new(),
+            #[cfg(feature = "persona-graph")]
+            persona_graph: Some(PersonaGraph::new()),
+            #[cfg(not(feature = "persona-graph"))]
+            persona_graph: None,
             last_updated: Utc::now(),
             version: 1,
         }
+    }
+
+    /// Get or create the persona graph for this workspace
+    #[cfg(feature = "persona-graph")]
+    pub fn get_or_create_persona_graph(&mut self) -> &mut PersonaGraph {
+        if self.persona_graph.is_none() {
+            self.persona_graph = Some(PersonaGraph::new());
+        }
+        self.persona_graph.as_mut().unwrap()
+    }
+
+    /// Get the persona graph (read-only)
+    #[cfg(feature = "persona-graph")]
+    pub fn persona_graph(&self) -> Option<&PersonaGraph> {
+        self.persona_graph.as_ref()
+    }
+
+    /// Get or create the persona graph for this workspace (stub when feature disabled)
+    #[cfg(not(feature = "persona-graph"))]
+    pub fn get_or_create_persona_graph(&mut self) -> &mut () {
+        if self.persona_graph.is_none() {
+            self.persona_graph = Some(());
+        }
+        self.persona_graph.as_mut().unwrap()
+    }
+
+    /// Get the persona graph (read-only, stub when feature disabled)
+    #[cfg(not(feature = "persona-graph"))]
+    pub fn persona_graph(&self) -> Option<&()> {
+        self.persona_graph.as_ref()
     }
 
     /// Create entity key from type and ID
@@ -314,4 +362,3 @@ impl StateChangeEvent {
         }
     }
 }
-

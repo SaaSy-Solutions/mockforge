@@ -2095,6 +2095,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let drift_state = DriftBudgetState {
             engine: drift_engine,
             incident_manager,
+            gitops_handler: None, // Can be initialized later if GitOps is configured
         };
 
         app = app.merge(drift_budget_router(drift_state));
@@ -2240,6 +2241,22 @@ pub async fn build_router_with_chains_and_multi_tenant(
         app = app.merge(consistency_router(consistency_state));
         debug!("Consistency engine initialized and endpoints mounted at /api/v1/consistency");
 
+        // Add fidelity score endpoints
+        {
+            use crate::handlers::fidelity::{fidelity_router, FidelityState};
+            let fidelity_state = FidelityState::new();
+            app = app.merge(fidelity_router(fidelity_state));
+            debug!("Fidelity score endpoints mounted at /api/v1/workspace/:workspace_id/fidelity");
+        }
+
+        // Add scenario studio endpoints
+        {
+            use crate::handlers::scenario_studio::{scenario_studio_router, ScenarioStudioState};
+            let scenario_studio_state = ScenarioStudioState::new();
+            app = app.merge(scenario_studio_router(scenario_studio_state));
+            debug!("Scenario Studio endpoints mounted at /api/v1/scenario-studio");
+        }
+
         // Add snapshot management endpoints
         {
             use crate::handlers::snapshots::{snapshot_router, SnapshotState};
@@ -2268,6 +2285,34 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 app = app.merge(xray_router(xray_state));
                 debug!("X-Ray API endpoints mounted at /api/v1/xray");
             }
+        }
+
+        // Add A/B testing endpoints and middleware
+        {
+            use crate::handlers::ab_testing::{ab_testing_router, ABTestingState};
+            use crate::middleware::ab_testing::ab_testing_middleware;
+
+            let ab_testing_state = ABTestingState::new();
+
+            // Add A/B testing middleware (before other response middleware)
+            let ab_testing_state_clone = ab_testing_state.clone();
+            app = app.layer(axum::middleware::from_fn(
+                move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                    let state = ab_testing_state_clone.clone();
+                    async move {
+                        // Insert state into extensions if not already present
+                        if req.extensions().get::<ABTestingState>().is_none() {
+                            req.extensions_mut().insert(state);
+                        }
+                        // Call the middleware function
+                        ab_testing_middleware(req, next).await
+                    }
+                },
+            ));
+
+            // Add A/B testing API endpoints
+            app = app.merge(ab_testing_router(ab_testing_state));
+            debug!("A/B testing endpoints mounted at /api/v1/ab-tests");
         }
     }
 

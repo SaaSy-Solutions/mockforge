@@ -74,6 +74,18 @@ pub struct DriftIncident {
     pub created_at: i64,
     /// When the incident was last updated
     pub updated_at: i64,
+    /// Sync cycle ID that triggered this incident (if from API sync)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync_cycle_id: Option<String>,
+    /// Contract diff ID that triggered this incident (if from contract diff)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract_diff_id: Option<String>,
+    /// Before sample - contract/spec state before drift was detected
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_sample: Option<serde_json::Value>,
+    /// After sample - contract/spec state after drift was detected
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_sample: Option<serde_json::Value>,
 }
 
 impl DriftIncident {
@@ -103,6 +115,10 @@ impl DriftIncident {
             external_ticket_url: None,
             created_at: now,
             updated_at: now,
+            sync_cycle_id: None,
+            contract_diff_id: None,
+            before_sample: None,
+            after_sample: None,
         }
     }
 

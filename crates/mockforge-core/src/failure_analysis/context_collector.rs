@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use super::types::*;
 
 /// Collector for failure context
+#[derive(Debug)]
 pub struct FailureContextCollector;
 
 impl FailureContextCollector {

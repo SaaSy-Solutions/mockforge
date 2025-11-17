@@ -23,6 +23,7 @@ pub use sync::*;
 // Legacy imports for compatibility
 use crate::config::AuthConfig;
 use crate::encryption::AutoEncryptionConfig;
+use crate::fidelity::FidelityScore;
 use crate::reality::RealityLevel;
 use crate::routing::{HttpMethod, Route, RouteRegistry};
 use crate::{Error, Result};
@@ -280,6 +281,10 @@ pub struct WorkspaceConfig {
     /// Controls the realism of mock behavior (chaos, latency, MockAI)
     #[serde(default)]
     pub reality_level: Option<RealityLevel>,
+    /// Current fidelity score for this workspace
+    /// Measures how close the mock is to the real upstream
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fidelity_score: Option<FidelityScore>,
 }
 
 /// Workspace registry for managing multiple workspaces
@@ -1046,6 +1051,7 @@ impl Default for WorkspaceConfig {
             sync: SyncConfig::default(),
             auto_encryption: AutoEncryptionConfig::default(),
             reality_level: None,
+            fidelity_score: None,
         }
     }
 }

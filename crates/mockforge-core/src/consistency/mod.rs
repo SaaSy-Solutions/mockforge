@@ -7,10 +7,14 @@
 
 pub mod adapters;
 pub mod engine;
+pub mod persona_graph_response;
 pub mod types;
 
 pub use engine::ConsistencyEngine;
+pub use persona_graph_response::{
+    enrich_order_response, enrich_response_via_graph, enrich_user_response,
+    get_user_orders_via_graph,
+};
 pub use types::{
     EntityState, PersonaProfile, ProtocolState, SessionInfo, StateChangeEvent, UnifiedState,
 };
-

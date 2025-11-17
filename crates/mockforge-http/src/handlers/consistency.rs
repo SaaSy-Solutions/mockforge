@@ -7,10 +7,13 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use mockforge_core::consistency::{ConsistencyEngine, EntityState, UnifiedState};
+use mockforge_core::consistency::{
+    enrich_order_response, enrich_response_via_graph, enrich_user_response,
+    get_user_orders_via_graph, ConsistencyEngine, EntityState, UnifiedState,
+};
 use mockforge_core::reality::RealityLevel;
 use mockforge_chaos::ChaosScenario;
-use mockforge_data::PersonaProfile;
+use mockforge_data::{PersonaProfile, PersonaLifecycle, LifecycleState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -77,6 +80,15 @@ pub struct ActivateChaosRuleRequest {
 pub struct DeactivateChaosRuleRequest {
     /// Rule name
     pub rule_name: String,
+}
+
+/// Request to set persona lifecycle state
+#[derive(Debug, Deserialize)]
+pub struct SetPersonaLifecycleRequest {
+    /// Persona ID
+    pub persona_id: String,
+    /// Initial lifecycle state
+    pub initial_state: String,
 }
 
 /// Query parameters for workspace operations
@@ -350,6 +362,165 @@ pub async fn deactivate_chaos_rule(
     })))
 }
 
+/// Set persona lifecycle state
+///
+/// POST /api/v1/consistency/persona/lifecycle?workspace={workspace_id}
+pub async fn set_persona_lifecycle(
+    State(state): State<ConsistencyState>,
+    Query(params): Query<WorkspaceQuery>,
+    Json(request): Json<SetPersonaLifecycleRequest>,
+) -> Result<Json<Value>, StatusCode> {
+    // Parse lifecycle state
+    let lifecycle_state = match request.initial_state.to_lowercase().as_str() {
+        "new" | "new_signup" => LifecycleState::NewSignup,
+        "active" => LifecycleState::Active,
+        "power_user" | "poweruser" => LifecycleState::PowerUser,
+        "churn_risk" | "churnrisk" => LifecycleState::ChurnRisk,
+        "churned" => LifecycleState::Churned,
+        "upgrade_pending" | "upgradepending" => LifecycleState::UpgradePending,
+        "payment_failed" | "paymentfailed" => LifecycleState::PaymentFailed,
+        _ => {
+            error!("Invalid lifecycle state: {}", request.initial_state);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
+
+    // Get unified state to access active persona
+    let unified_state = state
+        .engine
+        .get_state(&params.workspace)
+        .await
+        .ok_or_else(|| {
+            error!("State not found for workspace: {}", params.workspace);
+            StatusCode::NOT_FOUND
+        })?;
+
+    // Update persona lifecycle if active persona matches
+    if let Some(ref persona) = unified_state.active_persona {
+        if persona.id == request.persona_id {
+            let mut persona_mut = persona.clone();
+            let lifecycle = PersonaLifecycle::new(request.persona_id.clone(), lifecycle_state);
+            persona_mut.set_lifecycle(lifecycle);
+            
+            // Apply lifecycle effects to persona traits
+            if let Some(ref lifecycle) = persona_mut.lifecycle {
+                let effects = lifecycle.apply_lifecycle_effects();
+                for (key, value) in effects {
+                    persona_mut.set_trait(key, value);
+                }
+            }
+
+            // Update the persona in the engine
+            state
+                .engine
+                .set_active_persona(&params.workspace, persona_mut)
+                .await
+                .map_err(|e| {
+                    error!("Failed to set persona lifecycle: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+
+            info!("Set lifecycle state {} for persona {} in workspace: {}", 
+                  request.initial_state, request.persona_id, params.workspace);
+            
+            return Ok(Json(serde_json::json!({
+                "success": true,
+                "workspace": params.workspace,
+                "persona_id": request.persona_id,
+                "lifecycle_state": request.initial_state,
+            })));
+        }
+    }
+
+    error!("Persona {} not found or not active in workspace: {}", 
+           request.persona_id, params.workspace);
+    Err(StatusCode::NOT_FOUND)
+}
+
+/// Get user by ID with persona graph enrichment
+///
+/// GET /api/v1/consistency/users/{id}?workspace={workspace_id}
+/// This endpoint uses the persona graph to enrich the user response with related entities.
+pub async fn get_user_with_graph(
+    State(state): State<ConsistencyState>,
+    Path(user_id): Path<String>,
+    Query(params): Query<WorkspaceQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    // Get user entity
+    let mut user_entity = state
+        .engine
+        .get_entity(&params.workspace, "user", &user_id)
+        .await
+        .ok_or_else(|| {
+            error!("User not found: {} in workspace: {}", user_id, params.workspace);
+            StatusCode::NOT_FOUND
+        })?;
+
+    // Enrich response with persona graph data
+    let mut response = user_entity.data.clone();
+    enrich_user_response(&state.engine, &params.workspace, &user_id, &mut response).await;
+
+    Ok(Json(response))
+}
+
+/// Get orders for a user using persona graph
+///
+/// GET /api/v1/consistency/users/{id}/orders?workspace={workspace_id}
+/// This endpoint uses the persona graph to find all orders related to the user.
+pub async fn get_user_orders_with_graph(
+    State(state): State<ConsistencyState>,
+    Path(user_id): Path<String>,
+    Query(params): Query<WorkspaceQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    // Verify user exists
+    state
+        .engine
+        .get_entity(&params.workspace, "user", &user_id)
+        .await
+        .ok_or_else(|| {
+            error!("User not found: {} in workspace: {}", user_id, params.workspace);
+            StatusCode::NOT_FOUND
+        })?;
+
+    // Get orders via persona graph
+    let orders = get_user_orders_via_graph(&state.engine, &params.workspace, &user_id).await;
+
+    // Convert to JSON response
+    let orders_json: Vec<Value> = orders.iter().map(|e| e.data.clone()).collect();
+
+    Ok(Json(serde_json::json!({
+        "user_id": user_id,
+        "orders": orders_json,
+        "count": orders_json.len(),
+    })))
+}
+
+/// Get order by ID with persona graph enrichment
+///
+/// GET /api/v1/consistency/orders/{id}?workspace={workspace_id}
+/// This endpoint uses the persona graph to enrich the order response with related entities.
+pub async fn get_order_with_graph(
+    State(state): State<ConsistencyState>,
+    Path(order_id): Path<String>,
+    Query(params): Query<WorkspaceQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    // Get order entity
+    let mut order_entity = state
+        .engine
+        .get_entity(&params.workspace, "order", &order_id)
+        .await
+        .ok_or_else(|| {
+            error!("Order not found: {} in workspace: {}", order_id, params.workspace);
+            StatusCode::NOT_FOUND
+        })?;
+
+    // Enrich response with persona graph data
+    let mut response = order_entity.data.clone();
+    enrich_order_response(&state.engine, &params.workspace, &order_id, &mut response).await;
+
+    Ok(Json(response))
+}
+
 /// Create consistency router
 pub fn consistency_router(state: ConsistencyState) -> axum::Router {
     use axum::routing::{get, post};
@@ -359,6 +530,7 @@ pub fn consistency_router(state: ConsistencyState) -> axum::Router {
         .route("/api/v1/consistency/state", get(get_state))
         // Persona management
         .route("/api/v1/consistency/persona", post(set_persona))
+        .route("/api/v1/consistency/persona/lifecycle", post(set_persona_lifecycle))
         // Scenario management
         .route("/api/v1/consistency/scenario", post(set_scenario))
         // Reality level management
@@ -371,9 +543,12 @@ pub fn consistency_router(state: ConsistencyState) -> axum::Router {
             "/api/v1/consistency/entities/:entity_type/:entity_id",
             get(get_entity),
         )
+        // Persona graph-enabled endpoints
+        .route("/api/v1/consistency/users/:id", get(get_user_with_graph))
+        .route("/api/v1/consistency/users/:id/orders", get(get_user_orders_with_graph))
+        .route("/api/v1/consistency/orders/:id", get(get_order_with_graph))
         // Chaos rule management
         .route("/api/v1/consistency/chaos/activate", post(activate_chaos_rule))
         .route("/api/v1/consistency/chaos/deactivate", post(deactivate_chaos_rule))
         .with_state(state)
 }
-

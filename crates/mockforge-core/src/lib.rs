@@ -222,6 +222,8 @@ pub mod consumer_contracts;
 pub mod contract_drift;
 /// Contract validation for ensuring API contracts match specifications
 pub mod contract_validation;
+/// GitOps integration for drift budget violations
+pub mod drift_gitops;
 /// Contract webhooks for notifying external systems about contract changes
 pub mod contract_webhooks;
 /// Runtime validation for SDKs (request/response validation at runtime)

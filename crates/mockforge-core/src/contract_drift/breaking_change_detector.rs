@@ -41,6 +41,40 @@ impl BreakingChangeDetector {
         (breaking, non_breaking)
     }
 
+    /// Classify mismatches into three categories: non-breaking, potentially breaking, and definitely breaking
+    ///
+    /// - **Non-breaking**: Additive changes, documentation-only, unexpected fields (additive)
+    /// - **Potentially breaking**: Medium severity changes, format mismatches, constraint violations
+    /// - **Definitely breaking**: Critical/High severity, missing required fields, type changes, removals
+    pub fn classify_three_way(&self, mismatches: &[Mismatch]) -> (Vec<Mismatch>, Vec<Mismatch>, Vec<Mismatch>) {
+        let mut non_breaking = Vec::new();
+        let mut potentially_breaking = Vec::new();
+        let mut definitely_breaking = Vec::new();
+
+        for mismatch in mismatches {
+            // Definitely breaking: explicitly matches breaking rules
+            if self.is_breaking(mismatch) {
+                definitely_breaking.push(mismatch.clone());
+            }
+            // Potentially breaking: medium severity or certain mismatch types that need review
+            else if mismatch.severity == crate::ai_contract_diff::MismatchSeverity::Medium
+                || matches!(
+                    mismatch.mismatch_type,
+                    crate::ai_contract_diff::MismatchType::FormatMismatch
+                        | crate::ai_contract_diff::MismatchType::ConstraintViolation
+                        | crate::ai_contract_diff::MismatchType::TypeMismatch
+                ) {
+                potentially_breaking.push(mismatch.clone());
+            }
+            // Non-breaking: additive changes, documentation, unexpected fields
+            else {
+                non_breaking.push(mismatch.clone());
+            }
+        }
+
+        (non_breaking, potentially_breaking, definitely_breaking)
+    }
+
     /// Get the rules used by this detector
     pub fn rules(&self) -> &[BreakingChangeRule] {
         &self.rules

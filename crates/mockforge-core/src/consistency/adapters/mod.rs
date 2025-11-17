@@ -50,4 +50,3 @@ pub trait ProtocolAdapter: Send + Sync {
 
 // Placeholder adapters will be implemented in protocol-specific crates
 // (mockforge-http, mockforge-graphql, etc.)
-

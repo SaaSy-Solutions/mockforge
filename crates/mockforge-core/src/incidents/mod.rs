@@ -8,6 +8,13 @@ pub mod manager;
 pub mod store;
 pub mod types;
 
+// Integration formatters (always available, not behind feature flag for simplicity)
+#[path = "integrations/slack.rs"]
+pub mod slack_formatter;
+
+#[path = "integrations/jira.rs"]
+pub mod jira_formatter;
+
 pub use manager::IncidentManager;
 pub use store::IncidentStore;
 pub use types::{

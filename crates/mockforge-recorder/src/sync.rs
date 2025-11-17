@@ -494,6 +494,19 @@ impl SyncService {
         &self,
         gitops_handler: Option<&crate::sync_gitops::GitOpsSyncHandler>,
     ) -> Result<(Vec<DetectedChange>, usize, Option<mockforge_core::pr_generation::PRResult>)> {
+        self.sync_with_gitops_and_drift(
+            gitops_handler,
+            None, // drift_evaluator
+        )
+        .await
+    }
+
+    /// Perform sync with GitOps and drift budget evaluation
+    pub async fn sync_with_gitops_and_drift(
+        &self,
+        gitops_handler: Option<&crate::sync_gitops::GitOpsSyncHandler>,
+        drift_evaluator: Option<&crate::sync_drift::SyncDriftEvaluator>,
+    ) -> Result<(Vec<DetectedChange>, usize, Option<mockforge_core::pr_generation::PRResult>)> {
         let config = self.config.read().await.clone();
         let upstream_url = config.upstream_url.ok_or_else(|| {
             crate::RecorderError::InvalidFilter("No upstream_url configured".to_string())
@@ -539,6 +552,16 @@ impl SyncService {
         } else {
             None
         };
+
+        // Evaluate drift budgets and create incidents if enabled
+        if let Some(evaluator) = drift_evaluator {
+            if let Err(e) = evaluator
+                .evaluate_sync_changes(&changes, &sync_cycle_id, None, None, None)
+                .await
+            {
+                warn!("Failed to evaluate drift budgets for sync changes: {}", e);
+            }
+        }
 
         {
             let mut status = self.status.write().await;

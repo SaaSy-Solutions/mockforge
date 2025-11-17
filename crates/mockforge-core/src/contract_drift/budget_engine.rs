@@ -3,20 +3,43 @@
 //! This module provides the core logic for evaluating contract drift against configured budgets.
 
 use crate::ai_contract_diff::ContractDiffResult;
+use crate::contract_drift::field_tracking::FieldCountTracker;
 use crate::contract_drift::types::{
-    BreakingChangeRule, DriftBudget, DriftBudgetConfig, DriftResult,
+    DriftBudget, DriftBudgetConfig, DriftResult,
 };
+use std::sync::Arc;
 
 /// Engine for evaluating drift budgets
 #[derive(Debug, Clone)]
 pub struct DriftBudgetEngine {
     config: DriftBudgetConfig,
+    /// Optional field count tracker for percentage-based budgets
+    field_tracker: Option<Arc<tokio::sync::RwLock<FieldCountTracker>>>,
 }
 
 impl DriftBudgetEngine {
     /// Create a new drift budget engine
     pub fn new(config: DriftBudgetConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            field_tracker: None,
+        }
+    }
+
+    /// Create a new drift budget engine with field count tracking
+    pub fn new_with_tracker(
+        config: DriftBudgetConfig,
+        field_tracker: Arc<tokio::sync::RwLock<FieldCountTracker>>,
+    ) -> Self {
+        Self {
+            config,
+            field_tracker: Some(field_tracker),
+        }
+    }
+
+    /// Set the field count tracker
+    pub fn set_field_tracker(&mut self, field_tracker: Arc<tokio::sync::RwLock<FieldCountTracker>>) {
+        self.field_tracker = Some(field_tracker);
     }
 
     /// Evaluate contract diff result against drift budget
@@ -29,13 +52,31 @@ impl DriftBudgetEngine {
         endpoint: &str,
         method: &str,
     ) -> DriftResult {
+        self.evaluate_with_context(diff_result, endpoint, method, None, None, None)
+    }
+
+    /// Evaluate contract diff result against drift budget with context
+    ///
+    /// Returns a `DriftResult` indicating whether the budget is exceeded and
+    /// which mismatches are considered breaking.
+    pub fn evaluate_with_context(
+        &self,
+        diff_result: &ContractDiffResult,
+        endpoint: &str,
+        method: &str,
+        workspace_id: Option<&str>,
+        service_name: Option<&str>,
+        tags: Option<&[String]>,
+    ) -> DriftResult {
         if !self.config.enabled {
             // If drift tracking is disabled, return a result indicating no issues
             return DriftResult {
                 budget_exceeded: false,
                 breaking_changes: 0,
+                potentially_breaking_changes: 0,
                 non_breaking_changes: 0,
                 breaking_mismatches: vec![],
+                potentially_breaking_mismatches: vec![],
                 non_breaking_mismatches: diff_result.mismatches.clone(),
                 metrics: crate::contract_drift::types::DriftMetrics {
                     endpoint: endpoint.to_string(),
@@ -50,16 +91,18 @@ impl DriftBudgetEngine {
             };
         }
 
-        // Get budget for this endpoint
-        let budget = self.get_budget_for_endpoint(endpoint, method);
+        // Get budget for this endpoint using priority hierarchy
+        let budget = self.get_budget_for_endpoint(endpoint, method, workspace_id, service_name, tags);
 
         if !budget.enabled {
             // Budget disabled for this endpoint
             return DriftResult {
                 budget_exceeded: false,
                 breaking_changes: 0,
+                potentially_breaking_changes: 0,
                 non_breaking_changes: 0,
                 breaking_mismatches: vec![],
+                potentially_breaking_mismatches: vec![],
                 non_breaking_mismatches: diff_result.mismatches.clone(),
                 metrics: crate::contract_drift::types::DriftMetrics {
                     endpoint: endpoint.to_string(),
@@ -73,6 +116,37 @@ impl DriftBudgetEngine {
                 should_create_incident: false,
             };
         }
+
+        // Calculate baseline field count if percentage-based budget is enabled and tracker is available
+        let baseline_field_count = if budget.max_field_churn_percent.is_some() {
+            if let Some(ref tracker) = self.field_tracker {
+                // Use blocking call to get baseline (evaluate_with_context is sync)
+                // This is safe because we're in a tokio runtime context
+                let rt = tokio::runtime::Handle::try_current();
+                if let Ok(handle) = rt {
+                    if let Some(time_window) = budget.time_window_days {
+                        // Use blocking call to get baseline (average over time window)
+                        handle.block_on(async {
+                            let guard = tracker.read().await;
+                            guard.get_average_count(
+                                None, // workspace_id - could be passed through if needed
+                                endpoint,
+                                method,
+                                time_window,
+                            )
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // Evaluate against budget
         DriftResult::from_diff_result(
@@ -81,23 +155,64 @@ impl DriftBudgetEngine {
             method.to_string(),
             &budget,
             &self.config.breaking_change_rules,
+            baseline_field_count,
         )
     }
 
     /// Get budget for a specific endpoint
-    fn get_budget_for_endpoint(&self, endpoint: &str, method: &str) -> DriftBudget {
-        let key = format!("{} {}", method, endpoint);
+    /// 
+    /// Priority order: workspace > service/tag > endpoint > default
+    pub fn get_budget_for_endpoint(
+        &self,
+        endpoint: &str,
+        method: &str,
+        workspace_id: Option<&str>,
+        service_name: Option<&str>,
+        tags: Option<&[String]>,
+    ) -> DriftBudget {
+        // Priority 1: Per-workspace budget
+        if let Some(workspace_id) = workspace_id {
+            if let Some(budget) = self.config.per_workspace_budgets.get(workspace_id) {
+                return budget.clone();
+            }
+        }
 
-        // Check per-endpoint budgets first
+        // Priority 2: Per-service budget (explicit service name)
+        if let Some(service_name) = service_name {
+            if let Some(budget) = self.config.per_service_budgets.get(service_name) {
+                return budget.clone();
+            }
+        }
+
+        // Priority 3: Per-tag budget (from OpenAPI tags)
+        if let Some(tags) = tags {
+            for tag in tags {
+                if let Some(budget) = self.config.per_tag_budgets.get(tag) {
+                    return budget.clone();
+                }
+                // Also check per_service_budgets for tag matches
+                if let Some(budget) = self.config.per_service_budgets.get(tag) {
+                    return budget.clone();
+                }
+            }
+        }
+
+        // Priority 4: Per-endpoint budget
+        let key = format!("{} {}", method, endpoint);
         if let Some(budget) = self.config.per_endpoint_budgets.get(&key) {
             return budget.clone();
         }
 
-        // Fall back to default budget
+        // Priority 5: Default budget
         self.config
             .default_budget
             .clone()
             .unwrap_or_else(DriftBudget::default)
+    }
+
+    /// Get budget for a specific endpoint (backward compatibility)
+    fn get_budget_for_endpoint_legacy(&self, endpoint: &str, method: &str) -> DriftBudget {
+        self.get_budget_for_endpoint(endpoint, method, None, None, None)
     }
 
     /// Get the drift budget configuration

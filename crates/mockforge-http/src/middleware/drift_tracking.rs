@@ -115,10 +115,24 @@ pub async fn drift_tracking_middleware_with_extensions(
                         "budget_exceeded": drift_result.budget_exceeded,
                     });
 
-                    // Create incident
+                    // Create incident with before/after samples
+                    // Extract before/after samples from diff result if available
+                    let before_sample = Some(serde_json::json!({
+                        "contract_format": diff_result.metadata.contract_format,
+                        "contract_version": diff_result.metadata.contract_version,
+                        "endpoint": path,
+                        "method": method,
+                    }));
+
+                    let after_sample = Some(serde_json::json!({
+                        "mismatches": diff_result.mismatches,
+                        "recommendations": diff_result.recommendations,
+                        "corrections": diff_result.corrections,
+                    }));
+
                     let _incident = state
                         .incident_manager
-                        .create_incident(
+                        .create_incident_with_samples(
                             path.clone(),
                             method.clone(),
                             incident_type,
@@ -126,6 +140,10 @@ pub async fn drift_tracking_middleware_with_extensions(
                             details,
                             None, // budget_id
                             None, // workspace_id
+                            None, // sync_cycle_id
+                            None, // contract_diff_id (could be generated from diff_result)
+                            before_sample,
+                            after_sample,
                         )
                         .await;
 
