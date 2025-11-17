@@ -9,7 +9,7 @@
 //! - Drift budget configuration
 
 use crate::contract_drift::{DriftBudget, DriftBudgetConfig};
-use crate::multi_tenant::{MultiTenantWorkspaceRegistry, Workspace};
+use crate::multi_tenant::MultiTenantWorkspaceRegistry;
 use crate::openapi::OpenApiSpec;
 use crate::reality_continuum::config::{
     ContinuumConfig, ContinuumRule, MergeStrategy, TransitionMode,
@@ -22,6 +22,7 @@ use crate::voice::command_parser::{
 };
 use crate::voice::spec_generator::VoiceSpecGenerator;
 use crate::Result;
+use crate::Workspace;
 use mockforge_data::{Domain, PersonaProfile};
 use std::collections::HashMap;
 use uuid::Uuid;

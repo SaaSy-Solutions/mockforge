@@ -8,7 +8,8 @@ use crate::consistency::types::{EntityState, ProtocolState, StateChangeEvent, Un
 use crate::protocol_abstraction::Protocol;
 use crate::reality::RealityLevel;
 use crate::Result;
-use mockforge_chaos::ChaosScenario;
+// ChaosScenario is defined in mockforge-chaos, but we use serde_json::Value to avoid circular dependency
+type ChaosScenario = serde_json::Value;
 use mockforge_data::PersonaProfile;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -308,7 +309,12 @@ impl ConsistencyEngine {
             .or_insert_with(|| UnifiedState::new(workspace_id.to_string()));
 
         // Remove existing rule with same name if present
-        state.active_chaos_rules.retain(|r| r.name != rule.name);
+        // Note: ChaosScenario is serde_json::Value, so we compare by serializing
+        if let Some(rule_name) = rule.get("name").and_then(|v| v.as_str()) {
+            state
+                .active_chaos_rules
+                .retain(|r| r.get("name").and_then(|v| v.as_str()) != Some(rule_name));
+        }
         state.active_chaos_rules.push(rule.clone());
         state.increment_version();
 
@@ -331,10 +337,16 @@ impl ConsistencyEngine {
             .entry(workspace_id.to_string())
             .or_insert_with(|| UnifiedState::new(workspace_id.to_string()));
 
-        let removed = state.active_chaos_rules.iter().any(|r| r.name == rule_name);
+        // Note: ChaosScenario is serde_json::Value, so we compare by serializing
+        let removed = state
+            .active_chaos_rules
+            .iter()
+            .any(|r| r.get("name").and_then(|v| v.as_str()) == Some(rule_name));
 
         if removed {
-            state.active_chaos_rules.retain(|r| r.name != rule_name);
+            state
+                .active_chaos_rules
+                .retain(|r| r.get("name").and_then(|v| v.as_str()) != Some(rule_name));
             state.increment_version();
 
             let event = StateChangeEvent::ChaosRuleDeactivated {

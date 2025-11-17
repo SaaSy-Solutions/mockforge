@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use mockforge_chaos::ChaosScenario;
+// ChaosScenario is now serde_json::Value to avoid circular dependency
 use mockforge_core::consistency::{
     enrich_order_response, enrich_response_via_graph, enrich_user_response,
     get_user_orders_via_graph, ConsistencyEngine, EntityState, UnifiedState,
@@ -15,6 +15,7 @@ use mockforge_core::consistency::{
 use mockforge_core::reality::RealityLevel;
 use mockforge_data::{LifecycleState, PersonaLifecycle, PersonaProfile};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -72,7 +73,7 @@ pub struct RegisterEntityRequest {
 #[derive(Debug, Deserialize)]
 pub struct ActivateChaosRuleRequest {
     /// Chaos scenario
-    pub rule: ChaosScenario,
+    pub rule: JsonValue, // ChaosScenario as JSON value
 }
 
 /// Request to deactivate chaos rule

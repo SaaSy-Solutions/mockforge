@@ -2,9 +2,15 @@
 # This file helps with sqlx offline mode for mockforge-collab
 
 [env]
+# Set DATABASE_URL for sqlx compile-time query checking
+# Using SQLite for development - can be overridden with environment variable
+# Note: The database file will be created automatically if it doesn't exist
+DATABASE_URL = { value = "sqlite:./crates/mockforge-collab/compile-check.db" }
+
 # Enable sqlx offline mode to avoid database connection requirements during compilation
 # Set this to true if you don't have a database connection available
-# SQLX_OFFLINE = true
+# SQLX_OFFLINE = "true"
+# Note: Disabled for now - using DATABASE_URL instead for compile-time checking
 
 # Note: If you need to update sqlx query metadata, run:
 # cd crates/mockforge-collab && cargo sqlx prepare --database-url postgresql://user:pass@localhost/dbname

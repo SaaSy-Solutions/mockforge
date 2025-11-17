@@ -156,9 +156,9 @@ pub async fn build_probability_model(
     let mut latencies_ms = Vec::new();
     let mut error_responses = Vec::new();
 
-    for (req, resp_opt) in exchanges {
+    for (req, resp_opt) in &exchanges {
         // Get status code from request or response
-        let status_code = if let Some(ref resp) = resp_opt {
+        let status_code = if let Some(resp) = resp_opt {
             resp.status_code as u16
         } else if let Some(code) = req.status_code {
             code as u16
@@ -175,7 +175,7 @@ pub async fn build_probability_model(
 
         // Extract error response body if status >= 400
         if status_code >= 400 {
-            if let Some(ref resp) = resp_opt {
+            if let Some(resp) = resp_opt {
                 if let Some(ref body) = resp.body {
                     // Try to parse as JSON
                     if let Ok(json_body) = serde_json::from_str::<Value>(body) {

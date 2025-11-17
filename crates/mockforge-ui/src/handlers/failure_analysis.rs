@@ -2,9 +2,13 @@
 //!
 //! Provides endpoints for retrieving failure narratives and analyzing request failures.
 
-use axum::{extract::Path, http::StatusCode, response::Json as ResponseJson};
+use axum::{
+    extract::{Json, Path},
+    http::StatusCode,
+    response::Json as ResponseJson,
+};
+use mockforge_core::failure_analysis::{FailureContextCollector, FailureNarrativeGenerator};
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
-use mockforge_core::{FailureContextCollector, FailureNarrativeGenerator};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

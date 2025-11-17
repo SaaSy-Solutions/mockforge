@@ -38,17 +38,17 @@ reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
 once_cell = "1.19"
-mockforge-core = "0.2.9"
-mockforge-http = { version = "0.2.9", path = "../mockforge-http", features = ["smtp", "mqtt"] }
-mockforge-ws = "0.2.9"
-mockforge-grpc = "0.2.9"
-mockforge-vbr = { version = "0.2.9", path = "../mockforge-vbr" }
-mockforge-plugin-core = "0.2.9"
-mockforge-plugin-loader = "0.2.9"
-mockforge-analytics = "0.2.9"
-mockforge-chaos = "0.2.9"
-mockforge-collab = "0.2.9"
-mockforge-recorder = { version = "0.2.9", path = "../mockforge-recorder" }
+mockforge-core = { path = "../mockforge-core" }
+mockforge-http = { path = "../mockforge-http", features = ["smtp", "mqtt"] }
+mockforge-ws = { path = "../mockforge-ws" }
+mockforge-grpc = { path = "../mockforge-grpc" }
+mockforge-vbr = { path = "../mockforge-vbr" }
+mockforge-plugin-core = { path = "../mockforge-plugin-core" }
+mockforge-plugin-loader = { path = "../mockforge-plugin-loader" }
+mockforge-analytics = { path = "../mockforge-analytics" }
+mockforge-chaos = { path = "../mockforge-chaos" }
+mockforge-collab = { path = "../mockforge-collab" }
+mockforge-recorder = {path = "../mockforge-recorder" }
 base64 = { workspace = true }
 jsonwebtoken = "9.3"
 bcrypt = "0.15"

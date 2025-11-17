@@ -187,11 +187,16 @@ pub async fn get_budget(
 /// GET /api/v1/drift/budgets/lookup?endpoint=/api/users&method=GET&workspace_id=...
 #[derive(Debug, Deserialize)]
 pub struct GetBudgetQuery {
+    /// Endpoint path
     pub endpoint: String,
+    /// HTTP method
     pub method: String,
+    /// Optional workspace ID
     pub workspace_id: Option<String>,
+    /// Optional service name
     pub service_name: Option<String>,
-    pub tags: Option<String>, // Comma-separated tags
+    /// Optional comma-separated tags
+    pub tags: Option<String>,
 }
 
 /// Get budget for endpoint
@@ -211,7 +216,7 @@ pub async fn get_budget_for_endpoint(
         &params.method,
         params.workspace_id.as_deref(),
         params.service_name.as_deref(),
-        tags.as_deref().map(|t| t.as_slice()),
+        tags.as_deref(),
     );
 
     Ok(Json(serde_json::json!({
@@ -226,21 +231,34 @@ pub async fn get_budget_for_endpoint(
 /// Request to create workspace/service/tag budget
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateWorkspaceBudgetRequest {
+    /// Workspace ID
     pub workspace_id: String,
+    /// Maximum allowed breaking changes
     pub max_breaking_changes: Option<u32>,
+    /// Maximum allowed non-breaking changes
     pub max_non_breaking_changes: Option<u32>,
+    /// Maximum field churn percentage
     pub max_field_churn_percent: Option<f64>,
+    /// Time window in days
     pub time_window_days: Option<u32>,
+    /// Whether the budget is enabled
     pub enabled: Option<bool>,
 }
 
+/// Request to create a service-level drift budget
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateServiceBudgetRequest {
+    /// Service name
     pub service_name: String,
+    /// Maximum allowed breaking changes
     pub max_breaking_changes: Option<u32>,
+    /// Maximum allowed non-breaking changes
     pub max_non_breaking_changes: Option<u32>,
+    /// Maximum field churn percentage
     pub max_field_churn_percent: Option<f64>,
+    /// Time window in days
     pub time_window_days: Option<u32>,
+    /// Whether the budget is enabled
     pub enabled: Option<bool>,
 }
 
@@ -305,9 +323,12 @@ pub async fn create_service_budget(
 /// Request to generate GitOps PR from incidents
 #[derive(Debug, Deserialize)]
 pub struct GeneratePRRequest {
+    /// Optional list of specific incident IDs
     pub incident_ids: Option<Vec<String>>,
+    /// Optional workspace ID filter
     pub workspace_id: Option<String>,
-    pub status: Option<String>, // Filter by status (e.g., "open")
+    /// Optional status filter (e.g., "open")
+    pub status: Option<String>,
 }
 
 /// Generate GitOps PR from drift incidents
@@ -373,10 +394,14 @@ pub async fn generate_gitops_pr(
 /// GET /api/v1/drift/metrics?endpoint=/api/users&method=GET&days=30
 #[derive(Debug, Deserialize)]
 pub struct GetMetricsQuery {
+    /// Optional endpoint filter
     pub endpoint: Option<String>,
+    /// Optional HTTP method filter
     pub method: Option<String>,
+    /// Optional workspace ID filter
     pub workspace_id: Option<String>,
-    pub days: Option<u32>, // Lookback window in days
+    /// Lookback window in days
+    pub days: Option<u32>,
 }
 
 /// Get drift metrics

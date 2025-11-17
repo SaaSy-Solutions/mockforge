@@ -545,10 +545,16 @@ async fn handle_transpile_hook(
     };
 
     println!("✅ Hook transpiled successfully");
-    println!("   - Name: {}", hook.name);
-    println!("   - Type: {:?}", hook.hook_type);
-    println!("   - Actions: {}", hook.actions.len());
-    if hook.condition.is_some() {
+    // Note: Hook is now serde_json::Value, so we extract fields from JSON
+    let hook_name = hook.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let hook_type = hook.get("hook_type").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let actions_count =
+        hook.get("actions").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let has_condition = hook.get("condition").is_some();
+    println!("   - Name: {}", hook_name);
+    println!("   - Type: {:?}", hook_type);
+    println!("   - Actions: {}", actions_count);
+    if has_condition {
         println!("   - Has condition: Yes");
     }
 

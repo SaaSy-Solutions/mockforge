@@ -32,7 +32,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-mockforge-smtp = { version = "0.2.0", path = "../mockforge-smtp", optional = true }
+mockforge-smtp = { path = "../mockforge-smtp", optional = true }
 mockforge-chaos = { path = "../mockforge-chaos" }
 async-trait = { workspace = true }
 glob = { workspace = true }
@@ -54,13 +54,13 @@ oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
 mockforge-core = { path = "../mockforge-core" }
-mockforge-data = "0.2.9"
+mockforge-data = { path = "../mockforge-data" }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate"], optional = true }
-mockforge-observability = "0.2.9"
+mockforge-observability = { path = "../mockforge-observability" }
 mockforge-recorder = { path = "../mockforge-recorder" }
-mockforge-scenarios = "0.2.9"
-mockforge-tracing = "0.2.9"
-mockforge-mqtt = { version = "0.2.0", path = "../mockforge-mqtt", optional = true }
+mockforge-scenarios = { path = "../mockforge-scenarios" }
+mockforge-tracing = { path = "../mockforge-tracing" }
+mockforge-mqtt = { path = "../mockforge-mqtt", optional = true }
 opentelemetry = "0.21"
 rustls = "0.21"
 rustls-pemfile = "1.0"
@@ -83,8 +83,8 @@ reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
-mockforge-ws = "0.2.9"
-mockforge-plugin-core = "0.2.9"
+mockforge-ws = { path = "../mockforge-ws" }
+mockforge-plugin-core = { path = "../mockforge-plugin-core" }
 opentelemetry_sdk = "0.21"
 uuid = { version = "1", features = ["v4"] }
 once_cell = { workspace = true }

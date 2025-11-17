@@ -381,14 +381,14 @@ impl PersonaGraph {
         to_entity_type: &str,
     ) {
         // Determine relationship type based on entity types
-        let relationship_type = match (from_entity_type, to_entity_type) {
-            ("user", "order") | ("user", "orders") => "has_orders",
-            ("user", "account") | ("user", "accounts") => "has_accounts",
-            ("user", "webhook") | ("user", "webhooks") => "has_webhooks",
-            ("user", "tcp_message") | ("user", "tcp_messages") => "has_tcp_messages",
-            ("order", "payment") | ("order", "payments") => "has_payments",
-            ("account", "order") | ("account", "orders") => "has_orders",
-            ("account", "payment") | ("account", "payments") => "has_payments",
+        let relationship_type: String = match (from_entity_type, to_entity_type) {
+            ("user", "order") | ("user", "orders") => "has_orders".to_string(),
+            ("user", "account") | ("user", "accounts") => "has_accounts".to_string(),
+            ("user", "webhook") | ("user", "webhooks") => "has_webhooks".to_string(),
+            ("user", "tcp_message") | ("user", "tcp_messages") => "has_tcp_messages".to_string(),
+            ("order", "payment") | ("order", "payments") => "has_payments".to_string(),
+            ("account", "order") | ("account", "orders") => "has_orders".to_string(),
+            ("account", "payment") | ("account", "payments") => "has_payments".to_string(),
             _ => {
                 // Generic relationship: from_entity_type -> to_entity_type
                 format!("has_{}", to_entity_type.to_lowercase().trim_end_matches('s'))

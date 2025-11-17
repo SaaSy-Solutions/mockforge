@@ -16,7 +16,7 @@ use super::command_parser::ParsedWorkspaceScenario;
 use super::spec_generator::VoiceSpecGenerator;
 
 /// Generated workspace scenario
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeneratedWorkspaceScenario {
     /// Workspace ID
     pub workspace_id: String,
@@ -24,8 +24,9 @@ pub struct GeneratedWorkspaceScenario {
     pub name: String,
     /// Workspace description
     pub description: String,
-    /// Generated OpenAPI specification (not serialized - OpenApiSpec doesn't implement Serialize)
-    pub openapi_spec: Option<OpenApiSpec>,
+    /// Generated OpenAPI specification (serialized as JSON string since OpenApiSpec doesn't implement Serialize)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub openapi_spec: Option<String>, // Serialized as JSON string
     /// Chaos configuration (YAML)
     pub chaos_config: Option<String>,
     /// Initial fixture data
@@ -95,7 +96,16 @@ impl WorkspaceScenarioGenerator {
             // Generate spec
             let spec_generator = VoiceSpecGenerator::new();
             let spec_result = spec_generator.generate_spec(&parsed_command).await;
-            spec_result.ok()
+            // Convert OpenApiSpec to JSON string for serialization
+            spec_result.ok().and_then(|spec| {
+                // Use raw_document if available, otherwise serialize the spec
+                if let Some(ref raw) = spec.raw_document {
+                    serde_json::to_string(raw).ok()
+                } else {
+                    // Fallback: try to serialize the spec struct
+                    serde_json::to_string(&spec.spec).ok()
+                }
+            })
         } else {
             None
         };

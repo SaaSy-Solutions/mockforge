@@ -60,6 +60,7 @@ pub mod playground;
 pub mod plugin;
 pub mod verification;
 pub mod voice;
+pub mod workspaces;
 
 // Re-export commonly used types
 pub use assets::*;

@@ -340,10 +340,11 @@ pub fn create_admin_router(
                 axum::routing::put(workspaces::update_workspace),
             )
             .route("/__mockforge/workspaces/{workspace_id}", delete(workspaces::delete_workspace))
-            .route(
-                "/__mockforge/workspaces/{workspace_id}/activate",
-                post(workspaces::set_active_workspace),
-            )
+            // Note: set_active_workspace handler not yet implemented
+            // .route(
+            //     "/__mockforge/workspaces/{workspace_id}/activate",
+            //     post(workspaces::set_active_workspace),
+            // )
             .route("/api/v2/voice/create-workspace-confirm", post(voice::create_workspace_confirm))
             .route(
                 "/__mockforge/voice/create-workspace-confirm",

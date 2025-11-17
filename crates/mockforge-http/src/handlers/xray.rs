@@ -59,7 +59,12 @@ pub async fn get_state_summary(
         "reality_level": unified_state.reality_level.value(),
         "reality_level_name": unified_state.reality_level.name(),
         "reality_ratio": unified_state.reality_continuum_ratio,
-        "chaos_rules": unified_state.active_chaos_rules.iter().map(|r| r.name.clone()).collect::<Vec<_>>(),
+        // Note: ChaosScenario is now serde_json::Value, so we extract the name field
+        "chaos_rules": unified_state
+            .active_chaos_rules
+            .iter()
+            .filter_map(|r| r.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .collect::<Vec<_>>(),
         "timestamp": unified_state.last_updated,
     });
 

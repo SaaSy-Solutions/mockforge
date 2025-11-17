@@ -169,12 +169,12 @@ pub async fn tag_flow(
     match RecorderDatabase::new(&db_path).await {
         Ok(db) => {
             let recorder = FlowRecorder::new(db.clone(), FlowRecordingConfig::default());
-            match recorder
-                .tag_flow(
+            match db
+                .update_flow_metadata(
                     &flow_id,
-                    payload.name,
-                    payload.description,
-                    payload.tags.unwrap_or_default(),
+                    payload.name.as_deref(),
+                    payload.description.as_deref(),
+                    Some(&payload.tags.unwrap_or_default()),
                 )
                 .await
             {

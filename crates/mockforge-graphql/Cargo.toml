@@ -37,13 +37,13 @@ notify = "7.0"
 parking_lot = { workspace = true }
 
 # MockForge core
-mockforge-core = "0.2.9"
-mockforge-observability = "0.2.9"
-mockforge-tracing = "0.2.9"
+mockforge-core = { path = "../mockforge-core" }
+mockforge-observability = { path = "../mockforge-observability" }
+mockforge-tracing = { path = "../mockforge-tracing" }
 opentelemetry = "0.21"
 
 # Optional data generation support
-mockforge-data = { version = "0.2.0", path = "../mockforge-data", optional = true }
+mockforge-data = {path = "../mockforge-data", optional = true }
 
 [features]
 default = ["data-faker"]

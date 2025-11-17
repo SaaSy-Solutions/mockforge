@@ -7,9 +7,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
-use mockforge_core::{
-    MultiTenantWorkspaceRegistry, TenantWorkspace, Workspace, WorkspaceStats,
-};
+use mockforge_core::{MultiTenantWorkspaceRegistry, TenantWorkspace, Workspace, WorkspaceStats};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -109,10 +107,7 @@ pub async fn list_workspaces(
         }
         Err(e) => {
             tracing::error!("Failed to list workspaces: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": e.to_string()})),
-            )
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()})))
                 .into_response())
         }
     }
@@ -200,10 +195,7 @@ pub async fn create_workspace(
         }
         Err(e) => {
             tracing::error!("Failed to create workspace: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": e.to_string()})),
-            )
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()})))
                 .into_response())
         }
     }
@@ -278,10 +270,7 @@ pub async fn update_workspace(
         }
         Err(e) => {
             tracing::error!("Failed to update workspace: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": e.to_string()})),
-            )
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()})))
                 .into_response())
         }
     }
@@ -304,11 +293,7 @@ pub async fn delete_workspace(
         }
         Err(e) => {
             tracing::error!("Failed to delete workspace {}: {}", workspace_id, e);
-            Err((
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": e.to_string()})),
-            )
-                .into_response())
+            Err((StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response())
         }
     }
 }
@@ -354,9 +339,7 @@ mod tests {
             description: Some("Test description".to_string()),
         };
 
-        let result = create_workspace(State(state.clone()), Json(request))
-            .await
-            .unwrap();
+        let result = create_workspace(State(state.clone()), Json(request)).await.unwrap();
 
         assert!(result.0.success);
         assert_eq!(result.0.data.as_ref().unwrap().id, "test");

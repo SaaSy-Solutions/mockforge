@@ -141,11 +141,11 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
                     println!("✓ Snapshot '{}' is valid", name);
                 } else {
                     println!("✗ Snapshot '{}' failed validation", name);
-                    return Err(mockforge_core::Error::from("Snapshot validation failed"));
+                    return Err(mockforge_core::Error::generic("Snapshot validation failed"));
                 }
             } else {
                 info!("Loading snapshot '{}' for workspace '{}'", name, workspace);
-                let components = components.map(parse_components);
+                let components = components.map(|c| parse_components(Some(c)));
 
                 // TODO: Get consistency engine from server state when integrated
                 let manifest = manager
@@ -218,7 +218,7 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
                 println!("✓ Snapshot '{}' is valid", name);
             } else {
                 println!("✗ Snapshot '{}' failed validation (checksum mismatch)", name);
-                return Err(mockforge_core::Error::from("Snapshot validation failed"));
+                return Err(mockforge_core::Error::generic("Snapshot validation failed"));
             }
         }
     }

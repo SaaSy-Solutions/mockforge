@@ -14,9 +14,9 @@ publish = true
 
 [dependencies]
 # Core MockForge dependencies
-mockforge-core = "0.2.9"
-mockforge-http = "0.2.9"
-mockforge-data = { version = "0.2.0", path = "../mockforge-data", optional = true }
+mockforge-core = { path = "../mockforge-core" }
+mockforge-http = { path = "../mockforge-http" }
+mockforge-data = {path = "../mockforge-data", optional = true }
 
 # Async runtime
 tokio = { workspace = true }

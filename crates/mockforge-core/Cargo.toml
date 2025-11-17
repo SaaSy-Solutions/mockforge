@@ -71,8 +71,7 @@ rquickjs = { version = "0.9", features = ["macro", "classes"] }
 # Cron expression parsing for scheduled events
 cron = "0.15"
 
-mockforge-data = "0.2.9"
-mockforge-chaos = { path = "../mockforge-chaos" }
+mockforge-data = { path = "../mockforge-data" }
 
 [dev-dependencies]
 tempfile = "3.10"

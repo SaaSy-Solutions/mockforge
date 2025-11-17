@@ -61,8 +61,12 @@ pub async fn consistency_middleware(req: Request, next: Next) -> Response<Body> 
             let scenario_id = unified_state.active_scenario.clone();
             let reality_level = unified_state.reality_level.value();
             let reality_ratio = unified_state.reality_continuum_ratio;
-            let chaos_rules: Vec<String> =
-                unified_state.active_chaos_rules.iter().map(|r| r.name.clone()).collect();
+            // Note: ChaosScenario is now serde_json::Value, so we extract the name field
+            let chaos_rules: Vec<String> = unified_state
+                .active_chaos_rules
+                .iter()
+                .filter_map(|r| r.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                .collect();
             let request_id = uuid::Uuid::new_v4().to_string();
 
             // Insert unified state into request extensions for handlers

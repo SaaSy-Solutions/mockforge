@@ -190,7 +190,7 @@ async fn handle_list(db: RecorderDatabase, limit: usize) -> anyhow::Result<()> {
 
 async fn handle_view(db: RecorderDatabase, flow_id: String, verbose: bool) -> anyhow::Result<()> {
     let config = FlowRecordingConfig::default();
-    let recorder = FlowRecorder::new(db, config);
+    let recorder = FlowRecorder::new(db.clone(), config);
     let flow = recorder
         .get_flow(&flow_id)
         .await?

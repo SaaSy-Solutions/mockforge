@@ -844,11 +844,32 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
 
                         // Check if it's a pre-built pack or a path
                         let manifest = if pack_name == "fintech-fraud-lab" {
-                            Some(mockforge_scenarios::create_fintech_fraud_lab_pack())
+                            #[cfg(feature = "studio-packs")]
+                            {
+                                Some(mockforge_scenarios::create_fintech_fraud_lab_pack())
+                            }
+                            #[cfg(not(feature = "studio-packs"))]
+                            {
+                                return Err(anyhow::anyhow!("studio-packs feature not enabled"));
+                            }
                         } else if pack_name == "ecommerce-peak-day" {
-                            Some(mockforge_scenarios::create_ecommerce_peak_day_pack())
+                            #[cfg(feature = "studio-packs")]
+                            {
+                                Some(mockforge_scenarios::create_ecommerce_peak_day_pack())
+                            }
+                            #[cfg(not(feature = "studio-packs"))]
+                            {
+                                return Err(anyhow::anyhow!("studio-packs feature not enabled"));
+                            }
                         } else if pack_name == "healthcare-outage-drill" {
-                            Some(mockforge_scenarios::create_healthcare_outage_drill_pack())
+                            #[cfg(feature = "studio-packs")]
+                            {
+                                Some(mockforge_scenarios::create_healthcare_outage_drill_pack())
+                            }
+                            #[cfg(not(feature = "studio-packs"))]
+                            {
+                                return Err(anyhow::anyhow!("studio-packs feature not enabled"));
+                            }
                         } else {
                             // Try to load from file
                             let manifest_path = Path::new(&pack_name);

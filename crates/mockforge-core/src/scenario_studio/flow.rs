@@ -11,7 +11,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 /// Result of executing a flow step
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FlowStepResult {
     /// ID of the step that was executed
     pub step_id: String,
@@ -28,7 +28,7 @@ pub struct FlowStepResult {
 }
 
 /// Result of executing an entire flow
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FlowExecutionResult {
     /// ID of the flow that was executed
     pub flow_id: String,

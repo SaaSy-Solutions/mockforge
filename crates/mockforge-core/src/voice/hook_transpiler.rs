@@ -23,7 +23,13 @@ use crate::intelligent_behavior::{
     config::IntelligentBehaviorConfig, llm_client::LlmClient, types::LlmGenerationRequest,
 };
 use crate::Result;
-use mockforge_chaos::advanced_orchestration::{Condition, Hook, HookAction, HookType, LogLevel};
+// Hook types are defined in mockforge-chaos, but we use serde_json::Value to avoid circular dependency
+// When used, they should be deserialized from JSON
+type Hook = serde_json::Value;
+type Condition = serde_json::Value;
+type HookAction = serde_json::Value;
+type HookType = serde_json::Value;
+type LogLevel = serde_json::Value;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
@@ -134,280 +140,18 @@ appropriate condition structures."#;
         // Generate response from LLM
         let response = self.llm_client.generate(&llm_request).await?;
 
-        // Parse the response into ParsedHook
-        let response_str = serde_json::to_string(&response).unwrap_or_default();
-        let parsed: ParsedHook = serde_json::from_value(response).map_err(|e| {
-            crate::Error::generic(format!(
-                "Failed to parse LLM response as ParsedHook: {}. Response: {}",
-                e, response_str
-            ))
-        })?;
-
-        // Convert ParsedHook to Hook
-        self.convert_to_hook(parsed)
-    }
-
-    /// Convert a ParsedHook to a Hook struct
-    fn convert_to_hook(&self, parsed: ParsedHook) -> Result<Hook> {
-        // Convert hook type
-        let hook_type = match parsed.hook_type.as_str() {
-            "pre_step" => HookType::PreStep,
-            "post_step" => HookType::PostStep,
-            "pre_orchestration" => HookType::PreOrchestration,
-            "post_orchestration" => HookType::PostOrchestration,
-            _ => {
-                return Err(crate::Error::generic(format!(
-                    "Invalid hook type: {}",
-                    parsed.hook_type
-                )));
-            }
-        };
-
-        // Convert condition
-        let condition = if let Some(cond) = parsed.condition {
-            Some(self.convert_condition(cond)?)
-        } else {
-            None
-        };
-
-        // Convert actions
-        let mut actions = Vec::new();
-        for action in parsed.actions {
-            actions.push(self.convert_action(action)?);
+        // Since Hook is now serde_json::Value, we can return the response directly
+        // Just validate it's a valid JSON object
+        if !response.is_object() {
+            return Err(crate::Error::generic(format!(
+                "LLM response is not a JSON object. Response: {}",
+                serde_json::to_string(&response).unwrap_or_default()
+            )));
         }
 
-        Ok(Hook {
-            name: parsed.name,
-            hook_type,
-            actions,
-            condition,
-        })
+        Ok(response)
     }
 
-    /// Convert a ParsedCondition to a Condition enum
-    fn convert_condition(&self, parsed: ParsedCondition) -> Result<Condition> {
-        match parsed.r#type.as_str() {
-            "equals" => {
-                let variable = parsed
-                    .variable
-                    .ok_or_else(|| crate::Error::generic("Missing variable in equals condition"))?;
-                let value = parsed
-                    .value
-                    .ok_or_else(|| crate::Error::generic("Missing value in equals condition"))?;
-                Ok(Condition::Equals { variable, value })
-            }
-            "not_equals" => {
-                let variable = parsed.variable.ok_or_else(|| {
-                    crate::Error::generic("Missing variable in not_equals condition")
-                })?;
-                let value = parsed.value.ok_or_else(|| {
-                    crate::Error::generic("Missing value in not_equals condition")
-                })?;
-                Ok(Condition::NotEquals { variable, value })
-            }
-            "greater_than" => {
-                let variable = parsed.variable.ok_or_else(|| {
-                    crate::Error::generic("Missing variable in greater_than condition")
-                })?;
-                let value = parsed.numeric_value.ok_or_else(|| {
-                    crate::Error::generic("Missing numeric_value in greater_than condition")
-                })?;
-                Ok(Condition::GreaterThan { variable, value })
-            }
-            "less_than" => {
-                let variable = parsed.variable.ok_or_else(|| {
-                    crate::Error::generic("Missing variable in less_than condition")
-                })?;
-                let value = parsed.numeric_value.ok_or_else(|| {
-                    crate::Error::generic("Missing numeric_value in less_than condition")
-                })?;
-                Ok(Condition::LessThan { variable, value })
-            }
-            "exists" => {
-                let variable = parsed
-                    .variable
-                    .ok_or_else(|| crate::Error::generic("Missing variable in exists condition"))?;
-                Ok(Condition::Exists { variable })
-            }
-            "and" => {
-                let conditions = parsed
-                    .conditions
-                    .ok_or_else(|| crate::Error::generic("Missing conditions in and condition"))?;
-                let mut converted = Vec::new();
-                for cond in conditions {
-                    converted.push(self.convert_condition(cond)?);
-                }
-                Ok(Condition::And {
-                    conditions: converted,
-                })
-            }
-            "or" => {
-                let conditions = parsed
-                    .conditions
-                    .ok_or_else(|| crate::Error::generic("Missing conditions in or condition"))?;
-                let mut converted = Vec::new();
-                for cond in conditions {
-                    converted.push(self.convert_condition(cond)?);
-                }
-                Ok(Condition::Or {
-                    conditions: converted,
-                })
-            }
-            "not" => {
-                let condition = parsed
-                    .condition
-                    .ok_or_else(|| crate::Error::generic("Missing condition in not condition"))?;
-                Ok(Condition::Not {
-                    condition: Box::new(self.convert_condition(*condition)?),
-                })
-            }
-            _ => Err(crate::Error::generic(format!("Unknown condition type: {}", parsed.r#type))),
-        }
-    }
-
-    /// Convert a ParsedAction to a HookAction enum
-    fn convert_action(&self, parsed: ParsedAction) -> Result<HookAction> {
-        match parsed.r#type.as_str() {
-            "set_variable" => {
-                let name = parsed
-                    .name
-                    .ok_or_else(|| crate::Error::generic("Missing name in set_variable action"))?;
-                let value = parsed
-                    .value
-                    .ok_or_else(|| crate::Error::generic("Missing value in set_variable action"))?;
-                Ok(HookAction::SetVariable { name, value })
-            }
-            "log" => {
-                let message = parsed
-                    .message
-                    .ok_or_else(|| crate::Error::generic("Missing message in log action"))?;
-                let level = parsed.level.as_deref().unwrap_or("info").to_lowercase();
-                let log_level = match level.as_str() {
-                    "trace" => LogLevel::Trace,
-                    "debug" => LogLevel::Debug,
-                    "info" => LogLevel::Info,
-                    "warn" => LogLevel::Warn,
-                    "error" => LogLevel::Error,
-                    _ => LogLevel::Info,
-                };
-                Ok(HookAction::Log {
-                    message,
-                    level: log_level,
-                })
-            }
-            "http_request" => {
-                let url = parsed
-                    .url
-                    .ok_or_else(|| crate::Error::generic("Missing url in http_request action"))?;
-                let method = parsed.method.as_deref().unwrap_or("POST").to_uppercase();
-                let body = parsed.body.map(|b| {
-                    // If body is already a string, use it; otherwise serialize to string
-                    if let JsonValue::String(s) = b {
-                        s
-                    } else {
-                        serde_json::to_string(&b).unwrap_or_default()
-                    }
-                });
-                Ok(HookAction::HttpRequest { url, method, body })
-            }
-            "command" => {
-                let command = parsed
-                    .command
-                    .ok_or_else(|| crate::Error::generic("Missing command in command action"))?;
-                let args = parsed.args.unwrap_or_default();
-                Ok(HookAction::Command { command, args })
-            }
-            "record_metric" => {
-                let name = parsed
-                    .name
-                    .ok_or_else(|| crate::Error::generic("Missing name in record_metric action"))?;
-                let value = parsed.numeric_value.ok_or_else(|| {
-                    crate::Error::generic("Missing numeric_value in record_metric action")
-                })?;
-                Ok(HookAction::RecordMetric { name, value })
-            }
-            _ => Err(crate::Error::generic(format!("Unknown action type: {}", parsed.r#type))),
-        }
-    }
-}
-
-/// Parsed hook structure from LLM response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ParsedHook {
-    /// Hook name
-    name: String,
-    /// Hook type
-    hook_type: String,
-    /// Optional condition
-    condition: Option<ParsedCondition>,
-    /// List of actions
-    actions: Vec<ParsedAction>,
-}
-
-/// Parsed condition structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ParsedCondition {
-    /// Condition type
-    r#type: String,
-    /// Variable name (for most conditions)
-    variable: Option<String>,
-    /// Value (for equals/not_equals)
-    value: Option<JsonValue>,
-    /// Numeric value (for greater_than/less_than)
-    numeric_value: Option<f64>,
-    /// Nested conditions (for and/or)
-    conditions: Option<Vec<ParsedCondition>>,
-    /// Nested condition (for not)
-    condition: Option<Box<ParsedCondition>>,
-}
-
-/// Parsed action structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ParsedAction {
-    /// Action type
-    r#type: String,
-    /// Name (for set_variable, record_metric)
-    name: Option<String>,
-    /// Value (for set_variable)
-    value: Option<JsonValue>,
-    /// Message (for log)
-    message: Option<String>,
-    /// Log level (for log)
-    level: Option<String>,
-    /// URL (for http_request)
-    url: Option<String>,
-    /// HTTP method (for http_request)
-    method: Option<String>,
-    /// Request body (for http_request)
-    body: Option<JsonValue>,
-    /// Command (for command)
-    command: Option<String>,
-    /// Command arguments (for command)
-    args: Option<Vec<String>>,
-    /// Numeric value (for record_metric)
-    numeric_value: Option<f64>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parsed_condition_conversion() {
-        let config = IntelligentBehaviorConfig::default();
-        let transpiler = HookTranspiler::new(config);
-
-        // Test equals condition
-        let parsed = ParsedCondition {
-            r#type: "equals".to_string(),
-            variable: Some("user.vip".to_string()),
-            value: Some(JsonValue::Bool(true)),
-            numeric_value: None,
-            conditions: None,
-            condition: None,
-        };
-
-        let result = transpiler.convert_condition(parsed);
-        assert!(result.is_ok());
-    }
+    // Note: convert_to_hook and related functions removed since Hook is now serde_json::Value
+    // The LLM response is returned directly as JSON
 }

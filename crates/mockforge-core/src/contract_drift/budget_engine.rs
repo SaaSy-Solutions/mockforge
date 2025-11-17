@@ -240,9 +240,15 @@ mod tests {
             recommendations: vec![],
             corrections: vec![],
             metadata: DiffMetadata {
-                contract_format: "openapi".to_string(),
-                contract_version: "3.0.0".to_string(),
                 analyzed_at: chrono::Utc::now(),
+                request_source: "budget_engine".to_string(),
+                contract_version: Some("3.0.0".to_string()),
+                contract_format: "openapi".to_string(),
+                endpoint_path: String::new(),
+                http_method: String::new(),
+                request_count: 0,
+                llm_provider: None,
+                llm_model: None,
             },
         }
     }

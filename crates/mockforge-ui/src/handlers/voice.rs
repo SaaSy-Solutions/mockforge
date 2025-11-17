@@ -9,10 +9,12 @@ use axum::{
     response::Json as ResponseJson,
 };
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
-use mockforge_core::voice::{ParsedWorkspaceCreation, WorkspaceBuilder};
-use mockforge_core::{
-    GeneratedWorkspaceScenario, HookTranspiler, VoiceCommandParser, VoiceSpecGenerator,
-    WorkspaceScenarioGenerator,
+use mockforge_core::voice::{
+    command_parser::{ParsedWorkspaceCreation, VoiceCommandParser},
+    hook_transpiler::HookTranspiler,
+    spec_generator::VoiceSpecGenerator,
+    workspace_builder::WorkspaceBuilder,
+    workspace_scenario_generator::{GeneratedWorkspaceScenario, WorkspaceScenarioGenerator},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

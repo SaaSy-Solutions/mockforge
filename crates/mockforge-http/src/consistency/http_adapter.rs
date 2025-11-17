@@ -107,9 +107,11 @@ impl ProtocolAdapter for HttpAdapter {
                 // Updated entity is now available for HTTP endpoints
             }
             StateChangeEvent::ChaosRuleActivated { workspace_id, rule } => {
+                // Note: ChaosScenario is now serde_json::Value, so we extract the name field
+                let rule_name = rule.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
                 info!(
                     "HTTP adapter: Chaos rule '{}' activated for workspace {}",
-                    rule.name, workspace_id
+                    rule_name, workspace_id
                 );
                 // Chaos rule will be applied to HTTP responses via chaos middleware
             }
