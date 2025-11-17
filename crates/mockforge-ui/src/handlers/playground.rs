@@ -337,6 +337,7 @@ pub async fn execute_rest_request(
                         .unwrap_or(0),
                     error_message: None,
                     metadata,
+                    reality_metadata: None,
                 };
                 logger.log_request(log_entry).await;
             }
@@ -464,6 +465,7 @@ pub async fn execute_graphql_query(
                     } else {
                         None
                     },
+                    reality_metadata: None,
                     metadata: {
                         let mut meta = HashMap::new();
                         meta.insert("query".to_string(), request.query.clone());

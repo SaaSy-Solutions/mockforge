@@ -246,6 +246,126 @@ impl PersonaLifecycle {
     }
 }
 
+/// Lifecycle preset types
+///
+/// Predefined lifecycle patterns for common business scenarios.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LifecyclePreset {
+    /// Subscription lifecycle: NEW → ACTIVE → PAST_DUE → CANCELED
+    Subscription,
+    /// Loan lifecycle: APPLICATION → APPROVED → ACTIVE → PAST_DUE → DEFAULTED
+    Loan,
+    /// Order fulfillment lifecycle: PENDING → PROCESSING → SHIPPED → DELIVERED → COMPLETED
+    OrderFulfillment,
+}
+
+impl LifecyclePreset {
+    /// Get all available presets
+    pub fn all() -> Vec<Self> {
+        vec![
+            LifecyclePreset::Subscription,
+            LifecyclePreset::Loan,
+            LifecyclePreset::OrderFulfillment,
+        ]
+    }
+
+    /// Get human-readable name
+    pub fn name(&self) -> &'static str {
+        match self {
+            LifecyclePreset::Subscription => "Subscription",
+            LifecyclePreset::Loan => "Loan",
+            LifecyclePreset::OrderFulfillment => "Order Fulfillment",
+        }
+    }
+
+    /// Get description
+    pub fn description(&self) -> &'static str {
+        match self {
+            LifecyclePreset::Subscription => "Subscription lifecycle: NEW → ACTIVE → PAST_DUE → CANCELED",
+            LifecyclePreset::Loan => "Loan lifecycle: APPLICATION → APPROVED → ACTIVE → PAST_DUE → DEFAULTED",
+            LifecyclePreset::OrderFulfillment => "Order fulfillment lifecycle: PENDING → PROCESSING → SHIPPED → DELIVERED → COMPLETED",
+        }
+    }
+}
+
+/// Extended lifecycle states for presets
+///
+/// These states extend the base LifecycleState enum with preset-specific states
+/// for subscription, loan, and order fulfillment lifecycles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtendedLifecycleState {
+    // Base states
+    /// New user signup state
+    #[serde(rename = "new_signup")]
+    NewSignup,
+    /// Active user state
+    Active,
+    /// Power user state with high activity
+    #[serde(rename = "power_user")]
+    PowerUser,
+    /// Churn risk state indicating potential user departure
+    #[serde(rename = "churn_risk")]
+    ChurnRisk,
+    /// Churned state - user has left
+    Churned,
+    /// Upgrade pending state
+    #[serde(rename = "upgrade_pending")]
+    UpgradePending,
+    /// Payment failed state
+    #[serde(rename = "payment_failed")]
+    PaymentFailed,
+
+    // Subscription states
+    /// New subscription state
+    #[serde(rename = "subscription_new")]
+    SubscriptionNew,
+    /// Active subscription state
+    #[serde(rename = "subscription_active")]
+    SubscriptionActive,
+    /// Subscription past due state
+    #[serde(rename = "subscription_past_due")]
+    SubscriptionPastDue,
+    /// Subscription canceled state
+    #[serde(rename = "subscription_canceled")]
+    SubscriptionCanceled,
+
+    // Loan states
+    /// Loan application state
+    #[serde(rename = "loan_application")]
+    LoanApplication,
+    /// Loan approved state
+    #[serde(rename = "loan_approved")]
+    LoanApproved,
+    /// Loan active state
+    #[serde(rename = "loan_active")]
+    LoanActive,
+    /// Loan past due state
+    #[serde(rename = "loan_past_due")]
+    LoanPastDue,
+    /// Loan defaulted state
+    #[serde(rename = "loan_defaulted")]
+    LoanDefaulted,
+
+    // Order fulfillment states
+    /// Order pending state
+    #[serde(rename = "order_pending")]
+    OrderPending,
+    /// Order processing state
+    #[serde(rename = "order_processing")]
+    OrderProcessing,
+    /// Order shipped state
+    #[serde(rename = "order_shipped")]
+    OrderShipped,
+    /// Order delivered state
+    #[serde(rename = "order_delivered")]
+    OrderDelivered,
+    /// Order completed state
+    #[serde(rename = "order_completed")]
+    OrderCompleted,
+}
+
 /// Prebuilt lifecycle scenarios
 pub struct LifecycleScenarios;
 
@@ -312,5 +432,106 @@ impl LifecycleScenarios {
         ];
 
         PersonaLifecycle::with_rules(persona_id, LifecycleState::Active, rules)
+    }
+
+    /// Create a subscription lifecycle preset
+    ///
+    /// States: NEW → ACTIVE → PAST_DUE → CANCELED
+    pub fn subscription_preset(persona_id: String) -> PersonaLifecycle {
+        // For subscription, we'll use the base lifecycle states and map them
+        // NEW -> NewSignup, ACTIVE -> Active, PAST_DUE -> PaymentFailed, CANCELED -> Churned
+        let rules = vec![
+            TransitionRule {
+                to: LifecycleState::Active,
+                after_days: Some(0), // Immediately active after creation
+                condition: None,
+                on_transition: None,
+            },
+            TransitionRule {
+                to: LifecycleState::PaymentFailed,
+                after_days: Some(30), // Past due after 30 days
+                condition: Some("payment_failed_count > 0".to_string()),
+                on_transition: None,
+            },
+            TransitionRule {
+                to: LifecycleState::Churned,
+                after_days: Some(60), // Canceled after 60 days of past due
+                condition: Some("payment_failed_count > 2".to_string()),
+                on_transition: None,
+            },
+        ];
+
+        PersonaLifecycle::with_rules(persona_id, LifecycleState::NewSignup, rules)
+    }
+
+    /// Create a loan lifecycle preset
+    ///
+    /// States: APPLICATION → APPROVED → ACTIVE → PAST_DUE → DEFAULTED
+    pub fn loan_preset(persona_id: String) -> PersonaLifecycle {
+        let rules = vec![
+            TransitionRule {
+                to: LifecycleState::Active, // APPROVED -> ACTIVE
+                after_days: Some(7),        // Approved after 7 days
+                condition: Some("credit_score > 650".to_string()),
+                on_transition: None,
+            },
+            TransitionRule {
+                to: LifecycleState::PaymentFailed, // ACTIVE -> PAST_DUE
+                after_days: Some(90),              // Past due after 90 days
+                condition: Some("payment_failed_count > 0".to_string()),
+                on_transition: None,
+            },
+            TransitionRule {
+                to: LifecycleState::Churned, // PAST_DUE -> DEFAULTED
+                after_days: Some(120),       // Defaulted after 120 days
+                condition: Some("payment_failed_count > 3".to_string()),
+                on_transition: None,
+            },
+        ];
+
+        PersonaLifecycle::with_rules(persona_id, LifecycleState::NewSignup, rules)
+    }
+
+    /// Create an order fulfillment lifecycle preset
+    ///
+    /// States: PENDING → PROCESSING → SHIPPED → DELIVERED → COMPLETED
+    pub fn order_fulfillment_preset(persona_id: String) -> PersonaLifecycle {
+        let rules = vec![
+            TransitionRule {
+                to: LifecycleState::Active, // PENDING -> PROCESSING (using Active as processing)
+                after_days: Some(0),        // Processing starts immediately
+                condition: None,
+                on_transition: None,
+            },
+            TransitionRule {
+                to: LifecycleState::PowerUser, // PROCESSING -> SHIPPED (using PowerUser as shipped)
+                after_days: Some(1),           // Shipped after 1 day
+                condition: Some("inventory_available == true".to_string()),
+                on_transition: None,
+            },
+            TransitionRule {
+                to: LifecycleState::UpgradePending, // SHIPPED -> DELIVERED (using UpgradePending as delivered)
+                after_days: Some(3),                // Delivered after 3 days
+                condition: None,
+                on_transition: None,
+            },
+            TransitionRule {
+                to: LifecycleState::Churned, // DELIVERED -> COMPLETED (using Churned as completed - terminal state)
+                after_days: Some(7),         // Completed after 7 days
+                condition: None,
+                on_transition: None,
+            },
+        ];
+
+        PersonaLifecycle::with_rules(persona_id, LifecycleState::NewSignup, rules)
+    }
+
+    /// Create a lifecycle from a preset
+    pub fn from_preset(preset: LifecyclePreset, persona_id: String) -> PersonaLifecycle {
+        match preset {
+            LifecyclePreset::Subscription => Self::subscription_preset(persona_id),
+            LifecyclePreset::Loan => Self::loan_preset(persona_id),
+            LifecyclePreset::OrderFulfillment => Self::order_fulfillment_preset(persona_id),
+        }
     }
 }

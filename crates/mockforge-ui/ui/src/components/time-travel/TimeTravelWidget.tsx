@@ -6,20 +6,24 @@
  * with smooth animations and intuitive interactions.
  */
 
-import React, { useState } from 'react';
-import { Clock, Play, Pause, RotateCcw, FastForward, Settings } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import {
   useTimeTravelStatus,
   useEnableTimeTravel,
   useDisableTimeTravel,
   useAdvanceTime,
+  useSetTime,
+  useSetTimeScale,
   useResetTimeTravel,
 } from '../../hooks/useApi';
 import { Button } from '../ui/button';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Tooltip } from '../ui/Tooltip';
+import { Input } from '../ui/input';
+import { Slider } from '../ui/slider';
 
 const QUICK_ADVANCE_OPTIONS = [
   { label: '+1h', value: '1h' },
@@ -33,8 +37,14 @@ export function TimeTravelWidget() {
   const enableMutation = useEnableTimeTravel();
   const disableMutation = useDisableTimeTravel();
   const advanceMutation = useAdvanceTime();
+  const setTimeMutation = useSetTime();
+  const setScaleMutation = useSetTimeScale();
   const resetMutation = useResetTimeTravel();
   const [isAdvancing, setIsAdvancing] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [dateTimeInput, setDateTimeInput] = useState('');
+  const [timeScale, setTimeScale] = useState(1.0);
+  const [sliderValue, setSliderValue] = useState(0);
 
   const handleEnable = () => {
     enableMutation.mutate({});
@@ -83,7 +93,93 @@ export function TimeTravelWidget() {
 
   const isEnabled = status?.enabled ?? false;
   const virtualTime = status?.current_time;
+  const realTime = status?.real_time;
   const scaleFactor = status?.scale_factor ?? 1.0;
+
+  // Calculate time range for slider (30 days before/after current time)
+  const timeRange = useMemo(() => {
+    if (!virtualTime || !realTime) return { min: 0, max: 100, current: 50 };
+    const current = new Date(virtualTime).getTime();
+    const real = new Date(realTime).getTime();
+    const range = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
+    const min = real - range;
+    const max = real + range;
+    const normalized = ((current - min) / (max - min)) * 100;
+    return { min: 0, max: 100, current: Math.max(0, Math.min(100, normalized)) };
+  }, [virtualTime, realTime]);
+
+  // Sync slider with virtual time
+  useEffect(() => {
+    if (isEnabled && virtualTime) {
+      setSliderValue(timeRange.current);
+    }
+  }, [isEnabled, virtualTime, timeRange.current]);
+
+  // Sync scale with status
+  useEffect(() => {
+    if (status?.scale_factor !== undefined) {
+      setTimeScale(status.scale_factor);
+    }
+  }, [status?.scale_factor]);
+
+  // Format datetime-local input value
+  const getDateTimeLocalValue = (isoString?: string) => {
+    if (!isoString) return '';
+    try {
+      const date = new Date(isoString);
+      // Convert to local datetime-local format (YYYY-MM-DDTHH:mm)
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  };
+
+  const handleSetTime = async () => {
+    if (!dateTimeInput) return;
+    try {
+      const date = new Date(dateTimeInput);
+      if (isNaN(date.getTime())) {
+        alert('Invalid date/time');
+        return;
+      }
+      await setTimeMutation.mutateAsync(date.toISOString());
+      setDateTimeInput('');
+    } catch (error) {
+      console.error('Failed to set time:', error);
+    }
+  };
+
+  const handleSliderChange = async (value: number) => {
+    if (!isEnabled || !virtualTime || !realTime) return;
+    setSliderValue(value);
+
+    // Calculate new time based on slider position
+    const range = 30 * 24 * 60 * 60 * 1000; // 30 days
+    const real = new Date(realTime).getTime();
+    const min = real - range;
+    const max = real + range;
+    const newTime = min + (value / 100) * (max - min);
+
+    try {
+      await setTimeMutation.mutateAsync(new Date(newTime).toISOString());
+    } catch (error) {
+      console.error('Failed to set time:', error);
+    }
+  };
+
+  const handleScaleChange = async (value: number) => {
+    setTimeScale(value);
+    try {
+      await setScaleMutation.mutateAsync(value);
+    } catch (error) {
+      console.error('Failed to set scale:', error);
+    }
+  };
 
   return (
     <Card
@@ -207,21 +303,104 @@ export function TimeTravelWidget() {
           </div>
         )}
 
-        {/* Link to Advanced Controls */}
+        {/* Advanced Controls Toggle */}
         {isEnabled && (
           <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
             <Button
               variant="ghost"
               size="sm"
               className="w-full text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-200"
-              onClick={() => {
-                // Navigate to time travel page
-                window.location.href = '/time-travel';
-              }}
+              onClick={() => setShowAdvanced(!showAdvanced)}
             >
               <Settings className="h-4 w-4 mr-2" />
-              Advanced Controls
+              {showAdvanced ? 'Hide' : 'Show'} Advanced Controls
             </Button>
+          </div>
+        )}
+
+        {/* Advanced Controls */}
+        {isEnabled && showAdvanced && (
+          <div className="pt-4 space-y-4 animate-fade-in border-t border-gray-200 dark:border-gray-700">
+            {/* Time Slider */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Time Travel Slider
+                </label>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  ±30 days from real time
+                </span>
+              </div>
+              <Slider
+                min={0}
+                max={100}
+                step={0.1}
+                value={sliderValue}
+                onChange={handleSliderChange}
+                label=""
+                showValue={false}
+                disabled={setTimeMutation.isPending}
+              />
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <span>Past</span>
+                <span>Real Time</span>
+                <span>Future</span>
+              </div>
+            </div>
+
+            {/* Date/Time Picker */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <Calendar className="h-3 w-3 inline mr-1" />
+                Set Specific Time
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  type="datetime-local"
+                  value={dateTimeInput || getDateTimeLocalValue(virtualTime)}
+                  onChange={(e) => setDateTimeInput(e.target.value)}
+                  className="flex-1"
+                  placeholder="Select date and time"
+                />
+                <Button
+                  onClick={handleSetTime}
+                  disabled={!dateTimeInput || setTimeMutation.isPending}
+                  size="sm"
+                  variant="outline"
+                >
+                  Set
+                </Button>
+              </div>
+            </div>
+
+            {/* Speed Control */}
+            <div>
+              <Slider
+                min={0.1}
+                max={10}
+                step={0.1}
+                value={timeScale}
+                onChange={handleScaleChange}
+                label="Time Speed"
+                unit="x"
+                description="1.0x = real time, 2.0x = 2x speed, etc."
+                disabled={setScaleMutation.isPending}
+              />
+            </div>
+
+            {/* Link to Full Page */}
+            <div className="pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-200"
+                onClick={() => {
+                  window.location.href = '/time-travel';
+                }}
+              >
+                Open Full Time Travel Page
+              </Button>
+            </div>
           </div>
         )}
       </div>

@@ -156,9 +156,9 @@ pub fn risk_simulation_router(state: RiskSimulationState) -> axum::Router {
     axum::Router::new()
         .route("/risk/simulate", post(set_risk_score))
         .route("/risk/factors", post(set_risk_factors))
-        .route("/risk/clear/:user_id", delete(clear_risk))
+        .route("/risk/clear/{user_id}", delete(clear_risk))
         .route("/risk/trigger-mfa", post(trigger_mfa))
         .route("/risk/block", post(block_user))
-        .route("/risk/assessment/:user_id", get(get_risk_assessment))
+        .route("/risk/assessment/{user_id}", get(get_risk_assessment))
         .with_state(state)
 }

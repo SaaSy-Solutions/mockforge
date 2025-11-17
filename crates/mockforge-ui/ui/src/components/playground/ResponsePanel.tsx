@@ -1,6 +1,6 @@
 import { logger } from '@/utils/logger';
 import React, { useState, useMemo } from 'react';
-import { Copy, Download, Check, Eye, Code, AlertCircle, Clock, FileJson, Sparkles } from 'lucide-react';
+import { Copy, Download, Check, Eye, Code, AlertCircle, Clock, FileJson, Sparkles, HelpCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
@@ -9,6 +9,8 @@ import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { usePlaygroundStore } from '../../stores/usePlaygroundStore';
 import { toast } from 'sonner';
+import { RealityTracePanel } from '../reality/RealityTracePanel';
+import { ResponseTraceModal } from '../reality/ResponseTraceModal';
 
 /**
  * Response Panel Component
@@ -27,6 +29,7 @@ export function ResponsePanel() {
   const [copied, setCopied] = useState(false);
   const [mockAIPreview, setMockAIPreview] = useState(false);
   const [mockAILoading, setMockAILoading] = useState(false);
+  const [traceModalOpen, setTraceModalOpen] = useState(false);
 
   // Use MockAI response when preview is enabled, otherwise use standard response
   const displayResponse = mockAIPreview && mockAIResponse ? mockAIResponse : currentResponse;
@@ -200,6 +203,16 @@ export function ResponsePanel() {
             <Button variant="ghost" size="icon" onClick={handleDownload}>
               <Download className="h-4 w-4" />
             </Button>
+            {displayResponse && displayResponse.request_id && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setTraceModalOpen(true)}
+                title="Why did I get this response?"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -302,7 +315,23 @@ export function ResponsePanel() {
             )}
           </div>
         )}
+
+        {/* Reality Trace Panel */}
+        {displayResponse && displayResponse.request_id && (
+          <div className="mt-4">
+            <RealityTracePanel requestId={displayResponse.request_id} />
+          </div>
+        )}
       </CardContent>
+
+      {/* Response Trace Modal */}
+      {displayResponse && displayResponse.request_id && (
+        <ResponseTraceModal
+          requestId={displayResponse.request_id}
+          open={traceModalOpen}
+          onOpenChange={setTraceModalOpen}
+        />
+      )}
     </Card>
   );
 }

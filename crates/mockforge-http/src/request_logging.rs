@@ -6,7 +6,9 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use mockforge_core::{create_http_log_entry, log_request_global};
+use mockforge_core::{
+    create_http_log_entry, log_request_global, request_logger::RealityTraceMetadata,
+};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Instant;
@@ -42,6 +44,10 @@ pub async fn log_http_requests(
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
+
+    // Extract reality metadata from request extensions (set by consistency middleware)
+    // Must be done before calling next.run() which consumes the request
+    let reality_metadata = req.extensions().get::<RealityTraceMetadata>().cloned();
 
     // Call the next middleware/handler
     let response = next.run(req).await;
@@ -89,6 +95,9 @@ pub async fn log_http_requests(
             log_entry.metadata.insert(format!("query.{}", key), value);
         }
     }
+
+    // Attach reality metadata if available
+    log_entry.reality_metadata = reality_metadata;
 
     // Log to centralized logger
     log_request_global(log_entry).await;

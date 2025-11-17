@@ -3,6 +3,7 @@
 //! Defines the configuration structures for blending mock and real data sources,
 //! including transition modes, schedules, and merge strategies.
 
+use crate::protocol_abstraction::Protocol;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -69,6 +70,9 @@ pub struct ContinuumConfig {
     /// Field-level reality mixing configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field_mixing: Option<crate::reality_continuum::FieldRealityConfig>,
+    /// Cross-protocol state sharing configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cross_protocol_state: Option<CrossProtocolStateConfig>,
 }
 
 fn default_false() -> bool {
@@ -90,6 +94,7 @@ impl Default for ContinuumConfig {
             routes: Vec::new(),
             groups: HashMap::new(),
             field_mixing: None,
+            cross_protocol_state: None,
         }
     }
 }
@@ -140,6 +145,76 @@ impl ContinuumConfig {
     pub fn set_group_ratio(mut self, group: String, ratio: f64) -> Self {
         self.groups.insert(group, ratio.clamp(0.0, 1.0));
         self
+    }
+
+    /// Set cross-protocol state configuration
+    pub fn with_cross_protocol_state(mut self, config: CrossProtocolStateConfig) -> Self {
+        self.cross_protocol_state = Some(config);
+        self
+    }
+}
+
+/// Cross-protocol state sharing configuration
+///
+/// Ensures that HTTP, WebSocket, gRPC, TCP, and webhooks all use the same
+/// backing persona graph and unified state when configured.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrossProtocolStateConfig {
+    /// State model identifier (e.g., "ecommerce_v1", "finance_v1")
+    ///
+    /// This identifies the shared state model that defines how personas
+    /// and entities are related across protocols.
+    pub state_model: String,
+
+    /// List of protocols that should share state
+    ///
+    /// When a protocol is included, it will use the same persona graph
+    /// and unified state as other protocols in this list.
+    #[serde(default)]
+    pub share_state_across: Vec<Protocol>,
+
+    /// Whether cross-protocol state sharing is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for CrossProtocolStateConfig {
+    fn default() -> Self {
+        Self {
+            state_model: "default".to_string(),
+            share_state_across: vec![Protocol::Http, Protocol::WebSocket, Protocol::Grpc],
+            enabled: true,
+        }
+    }
+}
+
+impl CrossProtocolStateConfig {
+    /// Create a new cross-protocol state configuration
+    pub fn new(state_model: String) -> Self {
+        Self {
+            state_model,
+            share_state_across: Vec::new(),
+            enabled: true,
+        }
+    }
+
+    /// Add a protocol to share state across
+    pub fn add_protocol(mut self, protocol: Protocol) -> Self {
+        if !self.share_state_across.contains(&protocol) {
+            self.share_state_across.push(protocol);
+        }
+        self
+    }
+
+    /// Set the list of protocols to share state across
+    pub fn with_protocols(mut self, protocols: Vec<Protocol>) -> Self {
+        self.share_state_across = protocols;
+        self
+    }
+
+    /// Check if a protocol should share state
+    pub fn should_share_state(&self, protocol: &Protocol) -> bool {
+        self.enabled && self.share_state_across.contains(protocol)
     }
 }
 

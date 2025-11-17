@@ -1554,6 +1554,28 @@ class TimeTravelApiService {
     }>;
   }
 
+  async setTime(time: string): Promise<{
+    success: boolean;
+    status: {
+      enabled: boolean;
+      current_time?: string;
+      scale_factor: number;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/time-travel/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time }),
+    }) as Promise<{
+      success: boolean;
+      status: {
+        enabled: boolean;
+        current_time?: string;
+        scale_factor: number;
+      };
+    }>;
+  }
+
   async setScale(scale: number): Promise<{ success: boolean }> {
     return this.fetchJson('/__mockforge/time-travel/scale', {
       method: 'POST',

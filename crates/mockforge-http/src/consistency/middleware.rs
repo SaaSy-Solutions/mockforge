@@ -6,6 +6,7 @@
 use crate::consistency::HttpAdapter;
 use axum::{body::Body, extract::Request, http::Response, middleware::Next};
 use mockforge_core::consistency::ConsistencyEngine;
+use mockforge_core::request_logger::RealityTraceMetadata;
 use std::sync::Arc;
 use tracing::debug;
 use uuid::Uuid;
@@ -69,9 +70,16 @@ pub async fn consistency_middleware(req: Request, next: Next) -> Response<Body> 
                 .collect();
             let request_id = uuid::Uuid::new_v4().to_string();
 
-            // Insert unified state into request extensions for handlers
+            // Build reality trace metadata from unified state
+            // Use the path from the request URI for path-specific blend ratio calculation
+            let path = req.uri().path();
+            let reality_metadata =
+                RealityTraceMetadata::from_unified_state(&unified_state, reality_ratio, path);
+
+            // Insert unified state and reality metadata into request extensions for handlers
             let mut req = req;
             req.extensions_mut().insert(unified_state);
+            req.extensions_mut().insert(reality_metadata);
 
             // Continue with request processing
             let mut response = next.run(req).await;

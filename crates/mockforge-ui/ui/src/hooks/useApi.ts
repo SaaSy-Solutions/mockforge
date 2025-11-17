@@ -4,6 +4,7 @@ import { logger } from '@/utils/logger';
  * Uses React Query for caching, background refetching, and optimistic updates
  */
 
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   apiService,
@@ -999,6 +1000,63 @@ export function useTimeTravelStatus() {
   });
 }
 
+/**
+ * Hook to update persona lifecycle states based on virtual time
+ * This should be called when time changes to update lifecycle states
+ */
+export function useUpdatePersonaLifecycles() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (workspace: string = 'default') => {
+      const response = await fetch(`/api/v1/consistency/persona/update-lifecycles?workspace=${workspace}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update persona lifecycles');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate relevant queries to refresh responses
+      queryClient.invalidateQueries({ queryKey: ['consistency', 'state'] });
+      queryClient.invalidateQueries({ queryKey: ['consistency', 'persona'] });
+    },
+  });
+}
+
+/**
+ * Hook that watches time changes and automatically updates persona lifecycle states
+ * This provides live preview of persona/lifecycle state changes when virtual time is adjusted
+ */
+export function useLivePreviewLifecycleUpdates(workspace: string = 'default', enabled: boolean = true) {
+  const { data: timeStatus } = useTimeTravelStatus();
+  const updateLifecycles = useUpdatePersonaLifecycles();
+  const previousTimeRef = React.useRef<string | undefined>();
+
+  React.useEffect(() => {
+    if (!enabled || !timeStatus?.enabled) {
+      return;
+    }
+
+    const currentTime = timeStatus.current_time;
+
+    // Check if time has changed
+    if (currentTime && currentTime !== previousTimeRef.current) {
+      previousTimeRef.current = currentTime;
+
+      // Update persona lifecycle states based on new virtual time
+      updateLifecycles.mutate(workspace, {
+        onSuccess: () => {
+          // Lifecycle states have been updated, responses will be refreshed automatically
+          // via query invalidation in the mutation
+        },
+      });
+    }
+  }, [timeStatus?.current_time, timeStatus?.enabled, enabled, workspace, updateLifecycles]);
+}
+
 export function useEnableTimeTravel() {
   const queryClient = useQueryClient();
 
@@ -1027,6 +1085,17 @@ export function useAdvanceTime() {
 
   return useMutation({
     mutationFn: (duration: string) => timeTravelApi.advance(duration),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeTravelStatus });
+    },
+  });
+}
+
+export function useSetTime() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (time: string) => timeTravelApi.setTime(time),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.timeTravelStatus });
     },

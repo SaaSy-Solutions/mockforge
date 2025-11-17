@@ -506,6 +506,71 @@ pub async fn get_order_with_graph(
     Ok(Json(response))
 }
 
+/// Update persona lifecycle states based on current virtual time
+///
+/// POST /api/v1/consistency/persona/update-lifecycles?workspace={workspace_id}
+/// This endpoint checks all active personas and updates their lifecycle states
+/// based on elapsed time since state entry, using virtual time if time travel is enabled.
+pub async fn update_persona_lifecycles(
+    State(state): State<ConsistencyState>,
+    Query(params): Query<WorkspaceQuery>,
+) -> Result<Json<Value>, StatusCode> {
+    use mockforge_core::time_travel::now as get_virtual_time;
+
+    // Get unified state
+    let mut unified_state = state.engine.get_state(&params.workspace).await.ok_or_else(|| {
+        error!("State not found for workspace: {}", params.workspace);
+        StatusCode::NOT_FOUND
+    })?;
+
+    // Get current time (virtual if time travel is enabled, real otherwise)
+    let current_time = get_virtual_time();
+
+    // Update lifecycle state for active persona if present
+    let mut updated = false;
+    if let Some(ref mut persona) = unified_state.active_persona {
+        let old_state = persona
+            .lifecycle
+            .as_ref()
+            .map(|l| l.current_state)
+            .unwrap_or(mockforge_data::LifecycleState::Active);
+
+        // Update lifecycle state based on elapsed time
+        persona.update_lifecycle_state(current_time);
+
+        let new_state = persona
+            .lifecycle
+            .as_ref()
+            .map(|l| l.current_state)
+            .unwrap_or(mockforge_data::LifecycleState::Active);
+
+        if old_state != new_state {
+            updated = true;
+            info!(
+                "Persona {} lifecycle state updated: {:?} -> {:?}",
+                persona.id, old_state, new_state
+            );
+
+            // Update the persona in the engine
+            state
+                .engine
+                .set_active_persona(&params.workspace, persona.clone())
+                .await
+                .map_err(|e| {
+                    error!("Failed to update persona lifecycle: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+        }
+    }
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "workspace": params.workspace,
+        "updated": updated,
+        "current_time": current_time.to_rfc3339(),
+    })))
+}
+
 /// Create consistency router
 pub fn consistency_router(state: ConsistencyState) -> axum::Router {
     use axum::routing::{get, post};
@@ -516,6 +581,7 @@ pub fn consistency_router(state: ConsistencyState) -> axum::Router {
         // Persona management
         .route("/api/v1/consistency/persona", post(set_persona))
         .route("/api/v1/consistency/persona/lifecycle", post(set_persona_lifecycle))
+        .route("/api/v1/consistency/persona/update-lifecycles", post(update_persona_lifecycles))
         // Scenario management
         .route("/api/v1/consistency/scenario", post(set_scenario))
         // Reality level management

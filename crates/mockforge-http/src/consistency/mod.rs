@@ -5,6 +5,7 @@
 
 pub mod http_adapter;
 pub mod middleware;
+pub mod response_enrichment;
 
 pub use http_adapter::HttpAdapter;
 pub use middleware::ConsistencyMiddlewareState;

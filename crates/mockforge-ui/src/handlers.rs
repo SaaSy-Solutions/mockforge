@@ -10,7 +10,7 @@
 //! - fixtures: Fixture management operations
 
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{self, StatusCode},
     response::{
         sse::{Event, Sse},
@@ -1072,6 +1072,48 @@ pub async fn get_logs(
     };
 
     Json(ApiResponse::success(logs))
+}
+
+/// Get reality trace metadata for a specific request
+///
+/// GET /__mockforge/api/reality/trace/:request_id
+pub async fn get_reality_trace(
+    Path(request_id): Path<String>,
+) -> Json<ApiResponse<Option<mockforge_core::request_logger::RealityTraceMetadata>>> {
+    if let Some(global_logger) = mockforge_core::get_global_logger() {
+        let logs = global_logger.get_recent_logs(None).await;
+        if let Some(log_entry) = logs.into_iter().find(|log| log.id == request_id) {
+            Json(ApiResponse::success(log_entry.reality_metadata))
+        } else {
+            Json(ApiResponse::error(format!("Request {} not found", request_id)))
+        }
+    } else {
+        Json(ApiResponse::error("Request logger not initialized".to_string()))
+    }
+}
+
+/// Get response generation trace for a specific request
+///
+/// GET /__mockforge/api/reality/response-trace/:request_id
+pub async fn get_response_trace(
+    Path(request_id): Path<String>,
+) -> Json<ApiResponse<Option<serde_json::Value>>> {
+    if let Some(global_logger) = mockforge_core::get_global_logger() {
+        let logs = global_logger.get_recent_logs(None).await;
+        if let Some(log_entry) = logs.into_iter().find(|log| log.id == request_id) {
+            // Response generation trace would be stored in metadata
+            // For now, return the metadata as JSON
+            let trace = log_entry
+                .metadata
+                .get("response_generation_trace")
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
+            Json(ApiResponse::success(trace))
+        } else {
+            Json(ApiResponse::error(format!("Request {} not found", request_id)))
+        }
+    } else {
+        Json(ApiResponse::error("Request logger not initialized".to_string()))
+    }
 }
 
 // Configuration for recent logs display

@@ -1,0 +1,118 @@
+# E2E Persona Flow Configuration
+# Demonstrates cross-protocol consistency with shared state model
+
+# Server configuration
+server:
+  http:
+    port: 3000
+    enabled: true
+  websocket:
+    port: 3001
+    enabled: true
+
+# Cross-protocol state configuration
+reality:
+  state_model: "ecommerce_v1"
+  share_state_across:
+    - http
+    - websocket
+    - webhooks
+
+# Consistency engine configuration
+consistency:
+  # Enable persona graphs for cross-entity relationships
+  persona_graphs:
+    enabled: true
+
+  # Default persona for the workspace
+  personas:
+    default_persona:
+      id: "user:demo-user-001"
+      name: "Demo User"
+      domain: "ecommerce"
+      traits:
+        email: "demo@example.com"
+        name: "Demo User"
+        subscription_tier: "premium"
+      lifecycle:
+        preset: "subscription"
+        initial_state: "active"
+
+# Reality continuum configuration
+reality_continuum:
+  enabled: true
+  default_ratio: 0.5  # 50% reality (blended)
+  time_based_progression:
+    enabled: true
+    schedule:
+      - time: "00:00"
+        ratio: 0.3  # Start with 30% reality
+      - time: "12:00"
+        ratio: 0.7  # Increase to 70% at noon
+      - time: "18:00"
+        ratio: 0.5  # Back to 50% in evening
+
+# Lifecycle presets
+lifecycle:
+  presets:
+    - name: "subscription"
+      type: "subscription"
+      states:
+        - name: "new"
+          transitions:
+            - to: "active"
+              after_days: 0
+        - name: "active"
+          transitions:
+            - to: "past_due"
+              after_days: 30
+              condition: "payment_failed_count > 0"
+            - to: "canceled"
+              after_days: 60
+              condition: "payment_failed_count > 2"
+    - name: "order_fulfillment"
+      type: "order_fulfillment"
+      states:
+        - name: "pending"
+          transitions:
+            - to: "processing"
+              after_days: 0
+        - name: "processing"
+          transitions:
+            - to: "shipped"
+              after_days: 1
+              condition: "inventory_available == true"
+        - name: "shipped"
+          transitions:
+            - to: "delivered"
+              after_days: 3
+        - name: "delivered"
+          transitions:
+            - to: "completed"
+              after_days: 7
+
+# WebSocket configuration
+websocket:
+  enabled: true
+  port: 3001
+  # WebSocket will use the same persona graph as HTTP
+  use_shared_state: true
+
+# Webhook configuration
+webhooks:
+  enabled: true
+  # Webhooks will use the same persona graph as HTTP
+  use_shared_state: true
+  endpoints:
+    - name: "order_status_update"
+      url: "http://localhost:3000/api/webhooks/order-status"
+      events:
+        - "order.created"
+        - "order.shipped"
+        - "order.delivered"
+
+# Time travel configuration (for lifecycle testing)
+time_travel:
+  enabled: true
+  # Allow time travel to test lifecycle transitions
+  allow_time_manipulation: true

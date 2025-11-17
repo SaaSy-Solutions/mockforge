@@ -59,9 +59,12 @@ pub use persona_graph::{
     Edge, GraphStats, GraphVisualization, PersonaGraph, PersonaNode, VisualizationEdge,
     VisualizationNode,
 };
-pub use persona_lifecycle::{LifecycleScenarios, LifecycleState, PersonaLifecycle, TransitionRule};
+pub use persona_lifecycle::{
+    LifecyclePreset, LifecycleScenarios, LifecycleState, PersonaLifecycle, TransitionRule,
+};
 pub use persona_lifecycle_response::{
-    apply_billing_lifecycle_effects, apply_lifecycle_effects, apply_support_lifecycle_effects,
+    apply_billing_lifecycle_effects, apply_lifecycle_effects, apply_loan_lifecycle_effects,
+    apply_order_fulfillment_lifecycle_effects, apply_support_lifecycle_effects,
 };
 pub use persona_templates::{
     EcommercePersonaTemplate, FinancePersonaTemplate, HealthcarePersonaTemplate, PersonaTemplate,

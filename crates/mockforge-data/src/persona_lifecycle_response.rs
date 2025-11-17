@@ -6,7 +6,6 @@
 
 use crate::persona_lifecycle::{LifecycleState, PersonaLifecycle};
 use serde_json::Value;
-use std::collections::HashMap;
 
 /// Apply lifecycle state effects to a response for billing endpoints
 ///
@@ -141,6 +140,110 @@ pub fn apply_support_lifecycle_effects(response: &mut Value, lifecycle: &Persona
     }
 }
 
+/// Apply lifecycle state effects for order fulfillment endpoints
+///
+/// Modifies order-related fields based on the persona's lifecycle state.
+/// Maps lifecycle states to order fulfillment states:
+/// - NewSignup -> PENDING
+/// - Active -> PROCESSING
+/// - PowerUser -> SHIPPED
+/// - UpgradePending -> DELIVERED
+/// - Churned -> COMPLETED
+pub fn apply_order_fulfillment_lifecycle_effects(
+    response: &mut Value,
+    lifecycle: &PersonaLifecycle,
+) {
+    if let Some(obj) = response.as_object_mut() {
+        match lifecycle.current_state {
+            LifecycleState::NewSignup => {
+                obj.insert("status".to_string(), Value::String("pending".to_string()));
+                obj.insert("estimated_delivery".to_string(), Value::Null);
+            }
+            LifecycleState::Active => {
+                obj.insert("status".to_string(), Value::String("processing".to_string()));
+                obj.insert("estimated_delivery".to_string(), Value::Null);
+            }
+            LifecycleState::PowerUser => {
+                obj.insert("status".to_string(), Value::String("shipped".to_string()));
+                obj.insert("tracking_number".to_string(), Value::String("TRACK123456".to_string()));
+                obj.insert(
+                    "shipped_at".to_string(),
+                    Value::String(chrono::Utc::now().to_rfc3339()),
+                );
+            }
+            LifecycleState::UpgradePending => {
+                obj.insert("status".to_string(), Value::String("delivered".to_string()));
+                obj.insert(
+                    "delivered_at".to_string(),
+                    Value::String(chrono::Utc::now().to_rfc3339()),
+                );
+            }
+            LifecycleState::Churned => {
+                obj.insert("status".to_string(), Value::String("completed".to_string()));
+                obj.insert(
+                    "completed_at".to_string(),
+                    Value::String(chrono::Utc::now().to_rfc3339()),
+                );
+            }
+            _ => {
+                // Default to processing for other states
+                obj.insert("status".to_string(), Value::String("processing".to_string()));
+            }
+        }
+    }
+}
+
+/// Apply lifecycle state effects for loan endpoints
+///
+/// Modifies loan-related fields based on the persona's lifecycle state.
+/// Maps lifecycle states to loan states:
+/// - NewSignup -> APPLICATION
+/// - Active -> APPROVED/ACTIVE
+/// - PaymentFailed -> PAST_DUE
+/// - Churned -> DEFAULTED
+pub fn apply_loan_lifecycle_effects(response: &mut Value, lifecycle: &PersonaLifecycle) {
+    if let Some(obj) = response.as_object_mut() {
+        match lifecycle.current_state {
+            LifecycleState::NewSignup => {
+                obj.insert("status".to_string(), Value::String("application".to_string()));
+                obj.insert("approved".to_string(), Value::Bool(false));
+            }
+            LifecycleState::Active => {
+                obj.insert("status".to_string(), Value::String("active".to_string()));
+                obj.insert("approved".to_string(), Value::Bool(true));
+                obj.insert(
+                    "approved_at".to_string(),
+                    Value::String(chrono::Utc::now().to_rfc3339()),
+                );
+            }
+            LifecycleState::PaymentFailed => {
+                obj.insert("status".to_string(), Value::String("past_due".to_string()));
+                obj.insert(
+                    "days_past_due".to_string(),
+                    Value::Number(
+                        lifecycle
+                            .get_metadata("payment_failed_count")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(1)
+                            .into(),
+                    ),
+                );
+            }
+            LifecycleState::Churned => {
+                obj.insert("status".to_string(), Value::String("defaulted".to_string()));
+                obj.insert(
+                    "defaulted_at".to_string(),
+                    Value::String(chrono::Utc::now().to_rfc3339()),
+                );
+            }
+            _ => {
+                // Default to application for other states
+                obj.insert("status".to_string(), Value::String("application".to_string()));
+            }
+        }
+    }
+}
+
 /// Apply lifecycle state effects to a response based on endpoint type
 ///
 /// This is a convenience function that routes to the appropriate lifecycle
@@ -156,6 +259,12 @@ pub fn apply_lifecycle_effects(
         }
         "support" | "support_tickets" | "tickets" | "help" => {
             apply_support_lifecycle_effects(response, lifecycle);
+        }
+        "order" | "orders" | "fulfillment" | "shipment" | "delivery" => {
+            apply_order_fulfillment_lifecycle_effects(response, lifecycle);
+        }
+        "loan" | "loans" | "credit" | "application" => {
+            apply_loan_lifecycle_effects(response, lifecycle);
         }
         _ => {
             // For other endpoints, apply basic lifecycle traits
