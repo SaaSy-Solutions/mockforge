@@ -11,6 +11,7 @@ use std::collections::HashMap;
 /// Stores the visual representation of a state machine including node positions,
 /// edge routing, and visual metadata. This format is compatible with React Flow.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct VisualLayout {
     /// Visual nodes representing states
     pub nodes: Vec<VisualNode>,
@@ -24,6 +25,7 @@ pub struct VisualLayout {
 
 /// Visual representation of a state node
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct VisualNode {
     /// Unique node identifier (typically matches state name)
     pub id: String,
@@ -60,6 +62,7 @@ pub struct VisualNode {
 
 /// Visual representation of a transition edge
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct VisualEdge {
     /// Unique edge identifier
     pub id: String,
@@ -93,6 +96,7 @@ pub struct VisualEdge {
 
 /// Viewport information for the visual editor
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Viewport {
     /// Zoom level (1.0 = 100%)
     pub zoom: f64,

@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 /// Review frequency types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum ReviewFrequency {
     /// Monthly reviews
@@ -245,6 +246,7 @@ pub struct UserReviewItem {
 
 /// Access review configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct AccessReviewConfig {
     /// Whether access review is enabled
     pub enabled: bool,
@@ -262,6 +264,7 @@ pub struct AccessReviewConfig {
 
 /// User access review configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct UserReviewConfig {
     /// Whether user review is enabled
     pub enabled: bool,
@@ -279,6 +282,7 @@ pub struct UserReviewConfig {
 
 /// Privileged access review configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PrivilegedReviewConfig {
     /// Whether privileged review is enabled
     pub enabled: bool,
@@ -294,6 +298,7 @@ pub struct PrivilegedReviewConfig {
 
 /// API token review configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TokenReviewConfig {
     /// Whether token review is enabled
     pub enabled: bool,
@@ -309,6 +314,7 @@ pub struct TokenReviewConfig {
 
 /// Resource access review configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ResourceReviewConfig {
     /// Whether resource review is enabled
     pub enabled: bool,
@@ -320,6 +326,7 @@ pub struct ResourceReviewConfig {
 
 /// Notification configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct NotificationConfig {
     /// Whether notifications are enabled
     pub enabled: bool,

@@ -17,6 +17,7 @@ const GLOBAL_BUCKET_KEY: &str = "__global__";
 
 /// Bandwidth throttling configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BandwidthConfig {
     /// Enable bandwidth throttling
     pub enabled: bool,
@@ -68,6 +69,7 @@ impl BandwidthConfig {
 
 /// Burst loss configuration for simulating intermittent connectivity issues
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BurstLossConfig {
     /// Enable burst loss simulation
     pub enabled: bool,
@@ -85,6 +87,7 @@ pub struct BurstLossConfig {
 
 /// Tag-specific burst loss configuration override
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BurstLossOverride {
     /// Probability of entering a loss burst (0.0 to 1.0)
     pub burst_probability: f64,
@@ -292,6 +295,7 @@ impl BurstLossState {
 
 /// Traffic shaping configuration combining all features
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TrafficShapingConfig {
     /// Bandwidth throttling configuration
     pub bandwidth: BandwidthConfig,

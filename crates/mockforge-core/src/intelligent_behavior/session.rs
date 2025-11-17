@@ -11,6 +11,7 @@ use crate::Result;
 
 /// Session tracking method
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum SessionTrackingMethod {
     /// Track via cookie
@@ -29,6 +30,7 @@ impl Default for SessionTrackingMethod {
 
 /// Session tracking configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SessionTracking {
     /// Tracking method
     #[serde(default)]

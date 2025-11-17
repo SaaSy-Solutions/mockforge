@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 /// Configuration for acceptable drift levels
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DriftBudget {
     /// Maximum number of breaking changes allowed (used if percentage not set)
     #[serde(default)]
@@ -49,6 +50,7 @@ impl Default for DriftBudget {
 
 /// Global drift budget configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DriftBudgetConfig {
     /// Whether drift budget tracking is enabled
     #[serde(default = "default_true")]
@@ -117,6 +119,7 @@ impl Default for DriftBudgetConfig {
 
 /// Rule for detecting breaking changes
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BreakingChangeRule {
     /// Type of rule
     pub rule_type: BreakingChangeRuleType,
@@ -128,6 +131,7 @@ pub struct BreakingChangeRule {
 
 /// Type of breaking change rule
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum BreakingChangeRuleType {
     /// Rule based on mismatch severity
@@ -140,6 +144,7 @@ pub enum BreakingChangeRuleType {
 
 /// Configuration for breaking change rules
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum BreakingChangeRuleConfig {
     /// Severity-based rule

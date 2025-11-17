@@ -46,6 +46,7 @@ mockforge-plugin-core = { path = "../mockforge-plugin-core"}
 mockforge-plugin-loader = { path = "../mockforge-plugin-loader"}
 mockforge-scenarios = { path = "../mockforge-scenarios", features = ["studio-packs"] }
 mockforge-chaos = { path = "../mockforge-chaos"}
+mockforge-schema = { path = "../mockforge-schema"}
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"

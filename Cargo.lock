@@ -5864,6 +5864,7 @@ dependencies = [
  "mockforge-plugin-loader",
  "mockforge-recorder 0.3.0",
  "mockforge-scenarios",
+ "mockforge-schema",
  "mockforge-smtp",
  "mockforge-tcp",
  "mockforge-tracing 0.3.0",
@@ -6078,6 +6079,7 @@ dependencies = [
  "reqwest 0.12.24",
  "roxmltree",
  "rquickjs",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -6694,6 +6696,15 @@ dependencies = [
  "uuid",
  "wiremock",
  "zip 2.4.2",
+]
+
+[[package]]
+name = "mockforge-schema"
+version = "0.3.0"
+dependencies = [
+ "mockforge-core 0.3.0",
+ "schemars 0.8.22",
+ "serde_json",
 ]
 
 [[package]]
@@ -9987,6 +9998,18 @@ dependencies = [
 
 [[package]]
 name = "schemars"
+version = "0.8.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fbf2ae1b8bc8e02df939598064d22402220cd5bbcca1c76f7d6a310974d5615"
+dependencies = [
+ "dyn-clone",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4cd191f9397d57d581cddd31014772520aa448f65ef991055d7f61582c65165f"
@@ -10007,6 +10030,18 @@ dependencies = [
  "ref-cast",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32e265784ad618884abaea0600a9adf15393368d840e0222d101a072f3f7534d"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.42",
+ "serde_derive_internals",
+ "syn 2.0.110",
 ]
 
 [[package]]
@@ -10132,6 +10167,17 @@ name = "serde_derive"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.42",
+ "syn 2.0.110",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.29.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18d26a20a969b9e3fdf2fc2d9f21eda6c40e2de84c9408bb5d3b05d499aae711"
 dependencies = [
  "proc-macro2",
  "quote 1.0.42",

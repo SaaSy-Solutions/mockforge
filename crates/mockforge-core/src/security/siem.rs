@@ -18,6 +18,7 @@ use tracing::{debug, error, warn};
 
 /// SIEM protocol types
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum SiemProtocol {
     /// Syslog (RFC 5424)
@@ -42,6 +43,7 @@ pub enum SiemProtocol {
 
 /// Syslog facility codes (RFC 5424)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum SyslogFacility {
     /// Kernel messages
@@ -132,6 +134,7 @@ impl From<crate::security::events::SecurityEventSeverity> for SyslogSeverity {
 
 /// Retry configuration for SIEM delivery
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RetryConfig {
     /// Maximum number of retry attempts
     pub max_attempts: u32,
@@ -163,6 +166,7 @@ impl Default for RetryConfig {
 
 /// File rotation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FileRotationConfig {
     /// Maximum file size (e.g., "100MB", "1GB")
     pub max_size: String,
@@ -175,6 +179,7 @@ pub struct FileRotationConfig {
 
 /// Event filter configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct EventFilter {
     /// Include patterns (e.g., ["auth.*", "authz.*"])
     pub include: Option<Vec<String>>,
@@ -249,6 +254,7 @@ impl EventFilter {
 
 /// SIEM destination configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "protocol")]
 pub enum SiemDestination {
     /// Syslog destination
@@ -401,6 +407,7 @@ fn default_datadog_site() -> String {
 
 /// SIEM configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SiemConfig {
     /// Whether SIEM integration is enabled
     pub enabled: bool,

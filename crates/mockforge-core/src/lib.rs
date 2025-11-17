@@ -456,6 +456,7 @@ pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
 
 /// Core configuration for MockForge
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct Config {
     /// Enable latency simulation

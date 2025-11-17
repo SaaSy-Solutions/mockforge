@@ -1,0 +1,85 @@
+manifest_version: "1.0"
+name: ecommerce
+version: "1.0.0"
+title: E-commerce with Carts + Orders + Fulfillment
+description: |
+  Complete e-commerce blueprint with shopping carts, orders, payments, and fulfillment.
+
+  This blueprint provides:
+  - Product catalog and inventory management
+  - Shopping cart operations
+  - Checkout and payment processing
+  - Order management and tracking
+  - Fulfillment and shipping
+  - Customer profiles and order history
+
+  Perfect for e-commerce applications that need:
+  - Multi-step checkout flows
+  - Payment processing
+  - Order state management
+  - Shipping and fulfillment tracking
+  - Customer relationship management
+
+author: MockForge Team
+author_email: team@mockforge.dev
+category: ecommerce
+tags:
+  - ecommerce
+  - shopping
+  - cart
+  - orders
+  - payments
+  - fulfillment
+  - shipping
+
+setup:
+  personas:
+    - id: premium-customer
+      name: Premium Customer
+      description: High-value customer with frequent purchases and premium membership
+    - id: regular-customer
+      name: Regular Customer
+      description: Standard customer with typical shopping patterns
+    - id: vip-customer
+      name: VIP Customer
+      description: VIP member with exclusive access and benefits
+
+  reality:
+    level: high
+    description: High realism with order state transitions and realistic inventory management
+
+  flows:
+    - id: browse-to-checkout-flow
+      name: Browse to Checkout Flow
+      description: Complete shopping journey from browsing to order completion
+    - id: cart-to-payment-flow
+      name: Cart to Payment Flow
+      description: Add items to cart, proceed to checkout, and process payment
+    - id: order-fulfillment-flow
+      name: Order Fulfillment Flow
+      description: Order processing, shipping, and delivery tracking
+
+  playground:
+    enabled: true
+    collection_file: playground/collection.json
+
+compatibility:
+  min_version: "0.3.0"
+  max_version: null
+  required_features:
+    - personas
+    - consistency
+    - reality-continuum
+  protocols:
+    - http
+    - websocket
+
+files:
+  - blueprint.yaml
+  - config.yaml
+  - README.md
+  - personas/
+  - flows/
+  - playground/
+
+readme: README.md

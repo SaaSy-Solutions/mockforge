@@ -27,6 +27,7 @@ pub use streaming::{
 
 /// Protocol type enumeration for multi-protocol support
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Protocol {
     /// HTTP/REST protocol for RESTful APIs
     Http,

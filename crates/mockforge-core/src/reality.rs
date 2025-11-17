@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 /// Each level represents a different degree of realism, from simple static mocks
 /// to full production-like chaos behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum RealityLevel {
     /// Level 1: Static Stubs - Simple, instant responses with no chaos

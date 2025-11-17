@@ -10,6 +10,7 @@ use std::hash::{Hash, Hasher};
 
 /// Deceptive canary configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DeceptiveCanaryConfig {
     /// Enable deceptive canary mode
     pub enabled: bool,
@@ -49,6 +50,7 @@ impl Default for DeceptiveCanaryConfig {
 
 /// Team/user identification criteria
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TeamIdentifiers {
     /// User agent patterns (regex patterns, "*" matches all)
     #[serde(default)]
@@ -66,6 +68,7 @@ pub struct TeamIdentifiers {
 
 /// Canary routing strategy
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum CanaryRoutingStrategy {
     /// Consistent hashing on user ID for consistent routing
@@ -78,6 +81,7 @@ pub enum CanaryRoutingStrategy {
 
 /// Statistics for canary routing
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct CanaryStats {
     /// Total requests processed
     pub total_requests: u64,

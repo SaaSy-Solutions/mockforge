@@ -126,6 +126,7 @@ pub enum TreatmentStatus {
 
 /// Risk review frequency
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum RiskReviewFrequency {
     /// Monthly reviews
@@ -295,6 +296,7 @@ pub struct RiskSummary {
 
 /// Risk assessment configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RiskAssessmentConfig {
     /// Whether risk assessment is enabled
     pub enabled: bool,
@@ -306,6 +308,7 @@ pub struct RiskAssessmentConfig {
 
 /// Risk tolerance thresholds
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RiskTolerance {
     /// Maximum acceptable risk score
     pub max_acceptable_score: u8,

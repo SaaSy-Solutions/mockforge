@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 /// Reality source for a field or entity
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum RealitySource {
     /// Use real upstream data
@@ -34,6 +35,7 @@ impl RealitySource {
 
 /// Field pattern for matching JSON paths
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FieldPattern {
     /// JSON path pattern (e.g., "id", "email", "*.currency", "user.pii.*")
     pub path: String,
@@ -75,6 +77,7 @@ impl FieldPattern {
 
 /// Entity-level reality rule
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct EntityRealityRule {
     /// Entity type (e.g., "user", "order", "currency")
     pub entity_type: String,
@@ -90,6 +93,7 @@ pub struct EntityRealityRule {
 /// Configures per-field and per-entity reality sources for fine-grained
 /// control over data blending.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FieldRealityConfig {
     /// Whether field-level mixing is enabled
     #[serde(default)]

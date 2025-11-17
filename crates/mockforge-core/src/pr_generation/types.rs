@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// PR provider type
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum PRProvider {
     /// GitHub
@@ -14,6 +15,7 @@ pub enum PRProvider {
 
 /// Configuration for PR generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PRGenerationConfig {
     /// Whether PR generation is enabled
     pub enabled: bool,

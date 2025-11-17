@@ -63,6 +63,7 @@ pub struct Mismatch {
 
 /// Types of mismatches that can be detected
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum MismatchType {
     /// Missing required field in request
@@ -98,6 +99,7 @@ pub enum MismatchType {
 
 /// Severity levels for mismatches
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum MismatchSeverity {
     /// Critical - will cause request to fail

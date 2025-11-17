@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 /// Change type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ChangeType {
     /// Security enhancement
@@ -230,6 +231,7 @@ impl ChangeRequest {
 
 /// Change management configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ChangeManagementConfig {
     /// Whether change management is enabled
     pub enabled: bool,
@@ -243,6 +245,7 @@ pub struct ChangeManagementConfig {
 
 /// Approval workflow configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ApprovalWorkflowConfig {
     /// Emergency change approvers
     pub emergency: ApprovalLevelConfig,
@@ -256,6 +259,7 @@ pub struct ApprovalWorkflowConfig {
 
 /// Approval level configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ApprovalLevelConfig {
     /// Required approvers
     pub approvers: Vec<String>,
@@ -265,6 +269,7 @@ pub struct ApprovalLevelConfig {
 
 /// Testing configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TestingConfig {
     /// Change types that require testing
     pub required_for: Vec<ChangeType>,
@@ -276,6 +281,7 @@ pub struct TestingConfig {
 
 /// Notification configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct NotificationConfig {
     /// Whether notifications are enabled
     pub enabled: bool,

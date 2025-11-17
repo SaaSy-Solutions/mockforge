@@ -112,6 +112,7 @@ impl InteractionRecord {
 
 /// Behavior rules that define how the mock API should behave
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BehaviorRules {
     /// System prompt that describes the overall API behavior
     pub system_prompt: String,

@@ -1,0 +1,17 @@
+[package]
+name = "mockforge-schema"
+version.workspace = true
+edition = "2021"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "JSON Schema generation for MockForge configuration files"
+
+[dependencies]
+schemars = { version = "0.8", features = ["derive"] }
+serde_json = { workspace = true }
+mockforge-core = { path = "../mockforge-core", features = ["schema"] }
+
+[lints.rust]
+missing_docs = "warn"

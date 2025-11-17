@@ -212,12 +212,14 @@ pub struct TimeTravelStatus {
 }
 
 /// Configuration for time travel features
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeTravelConfig {
     /// Whether time travel is enabled by default
     #[serde(default)]
     pub enabled: bool,
     /// Initial virtual time (if enabled)
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
     pub initial_time: Option<DateTime<Utc>>,
     /// Initial time scale factor
     #[serde(default = "default_scale")]

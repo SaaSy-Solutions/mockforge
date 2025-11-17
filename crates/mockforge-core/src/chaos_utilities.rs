@@ -13,6 +13,7 @@ use tokio::sync::RwLock;
 
 /// Chaos mode configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ChaosConfig {
     /// Enable chaos mode
     pub enabled: bool,

@@ -47,6 +47,7 @@ pub enum RequestStatus {
 
 /// Privileged action type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum PrivilegedActionType {
     /// User management actions
@@ -190,6 +191,7 @@ pub struct PrivilegedSession {
 
 /// Privileged access configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PrivilegedAccessConfig {
     /// Require MFA for privileged users
     pub require_mfa: bool,

@@ -70,6 +70,8 @@ notify = "8.2"
 rquickjs = { version = "0.9", features = ["macro", "classes"] }
 # Cron expression parsing for scheduled events
 cron = "0.15"
+# JSON Schema generation (optional, for schema crate)
+schemars = { version = "0.8", features = ["derive"], optional = true }
 
 mockforge-data = { path = "../mockforge-data" }
 
@@ -91,3 +93,4 @@ windows = { version = "0.62", features = ["Win32_Security_Credentials"] }
 [features]
 default = []
 parallel-routes = ["rayon"]
+schema = ["schemars"]

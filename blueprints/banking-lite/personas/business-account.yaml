@@ -1,0 +1,33 @@
+id: business-account
+name: Business Account
+domain: banking
+traits:
+  account_type: business
+  total_balance: "250000.00"
+  account_count: 5
+  monthly_transactions: 120
+  business_type: retail
+  employees: 25
+  accounts:
+    - type: business_checking
+      balance: "150000.00"
+      account_number: "****1111"
+    - type: business_savings
+      balance: "75000.00"
+      account_number: "****2222"
+    - type: payroll
+      balance: "20000.00"
+      account_number: "****3333"
+    - type: operating
+      balance: "4000.00"
+      account_number: "****4444"
+    - type: reserve
+      balance: "1000.00"
+      account_number: "****5555"
+lifecycle:
+  preset: subscription
+  initial_state: active
+backstory: |
+  Business banking customer with multiple commercial accounts and high transaction volume.
+  Retail business with 25 employees requiring payroll and operating accounts.
+  High balance accounts with frequent transactions for business operations.

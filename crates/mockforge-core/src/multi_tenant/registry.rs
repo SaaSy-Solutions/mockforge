@@ -14,6 +14,7 @@ use std::sync::{Arc, RwLock};
 
 /// Multi-tenant configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct MultiTenantConfig {
     /// Enable multi-tenant mode
     pub enabled: bool,
@@ -51,6 +52,7 @@ impl Default for MultiTenantConfig {
 
 /// Routing strategy for multi-tenant workspaces
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum RoutingStrategy {
     /// Path-based routing: /workspace/{id}/path

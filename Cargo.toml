@@ -34,6 +34,7 @@ members = [
     "crates/mockforge-sdk",
     "crates/mockforge-tunnel",
     "crates/mockforge-vbr",
+    "crates/mockforge-schema",
     "desktop-app",
     "tests"  # Integration tests package
 ]

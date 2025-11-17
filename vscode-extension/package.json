@@ -100,6 +100,11 @@
       {
         "command": "mockforge.showLogs",
         "title": "Show Extension Logs"
+      },
+      {
+        "command": "mockforge.generateMockScenario",
+        "title": "Generate MockForge Scenario",
+        "category": "MockForge"
       }
     ],
     "menus": {
@@ -130,6 +135,14 @@
         }
       ]
     },
+    "languages": [
+      {
+        "id": "yaml",
+        "aliases": ["YAML", "yaml"],
+        "filenames": ["mockforge.yaml", "mockforge.yml", "*.mockforge.yaml", "*.mockforge.yml"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
     "configuration": {
       "title": "MockForge",
       "properties": {

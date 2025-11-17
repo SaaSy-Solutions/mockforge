@@ -17,6 +17,8 @@ import { registerImportMocksCommand } from './commands/importMocks';
 import { registerViewStatsCommand } from './commands/viewStats';
 import { registerStartServerCommand, registerStopServerCommand, registerRestartServerCommand } from './commands/serverControl';
 import { registerShowLogsCommand } from './commands/showLogs';
+import { MockForgeLanguageServer } from './services/languageServer';
+import { registerGenerateMockScenarioCommand } from './commands/generateMockScenario';
 
 /**
  * Extension activation function
@@ -101,6 +103,11 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Initialize and activate language server
+    const languageServer = new MockForgeLanguageServer();
+    languageServer.activate(context);
+    context.subscriptions.push({ dispose: () => languageServer.dispose() });
+
     // Register all commands
     registerAllCommands(context, client, mocksProvider);
 
@@ -142,6 +149,7 @@ function registerAllCommands(
     registerStopServerCommand(context, client, mocksProvider);
     registerRestartServerCommand(context, client, mocksProvider);
     registerShowLogsCommand(context);
+    registerGenerateMockScenarioCommand(context);
 }
 
 /**

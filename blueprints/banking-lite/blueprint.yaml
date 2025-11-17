@@ -1,0 +1,83 @@
+manifest_version: "1.0"
+name: banking-lite
+version: "1.0.0"
+title: Banking Lite with Accounts + Transactions
+description: |
+  Banking blueprint with accounts, transactions, transfers, and statements.
+
+  This blueprint provides:
+  - Account management (checking, savings, business)
+  - Transaction history and processing
+  - Money transfers between accounts
+  - Account statements and reports
+  - Balance inquiries and account details
+  - Transaction categorization
+
+  Perfect for banking and fintech applications that need:
+  - Account balance management
+  - Transaction processing
+  - Transfer workflows
+  - Financial reporting
+  - Strict contract compliance
+
+author: MockForge Team
+author_email: team@mockforge.dev
+category: banking
+tags:
+  - banking
+  - fintech
+  - accounts
+  - transactions
+  - transfers
+  - statements
+
+setup:
+  personas:
+    - id: high-value-customer
+      name: High-Value Customer
+      description: Customer with multiple accounts and high balances
+    - id: regular-customer
+      name: Regular Customer
+      description: Standard customer with typical banking activity
+    - id: business-account
+      name: Business Account
+      description: Business customer with commercial banking needs
+
+  reality:
+    level: high
+    description: High realism with strict drift budgets for financial data accuracy
+
+  flows:
+    - id: account-creation-flow
+      name: Account Creation Flow
+      description: Create new account and initial deposit
+    - id: transfer-flow
+      name: Transfer Flow
+      description: Transfer money between accounts
+    - id: transaction-history-flow
+      name: Transaction History Flow
+      description: View account transactions and generate statement
+
+  playground:
+    enabled: true
+    collection_file: playground/collection.json
+
+compatibility:
+  min_version: "0.3.0"
+  max_version: null
+  required_features:
+    - personas
+    - consistency
+    - drift-budget
+  protocols:
+    - http
+
+files:
+  - blueprint.yaml
+  - config.yaml
+  - README.md
+  - personas/
+  - flows/
+  - playground/
+
+readme: README.md

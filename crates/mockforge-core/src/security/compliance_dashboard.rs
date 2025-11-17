@@ -200,6 +200,7 @@ pub struct RemediationStatus {
 
 /// Compliance dashboard configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ComplianceDashboardConfig {
     /// Whether dashboard is enabled
     pub enabled: bool,
@@ -211,6 +212,7 @@ pub struct ComplianceDashboardConfig {
 
 /// Alert thresholds
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct AlertThresholds {
     /// Minimum compliance score to trigger alert
     pub compliance_score: u8,

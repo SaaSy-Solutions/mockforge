@@ -20,11 +20,13 @@ use tokio::net::TcpListener;
 #[cfg(feature = "amqp")]
 mod amqp_commands;
 mod backend_generator;
+mod blueprint_commands;
 mod client_generator;
 mod cloud_commands;
 mod contract_diff_commands;
 mod contract_sync_commands;
 mod deploy_commands;
+mod dev_setup_commands;
 mod error_helpers;
 mod flow_commands;
 #[cfg(feature = "ftp")]
@@ -684,6 +686,40 @@ enum Commands {
         progress: bool,
     },
 
+    /// Generate JSON Schema for MockForge configuration files
+    ///
+    /// Generates a JSON Schema that can be used by IDEs and editors
+    /// to provide autocomplete, validation, and documentation for
+    /// mockforge.yaml and mockforge.toml files.
+    ///
+    /// Examples:
+    ///   mockforge schema generate
+    ///   mockforge schema generate --output mockforge-config.schema.json
+    #[command(verbatim_doc_comment)]
+    Schema {
+        /// Output file path (default: stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// One-command frontend integration setup
+    ///
+    /// Sets up MockForge integration for frontend frameworks with:
+    /// - Typed client generation from OpenAPI spec
+    /// - Example hooks/composables/services
+    /// - Environment configuration
+    /// - SDK dependencies
+    ///
+    /// Examples:
+    ///   mockforge dev-setup react
+    ///   mockforge dev-setup vue --spec api.yaml
+    ///   mockforge dev-setup next --base-url http://localhost:3000
+    #[command(verbatim_doc_comment)]
+    DevSetup {
+        #[command(flatten)]
+        args: dev_setup_commands::DevSetupArgs,
+    },
+
     /// Configuration management
     Config {
         #[command(subcommand)]
@@ -876,6 +912,24 @@ enum Commands {
     Template {
         #[command(subcommand)]
         template_command: template_commands::TemplateCommands,
+    },
+
+    /// Blueprint management - predefined app archetypes
+    ///
+    /// Blueprints provide opinionated "Golden Path" workflows with:
+    /// - Pre-configured personas for different user types
+    /// - Reality defaults optimized for the use case
+    /// - Sample flows demonstrating common workflows
+    /// - Playground collections for testing
+    ///
+    /// Examples:
+    ///   mockforge blueprint list
+    ///   mockforge blueprint create my-app --blueprint b2c-saas
+    ///   mockforge blueprint info ecommerce
+    #[command(verbatim_doc_comment)]
+    Blueprint {
+        #[command(subcommand)]
+        blueprint_command: blueprint_commands::BlueprintCommands,
     },
 
     /// Client code generation for frontend frameworks
@@ -2221,6 +2275,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             )
             .await?;
         }
+        Commands::Schema { output } => {
+            handle_schema(output).await?;
+        }
+        Commands::DevSetup { args } => {
+            dev_setup_commands::execute_dev_setup(args).await?;
+        }
         Commands::Config { config_command } => {
             handle_config(config_command).await?;
         }
@@ -2293,6 +2353,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Template { template_command } => {
             template_commands::handle_template_command(template_command).await?;
         }
+        Commands::Blueprint { blueprint_command } => match blueprint_command {
+            blueprint_commands::BlueprintCommands::List { detailed, category } => {
+                blueprint_commands::list_blueprints(detailed, category)?;
+            }
+            blueprint_commands::BlueprintCommands::Create {
+                name,
+                blueprint,
+                output,
+                force,
+            } => {
+                blueprint_commands::create_from_blueprint(name, blueprint, output, force)?;
+            }
+            blueprint_commands::BlueprintCommands::Info { blueprint_id } => {
+                blueprint_commands::show_blueprint_info(blueprint_id)?;
+            }
+        },
         Commands::Client { client_command } => {
             client_generator::execute_client_command(client_command).await?;
         }
@@ -5631,6 +5707,25 @@ fn handle_completions(shell: Shell) {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();
     generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
+}
+
+/// Handle JSON Schema generation for MockForge configuration
+async fn handle_schema(
+    output: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use mockforge_schema::generate_config_schema_json;
+    use std::fs;
+
+    let schema_json = generate_config_schema_json();
+
+    if let Some(output_path) = output {
+        fs::write(&output_path, schema_json)?;
+        println!("✅ JSON Schema generated: {}", output_path.display());
+    } else {
+        println!("{}", schema_json);
+    }
+
+    Ok(())
 }
 
 /// Handle mock generation from configuration

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 /// Failure injection configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FailureConfig {
     /// Global error rate (0.0 to 1.0)
     pub global_error_rate: f64,
@@ -21,6 +22,7 @@ pub struct FailureConfig {
 
 /// Per-tag failure configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TagFailureConfig {
     /// Error rate for this tag (0.0 to 1.0)
     pub error_rate: f64,

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// Transition curve type for blend ratio progression
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum TransitionCurve {
     /// Linear progression (constant rate)
@@ -26,10 +27,13 @@ impl Default for TransitionCurve {
 
 /// Time schedule for blend ratio progression
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TimeSchedule {
     /// Start time for the transition
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
     pub start_time: DateTime<Utc>,
     /// End time for the transition
+    #[cfg_attr(feature = "schema", schemars(with = "String"))]
     pub end_time: DateTime<Utc>,
     /// Initial blend ratio at start time
     pub start_ratio: f64,

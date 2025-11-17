@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Configuration for external integrations
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct ExternalIntegrationConfig {
     /// Jira configuration
@@ -19,6 +20,7 @@ pub struct ExternalIntegrationConfig {
 
 /// Jira integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct JiraConfig {
     /// Jira base URL
     pub url: String,
@@ -36,6 +38,7 @@ pub struct JiraConfig {
 
 /// Linear integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LinearConfig {
     /// Linear API key
     pub api_key: String,
@@ -47,6 +50,7 @@ pub struct LinearConfig {
 
 /// Webhook configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct WebhookConfig {
     /// Webhook URL
     pub url: String,

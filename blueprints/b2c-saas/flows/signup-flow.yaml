@@ -1,0 +1,42 @@
+id: signup-flow
+name: User Signup Flow
+description: Complete signup → trial → activation flow
+steps:
+  - name: Create Account
+    method: POST
+    path: /api/auth/signup
+    body:
+      email: "{{faker.email}}"
+      password: "SecurePass123!"
+      name: "{{faker.name}}"
+    extract:
+      user_id: body.user.id
+      access_token: body.access_token
+
+  - name: Start Trial
+    method: POST
+    path: /api/subscriptions/trial
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      plan: "trial"
+    extract:
+      subscription_id: body.subscription.id
+      trial_ends: body.subscription.trial_ends
+
+  - name: Get User Profile
+    method: GET
+    path: /api/users/{{user_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    validate:
+      - path: body.subscription.status
+        expected: "trial"
+
+  - name: Complete Onboarding
+    method: POST
+    path: /api/users/{{user_id}}/onboarding/complete
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      onboarding_step: "completed"

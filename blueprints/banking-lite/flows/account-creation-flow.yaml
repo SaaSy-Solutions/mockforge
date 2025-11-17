@@ -1,0 +1,44 @@
+id: account-creation-flow
+name: Account Creation Flow
+description: Create new account and initial deposit
+steps:
+  - name: Create Account
+    method: POST
+    path: /api/accounts
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      account_type: "checking"
+      currency: "USD"
+      initial_deposit: 1000.00
+    extract:
+      account_id: body.account.id
+      account_number: body.account.account_number
+
+  - name: Verify Account Created
+    method: GET
+    path: /api/accounts/{{account_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    validate:
+      - path: body.account.status
+        expected: "active"
+      - path: body.account.balance
+        expected: 1000.00
+
+  - name: Get Account Balance
+    method: GET
+    path: /api/accounts/{{account_id}}/balance
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      balance: body.balance
+      available_balance: body.available_balance
+
+  - name: List All Accounts
+    method: GET
+    path: /api/accounts
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      account_count: body.accounts.length

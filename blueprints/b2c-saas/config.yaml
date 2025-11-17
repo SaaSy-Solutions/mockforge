@@ -1,0 +1,119 @@
+# B2C SaaS Configuration
+# Complete setup for SaaS applications with auth, billing, and subscriptions
+
+# HTTP Server
+http:
+  port: 3000
+  host: "0.0.0.0"
+  enabled: true
+  cors_enabled: true
+  openapi_spec: "openapi.yaml"
+
+# Admin UI
+admin:
+  enabled: true
+  port: 9080
+  host: "127.0.0.1"
+
+# Reality Configuration
+reality:
+  level: moderate
+  enabled: true
+
+# Reality Continuum - blend mock and real data
+reality_continuum:
+  enabled: true
+  default_ratio: 0.3  # 30% reality, 70% mock (good for development)
+  route_rules:
+    - pattern: "/api/billing/*"
+      ratio: 0.5  # Billing endpoints use 50% real data
+    - pattern: "/api/payments/*"
+      ratio: 0.2  # Payment endpoints mostly mock (safer)
+
+# Consistency Engine with Personas
+consistency:
+  persona_graphs:
+    enabled: true
+
+  personas:
+    premium_user:
+      id: "user:premium-001"
+      name: "Premium User"
+      domain: "saas"
+      traits:
+        subscription_tier: "premium"
+        subscription_status: "active"
+        payment_method: "credit_card"
+        billing_cycle: "monthly"
+        plan_price: "29.99"
+      lifecycle:
+        preset: "subscription"
+        initial_state: "active"
+
+    trial_user:
+      id: "user:trial-001"
+      name: "Trial User"
+      domain: "saas"
+      traits:
+        subscription_tier: "trial"
+        subscription_status: "trial"
+        trial_days_remaining: "7"
+        payment_method: null
+      lifecycle:
+        preset: "subscription"
+        initial_state: "new"
+
+    churned_user:
+      id: "user:churned-001"
+      name: "Churned User"
+      domain: "saas"
+      traits:
+        subscription_tier: "free"
+        subscription_status: "cancelled"
+        cancellation_date: "2024-01-15"
+        cancellation_reason: "price"
+      lifecycle:
+        preset: "subscription"
+        initial_state: "canceled"
+
+# Drift Budget - strict for billing endpoints
+drift_budget:
+  enabled: true
+  default_budget:
+    max_breaking_changes: 0
+    max_non_breaking_changes: 5
+  per_endpoint_budgets:
+    "POST /api/billing/subscriptions":
+      max_breaking_changes: 0
+      max_non_breaking_changes: 2
+    "POST /api/payments/process":
+      max_breaking_changes: 0
+      max_non_breaking_changes: 1
+
+# Chaos Configuration - billing-specific patterns
+core:
+  failures_enabled: true
+  failure_config:
+    global_error_rate: 0.02  # 2% global error rate
+    tag_configs:
+      billing:
+        error_rate: 0.05  # 5% error rate for billing (payment failures)
+        status_codes: [402, 503]  # Payment required, service unavailable
+        error_message: "Payment processing temporarily unavailable"
+      auth:
+        error_rate: 0.01  # 1% error rate for auth
+        status_codes: [401, 403]
+      subscriptions:
+        error_rate: 0.03  # 3% error rate for subscription operations
+        status_codes: [409, 503]  # Conflict, service unavailable
+
+# Logging
+logging:
+  level: "info"
+  json_format: false
+
+# Observability
+observability:
+  prometheus:
+    enabled: true
+    port: 9090

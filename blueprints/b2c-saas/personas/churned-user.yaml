@@ -1,0 +1,19 @@
+id: churned-user
+name: Churned User
+domain: saas
+traits:
+  subscription_tier: free
+  subscription_status: cancelled
+  cancellation_date: "2024-01-15"
+  cancellation_reason: price
+  previous_tier: premium
+  total_spent: "179.94"
+  last_active: "2024-01-10"
+  win_back_offer_sent: false
+lifecycle:
+  preset: subscription
+  initial_state: canceled
+backstory: |
+  Former premium customer who cancelled due to pricing concerns.
+  Was active for 6 months before cancellation. May return if offered
+  a discount or better pricing plan. Good candidate for win-back campaign.

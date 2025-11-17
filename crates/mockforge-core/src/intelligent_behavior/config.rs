@@ -9,6 +9,7 @@ use super::types::BehaviorRules;
 
 /// Configuration for the Intelligent Mock Behavior system
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct IntelligentBehaviorConfig {
     /// Enable intelligent behavior
     #[serde(default)]
@@ -37,6 +38,7 @@ pub struct IntelligentBehaviorConfig {
 
 /// Personas configuration for consistent data generation
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PersonasConfig {
     /// List of configured personas
     #[serde(default)]
@@ -63,6 +65,7 @@ impl PersonasConfig {
 
 /// A persona defines consistent data patterns across endpoints
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Persona {
     /// Persona name (e.g., "commercial_midwest", "hobbyist_urban")
     pub name: String,
@@ -99,6 +102,7 @@ impl Persona {
 
 /// Behavior model configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BehaviorModelConfig {
     /// LLM provider (openai, anthropic, ollama, openai-compatible)
     pub llm_provider: String,
@@ -141,6 +145,7 @@ impl Default for BehaviorModelConfig {
 
 /// Vector store configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct VectorStoreConfig {
     /// Enable vector store for long-term memory
     #[serde(default)]
@@ -181,6 +186,7 @@ impl Default for VectorStoreConfig {
 
 /// Performance configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PerformanceConfig {
     /// Cache TTL in seconds
     #[serde(default = "default_cache_ttl")]

@@ -7,6 +7,7 @@ use std::time::Duration;
 
 /// Latency distribution types
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum LatencyDistribution {
     /// Fixed latency with optional jitter (backward compatible)
@@ -20,6 +21,7 @@ pub enum LatencyDistribution {
 
 /// Latency profile configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LatencyProfile {
     /// Base latency in milliseconds (mean for distributions)
     pub base_ms: u64,

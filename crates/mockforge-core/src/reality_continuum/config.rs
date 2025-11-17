@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 /// Transition mode for blend ratio progression
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum TransitionMode {
     /// Time-based progression using virtual clock
@@ -27,6 +28,7 @@ impl Default for TransitionMode {
 
 /// Merge strategy for blending responses
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum MergeStrategy {
     /// Field-level intelligent merge (deep merge objects, combine arrays)
@@ -45,6 +47,7 @@ impl Default for MergeStrategy {
 
 /// Configuration for Reality Continuum
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ContinuumConfig {
     /// Whether the continuum feature is enabled
     #[serde(default = "default_false")]
@@ -159,6 +162,7 @@ impl ContinuumConfig {
 /// Ensures that HTTP, WebSocket, gRPC, TCP, and webhooks all use the same
 /// backing persona graph and unified state when configured.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct CrossProtocolStateConfig {
     /// State model identifier (e.g., "ecommerce_v1", "finance_v1")
     ///
@@ -220,6 +224,7 @@ impl CrossProtocolStateConfig {
 
 /// Rule for per-route continuum configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ContinuumRule {
     /// Path pattern to match (supports wildcards like "/api/users/*")
     pub pattern: String,
