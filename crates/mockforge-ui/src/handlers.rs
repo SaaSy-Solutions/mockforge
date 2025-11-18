@@ -44,6 +44,7 @@ use mockforge_core::workspace_import::{ImportResponse, ImportRoute};
 
 // Handler sub-modules
 pub mod admin;
+pub mod ai_studio;
 pub mod analytics;
 pub mod analytics_stream;
 pub mod analytics_v2;

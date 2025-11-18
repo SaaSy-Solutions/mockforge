@@ -204,6 +204,8 @@
 pub mod ab_testing;
 pub mod ai_contract_diff;
 pub mod ai_response;
+/// AI Studio - Unified AI Copilot for all AI-powered features
+pub mod ai_studio;
 /// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
 pub mod behavioral_cloning;
 pub mod cache;

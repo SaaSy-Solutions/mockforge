@@ -73,6 +73,9 @@ const MockAIRulesPage = lazy(() => import('./pages/MockAIRulesPage').then(m => (
 // Voice + LLM Interface
 const VoicePage = lazy(() => import('./pages/VoicePage').then(m => ({ default: m.VoicePage })));
 
+// AI Studio - Unified AI Copilot
+const AIStudioPage = lazy(() => import('./pages/AIStudioPage').then(m => ({ default: m.AIStudioPage })));
+
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const loadWorkspaces = useWorkspaceStore(state => state.loadWorkspaces);
@@ -236,6 +239,10 @@ function App() {
       // Voice + LLM Interface
       case 'voice':
         return <VoicePage />;
+
+      // AI Studio - Unified AI Copilot
+      case 'ai-studio':
+        return <AIStudioPage />;
 
       // Configuration
       case 'config':

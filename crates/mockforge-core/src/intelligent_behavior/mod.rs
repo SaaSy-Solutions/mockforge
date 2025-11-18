@@ -53,6 +53,7 @@ pub mod context;
 pub mod embedding_client;
 pub mod history;
 pub mod llm_client;
+pub use llm_client::LlmUsage;
 pub mod memory;
 pub mod mockai;
 pub mod mutation_analyzer;

@@ -268,6 +268,19 @@ pub fn create_admin_router(
             post(voice::create_workspace_preview),
         )
         // create-workspace-confirm route moved to workspace router with WorkspaceState
+        // AI Studio routes
+        .route("/api/v1/ai-studio/chat", post(ai_studio::chat))
+        .route("/__mockforge/ai-studio/chat", post(ai_studio::chat))
+        .route("/api/v1/ai-studio/generate-mock", post(ai_studio::generate_mock))
+        .route("/__mockforge/ai-studio/generate-mock", post(ai_studio::generate_mock))
+        .route("/api/v1/ai-studio/debug-test", post(ai_studio::debug_test))
+        .route("/__mockforge/ai-studio/debug-test", post(ai_studio::debug_test))
+        .route("/api/v1/ai-studio/generate-persona", post(ai_studio::generate_persona))
+        .route("/__mockforge/ai-studio/generate-persona", post(ai_studio::generate_persona))
+        .route("/api/v1/ai-studio/freeze", post(ai_studio::freeze_artifact))
+        .route("/__mockforge/ai-studio/freeze", post(ai_studio::freeze_artifact))
+        .route("/api/v1/ai-studio/usage", get(ai_studio::get_usage))
+        .route("/__mockforge/ai-studio/usage", get(ai_studio::get_usage))
         // Failure analysis routes
         .route("/api/v2/failures/analyze", post(failure_analysis::analyze_failure))
         .route("/api/v2/failures/{request_id}", get(failure_analysis::get_failure_analysis))

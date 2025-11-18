@@ -90,6 +90,7 @@ const navItems = [
   { id: 'template-marketplace', label: 'Template Marketplace', icon: Store },
 
   // AI & Intelligence
+  { id: 'ai-studio', label: 'AI Studio', icon: Brain },
   { id: 'mockai', label: 'MockAI', icon: Brain },
   { id: 'mockai-openapi-generator', label: 'MockAI OpenAPI Generator', icon: Code2 },
   { id: 'mockai-rules', label: 'MockAI Rules', icon: BarChart3 },
