@@ -221,10 +221,20 @@ convert_crate_dependencies() {
 
     if [ -f "$cargo_toml" ]; then
         print_status "Converting dependencies for $crate_name..."
-        # Build list of published crates to only convert those
+        # Build list of crates that will be published in this batch
+        # For Phase 1, include all Phase 1 crates; for Phase 2, include all Phase 1 + Phase 2 crates
         local published_crates=""
-        for dep_crate in mockforge-core mockforge-data mockforge-plugin-core mockforge-plugin-sdk mockforge-plugin-loader mockforge-plugin-registry mockforge-observability mockforge-tracing mockforge-recorder mockforge-reporting mockforge-chaos mockforge-analytics mockforge-collab mockforge-http mockforge-grpc mockforge-ws mockforge-graphql mockforge-mqtt mockforge-smtp mockforge-amqp mockforge-kafka mockforge-ftp mockforge-tcp mockforge-sdk mockforge-bench mockforge-test mockforge-vbr mockforge-tunnel mockforge-ui mockforge-cli mockforge-scenarios; do
+        local phase1_crates="mockforge-core mockforge-data mockforge-plugin-core mockforge-observability mockforge-tracing mockforge-plugin-sdk mockforge-recorder mockforge-plugin-registry mockforge-chaos mockforge-reporting mockforge-analytics mockforge-collab"
+        local phase2_crates="mockforge-plugin-loader mockforge-http mockforge-grpc mockforge-ws mockforge-graphql mockforge-mqtt mockforge-smtp mockforge-amqp mockforge-kafka mockforge-ftp mockforge-tcp mockforge-sdk mockforge-bench mockforge-test mockforge-vbr mockforge-tunnel mockforge-ui mockforge-cli mockforge-scenarios"
+
+        # Check which phase we're in based on the crate being published
+        local all_crates="$phase1_crates $phase2_crates"
+        for dep_crate in $all_crates; do
+            # Include if already published OR if it's a Phase 1 crate (will be published in same batch)
             if crate_version_published "$dep_crate" "$WORKSPACE_VERSION"; then
+                published_crates="$published_crates $dep_crate"
+            elif [[ " $phase1_crates " =~ " $dep_crate " ]]; then
+                # Phase 1 crates can reference each other even if not yet published
                 published_crates="$published_crates $dep_crate"
             fi
         done
@@ -524,13 +534,14 @@ main() {
     # Phase 1: Publish base crates (no internal dependencies)
     print_status "Phase 1: Publishing base crates..."
 
-    convert_crate_dependencies "mockforge-core"
-    publish_crate "mockforge-core"
-    wait_for_processing
-
-    # Convert dependencies for mockforge-data and publish it
+    # Publish mockforge-data first (it depends on mockforge-core 0.1.3, already published)
     convert_crate_dependencies "mockforge-data"
     publish_crate "mockforge-data"
+    wait_for_processing
+
+    # Convert dependencies for mockforge-core (can now reference mockforge-data 0.3.0)
+    convert_crate_dependencies "mockforge-core"
+    publish_crate "mockforge-core"
     wait_for_processing
 
     # Convert dependencies for mockforge-plugin-core and publish it
