@@ -12,7 +12,11 @@ JetBrains IDE plugin for MockForge providing config validation, code actions, an
 
 ## Implementation Status
 
-This plugin is planned but not yet implemented. The implementation should follow the same patterns as the VS Code extension:
+**Status:** 🔮 **Future Work** - Planned but not yet implemented
+
+This plugin is documented as future work. The VS Code extension is the primary IDE integration and should be polished first. This plugin can be implemented later or as a community contribution.
+
+The implementation should follow the same patterns as the VS Code extension:
 
 ### Required Components
 
@@ -99,6 +103,26 @@ jetbrains-plugin/
 ```bash
 ./gradlew runIde
 ```
+
+## Future Work
+
+This plugin is currently planned but not implemented. Priority is on polishing the VS Code extension first, as it serves a larger user base.
+
+### Community Contributions Welcome
+
+If you're interested in implementing the JetBrains plugin, we welcome contributions! Please:
+
+1. Open an issue to discuss the implementation approach
+2. Follow the patterns established in the VS Code extension
+3. Ensure feature parity with VS Code extension where applicable
+4. Submit a pull request when ready
+
+### Implementation Priority
+
+- **Phase 1**: Config validation and autocomplete (highest priority)
+- **Phase 2**: Code actions for scenario generation
+- **Phase 3**: Inline preview of mock responses
+- **Phase 4**: Advanced features (scenario execution, server control panel)
 
 ## Future Enhancements
 

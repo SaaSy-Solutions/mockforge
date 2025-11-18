@@ -8,6 +8,8 @@
 
 import * as vscode from 'vscode';
 import { ConfigValidator } from './configValidator';
+import { MockPreviewProvider } from './mockPreviewProvider';
+import { MockForgeClient } from './mockforgeClient';
 
 /**
  * Language server for MockForge config files
@@ -15,12 +17,21 @@ import { ConfigValidator } from './configValidator';
 export class MockForgeLanguageServer {
     private configValidator: ConfigValidator;
     private diagnosticCollection: vscode.DiagnosticCollection;
+    private mockPreviewProvider: MockPreviewProvider;
     private disposables: vscode.Disposable[] = [];
 
     constructor() {
         this.configValidator = new ConfigValidator();
         this.diagnosticCollection = vscode.languages.createDiagnosticCollection('mockforge');
+        this.mockPreviewProvider = new MockPreviewProvider();
         this.disposables.push(this.diagnosticCollection);
+    }
+
+    /**
+     * Set the MockForge client for preview provider
+     */
+    setClient(client: MockForgeClient | null): void {
+        this.mockPreviewProvider.setClient(client);
     }
 
     /**
@@ -36,6 +47,29 @@ export class MockForgeLanguageServer {
             { scheme: 'file', pattern: '**/*.mockforge.yaml' },
             { scheme: 'file', pattern: '**/*.mockforge.yml' },
         ];
+
+        // Register hover provider for code files (TypeScript, JavaScript, Python, etc.)
+        const codeFileSelector: vscode.DocumentSelector = [
+            { scheme: 'file', language: 'typescript' },
+            { scheme: 'file', language: 'javascript' },
+            { scheme: 'file', language: 'typescriptreact' },
+            { scheme: 'file', language: 'javascriptreact' },
+            { scheme: 'file', language: 'python' },
+            { scheme: 'file', language: 'go' },
+            { scheme: 'file', language: 'java' },
+            { scheme: 'file', language: 'csharp' },
+        ];
+
+        // Register hover provider for code files to show mock previews
+        const codeHoverProvider = vscode.languages.registerHoverProvider(
+            codeFileSelector,
+            {
+                provideHover: async (document, position) => {
+                    return this.provideCodeHover(document, position);
+                },
+            }
+        );
+        context.subscriptions.push(codeHoverProvider);
 
         // Register validation on document change
         const validateDocument = async (document: vscode.TextDocument) => {
@@ -129,12 +163,34 @@ export class MockForgeLanguageServer {
 
         // Check if this is an endpoint path - show mock response preview
         if (line.text.includes('path:') || line.text.includes('url:')) {
-            const preview = await this.getMockResponsePreview(document, position);
-            if (preview) {
-                return new vscode.Hover(preview, wordRange);
+            // Extract endpoint from config file
+            const endpoint = this.mockPreviewProvider.extractEndpoint(document, position);
+            if (endpoint) {
+                const preview = await this.mockPreviewProvider.getPreview(endpoint);
+                if (preview) {
+                    return new vscode.Hover(preview, wordRange);
+                }
             }
         }
 
+        return null;
+    }
+
+    /**
+     * Provide hover for code files (endpoint detection)
+     */
+    private async provideCodeHover(
+        document: vscode.TextDocument,
+        position: vscode.Position
+    ): Promise<vscode.Hover | null> {
+        const endpoint = this.mockPreviewProvider.extractEndpoint(document, position);
+        if (endpoint) {
+            const preview = await this.mockPreviewProvider.getPreview(endpoint);
+            if (preview) {
+                const wordRange = document.getWordRangeAtPosition(position, /['"`][^'"`]+['"`]/);
+                return new vscode.Hover(preview, wordRange || undefined);
+            }
+        }
         return null;
     }
 
@@ -163,18 +219,6 @@ export class MockForgeLanguageServer {
         }
 
         return null;
-    }
-
-    /**
-     * Get mock response preview for an endpoint
-     */
-    private async getMockResponsePreview(
-        document: vscode.TextDocument,
-        position: vscode.Position
-    ): Promise<vscode.MarkdownString | null> {
-        // This would query the MockForge server for the endpoint's mock response
-        // For now, return a placeholder
-        return new vscode.MarkdownString('**Mock Response Preview**\n\n*Connect to MockForge server to see preview*');
     }
 
     /**

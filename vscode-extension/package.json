@@ -202,6 +202,11 @@
           "type": "number",
           "default": 5000,
           "description": "HTTP request timeout in milliseconds"
+        },
+        "mockforge.inlinePreview.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable inline preview of mock responses when hovering over endpoint references"
         }
       }
     }

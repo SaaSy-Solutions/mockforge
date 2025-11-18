@@ -1,5 +1,9 @@
 # Behavioral Cloning v1
 
+**Pillars:** [Reality]
+
+[Reality] - Makes mocks feel like real backends through behavioral cloning from recorded traffic
+
 Behavioral Cloning v1 enables MockForge to record multi-step API flows and replay them as named scenarios. This moves from endpoint-level mocks to journey-level simulations, allowing teams to replay realistic flows captured from real systems.
 
 ## Overview
@@ -274,7 +278,7 @@ In your CI pipeline:
     mockforge serve \
       --config config.yaml \
       --behavioral-cloning-enabled &
-  
+
 - name: Run E2E tests
   run: |
     # Your E2E test makes the same sequence of requests
@@ -423,7 +427,7 @@ steps:
       user_id: user_id  # Extract from response.user_id
     response:
       body: '{"user_id": "user-123", "token": "..."}'
-  
+
   - step_id: step_1
     label: get_profile
     request:
@@ -485,4 +489,3 @@ Requests are automatically grouped into flows based on the configured grouping s
 - **v2 Features**: Probabilistic replay, multiple scenarios per session, advanced path matching
 - **Admin UI**: Visual flow viewer with timeline (planned)
 - **Marketplace**: Share scenarios via marketplace (planned)
-

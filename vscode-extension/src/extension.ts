@@ -86,6 +86,9 @@ export function activate(context: vscode.ExtensionContext) {
                 vscode.window.registerTreeDataProvider('mockforge-explorer', mocksProvider);
                 vscode.window.registerTreeDataProvider('mockforge-server', serverProvider);
 
+                // Update language server client
+                languageServer.setClient(client);
+
                 // Re-register all commands with new client and providers
                 registerAllCommands(context, client, mocksProvider);
 
@@ -105,6 +108,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Initialize and activate language server
     const languageServer = new MockForgeLanguageServer();
+    languageServer.setClient(client);
     languageServer.activate(context);
     context.subscriptions.push({ dispose: () => languageServer.dispose() });
 

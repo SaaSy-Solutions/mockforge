@@ -1,5 +1,9 @@
 # Consent & Risk Simulation Guide
 
+**Pillars:** [Reality]
+
+[Reality] - Makes mocks feel like real backends through realistic consent and risk simulation
+
 MockForge provides consent screen simulation and risk-based authentication challenges to help you test applications that integrate with identity providers requiring user consent and risk assessment.
 
 ## Overview

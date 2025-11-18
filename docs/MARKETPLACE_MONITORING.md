@@ -1,5 +1,9 @@
 # Marketplace Monitoring & Dashboards
 
+**Pillars:** [Cloud]
+
+[Cloud] - Registry, orgs, governance, monetization, marketplace
+
 This document describes the monitoring infrastructure for MockForge Cloud marketplace operations, including Prometheus metrics and Grafana dashboard setup.
 
 ## Overview

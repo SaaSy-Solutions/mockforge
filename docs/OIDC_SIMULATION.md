@@ -1,5 +1,10 @@
 # OIDC Simulation Guide
 
+**Pillars:** [Reality][DevX]
+
+[Reality] - Makes mocks feel like real backends through realistic OIDC simulation
+[DevX] - Improves developer experience with easy-to-use authentication testing
+
 MockForge provides OpenID Connect (OIDC) simulation capabilities to help you test applications that integrate with identity providers. This guide explains how to configure and use OIDC simulation features.
 
 ## Overview

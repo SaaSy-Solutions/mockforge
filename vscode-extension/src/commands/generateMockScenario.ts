@@ -33,8 +33,8 @@ export function registerGenerateMockScenarioCommand(context: vscode.ExtensionCon
     // Register command handler
     const command = vscode.commands.registerCommand(
         'mockforge.generateMockScenario',
-        async (document: vscode.TextDocument, operation?: any) => {
-            await generateMockScenario(document, operation);
+        async (document: vscode.TextDocument) => {
+            await generateMockScenario(document);
         }
     );
 
@@ -85,20 +85,19 @@ function provideGenerateMockScenarioActions(
  * Generate mock scenario from OpenAPI operation
  */
 async function generateMockScenario(
-    document: vscode.TextDocument,
-    operation?: string
+    document: vscode.TextDocument
 ): Promise<void> {
     try {
         // Parse OpenAPI spec
         const content = document.getText();
-        let spec: any;
+        let spec: Record<string, unknown>;
 
         if (document.fileName.endsWith('.json')) {
             spec = JSON.parse(content);
         } else {
             // YAML parsing
             try {
-                spec = yaml.load(content) as any;
+                spec = yaml.load(content) as Record<string, unknown>;
             } catch (yamlError) {
                 vscode.window.showErrorMessage(
                     `Failed to parse YAML: ${yamlError instanceof Error ? yamlError.message : 'Unknown error'}`
@@ -194,7 +193,7 @@ async function generateMockScenario(
 /**
  * Extract operations from OpenAPI spec
  */
-function extractOperations(spec: any): Array<{ method: string; path: string; operationId?: string; summary?: string }> {
+function extractOperations(spec: Record<string, unknown>): Array<{ method: string; path: string; operationId?: string; summary?: string }> {
     const operations: Array<{ method: string; path: string; operationId?: string; summary?: string }> = [];
 
     if (!spec.paths) {
@@ -203,19 +202,24 @@ function extractOperations(spec: any): Array<{ method: string; path: string; ope
 
     const methods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'];
 
-    for (const [path, pathItem] of Object.entries(spec.paths)) {
+    const paths = spec.paths as Record<string, Record<string, unknown>> | undefined;
+    if (!paths) {
+        return operations;
+    }
+
+    for (const [path, pathItem] of Object.entries(paths)) {
         if (typeof pathItem !== 'object' || pathItem === null) {
             continue;
         }
 
         for (const method of methods) {
             if (method in pathItem) {
-                const operation = (pathItem as any)[method];
+                const operation = pathItem[method] as Record<string, unknown>;
                 operations.push({
                     method,
                     path,
-                    operationId: operation.operationId,
-                    summary: operation.summary,
+                    operationId: typeof operation.operationId === 'string' ? operation.operationId : undefined,
+                    summary: typeof operation.summary === 'string' ? operation.summary : undefined,
                 });
             }
         }

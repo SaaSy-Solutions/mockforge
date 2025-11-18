@@ -1,5 +1,9 @@
 # Consumer Impact Analysis
 
+**Pillars:** [Contracts]
+
+[Contracts] - Schema, drift, validation, and safety nets for API contracts
+
 ## Overview
 
 Consumer Impact Analysis helps teams understand which applications and services will be affected when API contracts change. By mapping endpoints to client SDK methods and consuming applications, MockForge provides visibility into the downstream impact of contract drift.

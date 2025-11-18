@@ -1,5 +1,9 @@
 # Token Lifecycle Scenarios Guide
 
+**Pillars:** [Reality]
+
+[Reality] - Makes mocks feel like real backends through realistic token lifecycle simulation
+
 MockForge provides first-class support for testing token lifecycle edge cases, including token revocation, key rotation, clock skew, and other scenarios that are difficult to test in production.
 
 ## Overview
