@@ -40,6 +40,10 @@ pub enum AnalyticsError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Invalid input
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
     /// Generic error
     #[error("{0}")]
     Other(String),

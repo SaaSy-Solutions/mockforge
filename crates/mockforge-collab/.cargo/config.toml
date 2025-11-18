@@ -1,5 +1,0 @@
-# SQLX_OFFLINE disabled - compile-time query checking requires database
-# Database file: compile-check.db (created with migrations)
-# To enable offline mode: cargo sqlx prepare --database-url sqlite:$(pwd)/compile-check.db
-[env]
-DATABASE_URL = { value = "sqlite:compile-check.db", relative = true }

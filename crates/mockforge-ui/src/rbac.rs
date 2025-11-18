@@ -106,6 +106,28 @@ impl AdminActionPermissions {
                 vec![Permission::ManageSettings]
             }
 
+            // Scenario-specific permissions
+            // Modify chaos rules - typically QA only
+            "modify_scenario_chaos_rules" | "update_scenario_chaos" => {
+                vec![Permission::ScenarioModifyChaosRules]
+            }
+            // Modify reality defaults - typically Platform team only
+            "modify_scenario_reality_defaults" | "update_scenario_reality" => {
+                vec![Permission::ScenarioModifyRealityDefaults]
+            }
+            // Promote scenarios between environments
+            "promote_scenario" | "create_scenario_promotion" => {
+                vec![Permission::ScenarioPromote]
+            }
+            // Approve scenario promotions
+            "approve_scenario_promotion" | "reject_scenario_promotion" => {
+                vec![Permission::ScenarioApprove]
+            }
+            // Modify drift budgets for scenarios
+            "modify_scenario_drift_budget" | "update_scenario_drift_budget" => {
+                vec![Permission::ScenarioModifyDriftBudgets]
+            }
+
             // Default: require ManageSettings for unknown actions
             _ => {
                 vec![Permission::ManageSettings]

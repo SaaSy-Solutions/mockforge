@@ -59,6 +59,10 @@ pub fn create_router() -> Router<AppState> {
         .route("/api/v1/organizations/:org_id/settings", patch(handlers::organization_settings::update_organization_settings))
         .route("/api/v1/organizations/:org_id/usage", get(handlers::organization_settings::get_organization_usage))
         .route("/api/v1/organizations/:org_id/billing", get(handlers::organization_settings::get_organization_billing))
+        // Pillar analytics routes
+        .route("/api/v1/organizations/:org_id/analytics/pillars", get(handlers::pillar_analytics::get_org_pillar_metrics))
+        .route("/api/v1/workspaces/:workspace_id/analytics/pillars", get(handlers::pillar_analytics::get_workspace_pillar_metrics))
+        .route("/api/v1/analytics/pillars/events", post(handlers::pillar_analytics::record_pillar_event))
         // SSO routes (Team plan only)
         .route("/api/v1/sso/config", get(handlers::sso::get_sso_config))
         .route("/api/v1/sso/config", post(handlers::sso::create_sso_config))

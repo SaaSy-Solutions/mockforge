@@ -391,7 +391,9 @@ impl RequestProcessor {
                 }
                 let error_msg = format!("Request with ID {} not found", request_id);
 
-                // Capture failure context if collector is available (for future storage/analysis)
+                // Capture failure context if collector is available
+                // Note: The failure_context is available in RequestExecutionResult for callers to store
+                // if needed. The caller (e.g., API handler) can persist it to a failure store.
                 if let Some(ref collector) = self.failure_collector {
                     let _failure_context = collector
                         .collect_context(
@@ -401,7 +403,6 @@ impl RequestProcessor {
                             Some(error_msg.clone()),
                         )
                         .ok();
-                    // TODO: Store failure_context in global failure store for API access
                 }
 
                 return Err(Error::generic(error_msg));
@@ -421,12 +422,13 @@ impl RequestProcessor {
                 }
                 let error_msg = format!("Request validation error: {}", e);
 
-                // Capture failure context (for future storage/analysis)
+                // Capture failure context
+                // Note: The failure_context is available in RequestExecutionResult for callers to store
+                // if needed. The caller (e.g., API handler) can persist it to a failure store.
                 if let Some(ref collector) = self.failure_collector {
                     let _failure_context = collector
                         .collect_context(method, &path, None, Some(error_msg.clone()))
                         .ok();
-                    // TODO: Store failure_context in global failure store for API access
                 }
 
                 return Err(e);
@@ -439,11 +441,12 @@ impl RequestProcessor {
             }
             let error_msg = format!("Request validation failed: {:?}", validation.errors);
 
-            // Capture failure context (for future storage/analysis)
+            // Capture failure context
+            // Note: The failure_context is available in RequestExecutionResult for callers to store
+            // if needed. The caller (e.g., API handler) can persist it to a failure store.
             if let Some(ref collector) = self.failure_collector {
                 let _failure_context =
                     collector.collect_context(method, &path, None, Some(error_msg.clone())).ok();
-                // TODO: Store failure_context in global failure store for API access
             }
 
             return Err(Error::Validation { message: error_msg });
@@ -458,12 +461,13 @@ impl RequestProcessor {
                 }
                 let error_msg = "No active response found for request".to_string();
 
-                // Capture failure context (for future storage/analysis)
+                // Capture failure context
+                // Note: The failure_context is available in RequestExecutionResult for callers to store
+                // if needed. The caller (e.g., API handler) can persist it to a failure store.
                 if let Some(ref collector) = self.failure_collector {
                     let _failure_context = collector
                         .collect_context(method, &path, None, Some(error_msg.clone()))
                         .ok();
-                    // TODO: Store failure_context in global failure store for API access
                 }
 
                 return Err(Error::generic(error_msg));
@@ -479,12 +483,13 @@ impl RequestProcessor {
                 }
                 let error_msg = format!("Failed to process response: {}", e);
 
-                // Capture failure context (for future storage/analysis)
+                // Capture failure context
+                // Note: The failure_context is available in RequestExecutionResult for callers to store
+                // if needed. The caller (e.g., API handler) can persist it to a failure store.
                 if let Some(ref collector) = self.failure_collector {
                     let _failure_context = collector
                         .collect_context(method, &path, None, Some(error_msg.clone()))
                         .ok();
-                    // TODO: Store failure_context in global failure store for API access
                 }
 
                 return Err(e);

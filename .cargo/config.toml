@@ -5,7 +5,7 @@
 # Set DATABASE_URL for sqlx compile-time query checking
 # Using SQLite for development - can be overridden with environment variable
 # Note: The database file will be created automatically if it doesn't exist
-DATABASE_URL = { value = "sqlite:./crates/mockforge-collab/compile-check.db" }
+DATABASE_URL = { value = "sqlite:///home/rclanan/dev/projects/work/mockforge/crates/mockforge-collab/compile-check.db" }
 
 # Enable sqlx offline mode to avoid database connection requirements during compilation
 # Set this to true if you don't have a database connection available

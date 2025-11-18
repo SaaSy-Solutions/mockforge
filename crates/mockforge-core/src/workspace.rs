@@ -10,14 +10,18 @@
 // Re-export sub-modules for backward compatibility
 pub mod core;
 pub mod environment;
+pub mod mock_environment;
 pub mod registry;
 pub mod request;
+pub mod scenario_promotion;
 pub mod sync;
 
 // Re-export commonly used types
 pub use environment::*;
+pub use mock_environment::*;
 pub use registry::*;
 pub use request::*;
+pub use scenario_promotion::*;
 pub use sync::*;
 
 // Legacy imports for compatibility

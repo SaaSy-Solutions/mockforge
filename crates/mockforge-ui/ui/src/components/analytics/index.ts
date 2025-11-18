@@ -12,6 +12,14 @@ export { TrafficHeatmap } from './TrafficHeatmap';
 export { FilterPanel } from './FilterPanel';
 export { ExportButton } from './ExportButton';
 
+// Pillar analytics components
+export { PillarAnalyticsDashboard } from './PillarAnalyticsDashboard';
+export { PillarOverviewCards } from './PillarOverviewCards';
+export { PillarUsageChart } from './PillarUsageChart';
+export { RealityPillarDetails } from './RealityPillarDetails';
+export { ContractsPillarDetails } from './ContractsPillarDetails';
+export { TimeRangeSelector } from './TimeRangeSelector';
+
 // Legacy components (still available)
 export { EndpointsTable } from './EndpointsTable';
 export { RequestRateChart } from './RequestRateChart';

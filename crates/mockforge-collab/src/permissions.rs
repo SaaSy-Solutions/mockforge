@@ -34,6 +34,18 @@ pub enum Permission {
     // Settings permissions
     ManageSettings,
     ManageIntegrations,
+
+    // Scenario-specific permissions
+    /// Modify chaos rules for scenarios (typically QA only)
+    ScenarioModifyChaosRules,
+    /// Change reality-level defaults for scenarios (typically Platform team only)
+    ScenarioModifyRealityDefaults,
+    /// Promote scenarios between environments
+    ScenarioPromote,
+    /// Approve scenario promotions
+    ScenarioApprove,
+    /// Modify drift budgets for scenarios
+    ScenarioModifyDriftBudgets,
 }
 
 /// Role permissions mapping
@@ -63,6 +75,12 @@ impl RolePermissions {
                 Permission::RestoreSnapshot,
                 Permission::ManageSettings,
                 Permission::ManageIntegrations,
+                // Scenario permissions - admins have all
+                Permission::ScenarioModifyChaosRules,
+                Permission::ScenarioModifyRealityDefaults,
+                Permission::ScenarioPromote,
+                Permission::ScenarioApprove,
+                Permission::ScenarioModifyDriftBudgets,
             ],
             UserRole::Editor => vec![
                 // Can edit but not manage workspace or members
@@ -73,6 +91,8 @@ impl RolePermissions {
                 Permission::MockDelete,
                 Permission::ViewHistory,
                 Permission::CreateSnapshot,
+                // Editors can promote scenarios but not approve or modify sensitive configs
+                Permission::ScenarioPromote,
             ],
             UserRole::Viewer => vec![
                 // Read-only access

@@ -15,7 +15,7 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-full"] }
 
 # Database
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls", "uuid", "chrono", "migrate", "rust_decimal"] }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "migrate", "rust_decimal"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -71,6 +71,9 @@ x509-parser = "0.17"
 rustls-pemfile = "2.0"
 
 # Internal dependencies
+mockforge-analytics = { path = "../mockforge-analytics" }
+mockforge-collab = { path = "../mockforge-collab" }
+mockforge-core = { path = "../mockforge-core", version = "0.3.0" }
 mockforge-plugin-registry = "0.2.9"
 mockforge-observability = "0.2.9"
 

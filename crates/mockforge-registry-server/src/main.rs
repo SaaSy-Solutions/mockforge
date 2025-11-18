@@ -41,6 +41,7 @@ pub struct AppState {
     pub storage: PluginStorage,
     pub config: Config,
     pub metrics: Arc<mockforge_observability::prometheus::MetricsRegistry>,
+    pub analytics_db: Option<mockforge_analytics::AnalyticsDatabase>,
 }
 
 #[tokio::main]
@@ -73,12 +74,52 @@ async fn main() -> Result<()> {
     // Initialize metrics registry
     let metrics = Arc::new(get_global_registry().clone());
 
+    // Initialize analytics database (optional)
+    let analytics_db = if let Some(analytics_db_path) = &config.analytics_db_path {
+        match mockforge_analytics::AnalyticsDatabase::new(
+            std::path::Path::new(analytics_db_path)
+        ).await {
+            Ok(analytics_db) => {
+                if let Err(e) = analytics_db.run_migrations().await {
+                    tracing::warn!("Failed to run analytics database migrations: {}", e);
+                    None
+                } else {
+                    tracing::info!("Analytics database initialized at: {}", analytics_db_path);
+                    Some(analytics_db)
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize analytics database: {}", e);
+                None
+            }
+        }
+    } else {
+        // Try default path
+        let default_path = std::path::Path::new("mockforge-analytics.db");
+        match mockforge_analytics::AnalyticsDatabase::new(default_path).await {
+            Ok(analytics_db) => {
+                if let Err(e) = analytics_db.run_migrations().await {
+                    tracing::warn!("Failed to run analytics database migrations: {}", e);
+                    None
+                } else {
+                    tracing::info!("Analytics database initialized at default path: mockforge-analytics.db");
+                    Some(analytics_db)
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Analytics database not available (optional): {}", e);
+                None
+            }
+        }
+    };
+
     // Create app state
     let state = AppState {
         db: db.clone(),
         storage,
         config: config.clone(),
         metrics: metrics.clone(),
+        analytics_db,
     };
 
     // Start background workers
