@@ -8,9 +8,20 @@ fn main() {
         std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set by cargo");
     let sqlx_dir = std::path::Path::new(&manifest_dir).join(".sqlx");
 
-    // Check if .sqlx directory exists in the crate root
+    // Check if .sqlx directory exists and has query cache files
+    // Only enable offline mode if we have actual query cache files
     if sqlx_dir.exists() && sqlx_dir.is_dir() {
-        // Enable SQLx offline mode
-        println!("cargo:rustc-env=SQLX_OFFLINE=true");
+        // Count query cache files to ensure we have some
+        let query_files = std::fs::read_dir(&sqlx_dir)
+            .ok()
+            .map(|entries| entries.filter_map(|e| e.ok()).count())
+            .unwrap_or(0);
+
+        // Enable SQLx offline mode if we have query cache files
+        // Note: This assumes all queries are cached. If some queries are missing,
+        // users may need to set SQLX_OFFLINE=false and provide DATABASE_URL
+        if query_files > 0 {
+            println!("cargo:rustc-env=SQLX_OFFLINE=true");
+        }
     }
 }

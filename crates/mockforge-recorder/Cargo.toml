@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-recorder"
-version = "0.3.1"
+version = "0.3.2"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ description = "Recording and replay functionality for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false  # Internal component, integrated into CLI
+publish = true  # Internal component, integrated into CLI
 
 [dependencies]
 # Database
@@ -52,7 +52,7 @@ serde_path_to_error = "0.1"
 reqwest = { workspace = true }
 
 # Core types for OpenAPI generation
-mockforge-core = { version = "0.3.1", path = "../mockforge-core" }
+mockforge-core = "0.3.2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

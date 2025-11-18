@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT fork_point_commit_id\n            FROM workspace_forks\n            WHERE source_workspace_id = ? AND forked_workspace_id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "fork_point_commit_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "8fc91751739e93f6ecd3f682b7ce7979f5b6f50b94d1ecebbbf204cf579ab0fa"
+}
