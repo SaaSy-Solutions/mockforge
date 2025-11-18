@@ -306,28 +306,28 @@ for name, rel in targets:
     # Match dependency block with path - extract features and optional flags
     # Pattern matches: { path = "...", features = [...], optional = true } or variations
     pattern = rf'{name}\s*=\s*\{{([^}}]*path\s*=\s*"{re.escape(rel)}"[^}}]*)\}}'
-    
+
     def replace_dep(match):
         dep_content = match.group(1)
         # Extract features using regex (handles simple arrays)
         features_match = re.search(r'features\s*=\s*(\[[^\]]*\])', dep_content)
         features = features_match.group(0) if features_match else None  # Get "features = [...]"
-        
+
         # Check if optional
         is_optional = re.search(r'optional\s*=\s*true', dep_content) is not None
-        
+
         # Build replacement - preserve features and optional flag
         parts = [f'version = "{version}"']
         if is_optional:
             parts.append('optional = true')
         if features:
             parts.append(features)
-        
+
         if len(parts) > 1:
             return f'{name} = {{ {", ".join(parts)} }}'
         else:
             return f'{name} = "{version}"'
-    
+
     new_text = re.sub(pattern, replace_dep, text)
     if new_text != text:
         text = new_text

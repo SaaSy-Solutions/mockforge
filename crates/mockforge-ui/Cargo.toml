@@ -38,12 +38,12 @@ reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
 once_cell = "1.19"
-mockforge-core = { version = "0.3.0", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.1", path = "../mockforge-core" }
 mockforge-http = { version = "0.3.0", features = ["smtp", "mqtt"] }
 mockforge-ws = "0.3.0"
 mockforge-grpc = "0.3.0"
 mockforge-vbr = "0.3.0"
-mockforge-plugin-core = { version = "0.3.0", path = "../mockforge-plugin-core" }
+mockforge-plugin-core = { version = "0.3.1", path = "../mockforge-plugin-core" }
 mockforge-plugin-loader = "0.3.0"
 mockforge-analytics = "0.3.0"
 mockforge-chaos = "0.3.0"
