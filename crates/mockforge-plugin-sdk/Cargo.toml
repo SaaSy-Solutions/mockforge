@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-plugin-sdk"
-version.workspace = true
+version = "0.3.1"
 edition.workspace = true
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"

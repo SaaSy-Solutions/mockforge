@@ -1,0 +1,4 @@
+[env]
+# Enable sqlx offline mode automatically when .sqlx directory is present
+# This allows the crate to compile without a database connection
+SQLX_OFFLINE = "true"

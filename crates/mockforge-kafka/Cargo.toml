@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-kafka"
-version.workspace = true
+version = "0.3.1"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ keywords = ["kafka", "event-streaming", "mock", "testing"]
 categories = ["development-tools::testing", "network-programming"]
 
 [dependencies]
-mockforge-core = { path = "../mockforge-core" }
+mockforge-core = { version = "0.3.0", path = "../mockforge-core" }
 tokio = { workspace = true }
  rdkafka = "0.38"
 serde = { workspace = true }

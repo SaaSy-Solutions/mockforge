@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-reporting"
-version.workspace = true
+version = "0.3.1"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ description = "Report generation and visualization for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = true  # Internal reporting component
+publish = false  # Internal reporting component
 
 [dependencies]
 # Serialization

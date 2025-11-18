@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-tracing"
-version.workspace = true
+version = "0.3.1"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ description = "OpenTelemetry and distributed tracing integration for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = true  # Internal tracing component
+publish = false  # Internal tracing component
 
 [dependencies]
 # OpenTelemetry core

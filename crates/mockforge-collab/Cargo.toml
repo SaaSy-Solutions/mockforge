@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-collab"
-version.workspace = true
+version = "0.3.1"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -11,14 +11,14 @@ readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 description = "Cloud collaboration features for MockForge - team workspaces, real-time sync, and version control"
-include = ["src/**/*", "migrations/**/*", ".sqlx/**/*", ".cargo/**/*", "Cargo.toml", "README.md", "LICENSE-*"]
+include = ["src/**/*", "migrations/**/*", ".sqlx/**/*", ".cargo/**/*", "build.rs", "Cargo.toml", "README.md", "LICENSE-*"]
 
 [lints]
 workspace = true
 
 [dependencies]
 # Core dependencies
-mockforge-core = { path = "../mockforge-core" }
+mockforge-core = { version = "0.3.0", path = "../mockforge-core" }
 
 # Serialization
 serde = { workspace = true }

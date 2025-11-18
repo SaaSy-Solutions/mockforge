@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-http"
-version.workspace = true
+version = "0.3.1"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -32,8 +32,8 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-mockforge-smtp = { path = "../mockforge-smtp", optional = true }
-mockforge-chaos = { path = "../mockforge-chaos" }
+mockforge-smtp = { version = "0.3.0", optional = true }
+mockforge-chaos = "0.3.0"
 async-trait = { workspace = true }
 glob = { workspace = true }
 globwalk = { workspace = true }
@@ -53,14 +53,14 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = { path = "../mockforge-core" }
-mockforge-data = { path = "../mockforge-data" }
+mockforge-core = { version = "0.3.0", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.0", path = "../mockforge-data" }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate"], optional = true }
-mockforge-observability = { path = "../mockforge-observability" }
-mockforge-recorder = { path = "../mockforge-recorder" }
-mockforge-scenarios = { path = "../mockforge-scenarios" }
-mockforge-tracing = { path = "../mockforge-tracing" }
-mockforge-mqtt = { path = "../mockforge-mqtt", optional = true }
+mockforge-observability = "0.3.0"
+mockforge-recorder = "0.3.0"
+mockforge-scenarios = "0.3.0"
+mockforge-tracing = "0.3.0"
+mockforge-mqtt = { version = "0.3.0", optional = true }
 opentelemetry = "0.21"
 rustls = "0.21"
 rustls-pemfile = "1.0"
@@ -83,8 +83,8 @@ reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
-mockforge-ws = { path = "../mockforge-ws" }
-mockforge-plugin-core = { path = "../mockforge-plugin-core" }
+mockforge-ws = "0.3.0"
+mockforge-plugin-core = { version = "0.3.0", path = "../mockforge-plugin-core" }
 opentelemetry_sdk = "0.21"
 uuid = { version = "1", features = ["v4"] }
 once_cell = { workspace = true }
