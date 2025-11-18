@@ -16,13 +16,13 @@ description = "Developer SDK for embedding MockForge in tests and applications"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-mockforge-core = { version = "0.3.1", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.2", path = "../mockforge-core" }
 mockforge-http = "0.3.0"
 mockforge-ws = { version = "0.3.0", optional = true }
 mockforge-grpc = { version = "0.3.0", optional = true }
 mockforge-graphql = { version = "0.3.0", optional = true }
 mockforge-observability = "0.3.0"
-mockforge-data = { version = "0.3.1", path = "../mockforge-data" }
+mockforge-data = { version = "0.3.2", path = "../mockforge-data" }
 
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true }

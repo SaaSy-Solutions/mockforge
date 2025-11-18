@@ -28,8 +28,8 @@ chrono = { workspace = true }
 fastrand = "2.0"
 async-trait = { workspace = true }
 thiserror = "2.0"
-mockforge-core = { version = "0.3.1", path = "../mockforge-core" }
-mockforge-data = { version = "0.3.1", path = "../mockforge-data" }
+mockforge-core = { version = "0.3.2", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.2", path = "../mockforge-data" }
 mockforge-observability = "0.3.0"
 mockforge-tracing = "0.3.0"
 opentelemetry = "0.21"

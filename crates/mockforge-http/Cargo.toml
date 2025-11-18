@@ -53,8 +53,8 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = { version = "0.3.1", path = "../mockforge-core" }
-mockforge-data = { version = "0.3.1", path = "../mockforge-data" }
+mockforge-core = { version = "0.3.2", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.2", path = "../mockforge-data" }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate"], optional = true }
 mockforge-observability = "0.3.0"
 mockforge-recorder = "0.3.0"
@@ -84,7 +84,7 @@ tempfile = "3"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
 mockforge-ws = "0.3.0"
-mockforge-plugin-core = { version = "0.3.1", path = "../mockforge-plugin-core" }
+mockforge-plugin-core = { version = "0.3.2", path = "../mockforge-plugin-core" }
 opentelemetry_sdk = "0.21"
 uuid = { version = "1", features = ["v4"] }
 once_cell = { workspace = true }

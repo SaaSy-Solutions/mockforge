@@ -23,14 +23,14 @@ tokio-util = "0.7"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-opentelemetry = "0.22"
-mockforge-core = { version = "0.3.1", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.2", path = "../mockforge-core" }
 mockforge-http = { version = "0.3.0", optional = true }
 mockforge-ws = { version = "0.3.0", optional = true }
 mockforge-grpc = { version = "0.3.0", optional = true }
 mockforge-graphql = { version = "0.3.0", optional = true }
 mockforge-smtp = { version = "0.3.0", optional = true }
 mockforge-mqtt = { version = "0.3.0", optional = true }
-mockforge-data = { version = "0.3.1", path = "../mockforge-data" }
+mockforge-data = { version = "0.3.2", path = "../mockforge-data" }
 mockforge-ui = "^0.3.0"
 mockforge-observability = "0.3.0"
 mockforge-tracing = "0.3.0"
@@ -42,7 +42,7 @@ mockforge-amqp = { version = "0.3.0", optional = true }
 mockforge-tcp = { version = "0.3.0", optional = true }
 mockforge-tunnel = "0.3.0"
 mockforge-vbr = "0.3.0"
-mockforge-plugin-core = { version = "0.3.1", path = "../mockforge-plugin-core" }
+mockforge-plugin-core = { version = "0.3.2", path = "../mockforge-plugin-core" }
 mockforge-plugin-loader = "0.3.0"
 mockforge-scenarios = { version = "0.3.0", features = ["studio-packs"] }
 mockforge-chaos = "0.3.0"

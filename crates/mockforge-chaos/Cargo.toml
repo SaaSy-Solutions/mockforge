@@ -64,7 +64,7 @@ mockforge-tracing = "0.3.0"
 mockforge-recorder = "0.3.0"
 
 # Core (for MockAI integration)
-mockforge-core = { version = "0.3.1", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.2", path = "../mockforge-core" }
 
 # PDF generation
 printpdf = "0.7"
