@@ -1,3 +1,5 @@
+//! Pillars: [AI][DevX]
+//!
 //! Voice + LLM Interface for MockForge
 //!
 //! This module provides voice input capability that allows users to build mocks

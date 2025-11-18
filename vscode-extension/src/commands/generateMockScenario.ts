@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 
 /**
  * Register the "Generate Mock Scenario" code action
@@ -95,12 +96,15 @@ async function generateMockScenario(
         if (document.fileName.endsWith('.json')) {
             spec = JSON.parse(content);
         } else {
-            // YAML - would need js-yaml in production
-            // For now, show a message
-            vscode.window.showInformationMessage(
-                'YAML parsing requires js-yaml library. Please install it: npm install js-yaml'
-            );
-            return;
+            // YAML parsing
+            try {
+                spec = yaml.load(content) as any;
+            } catch (yamlError) {
+                vscode.window.showErrorMessage(
+                    `Failed to parse YAML: ${yamlError instanceof Error ? yamlError.message : 'Unknown error'}`
+                );
+                return;
+            }
         }
 
         // Extract operations from OpenAPI spec
@@ -127,8 +131,28 @@ async function generateMockScenario(
             return;
         }
 
+        // Ask for scenario name
+        const scenarioName = await vscode.window.showInputBox({
+            prompt: 'Enter scenario name (used for filename)',
+            placeHolder: 'generated-scenario',
+            value: 'generated-scenario',
+            validateInput: (value) => {
+                if (!value || value.trim().length === 0) {
+                    return 'Scenario name cannot be empty';
+                }
+                if (!/^[a-z0-9-]+$/.test(value)) {
+                    return 'Scenario name must contain only lowercase letters, numbers, and hyphens';
+                }
+                return null;
+            }
+        });
+
+        if (!scenarioName) {
+            return;
+        }
+
         // Generate scenario file
-        const scenarioContent = generateScenarioYaml(selectedOperations.map(s => s.operation));
+        const scenarioContent = generateScenarioYaml(scenarioName, selectedOperations.map(s => s.operation));
 
         // Ask for output location
         const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -140,7 +164,7 @@ async function generateMockScenario(
         const outputPath = path.join(
             workspaceFolders[0].uri.fsPath,
             'scenarios',
-            'generated-scenario.yaml'
+            `${scenarioName}.yaml`
         );
 
         // Create scenarios directory if it doesn't exist
@@ -203,16 +227,20 @@ function extractOperations(spec: any): Array<{ method: string; path: string; ope
 /**
  * Generate scenario YAML from operations
  */
-function generateScenarioYaml(operations: Array<{ method: string; path: string; operationId?: string; summary?: string }>): string {
+function generateScenarioYaml(scenarioName: string, operations: Array<{ method: string; path: string; operationId?: string; summary?: string }>): string {
+    const timestamp = new Date().toISOString();
+    const title = scenarioName.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     let yaml = `# Generated MockForge Scenario
 # Generated from OpenAPI specification
+# Generated at: ${timestamp}
 
 manifest_version: "1.0"
-name: generated-scenario
+name: ${scenarioName}
 version: "1.0.0"
-title: Generated Scenario
+title: ${title}
 description: |
   Auto-generated scenario from OpenAPI specification
+  Contains ${operations.length} operation${operations.length !== 1 ? 's' : ''}
 
 steps:
 `;

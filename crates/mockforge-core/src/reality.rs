@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Reality Slider - Unified control for mock environment realism
 //!
 //! This module provides a unified control mechanism that transitions mock environments

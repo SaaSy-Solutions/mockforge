@@ -256,6 +256,8 @@ pub mod openapi_routes;
 pub mod output_control;
 pub mod overrides;
 pub mod performance;
+/// Pillar metadata system for compile-time pillar tagging
+pub mod pillars;
 pub mod pr_generation;
 pub mod priority_handler;
 pub mod protocol_abstraction;
@@ -366,6 +368,7 @@ pub use output_control::{
     process_generated_file, BarrelGenerator, FileNamingContext, GeneratedFile,
 };
 pub use overrides::{OverrideMode, OverrideRule, Overrides, PatchOp};
+pub use pillars::{Pillar, PillarMetadata};
 pub use priority_handler::{
     MockGenerator, MockResponse, PriorityHttpHandler, PriorityResponse, SimpleMockGenerator,
 };

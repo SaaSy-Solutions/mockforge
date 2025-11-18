@@ -1,5 +1,9 @@
 # Protocol Contracts
 
+**Pillars:** [Contracts]
+
+[Contracts] - Schema, drift, validation, and safety nets for multi-protocol API contracts
+
 ## Overview
 
 MockForge supports contract management and drift detection across multiple protocols, not just HTTP/REST. This enables teams to maintain contract consistency across all transport layers, ensuring mocks and contracts stay aligned for gRPC, WebSocket, MQTT, and Kafka services.

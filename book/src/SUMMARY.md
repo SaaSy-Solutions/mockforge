@@ -11,6 +11,12 @@
 - [Basic Concepts](getting-started/concepts.md)
 - [The Five Pillars](../../docs/PILLARS.md)
 
+### Choose Your Path
+
+- [Reality-First Onboarding](getting-started/reality-first.md) - Start here if you care about realism
+- [Contracts-First Onboarding](getting-started/contracts-first.md) - Start here if you're a Platform/API team
+- [AI-First Onboarding](getting-started/ai-first.md) - Start here if you want natural-language-driven mocks
+
 ## Tutorials
 
 - [Overview](tutorials/README.md)

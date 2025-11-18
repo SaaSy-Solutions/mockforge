@@ -23,6 +23,12 @@ MockForge is built on five foundational pillars that guide every feature: **[Rea
 
 See the [complete Pillars documentation](docs/PILLARS.md) for detailed information about each pillar, feature mappings, and examples. All changelog entries are tagged with these pillars to make it clear what each release invests in.
 
+### Choose Your Path
+
+- **[Reality-First Onboarding](https://docs.mockforge.dev/getting-started/reality-first.html)** - Start here if you care about realism
+- **[Contracts-First Onboarding](https://docs.mockforge.dev/getting-started/contracts-first.html)** - Start here if you're a Platform/API team
+- **[AI-First Onboarding](https://docs.mockforge.dev/getting-started/ai-first.html)** - Start here if you want natural-language-driven mocks
+
 ## 🔄 Why MockForge?
 
 | Feature | MockForge | WireMock | MockServer | Mockoon |

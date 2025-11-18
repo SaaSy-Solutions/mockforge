@@ -1,3 +1,5 @@
+//! Pillars: [DevX]
+//!
 //! Extended templating system for MockForge with request chaining support
 //!
 //! This module provides template expansion with support for:

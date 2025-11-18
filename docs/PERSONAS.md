@@ -1,5 +1,10 @@
 # Smart Personas & Reality Continuum v2
 
+**Pillars:** [Reality][AI]
+
+[Reality] - Makes mocks feel like real backends through consistent persona data
+[AI] - LLM-powered data generation and relationship inference
+
 **Version:** 2.0.0
 **Tags:** `#reality` `#AI` `#personas` `#graphs` `#fidelity`
 

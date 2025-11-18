@@ -1,3 +1,5 @@
+//! Pillars: [AI]
+//!
 //! MockForge AI Studio - Unified AI Copilot
 //!
 //! This module provides a unified interface for all AI-powered features in MockForge,

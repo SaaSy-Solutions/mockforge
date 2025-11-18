@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Latency simulation and fault injection for MockForge
 
 use crate::Result;

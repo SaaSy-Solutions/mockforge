@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Reality Continuum - Dynamic blending of mock and real data sources
 //!
 //! This module provides functionality to gradually transition from mock to real backend

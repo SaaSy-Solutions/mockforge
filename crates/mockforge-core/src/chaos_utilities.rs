@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Chaos testing utilities with orchestration and randomness
 //!
 //! This module provides high-level chaos testing utilities that randomly inject

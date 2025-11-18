@@ -1,3 +1,5 @@
+//! Pillars: [Contracts][AI]
+//!
 //! AI-powered contract diff analysis
 //!
 //! This module provides intelligent contract diff analysis that compares front-end requests

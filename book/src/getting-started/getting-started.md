@@ -88,6 +88,16 @@ Leverage artificial intelligence to automate mock generation, enhance data reali
 
 **Learn More:** See the [complete Pillars documentation](../../docs/PILLARS.md) for detailed information about each pillar, feature mappings, and examples.
 
+## Choose Your Path
+
+Depending on your role, team, or use case, you may want to start with a specific pillar:
+
+- **[Reality-First Onboarding](reality-first.md)** - Start here if you care about realism. Perfect for frontend teams needing realistic data that evolves over time.
+- **[Contracts-First Onboarding](contracts-first.md)** - Start here if you're a Platform/API team. Perfect for teams needing contract validation and drift detection.
+- **[AI-First Onboarding](ai-first.md)** - Start here if you want natural-language-driven mocks. Perfect for rapid prototyping and AI-powered mock generation.
+
+See [Journeys by Pillar](../../docs/JOURNEYS_BY_PILLAR.md) for a complete overview of all pillar-first onboarding journeys.
+
 ## Installation
 
 ### Prerequisites

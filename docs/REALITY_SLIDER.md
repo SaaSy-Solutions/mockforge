@@ -1,5 +1,10 @@
 # Reality Slider Guide
 
+**Pillars:** [Reality][DevX]
+
+[Reality] - Makes mocks feel like real backends through configurable realism levels
+[DevX] - Hot-reload capabilities improve developer experience
+
 **Last Updated**: 2025-01-XX
 **Status**: ✅ Fully Implemented
 

@@ -1,3 +1,5 @@
+//! Pillars: [Contracts]
+//!
 //! Contract drift detection and budget management
 //!
 //! This module provides functionality for tracking contract drift, managing drift budgets,

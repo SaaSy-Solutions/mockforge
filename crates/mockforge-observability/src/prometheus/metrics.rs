@@ -96,22 +96,25 @@ impl MetricsRegistry {
     pub fn new() -> Self {
         let registry = Registry::new();
 
-        // Request metrics
+        // Request metrics (with pillar label)
         let requests_total = IntCounterVec::new(
             Opts::new(
                 "mockforge_requests_total",
-                "Total number of requests by protocol, method, and status",
+                "Total number of requests by protocol, method, status, and pillar",
             ),
-            &["protocol", "method", "status"],
+            &["protocol", "method", "status", "pillar"],
         )
         .expect("Failed to create requests_total metric");
 
         let requests_duration_seconds = HistogramVec::new(
-            HistogramOpts::new("mockforge_request_duration_seconds", "Request duration in seconds")
-                .buckets(vec![
-                    0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
-                ]),
-            &["protocol", "method"],
+            HistogramOpts::new(
+                "mockforge_request_duration_seconds",
+                "Request duration in seconds by protocol, method, and pillar",
+            )
+            .buckets(vec![
+                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ]),
+            &["protocol", "method", "pillar"],
         )
         .expect("Failed to create requests_duration_seconds metric");
 
@@ -124,13 +127,13 @@ impl MetricsRegistry {
         )
         .expect("Failed to create requests_in_flight metric");
 
-        // Error metrics
+        // Error metrics (with pillar label)
         let errors_total = IntCounterVec::new(
             Opts::new(
                 "mockforge_errors_total",
-                "Total number of errors by protocol and error type",
+                "Total number of errors by protocol, error type, and pillar",
             ),
-            &["protocol", "error_type"],
+            &["protocol", "error_type", "pillar"],
         )
         .expect("Failed to create errors_total metric");
 
@@ -725,18 +728,46 @@ impl MetricsRegistry {
 
     /// Record an HTTP request
     pub fn record_http_request(&self, method: &str, status: u16, duration_seconds: f64) {
+        self.record_http_request_with_pillar(method, status, duration_seconds, "");
+    }
+
+    /// Record an HTTP request with pillar information
+    pub fn record_http_request_with_pillar(
+        &self,
+        method: &str,
+        status: u16,
+        duration_seconds: f64,
+        pillar: &str,
+    ) {
         let status_str = status.to_string();
-        self.requests_total.with_label_values(&["http", method, &status_str]).inc();
+        let pillar_label = if pillar.is_empty() { "unknown" } else { pillar };
+        self.requests_total
+            .with_label_values(&["http", method, &status_str, pillar_label])
+            .inc();
         self.requests_duration_seconds
-            .with_label_values(&["http", method])
+            .with_label_values(&["http", method, pillar_label])
             .observe(duration_seconds);
     }
 
     /// Record a gRPC request
     pub fn record_grpc_request(&self, method: &str, status: &str, duration_seconds: f64) {
-        self.requests_total.with_label_values(&["grpc", method, status]).inc();
+        self.record_grpc_request_with_pillar(method, status, duration_seconds, "");
+    }
+
+    /// Record a gRPC request with pillar information
+    pub fn record_grpc_request_with_pillar(
+        &self,
+        method: &str,
+        status: &str,
+        duration_seconds: f64,
+        pillar: &str,
+    ) {
+        let pillar_label = if pillar.is_empty() { "unknown" } else { pillar };
+        self.requests_total
+            .with_label_values(&["grpc", method, status, pillar_label])
+            .inc();
         self.requests_duration_seconds
-            .with_label_values(&["grpc", method])
+            .with_label_values(&["grpc", method, pillar_label])
             .observe(duration_seconds);
     }
 
@@ -782,7 +813,13 @@ impl MetricsRegistry {
 
     /// Record an error
     pub fn record_error(&self, protocol: &str, error_type: &str) {
-        self.errors_total.with_label_values(&[protocol, error_type]).inc();
+        self.record_error_with_pillar(protocol, error_type, "");
+    }
+
+    /// Record an error with pillar information
+    pub fn record_error_with_pillar(&self, protocol: &str, error_type: &str, pillar: &str) {
+        let pillar_label = if pillar.is_empty() { "unknown" } else { pillar };
+        self.errors_total.with_label_values(&[protocol, error_type, pillar_label]).inc();
     }
 
     /// Update memory usage
@@ -813,6 +850,18 @@ impl MetricsRegistry {
         status: u16,
         duration_seconds: f64,
     ) {
+        self.record_http_request_with_path_and_pillar(path, method, status, duration_seconds, "");
+    }
+
+    /// Record an HTTP request with path and pillar information
+    pub fn record_http_request_with_path_and_pillar(
+        &self,
+        path: &str,
+        method: &str,
+        status: u16,
+        duration_seconds: f64,
+        pillar: &str,
+    ) {
         // Normalize path to avoid cardinality explosion
         let normalized_path = normalize_path(path);
         let status_str = status.to_string();
@@ -840,8 +889,8 @@ impl MetricsRegistry {
             .with_label_values(&[normalized_path.as_str(), method])
             .set(new_avg);
 
-        // Also record in the general metrics
-        self.record_http_request(method, status, duration_seconds);
+        // Also record in the general metrics with pillar
+        self.record_http_request_with_pillar(method, status, duration_seconds, pillar);
     }
 
     /// Record a WebSocket connection established
@@ -1042,6 +1091,16 @@ mod tests {
         let registry = MetricsRegistry::new();
         registry.record_http_request("GET", 200, 0.045);
         registry.record_http_request("POST", 201, 0.123);
+
+        // Verify metrics were recorded (they should not panic)
+        assert!(registry.is_initialized());
+    }
+
+    #[test]
+    fn test_record_http_request_with_pillar() {
+        let registry = MetricsRegistry::new();
+        registry.record_http_request_with_pillar("GET", 200, 0.045, "reality");
+        registry.record_http_request_with_pillar("POST", 201, 0.123, "contracts");
 
         // Verify metrics were recorded (they should not panic)
         assert!(registry.is_initialized());

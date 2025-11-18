@@ -1,3 +1,5 @@
+//! Pillars: [Contracts]
+//!
 //! Schema validation logic for MockForge
 
 use crate::{

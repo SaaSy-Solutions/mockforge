@@ -1,5 +1,9 @@
 # Drift Budgets & GitOps for API Sync + AI Contract Diff
 
+**Pillars:** [Contracts]
+
+[Contracts] - Schema, drift, validation, and safety nets for API contracts
+
 ## Overview
 
 MockForge's drift budget system makes it the "drift nerve center" for contracts. Teams can define acceptable drift thresholds, receive alerts when budgets are exceeded, and automatically generate pull requests to update contracts and fixtures.

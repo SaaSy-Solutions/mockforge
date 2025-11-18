@@ -1,7 +1,9 @@
-/// Contract validation for CI/CD pipelines
-///
-/// Validates that mock configurations match live API responses
-/// and detects breaking changes in API contracts
+//! Pillars: [Contracts]
+//!
+//! Contract validation for CI/CD pipelines
+//!
+//! Validates that mock configurations match live API responses
+//! and detects breaking changes in API contracts
 use serde::{Deserialize, Serialize};
 
 /// Result of contract validation with detailed breakdown
