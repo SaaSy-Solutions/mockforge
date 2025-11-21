@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar } from 'lucide-react';
+import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar, User, ArrowRight } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import {
   useTimeTravelStatus,
@@ -17,6 +17,7 @@ import {
   useSetTime,
   useSetTimeScale,
   useResetTimeTravel,
+  useLivePreviewLifecycleUpdates,
 } from '../../hooks/useApi';
 import { Button } from '../ui/button';
 import { Card } from '../ui/Card';
@@ -32,7 +33,11 @@ const QUICK_ADVANCE_OPTIONS = [
   { label: '+1 month', value: '1month' },
 ];
 
-export function TimeTravelWidget() {
+interface TimeTravelWidgetProps {
+  workspace?: string;
+}
+
+export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProps) {
   const { data: status, isLoading } = useTimeTravelStatus();
   const enableMutation = useEnableTimeTravel();
   const disableMutation = useDisableTimeTravel();
@@ -45,6 +50,10 @@ export function TimeTravelWidget() {
   const [dateTimeInput, setDateTimeInput] = useState('');
   const [timeScale, setTimeScale] = useState(1.0);
   const [sliderValue, setSliderValue] = useState(0);
+  const [lifecycleUpdates, setLifecycleUpdates] = useState<Array<{ personaId: string; oldState: string; newState: string; time: string }>>([]);
+
+  // Enable live preview of lifecycle updates when time changes
+  useLivePreviewLifecycleUpdates(workspace, status?.enabled ?? false);
 
   const handleEnable = () => {
     enableMutation.mutate({});
@@ -243,6 +252,22 @@ export function TimeTravelWidget() {
           )}
         </div>
       </div>
+
+      {/* Lifecycle State Changes */}
+      {isEnabled && (
+        <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 animate-fade-in">
+          <div className="flex items-center gap-2 mb-2">
+            <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <p className="text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wide">
+              Lifecycle Updates
+            </p>
+          </div>
+          <p className="text-xs text-blue-600 dark:text-blue-400">
+            Persona lifecycle states are automatically updated when virtual time advances.
+            Check the persona configuration to see current lifecycle states.
+          </p>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="space-y-3">

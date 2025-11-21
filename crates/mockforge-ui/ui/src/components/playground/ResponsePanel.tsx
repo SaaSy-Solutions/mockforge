@@ -319,7 +319,17 @@ export function ResponsePanel() {
         {/* Reality Trace Panel */}
         {displayResponse && displayResponse.request_id && (
           <div className="mt-4">
-            <RealityTracePanel requestId={displayResponse.request_id} />
+            <RealityTracePanel 
+              requestId={displayResponse.request_id}
+              onNavigate={(target, id) => {
+                // Navigate to the appropriate page based on target
+                // Dispatch a custom event that App can listen to, or use window events
+                const event = new CustomEvent('navigate', {
+                  detail: { target, id }
+                });
+                window.dispatchEvent(event);
+              }}
+            />
           </div>
         )}
       </CardContent>

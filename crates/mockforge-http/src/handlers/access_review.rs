@@ -52,6 +52,19 @@ pub struct RevokeAccessRequest {
     pub reason: String,
 }
 
+/// Request to update permissions in a review
+#[derive(Debug, Deserialize)]
+pub struct UpdatePermissionsRequest {
+    /// User ID to update
+    pub user_id: Uuid,
+    /// New roles for the user
+    pub roles: Vec<String>,
+    /// New permissions for the user
+    pub permissions: Vec<String>,
+    /// Reason for permission update
+    pub reason: Option<String>,
+}
+
 /// Response for review list
 #[derive(Debug, Serialize)]
 pub struct ReviewListResponse {
@@ -264,6 +277,75 @@ pub async fn revoke_access(
     }
 }
 
+/// Update user permissions in a review
+///
+/// POST /api/v1/security/access-reviews/{review_id}/update-permissions
+pub async fn update_permissions(
+    State(state): State<AccessReviewState>,
+    Path(review_id): Path<String>,
+    claims: OptionalAuthClaims,
+    Json(request): Json<UpdatePermissionsRequest>,
+) -> Result<Json<ReviewActionResponse>, StatusCode> {
+    let mut service = state.service.write().await;
+
+    // Extract updater ID from authentication claims, or use default for mock server
+    let updater_id = extract_user_id_with_fallback(&claims);
+
+    match service
+        .update_user_permissions(
+            &review_id,
+            request.user_id,
+            updater_id,
+            request.roles.clone(),
+            request.permissions.clone(),
+            request.reason.clone(),
+        )
+        .await
+    {
+        Ok(()) => {
+            info!(
+                "Permissions updated for user {} in review {}",
+                request.user_id, review_id
+            );
+
+            // Emit security event for permission change
+            let event = SecurityEvent::new(SecurityEventType::AuthzPermissionChanged, None, None)
+                .with_actor(EventActor {
+                    user_id: Some(updater_id.to_string()),
+                    username: None,
+                    ip_address: None,
+                    user_agent: None,
+                })
+                .with_target(EventTarget {
+                    resource_type: Some("access_review".to_string()),
+                    resource_id: Some(review_id.clone()),
+                    method: None,
+                })
+                .with_outcome(EventOutcome {
+                    success: true,
+                    reason: request.reason.clone(),
+                })
+                .with_metadata("user_id".to_string(), serde_json::json!(request.user_id))
+                .with_metadata("review_id".to_string(), serde_json::json!(review_id))
+                .with_metadata("new_roles".to_string(), serde_json::json!(request.roles))
+                .with_metadata("new_permissions".to_string(), serde_json::json!(request.permissions));
+            emit_security_event(event).await;
+
+            Ok(Json(ReviewActionResponse {
+                review_id,
+                user_id: request.user_id,
+                status: "permissions_updated".to_string(),
+                timestamp: chrono::Utc::now(),
+                message: Some("Permissions updated successfully".to_string()),
+            }))
+        }
+        Err(e) => {
+            error!("Failed to update permissions: {}", e);
+            Err(StatusCode::BAD_REQUEST)
+        }
+    }
+}
+
 /// Get review report
 ///
 /// GET /api/v1/security/access-reviews/{review_id}/report
@@ -374,6 +456,7 @@ pub fn access_review_router(state: AccessReviewState) -> axum::Router {
         .route("/{review_id}", get(get_review))
         .route("/{review_id}/approve", post(approve_access))
         .route("/{review_id}/revoke", post(revoke_access))
+        .route("/{review_id}/update-permissions", post(update_permissions))
         .route("/{review_id}/report", get(get_review_report))
         .with_state(state)
 }

@@ -8,10 +8,11 @@
 
 use mockforge_tunnel::audit::AuditLogger;
 use mockforge_tunnel::rate_limit::{rate_limit_middleware, RateLimitConfig, TunnelRateLimiter};
-use mockforge_tunnel::server::{create_tunnel_server_router, TunnelStore};
+use mockforge_tunnel::server::{create_tunnel_server_router, TunnelStore, TunnelStoreWrapper};
 use mockforge_tunnel::server_config::ServerConfig;
 #[cfg(feature = "sqlx")]
 use mockforge_tunnel::storage::PersistentTunnelStore;
+use std::sync::Arc;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -51,26 +52,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("  Audit Logging: {}", config.audit_logging_enabled);
 
     // Initialize storage
-    // Note: For now, we use in-memory storage. Persistent storage integration
-    // with the router will be added in a future update.
-    let store = TunnelStore::new();
-
-    #[cfg(feature = "sqlx")]
-    if !config.use_in_memory_storage {
-        let db_path = config.database_path.unwrap_or_else(|| PathBuf::from("tunnels.db"));
-        info!(
-            "Persistent storage configured at: {:?} (not yet integrated with router)",
-            db_path
-        );
-        // TODO: Integrate PersistentTunnelStore with router
-    }
+    let store_wrapper = {
+        #[cfg(feature = "sqlx")]
+        {
+            if !config.use_in_memory_storage {
+                let db_path = config.database_path.unwrap_or_else(|| PathBuf::from("tunnels.db"));
+                info!("Using persistent storage at: {:?}", db_path);
+                let persistent_store = PersistentTunnelStore::new(&db_path).await.map_err(|e| {
+                    anyhow::anyhow!("Failed to initialize persistent storage: {}", e)
+                })?;
+                TunnelStoreWrapper::new(Arc::new(persistent_store))
+            } else {
+                let in_memory_store = TunnelStore::new();
+                TunnelStoreWrapper::new(Arc::new(in_memory_store))
+            }
+        }
+        #[cfg(not(feature = "sqlx"))]
+        {
+            let in_memory_store = TunnelStore::new();
+            TunnelStoreWrapper::new(Arc::new(in_memory_store))
+        }
+    };
 
     // Initialize rate limiter
     #[cfg(feature = "governor")]
     let rate_limiter = Arc::new(TunnelRateLimiter::new(config.rate_limit.clone()));
 
-    // Create router
-    let mut router = create_tunnel_server_router().with_state(store);
+    // Create router with store
+    let mut router = create_tunnel_server_router().with_state(store_wrapper.clone());
 
     // Add rate limiting middleware if enabled
     #[cfg(feature = "governor")]
@@ -104,7 +113,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Health check: http://{}/health", addr);
     info!("API endpoint: http://{}/api/tunnels", addr);
 
-    // TODO: Start cleanup task for expired tunnels when persistent storage is integrated
+    // Start cleanup task for expired tunnels when persistent storage is enabled
+    #[cfg(feature = "sqlx")]
+    if !config.use_in_memory_storage {
+        let store_for_cleanup = store_wrapper.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600)); // Run every hour
+            loop {
+                interval.tick().await;
+                match store_for_cleanup.cleanup_expired().await {
+                    Ok(count) => {
+                        if count > 0 {
+                            info!("Cleaned up {} expired tunnels", count);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to cleanup expired tunnels: {}", e);
+                    }
+                }
+            }
+        });
+        info!("Started cleanup task for expired tunnels (runs every hour)");
+    }
 
     // Start server
     let listener = TcpListener::bind(&addr).await?;

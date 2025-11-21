@@ -1,0 +1,101 @@
+id: happy-path-transfer
+name: Happy Path - Account Transfer
+type: happy_path
+description: Successful money transfer between accounts with balance verification
+tags:
+  - transfer
+  - accounts
+  - success
+  - transactions
+
+steps:
+  - id: get-source-account
+    name: Get Source Account
+    method: GET
+    path: /api/accounts/{{source_account_id}}
+    expected_status: 200
+    continue_on_failure: false
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      source_balance: body.account.balance
+      source_account_id: body.account.id
+
+  - id: get-destination-account
+    name: Get Destination Account
+    method: GET
+    path: /api/accounts/{{destination_account_id}}
+    expected_status: 200
+    continue_on_failure: false
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      destination_balance: body.account.balance
+      destination_account_id: body.account.id
+
+  - id: initiate-transfer
+    name: Initiate Transfer
+    method: POST
+    path: /api/transfers
+    expected_status: 201
+    continue_on_failure: false
+    depends_on: [get-source-account, get-destination-account]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      from_account_id: "{{source_account_id}}"
+      to_account_id: "{{destination_account_id}}"
+      amount: 500.00
+      currency: "USD"
+      description: "Transfer between accounts"
+    extract:
+      transfer_id: body.transfer.id
+      transfer_status: body.transfer.status
+
+  - id: verify-transfer-status
+    name: Verify Transfer Status
+    method: GET
+    path: /api/transfers/{{transfer_id}}
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [initiate-transfer]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+
+  - id: verify-source-balance
+    name: Verify Source Account Balance
+    method: GET
+    path: /api/accounts/{{source_account_id}}/balance
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [verify-transfer-status]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+
+  - id: verify-destination-balance
+    name: Verify Destination Account Balance
+    method: GET
+    path: /api/accounts/{{destination_account_id}}/balance
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [verify-source-balance]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+
+expected_outcomes:
+  - All steps return 2xx status codes
+  - Transfer is created with valid transfer ID
+  - Transfer status is "completed"
+  - Source account balance is reduced by transfer amount
+  - Destination account balance is increased by transfer amount
+  - Transaction is recorded in both account histories
+
+variables:
+  access_token: null
+  source_account_id: null
+  destination_account_id: null
+  source_balance: null
+  destination_balance: null
+  transfer_id: null
+  transfer_status: null
+

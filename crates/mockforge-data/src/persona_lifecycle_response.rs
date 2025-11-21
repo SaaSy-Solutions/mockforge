@@ -140,6 +140,80 @@ pub fn apply_support_lifecycle_effects(response: &mut Value, lifecycle: &Persona
     }
 }
 
+/// Apply lifecycle state effects for user engagement endpoints
+///
+/// Modifies user profile, activity, and notification fields based on the persona's lifecycle state.
+/// Affects endpoints like:
+/// - User profile endpoints (status, engagement_level, last_active)
+/// - Activity endpoints (recent_activity, engagement_score)
+/// - Notification endpoints (notification_preferences, engagement_alerts)
+pub fn apply_user_engagement_lifecycle_effects(response: &mut Value, lifecycle: &PersonaLifecycle) {
+    if let Some(obj) = response.as_object_mut() {
+        match lifecycle.current_state {
+            LifecycleState::NewSignup => {
+                // New users have minimal engagement
+                obj.insert("status".to_string(), Value::String("new".to_string()));
+                obj.insert("engagement_level".to_string(), Value::String("low".to_string()));
+                obj.insert("last_active".to_string(), Value::String("recent".to_string()));
+                obj.insert("engagement_score".to_string(), Value::Number(10.into()));
+                obj.insert("recent_activity".to_string(), Value::Array(vec![]));
+                obj.insert("notification_preferences".to_string(), Value::Object(serde_json::Map::new()));
+                obj.insert("engagement_alerts".to_string(), Value::Bool(false));
+            }
+            LifecycleState::Active => {
+                // Active users have good engagement
+                obj.insert("status".to_string(), Value::String("active".to_string()));
+                obj.insert("engagement_level".to_string(), Value::String("medium".to_string()));
+                obj.insert("last_active".to_string(), Value::String("recent".to_string()));
+                obj.insert("engagement_score".to_string(), Value::Number(75.into()));
+                obj.insert("recent_activity".to_string(), Value::Array(vec![
+                    serde_json::json!({"type": "login", "timestamp": "recent"}),
+                    serde_json::json!({"type": "action", "timestamp": "recent"}),
+                ]));
+                obj.insert("notification_preferences".to_string(), Value::Object({
+                    let mut prefs = serde_json::Map::new();
+                    prefs.insert("email".to_string(), Value::Bool(true));
+                    prefs.insert("push".to_string(), Value::Bool(true));
+                    prefs
+                }));
+                obj.insert("engagement_alerts".to_string(), Value::Bool(false));
+            }
+            LifecycleState::ChurnRisk => {
+                // Churn risk users have declining engagement
+                obj.insert("status".to_string(), Value::String("at_risk".to_string()));
+                obj.insert("engagement_level".to_string(), Value::String("low".to_string()));
+                obj.insert("last_active".to_string(), Value::String("30_days_ago".to_string()));
+                obj.insert("engagement_score".to_string(), Value::Number(25.into()));
+                obj.insert("recent_activity".to_string(), Value::Array(vec![]));
+                obj.insert("notification_preferences".to_string(), Value::Object({
+                    let mut prefs = serde_json::Map::new();
+                    prefs.insert("email".to_string(), Value::Bool(true));
+                    prefs.insert("push".to_string(), Value::Bool(false));
+                    prefs
+                }));
+                obj.insert("engagement_alerts".to_string(), Value::Bool(true));
+                obj.insert("churn_risk_reason".to_string(), Value::String("inactivity".to_string()));
+            }
+            LifecycleState::Churned => {
+                // Churned users have no engagement
+                obj.insert("status".to_string(), Value::String("churned".to_string()));
+                obj.insert("engagement_level".to_string(), Value::String("none".to_string()));
+                obj.insert("last_active".to_string(), Value::String("90_days_ago".to_string()));
+                obj.insert("engagement_score".to_string(), Value::Number(0.into()));
+                obj.insert("recent_activity".to_string(), Value::Array(vec![]));
+                obj.insert("notification_preferences".to_string(), Value::Object(serde_json::Map::new()));
+                obj.insert("engagement_alerts".to_string(), Value::Bool(false));
+                obj.insert("churned_at".to_string(), Value::String("recent".to_string()));
+            }
+            _ => {
+                // For other states, use default active behavior
+                obj.insert("status".to_string(), Value::String("active".to_string()));
+                obj.insert("engagement_level".to_string(), Value::String("medium".to_string()));
+            }
+        }
+    }
+}
+
 /// Apply lifecycle state effects for order fulfillment endpoints
 ///
 /// Modifies order-related fields based on the persona's lifecycle state.
@@ -265,6 +339,9 @@ pub fn apply_lifecycle_effects(
         }
         "loan" | "loans" | "credit" | "application" => {
             apply_loan_lifecycle_effects(response, lifecycle);
+        }
+        "profile" | "user" | "users" | "activity" | "engagement" | "notifications" | "notification" => {
+            apply_user_engagement_lifecycle_effects(response, lifecycle);
         }
         _ => {
             // For other endpoints, apply basic lifecycle traits

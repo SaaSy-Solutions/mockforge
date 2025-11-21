@@ -208,6 +208,7 @@ pub mod ai_response;
 pub mod ai_studio;
 /// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
 pub mod behavioral_cloning;
+pub mod behavioral_economics;
 pub mod cache;
 pub mod chain_execution;
 pub mod chaos_utilities;
@@ -258,6 +259,8 @@ pub mod overrides;
 pub mod performance;
 /// Pillar metadata system for compile-time pillar tagging
 pub mod pillars;
+/// Pillar usage tracking utilities
+pub mod pillar_tracking;
 pub mod pr_generation;
 pub mod priority_handler;
 pub mod protocol_abstraction;
@@ -287,9 +290,12 @@ pub mod stateful_handler;
 pub mod sync_watcher;
 /// Template library system for shared templates, versioning, and marketplace
 pub mod template_library;
+/// Template expansion utilities (Send-safe, isolated from templating module)
+pub mod template_expansion;
 pub mod templating;
 pub mod time_travel;
 pub mod time_travel_handler;
+pub mod persona_lifecycle_time;
 pub mod traffic_shaping;
 pub mod validation;
 pub mod verification;

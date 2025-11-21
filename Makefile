@@ -260,5 +260,18 @@ sync-dry-run: ## Preview what would be synced without actually doing it
 	@echo "Dry run - preview sync..."
 	@cargo run -p mockforge-cli -- workspace sync --target-dir ./preview-sync --dry-run
 
+# SQLx query cache management
+sqlx-prepare: ## Regenerate SQLx query cache for mockforge-collab
+	@echo "Setting up temporary database for SQLx query preparation..."
+	@cd crates/mockforge-collab && \
+		rm -f /tmp/mockforge-sqlx-prepare.db && \
+		sqlx database create --database-url "sqlite:/tmp/mockforge-sqlx-prepare.db" && \
+		sqlx migrate run --database-url "sqlite:/tmp/mockforge-sqlx-prepare.db" && \
+		cd ../.. && \
+		cd crates/mockforge-collab && \
+		cargo sqlx prepare --database-url "sqlite:/tmp/mockforge-sqlx-prepare.db" && \
+		rm /tmp/mockforge-sqlx-prepare.db && \
+		echo "✅ SQLx query cache regenerated successfully"
+
 # Pre-commit checks (run before committing)
 pre-commit: fmt clippy test audit spellcheck ## Run all pre-commit checks

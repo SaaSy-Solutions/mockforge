@@ -23,6 +23,7 @@ import {
   chaosApi,
   timeTravelApi,
   realityApi,
+  consistencyApi,
   proxyApi,
   type ProxyRuleRequest,
 } from '../services/api';
@@ -63,6 +64,8 @@ export const queryKeys = {
   proxyInspect: ['proxyInspect'] as const,
   realityLevel: ['realityLevel'] as const,
   realityPresets: ['realityPresets'] as const,
+  lifecyclePresets: ['lifecyclePresets'] as const,
+  lifecyclePreset: (name: string) => ['lifecyclePreset', name] as const,
   // Drift budget and incidents
   driftBudgets: ['driftBudgets'] as const,
   driftBudget: (id: string) => ['driftBudget', id] as const,
@@ -1260,6 +1263,40 @@ export function useExportRealityPreset() {
       realityApi.exportPreset(name, description),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.realityPresets });
+    },
+  });
+}
+
+/**
+ * Lifecycle preset hooks
+ */
+export function useLifecyclePresets() {
+  return useQuery({
+    queryKey: queryKeys.lifecyclePresets,
+    queryFn: () => consistencyApi.listLifecyclePresets(),
+    staleTime: 60000, // Presets don't change often
+  });
+}
+
+export function useLifecyclePresetDetails(presetName: string) {
+  return useQuery({
+    queryKey: queryKeys.lifecyclePreset(presetName),
+    queryFn: () => consistencyApi.getLifecyclePresetDetails(presetName),
+    enabled: !!presetName,
+    staleTime: 60000,
+  });
+}
+
+export function useApplyLifecyclePreset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ workspace, personaId, preset }: { workspace: string; personaId: string; preset: string }) =>
+      consistencyApi.applyLifecyclePreset(workspace, personaId, preset),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['consistency', 'state'] });
+      queryClient.invalidateQueries({ queryKey: ['consistency', 'persona'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lifecyclePresets });
     },
   });
 }

@@ -1,3 +1,5 @@
+//! Pillars: [DevX]
+//!
 //! Integration tests for MockForge SDK
 
 use mockforge_sdk::MockServer;

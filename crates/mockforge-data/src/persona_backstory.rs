@@ -6,7 +6,7 @@
 
 use crate::domains::Domain;
 use crate::persona::PersonaProfile;
-use mockforge_core::Result;
+use crate::Result;
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
@@ -53,7 +53,7 @@ impl BackstoryGenerator {
     /// the same persona always gets the same backstory.
     pub fn generate_backstory(&self, persona: &PersonaProfile) -> Result<String> {
         let templates = self.templates.get(&persona.domain).ok_or_else(|| {
-            mockforge_core::Error::generic(format!(
+            crate::Error::generic(format!(
                 "No backstory templates available for domain: {:?}",
                 persona.domain
             ))

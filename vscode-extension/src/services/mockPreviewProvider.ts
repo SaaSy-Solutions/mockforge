@@ -116,7 +116,14 @@ export class MockPreviewProvider {
         }
 
         if (!this.client) {
-            return new vscode.MarkdownString('**Mock Response Preview**\n\n*MockForge server not connected*');
+            const md = new vscode.MarkdownString();
+            md.isTrusted = true;
+            md.appendMarkdown('**Mock Response Preview**\n\n');
+            md.appendMarkdown('*MockForge server not connected*\n\n');
+            md.appendMarkdown(`**${endpoint.method}** \`${endpoint.path}\`\n\n`);
+            md.appendMarkdown(`---\n\n`);
+            md.appendMarkdown(`[🔗 Open in Playground](command:mockforge.openPlayground?${encodeURIComponent(JSON.stringify(endpoint))})`);
+            return md;
         }
 
         try {
@@ -128,28 +135,35 @@ export class MockPreviewProvider {
             const response = await this.client.getMockResponse(endpoint.method, endpoint.path);
 
             if (response) {
-                const preview = this.formatResponsePreview(response);
+                const preview = this.formatResponsePreview(response, endpoint);
                 return preview;
             } else {
-                return new vscode.MarkdownString(
-                    `**Mock Response Preview**\n\n` +
-                    `**${endpoint.method}** \`${endpoint.path}\`\n\n` +
-                    `*No mock configured for this endpoint*`
-                );
+                const md = new vscode.MarkdownString();
+                md.isTrusted = true;
+                md.appendMarkdown(`**Mock Response Preview**\n\n`);
+                md.appendMarkdown(`**${endpoint.method}** \`${endpoint.path}\`\n\n`);
+                md.appendMarkdown(`*No mock configured for this endpoint*\n\n`);
+                md.appendMarkdown(`---\n\n`);
+                md.appendMarkdown(`[🔗 Open in Playground](command:mockforge.openPlayground?${encodeURIComponent(JSON.stringify(endpoint))})`);
+                return md;
             }
         } catch (error) {
             Logger.error('Failed to get mock preview:', error);
-            return new vscode.MarkdownString(
-                `**Mock Response Preview**\n\n` +
-                `*Error: ${error instanceof Error ? error.message : 'Unknown error'}*`
-            );
+            const md = new vscode.MarkdownString();
+            md.isTrusted = true;
+            md.appendMarkdown(`**Mock Response Preview**\n\n`);
+            md.appendMarkdown(`*Error: ${error instanceof Error ? error.message : 'Unknown error'}*\n\n`);
+            md.appendMarkdown(`**${endpoint.method}** \`${endpoint.path}\`\n\n`);
+            md.appendMarkdown(`---\n\n`);
+            md.appendMarkdown(`[🔗 Open in Playground](command:mockforge.openPlayground?${encodeURIComponent(JSON.stringify(endpoint))})`);
+            return md;
         }
     }
 
     /**
-     * Format response preview as markdown
+     * Format response preview as markdown with playground link
      */
-    private formatResponsePreview(response: MockResponse): vscode.MarkdownString {
+    private formatResponsePreview(response: MockResponse, endpoint: { method: string; path: string }): vscode.MarkdownString {
         const md = new vscode.MarkdownString();
         md.isTrusted = true;
 
@@ -168,6 +182,10 @@ export class MockPreviewProvider {
                 : JSON.stringify(response.body, null, 2);
             md.appendCodeblock(bodyStr, 'json');
         }
+
+        // Add playground link
+        md.appendMarkdown(`\n---\n\n`);
+        md.appendMarkdown(`[🔗 Open in Playground](command:mockforge.openPlayground?${encodeURIComponent(JSON.stringify(endpoint))})`);
 
         return md;
     }

@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Activity,
   TestTube,
+  Network,
 } from 'lucide-react';
 import { ConsumerImpactPanel } from '../components/ConsumerImpactPanel';
 import {
@@ -114,6 +115,85 @@ function IncidentTypeBadge({ type }: { type: IncidentType }) {
   );
 }
 
+// Protocol-specific display component
+function ProtocolDisplay({ 
+  protocol, 
+  endpoint, 
+  method 
+}: { 
+  protocol: string; 
+  endpoint: string; 
+  method: string;
+}) {
+  // Parse protocol-specific information
+  if (protocol === 'grpc') {
+    // For gRPC, endpoint is typically "service.method" format
+    const parts = endpoint.split('.');
+    if (parts.length >= 2) {
+      const service = parts.slice(0, -1).join('.');
+      const methodName = parts[parts.length - 1];
+      return (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 dark:text-gray-400">gRPC</span>
+          <span className="text-gray-400">•</span>
+          <span className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {service}
+          </span>
+          <span className="text-gray-400">/</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            {methodName}
+          </span>
+        </div>
+      );
+    }
+  } else if (protocol === 'websocket') {
+    // For WebSocket, endpoint might be the message type or channel
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500 dark:text-gray-400">WebSocket</span>
+        <span className="text-gray-400">•</span>
+        <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+          {endpoint || 'Message'}
+        </span>
+        {method && method !== 'websocket' && (
+          <>
+            <span className="text-gray-400">•</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {method}
+            </span>
+          </>
+        )}
+      </div>
+    );
+  } else if (protocol === 'mqtt' || protocol === 'kafka') {
+    // For MQTT/Kafka, endpoint is the topic
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase">
+          {protocol}
+        </span>
+        <span className="text-gray-400">•</span>
+        <span className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+          Topic: {endpoint}
+        </span>
+      </div>
+    );
+  }
+  
+  // Fallback for other protocols
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-gray-500 dark:text-gray-400 uppercase">
+        {protocol}
+      </span>
+      <span className="text-gray-400">•</span>
+      <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+        {endpoint}
+      </span>
+    </div>
+  );
+}
+
 // Incident row component
 function IncidentRow({
   incident,
@@ -133,15 +213,26 @@ function IncidentRow({
       <div className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  {incident.method}
-                </span>
-                <span className="text-gray-400">•</span>
-                <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
-                  {incident.endpoint}
-                </span>
+                {/* Protocol-specific display */}
+                {incident.protocol && incident.protocol !== 'http' ? (
+                  <ProtocolDisplay 
+                    protocol={incident.protocol} 
+                    endpoint={incident.endpoint} 
+                    method={incident.method} 
+                  />
+                ) : (
+                  <>
+                    <span className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {incident.method}
+                    </span>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                      {incident.endpoint}
+                    </span>
+                  </>
+                )}
               </div>
               <SeverityBadge severity={incident.severity} />
               <StatusBadge status={incident.status} />
@@ -169,17 +260,27 @@ function IncidentRow({
               </div>
             )}
 
+            {/* Protocol Badge - only show if not already displayed in header */}
+            {incident.protocol && incident.protocol !== 'http' && (
+              <div className="mt-2">
+                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                  <Network className="w-3 h-3 mr-1" />
+                  {incident.protocol.toUpperCase()}
+                </span>
+              </div>
+            )}
+
             {/* Fitness Test Results */}
-            {incident.details.fitness_test_results &&
-             Array.isArray(incident.details.fitness_test_results) &&
-             incident.details.fitness_test_results.length > 0 && (
+            {incident.fitness_test_results &&
+             Array.isArray(incident.fitness_test_results) &&
+             incident.fitness_test_results.length > 0 && (
               <details className="mt-2">
                 <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-900 dark:hover:text-gray-200 flex items-center gap-1">
                   <TestTube className="w-3 h-3" />
-                  Fitness Test Results ({incident.details.fitness_test_results.length})
+                  Fitness Test Results ({incident.fitness_test_results.length})
                 </summary>
                 <div className="mt-2 space-y-2">
-                  {(incident.details.fitness_test_results as any[]).map((result: any, idx: number) => (
+                  {incident.fitness_test_results.map((result, idx: number) => (
                     <div
                       key={idx}
                       className={`p-2 rounded text-xs ${
@@ -221,10 +322,72 @@ function IncidentRow({
               </details>
             )}
 
+            {/* Protocol-specific drift details */}
+            {incident.protocol && incident.protocol !== 'http' && incident.details && (
+              <details className="mt-2">
+                <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-900 dark:hover:text-gray-200 flex items-center gap-1">
+                  <Network className="w-3 h-3" />
+                  Protocol Drift Details
+                </summary>
+                <div className="mt-2 space-y-2">
+                  {/* Show breaking vs additive changes if available */}
+                  {typeof incident.details.breaking_changes === 'number' && (
+                    <div className="p-2 rounded text-xs bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                      <span className="font-semibold text-red-800 dark:text-red-300">
+                        Breaking Changes: {incident.details.breaking_changes}
+                      </span>
+                    </div>
+                  )}
+                  {typeof incident.details.non_breaking_changes === 'number' && (
+                    <div className="p-2 rounded text-xs bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                      <span className="font-semibold text-green-800 dark:text-green-300">
+                        Non-Breaking Changes: {incident.details.non_breaking_changes}
+                      </span>
+                    </div>
+                  )}
+                  {typeof incident.details.potentially_breaking_changes === 'number' && (
+                    <div className="p-2 rounded text-xs bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                      <span className="font-semibold text-yellow-800 dark:text-yellow-300">
+                        Potentially Breaking: {incident.details.potentially_breaking_changes}
+                      </span>
+                    </div>
+                  )}
+                  {/* Show protocol-specific operation info */}
+                  {incident.details.operation_id && (
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      <span className="font-semibold">Operation:</span> {String(incident.details.operation_id)}
+                    </div>
+                  )}
+                  {incident.details.operation_type && (
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      <span className="font-semibold">Type:</span> {String(incident.details.operation_type)}
+                    </div>
+                  )}
+                  {/* Show schema format if available */}
+                  {incident.details.schema_format && (
+                    <div className="p-2 rounded text-xs bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                      <span className="font-semibold text-blue-800 dark:text-blue-300">
+                        Schema Format: {String(incident.details.schema_format).replace(/_/g, ' ').toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  {/* Show service/method info for gRPC */}
+                  {incident.protocol === 'grpc' && incident.details.service && (
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      <span className="font-semibold">Service:</span> {String(incident.details.service)}
+                      {incident.details.method && (
+                        <> • <span className="font-semibold">Method:</span> {String(incident.details.method)}</>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
+
             {Object.keys(incident.details).length > 0 && (
               <details className="mt-2">
                 <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-900 dark:hover:text-gray-200">
-                  View Details
+                  View Full Details
                 </summary>
                 <pre className="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs overflow-x-auto">
                   {JSON.stringify(incident.details, null, 2)}
@@ -238,6 +401,7 @@ function IncidentRow({
                 incidentId={incident.id}
                 endpoint={incident.endpoint}
                 method={incident.method}
+                affectedConsumers={incident.affected_consumers}
               />
             </div>
           </div>
@@ -352,6 +516,7 @@ export function IncidentDashboardPage() {
   const [severityFilter, setSeverityFilter] = useState<IncidentSeverity | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<IncidentType | 'all'>('all');
   const [endpointFilter, setEndpointFilter] = useState('');
+  const [protocolFilter, setProtocolFilter] = useState<string>('all');
 
   // Build filter params
   const filterParams = useMemo(() => {
@@ -360,6 +525,7 @@ export function IncidentDashboardPage() {
     if (severityFilter !== 'all') params.severity = severityFilter;
     if (typeFilter !== 'all') params.incident_type = typeFilter;
     if (endpointFilter) params.endpoint = endpointFilter;
+    // Note: Protocol filter is applied client-side since API may not support it yet
     return params;
   }, [statusFilter, severityFilter, typeFilter, endpointFilter]);
 
@@ -378,19 +544,35 @@ export function IncidentDashboardPage() {
   const updateMutation = useUpdateDriftIncident();
   const resolveMutation = useResolveDriftIncident();
 
-  // Filter incidents by search term
+  // Filter incidents by search term and protocol
   const filteredIncidents = useMemo(() => {
     if (!incidentsData?.incidents) return [];
-    if (!searchTerm) return incidentsData.incidents;
-
-    const search = searchTerm.toLowerCase();
-    return incidentsData.incidents.filter(
-      (incident) =>
-        incident.endpoint.toLowerCase().includes(search) ||
-        incident.method.toLowerCase().includes(search) ||
-        incident.id.toLowerCase().includes(search)
-    );
-  }, [incidentsData, searchTerm]);
+    
+    let filtered = incidentsData.incidents;
+    
+    // Apply protocol filter
+    if (protocolFilter !== 'all') {
+      filtered = filtered.filter((incident) => {
+        if (protocolFilter === 'http') {
+          return !incident.protocol || incident.protocol === 'http';
+        }
+        return incident.protocol === protocolFilter;
+      });
+    }
+    
+    // Apply search term filter
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (incident) =>
+          incident.endpoint.toLowerCase().includes(search) ||
+          incident.method.toLowerCase().includes(search) ||
+          incident.id.toLowerCase().includes(search)
+      );
+    }
+    
+    return filtered;
+  }, [incidentsData, searchTerm, protocolFilter]);
 
   const handleUpdateStatus = async (id: string, status: IncidentStatus) => {
     try {
@@ -429,7 +611,7 @@ export function IncidentDashboardPage() {
 
       {/* Filters */}
       <ModernCard className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           <div className="lg:col-span-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -478,6 +660,20 @@ export function IncidentDashboardPage() {
               <SelectItem value="threshold_exceeded">Threshold Exceeded</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select value={protocolFilter} onValueChange={setProtocolFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Protocol" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Protocols</SelectItem>
+              <SelectItem value="http">HTTP</SelectItem>
+              <SelectItem value="grpc">gRPC</SelectItem>
+              <SelectItem value="websocket">WebSocket</SelectItem>
+              <SelectItem value="mqtt">MQTT</SelectItem>
+              <SelectItem value="kafka">Kafka</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="mt-4 flex items-center gap-2">
@@ -496,6 +692,7 @@ export function IncidentDashboardPage() {
               setSeverityFilter('all');
               setTypeFilter('all');
               setEndpointFilter('');
+              setProtocolFilter('all');
             }}
           >
             Clear Filters
@@ -525,7 +722,7 @@ export function IncidentDashboardPage() {
             icon={CheckCircle2}
             title="No Incidents Found"
             description={
-              searchTerm || statusFilter !== 'all' || severityFilter !== 'all' || typeFilter !== 'all' || endpointFilter
+              searchTerm || statusFilter !== 'all' || severityFilter !== 'all' || typeFilter !== 'all' || endpointFilter || protocolFilter !== 'all'
                 ? 'Try adjusting your filters to see more results'
                 : 'All clear! No contract drift incidents detected.'
             }

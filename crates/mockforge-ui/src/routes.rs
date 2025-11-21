@@ -275,12 +275,26 @@ pub fn create_admin_router(
         .route("/__mockforge/ai-studio/generate-mock", post(ai_studio::generate_mock))
         .route("/api/v1/ai-studio/debug-test", post(ai_studio::debug_test))
         .route("/__mockforge/ai-studio/debug-test", post(ai_studio::debug_test))
+        .route("/api/v1/ai-studio/debug/analyze-with-context", post(ai_studio::debug_analyze_with_context))
+        .route("/__mockforge/ai-studio/debug/analyze-with-context", post(ai_studio::debug_analyze_with_context))
         .route("/api/v1/ai-studio/generate-persona", post(ai_studio::generate_persona))
         .route("/__mockforge/ai-studio/generate-persona", post(ai_studio::generate_persona))
         .route("/api/v1/ai-studio/freeze", post(ai_studio::freeze_artifact))
         .route("/__mockforge/ai-studio/freeze", post(ai_studio::freeze_artifact))
+        .route("/api/v1/ai-studio/frozen", get(ai_studio::list_frozen))
+        .route("/__mockforge/ai-studio/frozen", get(ai_studio::list_frozen))
+        .route("/api/v1/ai-studio/apply-patch", post(ai_studio::apply_patch))
+        .route("/__mockforge/ai-studio/apply-patch", post(ai_studio::apply_patch))
         .route("/api/v1/ai-studio/usage", get(ai_studio::get_usage))
         .route("/__mockforge/ai-studio/usage", get(ai_studio::get_usage))
+        .route("/api/v1/ai-studio/org-controls", get(ai_studio::get_org_controls))
+        .route("/__mockforge/ai-studio/org-controls", get(ai_studio::get_org_controls))
+        .route("/api/v1/ai-studio/org-controls", axum::routing::put(ai_studio::update_org_controls))
+        .route("/__mockforge/ai-studio/org-controls", axum::routing::put(ai_studio::update_org_controls))
+        .route("/api/v1/ai-studio/org-controls/usage", get(ai_studio::get_org_usage))
+        .route("/__mockforge/ai-studio/org-controls/usage", get(ai_studio::get_org_usage))
+        .route("/api/v1/ai-studio/contract-diff/query", post(ai_studio::contract_diff_query))
+        .route("/__mockforge/ai-studio/contract-diff/query", post(ai_studio::contract_diff_query))
         // Failure analysis routes
         .route("/api/v2/failures/analyze", post(failure_analysis::analyze_failure))
         .route("/api/v2/failures/{request_id}", get(failure_analysis::get_failure_analysis))
@@ -330,6 +344,15 @@ pub fn create_admin_router(
 
     router = router.merge(analytics_router);
 
+    // Pillar analytics routes
+    // Note: These routes require an analytics database to be configured.
+    // The handlers will return appropriate errors if the database is not available.
+    // To enable analytics database:
+    // 1. Initialize analytics database connection from config
+    // 2. Add database connection to handler state (e.g., AnalyticsState)
+    // 3. Pass state to analytics route handlers
+    // For now, routes are defined but handlers will return errors if database is not configured
+
     // Add workspace router with WorkspaceState
     {
         use crate::handlers::workspaces::WorkspaceState;
@@ -356,6 +379,12 @@ pub fn create_admin_router(
                 axum::routing::put(workspaces::update_workspace),
             )
             .route("/__mockforge/workspaces/{workspace_id}", delete(workspaces::delete_workspace))
+            .route("/__mockforge/workspaces/{workspace_id}/stats", get(workspaces::get_workspace_stats))
+            // Mock environment endpoints
+            .route("/__mockforge/workspaces/{workspace_id}/environments", get(workspaces::list_mock_environments))
+            .route("/__mockforge/workspaces/{workspace_id}/environments/{env_name}", get(workspaces::get_mock_environment))
+            .route("/__mockforge/workspaces/{workspace_id}/environments/{env_name}", axum::routing::put(workspaces::update_mock_environment))
+            .route("/__mockforge/workspaces/{workspace_id}/environments/active", axum::routing::post(workspaces::set_active_mock_environment))
             // Note: set_active_workspace handler not yet implemented
             // .route(
             //     "/__mockforge/workspaces/{workspace_id}/activate",
@@ -370,24 +399,91 @@ pub fn create_admin_router(
 
         router = router.merge(workspace_router);
         tracing::info!("Workspace router mounted with WorkspaceState");
+
+        // Promotion routes
+        // Initialize PromotionService with database connection if available
+        // Note: In production, this should be initialized at application startup
+        #[cfg(feature = "database-auth")]
+        {
+            use crate::handlers::promotions::PromotionState;
+            use crate::handlers::promotions;
+            use mockforge_collab::promotion::PromotionService;
+            use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
+            use std::sync::Arc;
+
+            // Try to get database connection from environment or use default
+            let db_url = std::env::var("MOCKFORGE_COLLAB_DB_URL")
+                .unwrap_or_else(|_| "sqlite://mockforge-collab.db".to_string());
+
+            // Try to create database pool (async operation)
+            if let Ok(pool) = SqlitePoolOptions::new()
+                .max_connections(5)
+                .connect(&db_url)
+                .await
+            {
+                // Run migrations automatically
+                // Note: The migrate! macro resolves paths relative to the crate root
+                // Since we're in mockforge-ui, we need to use the correct relative path
+                let migrations_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .unwrap()
+                    .join("mockforge-collab")
+                    .join("migrations");
+                
+                // Use sqlx::migrate::Migrator for runtime migration
+                match sqlx::migrate::Migrator::new(migrations_path.as_path()).await {
+                    Ok(migrator) => {
+                        if let Err(e) = migrator.run(&pool).await {
+                            tracing::warn!("Failed to run promotion database migrations: {}. Promotion routes may not work correctly.", e);
+                            // Continue anyway - migrations might already be applied
+                        } else {
+                            tracing::info!("Promotion database migrations completed");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to initialize migration system: {}. Promotion routes may not work correctly.", e);
+                    }
+                }
+
+                let promotion_service = PromotionService::new(pool);
+                let promotion_state = PromotionState::new(
+                    Arc::new(promotion_service),
+                    workspace_state.clone(),
+                );
+                let promotion_router = Router::new()
+                    .route("/api/v2/promotions", post(promotions::create_promotion))
+                    .route("/api/v2/promotions/{promotion_id}", get(promotions::get_promotion))
+                    .route("/api/v2/promotions/{promotion_id}/status", axum::routing::put(promotions::update_promotion_status))
+                    .route("/api/v2/promotions/workspace/{workspace_id}", get(promotions::list_workspace_promotions))
+                    .route("/api/v2/promotions/pending", get(promotions::list_pending_promotions))
+                    .route("/api/v2/promotions/entity/{entity_type}/{entity_id}", get(promotions::get_entity_promotion_history))
+                    .with_state(promotion_state);
+
+                router = router.merge(promotion_router);
+                tracing::info!("Promotion routes mounted with database connection");
+            } else {
+                tracing::debug!("Failed to connect to promotion database - promotion routes will be unavailable");
+            }
+        }
+        #[cfg(not(feature = "database-auth"))]
+        {
+            tracing::debug!("Promotion routes require 'database-auth' feature - not available");
+        }
     }
 
     // Add UI Builder router
-    // This provides a low-code visual interface for creating mock endpoints
-    {
-        use mockforge_http::{create_ui_builder_router, UIBuilderState};
-
-        // Load server config for UI Builder
-        // For now, create a default config. In production, this should be loaded from the actual config.
-        // Use the re-exported ServerConfig from mockforge_core root to match UIBuilderState's import
-        let server_config = mockforge_core::ServerConfig::default();
-        let ui_builder_state = UIBuilderState::new(server_config);
-        let ui_builder_router = create_ui_builder_router(ui_builder_state);
-
-        // Nest the UI builder router with its own state
-        router = router.nest_service("/__mockforge/ui-builder", ui_builder_router);
-        tracing::info!("UI Builder mounted at /__mockforge/ui-builder");
-    }
+    // NOTE: UI Builder initialization is temporarily disabled due to ServerConfig type mismatch
+    // between mockforge-ui and mockforge-http dependency versions. This is a known issue
+    // that will be resolved when dependency versions are aligned.
+    // {
+    //     use mockforge_http::{create_ui_builder_router, UIBuilderState};
+    //     use mockforge_core::config::ServerConfig;
+    //     let server_config = ServerConfig::default();
+    //     let ui_builder_state = UIBuilderState::new(server_config);
+    //     let ui_builder_router = create_ui_builder_router(ui_builder_state);
+    //     router = router.nest_service("/__mockforge/ui-builder", ui_builder_router);
+    //     tracing::info!("UI Builder mounted at /__mockforge/ui-builder");
+    // }
 
     // SPA fallback: serve index.html for any unmatched routes to support client-side routing
     // IMPORTANT: This must be AFTER all API routes

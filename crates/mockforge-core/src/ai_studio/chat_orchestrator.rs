@@ -23,6 +23,12 @@ pub struct ChatRequest {
 
     /// Optional workspace ID for context
     pub workspace_id: Option<String>,
+
+    /// Optional organization ID for org-level controls
+    pub org_id: Option<String>,
+
+    /// Optional user ID for audit logging
+    pub user_id: Option<String>,
 }
 
 /// Chat context for multi-turn conversations
@@ -126,11 +132,27 @@ impl ChatOrchestrator {
     /// Helper to track usage and return token/cost info
     async fn track_usage(
         &self,
+        org_id: Option<&str>,
         workspace_id: &str,
+        user_id: Option<&str>,
         usage: &LlmUsage,
     ) -> Result<(Option<u64>, Option<f64>)> {
+        self.track_usage_with_feature(org_id, workspace_id, user_id, usage, None).await
+    }
+
+    /// Helper to track usage with feature information
+    async fn track_usage_with_feature(
+        &self,
+        org_id: Option<&str>,
+        workspace_id: &str,
+        user_id: Option<&str>,
+        usage: &LlmUsage,
+        feature: Option<crate::ai_studio::budget_manager::AiFeature>,
+    ) -> Result<(Option<u64>, Option<f64>)> {
         let cost = self.calculate_cost(usage);
-        self.budget_manager.record_usage(workspace_id, usage.total_tokens, cost).await?;
+        self.budget_manager
+            .record_usage_with_feature(org_id, workspace_id, user_id, usage.total_tokens, cost, feature)
+            .await?;
         Ok((Some(usage.total_tokens), Some(cost)))
     }
 
@@ -152,7 +174,13 @@ impl ChatOrchestrator {
                 // Use MockGenerator to generate mock from message
                 use crate::ai_studio::nl_mock_generator::MockGenerator;
                 let generator = MockGenerator::new();
-                match generator.generate(&request.message).await {
+                // For now, pass None for deterministic_config - it would need to be loaded from workspace config
+                match generator.generate(
+                    &request.message,
+                    request.workspace_id.as_deref(),
+                    None, // ai_mode - could be extracted from request if available
+                    None, // deterministic_config - would be loaded from workspace config
+                ).await {
                     Ok(result) => {
                         // Estimate tokens (MockGenerator uses LLM internally, but doesn't expose usage)
                         // For now, estimate based on message length and response size
@@ -160,7 +188,13 @@ impl ChatOrchestrator {
                             (request.message.len() + result.message.len()) as u64 / 4;
                         let usage = LlmUsage::new(estimated_tokens / 2, estimated_tokens / 2);
                         let (tokens, cost) = self
-                            .track_usage(&request.workspace_id.clone().unwrap_or_default(), &usage)
+                            .track_usage_with_feature(
+                                request.org_id.as_deref(),
+                                &request.workspace_id.clone().unwrap_or_default(),
+                                request.user_id.as_deref(),
+                                &usage,
+                                Some(crate::ai_studio::budget_manager::AiFeature::MockAi),
+                            )
                             .await
                             .unwrap_or((None, None));
                         Ok(ChatResponse {
@@ -203,7 +237,13 @@ impl ChatOrchestrator {
                             (request.message.len() + result.root_cause.len()) as u64 / 4;
                         let usage = LlmUsage::new(estimated_tokens / 2, estimated_tokens / 2);
                         let (tokens, cost) = self
-                            .track_usage(&request.workspace_id.clone().unwrap_or_default(), &usage)
+                            .track_usage_with_feature(
+                                request.org_id.as_deref(),
+                                &request.workspace_id.clone().unwrap_or_default(),
+                                request.user_id.as_deref(),
+                                &usage,
+                                Some(crate::ai_studio::budget_manager::AiFeature::DebugAnalysis),
+                            )
                             .await
                             .unwrap_or((None, None));
                         Ok(ChatResponse {
@@ -242,14 +282,20 @@ impl ChatOrchestrator {
                     base_persona_id: None,
                     workspace_id: request.workspace_id.clone(),
                 };
-                match generator.generate(&persona_request).await {
+                match generator.generate(&persona_request, None, None).await {
                     Ok(result) => {
                         // Estimate tokens (PersonaGenerator uses LLM internally)
                         let estimated_tokens =
                             (request.message.len() + result.message.len()) as u64 / 4;
                         let usage = LlmUsage::new(estimated_tokens / 2, estimated_tokens / 2);
                         let (tokens, cost) = self
-                            .track_usage(&request.workspace_id.clone().unwrap_or_default(), &usage)
+                            .track_usage_with_feature(
+                                request.org_id.as_deref(),
+                                &request.workspace_id.clone().unwrap_or_default(),
+                                request.user_id.as_deref(),
+                                &usage,
+                                Some(crate::ai_studio::budget_manager::AiFeature::PersonaGeneration),
+                            )
                             .await
                             .unwrap_or((None, None));
                         Ok(ChatResponse {
@@ -277,15 +323,38 @@ impl ChatOrchestrator {
                 }
             }
             ChatIntent::ContractDiff => {
-                // Route to ContractDiff analyzer
-                // Extract contract diff request from message
-                // Format: "analyze contract diff: <description>" or "compare contracts: <spec1> vs <spec2>"
-                let message_lower = request.message.to_lowercase();
-                if message_lower.contains("compare") || message_lower.contains("diff") {
-                    // For now, provide guidance on using contract diff
-                    Ok(ChatResponse {
+                // Use ContractDiffHandler to process the query
+                use crate::ai_studio::contract_diff_handler::ContractDiffHandler;
+                let handler = ContractDiffHandler::new()
+                    .map_err(|e| crate::Error::generic(format!("Failed to create ContractDiffHandler: {}", e)))?;
+                
+                // For now, we don't have direct access to specs/requests in the orchestrator
+                // The handler will provide guidance on how to use contract diff
+                match handler.analyze_from_query(&request.message, None, None).await {
+                    Ok(query_result) => {
+                        let mut message = query_result.summary.clone();
+                        if let Some(link) = &query_result.link_to_viewer {
+                            message.push_str(&format!("\n\nView details: {}", link));
+                        }
+                        
+                        Ok(ChatResponse {
+                            intent: ChatIntent::ContractDiff,
+                            message,
+                            data: Some(serde_json::json!({
+                                "type": "contract_diff_query",
+                                "intent": query_result.intent,
+                                "result": query_result.result,
+                                "breaking_changes": query_result.breaking_changes,
+                                "link_to_viewer": query_result.link_to_viewer,
+                            })),
+                            error: None,
+                            tokens_used: None,
+                            cost_usd: None,
+                        })
+                    }
+                    Err(e) => Ok(ChatResponse {
                         intent: ChatIntent::ContractDiff,
-                        message: "Contract diff analysis is available! Use the Contract Diff feature in the UI to:\n\n1. Upload or select an OpenAPI specification\n2. Capture or upload a request to analyze\n3. View mismatches and AI-powered recommendations\n4. Generate correction patches\n\nYou can also use the CLI: `mockforge contract-diff analyze --spec api.yaml --request-id <id>`".to_string(),
+                        message: format!("I can help with contract diff analysis! Try asking:\n- \"Analyze the last captured request\"\n- \"Show me breaking changes\"\n- \"Compare contract versions\"\n\nError: {}", e),
                         data: Some(serde_json::json!({
                             "type": "contract_diff_info",
                             "endpoints": {
@@ -294,19 +363,10 @@ impl ChatOrchestrator {
                                 "compare": "/api/v1/contract-diff/compare"
                             }
                         })),
-                        error: None,
+                        error: Some(e.to_string()),
                         tokens_used: None,
                         cost_usd: None,
-                    })
-                } else {
-                    Ok(ChatResponse {
-                        intent: ChatIntent::ContractDiff,
-                        message: "I can help with contract diff analysis! Please provide:\n- An OpenAPI specification (file path or URL)\n- A request to analyze (captured request ID or request details)\n\nOr use: 'analyze contract diff: <description>' to get started.".to_string(),
-                        data: None,
-                        error: None,
-                        tokens_used: None,
-                        cost_usd: None,
-                    })
+                    }),
                 }
             }
             ChatIntent::General | ChatIntent::Unknown => {

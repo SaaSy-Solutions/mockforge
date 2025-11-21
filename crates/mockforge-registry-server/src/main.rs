@@ -1,3 +1,5 @@
+//! Pillars: [Cloud]
+//!
 //! MockForge Plugin Registry Server
 //!
 //! Central registry for discovering, publishing, and installing plugins.
@@ -13,6 +15,7 @@ mod handlers;
 mod metrics;
 mod middleware;
 mod models;
+mod pillar_tracking_init;
 mod redis;
 mod routes;
 mod storage;
@@ -112,6 +115,12 @@ async fn main() -> Result<()> {
             }
         }
     };
+
+    // Initialize pillar tracking with analytics database
+    if let Some(ref analytics_db) = analytics_db {
+        let db_arc = std::sync::Arc::new(analytics_db.clone());
+        pillar_tracking_init::init_pillar_tracking(Some(db_arc)).await;
+    }
 
     // Create app state
     let state = AppState {

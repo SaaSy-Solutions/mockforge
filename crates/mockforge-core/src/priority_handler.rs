@@ -1,6 +1,9 @@
 //! Priority-based HTTP request handler implementing the full priority chain:
 //! Custom Fixtures → Replay → Stateful → Route Chaos (per-route fault/latency) → Global Fail → Proxy → Mock → Record
 
+use crate::behavioral_economics::{
+    BehavioralEconomicsEngine, ConditionEvaluator as BehavioralConditionEvaluator,
+};
 use crate::stateful_handler::StatefulResponseHandler;
 use crate::{
     CustomFixtureLoader, Error, FailureInjector, ProxyHandler, RealityContinuumEngine,
@@ -11,6 +14,7 @@ use async_trait::async_trait;
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Trait for behavioral scenario replay engines
 #[async_trait]
@@ -63,6 +67,8 @@ pub struct PriorityHttpHandler {
     openapi_spec: Option<crate::openapi::spec::OpenApiSpec>,
     /// Reality Continuum engine for blending mock and real responses
     continuum_engine: Option<Arc<RealityContinuumEngine>>,
+    /// Behavioral Economics Engine for reactive mock behavior
+    behavioral_economics_engine: Option<Arc<RwLock<BehavioralEconomicsEngine>>>,
 }
 
 /// Trait for mock response generation
@@ -108,6 +114,7 @@ impl PriorityHttpHandler {
             mock_generator,
             openapi_spec: None,
             continuum_engine: None,
+            behavioral_economics_engine: None,
         }
     }
 
@@ -130,6 +137,7 @@ impl PriorityHttpHandler {
             mock_generator,
             openapi_spec,
             continuum_engine: None,
+            behavioral_economics_engine: None,
         }
     }
 
@@ -154,6 +162,15 @@ impl PriorityHttpHandler {
     /// Set Reality Continuum engine
     pub fn with_continuum_engine(mut self, engine: Arc<RealityContinuumEngine>) -> Self {
         self.continuum_engine = Some(engine);
+        self
+    }
+
+    /// Set Behavioral Economics Engine
+    pub fn with_behavioral_economics_engine(
+        mut self,
+        engine: Arc<RwLock<BehavioralEconomicsEngine>>,
+    ) -> Self {
+        self.behavioral_economics_engine = Some(engine);
         self
     }
 
@@ -696,6 +713,48 @@ impl PriorityHttpHandler {
 
         // If we reach here, no handler could process the request
         Err(Error::generic("No handler could process the request".to_string()))
+    }
+
+    /// Apply behavioral economics rules to a response
+    ///
+    /// Updates condition evaluator with current metrics and evaluates rules,
+    /// then applies any matching actions to modify the response.
+    async fn apply_behavioral_economics(
+        &self,
+        mut response: PriorityResponse,
+        method: &Method,
+        uri: &Uri,
+        latency_ms: Option<u64>,
+    ) -> Result<PriorityResponse> {
+        if let Some(ref engine) = self.behavioral_economics_engine {
+            let engine = engine.read().await;
+            let evaluator = engine.condition_evaluator();
+
+            // Update condition evaluator with current metrics
+            {
+                let mut eval = evaluator.write().await;
+                if let Some(latency) = latency_ms {
+                    eval.update_latency(uri.path(), latency);
+                }
+                // TODO: Update other metrics (load, error rates, etc.)
+            }
+
+            // Evaluate rules and get executed actions
+            let executed_actions = engine.evaluate().await?;
+
+            // Apply actions to response if any were executed
+            if !executed_actions.is_empty() {
+                tracing::debug!(
+                    "Behavioral economics engine executed {} actions",
+                    executed_actions.len()
+                );
+                // Actions are executed by the engine, but we may need to modify
+                // the response based on action results. For now, the engine
+                // handles action execution internally.
+            }
+        }
+
+        Ok(response)
     }
 }
 

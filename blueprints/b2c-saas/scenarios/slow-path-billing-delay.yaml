@@ -1,0 +1,103 @@
+id: slow-path-billing-delay
+name: Slow Path - Billing Processing Delay
+type: slow_path
+description: Billing cycle processing with intentional delays simulating slow payment processing
+tags:
+  - billing
+  - performance
+  - delay
+  - slow-response
+
+steps:
+  - id: get-active-subscriptions
+    name: Get Active Subscriptions
+    method: GET
+    path: /api/subscriptions?status=active
+    expected_status: 200
+    continue_on_failure: false
+    delay_ms: 100  # Small initial delay
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      subscriptions: body.subscriptions
+
+  - id: generate-invoice-slow
+    name: Generate Invoice (Slow Processing)
+    method: POST
+    path: /api/billing/invoices
+    expected_status: 201
+    continue_on_failure: false
+    depends_on: [get-active-subscriptions]
+    delay_ms: 2000  # 2 second delay simulating slow invoice generation
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      subscription_id: "{{subscriptions[0].id}}"
+      period_start: "2024-01-01"
+      period_end: "2024-01-31"
+    extract:
+      invoice_id: body.invoice.id
+      invoice_amount: body.invoice.amount
+
+  - id: process-payment-slow
+    name: Process Payment (Delayed Response)
+    method: POST
+    path: /api/payments/process
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [generate-invoice-slow]
+    delay_ms: 3000  # 3 second delay simulating slow payment processing
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      invoice_id: "{{invoice_id}}"
+      amount: "{{invoice_amount}}"
+    extract:
+      payment_id: body.payment.id
+      payment_status: body.payment.status
+
+  - id: update-subscription-slow
+    name: Update Subscription (Delayed)
+    method: PATCH
+    path: /api/subscriptions/{{subscriptions[0].id}}
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [process-payment-slow]
+    delay_ms: 1500  # 1.5 second delay
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      last_billing_date: "2024-01-31"
+      next_billing_date: "2024-02-29"
+
+  - id: send-invoice-email
+    name: Send Invoice Email
+    method: POST
+    path: /api/notifications/send
+    expected_status: 200
+    continue_on_failure: true
+    depends_on: [update-subscription-slow]
+    delay_ms: 500  # Small delay for email sending
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      type: "invoice"
+      invoice_id: "{{invoice_id}}"
+      recipient: "{{user.email}}"
+
+expected_outcomes:
+  - All steps eventually complete successfully (2xx status codes)
+  - Total execution time exceeds 6 seconds due to intentional delays
+  - Invoice is generated and payment is processed
+  - Subscription is updated with new billing dates
+  - User experiences realistic billing processing delays
+  - System handles slow responses gracefully
+
+variables:
+  access_token: null
+  subscriptions: null
+  invoice_id: null
+  invoice_amount: null
+  payment_id: null
+  payment_status: null
+

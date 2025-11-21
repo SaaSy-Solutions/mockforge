@@ -6,7 +6,7 @@
 //! data patterns.
 
 use crate::domains::{Domain, DomainGenerator};
-use mockforge_core::Result;
+use crate::Result;
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -287,7 +287,7 @@ impl PersonaRegistry {
             }
             Ok(())
         } else {
-            Err(mockforge_core::Error::generic(format!("Persona with ID '{}' not found", id)))
+            Err(crate::Error::generic(format!("Persona with ID '{}' not found", id)))
         }
     }
 
@@ -300,7 +300,7 @@ impl PersonaRegistry {
             persona.set_backstory(backstory);
             Ok(())
         } else {
-            Err(mockforge_core::Error::generic(format!("Persona with ID '{}' not found", id)))
+            Err(crate::Error::generic(format!("Persona with ID '{}' not found", id)))
         }
     }
 
@@ -334,7 +334,7 @@ impl PersonaRegistry {
             }
             Ok(())
         } else {
-            Err(mockforge_core::Error::generic(format!("Persona with ID '{}' not found", id)))
+            Err(crate::Error::generic(format!("Persona with ID '{}' not found", id)))
         }
     }
 
@@ -381,7 +381,7 @@ impl PersonaRegistry {
             }
             Ok(related_personas)
         } else {
-            Err(mockforge_core::Error::generic(format!(
+            Err(crate::Error::generic(format!(
                 "Persona with ID '{}' not found",
                 persona_id
             )))
@@ -429,7 +429,7 @@ impl PersonaRegistry {
 
             Ok(())
         } else {
-            Err(mockforge_core::Error::generic(format!(
+            Err(crate::Error::generic(format!(
                 "Persona with ID '{}' not found",
                 from_persona_id
             )))

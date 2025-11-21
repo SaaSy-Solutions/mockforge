@@ -86,6 +86,15 @@ pub struct DriftIncident {
     /// After sample - contract/spec state after drift was detected
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_sample: Option<serde_json::Value>,
+    /// Results from fitness function tests
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fitness_test_results: Vec<crate::contract_drift::fitness::FitnessTestResult>,
+    /// Consumer impact analysis (optional)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affected_consumers: Option<crate::contract_drift::consumer_mapping::ConsumerImpact>,
+    /// Protocol type (HTTP, gRPC, WebSocket, etc.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<crate::protocol_abstraction::Protocol>,
 }
 
 impl DriftIncident {
@@ -119,6 +128,9 @@ impl DriftIncident {
             contract_diff_id: None,
             before_sample: None,
             after_sample: None,
+            fitness_test_results: Vec::new(),
+            affected_consumers: None,
+            protocol: None,
         }
     }
 

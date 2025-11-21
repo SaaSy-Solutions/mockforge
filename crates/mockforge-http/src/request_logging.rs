@@ -7,7 +7,9 @@ use axum::{
     response::Response,
 };
 use mockforge_core::{
-    create_http_log_entry, log_request_global, request_logger::RealityTraceMetadata,
+    create_http_log_entry, log_request_global,
+    reality_continuum::response_trace::ResponseGenerationTrace,
+    request_logger::RealityTraceMetadata,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -98,6 +100,16 @@ pub async fn log_http_requests(
 
     // Attach reality metadata if available
     log_entry.reality_metadata = reality_metadata;
+
+    // Extract response generation trace from response extensions (set by handler)
+    if let Some(trace) = response.extensions().get::<ResponseGenerationTrace>() {
+        // Serialize trace to JSON string and store in metadata
+        if let Ok(trace_json) = serde_json::to_string(trace) {
+            log_entry
+                .metadata
+                .insert("response_generation_trace".to_string(), trace_json);
+        }
+    }
 
     // Log to centralized logger
     log_request_global(log_entry).await;

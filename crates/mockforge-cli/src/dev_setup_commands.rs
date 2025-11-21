@@ -100,29 +100,83 @@ pub async fn execute_dev_setup(args: DevSetupArgs) -> anyhow::Result<()> {
     let project_root = detect_project_root()?;
     println!("  ✓ Detected project root: {}", project_root.display());
 
-    // Create output directory
+    // Detect existing MockForge workspace
+    let (detected_base_url, detected_reality_level) = detect_mockforge_workspace(&project_root)?;
+    
+    // Use detected values or fall back to provided/default values
+    let base_url = if args.base_url == "http://localhost:3000" && detected_base_url.is_some() {
+        detected_base_url.as_ref().unwrap().clone()
+    } else {
+        args.base_url.clone()
+    };
+    
+    let reality_level = if args.reality_level == "moderate" && detected_reality_level.is_some() {
+        detected_reality_level.as_ref().unwrap().clone()
+    } else {
+        args.reality_level.clone()
+    };
+
+    if detected_base_url.is_some() || detected_reality_level.is_some() {
+        println!("  ✓ Detected existing MockForge workspace configuration");
+        if let Some(ref url) = detected_base_url {
+            println!("    Base URL: {}", url);
+        }
+        if let Some(ref level) = detected_reality_level {
+            println!("    Reality level: {}", level);
+        }
+    }
+
+    // Check if workspace was created from a blueprint
+    let blueprint_spec = detect_blueprint_origin(&project_root)?;
+    
+    // Auto-detect OpenAPI spec if not provided
+    let spec_path = if args.spec.is_some() {
+        args.spec.clone()
+    } else if let Some(ref blueprint_spec_path) = blueprint_spec {
+        println!("  ✓ Using OpenAPI spec from blueprint: {}", blueprint_spec_path.display());
+        Some(blueprint_spec_path.clone())
+    } else {
+        let auto_detected = auto_detect_openapi_spec(&project_root)?;
+        if let Some(ref spec) = auto_detected {
+            println!("  ✓ Auto-detected OpenAPI spec: {}", spec.display());
+        }
+        auto_detected
+    };
+
+    // Check for existing client code
     let output_dir = project_root.join(&args.output);
+    if output_dir.exists() && !args.force {
+        let existing_files = check_existing_client_code(&output_dir)?;
+        if !existing_files.is_empty() {
+            println!("  ⚠️  Found existing client code in {}", output_dir.display());
+            println!("     Files: {}", existing_files.join(", "));
+            println!("     Use --force to overwrite");
+            return Ok(());
+        }
+    }
+
+    // Create output directory
     fs::create_dir_all(&output_dir)?;
     println!("  ✓ Created output directory: {}", output_dir.display());
 
-    // Generate client if spec provided
-    if let Some(spec_path) = &args.spec {
+    // Generate client if spec provided or detected
+    if let Some(spec_path) = &spec_path {
         println!("  📦 Generating typed client from OpenAPI spec...");
-        generate_client(framework, spec_path, &output_dir, &args.base_url).await?;
+        generate_client(framework, spec_path, &output_dir, &base_url).await?;
         println!("  ✓ Client generated");
     } else {
-        println!("  ⚠️  No OpenAPI spec provided, skipping client generation");
+        println!("  ⚠️  No OpenAPI spec found, skipping client generation");
         println!("     Use --spec <path> to generate typed client");
     }
 
     // Generate framework-specific hooks/composables/services
     println!("  📝 Generating {} examples...", framework.name());
-    generate_framework_examples(framework, &output_dir, &args.base_url)?;
+    generate_framework_examples(framework, &output_dir, &base_url)?;
     println!("  ✓ Examples generated");
 
     // Create .env.mockforge.example
     println!("  🔧 Creating environment configuration...");
-    create_env_example(&project_root, &args.base_url, &args.reality_level)?;
+    create_env_example(&project_root, &base_url, &reality_level)?;
     println!("  ✓ Environment configuration created");
 
     // Update package.json if it exists
@@ -132,12 +186,23 @@ pub async fn execute_dev_setup(args: DevSetupArgs) -> anyhow::Result<()> {
         println!("  ✓ package.json updated");
     }
 
+    // Verify TypeScript compilation if tsc is available
+    if let Some(tsconfig_path) = find_tsconfig(&project_root) {
+        println!("  🔍 Verifying TypeScript compilation...");
+        if verify_typescript_compilation(&tsconfig_path).is_ok() {
+            println!("  ✓ TypeScript compilation verified");
+        } else {
+            println!("  ⚠️  TypeScript compilation check skipped (tsc not found)");
+        }
+    }
+
     println!("\n✅ MockForge setup complete!");
     println!("\nNext steps:");
     println!("  1. Copy .env.mockforge.example to .env.mockforge");
     println!("  2. Review generated files in {}", output_dir.display());
     println!("  3. Import and use the generated hooks/composables in your app");
-    println!("  4. Start MockForge server: mockforge serve");
+    println!("  4. Check out the example component: {}", output_dir.join("UserList.example.tsx").display());
+    println!("  5. Start MockForge server: mockforge serve");
 
     Ok(())
 }
@@ -182,6 +247,241 @@ fn find_package_json(project_root: &Path) -> Option<PathBuf> {
     } else {
         None
     }
+}
+
+/// Detect existing MockForge workspace and extract configuration
+fn detect_mockforge_workspace(
+    project_root: &Path,
+) -> anyhow::Result<(Option<String>, Option<String>)> {
+    // Look for mockforge.yaml or mockforge.yml
+    let config_paths = [
+        project_root.join("mockforge.yaml"),
+        project_root.join("mockforge.yml"),
+        project_root.join(".mockforge.yaml"),
+        project_root.join(".mockforge.yml"),
+    ];
+
+    for config_path in &config_paths {
+        if config_path.exists() {
+            return load_config_values(config_path);
+        }
+    }
+
+    Ok((None, None))
+}
+
+/// Load base URL and reality level from config file
+fn load_config_values(config_path: &Path) -> anyhow::Result<(Option<String>, Option<String>)> {
+    use serde_yaml::Value;
+
+    let content = fs::read_to_string(config_path)?;
+    let config: Value = serde_yaml::from_str(&content)?;
+
+    // Extract base URL from http.port (construct URL)
+    let base_url = if let Some(http) = config.get("http") {
+        let port = http
+            .get("port")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(3000);
+        let host = http
+            .get("host")
+            .and_then(|v| v.as_str())
+            .unwrap_or("localhost");
+        
+        // Convert 0.0.0.0 to localhost for client usage
+        let host_str = if host == "0.0.0.0" { "localhost" } else { host };
+        Some(format!("http://{}:{}", host_str, port))
+    } else {
+        None
+    };
+
+    // Extract reality level
+    let reality_level = config
+        .get("reality")
+        .and_then(|r| r.get("level"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    Ok((base_url, reality_level))
+}
+
+/// Auto-detect OpenAPI specification files in workspace
+fn auto_detect_openapi_spec(project_root: &Path) -> anyhow::Result<Option<PathBuf>> {
+    // Common OpenAPI spec file names and locations
+    let spec_candidates = [
+        // Root directory
+        project_root.join("openapi.json"),
+        project_root.join("openapi.yaml"),
+        project_root.join("openapi.yml"),
+        project_root.join("api-spec.json"),
+        project_root.join("api-spec.yaml"),
+        project_root.join("api.json"),
+        project_root.join("api.yaml"),
+        // Examples directory
+        project_root.join("examples").join("openapi.json"),
+        project_root.join("examples").join("openapi.yaml"),
+        // Docs directory
+        project_root.join("docs").join("openapi.json"),
+        project_root.join("docs").join("openapi.yaml"),
+        // API directory
+        project_root.join("api").join("openapi.json"),
+        project_root.join("api").join("openapi.yaml"),
+        // Spec directory
+        project_root.join("spec").join("openapi.json"),
+        project_root.join("spec").join("openapi.yaml"),
+    ];
+
+    for candidate in &spec_candidates {
+        if candidate.exists() {
+            // Quick validation: check if it's a valid OpenAPI spec
+            if is_valid_openapi_spec(candidate)? {
+                return Ok(Some(candidate.clone()));
+            }
+        }
+    }
+
+    // Also check config file for openapi_spec reference
+    let config_paths = [
+        project_root.join("mockforge.yaml"),
+        project_root.join("mockforge.yml"),
+    ];
+
+    for config_path in &config_paths {
+        if config_path.exists() {
+            if let Ok(Some(spec_path)) = extract_spec_from_config(config_path, project_root) {
+                if spec_path.exists() && is_valid_openapi_spec(&spec_path)? {
+                    return Ok(Some(spec_path));
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+/// Check if file is a valid OpenAPI specification
+fn is_valid_openapi_spec(path: &Path) -> anyhow::Result<bool> {
+    let content = fs::read_to_string(path)?;
+    
+    // Try parsing as JSON
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+        if json.get("openapi").is_some() || json.get("swagger").is_some() {
+            return Ok(true);
+        }
+    }
+
+    // Try parsing as YAML
+    if let Ok(yaml) = serde_yaml::from_str::<serde_json::Value>(&content) {
+        if yaml.get("openapi").is_some() || yaml.get("swagger").is_some() {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+/// Extract OpenAPI spec path from mockforge.yaml config
+fn extract_spec_from_config(
+    config_path: &Path,
+    project_root: &Path,
+) -> anyhow::Result<Option<PathBuf>> {
+    use serde_yaml::Value;
+
+    let content = fs::read_to_string(config_path)?;
+    let config: Value = serde_yaml::from_str(&content)?;
+
+    // Check http.openapi_spec
+    if let Some(spec_path_str) = config
+        .get("http")
+        .and_then(|h| h.get("openapi_spec"))
+        .and_then(|v| v.as_str())
+    {
+        let spec_path = if spec_path_str.starts_with('/') {
+            PathBuf::from(spec_path_str)
+        } else {
+            project_root.join(spec_path_str)
+        };
+        return Ok(Some(spec_path));
+    }
+
+    Ok(None)
+}
+
+/// Check for existing client code in output directory
+fn check_existing_client_code(output_dir: &Path) -> anyhow::Result<Vec<String>> {
+    let mut existing_files = Vec::new();
+
+    if !output_dir.exists() {
+        return Ok(existing_files);
+    }
+
+    // Check for common generated files
+    let common_files = [
+        "client.ts",
+        "client.js",
+        "hooks.ts",
+        "hooks.js",
+        "composables.ts",
+        "composables.js",
+        "types.ts",
+        "types.js",
+        "index.ts",
+        "index.js",
+    ];
+
+    for file in &common_files {
+        let file_path = output_dir.join(file);
+        if file_path.exists() {
+            existing_files.push(file.to_string());
+        }
+    }
+
+    Ok(existing_files)
+}
+
+/// Detect if workspace was created from a blueprint and return blueprint's OpenAPI spec path
+fn detect_blueprint_origin(project_root: &Path) -> anyhow::Result<Option<PathBuf>> {
+    // Check for blueprint indicators:
+    // 1. README mentions blueprint
+    // 2. scenarios/ directory exists (blueprint-specific)
+    // 3. contracts/ directory exists (blueprint-specific)
+    
+    let has_scenarios = project_root.join("scenarios").exists();
+    let has_contracts = project_root.join("contracts").exists();
+    
+    if has_scenarios || has_contracts {
+        // This looks like a blueprint-based workspace
+        // Check config for openapi_spec reference
+        let config_paths = [
+            project_root.join("mockforge.yaml"),
+            project_root.join("mockforge.yml"),
+        ];
+        
+        for config_path in &config_paths {
+            if config_path.exists() {
+                if let Ok(Some(spec_path)) = extract_spec_from_config(config_path, project_root) {
+                    if spec_path.exists() {
+                        return Ok(Some(spec_path));
+                    }
+                }
+            }
+        }
+        
+        // Also check for openapi.yaml in root (common blueprint location)
+        let openapi_candidates = [
+            project_root.join("openapi.yaml"),
+            project_root.join("openapi.json"),
+            project_root.join("openapi.yml"),
+        ];
+        
+        for candidate in &openapi_candidates {
+            if candidate.exists() && is_valid_openapi_spec(candidate)? {
+                return Ok(Some(candidate.clone()));
+            }
+        }
+    }
+    
+    Ok(None)
 }
 
 /// Generate typed client from OpenAPI spec
@@ -236,75 +536,354 @@ fn generate_framework_examples(
 
 /// Generate React/Next.js examples
 fn generate_react_examples(output_dir: &Path, base_url: &str) -> anyhow::Result<()> {
-    // React Query hooks example
+    // React Query hooks example with comprehensive error handling
     let react_query_hooks = format!(
         r#"// React Query hooks for MockForge API
+// Generated with comprehensive error handling and TypeScript types
+
 import {{ useQuery, useMutation, useQueryClient }} from '@tanstack/react-query';
-import {{ mockforgeClient }} from './client';
+import type {{ ApiError }} from './client';
 
 const MOCKFORGE_BASE_URL = '{}';
 
-// Example: Get users
+// ============================================================================
+// Error Handling Utilities
+// ============================================================================
+
+/**
+ * Format API error for display to users
+ */
+export function formatApiError(error: unknown): string {{
+  if (error instanceof Error) {{
+    // Check if it's an ApiError with detailed information
+    if ('status' in error && 'statusText' in error) {{
+      const apiError = error as ApiError;
+      if (apiError.body && typeof apiError.body === 'object') {{
+        // Extract user-friendly error message
+        if ('message' in apiError.body) {{
+          return String(apiError.body.message);
+        }}
+        if ('error' in apiError.body) {{
+          return String(apiError.body.error);
+        }}
+      }}
+      return `${{apiError.status}} ${{apiError.statusText}}`;
+    }}
+    return error.message;
+  }}
+  return 'An unexpected error occurred';
+}}
+
+/**
+ * Check if error is a network error (can be retried)
+ */
+export function isNetworkError(error: unknown): boolean {{
+  if (error instanceof Error) {{
+    return error.message.includes('fetch') || 
+           error.message.includes('network') ||
+           error.message.includes('Failed to fetch');
+  }}
+  return false;
+}}
+
+/**
+ * Check if error is a client error (4xx - user input issue)
+ */
+export function isClientError(error: unknown): boolean {{
+  if (error && typeof error === 'object' && 'status' in error) {{
+    const status = (error as {{ status: number }}).status;
+    return status >= 400 && status < 500;
+  }}
+  return false;
+}}
+
+/**
+ * Check if error is a server error (5xx - server issue)
+ */
+export function isServerError(error: unknown): boolean {{
+  if (error && typeof error === 'object' && 'status' in error) {{
+    const status = (error as {{ status: number }}).status;
+    return status >= 500;
+  }}
+  return false;
+}}
+
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
+export interface User {{
+  id: string;
+  name: string;
+  email: string;
+  createdAt?: string;
+}}
+
+export interface CreateUserRequest {{
+  name: string;
+  email: string;
+}}
+
+export interface UpdateUserRequest {{
+  name?: string;
+  email?: string;
+}}
+
+// ============================================================================
+// React Query Hooks
+// ============================================================================
+
+/**
+ * Hook to fetch all users
+ * 
+ * @example
+ * ```tsx
+ * function UserList() {{
+ *   const {{ data: users, isLoading, error }} = useUsers();
+ *   
+ *   if (isLoading) return <div>Loading...</div>;
+ *   if (error) return <div>Error: {{formatApiError(error)}}</div>;
+ *   
+ *   return (
+ *     <ul>
+ *       {{users?.map(user => (
+ *         <li key={{user.id}}>{{user.name}}</li>
+ *       ))}}
+ *     </ul>
+ *   );
+ * }}
+ * ```
+ */
 export function useUsers() {{
-  return useQuery({{
+  return useQuery<User[], ApiError>({{
     queryKey: ['users'],
     queryFn: async () => {{
       const response = await fetch(`${{MOCKFORGE_BASE_URL}}/api/users`);
-      if (!response.ok) throw new Error('Failed to fetch users');
-      return response.json();
+      if (!response.ok) {{
+        const errorBody = await response.json().catch(() => ({{}}));
+        throw new Error(`Failed to fetch users: ${{response.status}} ${{response.statusText}}`);
+      }}
+      const data = await response.json();
+      return Array.isArray(data) ? data : (data.users || []);
     }},
+    retry: (failureCount, error) => {{
+      // Retry network errors up to 3 times
+      if (isNetworkError(error)) {{
+        return failureCount < 3;
+      }}
+      // Don't retry client errors (4xx)
+      if (isClientError(error)) {{
+        return false;
+      }}
+      // Retry server errors (5xx) up to 2 times
+      return failureCount < 2;
+    }},
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   }});
 }}
 
-// Example: Get user by ID
+/**
+ * Hook to fetch a single user by ID
+ * 
+ * @param id - User ID
+ * @example
+ * ```tsx
+ * function UserProfile({{ userId }}: {{ userId: string }}) {{
+ *   const {{ data: user, isLoading, error }} = useUser(userId);
+ *   
+ *   if (isLoading) return <div>Loading user...</div>;
+ *   if (error) return <div>Error: {{formatApiError(error)}}</div>;
+ *   if (!user) return <div>User not found</div>;
+ *   
+ *   return (
+ *     <div>
+ *       <h1>{{user.name}}</h1>
+ *       <p>{{user.email}}</p>
+ *     </div>
+ *   );
+ * }}
+ * ```
+ */
 export function useUser(id: string) {{
-  return useQuery({{
+  return useQuery<User, ApiError>({{
     queryKey: ['users', id],
     queryFn: async () => {{
+      if (!id) throw new Error('User ID is required');
       const response = await fetch(`${{MOCKFORGE_BASE_URL}}/api/users/${{id}}`);
-      if (!response.ok) throw new Error('Failed to fetch user');
+      if (!response.ok) {{
+        if (response.status === 404) {{
+          throw new Error('User not found');
+        }}
+        const errorBody = await response.json().catch(() => ({{}}));
+        throw new Error(`Failed to fetch user: ${{response.status}} ${{response.statusText}}`);
+      }}
       return response.json();
     }},
     enabled: !!id,
+    retry: (failureCount, error) => {{
+      if (isNetworkError(error)) return failureCount < 3;
+      if (isClientError(error)) return false;
+      return failureCount < 2;
+    }},
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   }});
 }}
 
-// Example: Create user mutation
+/**
+ * Hook to create a new user
+ * 
+ * @example
+ * ```tsx
+ * function CreateUserForm() {{
+ *   const createUser = useCreateUser();
+ *   
+ *   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {{
+ *     e.preventDefault();
+ *     const formData = new FormData(e.currentTarget);
+ *     
+ *     try {{
+ *       await createUser.mutateAsync({{
+ *         name: formData.get('name') as string,
+ *         email: formData.get('email') as string,
+ *       }});
+ *       alert('User created successfully!');
+ *     }} catch (error) {{
+ *       alert(`Failed to create user: ${{formatApiError(error)}}`);
+ *     }}
+ *   }};
+ *   
+ *   return (
+ *     <form onSubmit={{handleSubmit}}>
+ *       <input name="name" placeholder="Name" required />
+ *       <input name="email" type="email" placeholder="Email" required />
+ *       <button type="submit" disabled={{createUser.isPending}}>
+ *         {{createUser.isPending ? 'Creating...' : 'Create User'}}
+ *       </button>
+ *       {{createUser.error && (
+ *         <div style={{color: 'red'}}>
+ *           Error: {{formatApiError(createUser.error)}}
+ *         </div>
+ *       )}}
+ *     </form>
+ *   );
+ * }}
+ * ```
+ */
 export function useCreateUser() {{
   const queryClient = useQueryClient();
 
-  return useMutation({{
-    mutationFn: async (userData: {{ name: string; email: string }}) => {{
+  return useMutation<User, ApiError, CreateUserRequest>({{
+    mutationFn: async (userData) => {{
       const response = await fetch(`${{MOCKFORGE_BASE_URL}}/api/users`, {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify(userData),
       }});
-      if (!response.ok) throw new Error('Failed to create user');
+      
+      if (!response.ok) {{
+        const errorBody = await response.json().catch(() => ({{}}));
+        throw new Error(`Failed to create user: ${{response.status}} ${{response.statusText}}`);
+      }}
+      
       return response.json();
     }},
     onSuccess: () => {{
+      // Invalidate and refetch users list
       queryClient.invalidateQueries({{ queryKey: ['users'] }});
+    }},
+    onError: (error) => {{
+      // Log error for debugging
+      console.error('Failed to create user:', error);
     }},
   }});
 }}
 
-// Example: Update user mutation
+/**
+ * Hook to update an existing user
+ * 
+ * @example
+ * ```tsx
+ * function EditUserForm({{ userId, initialData }}: {{ 
+ *   userId: string; 
+ *   initialData: User 
+ * }}) {{
+ *   const updateUser = useUpdateUser();
+ *   
+ *   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {{
+ *     e.preventDefault();
+ *     const formData = new FormData(e.currentTarget);
+ *     
+ *     try {{
+ *       await updateUser.mutateAsync({{
+ *         id: userId,
+ *         name: formData.get('name') as string,
+ *         email: formData.get('email') as string,
+ *       }});
+ *       alert('User updated successfully!');
+ *     }} catch (error) {{
+ *       alert(`Failed to update user: ${{formatApiError(error)}}`);
+ *     }}
+ *   }};
+ *   
+ *   return (
+ *     <form onSubmit={{handleSubmit}}>
+ *       <input name="name" defaultValue={{initialData.name}} required />
+ *       <input name="email" type="email" defaultValue={{initialData.email}} required />
+ *       <button type="submit" disabled={{updateUser.isPending}}>
+ *         {{updateUser.isPending ? 'Updating...' : 'Update User'}}
+ *       </button>
+ *     </form>
+ *   );
+ * }}
+ * ```
+ */
 export function useUpdateUser() {{
   const queryClient = useQueryClient();
 
-  return useMutation({{
-    mutationFn: async ({{ id, ...userData }}: {{ id: string; name?: string; email?: string }}) => {{
+  return useMutation<User, ApiError, {{ id: string }} & UpdateUserRequest>({{
+    mutationFn: async ({{ id, ...userData }}) => {{
       const response = await fetch(`${{MOCKFORGE_BASE_URL}}/api/users/${{id}}`, {{
         method: 'PATCH',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify(userData),
       }});
-      if (!response.ok) throw new Error('Failed to update user');
+      
+      if (!response.ok) {{
+        const errorBody = await response.json().catch(() => ({{}}));
+        throw new Error(`Failed to update user: ${{response.status}} ${{response.statusText}}`);
+      }}
+      
       return response.json();
     }},
     onSuccess: (_, variables) => {{
+      // Invalidate both the specific user and the users list
       queryClient.invalidateQueries({{ queryKey: ['users', variables.id] }});
+      queryClient.invalidateQueries({{ queryKey: ['users'] }});
+    }},
+    onError: (error) => {{
+      console.error('Failed to update user:', error);
+    }},
+  }});
+}}
+
+/**
+ * Hook to delete a user
+ */
+export function useDeleteUser() {{
+  const queryClient = useQueryClient();
+
+  return useMutation<void, ApiError, string>({{
+    mutationFn: async (id) => {{
+      const response = await fetch(`${{MOCKFORGE_BASE_URL}}/api/users/${{id}}`, {{
+        method: 'DELETE',
+      }});
+      
+      if (!response.ok) {{
+        const errorBody = await response.json().catch(() => ({{}}));
+        throw new Error(`Failed to delete user: ${{response.status}} ${{response.statusText}}`);
+      }}
+    }},
+    onSuccess: () => {{
       queryClient.invalidateQueries({{ queryKey: ['users'] }});
     }},
   }});
@@ -367,6 +946,213 @@ export function useCreateUserSWR() {{
     );
 
     fs::write(output_dir.join("hooks-swr.ts"), swr_hooks)?;
+
+    // Generate example component
+    let example_component = format!(
+        r#"// Example React component using MockForge hooks
+// This demonstrates how to use the generated hooks in a real component
+
+import React from 'react';
+import {{ useUsers, useCreateUser, formatApiError }} from './hooks';
+
+/**
+ * Example UserList component
+ * 
+ * This component demonstrates:
+ * - Fetching data with useUsers hook
+ * - Creating new users with useCreateUser hook
+ * - Error handling and loading states
+ * - TypeScript type safety
+ */
+export function UserList() {{
+  const {{ data: users, isLoading, error, refetch }} = useUsers();
+  const createUser = useCreateUser();
+
+  const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {{
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    
+    try {{
+      await createUser.mutateAsync({{
+        name: formData.get('name') as string,
+        email: formData.get('email') as string,
+      }});
+      // Form will be reset by the form's reset() method
+      e.currentTarget.reset();
+    }} catch (error) {{
+      // Error is already handled by the mutation's onError
+      console.error('Failed to create user:', error);
+    }}
+  }};
+
+  if (isLoading) {{
+    return (
+      <div style={{ padding: '20px' }}>
+        <div>Loading users...</div>
+      </div>
+    );
+  }}
+
+  if (error) {{
+    return (
+      <div style={{ padding: '20px', color: 'red' }}>
+        <h2>Error loading users</h2>
+        <p>{{formatApiError(error)}}</p>
+        <button onClick={{() => refetch()}}>Retry</button>
+      </div>
+    );
+  }}
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <h1>Users</h1>
+      
+      <form onSubmit={{handleCreateUser}} style={{ marginBottom: '20px', padding: '10px', border: '1px solid #ccc' }}>
+        <h3>Create New User</h3>
+        <div style={{ marginBottom: '10px' }}>
+          <input
+            name="name"
+            placeholder="Name"
+            required
+            style={{ padding: '8px', width: '200px', marginRight: '10px' }}
+          />
+          <input
+            name="email"
+            type="email"
+            placeholder="Email"
+            required
+            style={{ padding: '8px', width: '200px', marginRight: '10px' }}
+          />
+          <button 
+            type="submit" 
+            disabled={{createUser.isPending}}
+            style={{ padding: '8px 16px' }}
+          >
+            {{createUser.isPending ? 'Creating...' : 'Create User'}}
+          </button>
+        </div>
+        {{createUser.error && (
+          <div style={{ color: 'red', fontSize: '14px' }}>
+            Error: {{formatApiError(createUser.error)}}
+          </div>
+        )}}
+      </form>
+
+      <div>
+        <h3>User List</h3>
+        {{users && users.length > 0 ? (
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {{{{users.map((user) => (
+              <li 
+                key={{{{user.id}}}} 
+                style={{{{ padding: '10px', marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px' }}}}
+              >
+                <strong>{{{{user.name}}}}</strong> - {{{{user.email}}}}
+                {{{{user.createdAt && (
+                  <span style={{{{ color: '#666', fontSize: '12px', marginLeft: '10px' }}}}>
+                    (Created: {{{{new Date(user.createdAt).toLocaleDateString()}}}})
+                  </span>
+                )}}}}
+              </li>
+            )}}}}
+          </ul>
+        ) : (
+          <p>No users found. Create one above!</p>
+        )}}
+      </div>
+    </div>
+  );
+}}
+
+export default UserList;
+"#
+    );
+
+    fs::write(output_dir.join("UserList.example.tsx"), example_component)?;
+
+    // Generate TypeScript types file (basic structure)
+    let types_file = format!(
+        r#"// TypeScript type definitions for MockForge API
+// These types are generated from your OpenAPI specification
+// Update this file if your API schema changes
+
+/**
+ * Base API error response
+ */
+export interface ApiError {{
+  status: number;
+  statusText: string;
+  body?: any;
+  message?: string;
+}}
+
+/**
+ * User entity
+ */
+export interface User {{
+  id: string;
+  name: string;
+  email: string;
+  createdAt?: string;
+  updatedAt?: string;
+}}
+
+/**
+ * Request to create a new user
+ */
+export interface CreateUserRequest {{
+  name: string;
+  email: string;
+}}
+
+/**
+ * Request to update an existing user
+ */
+export interface UpdateUserRequest {{
+  name?: string;
+  email?: string;
+}}
+
+/**
+ * API response wrapper (if your API uses this format)
+ */
+export interface ApiResponse<T> {{
+  success: boolean;
+  data?: T;
+  error?: {{
+    code: string;
+    message: string;
+    details?: any;
+  }};
+}}
+
+/**
+ * Paginated response (if your API supports pagination)
+ */
+export interface PaginatedResponse<T> {{
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}}
+"#
+    );
+
+    fs::write(output_dir.join("types.ts"), types_file)?;
+
+    // Generate index file for easy imports
+    let index_file = r#"// MockForge API Client - Main Export
+// Import hooks and utilities from this file
+
+export * from './hooks';
+export * from './types';
+
+// Re-export error utilities for convenience
+export { formatApiError, isNetworkError, isClientError, isServerError } from './hooks';
+"#;
+
+    fs::write(output_dir.join("index.ts"), index_file)?;
 
     Ok(())
 }
@@ -773,4 +1559,59 @@ fn update_package_json(package_json_path: &Path, framework: Framework) -> anyhow
     fs::write(package_json_path, updated_content)?;
 
     Ok(())
+}
+
+/// Find tsconfig.json in project
+fn find_tsconfig(project_root: &Path) -> Option<PathBuf> {
+    let paths = [
+        project_root.join("tsconfig.json"),
+        project_root.join("tsconfig.app.json"),
+        project_root.join("tsconfig.base.json"),
+    ];
+    
+    for path in &paths {
+        if path.exists() {
+            return Some(path.clone());
+        }
+    }
+    
+    None
+}
+
+/// Verify TypeScript compilation (if tsc is available)
+fn verify_typescript_compilation(tsconfig_path: &Path) -> anyhow::Result<()> {
+    use std::process::Command;
+    
+    // Check if tsc is available
+    let tsc_check = Command::new("tsc")
+        .arg("--version")
+        .output();
+    
+    if tsc_check.is_err() {
+        return Err(anyhow::anyhow!("tsc not found"));
+    }
+    
+    // Try to compile the generated files
+    let project_dir = tsconfig_path.parent().unwrap_or(Path::new("."));
+    let compile_result = Command::new("tsc")
+        .arg("--noEmit")
+        .arg("--project")
+        .arg(tsconfig_path)
+        .current_dir(project_dir)
+        .output();
+    
+    match compile_result {
+        Ok(output) => {
+            if output.status.success() {
+                Ok(())
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                // Don't fail the whole setup, just warn
+                println!("  ⚠️  TypeScript compilation warnings:");
+                println!("     {}", stderr.lines().take(5).collect::<Vec<_>>().join("\n     "));
+                Ok(())
+            }
+        }
+        Err(_) => Err(anyhow::anyhow!("Failed to run tsc")),
+    }
 }

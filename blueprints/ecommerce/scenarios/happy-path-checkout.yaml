@@ -1,0 +1,105 @@
+id: happy-path-checkout
+name: Happy Path - Complete Checkout
+type: happy_path
+description: Successful shopping cart to checkout flow with payment processing and order creation
+tags:
+  - checkout
+  - cart
+  - payment
+  - success
+
+steps:
+  - id: get-cart
+    name: Get Shopping Cart
+    method: GET
+    path: /api/cart
+    expected_status: 200
+    continue_on_failure: false
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      cart_id: body.cart.id
+      cart_total: body.cart.total
+
+  - id: add-items
+    name: Add Items to Cart
+    method: POST
+    path: /api/cart/items
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [get-cart]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      items:
+        - product_id: "prod_123"
+          quantity: 1
+        - product_id: "prod_456"
+          quantity: 2
+    extract:
+      cart_item_id: body.items[0].id
+
+  - id: apply-discount
+    name: Apply Discount Code
+    method: POST
+    path: /api/cart/discount
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [add-items]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      code: "SAVE10"
+    extract:
+      discount_amount: body.discount.amount
+
+  - id: process-payment
+    name: Process Payment
+    method: POST
+    path: /api/payments/process
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [apply-discount]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      cart_id: "{{cart_id}}"
+      payment_method_id: "pm_123"
+      amount: "{{cart_total}}"
+    extract:
+      payment_id: body.payment.id
+      payment_status: body.payment.status
+
+  - id: complete-order
+    name: Complete Order
+    method: POST
+    path: /api/orders
+    expected_status: 201
+    continue_on_failure: false
+    depends_on: [process-payment]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      cart_id: "{{cart_id}}"
+      payment_id: "{{payment_id}}"
+    extract:
+      order_id: body.order.id
+
+expected_outcomes:
+  - All steps return 2xx status codes
+  - Cart is populated with items
+  - Discount is applied successfully
+  - Payment is processed and approved
+  - Order is created with valid order ID
+  - Order status is "pending" or "processing"
+
+variables:
+  access_token: null
+  cart_id: null
+  cart_total: null
+  cart_item_id: null
+  discount_amount: null
+  payment_id: null
+  payment_status: null
+  order_id: null
+

@@ -250,6 +250,95 @@ Understanding which pillars receive investment in each release helps users under
 
 ---
 
+## Documentation by Pillar
+
+This section organizes MockForge documentation by pillar to help you find relevant guides quickly.
+
+**New to MockForge?** Start with [Journeys by Pillar](JOURNEYS_BY_PILLAR.md) to choose the onboarding path that best fits your needs.
+
+### [Reality] Documentation
+
+**Getting Started:**
+- [Reality-First Onboarding](../book/src/getting-started/reality-first.md) - Start here for reality features
+
+**Core Features:**
+- [Reality Continuum](REALITY_CONTINUUM.md) - Blend mock and real data
+- [Smart Personas](PERSONAS.md) - Consistent cross-endpoint data generation
+- [Reality Slider](REALITY_SLIDER.md) - Hot-reload reality level adjustments
+- [Chaos Lab](CHAOS_LAB.md) - Interactive network condition simulation
+- [Behavioral Cloning](BEHAVIORAL_CLONING.md) - Record and replay realistic flows
+- [Reality Trace](REALITY_TRACE.md) - Observability for mock behavior
+
+**Advanced:**
+- [Lifecysles and Time](LIFECYCLES_AND_TIME.md) - Time-based mutations and temporal simulation
+- [Deceptive Deploy](DECEPTIVE_DEPLOY.md) - Advanced testing scenarios
+
+### [Contracts] Documentation
+
+**Getting Started:**
+- [Contracts-First Onboarding](../book/src/getting-started/contracts-first.md) - Start here for contract features
+
+**Core Features:**
+- [Drift Budgets](DRIFT_BUDGETS.md) - Configurable thresholds for contract changes
+- [Protocol Contracts](PROTOCOL_CONTRACTS.md) - Multi-protocol contract management
+- [Contract Fitness](CONTRACT_FITNESS.md) - Quality enforcement functions
+- [Consumer Impact Analysis](CONSUMER_IMPACT_ANALYSIS.md) - Map endpoints to consumers
+
+**Advanced:**
+- [Drift Budget Setup](DRIFT_BUDGET_SETUP.md) - Configuration guide
+
+### [DevX] Documentation
+
+**Getting Started:**
+- [DevX-First Onboarding](../book/src/getting-started/devx-first.md) - Start here for developer experience features
+
+**Core Features:**
+- [Admin UI Quickstart](ADMIN_UI_QUICKSTART.md) - Interactive playground
+- [Plugin Marketplace](PLUGIN_MARKETPLACE_PRODUCTION.md) - Extend MockForge
+- [Multi-Framework Client Generation](MULTI_FRAMEWORK_CLIENT_GENERATION.md) - Generate clients
+
+**Advanced:**
+- [Developer Workflow Integration](DEVELOPER_WORKFLOW_INTEGRATION.md) - Integrate into workflows
+- [Reality Trace](REALITY_TRACE.md) - Developer debugging tools
+
+### [Cloud] Documentation
+
+**Getting Started:**
+- [Cloud-First Onboarding](../book/src/getting-started/cloud-first.md) - Start here for cloud features
+
+**Core Features:**
+- [Cloud Environments](CLOUD_ENVIRONMENTS.md) - Multi-tenant workspaces
+- [Scenario Marketplace](SCENARIOS_MARKETPLACE.md) - Discover and share scenarios
+- [Marketplace Monitoring](MARKETPLACE_MONITORING.md) - Analytics and dashboards
+- [Cloud Sync Implementation](CLOUD_SYNC_IMPLEMENTATION_GUIDE.md) - Synchronization guide
+- [RBAC Guide](RBAC_GUIDE.md) - Access control and governance
+
+**Advanced:**
+- [Enterprise Deployment Guide](ENTERPRISE_DEPLOYMENT_GUIDE.md) - Enterprise features
+- [Cloud SaaS MVP Guide](CLOUD_SAAS_MVP_GUIDE.md) - SaaS implementation
+
+### [AI] Documentation
+
+**Getting Started:**
+- [AI-First Onboarding](../book/src/getting-started/ai-first.md) - Start here for AI features
+
+**Core Features:**
+- [AI Studio](AI_STUDIO.md) - Unified AI interface
+- [MockAI Usage](MOCKAI_USAGE.md) - Natural language mock generation
+- [AI Contract Diff](PROTOCOL_CONTRACTS.md#ai-contract-diff) - Intelligent contract analysis
+
+**Advanced:**
+- [AI Features README](AI_FEATURES_README.md) - Complete AI feature overview
+- [AI-Driven Mocking](AI_DRIVEN_MOCKING.md) - AI-powered mock generation
+
+### Cross-Pillar Documentation
+
+- [Journeys by Pillar](JOURNEYS_BY_PILLAR.md) - Choose your onboarding journey
+- [Pillar Tagging Guide](contributing/PILLAR_TAGGING.md) - How to tag code with pillars
+- [Pillar Queries Guide](contributing/PILLAR_QUERIES.md) - Query by pillar
+
+---
+
 ## References
 
 - [Changelog](../CHANGELOG.md) - See pillar tags in action

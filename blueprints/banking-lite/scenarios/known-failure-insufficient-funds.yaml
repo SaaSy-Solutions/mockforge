@@ -1,0 +1,94 @@
+id: known-failure-insufficient-funds
+name: Known Failure - Insufficient Funds
+type: known_failure
+description: Transfer failure scenario where account has insufficient funds for the requested transfer
+tags:
+  - transfer
+  - failure
+  - insufficient-funds
+  - error-handling
+
+steps:
+  - id: get-source-account-low-balance
+    name: Get Source Account (Low Balance)
+    method: GET
+    path: /api/accounts/{{source_account_id}}
+    expected_status: 200
+    continue_on_failure: false
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      source_balance: body.account.balance
+      account_id: body.account.id
+
+  - id: get-destination-account
+    name: Get Destination Account
+    method: GET
+    path: /api/accounts/{{destination_account_id}}
+    expected_status: 200
+    continue_on_failure: false
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      destination_balance: body.account.balance
+
+  - id: attempt-transfer-insufficient-funds
+    name: Attempt Transfer (Insufficient Funds)
+    method: POST
+    path: /api/transfers
+    expected_status: 400  # Bad Request - insufficient funds
+    continue_on_failure: true
+    depends_on: [get-source-account-low-balance, get-destination-account]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      from_account_id: "{{account_id}}"
+      to_account_id: "{{destination_account_id}}"
+      amount: 10000.00  # Amount exceeds available balance
+      currency: "USD"
+      description: "Transfer attempt with insufficient funds"
+    extract:
+      error_code: body.error.code
+      error_message: body.error.message
+      available_balance: body.error.available_balance
+
+  - id: verify-account-balance-unchanged
+    name: Verify Account Balance Unchanged
+    method: GET
+    path: /api/accounts/{{account_id}}/balance
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [attempt-transfer-insufficient-funds]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+
+  - id: verify-no-transfer-created
+    name: Verify No Transfer Created
+    method: GET
+    path: /api/accounts/{{account_id}}/transfers?limit=1
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [verify-account-balance-unchanged]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+
+expected_outcomes:
+  - Transfer attempt returns 400 (Bad Request) or 422 (Unprocessable Entity)
+  - Error response includes error code (e.g., "INSUFFICIENT_FUNDS")
+  - Error message clearly indicates insufficient funds
+  - Available balance is included in error response
+  - Account balances remain unchanged
+  - No transfer record is created
+  - User receives appropriate error notification
+
+variables:
+  access_token: null
+  source_account_id: null
+  destination_account_id: null
+  source_balance: null
+  destination_balance: null
+  account_id: null
+  error_code: null
+  error_message: null
+  available_balance: null
+

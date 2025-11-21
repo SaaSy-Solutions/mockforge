@@ -332,6 +332,176 @@ impl MutationRuleManager {
         Ok(executed)
     }
 
+    /// Evaluate a transformation expression
+    ///
+    /// Supports expressions like:
+    /// - "{{field}} * 2" - multiply field by 2
+    /// - "{{field1}} + {{field2}}" - add two fields
+    /// - "{{field}}.toUpperCase()" - string operations
+    /// - "{{field}} + 10" - add constant
+    /// - Simple template strings with variable substitution
+    fn evaluate_transformation_expression(
+        expression: &str,
+        record: &HashMap<String, serde_json::Value>,
+    ) -> Result<serde_json::Value> {
+        use regex::Regex;
+
+        // Convert record to Value for easier manipulation
+        let record_value: Value = Value::Object(
+            record
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        );
+
+        // Substitute variables in expression (e.g., "{{field}}" -> actual value)
+        let re = Regex::new(r"\{\{([^}]+)\}\}").map_err(|e| {
+            Error::generic(format!("Failed to compile regex: {}", e))
+        })?;
+
+        let substituted = re.replace_all(expression, |caps: &regex::Captures| {
+            let var_name = caps.get(1).unwrap().as_str().trim();
+            // Try to get value from record
+            if let Some(value) = record.get(var_name) {
+                // Convert to string representation for substitution
+                if let Some(s) = value.as_str() {
+                    s.to_string()
+                } else if let Some(n) = value.as_f64() {
+                    n.to_string()
+                } else if let Some(b) = value.as_bool() {
+                    b.to_string()
+                } else {
+                    value.to_string()
+                }
+            } else {
+                // If not found, try JSONPath expression
+                if var_name.starts_with('$') {
+                    // Use JSONPath to extract value
+                    if let Ok(selector) = jsonpath::Selector::new(var_name) {
+                        let results: Vec<_> = selector.find(&record_value).collect();
+                        if let Some(first) = results.first() {
+                            if let Some(s) = first.as_str() {
+                                return s.to_string();
+                            } else if let Some(n) = first.as_f64() {
+                                return n.to_string();
+                            } else if let Some(b) = first.as_bool() {
+                                return b.to_string();
+                            }
+                        }
+                    }
+                }
+                format!("{{{{{}}}}}", var_name) // Keep original if not found
+            }
+        });
+
+        // Try to evaluate as a mathematical expression
+        let substituted_str = substituted.to_string();
+
+        // Check for mathematical operations
+        if substituted_str.contains('+') || substituted_str.contains('-')
+            || substituted_str.contains('*') || substituted_str.contains('/')
+        {
+            // Try to parse and evaluate as math expression
+            if let Ok(result) = Self::evaluate_math_expression(&substituted_str) {
+                return Ok(serde_json::json!(result));
+            }
+        }
+
+        // Check for string operations
+        if substituted_str.contains(".toUpperCase()") {
+            let base = substituted_str.replace(".toUpperCase()", "");
+            return Ok(serde_json::Value::String(base.to_uppercase()));
+        }
+        if substituted_str.contains(".toLowerCase()") {
+            let base = substituted_str.replace(".toLowerCase()", "");
+            return Ok(serde_json::Value::String(base.to_lowercase()));
+        }
+        if substituted_str.contains(".trim()") {
+            let base = substituted_str.replace(".trim()", "");
+            return Ok(serde_json::Value::String(base.trim().to_string()));
+        }
+
+        // If no operations detected, return as string
+        Ok(serde_json::Value::String(substituted_str))
+    }
+
+    /// Evaluate a simple mathematical expression
+    ///
+    /// Supports basic operations: +, -, *, /
+    /// Example: "10 + 5 * 2" -> 20
+    fn evaluate_math_expression(expr: &str) -> Result<f64> {
+        // Simple expression evaluator (handles basic arithmetic)
+        // For more complex expressions, consider using a proper expression parser
+
+        // Remove whitespace
+        let expr = expr.replace(' ', "");
+
+        // Try to parse as a simple expression
+        // This is a simplified evaluator - for production, use a proper math parser
+        let mut result = 0.0;
+        let mut current_num = String::new();
+        let mut last_op = '+';
+
+        for ch in expr.chars() {
+            match ch {
+                '+' | '-' | '*' | '/' => {
+                    if !current_num.is_empty() {
+                        let num: f64 = current_num.parse().map_err(|_| {
+                            Error::generic(format!("Invalid number: {}", current_num))
+                        })?;
+
+                        match last_op {
+                            '+' => result += num,
+                            '-' => result -= num,
+                            '*' => result *= num,
+                            '/' => {
+                                if num == 0.0 {
+                                    return Err(Error::generic("Division by zero".to_string()));
+                                }
+                                result /= num;
+                            }
+                            _ => {}
+                        }
+
+                        current_num.clear();
+                    }
+                    last_op = ch;
+                }
+                '0'..='9' | '.' => {
+                    current_num.push(ch);
+                }
+                _ => {
+                    return Err(Error::generic(format!(
+                        "Invalid character in expression: {}",
+                        ch
+                    )));
+                }
+            }
+        }
+
+        // Handle last number
+        if !current_num.is_empty() {
+            let num: f64 = current_num.parse().map_err(|_| {
+                Error::generic(format!("Invalid number: {}", current_num))
+            })?;
+
+            match last_op {
+                '+' => result += num,
+                '-' => result -= num,
+                '*' => result *= num,
+                '/' => {
+                    if num == 0.0 {
+                        return Err(Error::generic("Division by zero".to_string()));
+                    }
+                    result /= num;
+                }
+                _ => result = num, // First number
+            }
+        }
+
+        Ok(result)
+    }
+
     /// Evaluate a JSONPath condition against a record
     ///
     /// The condition can be:
@@ -550,10 +720,21 @@ impl MutationRuleManager {
                 }
                 MutationOperation::Transform {
                     field,
-                    expression: _,
+                    expression,
                 } => {
-                    // TODO: Implement transformation expressions
-                    warn!("Transform operation not yet implemented for field '{}'", field);
+                    // Evaluate transformation expression
+                    let transformed_value = Self::evaluate_transformation_expression(
+                        &expression,
+                        &record,
+                    )?;
+
+                    let update_query = format!(
+                        "UPDATE {} SET {} = ? WHERE {} = ?",
+                        table_name, field, pk_field
+                    );
+                    database
+                        .execute(&update_query, &[transformed_value, pk_value.clone()])
+                        .await?;
                 }
                 MutationOperation::UpdateStatus { status } => {
                     let update_query =

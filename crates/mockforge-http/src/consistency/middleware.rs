@@ -18,6 +18,8 @@ pub struct ConsistencyMiddlewareState {
     pub engine: Arc<ConsistencyEngine>,
     /// HTTP adapter
     pub adapter: Arc<HttpAdapter>,
+    /// X-Ray state for request context storage (optional)
+    pub xray_state: Option<std::sync::Arc<crate::handlers::xray::XRayState>>,
 }
 
 /// Consistency middleware
@@ -73,8 +75,55 @@ pub async fn consistency_middleware(req: Request, next: Next) -> Response<Body> 
             // Build reality trace metadata from unified state
             // Use the path from the request URI for path-specific blend ratio calculation
             let path = req.uri().path();
+
+            // Record reality continuum usage if blend ratio > 0
+            if reality_ratio > 0.0 {
+                mockforge_core::pillar_tracking::record_reality_usage(
+                    Some(workspace_id.clone()),
+                    None,
+                    "blended_reality_ratio",
+                    serde_json::json!({
+                        "ratio": reality_ratio,
+                        "path": path
+                    }),
+                )
+                .await;
+            }
+
+            // Record chaos usage if chaos rules are active
+            if !chaos_rules.is_empty() {
+                mockforge_core::pillar_tracking::record_reality_usage(
+                    Some(workspace_id.clone()),
+                    None,
+                    "chaos_enabled",
+                    serde_json::json!({
+                        "rules": chaos_rules,
+                        "count": chaos_rules.len()
+                    }),
+                )
+                .await;
+            }
             let reality_metadata =
                 RealityTraceMetadata::from_unified_state(&unified_state, reality_ratio, path);
+
+            // Store request context snapshot if X-Ray state is available
+            if let Some(xray_state) = &state.xray_state {
+                // Clone unified_state before moving it
+                let unified_state_clone = unified_state.clone();
+                let request_id_clone = request_id.clone();
+                let workspace_id_clone = workspace_id.clone();
+                
+                // Store snapshot asynchronously (don't block request processing)
+                let xray_state_clone = xray_state.clone();
+                tokio::spawn(async move {
+                    crate::handlers::xray::store_request_context(
+                        &xray_state_clone,
+                        request_id_clone,
+                        workspace_id_clone,
+                        &unified_state_clone,
+                    ).await;
+                });
+            }
 
             // Insert unified state and reality metadata into request extensions for handlers
             let mut req = req;

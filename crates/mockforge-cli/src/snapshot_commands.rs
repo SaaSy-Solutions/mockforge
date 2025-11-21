@@ -114,10 +114,10 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
             info!("Saving snapshot '{}' for workspace '{}'", name, workspace);
             let components = parse_components(components);
 
-            // TODO: Get consistency engine from server state when integrated
+            // TODO: Get consistency engine, workspace persistence, VBR engine, and Recorder from server state when integrated
             // For now, we'll create a placeholder that can be extended
             let manifest = manager
-                .save_snapshot(name.clone(), description, workspace.clone(), components, None)
+                .save_snapshot(name.clone(), description, workspace.clone(), components, None, None, None, None)
                 .await?;
 
             println!("✓ Snapshot '{}' saved successfully", name);
@@ -147,9 +147,9 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
                 info!("Loading snapshot '{}' for workspace '{}'", name, workspace);
                 let components = components.map(|c| parse_components(Some(c)));
 
-                // TODO: Get consistency engine from server state when integrated
-                let manifest = manager
-                    .load_snapshot(name.clone(), workspace.clone(), components, None)
+                // TODO: Get consistency engine and workspace persistence from server state when integrated
+                let (manifest, vbr_state, recorder_state) = manager
+                    .load_snapshot(name.clone(), workspace.clone(), components, None, None)
                     .await?;
 
                 println!("✓ Snapshot '{}' loaded successfully", name);
@@ -157,6 +157,12 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
                 println!("  Created: {}", manifest.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
                 if let Some(desc) = &manifest.description {
                     println!("  Description: {}", desc);
+                }
+                if vbr_state.is_some() {
+                    println!("  VBR state: loaded (restore manually if needed)");
+                }
+                if recorder_state.is_some() {
+                    println!("  Recorder state: loaded (restore manually if needed)");
                 }
             }
         }

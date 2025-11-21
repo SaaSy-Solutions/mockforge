@@ -98,6 +98,21 @@ pub async fn drift_tracking_middleware_with_extensions(
                 // Evaluate drift budget
                 let drift_result = state.drift_engine.evaluate(&diff_result, &path, &method);
 
+                // Record contracts pillar usage for drift detection
+                mockforge_core::pillar_tracking::record_contracts_usage(
+                    None, // workspace_id could be extracted from request if available
+                    None,
+                    "drift_detection",
+                    serde_json::json!({
+                        "endpoint": path,
+                        "method": method,
+                        "breaking_changes": drift_result.breaking_changes,
+                        "non_breaking_changes": drift_result.non_breaking_changes,
+                        "incident": drift_result.should_create_incident
+                    }),
+                )
+                .await;
+
                 // Create incident if budget is exceeded or breaking changes detected
                 if drift_result.should_create_incident {
                     let incident_type = if drift_result.breaking_changes > 0 {
@@ -145,6 +160,9 @@ pub async fn drift_tracking_middleware_with_extensions(
                             None, // contract_diff_id (could be generated from diff_result)
                             before_sample,
                             after_sample,
+                            Some(drift_result.fitness_test_results.clone()), // fitness_test_results
+                            drift_result.consumer_impact.clone(), // affected_consumers
+                            Some(mockforge_core::protocol_abstraction::Protocol::Http), // protocol
                         )
                         .await;
 

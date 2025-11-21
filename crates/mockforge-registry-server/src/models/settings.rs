@@ -38,6 +38,75 @@ pub struct BYOKConfig {
     pub enabled: bool,
 }
 
+/// Organization-level AI settings
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OrgAiSettings {
+    /// Maximum AI calls per workspace per day
+    #[serde(default = "default_max_calls_per_day")]
+    pub max_ai_calls_per_workspace_per_day: u64,
+
+    /// Maximum AI calls per workspace per month
+    #[serde(default = "default_max_calls_per_month")]
+    pub max_ai_calls_per_workspace_per_month: u64,
+
+    /// Feature flags for AI features
+    #[serde(default)]
+    pub feature_flags: AiFeatureFlags,
+}
+
+fn default_max_calls_per_day() -> u64 {
+    1_000
+}
+
+fn default_max_calls_per_month() -> u64 {
+    30_000
+}
+
+/// Feature flags for AI features
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiFeatureFlags {
+    /// Enable AI Studio
+    #[serde(default = "default_true")]
+    pub ai_studio_enabled: bool,
+
+    /// Enable AI Contract Diff
+    #[serde(default = "default_true")]
+    pub ai_contract_diff_enabled: bool,
+
+    /// Enable MockAI
+    #[serde(default = "default_true")]
+    pub mockai_enabled: bool,
+
+    /// Enable persona generation
+    #[serde(default = "default_true")]
+    pub persona_generation_enabled: bool,
+
+    /// Enable generative schema
+    #[serde(default = "default_true")]
+    pub generative_schema_enabled: bool,
+
+    /// Enable voice interface
+    #[serde(default = "default_true")]
+    pub voice_interface_enabled: bool,
+}
+
+impl Default for AiFeatureFlags {
+    fn default() -> Self {
+        Self {
+            ai_studio_enabled: true,
+            ai_contract_diff_enabled: true,
+            mockai_enabled: true,
+            persona_generation_enabled: true,
+            generative_schema_enabled: true,
+            voice_interface_enabled: true,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
 impl UserSetting {
     /// Get a user setting by key
     pub async fn get(

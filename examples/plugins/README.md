@@ -30,8 +30,9 @@ users:
 mockforge plugin install examples/plugins/auth-basic/
 ```
 
-### 📝 Template Plugins (`template-custom/`)
-**Custom Template Functions Plugin**
+### 📝 Template Plugins
+
+#### `template-custom/` - Custom Template Functions Plugin
 
 Extends MockForge's templating system with custom functions for generating domain-specific mock data.
 
@@ -60,8 +61,42 @@ enable_advanced_functions: true
 mockforge plugin install examples/plugins/template-custom/
 ```
 
-### 🔄 Response Plugins (`response-graphql/`)
-**GraphQL Response Generator Plugin**
+#### `template-advanced/` - Advanced Template Functions Plugin
+
+Provides advanced template functions for data transformations, aggregations, and complex data generation.
+
+**Features:**
+- Mathematical operations (sum, average)
+- Collection operations (group_by, sort)
+- Date/time formatting
+- UUID and random number generation
+- JSON data transformations
+
+**Available Functions:**
+- `{{sum ...numbers}}` - Calculate sum of numbers
+- `{{average ...numbers}}` - Calculate average of numbers
+- `{{format_date timestamp format?}}` - Format timestamp as date string
+- `{{group_by array key}}` - Group array elements by key
+- `{{sort array key?}}` - Sort arrays
+- `{{uuid}}` - Generate UUID v4
+- `{{random_int min? max?}}` - Generate random integers
+
+**Configuration:**
+```yaml
+enable_math: true
+enable_collections: true
+enable_datetime: true
+locale: "en-US"
+```
+
+**Usage:**
+```bash
+mockforge plugin install examples/plugins/template-advanced/
+```
+
+### 🔄 Response Plugins
+
+#### `response-graphql/` - GraphQL Response Generator Plugin
 
 Automatically generates mock GraphQL responses by analyzing GraphQL queries and generating appropriate mock data.
 
@@ -82,6 +117,37 @@ mock_data_complexity: "medium"  # simple, medium, complex
 ```bash
 mockforge plugin install examples/plugins/response-graphql/
 ```
+
+#### `webhook-example/` - Webhook Example Plugin
+
+Demonstrates webhook functionality by making outbound HTTP calls to external endpoints. Shows how to use network capabilities in plugins.
+
+**Features:**
+- Outbound HTTP requests to webhook endpoints
+- Configurable webhook URLs and payloads
+- Event-based response generation
+- Request/response logging
+- Error handling and retries
+- Optional payload signing (HMAC-SHA256)
+
+**Configuration:**
+```yaml
+webhook_url: "https://example.com/webhook"
+secret: "your-webhook-secret"  # Optional
+timeout_ms: 5000
+enable_retries: true
+max_retries: 3
+events:
+  - "payment.completed"
+  - "order.created"
+```
+
+**Usage:**
+```bash
+mockforge plugin install examples/plugins/webhook-example/
+```
+
+**Note:** This plugin requires network capabilities. Configure `allowed_hosts` in production for security.
 
 ### 📊 Data Source Plugins (`datasource-csv/`)
 **CSV Data Source Plugin**

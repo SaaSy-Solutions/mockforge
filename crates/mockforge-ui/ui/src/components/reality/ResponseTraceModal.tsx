@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, FileCode, Network, GitBranch, Zap, Code2, Sparkles } from 'lucide-react';
+import { X, FileCode, Network, GitBranch, Zap, Code2, Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/Badge';
 import {
@@ -48,6 +48,26 @@ interface ResponseGenerationTrace {
       value_source: string;
     }>;
   };
+  final_payload?: unknown;
+  schema_validation_diff?: Array<{
+    path: string;
+    expected: string;
+    found: string;
+    message?: string;
+    error_type: string;
+    schema_info?: {
+      data_type: string;
+      required?: boolean;
+      format?: string;
+      minimum?: number;
+      maximum?: number;
+      min_length?: number;
+      max_length?: number;
+      pattern?: string;
+      enum_values?: unknown[];
+      additional_properties?: boolean;
+    };
+  }>;
   metadata: Record<string, unknown>;
 }
 
@@ -327,6 +347,130 @@ export function ResponseTraceModal({ requestId, open, onOpenChange }: ResponseTr
                         ))}
                       </div>
                     </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Final Resolved Payload */}
+            {traceData.final_payload && (
+              <div>
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <FileCode className="h-4 w-4" />
+                  Final Resolved Payload
+                </h3>
+                <div className="bg-muted/30 rounded-md p-4">
+                  <pre className="text-xs font-mono overflow-x-auto max-h-96 overflow-y-auto">
+                    {typeof traceData.final_payload === 'string'
+                      ? traceData.final_payload
+                      : JSON.stringify(traceData.final_payload, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {/* Schema Validation Diff */}
+            {traceData.schema_validation_diff && (
+              <div>
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Code2 className="h-4 w-4" />
+                  Schema Validation Diff
+                </h3>
+                <div className="bg-muted/30 rounded-md p-4 space-y-3">
+                  {traceData.schema_validation_diff.length === 0 ? (
+                    <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                      <CheckCircle className="h-4 w-4" />
+                      <span>Payload is valid according to the contract schema</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-400 mb-3">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>
+                          Found {traceData.schema_validation_diff.length} validation
+                          {traceData.schema_validation_diff.length === 1 ? ' issue' : ' issues'}
+                        </span>
+                      </div>
+                      <div className="space-y-3">
+                        {traceData.schema_validation_diff.map((error, idx) => (
+                          <div
+                            key={idx}
+                            className="border-l-2 border-yellow-500 pl-3 py-2 bg-yellow-500/10 rounded-r"
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <code className="text-xs font-mono bg-background px-2 py-0.5 rounded">
+                                {error.path || '<root>'}
+                              </code>
+                              <Badge
+                                variant={
+                                  error.error_type.includes('required') ||
+                                  error.error_type.includes('type_mismatch')
+                                    ? 'destructive'
+                                    : 'secondary'
+                                }
+                                className="text-xs"
+                              >
+                                {error.error_type}
+                              </Badge>
+                            </div>
+                            <div className="text-xs space-y-1 mt-2">
+                              <div>
+                                <span className="text-muted-foreground">Expected: </span>
+                                <span className="font-medium text-green-600 dark:text-green-400">
+                                  {error.expected}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Found: </span>
+                                <span className="font-medium text-red-600 dark:text-red-400">
+                                  {error.found}
+                                </span>
+                              </div>
+                              {error.message && (
+                                <div className="text-muted-foreground italic mt-1">
+                                  {error.message}
+                                </div>
+                              )}
+                              {error.schema_info && (
+                                <div className="mt-2 pt-2 border-t border-yellow-500/30">
+                                  <div className="text-xs text-muted-foreground">
+                                    Schema Info:
+                                  </div>
+                                  <div className="mt-1 space-y-0.5 text-xs">
+                                    {error.schema_info.data_type && (
+                                      <div>
+                                        Type: <code className="bg-background px-1 rounded">
+                                          {error.schema_info.data_type}
+                                        </code>
+                                      </div>
+                                    )}
+                                    {error.schema_info.format && (
+                                      <div>
+                                        Format: <code className="bg-background px-1 rounded">
+                                          {error.schema_info.format}
+                                        </code>
+                                      </div>
+                                    )}
+                                    {error.schema_info.minimum !== undefined && (
+                                      <div>Min: {error.schema_info.minimum}</div>
+                                    )}
+                                    {error.schema_info.maximum !== undefined && (
+                                      <div>Max: {error.schema_info.maximum}</div>
+                                    )}
+                                    {error.schema_info.min_length !== undefined && (
+                                      <div>Min Length: {error.schema_info.min_length}</div>
+                                    )}
+                                    {error.schema_info.max_length !== undefined && (
+                                      <div>Max Length: {error.schema_info.max_length}</div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>

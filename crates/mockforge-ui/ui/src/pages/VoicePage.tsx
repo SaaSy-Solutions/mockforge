@@ -12,6 +12,7 @@ import {
 } from '../components/workspace/WorkspaceScenarioCreator';
 import { Card } from '../components/ui/Card';
 import { Mic, Sparkles, FileCode, Code2, Building2 } from 'lucide-react';
+import { AIStudioNav } from '../components/ai/AIStudioNav';
 
 type TabType = 'api' | 'hooks' | 'scenarios';
 
@@ -35,6 +36,7 @@ export function VoicePage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <AIStudioNav currentPage="Voice Interface" showQuickActions={false} />
       {/* Header */}
       <div className="space-y-2">
         <div className="flex items-center gap-3">

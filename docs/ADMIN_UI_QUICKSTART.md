@@ -1,5 +1,9 @@
 # MockForge Admin UI - Quick Start Guide
 
+**Pillars:** [DevX]
+
+[DevX] - Interactive playgrounds and developer experience tools
+
 ## Overview
 
 The MockForge Admin UI provides a comprehensive web interface for managing chaos engineering, observability, and API testing features.

@@ -244,33 +244,33 @@ impl RagConfig {
     /// Validate configuration
     pub fn validate(&self) -> Result<()> {
         if self.api_endpoint.is_empty() {
-            return Err(mockforge_core::Error::generic("API endpoint cannot be empty"));
+            return Err(crate::Error::generic("API endpoint cannot be empty"));
         }
 
         if self.model.is_empty() {
-            return Err(mockforge_core::Error::generic("Model name cannot be empty"));
+            return Err(crate::Error::generic("Model name cannot be empty"));
         }
 
         if !(0.0..=2.0).contains(&self.temperature) {
-            return Err(mockforge_core::Error::generic("Temperature must be between 0.0 and 2.0"));
+            return Err(crate::Error::generic("Temperature must be between 0.0 and 2.0"));
         }
 
         if !(0.0..=1.0).contains(&self.top_p) {
-            return Err(mockforge_core::Error::generic("Top-p must be between 0.0 and 1.0"));
+            return Err(crate::Error::generic("Top-p must be between 0.0 and 1.0"));
         }
 
         if self.chunk_size == 0 {
-            return Err(mockforge_core::Error::generic("Chunk size must be greater than 0"));
+            return Err(crate::Error::generic("Chunk size must be greater than 0"));
         }
 
         if self.chunk_overlap >= self.chunk_size {
-            return Err(mockforge_core::Error::generic(
+            return Err(crate::Error::generic(
                 "Chunk overlap must be less than chunk size",
             ));
         }
 
         if !(0.0..=1.0).contains(&self.similarity_threshold) {
-            return Err(mockforge_core::Error::generic(
+            return Err(crate::Error::generic(
                 "Similarity threshold must be between 0.0 and 1.0",
             ));
         }
@@ -278,7 +278,7 @@ impl RagConfig {
         if self.hybrid_search {
             let total_weight = self.semantic_weight + self.keyword_weight;
             if (total_weight - 1.0).abs() > f32::EPSILON {
-                return Err(mockforge_core::Error::generic(
+                return Err(crate::Error::generic(
                     "Hybrid search weights must sum to 1.0",
                 ));
             }

@@ -4,6 +4,7 @@
 //! and enforce budget limits. It uses in-memory tracking for local usage,
 //! and can integrate with cloud usage tracking when available.
 
+use crate::ai_studio::org_controls::{OrgControls, OrgControlsAccessor};
 use crate::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -13,10 +14,58 @@ use tokio::sync::RwLock;
 
 /// Budget manager for AI usage
 pub struct BudgetManager {
-    /// Budget configuration
+    /// Budget configuration (workspace-level defaults)
     config: BudgetConfig,
     /// In-memory usage tracking (workspace_id -> usage stats)
     usage_tracker: Arc<RwLock<HashMap<String, WorkspaceUsage>>>,
+    /// Optional org controls for org-level enforcement
+    org_controls: Option<Arc<OrgControls>>,
+}
+
+/// AI feature types for tracking
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AiFeature {
+    /// MockAI - Natural language mock generation
+    MockAi,
+    /// AI Contract Diff - Contract analysis and recommendations
+    ContractDiff,
+    /// Persona Generation - AI-generated personas
+    PersonaGeneration,
+    /// Debug Analysis - AI-guided debugging
+    DebugAnalysis,
+    /// Generative Schema - Schema generation from examples
+    GenerativeSchema,
+    /// Voice/LLM Interface - Voice commands and chat
+    VoiceInterface,
+    /// General chat/assistant
+    GeneralChat,
+}
+
+impl AiFeature {
+    /// Get display name for the feature
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            AiFeature::MockAi => "MockAI",
+            AiFeature::ContractDiff => "Contract Diff",
+            AiFeature::PersonaGeneration => "Persona Generation",
+            AiFeature::DebugAnalysis => "Debug Analysis",
+            AiFeature::GenerativeSchema => "Generative Schema",
+            AiFeature::VoiceInterface => "Voice Interface",
+            AiFeature::GeneralChat => "General Chat",
+        }
+    }
+}
+
+/// Per-feature usage statistics
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FeatureUsage {
+    /// Tokens used by this feature
+    pub tokens_used: u64,
+    /// Cost in USD for this feature
+    pub cost_usd: f64,
+    /// Number of calls made for this feature
+    pub calls_made: u64,
 }
 
 /// Per-workspace usage tracking
@@ -32,6 +81,8 @@ struct WorkspaceUsage {
     last_reset: DateTime<Utc>,
     /// Per-day call tracking (for rate limiting)
     daily_calls: HashMap<chrono::NaiveDate, u64>,
+    /// Per-feature usage tracking
+    feature_usage: HashMap<AiFeature, FeatureUsage>,
 }
 
 impl BudgetManager {
@@ -40,6 +91,16 @@ impl BudgetManager {
         Self {
             config,
             usage_tracker: Arc::new(RwLock::new(HashMap::new())),
+            org_controls: None,
+        }
+    }
+
+    /// Create a new budget manager with org controls
+    pub fn with_org_controls(config: BudgetConfig, org_controls: Arc<OrgControls>) -> Self {
+        Self {
+            config,
+            usage_tracker: Arc::new(RwLock::new(HashMap::new())),
+            org_controls: Some(org_controls),
         }
     }
 
@@ -52,6 +113,7 @@ impl BudgetManager {
             calls_made: 0,
             last_reset: Utc::now(),
             daily_calls: HashMap::new(),
+            feature_usage: HashMap::new(),
         });
 
         let usage_percentage = if self.config.max_tokens_per_workspace > 0 {
@@ -60,17 +122,44 @@ impl BudgetManager {
             0.0
         };
 
+        // Convert feature usage to serializable format
+        let feature_breakdown: HashMap<String, FeatureUsage> = usage
+            .feature_usage
+            .iter()
+            .map(|(feature, usage)| (format!("{:?}", feature), usage.clone()))
+            .collect();
+
         Ok(UsageStats {
             tokens_used: usage.tokens_used,
             cost_usd: usage.cost_usd,
             calls_made: usage.calls_made,
             budget_limit: self.config.max_tokens_per_workspace,
             usage_percentage,
+            feature_breakdown: Some(feature_breakdown),
         })
     }
 
     /// Check if request is within budget
-    pub async fn check_budget(&self, workspace_id: &str, estimated_tokens: u64) -> Result<bool> {
+    ///
+    /// Checks org-level limits first (if available), then workspace-level limits.
+    /// Org-level limits take precedence.
+    pub async fn check_budget(
+        &self,
+        org_id: Option<&str>,
+        workspace_id: &str,
+        estimated_tokens: u64,
+    ) -> Result<bool> {
+        // Check org-level budget first (if available)
+        if let (Some(org_id), Some(ref org_controls)) = (org_id, &self.org_controls) {
+            let budget_result = org_controls
+                .check_budget(org_id, Some(workspace_id), estimated_tokens)
+                .await?;
+            if !budget_result.allowed {
+                return Ok(false);
+            }
+        }
+
+        // Check workspace-level budget
         let tracker = self.usage_tracker.read().await;
         let usage = tracker.get(workspace_id);
 
@@ -97,8 +186,97 @@ impl BudgetManager {
         Ok(true)
     }
 
+    /// Check rate limit (org-level first, then workspace-level)
+    pub async fn check_rate_limit(
+        &self,
+        org_id: Option<&str>,
+        workspace_id: &str,
+    ) -> Result<bool> {
+        // Check org-level rate limit first (if available)
+        if let (Some(org_id), Some(ref org_controls)) = (org_id, &self.org_controls) {
+            let rate_limit_result = org_controls
+                .check_rate_limit(org_id, Some(workspace_id))
+                .await?;
+            if !rate_limit_result.allowed {
+                return Ok(false);
+            }
+        }
+
+        // Workspace-level rate limiting would be handled here if needed
+        // For now, we rely on org-level rate limiting
+        Ok(true)
+    }
+
+    /// Check if a feature is enabled (org-level first, then defaults to true)
+    pub async fn is_feature_enabled(
+        &self,
+        org_id: Option<&str>,
+        workspace_id: &str,
+        feature: &str,
+    ) -> Result<bool> {
+        // Check org-level feature toggle first (if available)
+        if let (Some(org_id), Some(ref org_controls)) = (org_id, &self.org_controls) {
+            return org_controls
+                .is_feature_enabled(org_id, Some(workspace_id), feature)
+                .await;
+        }
+
+        // Default to enabled if no org controls
+        Ok(true)
+    }
+
     /// Record token usage and cost
-    pub async fn record_usage(&self, workspace_id: &str, tokens: u64, cost_usd: f64) -> Result<()> {
+    pub async fn record_usage(
+        &self,
+        org_id: Option<&str>,
+        workspace_id: &str,
+        user_id: Option<&str>,
+        tokens: u64,
+        cost_usd: f64,
+    ) -> Result<()> {
+        self.record_usage_with_feature(org_id, workspace_id, user_id, tokens, cost_usd, None)
+            .await
+    }
+
+    /// Record token usage and cost with feature tracking
+    ///
+    /// Records usage both in-memory (workspace-level) and in org controls (if available).
+    pub async fn record_usage_with_feature(
+        &self,
+        org_id: Option<&str>,
+        workspace_id: &str,
+        user_id: Option<&str>,
+        tokens: u64,
+        cost_usd: f64,
+        feature: Option<AiFeature>,
+    ) -> Result<()> {
+        // Record in org controls (if available) for audit log
+        if let (Some(org_id), Some(ref org_controls)) = (org_id, &self.org_controls) {
+            if let Some(feature) = feature {
+                let feature_name = match feature {
+                    AiFeature::MockAi => "mock_generation",
+                    AiFeature::ContractDiff => "contract_diff",
+                    AiFeature::PersonaGeneration => "persona_generation",
+                    AiFeature::DebugAnalysis => "debug_analysis",
+                    AiFeature::GenerativeSchema => "generative_schema",
+                    AiFeature::VoiceInterface => "voice_interface",
+                    AiFeature::GeneralChat => "free_form_generation",
+                };
+                org_controls
+                    .record_usage(
+                        org_id,
+                        Some(workspace_id),
+                        user_id,
+                        feature,
+                        tokens,
+                        cost_usd,
+                        None,
+                    )
+                    .await?;
+            }
+        }
+
+        // Record in-memory (workspace-level tracking)
         let mut tracker = self.usage_tracker.write().await;
         let usage = tracker.entry(workspace_id.to_string()).or_insert_with(|| WorkspaceUsage {
             tokens_used: 0,
@@ -106,11 +284,20 @@ impl BudgetManager {
             calls_made: 0,
             last_reset: Utc::now(),
             daily_calls: HashMap::new(),
+            feature_usage: HashMap::new(),
         });
 
         usage.tokens_used += tokens;
         usage.cost_usd += cost_usd;
         usage.calls_made += 1;
+
+        // Track per-feature usage
+        if let Some(feature) = feature {
+            let feature_usage = usage.feature_usage.entry(feature).or_insert_with(FeatureUsage::default);
+            feature_usage.tokens_used += tokens;
+            feature_usage.cost_usd += cost_usd;
+            feature_usage.calls_made += 1;
+        }
 
         // Track daily calls
         let today = Utc::now().date_naive();
@@ -193,4 +380,8 @@ pub struct UsageStats {
 
     /// Usage percentage (0.0 to 1.0)
     pub usage_percentage: f64,
+
+    /// Per-feature usage breakdown
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feature_breakdown: Option<HashMap<String, FeatureUsage>>,
 }

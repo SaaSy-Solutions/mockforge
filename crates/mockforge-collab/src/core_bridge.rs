@@ -48,6 +48,9 @@ impl CoreBridge {
         workspace.description = team_workspace.description.clone();
         workspace.updated_at = team_workspace.updated_at;
 
+        // Initialize default mock environments if they don't exist (for backward compatibility)
+        workspace.initialize_default_mock_environments();
+
         Ok(workspace)
     }
 

@@ -48,6 +48,36 @@ pub enum Permission {
     ScenarioModifyDriftBudgets,
 }
 
+impl std::fmt::Display for Permission {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Permission::WorkspaceCreate => write!(f, "WorkspaceCreate"),
+            Permission::WorkspaceRead => write!(f, "WorkspaceRead"),
+            Permission::WorkspaceUpdate => write!(f, "WorkspaceUpdate"),
+            Permission::WorkspaceDelete => write!(f, "WorkspaceDelete"),
+            Permission::WorkspaceArchive => write!(f, "WorkspaceArchive"),
+            Permission::WorkspaceManageMembers => write!(f, "WorkspaceManageMembers"),
+            Permission::MockCreate => write!(f, "MockCreate"),
+            Permission::MockRead => write!(f, "MockRead"),
+            Permission::MockUpdate => write!(f, "MockUpdate"),
+            Permission::MockDelete => write!(f, "MockDelete"),
+            Permission::InviteMembers => write!(f, "InviteMembers"),
+            Permission::RemoveMembers => write!(f, "RemoveMembers"),
+            Permission::ChangeRoles => write!(f, "ChangeRoles"),
+            Permission::ViewHistory => write!(f, "ViewHistory"),
+            Permission::CreateSnapshot => write!(f, "CreateSnapshot"),
+            Permission::RestoreSnapshot => write!(f, "RestoreSnapshot"),
+            Permission::ManageSettings => write!(f, "ManageSettings"),
+            Permission::ManageIntegrations => write!(f, "ManageIntegrations"),
+            Permission::ScenarioModifyChaosRules => write!(f, "ScenarioModifyChaosRules"),
+            Permission::ScenarioModifyRealityDefaults => write!(f, "ScenarioModifyRealityDefaults"),
+            Permission::ScenarioPromote => write!(f, "ScenarioPromote"),
+            Permission::ScenarioApprove => write!(f, "ScenarioApprove"),
+            Permission::ScenarioModifyDriftBudgets => write!(f, "ScenarioModifyDriftBudgets"),
+        }
+    }
+}
+
 /// Role permissions mapping
 pub struct RolePermissions;
 

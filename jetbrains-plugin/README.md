@@ -10,123 +10,128 @@ JetBrains IDE plugin for MockForge providing config validation, code actions, an
 - **Inline Preview**: Hover to preview mock responses for endpoints
 - **Linting**: Linting for MockForge configuration files
 
-## Implementation Status
+## Installation
 
-**Status:** 🔮 **Future Work** - Planned but not yet implemented
+### From JetBrains Marketplace
 
-This plugin is documented as future work. The VS Code extension is the primary IDE integration and should be polished first. This plugin can be implemented later or as a community contribution.
+1. Open your JetBrains IDE (IntelliJ IDEA, WebStorm, PyCharm, etc.)
+2. Go to Settings/Preferences → Plugins
+3. Search for "MockForge"
+4. Click Install
+5. Restart your IDE
 
-The implementation should follow the same patterns as the VS Code extension:
+### From Local Build
 
-### Required Components
-
-1. **Config Validator** (`ConfigValidator.kt`)
-   - Load JSON Schema from `mockforge schema` command or schema file
-   - Validate YAML/TOML config files against schema
-   - Report validation errors as IDE inspections
-
-2. **Language Server** (`MockForgeLanguageServer.kt`)
-   - Register file type associations for MockForge config files
-   - Provide hover documentation for config keys
-   - Provide autocomplete suggestions
-   - Show inline previews of mock responses
-
-3. **Code Actions** (`GenerateMockScenarioAction.kt`)
-   - Detect OpenAPI specifications
-   - Generate MockForge scenario files from OpenAPI operations
-   - Register as IntelliJ code action
-
-4. **Inspections** (`MockForgeConfigInspection.kt`)
-   - Real-time validation of config files
-   - Highlight errors and warnings
-   - Quick fixes for common issues
-
-### Plugin Structure
-
-```
-jetbrains-plugin/
-├── src/
-│   ├── main/
-│   │   ├── kotlin/
-│   │   │   ├── com/
-│   │   │   │   └── mockforge/
-│   │   │   │       ├── plugin/
-│   │   │   │       │   ├── MockForgePlugin.kt
-│   │   │   │       │   ├── ConfigValidator.kt
-│   │   │   │       │   ├── LanguageServer.kt
-│   │   │   │       │   ├── GenerateMockScenarioAction.kt
-│   │   │   │       │   └── inspections/
-│   │   │   │       │       └── MockForgeConfigInspection.kt
-│   │   │   │       └── ...
-│   │   │   └── resources/
-│   │   │       ├── META-INF/
-│   │   │       │   └── plugin.xml
-│   │   │       └── ...
-│   │   └── test/
-│   └── build.gradle.kts
-├── README.md
-└── build.gradle.kts
-```
-
-### Implementation Notes
-
-1. **JSON Schema Validation**: Use a JSON Schema validator library (e.g., `com.github.everit-org.json-schema` or `com.networknt/json-schema-validator`)
-
-2. **YAML/TOML Parsing**: Use existing IntelliJ YAML/TOML support or libraries like:
-   - `org.yaml:snakeyaml` for YAML
-   - `com.moandjiezana.toml:toml4j` for TOML
-
-3. **File Type Registration**: Register MockForge config files in `plugin.xml`:
-   ```xml
-   <fileType name="MockForge Config" implementationClass="com.mockforge.plugin.MockForgeConfigFileType" extensions="mockforge.yaml;mockforge.yml;mockforge.toml" />
+1. Build the plugin:
+   ```bash
+   ./gradlew buildPlugin
    ```
 
-4. **Inspections**: Extend `LocalInspectionTool` to provide real-time validation
+2. Install the plugin:
+   - Go to Settings/Preferences → Plugins
+   - Click the gear icon → Install Plugin from Disk
+   - Select the generated `.zip` file from `build/distributions/`
 
-5. **Code Actions**: Extend `IntentionAction` or use `QuickFix` for code actions
+## Usage
 
-### Dependencies
+### Config Validation
 
-- IntelliJ Platform SDK
-- Kotlin
-- JSON Schema validator
-- YAML/TOML parser
+Open any `mockforge.yaml` or `mockforge.toml` file. The plugin will automatically:
+- Validate the configuration against JSON Schema
+- Show errors and warnings inline
+- Provide autocomplete suggestions
 
-### Building
+### Generate Mock Scenario
+
+1. Open an OpenAPI specification file (`.yaml`, `.yml`, or `.json`)
+2. Right-click in the editor
+3. Select "Generate MockForge Scenario"
+4. Choose which operations to include
+5. Enter a scenario name
+6. The scenario file will be generated and opened
+
+### Inline Preview
+
+Hover over API endpoint references in your code (TypeScript, JavaScript, Python, etc.) to see:
+- Mock response preview
+- Response headers and body
+- Link to open in MockForge Playground
+
+## Configuration
+
+The plugin automatically detects MockForge server at `http://localhost:3000`. To change this:
+
+1. Go to Settings/Preferences → Tools → MockForge
+2. Set the server URL
+
+## Building
 
 ```bash
+# Build the plugin
 ./gradlew buildPlugin
-```
 
-### Testing
+# Run tests
+./gradlew test
 
-```bash
+# Run IDE with plugin loaded
 ./gradlew runIde
 ```
 
-## Future Work
+## Development
 
-This plugin is currently planned but not implemented. Priority is on polishing the VS Code extension first, as it serves a larger user base.
+### Project Structure
 
-### Community Contributions Welcome
+```text
+jetbrains-plugin/
+├── src/
+│   ├── main/
+│   │   ├── kotlin/com/mockforge/plugin/
+│   │   │   ├── MockForgePlugin.kt          # Main plugin class
+│   │   │   ├── ConfigValidatorService.kt    # JSON Schema validation
+│   │   │   ├── LanguageServer.kt            # Hover, autocomplete
+│   │   │   ├── GenerateMockScenarioAction.kt # Code action
+│   │   │   ├── MockResponsePreviewProvider.kt # Inline preview
+│   │   │   └── inspections/
+│   │   │       └── MockForgeConfigInspection.kt
+│   │   └── resources/
+│   │       └── META-INF/
+│   │           └── plugin.xml
+│   └── test/
+└── build.gradle.kts
+```
 
-If you're interested in implementing the JetBrains plugin, we welcome contributions! Please:
+### Requirements
+
+- IntelliJ Platform SDK 2023.3 or later
+- Kotlin 1.9.20 or later
+- JDK 17 or later
+
+## Troubleshooting
+
+### Plugin not loading
+
+- Check that you're using a compatible IDE version (2023.3+)
+- Check the IDE logs: Help → Show Log in Files
+
+### Config validation not working
+
+- Ensure `mockforge` CLI is installed and in PATH
+- Or ensure schema files are bundled in the plugin
+
+### Mock preview not showing
+
+- Ensure MockForge server is running at `http://localhost:3000`
+- Check server connection in plugin settings
+
+## Contributing
+
+Contributions are welcome! Please:
 
 1. Open an issue to discuss the implementation approach
 2. Follow the patterns established in the VS Code extension
 3. Ensure feature parity with VS Code extension where applicable
 4. Submit a pull request when ready
 
-### Implementation Priority
+## License
 
-- **Phase 1**: Config validation and autocomplete (highest priority)
-- **Phase 2**: Code actions for scenario generation
-- **Phase 3**: Inline preview of mock responses
-- **Phase 4**: Advanced features (scenario execution, server control panel)
-
-## Future Enhancements
-
-- Integration with MockForge server for live preview
-- Scenario execution from IDE
-- Mock server control panel
-- Request/response inspection
+MIT OR Apache-2.0

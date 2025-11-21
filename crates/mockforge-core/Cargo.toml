@@ -65,6 +65,7 @@ tempfile = "3.10"
 prost = "0.14"
 prost-reflect = "0.16"
 prost-types = "0.14"
+bytes = "1.5"
 notify = "8.2"
 # JavaScript runtime for scripting
 rquickjs = { version = "0.9", features = ["macro", "classes"] }
@@ -72,8 +73,9 @@ rquickjs = { version = "0.9", features = ["macro", "classes"] }
 cron = "0.15"
 # JSON Schema generation (optional, for schema crate)
 schemars = { version = "0.8", features = ["derive"], optional = true }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"], optional = true }
 
-mockforge-data = "0.3.0"
+mockforge-data = { version = "0.3.2", path = "../mockforge-data", optional = true }
 
 [dev-dependencies]
 tempfile = "3.10"
@@ -91,6 +93,8 @@ harness = false
 windows = { version = "0.62", features = ["Win32_Security_Credentials"] }
 
 [features]
-default = []
+default = ["data"]
 parallel-routes = ["rayon"]
 schema = ["schemars"]
+database = ["sqlx"]
+data = ["mockforge-data"]

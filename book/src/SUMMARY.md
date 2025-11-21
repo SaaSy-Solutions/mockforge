@@ -20,10 +20,13 @@
 ## Tutorials
 
 - [Overview](tutorials/README.md)
+- [The Golden Path: Blueprint → Dev-Setup → Integration](tutorials/golden-path.md) ⭐ **Start Here**
 - [Mock a REST API from OpenAPI](tutorials/mock-openapi-spec.md)
 - [React + MockForge Workflow](tutorials/react-workflow.md)
 - [Vue + MockForge Workflow](tutorials/vue-workflow.md)
 - [Admin UI Walkthrough](tutorials/admin-ui-walkthrough.md)
+- [Plugin Starter Guide](tutorials/plugin-starter.md) - Create your first plugin
+- [IDE Extension Guide](tutorials/ide-extension-guide.md) - VS Code extension walkthrough
 - [Add a Custom Plugin](tutorials/add-custom-plugin.md)
 
 ## Protocols
@@ -60,6 +63,7 @@
 - [Security & Encryption](user-guide/security.md)
 - [Directory Synchronization](user-guide/sync.md)
 - [Admin UI](user-guide/admin-ui.md)
+- [IDE Integration](user-guide/ide-integration.md)
 - [Advanced Features](user-guide/advanced-features.md)
   - [VBR Engine](user-guide/vbr-engine.md)
   - [Temporal Simulation](user-guide/temporal-simulation.md)

@@ -1,6 +1,11 @@
 use crate::faker::EnhancedFaker;
-use mockforge_core::templating::{register_faker_provider, FakerProvider};
+// NOTE: mockforge_core dependency removed to break circular dependency
+// The provider registration functionality has been moved to a higher-level crate
 use std::sync::Arc;
+
+// NOTE: FakerProvider trait and registration removed to break circular dependency
+// This functionality should be implemented in a higher-level crate that depends on both
+// mockforge-core and mockforge-data
 
 struct DataFakerProvider(std::sync::Mutex<EnhancedFaker>);
 
@@ -10,6 +15,8 @@ impl DataFakerProvider {
     }
 }
 
+// NOTE: FakerProvider implementation removed - see comment above
+/*
 impl FakerProvider for DataFakerProvider {
     fn uuid(&self) -> String {
         self.0.lock().unwrap().uuid()
@@ -48,11 +55,14 @@ impl FakerProvider for DataFakerProvider {
         self.0.lock().unwrap().paragraph()
     }
 }
+*/
 
 /// Register the mockforge-data backed faker provider with core templating.
+/// NOTE: Disabled to break circular dependency
 pub fn register_core_faker_provider() {
-    let provider: Arc<dyn FakerProvider + Send + Sync> = Arc::new(DataFakerProvider::new());
-    register_faker_provider(provider);
+    // Disabled - functionality moved to higher-level crate
+    // let provider: Arc<dyn FakerProvider + Send + Sync> = Arc::new(DataFakerProvider::new());
+    // register_faker_provider(provider);
 }
 
 #[cfg(test)]

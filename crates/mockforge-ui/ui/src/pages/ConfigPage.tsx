@@ -12,6 +12,7 @@ import {
 } from '../components/ui/DesignSystem';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -87,7 +88,8 @@ export function ConfigPage() {
       http_port: 3000,
       ws_port: 3001,
       grpc_port: 50051,
-      admin_port: 9080
+      admin_port: 9080,
+      ai_mode: 'live' as 'generate_once_freeze' | 'live'
     },
     restartInProgress: false,
     latency: { base_ms: 0, jitter_ms: 0 },
@@ -743,6 +745,48 @@ export function ConfigPage() {
                             general: { ...prev.general, admin_port: parseInt(e.target.value) || 9080 }
                           }))}
                         />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI Mode Configuration */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      AI Mode
+                    </label>
+                    <div className="space-y-4">
+                      <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          Control how AI-generated artifacts are used at runtime. In <strong>Generate Once Freeze</strong> mode,
+                          AI is only used to produce config/templates, and runtime mocks use frozen artifacts (no LLM calls).
+                          In <strong>Live</strong> mode, AI is used dynamically at runtime for each request.
+                        </p>
+                        <Select
+                          value={formData.general.ai_mode || 'live'}
+                          onValueChange={(value) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              general: { ...prev.general, ai_mode: value as 'generate_once_freeze' | 'live' }
+                            }));
+                            setHasUnsavedChanges(true);
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="live">Live - AI used dynamically at runtime</SelectItem>
+                            <SelectItem value="generate_once_freeze">Generate Once Freeze - Use frozen artifacts only</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {formData.general.ai_mode === 'generate_once_freeze' && (
+                          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
+                            <p className="text-xs text-blue-800 dark:text-blue-200">
+                              <strong>Note:</strong> In this mode, AI-generated scenarios and personas will use frozen artifacts.
+                              Make sure to freeze your AI-generated artifacts before using them in this mode.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

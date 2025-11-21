@@ -9,6 +9,7 @@ use axum::{
 };
 use mockforge_core::consistency::ConsistencyEngine;
 use mockforge_core::snapshots::{SnapshotComponents, SnapshotManager, SnapshotMetadata};
+use mockforge_core::workspace_persistence::WorkspacePersistence;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -21,6 +22,8 @@ pub struct SnapshotState {
     pub manager: Arc<SnapshotManager>,
     /// Consistency engine (optional, for saving/loading unified state)
     pub consistency_engine: Option<Arc<ConsistencyEngine>>,
+    /// Workspace persistence (optional, for saving/loading workspace config)
+    pub workspace_persistence: Option<Arc<WorkspacePersistence>>,
 }
 
 /// Request to save a snapshot
@@ -64,6 +67,10 @@ pub async fn save_snapshot(
     let components = request.components.unwrap_or_else(SnapshotComponents::all);
 
     let consistency_engine = state.consistency_engine.as_deref();
+    let workspace_persistence = state.workspace_persistence.as_deref();
+    // TODO: Extract VBR and Recorder state from request or state when available
+    let vbr_state = None; // Can be provided via request.vbr_state in the future
+    let recorder_state = None; // Can be provided via request.recorder_state in the future
     let manifest = state
         .manager
         .save_snapshot(
@@ -72,6 +79,9 @@ pub async fn save_snapshot(
             params.workspace.clone(),
             components,
             consistency_engine,
+            workspace_persistence,
+            vbr_state,
+            recorder_state,
         )
         .await
         .map_err(|e| {
@@ -96,13 +106,15 @@ pub async fn load_snapshot(
     Json(request): Json<LoadSnapshotRequest>,
 ) -> Result<Json<Value>, StatusCode> {
     let consistency_engine = state.consistency_engine.as_deref();
-    let manifest = state
+    let workspace_persistence = state.workspace_persistence.as_deref();
+    let (manifest, vbr_state, recorder_state) = state
         .manager
         .load_snapshot(
             name.clone(),
             params.workspace.clone(),
             request.components,
             consistency_engine,
+            workspace_persistence,
         )
         .await
         .map_err(|e| {
@@ -114,6 +126,8 @@ pub async fn load_snapshot(
     Ok(Json(serde_json::json!({
         "success": true,
         "manifest": manifest,
+        "vbr_state": vbr_state,
+        "recorder_state": recorder_state,
     })))
 }
 

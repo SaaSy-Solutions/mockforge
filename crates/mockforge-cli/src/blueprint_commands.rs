@@ -34,6 +34,8 @@ pub struct BlueprintMetadata {
     pub files: Vec<String>,
     #[serde(default)]
     pub readme: Option<String>,
+    #[serde(default)]
+    pub contracts: Vec<ContractInfo>,
 }
 
 /// Blueprint setup configuration
@@ -45,6 +47,8 @@ pub struct BlueprintSetup {
     pub reality: Option<RealityInfo>,
     #[serde(default)]
     pub flows: Vec<FlowInfo>,
+    #[serde(default)]
+    pub scenarios: Vec<ScenarioInfo>,
     #[serde(default)]
     pub playground: Option<PlaygroundInfo>,
 }
@@ -71,6 +75,25 @@ pub struct RealityInfo {
 pub struct FlowInfo {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// Scenario information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScenarioInfo {
+    pub id: String,
+    pub name: String,
+    pub r#type: String, // happy_path, known_failure, slow_path
+    #[serde(default)]
+    pub description: Option<String>,
+    pub file: String,
+}
+
+/// Contract information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContractInfo {
+    pub file: String,
     #[serde(default)]
     pub description: Option<String>,
 }
@@ -325,6 +348,26 @@ pub fn show_blueprint_info(blueprint_id: String) -> anyhow::Result<()> {
                 }
             }
         }
+
+        if !setup.scenarios.is_empty() {
+            println!("\nScenarios:");
+            for scenario in &setup.scenarios {
+                println!("  • {} ({}) - {}", scenario.id, scenario.r#type, scenario.name);
+                if let Some(desc) = &scenario.description {
+                    println!("    {}", desc);
+                }
+            }
+        }
+    }
+
+    if !metadata.contracts.is_empty() {
+        println!("\nContract Schemas:");
+        for contract in &metadata.contracts {
+            println!("  • {}", contract.file);
+            if let Some(desc) = &contract.description {
+                println!("    {}", desc);
+            }
+        }
     }
 
     println!("\nPath: {}", blueprint_path.display());
@@ -367,6 +410,22 @@ fn copy_blueprint_files(
         let flows_dst = output_dir.join("flows");
         copy_directory(&flows_src, &flows_dst)?;
         println!("  ✓ Copied flows/");
+    }
+
+    // Copy scenarios directory
+    let scenarios_src = blueprint_path.join("scenarios");
+    if scenarios_src.exists() {
+        let scenarios_dst = output_dir.join("scenarios");
+        copy_directory(&scenarios_src, &scenarios_dst)?;
+        println!("  ✓ Copied scenarios/");
+    }
+
+    // Copy contracts directory
+    let contracts_src = blueprint_path.join("contracts");
+    if contracts_src.exists() {
+        let contracts_dst = output_dir.join("contracts");
+        copy_directory(&contracts_src, &contracts_dst)?;
+        println!("  ✓ Copied contracts/");
     }
 
     // Copy playground directory

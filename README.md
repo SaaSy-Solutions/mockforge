@@ -219,9 +219,25 @@ The documentation covers:
 - Advanced features and examples
 - Contributing guidelines
 
+## 🔌 IDE Integration
+
+### VS Code Extension
+
+**[Install the MockForge VS Code Extension](https://marketplace.visualstudio.com/items?itemName=saasy-solutions.mockforge-vscode)** to enhance your development workflow:
+
+- **Peek Mock Response**: Hover over API endpoint references to see mock responses inline
+- **Config Validation**: Real-time validation of `mockforge.yaml` files with inline error reporting
+- **Mocks Explorer**: Visual tree view of all mocks with real-time WebSocket updates
+- **Playground Integration**: Quick access to MockForge Playground from hover tooltips
+- **Mock Management**: Create, edit, enable/disable, and delete mocks directly from VS Code
+
+See the [VS Code Extension README](vscode-extension/README.md) for detailed features and usage.
+
 ## 🚀 Quick Start
 
-**New to MockForge?** Follow our **[5-Minute Tutorial](https://docs.mockforge.dev/getting-started/five-minute-api.html)** to create your first mock API.
+**New to MockForge?** Follow our **[Golden Path Guide](https://docs.mockforge.dev/tutorials/golden-path.html)** ⭐ - the fastest way from zero to integrated mock API in under 10 minutes.
+
+**Prefer a quick API?** Try our **[5-Minute Tutorial](https://docs.mockforge.dev/getting-started/five-minute-api.html)** to create your first mock API.
 
 **Need help?** Check the **[FAQ](https://docs.mockforge.dev/reference/faq.html)** or **[Troubleshooting Guide](https://docs.mockforge.dev/reference/troubleshooting.html)**.
 

@@ -1,3 +1,5 @@
+//! Pillars: [Contracts]
+//!
 //! Contract diff middleware for capturing requests
 //!
 //! This middleware captures incoming HTTP requests for contract diff analysis.

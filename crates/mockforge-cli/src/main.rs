@@ -31,10 +31,12 @@ mod error_helpers;
 mod flow_commands;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
+mod governance_commands;
 mod git_watch_commands;
 mod import_commands;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
+mod logs_commands;
 mod mockai_commands;
 #[cfg(feature = "mqtt")]
 mod mqtt_commands;
@@ -626,6 +628,11 @@ enum Commands {
     },
 
     /// Initialize a new MockForge project
+    ///
+    /// Examples:
+    ///   mockforge init my-project
+    ///   mockforge init . --blueprint ecommerce
+    ///   mockforge init . --blueprint b2c-saas
     Init {
         /// Project name (defaults to current directory name)
         #[arg(default_value = ".")]
@@ -634,6 +641,10 @@ enum Commands {
         /// Skip creating example files
         #[arg(long)]
         no_examples: bool,
+
+        /// Create project from a blueprint (e.g., ecommerce, b2c-saas, banking-lite)
+        #[arg(long)]
+        blueprint: Option<String>,
     },
 
     /// Interactive getting started wizard
@@ -688,18 +699,18 @@ enum Commands {
 
     /// Generate JSON Schema for MockForge configuration files
     ///
-    /// Generates a JSON Schema that can be used by IDEs and editors
+    /// Generates JSON Schemas that can be used by IDEs and editors
     /// to provide autocomplete, validation, and documentation for
-    /// mockforge.yaml and mockforge.toml files.
+    /// mockforge.yaml, persona files, reality config, and blueprint files.
     ///
     /// Examples:
     ///   mockforge schema generate
-    ///   mockforge schema generate --output mockforge-config.schema.json
+    ///   mockforge schema generate --output schemas/
+    ///   mockforge schema generate --type config --output mockforge-config.schema.json
     #[command(verbatim_doc_comment)]
     Schema {
-        /// Output file path (default: stdout)
-        #[arg(short, long)]
-        output: Option<PathBuf>,
+        #[command(subcommand)]
+        schema_command: Option<SchemaCommands>,
     },
 
     /// One-command frontend integration setup
@@ -834,6 +845,21 @@ enum Commands {
         diff_command: ContractDiffCommands,
     },
 
+    /// API governance and safety features
+    ///
+    /// Manage API change forecasting, semantic drift detection, and threat modeling.
+    ///
+    /// Examples:
+    ///   mockforge governance forecast generate --window-days 90
+    ///   mockforge governance semantic analyze --before old.yaml --after new.yaml --endpoint /api/users --method GET
+    ///   mockforge governance threat assess --spec api.yaml
+    ///   mockforge governance status
+    #[command(verbatim_doc_comment)]
+    Governance {
+        #[command(subcommand)]
+        gov_command: GovernanceCommands,
+    },
+
     /// Import API specifications and generate mocks (OpenAPI, AsyncAPI)
     ///
     /// Examples:
@@ -896,6 +922,48 @@ enum Commands {
     Scenario {
         #[command(subcommand)]
         scenario_command: scenario_commands::ScenarioCommands,
+    },
+
+    /// Reality Profile Pack management
+    ///
+    /// Manage and apply reality profile packs that configure hyper-realistic mock behaviors.
+    ///
+    /// Examples:
+    ///   mockforge reality-profile install ecommerce-peak-season
+    ///   mockforge reality-profile list
+    ///   mockforge reality-profile apply ecommerce-peak-season --workspace default
+    #[command(verbatim_doc_comment)]
+    RealityProfile {
+        #[command(subcommand)]
+        reality_profile_command: scenario_commands::RealityProfileCommands,
+    },
+
+    /// Behavioral Economics Engine management
+    ///
+    /// Configure behavior rules that make mocks react to pressure, load, pricing, and fraud.
+    ///
+    /// Examples:
+    ///   mockforge behavior-rule add --name "latency-conversion" --condition latency --threshold 400 --action modify-conversion-rate --multiplier 0.8
+    ///   mockforge behavior-rule list
+    ///   mockforge behavior-rule enable
+    #[command(verbatim_doc_comment)]
+    BehaviorRule {
+        #[command(subcommand)]
+        behavior_rule_command: scenario_commands::BehaviorRuleCommands,
+    },
+
+    /// Drift Learning configuration
+    ///
+    /// Configure drift learning that allows mocks to learn from recorded traffic patterns.
+    ///
+    /// Examples:
+    ///   mockforge drift-learning enable --sensitivity 0.2 --min-samples 10
+    ///   mockforge drift-learning status
+    ///   mockforge drift-learning disable
+    #[command(verbatim_doc_comment)]
+    DriftLearning {
+        #[command(subcommand)]
+        drift_learning_command: scenario_commands::DriftLearningCommands,
     },
 
     /// Template library management
@@ -1096,6 +1164,57 @@ enum Commands {
         /// Admin UI URL (default: http://localhost:9080)
         #[arg(long)]
         admin_url: Option<String>,
+    },
+
+    /// View logs from MockForge server or log files
+    ///
+    /// View request logs from a running MockForge server (via Admin API) or from log files.
+    /// Supports filtering, following (like tail -f), and JSON output.
+    ///
+    /// Examples:
+    ///   mockforge logs
+    ///   mockforge logs -f
+    ///   mockforge logs --method GET --path /api/users
+    ///   mockforge logs --status 500 --limit 20
+    ///   mockforge logs --file logs/mockforge.log -f
+    ///   mockforge logs --json
+    #[command(verbatim_doc_comment)]
+    Logs {
+        /// Admin UI URL (default: http://localhost:9080)
+        #[arg(long)]
+        admin_url: Option<String>,
+
+        /// Read from log file instead of Admin API
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
+        /// Follow logs in real-time (like tail -f)
+        #[arg(short, long)]
+        follow: bool,
+
+        /// Filter by HTTP method (GET, POST, etc.)
+        #[arg(long)]
+        method: Option<String>,
+
+        /// Filter by path pattern
+        #[arg(long)]
+        path: Option<String>,
+
+        /// Filter by status code
+        #[arg(long)]
+        status: Option<u16>,
+
+        /// Limit number of log entries
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Configuration file path (used to find log file path)
+        #[arg(short, long)]
+        config: Option<PathBuf>,
     },
 
     /// Chaos engineering profile management
@@ -2246,8 +2365,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Completions { shell } => {
             handle_completions(shell);
         }
-        Commands::Init { name, no_examples } => {
-            handle_init(name, no_examples).await?;
+        Commands::Init {
+            name,
+            no_examples,
+            blueprint,
+        } => {
+            handle_init(name, no_examples, blueprint).await?;
         }
         Commands::Wizard => {
             let config = wizard::run_wizard().await?;
@@ -2275,8 +2398,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             )
             .await?;
         }
-        Commands::Schema { output } => {
-            handle_schema(output).await?;
+        Commands::Schema { schema_command } => {
+            handle_schema(schema_command).await?;
         }
         Commands::DevSetup { args } => {
             dev_setup_commands::execute_dev_setup(args).await?;
@@ -2331,6 +2454,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::ContractDiff { diff_command } => {
             handle_contract_diff(diff_command).await?;
         }
+        Commands::Governance { gov_command } => {
+            handle_governance(gov_command).await?;
+        }
         Commands::Import { import_command } => {
             import_commands::handle_import_command(import_command).await?;
         }
@@ -2349,6 +2475,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Scenario { scenario_command } => {
             scenario_commands::handle_scenario_command(scenario_command).await?;
+        }
+        Commands::RealityProfile { reality_profile_command } => {
+            scenario_commands::handle_reality_profile_command(reality_profile_command).await?;
+        }
+        Commands::BehaviorRule { behavior_rule_command } => {
+            scenario_commands::handle_behavior_rule_command(behavior_rule_command).await?;
+        }
+        Commands::DriftLearning { drift_learning_command } => {
+            scenario_commands::handle_drift_learning_command(drift_learning_command).await?;
         }
         Commands::Template { template_command } => {
             template_commands::handle_template_command(template_command).await?;
@@ -2430,6 +2565,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             time_commands::execute_time_command(time_command, admin_url)
                 .await
                 .map_err(|e| anyhow::anyhow!("Time command failed: {}", e))?;
+        }
+
+        Commands::Logs {
+            admin_url,
+            file,
+            follow,
+            method,
+            path,
+            status,
+            limit,
+            json,
+            config,
+        } => {
+            logs_commands::execute_logs_command(
+                admin_url, file, follow, method, path, status, limit, json, config,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Logs command failed: {}", e))?;
         }
 
         Commands::Orchestrate {
@@ -3051,6 +3204,10 @@ fn initialize_opentelemetry_tracing(
     logging_config: &mockforge_observability::LoggingConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use mockforge_tracing::{init_tracer, TracingConfig};
+    use tracing_opentelemetry::OpenTelemetryLayer;
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    use tracing_subscriber::EnvFilter;
 
     // Create tracing configuration from OpenTelemetry config
     let tracing_config = if let Some(ref otlp_endpoint) = otel_config.otlp_endpoint {
@@ -3065,16 +3222,39 @@ fn initialize_opentelemetry_tracing(
     .with_environment(otel_config.environment.clone());
 
     // Initialize the tracer (this sets up the global tracer provider)
-    // Note: The BoxedTracer doesn't implement PreSampledTracer, so we skip the OpenTelemetry layer
-    // The tracer is still initialized and will work for direct tracing calls
+    // The global tracer provider is what the OpenTelemetry layer will use
     let _tracer = init_tracer(tracing_config)?;
 
-    // TODO: Fix OpenTelemetry layer integration - BoxedTracer doesn't implement PreSampledTracer
-    // For now, we'll skip the OpenTelemetry layer and just use the global tracer
-    // The tracing will still work, but won't be integrated with tracing-subscriber
-    // mockforge_observability::init_logging_with_otel(logging_config.clone(), otel_layer)?;
+    // Create OpenTelemetry layer that uses the global tracer provider
+    // The layer() function automatically uses the global tracer provider set by init_tracer
+    let otel_layer = OpenTelemetryLayer::default();
 
-    tracing::info!("OpenTelemetry tracing initialized successfully");
+    // Parse log level
+    let log_level = logging_config.level.clone();
+    let env_filter = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new(&log_level))
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    // Build the subscriber with OpenTelemetry layer
+    // We need to reinitialize the subscriber to add the OpenTelemetry layer
+    let registry = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(otel_layer);
+
+    // Add console layer based on config
+    if logging_config.json_format {
+        use tracing_subscriber::fmt;
+        registry
+            .with(fmt::layer().json())
+            .init();
+    } else {
+        use tracing_subscriber::fmt;
+        registry
+            .with(fmt::layer())
+            .init();
+    }
+
+    tracing::info!("OpenTelemetry tracing initialized successfully with layer integration");
     Ok(())
 }
 
@@ -4848,6 +5028,160 @@ async fn handle_contract_diff(
     Ok(())
 }
 
+/// Governance commands
+#[derive(Subcommand)]
+enum GovernanceCommands {
+    /// API change forecasting
+    Forecast {
+        #[command(subcommand)]
+        forecast_command: ForecastCommands,
+    },
+    /// Semantic drift analysis
+    Semantic {
+        #[command(subcommand)]
+        semantic_command: SemanticCommands,
+    },
+    /// Threat assessment
+    Threat {
+        #[command(subcommand)]
+        threat_command: ThreatCommands,
+    },
+    /// Governance status
+    Status {
+        /// Workspace ID
+        #[arg(long)]
+        workspace_id: Option<String>,
+        /// Service ID
+        #[arg(long)]
+        service_id: Option<String>,
+    },
+}
+
+/// Forecast commands
+#[derive(Subcommand)]
+enum ForecastCommands {
+    /// Generate API change forecast
+    Generate {
+        /// Workspace ID
+        #[arg(long)]
+        workspace_id: Option<String>,
+        /// Service ID
+        #[arg(long)]
+        service_id: Option<String>,
+        /// Endpoint path
+        #[arg(long)]
+        endpoint: Option<String>,
+        /// HTTP method
+        #[arg(long)]
+        method: Option<String>,
+        /// Forecast window in days (30, 90, or 180)
+        #[arg(long, default_value = "90")]
+        window_days: u32,
+    },
+}
+
+/// Semantic commands
+#[derive(Subcommand)]
+enum SemanticCommands {
+    /// Analyze semantic drift between contract versions
+    Analyze {
+        /// Path to before contract specification
+        #[arg(long)]
+        before: PathBuf,
+        /// Path to after contract specification
+        #[arg(long)]
+        after: PathBuf,
+        /// Endpoint path
+        #[arg(long)]
+        endpoint: String,
+        /// HTTP method
+        #[arg(long)]
+        method: String,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+}
+
+/// Threat commands
+#[derive(Subcommand)]
+enum ThreatCommands {
+    /// Assess contract security threats
+    Assess {
+        /// Path to contract specification
+        #[arg(short, long)]
+        spec: PathBuf,
+        /// Workspace ID
+        #[arg(long)]
+        workspace_id: Option<String>,
+        /// Service ID
+        #[arg(long)]
+        service_id: Option<String>,
+        /// Endpoint path
+        #[arg(long)]
+        endpoint: Option<String>,
+        /// HTTP method
+        #[arg(long)]
+        method: Option<String>,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+}
+
+/// Handle governance commands
+async fn handle_governance(gov_command: GovernanceCommands) -> mockforge_core::Result<()> {
+    use governance_commands::{
+        handle_forecast_generate, handle_governance_status, handle_semantic_analyze,
+        handle_threat_assess,
+    };
+
+    match gov_command {
+        GovernanceCommands::Forecast { forecast_command } => match forecast_command {
+            ForecastCommands::Generate {
+                workspace_id,
+                service_id,
+                endpoint,
+                method,
+                window_days,
+            } => {
+                handle_forecast_generate(workspace_id, service_id, endpoint, method, Some(window_days)).await?;
+            }
+        },
+        GovernanceCommands::Semantic { semantic_command } => match semantic_command {
+            SemanticCommands::Analyze {
+                before,
+                after,
+                endpoint,
+                method,
+                output,
+            } => {
+                handle_semantic_analyze(before, after, endpoint, method, output).await?;
+            }
+        },
+        GovernanceCommands::Threat { threat_command } => match threat_command {
+            ThreatCommands::Assess {
+                spec,
+                workspace_id,
+                service_id,
+                endpoint,
+                method,
+                output,
+            } => {
+                handle_threat_assess(spec, workspace_id, service_id, endpoint, method, output).await?;
+            }
+        },
+        GovernanceCommands::Status {
+            workspace_id,
+            service_id,
+        } => {
+            handle_governance_status(workspace_id, service_id).await?;
+        }
+    }
+
+    Ok(())
+}
+
 async fn handle_data(
     data_command: DataCommands,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -5709,20 +6043,309 @@ fn handle_completions(shell: Shell) {
     generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
 }
 
+/// Schema generation commands
+#[derive(Subcommand, Debug)]
+enum SchemaCommands {
+    /// Generate all JSON Schemas for MockForge configuration files
+    ///
+    /// Generates schemas for:
+    /// - Main config (mockforge.yaml)
+    /// - Reality configuration
+    /// - Persona configuration
+    /// - Blueprint metadata
+    ///
+    /// Examples:
+    ///   mockforge schema generate
+    ///   mockforge schema generate --output schemas/
+    ///   mockforge schema generate --type config
+    Generate {
+        /// Output directory or file path
+        /// If directory, generates all schemas with standard names
+        /// If file, generates only the specified schema type
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        
+        /// Schema type to generate (config, reality, persona, blueprint, all)
+        /// If not specified and output is a file, defaults to 'config'
+        /// If not specified and output is a directory, generates all schemas
+        #[arg(short, long, default_value = "all")]
+        r#type: String,
+    },
+    
+    /// Validate configuration files against JSON Schemas
+    ///
+    /// Validates MockForge configuration files against their corresponding
+    /// JSON Schemas to catch errors early and ensure config correctness.
+    ///
+    /// Examples:
+    ///   mockforge schema validate mockforge.yaml
+    ///   mockforge schema validate --file mockforge.yaml --schema-type config
+    ///   mockforge schema validate --directory . --schema-dir schemas/
+    Validate {
+        /// Config file to validate (mutually exclusive with --directory)
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+        
+        /// Directory containing config files to validate (mutually exclusive with --file)
+        #[arg(short, long)]
+        directory: Option<PathBuf>,
+        
+        /// Schema type to use for validation (config, reality, persona, blueprint)
+        /// If not specified, will attempt to auto-detect from file path
+        #[arg(long)]
+        schema_type: Option<String>,
+        
+        /// Directory containing schema files (default: looks for schemas/ in current directory)
+        #[arg(long)]
+        schema_dir: Option<PathBuf>,
+        
+        /// Exit with error code if validation fails (useful for CI)
+        #[arg(long)]
+        strict: bool,
+    },
+}
+
 /// Handle JSON Schema generation for MockForge configuration
 async fn handle_schema(
-    output: Option<PathBuf>,
+    schema_command: Option<SchemaCommands>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use mockforge_schema::generate_config_schema_json;
+    use mockforge_schema::generate_all_schemas;
     use std::fs;
+    use std::path::Path;
 
-    let schema_json = generate_config_schema_json();
+    // Default to generate all if no subcommand specified
+    let command = schema_command.unwrap_or(SchemaCommands::Generate {
+        output: None,
+        r#type: "all".to_string(),
+    });
 
-    if let Some(output_path) = output {
-        fs::write(&output_path, schema_json)?;
-        println!("✅ JSON Schema generated: {}", output_path.display());
-    } else {
-        println!("{}", schema_json);
+    match command {
+        SchemaCommands::Generate { output, r#type } => {
+            let schemas = generate_all_schemas();
+            
+            // Determine what to generate
+            let types_to_generate: Vec<&str> = if r#type == "all" {
+                vec!["mockforge-config", "reality-config", "persona-config", "blueprint-config"]
+            } else {
+                vec![&r#type]
+            };
+
+            if let Some(output_path) = output {
+                let output_path = Path::new(&output_path);
+                
+                // Check if output is a directory or file
+                if output_path.is_dir() || !output_path.exists() && output_path.extension().is_none() {
+                    // Directory mode: generate all requested schemas
+                    fs::create_dir_all(output_path)?;
+                    
+                    for schema_type in &types_to_generate {
+                        if let Some(schema) = schemas.get(*schema_type) {
+                            let filename = format!("{}.schema.json", schema_type.replace("-", "_"));
+                            let file_path = output_path.join(&filename);
+                            let schema_json = serde_json::to_string_pretty(schema)?;
+                            fs::write(&file_path, schema_json)?;
+                            println!("  ✓ Generated: {}", file_path.display());
+                        }
+                    }
+                    
+                    println!("\n✅ Generated {} schema(s) in {}", types_to_generate.len(), output_path.display());
+                    println!("\nTo use in your IDE:");
+                    println!("  1. Install a YAML schema extension (e.g., 'YAML' by Red Hat)");
+                    println!("  2. Add schema mapping to your VS Code settings.json:");
+                    println!("     \"yaml.schemas\": {{");
+                    for schema_type in &types_to_generate {
+                        let filename = format!("{}.schema.json", schema_type.replace("-", "_"));
+                        let schema_path = output_path.join(&filename);
+                        let file_pattern = match *schema_type {
+                            "mockforge-config" => "mockforge.yaml",
+                            "reality-config" => "**/reality*.yaml",
+                            "persona-config" => "**/personas/**/*.yaml",
+                            "blueprint-config" => "**/blueprint.yaml",
+                            _ => "*.yaml",
+                        };
+                        println!("       \"{}\": \"{}\",", schema_path.to_string_lossy(), file_pattern);
+                    }
+                    println!("     }}");
+                } else {
+                    // File mode: generate single schema
+                    let schema_type = if r#type == "all" { "mockforge-config" } else { &r#type };
+                    if let Some(schema) = schemas.get(schema_type) {
+                        let schema_json = serde_json::to_string_pretty(schema)?;
+                        fs::write(output_path, schema_json)?;
+                        println!("✅ JSON Schema generated: {}", output_path.display());
+                    } else {
+                        eprintln!("❌ Unknown schema type: {}", schema_type);
+                        eprintln!("Available types: mockforge-config, reality-config, persona-config, blueprint-config");
+                        return Err("Invalid schema type".into());
+                    }
+                }
+            } else {
+                // No output specified: print to stdout
+                if r#type == "all" {
+                    println!("Generating all schemas...\n");
+                    for schema_type in &types_to_generate {
+                        if let Some(schema) = schemas.get(*schema_type) {
+                            println!("=== {} ===", schema_type);
+                            println!("{}", serde_json::to_string_pretty(schema)?);
+                            println!();
+                        }
+                    }
+                } else {
+                    if let Some(schema) = schemas.get(&r#type) {
+                        println!("{}", serde_json::to_string_pretty(schema)?);
+                    } else {
+                        eprintln!("❌ Unknown schema type: {}", r#type);
+                        eprintln!("Available types: mockforge-config, reality-config, persona-config, blueprint-config");
+                        return Err("Invalid schema type".into());
+                    }
+                }
+            }
+        }
+        SchemaCommands::Validate {
+            file,
+            directory,
+            schema_type,
+            schema_dir,
+            strict,
+        } => {
+            use mockforge_schema::{detect_schema_type, generate_all_schemas, validate_config_file};
+            use std::fs;
+            use std::path::Path;
+
+            let schemas = generate_all_schemas();
+            let mut validation_results = Vec::new();
+            let mut has_errors = false;
+
+            // Determine schema directory
+            let schema_dir_path = schema_dir
+                .or_else(|| {
+                    let current_dir = std::env::current_dir().ok()?;
+                    let schemas_dir = current_dir.join("schemas");
+                    if schemas_dir.exists() {
+                        Some(schemas_dir)
+                    } else {
+                        None
+                    }
+                });
+
+            // Collect files to validate
+            let files_to_validate: Vec<PathBuf> = if let Some(file_path) = file {
+                vec![file_path]
+            } else if let Some(dir_path) = directory {
+                // Find all YAML/JSON files in directory
+                let mut files = Vec::new();
+                if let Ok(entries) = fs::read_dir(&dir_path) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() {
+                            if let Some(ext) = path.extension() {
+                                let ext_str = ext.to_string_lossy().to_lowercase();
+                                if ext_str == "yaml" || ext_str == "yml" || ext_str == "json" {
+                                    files.push(path);
+                                }
+                            }
+                        }
+                    }
+                }
+                files
+            } else {
+                // Default: validate mockforge.yaml in current directory
+                let current_dir = std::env::current_dir()?;
+                let default_file = current_dir.join("mockforge.yaml");
+                if default_file.exists() {
+                    vec![default_file]
+                } else {
+                    eprintln!("❌ No config file specified and mockforge.yaml not found in current directory");
+                    eprintln!("   Use --file or --directory to specify files to validate");
+                    return Err("No files to validate".into());
+                }
+            };
+
+            // Validate each file
+            for file_path in &files_to_validate {
+                // Determine schema type
+                let file_schema_type = schema_type.clone().unwrap_or_else(|| {
+                    detect_schema_type(file_path)
+                        .unwrap_or_else(|| "mockforge-config".to_string())
+                });
+
+                // Get schema (try from schema_dir first, then use generated)
+                let schema = if let Some(ref schema_dir) = schema_dir_path {
+                    let schema_file = schema_dir.join(format!("{}.schema.json", file_schema_type.replace("-", "_")));
+                    if schema_file.exists() {
+                        match fs::read_to_string(&schema_file)
+                            .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e)))
+                        {
+                            Ok(s) => s,
+                            Err(e) => {
+                                eprintln!("⚠️  Failed to load schema from {}: {}", schema_file.display(), e);
+                                schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
+                                    eprintln!("❌ Schema type '{}' not found", file_schema_type);
+                                    has_errors = true;
+                                    serde_json::json!({})
+                                })
+                            }
+                        }
+                    } else {
+                        schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
+                            eprintln!("⚠️  Schema file not found: {}, using generated schema", schema_file.display());
+                            schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
+                                eprintln!("❌ Schema type '{}' not found", file_schema_type);
+                                has_errors = true;
+                                serde_json::json!({})
+                            })
+                        })
+                    }
+                } else {
+                    schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
+                        eprintln!("❌ Schema type '{}' not found", file_schema_type);
+                        has_errors = true;
+                        serde_json::json!({})
+                    })
+                };
+
+                // Validate
+                match validate_config_file(file_path, &file_schema_type, &schema) {
+                    Ok(result) => {
+                        validation_results.push(result);
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to validate {}: {}", file_path.display(), e);
+                        has_errors = true;
+                    }
+                }
+            }
+
+            // Print results
+            println!("\n📋 Validation Results:\n");
+            for result in &validation_results {
+                if result.valid {
+                    println!("  ✅ {} (schema: {})", result.file_path, result.schema_type);
+                } else {
+                    println!("  ❌ {} (schema: {})", result.file_path, result.schema_type);
+                    for error in &result.errors {
+                        println!("     • {}", error);
+                    }
+                    has_errors = true;
+                }
+            }
+
+            // Summary
+            let valid_count = validation_results.iter().filter(|r| r.valid).count();
+            let total_count = validation_results.len();
+            
+            println!("\n📊 Summary: {} of {} file(s) passed validation", valid_count, total_count);
+
+            if has_errors {
+                if strict {
+                    return Err("Validation failed".into());
+                } else {
+                    eprintln!("\n⚠️  Validation completed with errors (use --strict to exit with error code)");
+                }
+            } else if !validation_results.is_empty() {
+                println!("\n✅ All files passed validation!");
+            }
+        }
     }
 
     Ok(())
@@ -6321,8 +6944,40 @@ mockforge serve --spec {}
 async fn handle_init(
     name: String,
     no_examples: bool,
+    blueprint: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::fs;
+
+    // If blueprint is provided, use blueprint creation instead
+    if let Some(blueprint_id) = blueprint {
+        println!("🚀 Creating project from blueprint '{}'...", blueprint_id);
+        
+        // Determine project directory
+        let project_dir = if name == "." {
+            std::env::current_dir()?
+        } else {
+            PathBuf::from(&name)
+        };
+
+        // Use blueprint creation logic
+        use crate::blueprint_commands;
+        blueprint_commands::create_from_blueprint(
+            if name == "." {
+                project_dir
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("my-project")
+                    .to_string()
+            } else {
+                name
+            },
+            blueprint_id,
+            Some(project_dir),
+            false, // Don't force overwrite by default
+        )?;
+
+        return Ok(());
+    }
 
     println!("🚀 Initializing MockForge project...");
 

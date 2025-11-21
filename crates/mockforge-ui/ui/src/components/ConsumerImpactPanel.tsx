@@ -14,6 +14,7 @@ interface ConsumerImpactPanelProps {
   incidentId: string;
   endpoint: string;
   method: string;
+  affectedConsumers?: ConsumerImpact | null;
 }
 
 // App type icon mapping
@@ -145,13 +146,25 @@ function SDKMethodCard({ sdkMethod, isExpanded, onToggle }: { sdkMethod: SDKMeth
   );
 }
 
-export function ConsumerImpactPanel({ incidentId, endpoint, method }: ConsumerImpactPanelProps) {
-  const [impact, setImpact] = useState<ConsumerImpact | null>(null);
-  const [loading, setLoading] = useState(true);
+export function ConsumerImpactPanel({ incidentId, endpoint, method, affectedConsumers }: ConsumerImpactPanelProps) {
+  const [impact, setImpact] = useState<ConsumerImpact | null>(affectedConsumers || null);
+  const [loading, setLoading] = useState(!affectedConsumers);
   const [error, setError] = useState<string | null>(null);
   const [expandedSDKMethods, setExpandedSDKMethods] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    // If affected_consumers is provided directly, use it and skip API call
+    if (affectedConsumers) {
+      setImpact(affectedConsumers);
+      setLoading(false);
+      if (affectedConsumers.affected_sdk_methods.length > 0) {
+        const firstKey = `${affectedConsumers.affected_sdk_methods[0].sdk_name}:${affectedConsumers.affected_sdk_methods[0].method_name}`;
+        setExpandedSDKMethods(new Set([firstKey]));
+      }
+      return;
+    }
+
+    // Otherwise, fetch from API
     let cancelled = false;
 
     async function fetchImpact() {
@@ -187,7 +200,7 @@ export function ConsumerImpactPanel({ incidentId, endpoint, method }: ConsumerIm
     return () => {
       cancelled = true;
     };
-  }, [incidentId]);
+  }, [incidentId, affectedConsumers]);
 
   const toggleSDKMethod = (sdkName: string, methodName: string) => {
     const key = `${sdkName}:${methodName}`;

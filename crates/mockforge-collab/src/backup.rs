@@ -505,57 +505,93 @@ impl BackupService {
         backup_url: &str,
         storage_config: Option<&serde_json::Value>,
     ) -> Result<()> {
-        // Parse S3 URL (format: s3://bucket-name/path/to/file)
-        if !backup_url.starts_with("s3://") {
-            return Err(CollabError::Internal(format!("Invalid S3 URL format: {}", backup_url)));
+        #[cfg(feature = "s3")]
+        {
+            use aws_sdk_s3::Client as S3Client;
+            use aws_sdk_s3::config::{Credentials, Region};
+            use aws_config::SdkConfig;
+
+            // Parse S3 URL (format: s3://bucket-name/path/to/file)
+            if !backup_url.starts_with("s3://") {
+                return Err(CollabError::Internal(format!("Invalid S3 URL format: {}", backup_url)));
+            }
+
+            let url_parts: Vec<&str> =
+                backup_url.strip_prefix("s3://").unwrap().splitn(2, '/').collect();
+            if url_parts.len() != 2 {
+                return Err(CollabError::Internal(format!("Invalid S3 URL format: {}", backup_url)));
+            }
+
+            let bucket = url_parts[0];
+            let key = url_parts[1];
+
+            // Build AWS config with credentials from storage_config or environment
+            let aws_config: SdkConfig = if let Some(config) = storage_config {
+                // Extract S3 credentials from storage_config
+                // Expected format: {"access_key_id": "...", "secret_access_key": "...", "region": "..."}
+                let access_key_id = config
+                    .get("access_key_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        CollabError::Internal("S3 access_key_id not found in storage_config".to_string())
+                    })?;
+
+                let secret_access_key = config
+                    .get("secret_access_key")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        CollabError::Internal(
+                            "S3 secret_access_key not found in storage_config".to_string(),
+                        )
+                    })?;
+
+                let region_str = config
+                    .get("region")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("us-east-1");
+
+                // Create credentials provider
+                let credentials = Credentials::new(
+                    access_key_id,
+                    secret_access_key,
+                    None, // session token
+                    None, // expiration
+                    "mockforge",
+                );
+
+                // Build AWS config with custom credentials and region
+                aws_config::ConfigLoader::default()
+                    .credentials_provider(credentials)
+                    .region(Region::new(region_str.to_string()))
+                    .load()
+                    .await
+            } else {
+                // Use default AWS config (from environment variables, IAM role, etc.)
+                aws_config::load_from_env().await
+            };
+
+            // Create S3 client
+            let client = S3Client::new(&aws_config);
+
+            // Delete object from S3
+            client
+                .delete_object()
+                .bucket(bucket)
+                .key(key)
+                .send()
+                .await
+                .map_err(|e| CollabError::Internal(format!("Failed to delete S3 object: {}", e)))?;
+
+            tracing::info!("Successfully deleted S3 object: {}", backup_url);
+            Ok(())
         }
 
-        let url_parts: Vec<&str> =
-            backup_url.strip_prefix("s3://").unwrap().splitn(2, '/').collect();
-        if url_parts.len() != 2 {
-            return Err(CollabError::Internal(format!("Invalid S3 URL format: {}", backup_url)));
+        #[cfg(not(feature = "s3"))]
+        {
+            Err(CollabError::Internal(
+                "S3 deletion requires 's3' feature to be enabled. Add 's3' feature to mockforge-collab in Cargo.toml.".to_string(),
+            ))
         }
-
-        let bucket = url_parts[0];
-        let key = url_parts[1];
-
-        // Extract S3 credentials from storage_config
-        // Expected format: {"access_key_id": "...", "secret_access_key": "...", "region": "..."}
-        let _access_key = storage_config
-            .and_then(|c| c.get("access_key_id"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                CollabError::Internal("S3 access_key_id not found in storage_config".to_string())
-            })?;
-
-        let _secret_key = storage_config
-            .and_then(|c| c.get("secret_access_key"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                CollabError::Internal(
-                    "S3 secret_access_key not found in storage_config".to_string(),
-                )
-            })?;
-
-        // Note: In production, you would use the aws-sdk-s3 crate here
-        // For now, we'll return an error indicating S3 deletion requires the SDK
-        tracing::warn!(
-            "S3 deletion requires aws-sdk-s3. Backup URL: {}, Bucket: {}, Key: {}",
-            backup_url,
-            bucket,
-            key
-        );
-
-        // TODO: Implement actual S3 deletion using aws-sdk-s3
-        // Example:
-        // use aws_sdk_s3::Client;
-        // let client = Client::new(&aws_config).await;
-        // client.delete_object().bucket(bucket).key(key).send().await?;
-
-        Err(CollabError::Internal(
-            "S3 deletion requires aws-sdk-s3 dependency. Please install it to enable S3 support."
-                .to_string(),
-        ))
     }
 
     /// Delete backup from Azure Blob Storage
@@ -564,57 +600,83 @@ impl BackupService {
         backup_url: &str,
         storage_config: Option<&serde_json::Value>,
     ) -> Result<()> {
-        // Parse Azure URL (format: https://account.blob.core.windows.net/container/path)
-        if !backup_url.contains("blob.core.windows.net") {
-            return Err(CollabError::Internal(format!(
-                "Invalid Azure Blob URL format: {}",
-                backup_url
-            )));
+        #[cfg(feature = "azure")]
+        {
+            use azure_storage_blobs::prelude::*;
+            use azure_identity::DefaultAzureCredential;
+            use std::sync::Arc;
+
+            // Parse Azure URL (format: https://account.blob.core.windows.net/container/path)
+            if !backup_url.contains("blob.core.windows.net") {
+                return Err(CollabError::Internal(format!(
+                    "Invalid Azure Blob URL format: {}",
+                    backup_url
+                )));
+            }
+
+            // Parse URL properly
+            let url = url::Url::parse(backup_url)
+                .map_err(|e| CollabError::Internal(format!("Invalid Azure URL: {}", e)))?;
+
+            // Extract account name from hostname (e.g., "account.blob.core.windows.net" -> "account")
+            let hostname = url.host_str()
+                .ok_or_else(|| CollabError::Internal("Invalid Azure hostname".to_string()))?;
+            let account_name = hostname
+                .split('.')
+                .next()
+                .ok_or_else(|| CollabError::Internal("Invalid Azure hostname format".to_string()))?;
+
+            // Extract container and blob name from path
+            let path = url.path();
+            let path_parts: Vec<&str> = path.splitn(3, '/').filter(|s| !s.is_empty()).collect();
+            if path_parts.len() < 2 {
+                return Err(CollabError::Internal(format!(
+                    "Invalid Azure blob path: {}",
+                    path
+                )));
+            }
+
+            let container_name = path_parts[0];
+            let blob_name = path_parts[1..].join("/");
+
+            // Extract Azure credentials from storage_config
+            // Expected format: {"account_name": "...", "account_key": "..."} or use DefaultAzureCredential
+            let storage_client = if let Some(config) = storage_config {
+                if let Some(account_key) = config.get("account_key").and_then(|v| v.as_str()) {
+                    // Use account key authentication
+                    let account_key = account_key.to_string();
+                    let storage_credentials = StorageCredentials::access_key(account_name, account_key);
+                    BlobServiceClient::new(account_name, storage_credentials)
+                } else {
+                    // Use DefaultAzureCredential (for managed identity, environment variables, etc.)
+                    let credential = Arc::new(DefaultAzureCredential::default());
+                    BlobServiceClient::new(account_name, credential)
+                }
+            } else {
+                // Use DefaultAzureCredential if no config provided
+                let credential = Arc::new(DefaultAzureCredential::default());
+                BlobServiceClient::new(account_name, credential)
+            };
+
+            // Get container client and delete blob
+            let container_client = storage_client.container_client(container_name);
+            let blob_client = container_client.blob_client(&blob_name);
+
+            blob_client
+                .delete()
+                .await
+                .map_err(|e| CollabError::Internal(format!("Failed to delete Azure blob: {}", e)))?;
+
+            tracing::info!("Successfully deleted Azure blob: {}", backup_url);
+            Ok(())
         }
 
-        // Extract account, container, and blob name from URL
-        // Expected format: https://{account}.blob.core.windows.net/{container}/{blob}
-        let url_parts: Vec<&str> = backup_url.splitn(4, '/').collect();
-        if url_parts.len() < 4 {
-            return Err(CollabError::Internal(format!(
-                "Invalid Azure Blob URL format: {}",
-                backup_url
-            )));
+        #[cfg(not(feature = "azure"))]
+        {
+            Err(CollabError::Internal(
+                "Azure deletion requires 'azure' feature to be enabled. Add 'azure' feature to mockforge-collab in Cargo.toml.".to_string(),
+            ))
         }
-
-        // Extract account name from hostname
-        let hostname = url_parts[2];
-        let _account = hostname
-            .split('.')
-            .next()
-            .ok_or_else(|| CollabError::Internal("Invalid Azure hostname".to_string()))?;
-
-        let _container = url_parts[3]
-            .split('/')
-            .next()
-            .ok_or_else(|| CollabError::Internal("Invalid Azure container path".to_string()))?;
-
-        let _blob_name = backup_url
-            .splitn(5, '/')
-            .nth(4)
-            .ok_or_else(|| CollabError::Internal("Invalid Azure blob path".to_string()))?;
-
-        // Extract Azure credentials from storage_config
-        // Expected format: {"account_name": "...", "account_key": "..."}
-        let _account_name = storage_config
-            .and_then(|c| c.get("account_name"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                CollabError::Internal("Azure account_name not found in storage_config".to_string())
-            })?;
-
-        // Note: In production, you would use the azure_storage_blobs crate here
-        tracing::warn!("Azure deletion requires azure-storage-blobs. Backup URL: {}", backup_url);
-
-        // TODO: Implement actual Azure deletion using azure-storage-blobs
-        Err(CollabError::Internal(
-            "Azure deletion requires azure-storage-blobs dependency. Please install it to enable Azure support.".to_string(),
-        ))
     }
 
     /// Delete backup from Google Cloud Storage
@@ -623,36 +685,85 @@ impl BackupService {
         backup_url: &str,
         storage_config: Option<&serde_json::Value>,
     ) -> Result<()> {
-        // Parse GCS URL (format: gs://bucket-name/path/to/file)
-        if !backup_url.starts_with("gs://") {
-            return Err(CollabError::Internal(format!("Invalid GCS URL format: {}", backup_url)));
+        #[cfg(feature = "gcs")]
+        {
+            use google_cloud_storage::client::{Client, ClientConfig};
+            use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
+            use google_cloud_storage::http::objects::Object;
+            use google_cloud_auth::credentials::CredentialsFile;
+
+            // Parse GCS URL (format: gs://bucket-name/path/to/file)
+            if !backup_url.starts_with("gs://") {
+                return Err(CollabError::Internal(format!("Invalid GCS URL format: {}", backup_url)));
+            }
+
+            let url_parts: Vec<&str> =
+                backup_url.strip_prefix("gs://").unwrap().splitn(2, '/').collect();
+            if url_parts.len() != 2 {
+                return Err(CollabError::Internal(format!("Invalid GCS URL format: {}", backup_url)));
+            }
+
+            let bucket_name = url_parts[0];
+            let object_name = url_parts[1];
+
+            // Extract GCS credentials from storage_config
+            // Expected format: {"service_account_key": "...", "project_id": "..."}
+            let project_id = storage_config
+                .and_then(|c| c.get("project_id"))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    CollabError::Internal("GCS project_id not found in storage_config".to_string())
+                })?;
+
+            // Initialize GCS client
+            let config = if let Some(config) = storage_config {
+                if let Some(service_account_key) = config.get("service_account_key").and_then(|v| v.as_str()) {
+                    // Parse service account key JSON
+                    let creds: CredentialsFile = serde_json::from_str(service_account_key)
+                        .map_err(|e| CollabError::Internal(format!("Invalid GCS service account key: {}", e)))?;
+                    ClientConfig::default()
+                        .with_credentials(creds)
+                        .await
+                        .map_err(|e| CollabError::Internal(format!("Failed to initialize GCS client: {}", e)))?
+                } else {
+                    // Use default credentials (from environment or metadata server)
+                    ClientConfig::default()
+                        .with_auth()
+                        .await
+                        .map_err(|e| CollabError::Internal(format!("Failed to initialize GCS client: {}", e)))?
+                }
+            } else {
+                // Use default credentials
+                ClientConfig::default()
+                    .with_auth()
+                    .await
+                    .map_err(|e| CollabError::Internal(format!("Failed to initialize GCS client: {}", e)))?
+            };
+
+            let client = Client::new(config);
+
+            // Delete object
+            let request = DeleteObjectRequest {
+                bucket: bucket_name.to_string(),
+                object: object_name.to_string(),
+                ..Default::default()
+            };
+
+            client
+                .delete_object(&request)
+                .await
+                .map_err(|e| CollabError::Internal(format!("Failed to delete GCS object: {}", e)))?;
+
+            tracing::info!("Successfully deleted GCS object: {}", backup_url);
+            Ok(())
         }
 
-        let url_parts: Vec<&str> =
-            backup_url.strip_prefix("gs://").unwrap().splitn(2, '/').collect();
-        if url_parts.len() != 2 {
-            return Err(CollabError::Internal(format!("Invalid GCS URL format: {}", backup_url)));
+        #[cfg(not(feature = "gcs"))]
+        {
+            Err(CollabError::Internal(
+                "GCS deletion requires 'gcs' feature to be enabled. Add 'gcs' feature to mockforge-collab in Cargo.toml.".to_string(),
+            ))
         }
-
-        let _bucket = url_parts[0];
-        let _object_name = url_parts[1];
-
-        // Extract GCS credentials from storage_config
-        // Expected format: {"service_account_key": "...", "project_id": "..."}
-        let _project_id = storage_config
-            .and_then(|c| c.get("project_id"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                CollabError::Internal("GCS project_id not found in storage_config".to_string())
-            })?;
-
-        // Note: In production, you would use the google-cloud-storage crate here
-        tracing::warn!("GCS deletion requires google-cloud-storage. Backup URL: {}", backup_url);
-
-        // TODO: Implement actual GCS deletion using google-cloud-storage
-        Err(CollabError::Internal(
-            "GCS deletion requires google-cloud-storage dependency. Please install it to enable GCS support.".to_string(),
-        ))
     }
 
     /// Get workspace data for backup

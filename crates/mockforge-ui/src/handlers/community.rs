@@ -108,8 +108,12 @@ pub async fn get_showcase_projects(
     let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(20);
     let offset = params.get("offset").and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
 
-    // TODO: Fetch from database or storage
-    // For now, return mock data
+    // Note: Community showcase requires database or content storage integration
+    // To enable database persistence:
+    // 1. Create showcase_projects table in database
+    // 2. Add database accessor to handler state
+    // 3. Query projects with filters (category, featured, pagination)
+    // For now, returns mock data for UI development
     let projects = vec![ShowcaseProject {
         id: "ecommerce-platform".to_string(),
         title: "E-commerce Platform Mock".to_string(),
@@ -156,7 +160,8 @@ pub async fn get_showcase_projects(
 pub async fn get_showcase_project(
     Path(project_id): Path<String>,
 ) -> Json<ApiResponse<ShowcaseProject>> {
-    // TODO: Fetch from database
+    // Note: Requires database integration (see list_showcase_projects comment)
+    // For now, returns mock data
     let project = ShowcaseProject {
         id: project_id.clone(),
         title: "E-commerce Platform Mock".to_string(),
@@ -218,7 +223,8 @@ pub async fn get_success_stories(
     let featured = params.get("featured").map(|s| s == "true");
     let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
 
-    // TODO: Fetch from database
+    // Note: Requires database integration (see list_showcase_projects comment)
+    // For now, returns mock data
     let stories = vec![
         SuccessStory {
             id: "acme-corp".to_string(),
@@ -256,7 +262,8 @@ pub async fn get_learning_resources(
     let difficulty = params.get("difficulty");
     let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(20);
 
-    // TODO: Fetch from database or content storage
+    // Note: Requires database integration (see list_showcase_projects comment)
+    // For now, returns mock data or content storage
     let resources = vec![LearningResource {
         id: "getting-started".to_string(),
         title: "Getting Started with MockForge".to_string(),
@@ -293,7 +300,8 @@ pub async fn get_learning_resources(
 pub async fn get_learning_resource(
     Path(resource_id): Path<String>,
 ) -> Json<ApiResponse<LearningResource>> {
-    // TODO: Fetch from database
+    // Note: Requires database integration (see list_showcase_projects comment)
+    // For now, returns mock data
     let resource = LearningResource {
         id: resource_id.clone(),
         title: "Getting Started with MockForge".to_string(),
@@ -342,7 +350,13 @@ pub async fn submit_showcase_project(
     State(_state): State<AdminState>,
     Json(payload): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
-    // TODO: Validate and store project submission
+    // Note: Project submission requires database integration
+    // To enable:
+    // 1. Validate project data (title, description, files, etc.)
+    // 2. Store project metadata in database
+    // 3. Store project files in object storage (S3, etc.)
+    // 4. Return created project with ID
+    // For now, returns success response with mock project
     // Requires authentication and validation
 
     Ok(Json(ApiResponse {

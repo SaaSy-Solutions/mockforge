@@ -1,0 +1,181 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Banking Lite Account Contract",
+  "description": "Contract schemas for account management endpoints",
+  "version": "1.0.0",
+  "endpoints": {
+    "/api/accounts": {
+      "GET": {
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["accounts"],
+            "properties": {
+              "accounts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "account_number", "type", "balance"],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "account_number": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": ["checking", "savings", "business"]
+                    },
+                    "balance": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string",
+                      "enum": ["USD", "EUR", "GBP"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["account_type", "currency"],
+          "properties": {
+            "account_type": {
+              "type": "string",
+              "enum": ["checking", "savings", "business"]
+            },
+            "currency": {
+              "type": "string",
+              "enum": ["USD", "EUR", "GBP"],
+              "default": "USD"
+            },
+            "initial_deposit": {
+              "type": "number",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        },
+        "response": {
+          "201": {
+            "type": "object",
+            "required": ["account"],
+            "properties": {
+              "account": {
+                "type": "object",
+                "required": ["id", "account_number", "type", "balance", "status"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "account_number": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "balance": {
+                    "type": "number"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["active", "pending", "closed"]
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/{account_id}": {
+      "GET": {
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["account"],
+            "properties": {
+              "account": {
+                "type": "object",
+                "required": ["id", "account_number", "type", "balance"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "account_number": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "balance": {
+                    "type": "number"
+                  },
+                  "available_balance": {
+                    "type": "number"
+                  },
+                  "currency": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+              "error": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": ["ACCOUNT_NOT_FOUND"]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/{account_id}/balance": {
+      "GET": {
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["balance", "available_balance"],
+            "properties": {
+              "balance": {
+                "type": "number",
+                "description": "Current account balance"
+              },
+              "available_balance": {
+                "type": "number",
+                "description": "Available balance (excluding pending transactions)"
+              },
+              "currency": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+

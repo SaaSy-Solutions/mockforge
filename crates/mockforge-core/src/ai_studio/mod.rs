@@ -38,22 +38,48 @@ pub mod artifact_freezer;
 pub mod budget_manager;
 pub mod chat_orchestrator;
 pub mod config;
+pub mod contract_diff_handler;
 pub mod conversation_store;
 pub mod debug_analyzer;
+pub mod debug_context;
+pub mod debug_context_integrator;
 pub mod nl_mock_generator;
+pub mod org_controls;
+#[cfg(feature = "database")]
+pub mod org_controls_db;
 pub mod persona_generator;
 
-pub use artifact_freezer::{ArtifactFreezer, FreezeRequest, FrozenArtifact};
-pub use budget_manager::{BudgetConfig, BudgetManager, UsageStats};
+pub use artifact_freezer::{
+    ArtifactFreezer, FreezeMetadata, FreezeRequest, FrozenArtifact,
+};
+pub use budget_manager::{AiFeature, BudgetConfig, BudgetManager, FeatureUsage, UsageStats};
 pub use chat_orchestrator::{
     ChatContext, ChatIntent, ChatMessage, ChatOrchestrator, ChatRequest, ChatResponse,
 };
-pub use config::AiStudioConfig;
+pub use contract_diff_handler::{
+    BreakingChange, ContractDiffFilters, ContractDiffHandler, ContractDiffIntent,
+    ContractDiffQueryResult,
+};
+pub use config::{AiStudioConfig, FreezeMode};
 pub use conversation_store::{
     get_conversation_store, initialize_conversation_store, ConversationStore,
 };
-pub use debug_analyzer::{DebugAnalyzer, DebugRequest, DebugResponse, DebugSuggestion};
+pub use debug_analyzer::{
+    DebugAnalyzer, DebugRequest, DebugResponse, DebugSuggestion, LinkedArtifact,
+};
+pub use debug_context::{
+    ChaosContext, ContractContext, DebugContext, PersonaContext, RealityContext, ScenarioContext,
+};
+pub use debug_context_integrator::{
+    ChaosAccessor, ContractAccessor, DebugContextIntegrator, PersonaAccessor, RealityAccessor,
+    ScenarioAccessor,
+};
 pub use nl_mock_generator::{MockGenerationResult, MockGenerator};
+pub use org_controls::{
+    OrgAiControlsConfig, OrgBudgetConfig, OrgControls, OrgControlsAccessor, OrgRateLimitConfig,
+};
+#[cfg(feature = "database")]
+pub use org_controls_db::DbOrgControls;
 pub use persona_generator::{
     PersonaGenerationRequest, PersonaGenerationResponse, PersonaGenerator,
 };

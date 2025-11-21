@@ -1,3 +1,5 @@
+//! Pillars: [DevX]
+//!
 //! # MockForge Plugin Core
 //!
 //! Core traits, types, and runtime interfaces for the MockForge plugin system.

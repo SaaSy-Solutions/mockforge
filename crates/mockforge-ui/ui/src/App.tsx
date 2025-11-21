@@ -28,6 +28,7 @@ const GraphPage = lazy(() => import('./pages/GraphPage').then(m => ({ default: m
 const ScenarioStateMachineEditor = lazy(() => import('./pages/ScenarioStateMachineEditor').then(m => ({ default: m.ScenarioStateMachineEditor })));
 const ScenarioStudioPage = lazy(() => import('./pages/ScenarioStudioPage').then(m => ({ default: m.ScenarioStudioPage })));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const PillarAnalyticsPage = lazy(() => import('./pages/PillarAnalyticsPage').then(m => ({ default: m.PillarAnalyticsPage })));
 
 // Observability & Monitoring
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage').then(m => ({ default: m.ObservabilityPage })));
@@ -87,6 +88,30 @@ function App() {
   useEffect(() => {
     loadWorkspaces();
   }, [loadWorkspaces]);
+
+  // Handle navigation events from deep-links (e.g., from RealityTracePanel)
+  useEffect(() => {
+    const handleNavigate = (event: CustomEvent<{ target: 'persona' | 'scenario' | 'chaos'; id: string }>) => {
+      const { target, id } = event.detail;
+      
+      if (target === 'chaos') {
+        setActiveTab('chaos');
+        // ChaosPage can read URL params or we can pass via state
+        // For now, just navigate to the page
+      } else if (target === 'scenario') {
+        setActiveTab('scenario-studio');
+        // ScenarioStudioPage can filter by scenario ID
+      } else if (target === 'persona') {
+        setActiveTab('ai-studio');
+        // AIStudioPage can switch to personas tab and filter by persona ID
+      }
+    };
+
+    window.addEventListener('navigate', handleNavigate as EventListener);
+    return () => {
+      window.removeEventListener('navigate', handleNavigate as EventListener);
+    };
+  }, []);
 
   // Handle Tauri file open events (desktop app only)
   useEffect(() => {
@@ -176,6 +201,8 @@ function App() {
         return <MetricsPage />;
       case 'analytics':
         return <AnalyticsPage />;
+      case 'pillar-analytics':
+        return <PillarAnalyticsPage />;
       case 'verification':
         return <VerificationPage />;
       case 'contract-diff':

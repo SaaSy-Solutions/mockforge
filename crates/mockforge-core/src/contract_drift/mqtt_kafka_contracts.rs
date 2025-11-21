@@ -184,9 +184,50 @@ impl MqttContract {
                     });
                 }
 
-                // Compare schemas
-                let schema_mismatches =
-                    Self::compare_json_schemas(&old_topic.schema, &new_topic.schema, topic_name);
+                // Detect schema format and compare schemas
+                let old_format = Self::detect_schema_format(&old_topic.schema);
+                let new_format = Self::detect_schema_format(&new_topic.schema);
+                
+                // Check for schema format changes (breaking change)
+                if old_format != new_format {
+                    let mut context = HashMap::new();
+                    context.insert("is_additive".to_string(), serde_json::json!(false));
+                    context.insert("is_breaking".to_string(), serde_json::json!(true));
+                    context.insert("change_category".to_string(), serde_json::json!("schema_format_changed"));
+                    context.insert("topic".to_string(), serde_json::json!(topic_name));
+                    context.insert("old_format".to_string(), serde_json::json!(old_format));
+                    context.insert("new_format".to_string(), serde_json::json!(new_format));
+                    
+                    mismatches.push(Mismatch {
+                        mismatch_type: MismatchType::SchemaMismatch,
+                        path: format!("{}.schema_format", topic_name),
+                        method: None,
+                        expected: Some(format!("Schema format: {}", old_format)),
+                        actual: Some(format!("Schema format: {}", new_format)),
+                        description: format!(
+                            "Schema format changed from {} to {} for topic {}",
+                            old_format, new_format, topic_name
+                        ),
+                        severity: MismatchSeverity::High,
+                        confidence: 1.0,
+                        context,
+                    });
+                }
+                
+                // Compare schemas based on format
+                let schema_mismatches = match (old_format.as_str(), new_format.as_str()) {
+                    ("json_schema", "json_schema") => {
+                        Self::compare_json_schemas(&old_topic.schema, &new_topic.schema, topic_name)
+                    }
+                    ("avro", "avro") => {
+                        Self::compare_avro_schemas(&old_topic.schema, &new_topic.schema, topic_name)
+                            .unwrap_or_else(|_| Vec::new()) // Fallback to empty on error
+                    }
+                    ("json_shape", "json_shape") => {
+                        Self::compare_json_shape_schemas(&old_topic.schema, &new_topic.schema, topic_name)
+                    }
+                    _ => Vec::new(), // Different formats already handled above
+                };
                 mismatches.extend(schema_mismatches);
             }
         }
@@ -214,6 +255,256 @@ impl MqttContract {
         })
     }
 
+    /// Detect the schema format (JSON Schema, Avro, or JSON-shape)
+    fn detect_schema_format(schema: &Value) -> String {
+        // Check for Avro schema indicators
+        if schema.get("type").and_then(|v| v.as_str()) == Some("record")
+            || schema.get("fields").is_some()
+        {
+            return "avro".to_string();
+        }
+
+        // Check for JSON Schema indicators
+        if schema.get("$schema").is_some()
+            || (schema.get("type").is_some() && schema.get("properties").is_some())
+            || schema.get("required").is_some()
+        {
+            return "json_schema".to_string();
+        }
+
+        // Check for JSON-shape (simple object with type strings)
+        if let Some(obj) = schema.as_object() {
+            let all_strings = obj.values().all(|v| {
+                v.as_str().is_some()
+                    || (v.is_object() && v.get("type").and_then(|t| t.as_str()).is_some())
+            });
+            if all_strings && !obj.is_empty() {
+                return "json_shape".to_string();
+            }
+        }
+
+        // Default to JSON Schema if unclear
+        "json_schema".to_string()
+    }
+
+    /// Compare Avro schemas and identify differences
+    fn compare_avro_schemas(
+        old_schema: &Value,
+        new_schema: &Value,
+        path_prefix: &str,
+    ) -> Result<Vec<Mismatch>, ContractError> {
+        let mut mismatches = Vec::new();
+
+        // Extract fields from Avro schema
+        let old_fields = old_schema
+            .get("fields")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| ContractError::SchemaValidation("Invalid Avro schema: missing fields".to_string()))?;
+        let new_fields = new_schema
+            .get("fields")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| ContractError::SchemaValidation("Invalid Avro schema: missing fields".to_string()))?;
+
+        // Build field maps by name
+        let old_fields_map: HashMap<String, &Value> = old_fields
+            .iter()
+            .filter_map(|f| {
+                f.get("name").and_then(|n| n.as_str()).map(|name| (name.to_string(), f))
+            })
+            .collect();
+        let new_fields_map: HashMap<String, &Value> = new_fields
+            .iter()
+            .filter_map(|f| {
+                f.get("name").and_then(|n| n.as_str()).map(|name| (name.to_string(), f))
+            })
+            .collect();
+
+        // Check for removed fields (breaking change)
+        for (field_name, old_field) in &old_fields_map {
+            if !new_fields_map.contains_key(field_name) {
+                let mut context = HashMap::new();
+                context.insert("is_additive".to_string(), serde_json::json!(false));
+                context.insert("is_breaking".to_string(), serde_json::json!(true));
+                context.insert("change_category".to_string(), serde_json::json!("field_removed"));
+                context.insert("field_name".to_string(), serde_json::json!(field_name));
+                context.insert("schema_format".to_string(), serde_json::json!("avro"));
+                
+                mismatches.push(Mismatch {
+                    mismatch_type: MismatchType::EndpointNotFound,
+                    path: format!("{}.{}", path_prefix, field_name),
+                    method: None,
+                    expected: Some(format!("Field {} should exist", field_name)),
+                    actual: Some("Field removed".to_string()),
+                    description: format!("Avro field {} was removed", field_name),
+                    severity: MismatchSeverity::High,
+                    confidence: 1.0,
+                    context,
+                });
+            }
+        }
+
+        // Check for added fields
+        for (field_name, new_field) in &new_fields_map {
+            if !old_fields_map.contains_key(field_name) {
+                // In Avro, fields without defaults are required
+                let has_default = new_field.get("default").is_some();
+                let is_required = !has_default;
+                
+                let mut context = HashMap::new();
+                context.insert("is_additive".to_string(), serde_json::json!(!is_required));
+                context.insert("is_breaking".to_string(), serde_json::json!(is_required));
+                context.insert("change_category".to_string(), serde_json::json!(if is_required { "required_field_added" } else { "field_added" }));
+                context.insert("field_name".to_string(), serde_json::json!(field_name));
+                context.insert("schema_format".to_string(), serde_json::json!("avro"));
+                context.insert("has_default".to_string(), serde_json::json!(has_default));
+                
+                mismatches.push(Mismatch {
+                    mismatch_type: if is_required { MismatchType::MissingRequiredField } else { MismatchType::UnexpectedField },
+                    path: format!("{}.{}", path_prefix, field_name),
+                    method: None,
+                    expected: None,
+                    actual: Some(format!("New Avro field {} ({})", field_name, if is_required { "required" } else { "optional" })),
+                    description: format!(
+                        "New Avro field {} was added ({})",
+                        field_name,
+                        if is_required { "required - breaking" } else { "optional - additive" }
+                    ),
+                    severity: if is_required { MismatchSeverity::High } else { MismatchSeverity::Low },
+                    confidence: 1.0,
+                    context,
+                });
+            } else {
+                // Check for type changes
+                let old_field = old_fields_map[field_name];
+                let old_type = old_field.get("type");
+                let new_type = new_field.get("type");
+                
+                if old_type != new_type {
+                    let mut context = HashMap::new();
+                    context.insert("is_additive".to_string(), serde_json::json!(false));
+                    context.insert("is_breaking".to_string(), serde_json::json!(true));
+                    context.insert("change_category".to_string(), serde_json::json!("field_type_changed"));
+                    context.insert("field_name".to_string(), serde_json::json!(field_name));
+                    context.insert("schema_format".to_string(), serde_json::json!("avro"));
+                    context.insert("old_type".to_string(), serde_json::json!(old_type));
+                    context.insert("new_type".to_string(), serde_json::json!(new_type));
+                    
+                    mismatches.push(Mismatch {
+                        mismatch_type: MismatchType::TypeMismatch,
+                        path: format!("{}.{}", path_prefix, field_name),
+                        method: None,
+                        expected: Some(format!("Type: {:?}", old_type)),
+                        actual: Some(format!("Type: {:?}", new_type)),
+                        description: format!(
+                            "Avro field {} type changed",
+                            field_name
+                        ),
+                        severity: MismatchSeverity::High,
+                        confidence: 1.0,
+                        context,
+                    });
+                }
+            }
+        }
+
+        Ok(mismatches)
+    }
+
+    /// Compare JSON-shape schemas (simplified format)
+    fn compare_json_shape_schemas(
+        old_schema: &Value,
+        new_schema: &Value,
+        path_prefix: &str,
+    ) -> Vec<Mismatch> {
+        let mut mismatches = Vec::new();
+
+        if let (Some(old_obj), Some(new_obj)) = (old_schema.as_object(), new_schema.as_object()) {
+            // Check for removed properties (breaking)
+            for (prop_name, _) in old_obj {
+                if !new_obj.contains_key(prop_name) {
+                    let mut context = HashMap::new();
+                    context.insert("is_additive".to_string(), serde_json::json!(false));
+                    context.insert("is_breaking".to_string(), serde_json::json!(true));
+                    context.insert("change_category".to_string(), serde_json::json!("property_removed"));
+                    context.insert("field_name".to_string(), serde_json::json!(prop_name));
+                    context.insert("schema_format".to_string(), serde_json::json!("json_shape"));
+                    
+                    mismatches.push(Mismatch {
+                        mismatch_type: MismatchType::UnexpectedField,
+                        path: format!("{}.{}", path_prefix, prop_name),
+                        method: None,
+                        expected: Some(format!("Property {} should exist", prop_name)),
+                        actual: Some("Property removed".to_string()),
+                        description: format!("Property {} was removed", prop_name),
+                        severity: MismatchSeverity::High,
+                        confidence: 1.0,
+                        context,
+                    });
+                }
+            }
+
+            // Check for added properties (additive)
+            for (prop_name, _) in new_obj {
+                if !old_obj.contains_key(prop_name) {
+                    let mut context = HashMap::new();
+                    context.insert("is_additive".to_string(), serde_json::json!(true));
+                    context.insert("is_breaking".to_string(), serde_json::json!(false));
+                    context.insert("change_category".to_string(), serde_json::json!("property_added"));
+                    context.insert("field_name".to_string(), serde_json::json!(prop_name));
+                    context.insert("schema_format".to_string(), serde_json::json!("json_shape"));
+                    
+                    mismatches.push(Mismatch {
+                        mismatch_type: MismatchType::UnexpectedField,
+                        path: format!("{}.{}", path_prefix, prop_name),
+                        method: None,
+                        expected: None,
+                        actual: Some(format!("New property {}", prop_name)),
+                        description: format!("New property {} was added", prop_name),
+                        severity: MismatchSeverity::Low,
+                        confidence: 1.0,
+                        context,
+                    });
+                } else {
+                    // Check for type changes
+                    let old_type = old_obj[prop_name].as_str().or_else(|| {
+                        old_obj[prop_name].get("type").and_then(|t| t.as_str())
+                    });
+                    let new_type = new_obj[prop_name].as_str().or_else(|| {
+                        new_obj[prop_name].get("type").and_then(|t| t.as_str())
+                    });
+                    
+                    if old_type != new_type {
+                        let mut context = HashMap::new();
+                        context.insert("is_additive".to_string(), serde_json::json!(false));
+                        context.insert("is_breaking".to_string(), serde_json::json!(true));
+                        context.insert("change_category".to_string(), serde_json::json!("property_type_changed"));
+                        context.insert("field_name".to_string(), serde_json::json!(prop_name));
+                        context.insert("schema_format".to_string(), serde_json::json!("json_shape"));
+                        context.insert("old_type".to_string(), serde_json::json!(old_type));
+                        context.insert("new_type".to_string(), serde_json::json!(new_type));
+                        
+                        mismatches.push(Mismatch {
+                            mismatch_type: MismatchType::TypeMismatch,
+                            path: format!("{}.{}", path_prefix, prop_name),
+                            method: None,
+                            expected: old_type.map(|t| format!("Type: {}", t)),
+                            actual: new_type.map(|t| format!("Type: {}", t)),
+                            description: format!(
+                                "Property {} type changed",
+                                prop_name
+                            ),
+                            severity: MismatchSeverity::High,
+                            confidence: 1.0,
+                            context,
+                        });
+                    }
+                }
+            }
+        }
+
+        mismatches
+    }
+
     /// Compare two JSON schemas and identify differences (shared with Kafka)
     fn compare_json_schemas(
         old_schema: &Value,
@@ -232,8 +523,15 @@ impl MqttContract {
             let new_required_set: std::collections::HashSet<&str> =
                 new_required.iter().filter_map(|v| v.as_str()).collect();
 
-            // Check for newly required fields (breaking change)
+                // Check for newly required fields (breaking change)
             for new_req in new_required_set.difference(&old_required_set) {
+                let mut context = HashMap::new();
+                context.insert("is_additive".to_string(), serde_json::json!(false));
+                context.insert("is_breaking".to_string(), serde_json::json!(true));
+                context.insert("change_category".to_string(), serde_json::json!("required_field_added"));
+                context.insert("field_name".to_string(), serde_json::json!(new_req));
+                context.insert("schema_format".to_string(), serde_json::json!("json_schema"));
+                
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::MissingRequiredField,
                     path: format!("{}.{}", path_prefix, new_req),
@@ -243,7 +541,29 @@ impl MqttContract {
                     description: format!("Field {} became required", new_req),
                     severity: MismatchSeverity::Critical,
                     confidence: 1.0,
-                    context: HashMap::new(),
+                    context,
+                });
+            }
+            
+            // Check for removed required fields (additive - field is now optional)
+            for removed_req in old_required_set.difference(&new_required_set) {
+                let mut context = HashMap::new();
+                context.insert("is_additive".to_string(), serde_json::json!(true));
+                context.insert("is_breaking".to_string(), serde_json::json!(false));
+                context.insert("change_category".to_string(), serde_json::json!("required_field_removed"));
+                context.insert("field_name".to_string(), serde_json::json!(removed_req));
+                context.insert("schema_format".to_string(), serde_json::json!("json_schema"));
+                
+                mismatches.push(Mismatch {
+                    mismatch_type: MismatchType::UnexpectedField,
+                    path: format!("{}.{}", path_prefix, removed_req),
+                    method: None,
+                    expected: Some(format!("Field {} was required", removed_req)),
+                    actual: Some(format!("Field {} is now optional", removed_req)),
+                    description: format!("Field {} is no longer required", removed_req),
+                    severity: MismatchSeverity::Low,
+                    confidence: 1.0,
+                    context,
                 });
             }
         }
@@ -260,6 +580,15 @@ impl MqttContract {
                         new_prop_schema.get("type").and_then(|v| v.as_str()),
                     ) {
                         if old_type != new_type {
+                            let mut context = HashMap::new();
+                            context.insert("is_additive".to_string(), serde_json::json!(false));
+                            context.insert("is_breaking".to_string(), serde_json::json!(true));
+                            context.insert("change_category".to_string(), serde_json::json!("property_type_changed"));
+                            context.insert("field_name".to_string(), serde_json::json!(prop_name));
+                            context.insert("old_type".to_string(), serde_json::json!(old_type));
+                            context.insert("new_type".to_string(), serde_json::json!(new_type));
+                            context.insert("schema_format".to_string(), serde_json::json!("json_schema"));
+                            
                             mismatches.push(Mismatch {
                                 mismatch_type: MismatchType::TypeMismatch,
                                 path: format!("{}.{}", path_prefix, prop_name),
@@ -272,17 +601,24 @@ impl MqttContract {
                                 ),
                                 severity: MismatchSeverity::High,
                                 confidence: 1.0,
-                                context: HashMap::new(),
+                                context,
                             });
                         }
                     }
                 }
             }
 
-            // Check for removed properties
+            // Check for removed properties (breaking change)
             for prop_name in old_props.keys() {
                 if !new_props.contains_key(prop_name) {
-                    mismatches.push(Mismatch {
+                    let mut context = HashMap::new();
+                    context.insert("is_additive".to_string(), serde_json::json!(false));
+                    context.insert("is_breaking".to_string(), serde_json::json!(true));
+                context.insert("change_category".to_string(), serde_json::json!("property_removed"));
+                context.insert("field_name".to_string(), serde_json::json!(prop_name));
+                context.insert("schema_format".to_string(), serde_json::json!("json_schema"));
+                
+                mismatches.push(Mismatch {
                         mismatch_type: MismatchType::UnexpectedField,
                         path: format!("{}.{}", path_prefix, prop_name),
                         method: None,
@@ -291,7 +627,31 @@ impl MqttContract {
                         description: format!("Property {} was removed", prop_name),
                         severity: MismatchSeverity::High,
                         confidence: 1.0,
-                        context: HashMap::new(),
+                        context,
+                    });
+                }
+            }
+            
+            // Check for new properties (additive change)
+            for prop_name in new_props.keys() {
+                if !old_props.contains_key(prop_name) {
+                    let mut context = HashMap::new();
+                    context.insert("is_additive".to_string(), serde_json::json!(true));
+                    context.insert("is_breaking".to_string(), serde_json::json!(false));
+                context.insert("change_category".to_string(), serde_json::json!("property_added"));
+                context.insert("field_name".to_string(), serde_json::json!(prop_name));
+                context.insert("schema_format".to_string(), serde_json::json!("json_schema"));
+                
+                mismatches.push(Mismatch {
+                        mismatch_type: MismatchType::UnexpectedField,
+                        path: format!("{}.{}", path_prefix, prop_name),
+                        method: None,
+                        expected: None,
+                        actual: Some(format!("New property {}", prop_name)),
+                        description: format!("New property {} was added", prop_name),
+                        severity: MismatchSeverity::Low,
+                        confidence: 1.0,
+                        context,
                     });
                 }
             }

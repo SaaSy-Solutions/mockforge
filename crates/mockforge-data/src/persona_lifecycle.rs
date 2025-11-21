@@ -244,6 +244,16 @@ impl PersonaLifecycle {
     pub fn get_metadata(&self, key: &str) -> Option<&serde_json::Value> {
         self.metadata.get(key)
     }
+
+    /// Create a lifecycle from a preset
+    pub fn from_preset(preset: LifecyclePreset, persona_id: String) -> PersonaLifecycle {
+        match preset {
+            LifecyclePreset::Subscription => LifecycleScenarios::subscription_preset(persona_id),
+            LifecyclePreset::Loan => LifecycleScenarios::loan_preset(persona_id),
+            LifecyclePreset::OrderFulfillment => LifecycleScenarios::order_fulfillment_preset(persona_id),
+            LifecyclePreset::UserEngagement => LifecycleScenarios::user_engagement_preset(persona_id),
+        }
+    }
 }
 
 /// Lifecycle preset types
@@ -258,6 +268,8 @@ pub enum LifecyclePreset {
     Loan,
     /// Order fulfillment lifecycle: PENDING → PROCESSING → SHIPPED → DELIVERED → COMPLETED
     OrderFulfillment,
+    /// User engagement lifecycle: NEW → ACTIVE → CHURN_RISK → CHURNED
+    UserEngagement,
 }
 
 impl LifecyclePreset {
@@ -267,6 +279,7 @@ impl LifecyclePreset {
             LifecyclePreset::Subscription,
             LifecyclePreset::Loan,
             LifecyclePreset::OrderFulfillment,
+            LifecyclePreset::UserEngagement,
         ]
     }
 
@@ -276,6 +289,7 @@ impl LifecyclePreset {
             LifecyclePreset::Subscription => "Subscription",
             LifecyclePreset::Loan => "Loan",
             LifecyclePreset::OrderFulfillment => "Order Fulfillment",
+            LifecyclePreset::UserEngagement => "User Engagement",
         }
     }
 
@@ -285,6 +299,7 @@ impl LifecyclePreset {
             LifecyclePreset::Subscription => "Subscription lifecycle: NEW → ACTIVE → PAST_DUE → CANCELED",
             LifecyclePreset::Loan => "Loan lifecycle: APPLICATION → APPROVED → ACTIVE → PAST_DUE → DEFAULTED",
             LifecyclePreset::OrderFulfillment => "Order fulfillment lifecycle: PENDING → PROCESSING → SHIPPED → DELIVERED → COMPLETED",
+            LifecyclePreset::UserEngagement => "User engagement lifecycle: NEW → ACTIVE → CHURN_RISK → CHURNED",
         }
     }
 }
@@ -526,12 +541,32 @@ impl LifecycleScenarios {
         PersonaLifecycle::with_rules(persona_id, LifecycleState::NewSignup, rules)
     }
 
-    /// Create a lifecycle from a preset
-    pub fn from_preset(preset: LifecyclePreset, persona_id: String) -> PersonaLifecycle {
-        match preset {
-            LifecyclePreset::Subscription => Self::subscription_preset(persona_id),
-            LifecyclePreset::Loan => Self::loan_preset(persona_id),
-            LifecyclePreset::OrderFulfillment => Self::order_fulfillment_preset(persona_id),
-        }
+    /// User Engagement lifecycle preset
+    ///
+    /// Models user engagement progression: NEW → ACTIVE → CHURN_RISK → CHURNED
+    /// States: NewSignup → Active → ChurnRisk → Churned
+    pub fn user_engagement_preset(persona_id: String) -> PersonaLifecycle {
+        let rules = vec![
+            TransitionRule {
+                to: LifecycleState::Active, // NEW → ACTIVE
+                after_days: Some(7),        // Active after 7 days of engagement
+                condition: Some("login_count >= 3".to_string()),
+                on_transition: None,
+            },
+            TransitionRule {
+                to: LifecycleState::ChurnRisk, // ACTIVE → CHURN_RISK
+                after_days: Some(90),          // Churn risk after 90 days of inactivity
+                condition: Some("last_login_days_ago > 30".to_string()),
+                on_transition: None,
+            },
+            TransitionRule {
+                to: LifecycleState::Churned, // CHURN_RISK → CHURNED
+                after_days: Some(60),        // Churned after 60 days in churn risk
+                condition: Some("last_login_days_ago > 90".to_string()),
+                on_transition: None,
+            },
+        ];
+
+        PersonaLifecycle::with_rules(persona_id, LifecycleState::NewSignup, rules)
     }
 }

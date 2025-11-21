@@ -241,10 +241,20 @@ impl ResponseGenerator {
         // Find the response for the status code
         let response = Self::find_response_for_status(&operation.responses, status_code);
 
+        tracing::debug!(
+            "Finding response for status code {}: {:?}",
+            status_code,
+            if response.is_some() { "found" } else { "not found" }
+        );
+
         match response {
             Some(response_ref) => {
                 match response_ref {
                     ReferenceOr::Item(response) => {
+                        tracing::debug!(
+                            "Using direct response item with {} content types",
+                            response.content.len()
+                        );
                         Self::generate_from_response_with_scenario_and_mode(
                             spec,
                             response,
@@ -256,8 +266,13 @@ impl ResponseGenerator {
                         )
                     }
                     ReferenceOr::Reference { reference } => {
+                        tracing::debug!("Resolving response reference: {}", reference);
                         // Resolve the reference
                         if let Some(resolved_response) = spec.get_response(reference) {
+                            tracing::debug!(
+                                "Resolved response reference with {} content types",
+                                resolved_response.content.len()
+                            );
                             Self::generate_from_response_with_scenario_and_mode(
                                 spec,
                                 resolved_response,
@@ -268,6 +283,7 @@ impl ResponseGenerator {
                                 selector,
                             )
                         } else {
+                            tracing::warn!("Response reference '{}' not found in spec", reference);
                             // Reference not found, return empty object
                             Ok(Value::Object(serde_json::Map::new()))
                         }
@@ -275,6 +291,11 @@ impl ResponseGenerator {
                 }
             }
             None => {
+                tracing::warn!(
+                    "No response found for status code {} in operation. Available status codes: {:?}",
+                    status_code,
+                    operation.responses.responses.keys().collect::<Vec<_>>()
+                );
                 // No response found for this status code
                 Ok(Value::Object(serde_json::Map::new()))
             }
@@ -473,6 +494,8 @@ impl ResponseGenerator {
         persona: Option<&Persona>,
     ) -> Result<Value> {
         // First, check if there's an explicit example
+        // CRITICAL: Always check examples first before falling back to schema generation
+        // This ensures GET requests use the correct response format from OpenAPI examples
         if let Some(example) = &media_type.example {
             tracing::debug!("Using explicit example from media type: {:?}", example);
             // Expand templates in the example if enabled
@@ -485,20 +508,37 @@ impl ResponseGenerator {
         }
 
         // Then check examples map - with scenario support and selection modes
+        // CRITICAL: Always use examples if available, even if query parameters are missing
+        // This fixes the bug where GET requests without query params return POST-style responses
         if !media_type.examples.is_empty() {
             use crate::openapi::response_selection::{ResponseSelectionMode, ResponseSelector};
+
+            tracing::debug!(
+                "Found {} examples in media type, available examples: {:?}",
+                media_type.examples.len(),
+                media_type.examples.keys().collect::<Vec<_>>()
+            );
 
             // If a scenario is specified, try to find it first
             if let Some(scenario_name) = scenario {
                 if let Some(example_ref) = media_type.examples.get(scenario_name) {
                     tracing::debug!("Using scenario '{}' from examples map", scenario_name);
-                    return Ok(Self::extract_example_value_with_persona(
+                    match Self::extract_example_value_with_persona(
                         spec,
                         example_ref,
                         expand_tokens,
                         persona,
                         media_type.schema.as_ref(),
-                    )?);
+                    ) {
+                        Ok(value) => return Ok(value),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to extract example for scenario '{}': {}, falling back",
+                                scenario_name,
+                                e
+                            );
+                        }
+                    }
                 } else {
                     tracing::warn!(
                         "Scenario '{}' not found in examples, falling back based on selection mode",
@@ -515,8 +555,10 @@ impl ResponseGenerator {
 
             if example_names.is_empty() {
                 // No examples available, fall back to schema
+                tracing::warn!("Examples map is empty, falling back to schema generation");
             } else if mode == ResponseSelectionMode::Scenario && scenario.is_some() {
                 // Scenario mode was requested but scenario not found, fall through to selection mode
+                tracing::debug!("Scenario not found, using selection mode: {:?}", mode);
             } else {
                 // Use selection mode to choose an example
                 let selected_index = if let Some(sel) = selector {
@@ -535,31 +577,59 @@ impl ResponseGenerator {
                             mode,
                             selected_index
                         );
-                        return Ok(Self::extract_example_value_with_persona(
+                        match Self::extract_example_value_with_persona(
                             spec,
                             example_ref,
                             expand_tokens,
                             persona,
                             media_type.schema.as_ref(),
-                        )?);
+                        ) {
+                            Ok(value) => return Ok(value),
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to extract example '{}': {}, trying fallback",
+                                    example_name,
+                                    e
+                                );
+                            }
+                        }
                     }
                 }
             }
 
             // Fall back to first example if selection failed
+            // This is critical - always use the first example if available, even if previous attempts failed
             if let Some((example_name, example_ref)) = media_type.examples.iter().next() {
                 tracing::debug!(
                     "Using first example '{}' from examples map as fallback",
                     example_name
                 );
-                return Ok(Self::extract_example_value_with_persona(
+                match Self::extract_example_value_with_persona(
                     spec,
                     example_ref,
                     expand_tokens,
                     persona,
                     media_type.schema.as_ref(),
-                )?);
+                ) {
+                    Ok(value) => {
+                        tracing::debug!(
+                            "Successfully extracted fallback example '{}'",
+                            example_name
+                        );
+                        return Ok(value);
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to extract fallback example '{}': {}, falling back to schema generation",
+                            example_name,
+                            e
+                        );
+                        // Continue to schema generation as last resort
+                    }
+                }
             }
+        } else {
+            tracing::debug!("No examples found in media type, will use schema generation");
         }
 
         // Fall back to schema-based generation

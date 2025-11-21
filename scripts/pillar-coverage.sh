@@ -147,6 +147,123 @@ fi
 # Parse coverage data by pillar
 echo -e "${BLUE}Analyzing coverage by pillar...${NC}"
 
+# Function to parse lcov.info and extract coverage for a file
+get_file_coverage() {
+    local file_path="$1"
+    local lcov_file="${PROJECT_ROOT}/coverage/lcov.info"
+    
+    if [[ ! -f "$lcov_file" ]]; then
+        echo "0|0|0"  # lines_found, lines_hit, coverage_percent
+        return
+    fi
+    
+    # Convert absolute path to relative path for lcov matching
+    local rel_path="${file_path#$PROJECT_ROOT/}"
+    
+    # Extract coverage data for this file from lcov.info
+    local lines_found=0
+    local lines_hit=0
+    
+    # Parse lcov format: SF:file, then DA:line_number,hit_count
+    local in_file=false
+    while IFS= read -r line; do
+        if [[ "$line" == "SF:$rel_path" ]]; then
+            in_file=true
+        elif [[ "$line" == "end_of_record" ]]; then
+            in_file=false
+        elif [[ "$in_file" == true ]] && [[ "$line" =~ ^DA: ]]; then
+            lines_found=$((lines_found + 1))
+            # Extract hit count (after comma)
+            local hit_count=$(echo "$line" | cut -d',' -f2)
+            if [[ "$hit_count" -gt 0 ]]; then
+                lines_hit=$((lines_hit + 1))
+            fi
+        fi
+    done < "$lcov_file"
+    
+    # Calculate coverage percentage
+    local coverage_percent=0
+    if [[ $lines_found -gt 0 ]]; then
+        coverage_percent=$((lines_hit * 100 / lines_found))
+    fi
+    
+    echo "${lines_found}|${lines_hit}|${coverage_percent}"
+}
+
+# Function to find test files for a pillar
+find_pillar_tests() {
+    local pillar="$1"
+    local test_files=()
+    
+    # Find test files that might test this pillar's features
+    # Look for test files with pillar-related names
+    local pillar_patterns=()
+    case "$pillar" in
+        reality)
+            pillar_patterns=("reality" "persona" "chaos" "continuum" "fidelity")
+            ;;
+        contracts)
+            pillar_patterns=("contract" "validation" "drift" "schema" "sync")
+            ;;
+        devx)
+            pillar_patterns=("sdk" "playground" "plugin" "cli" "generator")
+            ;;
+        cloud)
+            pillar_patterns=("registry" "workspace" "org" "marketplace" "collab")
+            ;;
+        ai)
+            pillar_patterns=("ai" "mockai" "voice" "llm" "studio")
+            ;;
+    esac
+    
+    for pattern in "${pillar_patterns[@]}"; do
+        while IFS= read -r test_file; do
+            if [[ -f "$test_file" ]]; then
+                test_files+=("$test_file")
+            fi
+        done < <(find "$PROJECT_ROOT/tests" "$PROJECT_ROOT/crates" -name "*test*.rs" -o -name "tests.rs" 2>/dev/null | grep -i "$pattern" || true)
+    done
+    
+    printf '%s\n' "${test_files[@]}" | sort -u
+}
+
+# Calculate coverage statistics per pillar
+declare -A PILLAR_LINES_FOUND
+declare -A PILLAR_LINES_HIT
+declare -A PILLAR_FILE_COUNT
+declare -A PILLAR_TEST_COUNT
+
+for pillar in reality contracts devx cloud ai; do
+    if [[ -n "$FILTER_PILLAR" ]] && [[ "$pillar" != "$FILTER_PILLAR" ]]; then
+        continue
+    fi
+    
+    PILLAR_LINES_FOUND[$pillar]=0
+    PILLAR_LINES_HIT[$pillar]=0
+    PILLAR_FILE_COUNT[$pillar]=0
+    
+    files="${PILLAR_FILES[$pillar]:-}"
+    if [[ -n "$files" ]]; then
+        while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            [[ ! -f "$file" ]] && continue
+            
+            PILLAR_FILE_COUNT[$pillar]=$((${PILLAR_FILE_COUNT[$pillar]} + 1))
+            
+            # Get coverage for this file
+            coverage_data=$(get_file_coverage "$file")
+            IFS='|' read -r lines_found lines_hit coverage_percent <<< "$coverage_data"
+            
+            PILLAR_LINES_FOUND[$pillar]=$((${PILLAR_LINES_FOUND[$pillar]} + lines_found))
+            PILLAR_LINES_HIT[$pillar]=$((${PILLAR_LINES_HIT[$pillar]} + lines_hit))
+        done <<< "$files"
+    fi
+    
+    # Count test files for this pillar
+    test_files=$(find_pillar_tests "$pillar")
+    PILLAR_TEST_COUNT[$pillar]=$(echo "$test_files" | grep -c '^' || echo "0")
+done
+
 # Generate text report
 if [[ "$FORMAT" == "text" ]]; then
     REPORT_FILE="$OUTPUT_DIR/coverage-by-pillar.txt"
@@ -164,25 +281,60 @@ if [[ "$FORMAT" == "text" ]]; then
 
             echo "Pillar: $pillar"
             echo "----------------"
+            
+            local file_count=${PILLAR_FILE_COUNT[$pillar]:-0}
+            local test_count=${PILLAR_TEST_COUNT[$pillar]:-0}
+            local lines_found=${PILLAR_LINES_FOUND[$pillar]:-0}
+            local lines_hit=${PILLAR_LINES_HIT[$pillar]:-0}
+            local coverage_percent=0
+            
+            if [[ $lines_found -gt 0 ]]; then
+                coverage_percent=$((lines_hit * 100 / lines_found))
+            fi
 
-            files="${PILLAR_FILES[$pillar]:-}"
-            if [[ -z "$files" ]]; then
+            if [[ $file_count -eq 0 ]]; then
                 echo "  No files tagged with this pillar"
             else
-                file_count=$(echo "$files" | grep -c '^' || echo "0")
                 echo "  Files tagged: $file_count"
-                echo ""
-                echo "  Tagged files:"
-                echo "$files" | while read -r file; do
-                    [[ -n "$file" ]] && echo "    - ${file#$PROJECT_ROOT/}"
-                done
+                echo "  Test files: $test_count"
+                echo "  Lines found: $lines_found"
+                echo "  Lines hit: $lines_hit"
+                echo "  Coverage: ${coverage_percent}%"
+                
+                # Coverage status
+                if [[ $coverage_percent -ge 80 ]]; then
+                    echo "  Status: ✅ Good coverage"
+                elif [[ $coverage_percent -ge 50 ]]; then
+                    echo "  Status: ⚠️  Moderate coverage"
+                elif [[ $coverage_percent -gt 0 ]]; then
+                    echo "  Status: ⚠️  Low coverage"
+                else
+                    echo "  Status: ❌ No coverage data"
+                fi
+                
+                # Missing coverage areas
+                if [[ $coverage_percent -lt 80 ]] && [[ $file_count -gt 0 ]]; then
+                    echo ""
+                    echo "  Missing coverage areas:"
+                    files="${PILLAR_FILES[$pillar]:-}"
+                    while IFS= read -r file; do
+                        [[ -z "$file" ]] && continue
+                        [[ ! -f "$file" ]] && continue
+                        
+                        coverage_data=$(get_file_coverage "$file")
+                        IFS='|' read -r file_lines_found file_lines_hit file_coverage <<< "$coverage_data"
+                        
+                        if [[ $file_coverage -lt 50 ]]; then
+                            echo "    - ${file#$PROJECT_ROOT/} (${file_coverage}% coverage)"
+                        fi
+                    done <<< "$files"
+                fi
             fi
             echo ""
         done
 
-        echo "Note: This report shows files tagged with pillars."
-        echo "      Actual test coverage analysis requires integration with coverage tools."
-        echo "      Use 'cargo llvm-cov' to generate detailed coverage reports."
+        echo "Note: Coverage data is parsed from lcov.info generated by cargo-llvm-cov."
+        echo "      Run 'cargo llvm-cov --lcov --output-path coverage/lcov.info' to update."
     } > "$REPORT_FILE"
 
     echo -e "${GREEN}Coverage report generated: $REPORT_FILE${NC}"
@@ -206,14 +358,28 @@ if [[ "$FORMAT" == "json" ]]; then
             [[ "$first" == false ]] && echo ","
             first=false
 
+            local file_count=${PILLAR_FILE_COUNT[$pillar]:-0}
+            local test_count=${PILLAR_TEST_COUNT[$pillar]:-0}
+            local lines_found=${PILLAR_LINES_FOUND[$pillar]:-0}
+            local lines_hit=${PILLAR_LINES_HIT[$pillar]:-0}
+            local coverage_percent=0
+            
+            if [[ $lines_found -gt 0 ]]; then
+                coverage_percent=$((lines_hit * 100 / lines_found))
+            fi
+
             echo "    \"$pillar\": {"
+            echo "      \"file_count\": $file_count,"
+            echo "      \"test_count\": $test_count,"
+            echo "      \"lines_found\": $lines_found,"
+            echo "      \"lines_hit\": $lines_hit,"
+            echo "      \"coverage_percent\": $coverage_percent,"
+            
             files="${PILLAR_FILES[$pillar]:-}"
             if [[ -z "$files" ]]; then
-                echo "      \"file_count\": 0,"
-                echo "      \"files\": []"
+                echo "      \"files\": [],"
+                echo "      \"low_coverage_files\": []"
             else
-                file_count=$(echo "$files" | grep -c '^' || echo "0")
-                echo "      \"file_count\": $file_count,"
                 echo "      \"files\": ["
                 first_file=true
                 echo "$files" | while read -r file; do
@@ -222,6 +388,30 @@ if [[ "$FORMAT" == "json" ]]; then
                     first_file=false
                     echo "        \"${file#$PROJECT_ROOT/}\""
                 done
+                echo "      ],"
+                
+                # Find low coverage files
+                echo "      \"low_coverage_files\": ["
+                first_low=true
+                echo "$files" | while read -r file; do
+                    [[ -z "$file" ]] && continue
+                    [[ ! -f "$file" ]] && continue
+                    
+                    coverage_data=$(get_file_coverage "$file")
+                    IFS='|' read -r file_lines_found file_lines_hit file_coverage <<< "$coverage_data"
+                    
+                    if [[ $file_coverage -lt 50 ]]; then
+                        [[ "$first_low" == false ]] && echo ","
+                        first_low=false
+                        echo "        {"
+                        echo "          \"file\": \"${file#$PROJECT_ROOT/}\","
+                        echo "          \"coverage_percent\": $file_coverage,"
+                        echo "          \"lines_found\": $file_lines_found,"
+                        echo "          \"lines_hit\": $file_lines_hit"
+                        echo -n "        }"
+                    fi
+                done
+                echo ""
                 echo "      ]"
             fi
             echo -n "    }"

@@ -95,6 +95,18 @@ pub enum MismatchType {
 
     /// Query parameter mismatch
     QueryParamMismatch,
+
+    /// Semantic drift: description meaning changed
+    SemanticDescriptionChange,
+
+    /// Semantic drift: enum values narrowed
+    SemanticEnumNarrowing,
+
+    /// Semantic drift: nullable → non-nullable (hidden)
+    SemanticNullabilityChange,
+
+    /// Semantic drift: error code removed
+    SemanticErrorCodeRemoved,
 }
 
 /// Severity levels for mismatches
@@ -268,6 +280,32 @@ pub struct ContractDiffConfig {
 
     /// Whether to include examples in recommendations
     pub include_examples: bool,
+
+    /// Whether semantic analysis is enabled (Layer 2)
+    #[serde(default = "default_true")]
+    pub semantic_analysis_enabled: bool,
+
+    /// Semantic confidence threshold (default 0.65)
+    /// Only semantic drift above this threshold triggers notifications
+    #[serde(default = "default_semantic_threshold")]
+    pub semantic_confidence_threshold: f64,
+
+    /// Soft-breaking threshold (default 0.65)
+    /// Semantic changes above this score are considered soft-breaking
+    #[serde(default = "default_soft_breaking_threshold")]
+    pub soft_breaking_threshold: f64,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_semantic_threshold() -> f64 {
+    0.65
+}
+
+fn default_soft_breaking_threshold() -> f64 {
+    0.65
 }
 
 impl Default for ContractDiffConfig {
@@ -282,6 +320,9 @@ impl Default for ContractDiffConfig {
             use_ai_recommendations: true,
             max_recommendations: 10,
             include_examples: true,
+            semantic_analysis_enabled: true,
+            semantic_confidence_threshold: 0.65,
+            soft_breaking_threshold: 0.65,
         }
     }
 }

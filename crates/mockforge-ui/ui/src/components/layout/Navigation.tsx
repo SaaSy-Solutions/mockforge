@@ -26,6 +26,8 @@ const navItems: NavItem[] = [
   { id: 'behavioral-cloning', label: 'Behavioral Cloning', requiredRoles: ['admin'] },
   { id: 'logs', label: 'Live Logs', requiredRoles: ['admin', 'viewer'] },
   { id: 'metrics', label: 'Metrics', requiredRoles: ['admin', 'viewer'] },
+  { id: 'analytics', label: 'Analytics', requiredRoles: ['admin', 'viewer'] },
+  { id: 'pillar-analytics', label: 'Pillar Analytics', requiredRoles: ['admin', 'viewer'] },
   { id: 'incidents', label: 'Incidents', requiredRoles: ['admin', 'viewer'] },
   { id: 'testing', label: 'Testing', requiredRoles: ['admin'] },
   { id: 'time-travel', label: 'Time Travel', requiredRoles: ['admin'] },

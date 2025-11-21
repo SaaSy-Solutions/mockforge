@@ -58,6 +58,23 @@ setup:
       name: Transaction History Flow
       description: View account transactions and generate statement
 
+  scenarios:
+    - id: happy-path-transfer
+      name: Happy Path - Account Transfer
+      type: happy_path
+      description: Successful money transfer between accounts with balance verification
+      file: scenarios/happy-path-transfer.yaml
+    - id: known-failure-insufficient-funds
+      name: Known Failure - Insufficient Funds
+      type: known_failure
+      description: Transfer failure scenario where account has insufficient funds
+      file: scenarios/known-failure-insufficient-funds.yaml
+    - id: slow-path-statement-generation
+      name: Slow Path - Statement Generation Delay
+      type: slow_path
+      description: Account statement generation with intentional delays
+      file: scenarios/slow-path-statement-generation.yaml
+
   playground:
     enabled: true
     collection_file: playground/collection.json
@@ -78,6 +95,16 @@ files:
   - README.md
   - personas/
   - flows/
+  - scenarios/
+  - contracts/
   - playground/
+
+contracts:
+  - file: contracts/account-contract.json
+    description: Account management endpoint contracts
+  - file: contracts/transfer-contract.json
+    description: Money transfer endpoint contracts
+  - file: contracts/transaction-contract.json
+    description: Transaction history and statement endpoint contracts
 
 readme: README.md

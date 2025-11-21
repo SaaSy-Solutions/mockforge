@@ -10,6 +10,7 @@
 // Re-export sub-modules for backward compatibility
 pub mod response;
 pub mod response_selection;
+pub mod response_trace;
 pub mod route;
 pub mod schema;
 pub mod spec;

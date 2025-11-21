@@ -1,3 +1,5 @@
+//! Pillars: [DevX]
+//!
 //! # MockForge UI
 //!
 //! Web-based admin interface for managing mock servers.

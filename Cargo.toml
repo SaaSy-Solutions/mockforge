@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/mockforge-core",
     "crates/mockforge-http",
     "crates/mockforge-mqtt",
     "crates/mockforge-ws",

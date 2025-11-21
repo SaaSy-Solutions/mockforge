@@ -149,6 +149,39 @@ impl AccessReviewService {
         Ok(())
     }
 
+    /// Update user permissions in a review
+    ///
+    /// This both updates the review and actually updates the user's permissions
+    /// in the user management system.
+    pub async fn update_user_permissions(
+        &mut self,
+        review_id: &str,
+        user_id: Uuid,
+        updated_by: Uuid,
+        new_roles: Vec<String>,
+        new_permissions: Vec<String>,
+        reason: Option<String>,
+    ) -> Result<(), Error> {
+        // Update the review to track permission changes
+        self.engine
+            .update_user_permissions(
+                review_id,
+                user_id,
+                updated_by,
+                new_roles.clone(),
+                new_permissions.clone(),
+                reason.clone(),
+            )
+            .map_err(|e| Error::Generic(e.to_string()))?;
+
+        // Actually update the user's permissions in the user management system
+        self.user_provider
+            .update_user_permissions(user_id, new_roles, new_permissions)
+            .await?;
+
+        Ok(())
+    }
+
     /// Get review by ID
     pub fn get_review(
         &self,

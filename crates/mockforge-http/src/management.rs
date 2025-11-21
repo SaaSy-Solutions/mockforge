@@ -2209,8 +2209,13 @@ pub fn management_router(state: ManagementState) -> Router {
 
     // AI-powered features
     let router = router
-        .route("/ai/generate-spec", post(generate_ai_spec))
-        .route("/mockai/generate-openapi", post(generate_openapi_from_traffic))
+        .route("/ai/generate-spec", post(generate_ai_spec));
+
+    #[cfg(feature = "behavioral-cloning")]
+    let router = router
+        .route("/mockai/generate-openapi", post(generate_openapi_from_traffic));
+
+    let router = router
         .route("/mockai/learn", post(learn_from_examples))
         .route("/mockai/rules/explanations", get(list_rule_explanations))
         .route("/mockai/rules/{id}/explanation", get(get_rule_explanation))
@@ -3048,6 +3053,7 @@ async fn generate_ai_spec(
 }
 
 /// Generate OpenAPI specification from recorded traffic
+#[cfg(feature = "behavioral-cloning")]
 async fn generate_openapi_from_traffic(
     State(_state): State<ManagementState>,
     Json(request): Json<GenerateOpenApiFromTrafficRequest>,

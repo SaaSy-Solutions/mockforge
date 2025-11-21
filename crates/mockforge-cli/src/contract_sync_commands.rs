@@ -1,3 +1,5 @@
+//! Pillars: [Contracts]
+//!
 //! Contract Sync Commands
 //!
 //! Commands for validating mocks against Git-hosted OpenAPI specs and syncing them.

@@ -1,0 +1,81 @@
+id: known-failure-out-of-stock
+name: Known Failure - Out of Stock
+type: known_failure
+description: Product out of stock scenario where item cannot be added to cart or order fails
+tags:
+  - inventory
+  - failure
+  - stock
+  - error-handling
+
+steps:
+  - id: get-product
+    name: Get Product Details
+    method: GET
+    path: /api/products/prod_out_of_stock
+    expected_status: 200
+    continue_on_failure: false
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      product_id: body.product.id
+      stock_quantity: body.product.stock_quantity
+
+  - id: attempt-add-to-cart
+    name: Attempt to Add Out of Stock Item
+    method: POST
+    path: /api/cart/items
+    expected_status: 409  # Conflict - out of stock
+    continue_on_failure: true
+    depends_on: [get-product]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      items:
+        - product_id: "prod_out_of_stock"
+          quantity: 1
+    extract:
+      error_code: body.error.code
+      error_message: body.error.message
+
+  - id: verify-cart-unchanged
+    name: Verify Cart Unchanged
+    method: GET
+    path: /api/cart
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [attempt-add-to-cart]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+
+  - id: attempt-checkout-fails
+    name: Attempt Checkout with Out of Stock Item (Expected Failure)
+    method: POST
+    path: /api/orders
+    expected_status: 400  # Bad Request - cannot checkout with unavailable items
+    continue_on_failure: true
+    depends_on: [verify-cart-unchanged]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      cart_id: "{{cart_id}}"
+    extract:
+      checkout_error: body.error.message
+
+expected_outcomes:
+  - Adding out of stock item returns 409 (Conflict) or 400 (Bad Request)
+  - Error response includes error code and descriptive message
+  - Cart remains unchanged (item not added)
+  - Checkout fails with appropriate error if attempted
+  - User receives clear out of stock notification
+  - Product stock status is accurately reflected
+
+variables:
+  access_token: null
+  product_id: null
+  stock_quantity: null
+  cart_id: null
+  error_code: null
+  error_message: null
+  checkout_error: null
+

@@ -1,0 +1,200 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Banking Lite Transaction Contract",
+  "description": "Contract schemas for transaction history endpoints",
+  "version": "1.0.0",
+  "endpoints": {
+    "/api/accounts/{account_id}/transactions": {
+      "GET": {
+        "request": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "start_date": {
+              "type": "string",
+              "format": "date",
+              "description": "Start date for transaction filter"
+            },
+            "end_date": {
+              "type": "string",
+              "format": "date",
+              "description": "End date for transaction filter"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["debit", "credit", "transfer"],
+              "description": "Filter by transaction type"
+            }
+          }
+        },
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["transactions", "total"],
+            "properties": {
+              "transactions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "type", "amount", "date"],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": ["debit", "credit", "transfer"]
+                    },
+                    "amount": {
+                      "type": "number"
+                    },
+                    "date": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "balance_after": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              "total": {
+                "type": "integer",
+                "description": "Total number of transactions"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transactions/{transaction_id}": {
+      "GET": {
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["transaction"],
+            "properties": {
+              "transaction": {
+                "type": "object",
+                "required": ["id", "type", "amount", "date"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "date": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "account_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+              "error": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": ["TRANSACTION_NOT_FOUND"]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/statements/generate": {
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["account_id", "period_start", "period_end"],
+          "properties": {
+            "account_id": {
+              "type": "string"
+            },
+            "period_start": {
+              "type": "string",
+              "format": "date"
+            },
+            "period_end": {
+              "type": "string",
+              "format": "date"
+            },
+            "format": {
+              "type": "string",
+              "enum": ["pdf", "csv", "json"],
+              "default": "pdf"
+            }
+          }
+        },
+        "response": {
+          "201": {
+            "type": "object",
+            "required": ["statement"],
+            "properties": {
+              "statement": {
+                "type": "object",
+                "required": ["id", "status", "download_url"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["generating", "ready", "failed"]
+                  },
+                  "download_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "period_start": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "period_end": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+

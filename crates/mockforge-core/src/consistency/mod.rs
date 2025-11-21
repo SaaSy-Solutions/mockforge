@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Cross-protocol consistency engine
 //!
 //! This module provides a unified state model that ensures all protocols

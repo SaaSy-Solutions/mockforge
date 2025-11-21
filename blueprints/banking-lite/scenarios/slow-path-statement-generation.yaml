@@ -1,0 +1,107 @@
+id: slow-path-statement-generation
+name: Slow Path - Statement Generation Delay
+type: slow_path
+description: Account statement generation with intentional delays simulating complex transaction processing and report generation
+tags:
+  - statements
+  - reports
+  - performance
+  - delay
+
+steps:
+  - id: get-account
+    name: Get Account Details
+    method: GET
+    path: /api/accounts/{{account_id}}
+    expected_status: 200
+    continue_on_failure: false
+    delay_ms: 150  # Small initial delay
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      account_id: body.account.id
+      account_type: body.account.type
+
+  - id: get-transactions-slow
+    name: Get Transaction History (Delayed)
+    method: GET
+    path: /api/accounts/{{account_id}}/transactions?start_date=2024-01-01&end_date=2024-01-31
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [get-account]
+    delay_ms: 2000  # 2 second delay for transaction retrieval
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      transaction_count: body.transactions.length
+
+  - id: calculate-balances-slow
+    name: Calculate Account Balances (Delayed)
+    method: POST
+    path: /api/accounts/{{account_id}}/balances/calculate
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [get-transactions-slow]
+    delay_ms: 1800  # 1.8 second delay for balance calculations
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      period_start: "2024-01-01"
+      period_end: "2024-01-31"
+    extract:
+      opening_balance: body.balances.opening
+      closing_balance: body.balances.closing
+
+  - id: generate-statement-slow
+    name: Generate Statement (Delayed)
+    method: POST
+    path: /api/statements/generate
+    expected_status: 201
+    continue_on_failure: false
+    depends_on: [calculate-balances-slow]
+    delay_ms: 3500  # 3.5 second delay for statement generation
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      account_id: "{{account_id}}"
+      period_start: "2024-01-01"
+      period_end: "2024-01-31"
+      format: "pdf"
+    extract:
+      statement_id: body.statement.id
+      statement_url: body.statement.download_url
+
+  - id: verify-statement-ready
+    name: Verify Statement Ready
+    method: GET
+    path: /api/statements/{{statement_id}}
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [generate-statement-slow]
+    delay_ms: 500  # Small delay for verification
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      statement_status: body.statement.status
+
+expected_outcomes:
+  - All steps eventually complete successfully (2xx status codes)
+  - Total execution time exceeds 7 seconds due to intentional delays
+  - Transaction history is retrieved successfully
+  - Account balances are calculated correctly
+  - Statement is generated with download URL
+  - Statement status is "ready" or "completed"
+  - User experiences realistic statement generation delays
+  - System handles slow responses gracefully
+
+variables:
+  access_token: null
+  account_id: null
+  account_type: null
+  transaction_count: null
+  opening_balance: null
+  closing_balance: null
+  statement_id: null
+  statement_url: null
+  statement_status: null
+

@@ -1,0 +1,202 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "E-commerce Cart Contract",
+  "description": "Contract schemas for shopping cart endpoints",
+  "version": "1.0.0",
+  "endpoints": {
+    "/api/cart": {
+      "GET": {
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["cart"],
+            "properties": {
+              "cart": {
+                "type": "object",
+                "required": ["id", "items", "total"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["id", "product_id", "quantity", "price"],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "product_id": {
+                          "type": "string"
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "price": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  },
+                  "total": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart/items": {
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["items"],
+          "properties": {
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["product_id", "quantity"],
+                "properties": {
+                  "product_id": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["items", "cart"],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "product_id", "quantity"],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "product_id": {
+                      "type": "string"
+                    },
+                    "quantity": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "cart": {
+                "type": "object",
+                "required": ["id", "total"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "total": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+              "error": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": ["OUT_OF_STOCK", "INSUFFICIENT_INVENTORY"]
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "available_quantity": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart/discount": {
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["code"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Discount code"
+            }
+          }
+        },
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["discount"],
+            "properties": {
+              "discount": {
+                "type": "object",
+                "required": ["code", "amount"],
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["percentage", "fixed"]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+              "error": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": ["INVALID_DISCOUNT_CODE", "EXPIRED_DISCOUNT"]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+

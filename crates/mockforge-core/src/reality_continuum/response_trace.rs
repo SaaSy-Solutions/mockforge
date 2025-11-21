@@ -5,7 +5,9 @@
 //! and template expansion details.
 
 use crate::openapi::response_selection::ResponseSelectionMode;
+use crate::schema_diff::ValidationError;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 
 /// Response generation trace
@@ -45,6 +47,22 @@ pub struct ResponseGenerationTrace {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blending_decision: Option<BlendingDecision>,
 
+    /// Final resolved response payload (after all transformations)
+    ///
+    /// This is the complete response body that was sent to the client,
+    /// after all template expansions, persona graph enrichments, and
+    /// rule/hook modifications have been applied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub final_payload: Option<Value>,
+
+    /// Schema validation diff results
+    ///
+    /// Contains validation errors if the final payload doesn't match
+    /// the expected contract schema. Empty vector means the payload
+    /// is valid according to the schema.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema_validation_diff: Option<Vec<ValidationError>>,
+
     /// Additional metadata about the generation process
     #[serde(default)]
     pub metadata: HashMap<String, serde_json::Value>,
@@ -61,6 +79,8 @@ impl Default for ResponseGenerationTrace {
             rules_executed: Vec::new(),
             template_expansions: Vec::new(),
             blending_decision: None,
+            final_payload: None,
+            schema_validation_diff: None,
             metadata: HashMap::new(),
         }
     }
@@ -187,5 +207,15 @@ impl ResponseGenerationTrace {
     /// Add metadata
     pub fn add_metadata(&mut self, key: String, value: serde_json::Value) {
         self.metadata.insert(key, value);
+    }
+
+    /// Set the final resolved payload
+    pub fn set_final_payload(&mut self, payload: Value) {
+        self.final_payload = Some(payload);
+    }
+
+    /// Set the schema validation diff results
+    pub fn set_schema_validation_diff(&mut self, diff: Vec<ValidationError>) {
+        self.schema_validation_diff = Some(diff);
     }
 }

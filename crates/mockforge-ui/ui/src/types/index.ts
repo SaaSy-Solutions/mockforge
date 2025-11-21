@@ -1311,6 +1311,12 @@ export interface Scenario {
   created_at: string;
   updated_at: string;
   tags: string[];
+  /// Metadata indicating if this scenario was AI-generated
+  ai_generated?: boolean;
+  /// Metadata indicating if this scenario is frozen (deterministic mode)
+  frozen?: boolean;
+  /// Path to frozen artifact file if frozen
+  frozen_path?: string;
 }
 
 export interface ScenarioStep {

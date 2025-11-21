@@ -55,6 +55,9 @@ export interface DriftIncident {
   external_ticket_url?: string;
   created_at: number;
   updated_at: number;
+  fitness_test_results?: FitnessTestResult[];
+  affected_consumers?: ConsumerImpact;
+  protocol?: 'http' | 'graphql' | 'grpc' | 'websocket' | 'smtp' | 'mqtt' | 'ftp' | 'kafka' | 'rabbitmq' | 'amqp' | 'tcp' | 'udp';
 }
 
 export interface ListIncidentsRequest {

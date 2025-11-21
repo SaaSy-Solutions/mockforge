@@ -179,12 +179,18 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true });
 
         try {
-          // TODO: Implement profile update API endpoint
-          // For now, just update local state
+          // Update local state immediately for responsive UI
+          // Note: Profile persistence would require a backend API endpoint
+          // For now, profile updates are stored in local state only
           set({
             user: userData,
             isLoading: false,
           });
+          
+          // Optionally persist to localStorage as backup
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('mockforge-user-profile', JSON.stringify(userData));
+          }
         } catch (error) {
           set({ isLoading: false });
           const errorMessage = error instanceof Error ? error.message : 'Profile update failed';

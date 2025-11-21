@@ -54,6 +54,135 @@ pub struct ConsumerContractsConfig {
     pub track_usage: bool,
 }
 
+/// Contracts configuration for fitness rules and contract management
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct ContractsConfig {
+    /// Fitness rules for contract validation
+    pub fitness_rules: Vec<FitnessRuleConfig>,
+}
+
+/// Behavioral Economics Engine configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct BehavioralEconomicsConfig {
+    /// Whether the behavioral economics engine is enabled
+    pub enabled: bool,
+    /// List of behavior rules
+    #[serde(default)]
+    pub rules: Vec<crate::behavioral_economics::BehaviorRule>,
+    /// Global sensitivity for behavioral changes (0.0 - 1.0)
+    /// A higher sensitivity means mocks react more strongly to conditions.
+    #[serde(default = "default_behavioral_sensitivity")]
+    pub global_sensitivity: f64,
+    /// Interval in milliseconds for re-evaluating time-based conditions
+    #[serde(default = "default_evaluation_interval_ms")]
+    pub evaluation_interval_ms: u64,
+}
+
+fn default_behavioral_sensitivity() -> f64 {
+    0.5
+}
+
+fn default_evaluation_interval_ms() -> u64 {
+    1000 // 1 second
+}
+
+/// Drift Learning configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct DriftLearningConfig {
+    /// Enable or disable drift learning
+    pub enabled: bool,
+    /// Learning mode (behavioral, statistical, hybrid)
+    #[serde(default)]
+    pub mode: DriftLearningMode,
+    /// How quickly mocks adapt to new patterns (0.0 - 1.0)
+    #[serde(default = "default_learning_sensitivity")]
+    pub sensitivity: f64,
+    /// How quickly old patterns are forgotten (0.0 - 1.0)
+    #[serde(default = "default_learning_decay")]
+    pub decay: f64,
+    /// Minimum number of samples required to learn a pattern
+    #[serde(default = "default_min_samples")]
+    pub min_samples: u64,
+    /// Enable persona-specific behavior adaptation
+    #[serde(default)]
+    pub persona_adaptation: bool,
+    /// Opt-in configuration for specific personas to learn
+    #[serde(default)]
+    pub persona_learning: HashMap<String, bool>, // persona_id -> enabled
+    /// Opt-in configuration for specific endpoints to learn
+    #[serde(default)]
+    pub endpoint_learning: HashMap<String, bool>, // endpoint_pattern -> enabled
+}
+
+/// Drift learning mode
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum DriftLearningMode {
+    /// Behavioral learning - adapts to behavior patterns
+    #[default]
+    Behavioral,
+    /// Statistical learning - adapts to statistical patterns
+    Statistical,
+    /// Hybrid - combines behavioral and statistical
+    Hybrid,
+}
+
+fn default_learning_sensitivity() -> f64 {
+    0.2
+}
+
+fn default_learning_decay() -> f64 {
+    0.05
+}
+
+fn default_min_samples() -> u64 {
+    10
+}
+
+/// Configuration for a fitness rule (YAML config format)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct FitnessRuleConfig {
+    /// Human-readable name for the fitness rule
+    pub name: String,
+    /// Scope where this rule applies (endpoint pattern, service name, or "global")
+    pub scope: String,
+    /// Type of fitness rule
+    #[serde(rename = "type")]
+    pub rule_type: FitnessRuleType,
+    /// Maximum percent increase for response size (for response_size_delta type)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_percent_increase: Option<f64>,
+    /// Maximum number of fields (for field_count type)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_fields: Option<u32>,
+    /// Maximum schema depth (for schema_complexity type)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_depth: Option<u32>,
+}
+
+/// Type of fitness rule (YAML config format)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum FitnessRuleType {
+    /// Response size must not increase by more than max_percent_increase
+    ResponseSizeDelta,
+    /// No new required fields allowed
+    NoNewRequiredFields,
+    /// Field count must not exceed max_fields
+    FieldCount,
+    /// Schema complexity (depth) must not exceed max_depth
+    SchemaComplexity,
+}
+
 /// Behavioral cloning configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -688,6 +817,18 @@ pub struct ServerConfig {
     /// Consumer contracts configuration
     #[serde(default)]
     pub consumer_contracts: ConsumerContractsConfig,
+    /// Contracts configuration (fitness rules, etc.)
+    #[serde(default)]
+    pub contracts: ContractsConfig,
+    /// Behavioral Economics Engine configuration
+    #[serde(default)]
+    pub behavioral_economics: BehavioralEconomicsConfig,
+    /// Drift Learning configuration
+    #[serde(default)]
+    pub drift_learning: DriftLearningConfig,
+    /// Organization AI controls configuration (YAML defaults, DB overrides)
+    #[serde(default)]
+    pub org_ai_controls: crate::ai_studio::org_controls::OrgAiControlsConfig,
 }
 
 /// Profile configuration - a partial ServerConfig that overrides base settings

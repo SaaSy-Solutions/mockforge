@@ -50,13 +50,24 @@ impl MethodMetrics {
 
     /// Record to Prometheus metrics
     pub fn record_to_prometheus(&self, method: &str, success: bool, duration_ms: u64) {
+        self.record_to_prometheus_with_pillar(method, success, duration_ms, "unknown");
+    }
+
+    /// Record to Prometheus metrics with pillar information
+    pub fn record_to_prometheus_with_pillar(
+        &self,
+        method: &str,
+        success: bool,
+        duration_ms: u64,
+        pillar: &str,
+    ) {
         let registry = get_global_registry();
         let status = if success { "ok" } else { "error" };
         let duration_seconds = duration_ms as f64 / 1000.0;
-        registry.record_grpc_request(method, status, duration_seconds);
+        registry.record_grpc_request_with_pillar(method, status, duration_seconds, pillar);
 
         if !success {
-            registry.record_error("grpc", "grpc_error");
+            registry.record_error_with_pillar("grpc", "grpc_error", pillar);
         }
     }
 
@@ -200,14 +211,69 @@ pub fn global_registry() -> &'static MetricsRegistry {
     &GLOBAL_REGISTRY
 }
 
+/// Determine pillar from gRPC service/method name
+fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static str {
+    let service_lower = service_name.to_lowercase();
+    let method_lower = method_name.to_lowercase();
+    
+    // Reality pillar patterns
+    if service_lower.contains("reality") 
+        || service_lower.contains("persona")
+        || service_lower.contains("chaos")
+        || method_lower.contains("reality")
+        || method_lower.contains("persona")
+        || method_lower.contains("chaos") {
+        return "reality";
+    }
+    
+    // Contracts pillar patterns
+    if service_lower.contains("contract")
+        || service_lower.contains("validation")
+        || service_lower.contains("drift")
+        || method_lower.contains("contract")
+        || method_lower.contains("validation")
+        || method_lower.contains("drift") {
+        return "contracts";
+    }
+    
+    // DevX pillar patterns
+    if service_lower.contains("sdk")
+        || service_lower.contains("plugin")
+        || method_lower.contains("sdk")
+        || method_lower.contains("plugin") {
+        return "devx";
+    }
+    
+    // Cloud pillar patterns
+    if service_lower.contains("registry")
+        || service_lower.contains("workspace")
+        || service_lower.contains("org")
+        || method_lower.contains("registry")
+        || method_lower.contains("workspace") {
+        return "cloud";
+    }
+    
+    // AI pillar patterns
+    if service_lower.contains("ai")
+        || service_lower.contains("mockai")
+        || method_lower.contains("ai")
+        || method_lower.contains("llm") {
+        return "ai";
+    }
+    
+    // Default to unknown if no pattern matches
+    "unknown"
+}
+
 /// Record a successful request
 pub async fn record_success(service_name: &str, method_name: &str, duration_ms: u64) {
     let metrics = global_registry().get_method_metrics(service_name, method_name).await;
     metrics.record_success(duration_ms);
 
-    // Also record to Prometheus
+    // Also record to Prometheus with pillar
     let method_full = format!("{}::{}", service_name, method_name);
-    metrics.record_to_prometheus(&method_full, true, duration_ms);
+    let pillar = determine_pillar_from_grpc(service_name, method_name);
+    metrics.record_to_prometheus_with_pillar(&method_full, true, duration_ms, pillar);
 }
 
 /// Record a failed request
@@ -215,9 +281,10 @@ pub async fn record_error(service_name: &str, method_name: &str) {
     let metrics = global_registry().get_method_metrics(service_name, method_name).await;
     metrics.record_error();
 
-    // Also record to Prometheus
+    // Also record to Prometheus with pillar
     let method_full = format!("{}::{}", service_name, method_name);
-    metrics.record_to_prometheus(&method_full, false, 0);
+    let pillar = determine_pillar_from_grpc(service_name, method_name);
+    metrics.record_to_prometheus_with_pillar(&method_full, false, 0, pillar);
 }
 
 /// Increment in-flight requests

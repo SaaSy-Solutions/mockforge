@@ -66,6 +66,9 @@ impl IncidentManager {
             None, // contract_diff_id
             None, // before_sample
             None, // after_sample
+            None, // fitness_test_results
+            None, // affected_consumers
+            None, // protocol
         )
         .await
     }
@@ -84,6 +87,9 @@ impl IncidentManager {
         contract_diff_id: Option<String>,
         before_sample: Option<serde_json::Value>,
         after_sample: Option<serde_json::Value>,
+        fitness_test_results: Option<Vec<crate::contract_drift::fitness::FitnessTestResult>>,
+        affected_consumers: Option<crate::contract_drift::consumer_mapping::ConsumerImpact>,
+        protocol: Option<crate::protocol_abstraction::Protocol>,
     ) -> DriftIncident {
         let id = Uuid::new_v4().to_string();
         let mut incident =
@@ -94,6 +100,9 @@ impl IncidentManager {
         incident.contract_diff_id = contract_diff_id;
         incident.before_sample = before_sample;
         incident.after_sample = after_sample;
+        incident.fitness_test_results = fitness_test_results.unwrap_or_default();
+        incident.affected_consumers = affected_consumers;
+        incident.protocol = protocol;
 
         self.store.store(incident.clone()).await;
 

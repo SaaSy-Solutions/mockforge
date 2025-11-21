@@ -288,6 +288,162 @@ pub fn extract_breaking_changes(diff: &ContractDiffResult) -> Vec<&Mismatch> {
         .collect()
 }
 
+/// Classification result for a change
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeClassification {
+    /// Whether this change is additive (new methods, fields, services)
+    pub is_additive: bool,
+    /// Whether this change is breaking (removed methods, type changes, etc.)
+    pub is_breaking: bool,
+    /// Category of change (e.g., "method_added", "method_removed", "type_changed")
+    pub change_category: Option<String>,
+}
+
+/// Extract change classification from a mismatch
+///
+/// Uses the context field to determine if a change is additive, breaking, or both
+pub fn classify_change(mismatch: &Mismatch) -> ChangeClassification {
+    // Check if classification is already in context (from gRPC diff)
+    let is_additive = mismatch
+        .context
+        .get("is_additive")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    
+    let is_breaking = mismatch
+        .context
+        .get("is_breaking")
+        .and_then(|v| v.as_bool())
+        .unwrap_or_else(|| {
+            // Fallback: infer from severity and type
+            matches!(mismatch.severity, MismatchSeverity::Critical | MismatchSeverity::High)
+                && matches!(
+                    mismatch.mismatch_type,
+                    crate::ai_contract_diff::MismatchType::MissingRequiredField
+                        | crate::ai_contract_diff::MismatchType::TypeMismatch
+                        | crate::ai_contract_diff::MismatchType::EndpointNotFound
+                        | crate::ai_contract_diff::MismatchType::MethodNotAllowed
+                        | crate::ai_contract_diff::MismatchType::SchemaMismatch
+                )
+        });
+    
+    let change_category = mismatch
+        .context
+        .get("change_category")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    
+    ChangeClassification {
+        is_additive,
+        is_breaking,
+        change_category,
+    }
+}
+
+/// Generate a per-service+method drift report for gRPC contracts
+///
+/// Groups mismatches by service and method, showing additive vs breaking changes
+pub fn generate_grpc_drift_report(diff: &ContractDiffResult) -> serde_json::Value {
+    use std::collections::HashMap;
+    
+    // Group mismatches by service and method
+    let mut service_reports: HashMap<String, HashMap<String, Vec<&Mismatch>>> = HashMap::new();
+    
+    for mismatch in &diff.mismatches {
+        // Extract service and method from context or path
+        let service = mismatch
+            .context
+            .get("service")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                // Fallback: try to extract from path (format: "service.method" or "service")
+                mismatch.path.split('.').next().map(|s| s.to_string())
+            })
+            .unwrap_or_else(|| "unknown".to_string());
+        
+        let method = mismatch
+            .context
+            .get("method")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| mismatch.method.clone())
+            .or_else(|| {
+                // Fallback: try to extract from path
+                mismatch.path.split('.').nth(1).map(|s| s.to_string())
+            })
+            .unwrap_or_else(|| "unknown".to_string());
+        
+        service_reports
+            .entry(service)
+            .or_insert_with(HashMap::new)
+            .entry(method)
+            .or_insert_with(Vec::new)
+            .push(mismatch);
+    }
+    
+    // Build report structure
+    let mut report = serde_json::Map::new();
+    let mut services_json = serde_json::Map::new();
+    
+    for (service_name, methods) in service_reports {
+        let mut service_json = serde_json::Map::new();
+        let mut methods_json = serde_json::Map::new();
+        let mut service_additive = 0;
+        let mut service_breaking = 0;
+        
+        for (method_name, mismatches) in methods {
+            let mut method_json = serde_json::Map::new();
+            let mut method_additive = 0;
+            let mut method_breaking = 0;
+            let mut changes = Vec::new();
+            
+            // Save length before consuming mismatches in the loop
+            let total_changes = mismatches.len();
+            
+            for mismatch in mismatches {
+                let classification = classify_change(mismatch);
+                if classification.is_additive {
+                    method_additive += 1;
+                }
+                if classification.is_breaking {
+                    method_breaking += 1;
+                }
+                
+                changes.push(serde_json::json!({
+                    "description": mismatch.description,
+                    "path": mismatch.path,
+                    "severity": format!("{:?}", mismatch.severity),
+                    "is_additive": classification.is_additive,
+                    "is_breaking": classification.is_breaking,
+                    "change_category": classification.change_category,
+                }));
+            }
+            
+            method_json.insert("additive_changes".to_string(), serde_json::json!(method_additive));
+            method_json.insert("breaking_changes".to_string(), serde_json::json!(method_breaking));
+            method_json.insert("total_changes".to_string(), serde_json::json!(total_changes));
+            method_json.insert("changes".to_string(), serde_json::json!(changes));
+            
+            service_additive += method_additive;
+            service_breaking += method_breaking;
+            
+            methods_json.insert(method_name, serde_json::Value::Object(method_json));
+        }
+        
+        service_json.insert("additive_changes".to_string(), serde_json::json!(service_additive));
+        service_json.insert("breaking_changes".to_string(), serde_json::json!(service_breaking));
+        service_json.insert("methods".to_string(), serde_json::Value::Object(methods_json));
+        
+        services_json.insert(service_name, serde_json::Value::Object(service_json));
+    }
+    
+    report.insert("services".to_string(), serde_json::Value::Object(services_json));
+    report.insert("total_mismatches".to_string(), serde_json::json!(diff.mismatches.len()));
+    
+    serde_json::Value::Object(report)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

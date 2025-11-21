@@ -19,6 +19,7 @@ import { registerStartServerCommand, registerStopServerCommand, registerRestartS
 import { registerShowLogsCommand } from './commands/showLogs';
 import { MockForgeLanguageServer } from './services/languageServer';
 import { registerGenerateMockScenarioCommand } from './commands/generateMockScenario';
+import { registerOpenPlaygroundCommand } from './commands/openPlayground';
 
 /**
  * Extension activation function
@@ -154,6 +155,7 @@ function registerAllCommands(
     registerRestartServerCommand(context, client, mocksProvider);
     registerShowLogsCommand(context);
     registerGenerateMockScenarioCommand(context);
+    registerOpenPlaygroundCommand(context);
 }
 
 /**

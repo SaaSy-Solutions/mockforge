@@ -61,7 +61,7 @@ redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], opt
 mockforge-tracing = "0.3.0"
 
 # Recorder
-mockforge-recorder = "0.3.0"
+mockforge-recorder = { version = "0.3.2", path = "../mockforge-recorder" }
 
 # Core (for MockAI integration)
 mockforge-core = { version = "0.3.2", path = "../mockforge-core" }

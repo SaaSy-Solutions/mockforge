@@ -5,6 +5,7 @@
 //! - Request duration histograms
 //! - In-flight request tracking
 //! - Error counts
+//! - Pillar dimension for usage tracking
 
 use axum::{
     extract::{MatchedPath, Request},
@@ -14,6 +15,62 @@ use axum::{
 use mockforge_observability::get_global_registry;
 use std::time::Instant;
 use tracing::debug;
+
+/// Determine pillar from endpoint path
+///
+/// Analyzes the request path to determine which pillar(s) the request belongs to.
+/// This enables pillar-based usage tracking in telemetry.
+fn determine_pillar_from_path(path: &str) -> &'static str {
+    let path_lower = path.to_lowercase();
+    
+    // Reality pillar patterns
+    if path_lower.contains("/reality") 
+        || path_lower.contains("/personas")
+        || path_lower.contains("/chaos")
+        || path_lower.contains("/fidelity")
+        || path_lower.contains("/continuum") {
+        return "reality";
+    }
+    
+    // Contracts pillar patterns
+    if path_lower.contains("/contracts")
+        || path_lower.contains("/validation")
+        || path_lower.contains("/drift")
+        || path_lower.contains("/schema")
+        || path_lower.contains("/sync") {
+        return "contracts";
+    }
+    
+    // DevX pillar patterns
+    if path_lower.contains("/sdk")
+        || path_lower.contains("/playground")
+        || path_lower.contains("/plugins")
+        || path_lower.contains("/cli")
+        || path_lower.contains("/generator") {
+        return "devx";
+    }
+    
+    // Cloud pillar patterns
+    if path_lower.contains("/registry")
+        || path_lower.contains("/workspace")
+        || path_lower.contains("/org")
+        || path_lower.contains("/marketplace")
+        || path_lower.contains("/collab") {
+        return "cloud";
+    }
+    
+    // AI pillar patterns
+    if path_lower.contains("/ai")
+        || path_lower.contains("/mockai")
+        || path_lower.contains("/voice")
+        || path_lower.contains("/llm")
+        || path_lower.contains("/studio") {
+        return "ai";
+    }
+    
+    // Default to unknown if no pattern matches
+    "unknown"
+}
 
 /// Metrics collection middleware for HTTP requests
 ///
@@ -55,17 +112,20 @@ pub async fn collect_http_metrics(
     let duration_seconds = duration.as_secs_f64();
     let status_code = response.status().as_u16();
 
-    // Record metrics with path information
-    registry.record_http_request_with_path(&path, &method, status_code, duration_seconds);
+    // Determine pillar from path
+    let pillar = determine_pillar_from_path(&path);
 
-    // Record errors separately
+    // Record metrics with pillar information
+    registry.record_http_request_with_pillar(&method, status_code, duration_seconds, pillar);
+
+    // Record errors separately with pillar
     if status_code >= 400 {
         let error_type = if status_code >= 500 {
             "server_error"
         } else {
             "client_error"
         };
-        registry.record_error("http", error_type);
+        registry.record_error_with_pillar("http", error_type, pillar);
     }
 
     debug!(
@@ -73,7 +133,8 @@ pub async fn collect_http_metrics(
         path = %path,
         status = status_code,
         duration_ms = duration.as_millis(),
-        "HTTP request metrics recorded (including path-based metrics)"
+        pillar = pillar,
+        "HTTP request metrics recorded with pillar dimension"
     );
 
     response

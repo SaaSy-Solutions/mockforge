@@ -108,7 +108,7 @@ pub struct FitnessTestResult {
 
 /// Trait for evaluating fitness functions
 pub trait FitnessEvaluator: Send + Sync {
-    /// Evaluate the fitness function against contract changes
+    /// Evaluate the fitness function against contract changes (OpenAPI/HTTP)
     ///
     /// # Arguments
     ///
@@ -131,6 +131,43 @@ pub trait FitnessEvaluator: Send + Sync {
         method: &str,
         config: &serde_json::Value,
     ) -> crate::Result<FitnessTestResult>;
+
+    /// Evaluate the fitness function against protocol contract changes (gRPC, WebSocket, MQTT, etc.)
+    ///
+    /// # Arguments
+    ///
+    /// * `old_contract` - The previous protocol contract (if available)
+    /// * `new_contract` - The new protocol contract
+    /// * `diff_result` - The contract diff result showing changes
+    /// * `operation_id` - The operation identifier (method, topic, etc.)
+    /// * `config` - Additional configuration for the fitness function
+    ///
+    /// # Returns
+    ///
+    /// A `FitnessTestResult` indicating whether the test passed
+    fn evaluate_protocol(
+        &self,
+        old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
+        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        diff_result: &ContractDiffResult,
+        operation_id: &str,
+        config: &serde_json::Value,
+    ) -> crate::Result<FitnessTestResult> {
+        // Default implementation: extract schema from protocol contract and use basic evaluation
+        // Individual evaluators can override this for protocol-specific logic
+        let new_schema = new_contract.get_schema(operation_id);
+        let old_schema = old_contract.and_then(|c| c.get_schema(operation_id));
+
+        // For protocol contracts, we'll estimate based on schema complexity
+        // This is a fallback - specific evaluators should override this method
+        Ok(FitnessTestResult {
+            function_id: String::new(),
+            function_name: "Protocol Contract Evaluation".to_string(),
+            passed: true,
+            message: "Protocol contract evaluation not implemented for this fitness function type".to_string(),
+            metrics: std::collections::HashMap::new(),
+        })
+    }
 }
 
 /// Response size fitness evaluator
@@ -192,6 +229,64 @@ impl FitnessEvaluator for ResponseSizeFitnessEvaluator {
 
         Ok(FitnessTestResult {
             function_id: String::new(), // Will be set by caller
+            function_name: "Response Size".to_string(),
+            passed,
+            message,
+            metrics,
+        })
+    }
+
+    fn evaluate_protocol(
+        &self,
+        old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
+        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        diff_result: &ContractDiffResult,
+        operation_id: &str,
+        config: &serde_json::Value,
+    ) -> crate::Result<FitnessTestResult> {
+        // Extract max_increase_percent from config
+        let max_increase_percent =
+            config.get("max_increase_percent").and_then(|v| v.as_f64()).unwrap_or(25.0);
+
+        // Estimate response size based on schema complexity from protocol contract
+        let old_size = if let Some(old) = old_contract {
+            estimate_protocol_schema_size(old, operation_id)
+        } else {
+            // No old contract, estimate from diff
+            estimate_size_from_diff(diff_result)
+        };
+
+        let new_size = estimate_protocol_schema_size(new_contract, operation_id);
+
+        let increase_percent = if old_size > 0.0 {
+            ((new_size - old_size) / old_size) * 100.0
+        } else if new_size > 0.0 {
+            100.0 // 100% increase from zero
+        } else {
+            0.0 // No change
+        };
+
+        let passed = increase_percent <= max_increase_percent;
+        let message = if passed {
+            format!(
+                "Protocol contract response size increase ({:.1}%) is within allowed limit ({:.1}%)",
+                increase_percent, max_increase_percent
+            )
+        } else {
+            format!(
+                "Protocol contract response size increase ({:.1}%) exceeds allowed limit ({:.1}%)",
+                increase_percent, max_increase_percent
+            )
+        };
+
+        let mut metrics = HashMap::new();
+        metrics.insert("old_size".to_string(), old_size);
+        metrics.insert("new_size".to_string(), new_size);
+        metrics.insert("increase_percent".to_string(), increase_percent);
+        metrics.insert("max_increase_percent".to_string(), max_increase_percent);
+
+        Ok(FitnessTestResult {
+            function_id: String::new(),
             function_name: "Response Size".to_string(),
             passed,
             message,
@@ -269,6 +364,76 @@ impl FitnessEvaluator for RequiredFieldFitnessEvaluator {
             metrics,
         })
     }
+
+    fn evaluate_protocol(
+        &self,
+        _old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
+        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        diff_result: &ContractDiffResult,
+        operation_id: &str,
+        config: &serde_json::Value,
+    ) -> crate::Result<FitnessTestResult> {
+        // Extract path_pattern and allow_new_required from config
+        let path_pattern = config.get("path_pattern").and_then(|v| v.as_str()).unwrap_or("*");
+        let allow_new_required =
+            config.get("allow_new_required").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        // For protocol contracts, check if operation ID matches pattern
+        // Operation ID format varies by protocol (e.g., "service.method" for gRPC, "topic" for MQTT)
+        let matches = matches_pattern(operation_id, path_pattern) || path_pattern == "*";
+
+        if !matches {
+            return Ok(FitnessTestResult {
+                function_id: String::new(),
+                function_name: "Required Field".to_string(),
+                passed: true,
+                message: format!("Operation {} does not match pattern {}", operation_id, path_pattern),
+                metrics: HashMap::new(),
+            });
+        }
+
+        // Count new required fields from mismatches
+        let new_required_fields = diff_result
+            .mismatches
+            .iter()
+            .filter(|m| m.mismatch_type == MismatchType::MissingRequiredField)
+            .count();
+
+        // Also check schema for required fields
+        let schema_required_fields = if let Some(schema) = new_contract.get_schema(operation_id) {
+            count_required_fields_in_schema(&schema)
+        } else {
+            0
+        };
+
+        let total_new_required = new_required_fields + schema_required_fields;
+        let passed = allow_new_required || total_new_required == 0;
+        let message = if passed {
+            if allow_new_required {
+                format!("Found {} new required fields, which is allowed", total_new_required)
+            } else {
+                "No new required fields detected in protocol contract".to_string()
+            }
+        } else {
+            format!(
+                "Found {} new required fields in protocol contract, which violates the fitness function",
+                total_new_required
+            )
+        };
+
+        let mut metrics = HashMap::new();
+        metrics.insert("new_required_fields".to_string(), total_new_required as f64);
+        metrics
+            .insert("allow_new_required".to_string(), if allow_new_required { 1.0 } else { 0.0 });
+
+        Ok(FitnessTestResult {
+            function_id: String::new(),
+            function_name: "Required Field".to_string(),
+            passed,
+            message,
+            metrics,
+        })
+    }
 }
 
 /// Field count fitness evaluator
@@ -313,6 +478,48 @@ impl FitnessEvaluator for FieldCountFitnessEvaluator {
             metrics,
         })
     }
+
+    fn evaluate_protocol(
+        &self,
+        _old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
+        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        _diff_result: &ContractDiffResult,
+        operation_id: &str,
+        config: &serde_json::Value,
+    ) -> crate::Result<FitnessTestResult> {
+        // Extract max_fields from config
+        let max_fields = config
+            .get("max_fields")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32)
+            .unwrap_or(100);
+
+        // Count fields in protocol contract schema
+        let field_count = if let Some(schema) = new_contract.get_schema(operation_id) {
+            count_fields_in_schema(&schema)
+        } else {
+            0.0
+        };
+
+        let passed = field_count <= max_fields as f64;
+        let message = if passed {
+            format!("Protocol contract field count ({}) is within allowed limit ({})", field_count as u32, max_fields)
+        } else {
+            format!("Protocol contract field count ({}) exceeds allowed limit ({})", field_count as u32, max_fields)
+        };
+
+        let mut metrics = HashMap::new();
+        metrics.insert("field_count".to_string(), field_count);
+        metrics.insert("max_fields".to_string(), max_fields as f64);
+
+        Ok(FitnessTestResult {
+            function_id: String::new(),
+            function_name: "Field Count".to_string(),
+            passed,
+            message,
+            metrics,
+        })
+    }
 }
 
 /// Schema complexity fitness evaluator
@@ -340,6 +547,45 @@ impl FitnessEvaluator for SchemaComplexityFitnessEvaluator {
             format!("Schema depth ({}) is within allowed limit ({})", depth, max_depth)
         } else {
             format!("Schema depth ({}) exceeds allowed limit ({})", depth, max_depth)
+        };
+
+        let mut metrics = HashMap::new();
+        metrics.insert("schema_depth".to_string(), depth as f64);
+        metrics.insert("max_depth".to_string(), max_depth as f64);
+
+        Ok(FitnessTestResult {
+            function_id: String::new(),
+            function_name: "Schema Complexity".to_string(),
+            passed,
+            message,
+            metrics,
+        })
+    }
+
+    fn evaluate_protocol(
+        &self,
+        _old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
+        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        _diff_result: &ContractDiffResult,
+        operation_id: &str,
+        config: &serde_json::Value,
+    ) -> crate::Result<FitnessTestResult> {
+        // Extract max_depth from config
+        let max_depth =
+            config.get("max_depth").and_then(|v| v.as_u64()).map(|v| v as u32).unwrap_or(10);
+
+        // Calculate schema depth for protocol contract
+        let depth = if let Some(schema) = new_contract.get_schema(operation_id) {
+            calculate_protocol_schema_depth(&schema)
+        } else {
+            0
+        };
+
+        let passed = depth <= max_depth;
+        let message = if passed {
+            format!("Protocol contract schema depth ({}) is within allowed limit ({})", depth, max_depth)
+        } else {
+            format!("Protocol contract schema depth ({}) exceeds allowed limit ({})", depth, max_depth)
         };
 
         let mut metrics = HashMap::new();
@@ -479,6 +725,72 @@ impl FitnessFunctionRegistry {
         Ok(results)
     }
 
+    /// Evaluate all applicable fitness functions for a protocol contract
+    ///
+    /// This method evaluates fitness functions against protocol contracts (gRPC, WebSocket, MQTT, etc.)
+    pub fn evaluate_all_protocol(
+        &self,
+        old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
+        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        diff_result: &ContractDiffResult,
+        operation_id: &str,
+        workspace_id: Option<&str>,
+        service_name: Option<&str>,
+    ) -> crate::Result<Vec<FitnessTestResult>> {
+        // Get operation to determine endpoint/method for scope matching
+        let operation = new_contract.get_operation(operation_id);
+        let (endpoint, method) = if let Some(op) = operation {
+            match &op.operation_type {
+                crate::contract_drift::protocol_contracts::OperationType::HttpEndpoint { path, method } => {
+                    (path.clone(), method.clone())
+                }
+                crate::contract_drift::protocol_contracts::OperationType::GrpcMethod { service, method } => {
+                    // For gRPC, use service.method as endpoint
+                    (format!("{}.{}", service, method), "grpc".to_string())
+                }
+                crate::contract_drift::protocol_contracts::OperationType::WebSocketMessage { message_type, .. } => {
+                    (message_type.clone(), "websocket".to_string())
+                }
+                crate::contract_drift::protocol_contracts::OperationType::MqttTopic { topic, qos: _ } => {
+                    (topic.clone(), "mqtt".to_string())
+                }
+                crate::contract_drift::protocol_contracts::OperationType::KafkaTopic { topic, key_schema: _, value_schema: _ } => {
+                    (topic.clone(), "kafka".to_string())
+                }
+            }
+        } else {
+            (operation_id.to_string(), "unknown".to_string())
+        };
+
+        let functions = self.get_functions_for_scope(&endpoint, &method, workspace_id, service_name);
+        let mut results = Vec::new();
+
+        for function in functions {
+            let evaluator_name = match &function.function_type {
+                FitnessFunctionType::ResponseSize { .. } => "response_size",
+                FitnessFunctionType::RequiredField { .. } => "required_field",
+                FitnessFunctionType::FieldCount { .. } => "field_count",
+                FitnessFunctionType::SchemaComplexity { .. } => "schema_complexity",
+                FitnessFunctionType::Custom { evaluator } => evaluator.as_str(),
+            };
+
+            if let Some(evaluator) = self.evaluators.get(evaluator_name) {
+                let mut result = evaluator.evaluate_protocol(
+                    old_contract,
+                    new_contract,
+                    diff_result,
+                    operation_id,
+                    &function.config,
+                )?;
+                result.function_id = function.id.clone();
+                result.function_name = function.name.clone();
+                results.push(result);
+            }
+        }
+
+        Ok(results)
+    }
+
     /// Check if a fitness function's scope matches the given context
     fn matches_scope(
         &self,
@@ -509,12 +821,250 @@ impl FitnessFunctionRegistry {
     pub fn update_function(&mut self, function: FitnessFunction) {
         self.functions.insert(function.id.clone(), function);
     }
+
+    /// Load fitness rules from config into the registry
+    ///
+    /// This converts YAML config fitness rules into FitnessFunction instances
+    /// and adds them to the registry.
+    ///
+    /// Validates that:
+    /// - Required fields are present for each rule type
+    /// - Unnecessary fields are not provided (warns but doesn't fail)
+    /// - Field values are within valid ranges
+    pub fn load_from_config(
+        &mut self,
+        config_rules: &[crate::config::FitnessRuleConfig],
+    ) -> crate::Result<()> {
+        use crate::config::FitnessRuleType;
+
+        for (idx, rule_config) in config_rules.iter().enumerate() {
+            // Generate a stable ID based on index and name
+            let id = format!("config-rule-{}", idx);
+            
+            // Parse scope string into FitnessScope
+            let scope = parse_scope(&rule_config.scope)?;
+            
+            // Convert rule type and create function type with validation
+            let function_type = match rule_config.rule_type {
+                FitnessRuleType::ResponseSizeDelta => {
+                    // Validate required field
+                    let max_increase = rule_config
+                        .max_percent_increase
+                        .ok_or_else(|| {
+                            crate::Error::generic(format!(
+                                "Fitness rule '{}' (type: response_size_delta) requires 'max_percent_increase' field. \
+                                Example: max_percent_increase: 25.0",
+                                rule_config.name
+                            ))
+                        })?;
+                    
+                    // Validate value range
+                    if max_increase < 0.0 {
+                        return Err(crate::Error::generic(format!(
+                            "Fitness rule '{}' (type: response_size_delta): 'max_percent_increase' must be >= 0, got {}",
+                            rule_config.name, max_increase
+                        )));
+                    }
+                    
+                    // Warn about unnecessary fields
+                    if rule_config.max_fields.is_some() {
+                        tracing::warn!(
+                            "Fitness rule '{}' (type: response_size_delta): 'max_fields' is not used for this rule type",
+                            rule_config.name
+                        );
+                    }
+                    if rule_config.max_depth.is_some() {
+                        tracing::warn!(
+                            "Fitness rule '{}' (type: response_size_delta): 'max_depth' is not used for this rule type",
+                            rule_config.name
+                        );
+                    }
+                    
+                    FitnessFunctionType::ResponseSize {
+                        max_increase_percent: max_increase,
+                    }
+                }
+                FitnessRuleType::NoNewRequiredFields => {
+                    // Extract path pattern from scope if it's an endpoint scope
+                    let path_pattern = match &scope {
+                        FitnessScope::Endpoint { pattern } => pattern.clone(),
+                        _ => "*".to_string(), // Default to all endpoints if scope is global/service
+                    };
+                    
+                    // Warn about unnecessary fields
+                    if rule_config.max_percent_increase.is_some() {
+                        tracing::warn!(
+                            "Fitness rule '{}' (type: no_new_required_fields): 'max_percent_increase' is not used for this rule type",
+                            rule_config.name
+                        );
+                    }
+                    if rule_config.max_fields.is_some() {
+                        tracing::warn!(
+                            "Fitness rule '{}' (type: no_new_required_fields): 'max_fields' is not used for this rule type",
+                            rule_config.name
+                        );
+                    }
+                    if rule_config.max_depth.is_some() {
+                        tracing::warn!(
+                            "Fitness rule '{}' (type: no_new_required_fields): 'max_depth' is not used for this rule type",
+                            rule_config.name
+                        );
+                    }
+                    
+                    FitnessFunctionType::RequiredField {
+                        path_pattern,
+                        allow_new_required: false,
+                    }
+                }
+                FitnessRuleType::FieldCount => {
+                    // Validate required field
+                    let max_fields = rule_config.max_fields.ok_or_else(|| {
+                        crate::Error::generic(format!(
+                            "Fitness rule '{}' (type: field_count) requires 'max_fields' field. \
+                            Example: max_fields: 50",
+                            rule_config.name
+                        ))
+                    })?;
+                    
+                    // Validate value range
+                    if max_fields == 0 {
+                        return Err(crate::Error::generic(format!(
+                            "Fitness rule '{}' (type: field_count): 'max_fields' must be > 0, got {}",
+                            rule_config.name, max_fields
+                        )));
+                    }
+                    
+                    // Warn about unnecessary fields
+                    if rule_config.max_percent_increase.is_some() {
+                        tracing::warn!(
+                            "Fitness rule '{}' (type: field_count): 'max_percent_increase' is not used for this rule type",
+                            rule_config.name
+                        );
+                    }
+                    if rule_config.max_depth.is_some() {
+                        tracing::warn!(
+                            "Fitness rule '{}' (type: field_count): 'max_depth' is not used for this rule type",
+                            rule_config.name
+                        );
+                    }
+                    
+                    FitnessFunctionType::FieldCount { max_fields }
+                }
+                FitnessRuleType::SchemaComplexity => {
+                    // Validate required field
+                    let max_depth = rule_config.max_depth.ok_or_else(|| {
+                        crate::Error::generic(format!(
+                            "Fitness rule '{}' (type: schema_complexity) requires 'max_depth' field. \
+                            Example: max_depth: 5",
+                            rule_config.name
+                        ))
+                    })?;
+                    
+                    // Validate value range
+                    if max_depth == 0 {
+                        return Err(crate::Error::generic(format!(
+                            "Fitness rule '{}' (type: schema_complexity): 'max_depth' must be > 0, got {}",
+                            rule_config.name, max_depth
+                        )));
+                    }
+                    
+                    // Warn about unnecessary fields
+                    if rule_config.max_percent_increase.is_some() {
+                        tracing::warn!(
+                            "Fitness rule '{}' (type: schema_complexity): 'max_percent_increase' is not used for this rule type",
+                            rule_config.name
+                        );
+                    }
+                    if rule_config.max_fields.is_some() {
+                        tracing::warn!(
+                            "Fitness rule '{}' (type: schema_complexity): 'max_fields' is not used for this rule type",
+                            rule_config.name
+                        );
+                    }
+                    
+                    FitnessFunctionType::SchemaComplexity { max_depth }
+                }
+            };
+
+            // Create config JSON
+            let config_json = match &function_type {
+                FitnessFunctionType::ResponseSize { max_increase_percent } => {
+                    serde_json::json!({
+                        "max_increase_percent": max_increase_percent
+                    })
+                }
+                FitnessFunctionType::RequiredField { path_pattern, allow_new_required } => {
+                    serde_json::json!({
+                        "path_pattern": path_pattern,
+                        "allow_new_required": allow_new_required
+                    })
+                }
+                FitnessFunctionType::FieldCount { max_fields } => {
+                    serde_json::json!({
+                        "max_fields": max_fields
+                    })
+                }
+                FitnessFunctionType::SchemaComplexity { max_depth } => {
+                    serde_json::json!({
+                        "max_depth": max_depth
+                    })
+                }
+                FitnessFunctionType::Custom { .. } => {
+                    serde_json::json!({})
+                }
+            };
+
+            let function = FitnessFunction {
+                id,
+                name: rule_config.name.clone(),
+                description: format!("Fitness rule: {}", rule_config.name),
+                function_type,
+                config: config_json,
+                scope,
+                enabled: true,
+                created_at: chrono::Utc::now().timestamp(),
+                updated_at: chrono::Utc::now().timestamp(),
+            };
+
+            self.add_function(function);
+        }
+
+        Ok(())
+    }
 }
 
-impl Default for FitnessFunctionRegistry {
-    fn default() -> Self {
-        Self::new()
+/// Parse a scope string into a FitnessScope enum
+///
+/// Supports:
+/// - "global" -> FitnessScope::Global
+/// - "/v1/mobile/*" -> FitnessScope::Endpoint { pattern: "/v1/mobile/*" }
+/// - "service:user-service" -> FitnessScope::Service { service_name: "user-service" }
+/// - "workspace:prod" -> FitnessScope::Workspace { workspace_id: "prod" }
+fn parse_scope(scope_str: &str) -> crate::Result<FitnessScope> {
+    let scope_str = scope_str.trim();
+    
+    if scope_str == "global" {
+        return Ok(FitnessScope::Global);
     }
+    
+    // Check for workspace: prefix
+    if let Some(workspace_id) = scope_str.strip_prefix("workspace:") {
+        return Ok(FitnessScope::Workspace {
+            workspace_id: workspace_id.to_string(),
+        });
+    }
+    
+    // Check for service: prefix
+    if let Some(service_name) = scope_str.strip_prefix("service:") {
+        return Ok(FitnessScope::Service {
+            service_name: service_name.to_string(),
+        });
+    }
+    
+    // Otherwise, treat as endpoint pattern
+    Ok(FitnessScope::Endpoint {
+        pattern: scope_str.to_string(),
+    })
 }
 
 // Helper functions
@@ -586,6 +1136,155 @@ fn calculate_schema_depth(_spec: &OpenApiSpec, _endpoint: &str, _method: &str) -
     // traverse the response schema and calculate the maximum depth
     // For now, return a placeholder value
     5
+}
+
+/// Estimate schema size for a protocol contract operation
+fn estimate_protocol_schema_size(
+    contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+    operation_id: &str,
+) -> f64 {
+    // Get the operation schema
+    if let Some(schema) = contract.get_schema(operation_id) {
+        // Estimate size based on schema complexity
+        // Count fields in the output schema
+        if let Some(output_schema) = schema.get("output_schema") {
+            count_fields_in_schema(output_schema)
+        } else if let Some(input_schema) = schema.get("input_schema") {
+            count_fields_in_schema(input_schema)
+        } else {
+            // Fallback: estimate based on operation type
+            10.0
+        }
+    } else {
+        // No schema available, use default estimate
+        10.0
+    }
+}
+
+/// Count fields in a JSON schema recursively
+fn count_fields_in_schema(schema: &serde_json::Value) -> f64 {
+    match schema {
+        serde_json::Value::Object(map) => {
+            let mut count = 0.0;
+            // Check for "properties" (JSON Schema)
+            if let Some(properties) = map.get("properties") {
+                if let Some(props) = properties.as_object() {
+                    count += props.len() as f64;
+                    // Recursively count nested properties
+                    for prop_value in props.values() {
+                        count += count_fields_in_schema(prop_value);
+                    }
+                }
+            }
+            // Check for "fields" (Avro-style)
+            if let Some(fields) = map.get("fields") {
+                if let Some(fields_array) = fields.as_array() {
+                    count += fields_array.len() as f64;
+                    for field in fields_array {
+                        if let Some(field_obj) = field.as_object() {
+                            if let Some(field_type) = field_obj.get("type") {
+                                count += count_fields_in_schema(field_type);
+                            }
+                        }
+                    }
+                }
+            }
+            // Check for nested objects/arrays
+            if let Some(item_type) = map.get("items") {
+                count += count_fields_in_schema(item_type);
+            }
+            count
+        }
+        _ => 0.0,
+    }
+}
+
+/// Estimate size from diff result
+fn estimate_size_from_diff(diff_result: &ContractDiffResult) -> f64 {
+    // Estimate based on number of mismatches
+    // More mismatches = larger size change
+    let base_size = 10.0;
+    let mismatch_count = diff_result.mismatches.len() as f64;
+    base_size + (mismatch_count * 2.0) // Each mismatch adds ~2 fields
+}
+
+/// Count required fields in a schema
+fn count_required_fields_in_schema(schema: &serde_json::Value) -> usize {
+    match schema {
+        serde_json::Value::Object(map) => {
+            let mut count = 0;
+            // Check for "required" array (JSON Schema)
+            if let Some(required) = map.get("required") {
+                if let Some(required_array) = required.as_array() {
+                    count += required_array.len();
+                }
+            }
+            // Check nested schemas
+            if let Some(properties) = map.get("properties") {
+                if let Some(props) = properties.as_object() {
+                    for prop_value in props.values() {
+                        count += count_required_fields_in_schema(prop_value);
+                    }
+                }
+            }
+            // Check for "fields" (Avro-style) with required flag
+            if let Some(fields) = map.get("fields") {
+                if let Some(fields_array) = fields.as_array() {
+                    for field in fields_array {
+                        if let Some(field_obj) = field.as_object() {
+                            // Check if field has "default" - if not, it's required in Avro
+                            if !field_obj.contains_key("default") {
+                                count += 1;
+                            }
+                            if let Some(field_type) = field_obj.get("type") {
+                                count += count_required_fields_in_schema(field_type);
+                            }
+                        }
+                    }
+                }
+            }
+            count
+        }
+        _ => 0,
+    }
+}
+
+/// Calculate schema depth for a protocol contract schema
+fn calculate_protocol_schema_depth(schema: &serde_json::Value) -> u32 {
+    match schema {
+        serde_json::Value::Object(map) => {
+            let mut max_depth = 0;
+            // Check nested objects
+            if let Some(properties) = map.get("properties") {
+                if let Some(props) = properties.as_object() {
+                    for prop_value in props.values() {
+                        let depth = calculate_protocol_schema_depth(prop_value);
+                        max_depth = max_depth.max(depth + 1);
+                    }
+                }
+            }
+            // Check for "fields" (Avro-style)
+            if let Some(fields) = map.get("fields") {
+                if let Some(fields_array) = fields.as_array() {
+                    for field in fields_array {
+                        if let Some(field_obj) = field.as_object() {
+                            if let Some(field_type) = field_obj.get("type") {
+                                let depth = calculate_protocol_schema_depth(field_type);
+                                max_depth = max_depth.max(depth + 1);
+                            }
+                        }
+                    }
+                }
+            }
+            // Check for arrays
+            if let Some(items) = map.get("items") {
+                let depth = calculate_protocol_schema_depth(items);
+                max_depth = max_depth.max(depth + 1);
+            }
+            max_depth
+        }
+        _ => 0,
+    }
 }
 
 #[cfg(test)]

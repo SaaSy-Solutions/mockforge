@@ -351,7 +351,20 @@ impl OpenApiRoute {
         &self,
         scenario: Option<&str>,
     ) -> (u16, serde_json::Value) {
+        let (status, body, _) = self.mock_response_with_status_and_scenario_and_trace(scenario);
+        (status, body)
+    }
+
+    /// Generate a mock response with status code, scenario selection, and trace collection
+    ///
+    /// Returns a tuple of (status_code, response_body, trace_data)
+    pub fn mock_response_with_status_and_scenario_and_trace(
+        &self,
+        scenario: Option<&str>,
+    ) -> (u16, serde_json::Value, crate::reality_continuum::response_trace::ResponseGenerationTrace) {
         use crate::openapi::response::ResponseGenerator;
+        use crate::openapi::response_trace;
+        use crate::reality_continuum::response_trace::ResponseGenerationTrace;
 
         // Find the first available status code from the OpenAPI spec
         let status_code = self.find_first_available_status_code();
@@ -365,7 +378,8 @@ impl OpenApiRoute {
         let mode = Some(self.response_selection_mode);
         let selector = Some(self.response_selector.as_ref());
 
-        match ResponseGenerator::generate_response_with_scenario_and_mode(
+        // Try to generate with trace collection
+        match response_trace::generate_response_with_trace(
             &self.spec,
             &self.operation,
             status_code,
@@ -374,8 +388,9 @@ impl OpenApiRoute {
             scenario,
             mode,
             selector,
+            None, // No persona in basic route
         ) {
-            Ok(response_body) => {
+            Ok((response_body, trace)) => {
                 tracing::debug!(
                     "ResponseGenerator succeeded for {} {} with status {} and scenario {:?}: {:?}",
                     self.method,
@@ -384,7 +399,7 @@ impl OpenApiRoute {
                     scenario,
                     response_body
                 );
-                (status_code, response_body)
+                (status_code, response_body, trace)
             }
             Err(e) => {
                 tracing::debug!(
@@ -399,7 +414,18 @@ impl OpenApiRoute {
                     "operation_id": self.operation.operation_id,
                     "status": status_code
                 });
-                (status_code, response_body)
+                // Create a minimal trace for fallback
+                let mut trace = ResponseGenerationTrace::new();
+                trace.set_final_payload(response_body.clone());
+                trace.add_metadata(
+                    "fallback".to_string(),
+                    serde_json::json!(true),
+                );
+                trace.add_metadata(
+                    "error".to_string(),
+                    serde_json::json!(e.to_string()),
+                );
+                (status_code, response_body, trace)
             }
         }
     }

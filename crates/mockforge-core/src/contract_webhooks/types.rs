@@ -63,6 +63,62 @@ pub enum ContractEvent {
         /// Patch file path
         patch_file: Option<String>,
     },
+
+    /// Forecast prediction updated
+    #[serde(rename = "forecast.prediction.updated")]
+    ForecastPredictionUpdated {
+        /// Endpoint path
+        endpoint: String,
+        /// HTTP method
+        method: String,
+        /// Forecast window in days
+        window_days: u32,
+        /// Change probability
+        change_probability: f64,
+        /// Break probability
+        break_probability: f64,
+    },
+
+    /// Semantic drift detected
+    #[serde(rename = "semantic.drift.detected")]
+    SemanticDriftDetected {
+        /// Endpoint path
+        endpoint: String,
+        /// HTTP method
+        method: String,
+        /// Semantic change type
+        change_type: String,
+        /// Semantic confidence
+        semantic_confidence: f64,
+        /// Soft-breaking score
+        soft_breaking_score: f64,
+    },
+
+    /// Threat assessment completed
+    #[serde(rename = "threat.assessment.completed")]
+    ThreatAssessmentCompleted {
+        /// Endpoint path (optional)
+        endpoint: Option<String>,
+        /// HTTP method (optional)
+        method: Option<String>,
+        /// Threat level
+        threat_level: String,
+        /// Threat score
+        threat_score: f64,
+        /// Number of findings
+        findings_count: usize,
+    },
+
+    /// Threat remediation suggested
+    #[serde(rename = "threat.remediation.suggested")]
+    ThreatRemediationSuggested {
+        /// Finding ID
+        finding_id: String,
+        /// Finding type
+        finding_type: String,
+        /// Remediation suggestion
+        suggestion: String,
+    },
 }
 
 impl ContractEvent {
@@ -73,6 +129,10 @@ impl ContractEvent {
             Self::BreakingChange { .. } => "contract.breaking_change",
             Self::DriftWarning { .. } => "contract.drift.warning",
             Self::CorrectionApplied { .. } => "contract.correction.applied",
+            Self::ForecastPredictionUpdated { .. } => "forecast.prediction.updated",
+            Self::SemanticDriftDetected { .. } => "semantic.drift.detected",
+            Self::ThreatAssessmentCompleted { .. } => "threat.assessment.completed",
+            Self::ThreatRemediationSuggested { .. } => "threat.remediation.suggested",
         }
     }
 
@@ -83,6 +143,10 @@ impl ContractEvent {
             Self::BreakingChange { severity, .. } => severity,
             Self::DriftWarning { severity, .. } => severity,
             Self::CorrectionApplied { .. } => "info",
+            Self::ForecastPredictionUpdated { .. } => "info",
+            Self::SemanticDriftDetected { .. } => "medium",
+            Self::ThreatAssessmentCompleted { threat_level, .. } => threat_level,
+            Self::ThreatRemediationSuggested { .. } => "info",
         }
     }
 

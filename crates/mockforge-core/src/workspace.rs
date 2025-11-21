@@ -11,18 +11,22 @@
 pub mod core;
 pub mod environment;
 pub mod mock_environment;
+pub mod rbac;
 pub mod registry;
 pub mod request;
 pub mod scenario_promotion;
 pub mod sync;
+pub mod template_application;
 
 // Re-export commonly used types
 pub use environment::*;
 pub use mock_environment::*;
+pub use rbac::*;
 pub use registry::*;
 pub use request::*;
 pub use scenario_promotion::*;
 pub use sync::*;
+pub use template_application::*;
 
 // Legacy imports for compatibility
 use crate::config::AuthConfig;
@@ -276,6 +280,10 @@ pub struct WorkspaceConfig {
     pub environments: Vec<Environment>,
     /// Currently active environment ID (None means only global)
     pub active_environment_id: Option<EntityId>,
+    /// Mock environment manager for dev/test/prod environments
+    /// Manages environment-specific overrides for reality levels, chaos profiles, and drift budgets
+    #[serde(default)]
+    pub mock_environments: MockEnvironmentManager,
     /// Directory sync configuration
     pub sync: SyncConfig,
     /// Automatic encryption configuration
@@ -283,8 +291,13 @@ pub struct WorkspaceConfig {
     pub auto_encryption: AutoEncryptionConfig,
     /// Reality level for this workspace (1-5)
     /// Controls the realism of mock behavior (chaos, latency, MockAI)
+    /// This is the default reality level; can be overridden per environment
     #[serde(default)]
     pub reality_level: Option<RealityLevel>,
+    /// AI mode for this workspace
+    /// Controls how AI-generated artifacts are used at runtime
+    #[serde(default)]
+    pub ai_mode: Option<crate::ai_studio::config::AiMode>,
     /// Current fidelity score for this workspace
     /// Measures how close the mock is to the real upstream
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -302,8 +315,9 @@ impl Workspace {
     /// Create a new workspace
     pub fn new(name: String) -> Self {
         let now = Utc::now();
-        Self {
-            id: Uuid::new_v4().to_string(),
+        let workspace_id = Uuid::new_v4().to_string();
+        let mut workspace = Self {
+            id: workspace_id.clone(),
             name,
             description: None,
             created_at: now,
@@ -313,6 +327,49 @@ impl Workspace {
             folders: Vec::new(),
             requests: Vec::new(),
             order: 0, // Default order will be updated when added to registry
+        };
+        
+        // Initialize default mock environments (dev/test/prod)
+        workspace.initialize_default_mock_environments();
+        
+        workspace
+    }
+
+    /// Initialize default mock environments for this workspace
+    /// This is called when creating a new workspace or when loading an existing one
+    /// that doesn't have mock environments configured
+    pub fn initialize_default_mock_environments(&mut self) {
+        // Only initialize if mock_environments is empty or has no workspace_id set
+        if self.config.mock_environments.workspace_id.is_empty() 
+            || self.config.mock_environments.environments.is_empty() {
+            
+            // Update workspace_id if needed
+            if self.config.mock_environments.workspace_id.is_empty() {
+                self.config.mock_environments.workspace_id = self.id.clone();
+            }
+            
+            // Create default dev environment if it doesn't exist
+            if !self.config.mock_environments.environments.contains_key(&MockEnvironmentName::Dev) {
+                let dev_env = MockEnvironment::new(self.id.clone(), MockEnvironmentName::Dev);
+                self.config.mock_environments.add_environment(dev_env);
+            }
+            
+            // Create default test environment if it doesn't exist
+            if !self.config.mock_environments.environments.contains_key(&MockEnvironmentName::Test) {
+                let test_env = MockEnvironment::new(self.id.clone(), MockEnvironmentName::Test);
+                self.config.mock_environments.add_environment(test_env);
+            }
+            
+            // Create default prod environment if it doesn't exist
+            if !self.config.mock_environments.environments.contains_key(&MockEnvironmentName::Prod) {
+                let prod_env = MockEnvironment::new(self.id.clone(), MockEnvironmentName::Prod);
+                self.config.mock_environments.add_environment(prod_env);
+            }
+            
+            // Set dev as the default active environment if none is set
+            if self.config.mock_environments.active_environment.is_none() {
+                let _ = self.config.mock_environments.set_active_environment(MockEnvironmentName::Dev);
+            }
         }
     }
 
@@ -478,6 +535,70 @@ impl Workspace {
         all_envs.extend(self.config.environments.iter());
         all_envs.sort_by_key(|env| env.order);
         all_envs
+    }
+
+    /// Get the mock environment manager
+    pub fn get_mock_environments(&self) -> &MockEnvironmentManager {
+        &self.config.mock_environments
+    }
+
+    /// Get mutable access to the mock environment manager
+    pub fn get_mock_environments_mut(&mut self) -> &mut MockEnvironmentManager {
+        &mut self.config.mock_environments
+    }
+
+    /// Get a specific mock environment by name
+    pub fn get_mock_environment(&self, name: MockEnvironmentName) -> Option<&MockEnvironment> {
+        self.config.mock_environments.get_environment(name)
+    }
+
+    /// Get the active mock environment
+    pub fn get_active_mock_environment(&self) -> Option<&MockEnvironment> {
+        self.config.mock_environments.get_active_environment()
+    }
+
+    /// Set the active mock environment
+    pub fn set_active_mock_environment(&mut self, name: MockEnvironmentName) -> Result<()> {
+        self.config.mock_environments.set_active_environment(name)?;
+        self.updated_at = Utc::now();
+        Ok(())
+    }
+
+    /// List all mock environments
+    pub fn list_mock_environments(&self) -> Vec<&MockEnvironment> {
+        self.config.mock_environments.list_environments()
+    }
+
+    /// Add or update a mock environment configuration
+    pub fn set_mock_environment_config(
+        &mut self,
+        name: MockEnvironmentName,
+        reality_config: Option<crate::reality::RealityConfig>,
+        chaos_config: Option<crate::chaos_utilities::ChaosConfig>,
+        drift_budget_config: Option<crate::contract_drift::DriftBudgetConfig>,
+    ) -> Result<()> {
+        // Get or create the environment
+        let env = if let Some(existing) = self.config.mock_environments.get_environment(name) {
+            MockEnvironment::with_configs(
+                existing.workspace_id.clone(),
+                name,
+                reality_config,
+                chaos_config,
+                drift_budget_config,
+            )
+        } else {
+            MockEnvironment::with_configs(
+                self.id.clone(),
+                name,
+                reality_config,
+                chaos_config,
+                drift_budget_config,
+            )
+        };
+
+        self.config.mock_environments.add_environment(env);
+        self.updated_at = Utc::now();
+        Ok(())
     }
 
     /// Configure directory sync for this workspace
@@ -1052,10 +1173,12 @@ impl Default for WorkspaceConfig {
             global_environment: Environment::new_global(),
             environments: Vec::new(),
             active_environment_id: None,
+            mock_environments: MockEnvironmentManager::default(),
             sync: SyncConfig::default(),
             auto_encryption: AutoEncryptionConfig::default(),
             reality_level: None,
             fidelity_score: None,
+            ai_mode: None,
         }
     }
 }

@@ -256,6 +256,9 @@ impl SyncDriftEvaluator {
                 None, // contract_diff_id
                 before_sample,
                 after_sample,
+                Some(drift_result.fitness_test_results.clone()), // fitness_test_results
+                drift_result.consumer_impact.clone(), // affected_consumers
+                None, // protocol (defaults to HTTP for sync drift)
             )
             .await;
 

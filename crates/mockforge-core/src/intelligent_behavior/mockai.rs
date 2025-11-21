@@ -234,16 +234,39 @@ impl MockAI {
         request: &Request,
         session_context: &StatefulAiContext,
     ) -> Result<Response> {
+        // CRITICAL FIX: GET, HEAD, and OPTIONS requests should NEVER be analyzed as mutations
+        // These are idempotent methods that don't mutate state. Only POST, PUT, PATCH, DELETE are mutations.
+        let method_upper = request.method.to_uppercase();
+        let is_mutation_method = matches!(
+            method_upper.as_str(),
+            "POST" | "PUT" | "PATCH" | "DELETE"
+        );
+
         // Get previous request from session history
         let history = session_context.get_history().await;
         let previous_request = history.last().and_then(|interaction| interaction.request.clone());
 
-        // Analyze mutation
-        let current_body = request.body.clone().unwrap_or(serde_json::json!({}));
-        let mutation_analysis = self
-            .mutation_analyzer
-            .analyze_mutation(&current_body, previous_request.as_ref(), session_context)
-            .await?;
+        // Only analyze mutations for mutation methods (POST, PUT, PATCH, DELETE)
+        // GET, HEAD, OPTIONS should use standard OpenAPI response generation, not mutation responses
+        let mutation_analysis = if is_mutation_method {
+            // Analyze mutation for mutation methods
+            let current_body = request.body.clone().unwrap_or(serde_json::json!({}));
+            self.mutation_analyzer
+                .analyze_mutation(&current_body, previous_request.as_ref(), session_context)
+                .await?
+        } else {
+            // For non-mutation methods (GET, HEAD, OPTIONS), create a dummy analysis
+            // that won't trigger mutation-based response generation
+            // This ensures GET requests use OpenAPI examples/schemas, not mutation responses
+            super::mutation_analyzer::MutationAnalysis {
+                mutation_type: super::mutation_analyzer::MutationType::NoChange, // Read operations are not mutations
+                changed_fields: Vec::new(),
+                added_fields: Vec::new(),
+                removed_fields: Vec::new(),
+                validation_issues: Vec::new(),
+                confidence: 1.0,
+            }
+        };
 
         // Check for validation issues
         if !mutation_analysis.validation_issues.is_empty() {
@@ -284,9 +307,21 @@ impl MockAI {
         }
 
         // Generate normal response based on mutation type
-        let response_body = self
-            .generate_response_body(&mutation_analysis, request, session_context)
-            .await?;
+        // For GET/HEAD/OPTIONS (Read operations), this should return an empty object
+        // to signal that OpenAPI response generation should be used instead
+        let response_body = if is_mutation_method {
+            // Only use mutation-based response generation for actual mutations
+            self.generate_response_body(&mutation_analysis, request, session_context)
+                .await?
+        } else {
+            // For GET/HEAD/OPTIONS, return empty object to signal OpenAPI generation should be used
+            // This prevents GET requests from returning POST-style {id: "generated_id", status: "created"} responses
+            tracing::debug!(
+                "Skipping mutation-based response generation for {} request - using OpenAPI response generation",
+                method_upper
+            );
+            serde_json::json!({}) // Empty object signals to use OpenAPI response generation
+        };
 
         Ok(Response {
             status_code: 200,
@@ -468,7 +503,15 @@ impl MockAI {
         _session_context: &StatefulAiContext,
     ) -> Result<Value> {
         // Generate response based on mutation type
+        // CRITICAL: NoChange (used for GET/HEAD/OPTIONS) should return empty object
+        // to signal that OpenAPI response generation should be used instead
         match mutation.mutation_type {
+            super::mutation_analyzer::MutationType::NoChange => {
+                // For read operations (GET, HEAD, OPTIONS), return empty object
+                // This signals to use OpenAPI response generation, not mutation responses
+                tracing::debug!("MutationType::NoChange - returning empty object to use OpenAPI response generation");
+                Ok(serde_json::json!({}))
+            }
             super::mutation_analyzer::MutationType::Create => {
                 // Generate created resource response
                 Ok(serde_json::json!({

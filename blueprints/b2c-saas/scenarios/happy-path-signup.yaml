@@ -1,0 +1,74 @@
+id: happy-path-signup
+name: Happy Path - User Signup
+type: happy_path
+description: Successful user signup and trial activation flow with all steps completing successfully
+tags:
+  - signup
+  - trial
+  - onboarding
+  - success
+
+steps:
+  - id: create-account
+    name: Create Account
+    method: POST
+    path: /api/auth/signup
+    expected_status: 201
+    continue_on_failure: false
+    body:
+      email: "{{faker.email}}"
+      password: "SecurePass123!"
+      name: "{{faker.name}}"
+    extract:
+      user_id: body.user.id
+      access_token: body.access_token
+
+  - id: start-trial
+    name: Start Trial
+    method: POST
+    path: /api/subscriptions/trial
+    expected_status: 201
+    continue_on_failure: false
+    depends_on: [create-account]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      plan: "trial"
+    extract:
+      subscription_id: body.subscription.id
+      trial_ends: body.subscription.trial_ends
+
+  - id: get-user-profile
+    name: Get User Profile
+    method: GET
+    path: /api/users/{{user_id}}
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [create-account]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+
+  - id: complete-onboarding
+    name: Complete Onboarding
+    method: POST
+    path: /api/users/{{user_id}}/onboarding/complete
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [create-account]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      onboarding_step: "completed"
+
+expected_outcomes:
+  - All steps return 2xx status codes
+  - User is created with valid ID
+  - Trial subscription is activated
+  - Access token is generated and valid
+  - Onboarding is marked as complete
+
+variables:
+  access_token: null
+  user_id: null
+  subscription_id: null
+

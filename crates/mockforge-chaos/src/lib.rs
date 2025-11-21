@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! MockForge Chaos Engineering
 //!
 //! Provides chaos engineering capabilities including traffic shaping, fault injection,

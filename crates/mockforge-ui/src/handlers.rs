@@ -48,6 +48,8 @@ pub mod ai_studio;
 pub mod analytics;
 pub mod analytics_stream;
 pub mod analytics_v2;
+pub mod pillar_analytics;
+pub mod promotions;
 pub mod assets;
 pub mod behavioral_cloning;
 pub mod chains;

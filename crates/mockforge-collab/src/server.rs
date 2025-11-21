@@ -48,8 +48,8 @@ impl CollabServer {
         // Initialize database
         let db = sqlx::SqlitePool::connect(&config.database_url).await?;
 
-        // Run migrations
-        sqlx::migrate!("./migrations").run(&db).await?;
+        // Run migrations automatically
+        Self::run_migrations(&db).await?;
 
         // Create CoreBridge for workspace integration
         let workspace_dir =
@@ -95,6 +95,23 @@ impl CollabServer {
             merge,
             backup,
         })
+    }
+
+    /// Run database migrations
+    ///
+    /// This method can be called independently to ensure migrations are up to date.
+    /// It's automatically called during server initialization.
+    pub async fn run_migrations(db: &sqlx::SqlitePool) -> Result<()> {
+        tracing::info!("Running database migrations");
+        sqlx::migrate!("./migrations")
+            .run(db)
+            .await
+            .map_err(|e| {
+                tracing::error!("Migration failed: {}", e);
+                crate::error::CollabError::DatabaseError(format!("Migration failed: {}", e))
+            })?;
+        tracing::info!("Database migrations completed successfully");
+        Ok(())
     }
 
     /// Start the collaboration server

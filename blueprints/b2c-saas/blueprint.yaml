@@ -57,6 +57,23 @@ setup:
       name: Billing Cycle Flow
       description: Monthly billing cycle with payment processing and invoice generation
 
+  scenarios:
+    - id: happy-path-signup
+      name: Happy Path - User Signup
+      type: happy_path
+      description: Successful user signup and trial activation flow
+      file: scenarios/happy-path-signup.yaml
+    - id: known-failure-payment-declined
+      name: Known Failure - Payment Declined
+      type: known_failure
+      description: Payment processing failure scenario where card is declined
+      file: scenarios/known-failure-payment-declined.yaml
+    - id: slow-path-billing-delay
+      name: Slow Path - Billing Processing Delay
+      type: slow_path
+      description: Billing cycle processing with intentional delays
+      file: scenarios/slow-path-billing-delay.yaml
+
   playground:
     enabled: true
     collection_file: playground/collection.json
@@ -77,6 +94,14 @@ files:
   - README.md
   - personas/
   - flows/
+  - scenarios/
+  - contracts/
   - playground/
+
+contracts:
+  - file: contracts/auth-contract.json
+    description: Authentication endpoint contracts (signup, login)
+  - file: contracts/billing-contract.json
+    description: Billing and subscription endpoint contracts
 
 readme: README.md

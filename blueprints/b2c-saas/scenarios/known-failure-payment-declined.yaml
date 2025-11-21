@@ -1,0 +1,97 @@
+id: known-failure-payment-declined
+name: Known Failure - Payment Declined
+type: known_failure
+description: Payment processing failure scenario where card is declined during subscription upgrade
+tags:
+  - payment
+  - failure
+  - upgrade
+  - error-handling
+
+steps:
+  - id: get-subscription
+    name: Get Current Subscription
+    method: GET
+    path: /api/subscriptions/current
+    expected_status: 200
+    continue_on_failure: false
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      subscription_id: body.subscription.id
+      current_tier: body.subscription.tier
+
+  - id: add-payment-method
+    name: Add Payment Method (Declined Card)
+    method: POST
+    path: /api/payments/methods
+    expected_status: 201
+    continue_on_failure: false
+    depends_on: [get-subscription]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      type: "card"
+      card_number: "4000000000000002"  # Test card that will be declined
+      exp_month: 12
+      exp_year: 2025
+      cvc: "123"
+    extract:
+      payment_method_id: body.payment_method.id
+
+  - id: attempt-upgrade
+    name: Attempt Subscription Upgrade
+    method: POST
+    path: /api/subscriptions/{{subscription_id}}/upgrade
+    expected_status: 200
+    continue_on_failure: true
+    depends_on: [add-payment-method]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      plan: "premium"
+      payment_method_id: "{{payment_method_id}}"
+    extract:
+      new_subscription_id: body.subscription.id
+
+  - id: process-payment-fails
+    name: Process Payment (Expected Failure)
+    method: POST
+    path: /api/payments/process
+    expected_status: 402  # Payment Required - card declined
+    continue_on_failure: true
+    depends_on: [attempt-upgrade]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      subscription_id: "{{new_subscription_id}}"
+      amount: 29.99
+      currency: USD
+    extract:
+      error_code: body.error.code
+      error_message: body.error.message
+
+  - id: verify-subscription-unchanged
+    name: Verify Subscription Status Unchanged
+    method: GET
+    path: /api/subscriptions/{{subscription_id}}
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [process-payment-fails]
+    headers:
+      Authorization: "Bearer {{access_token}}"
+
+expected_outcomes:
+  - Payment processing step returns 402 (Payment Required) or 400 (Bad Request)
+  - Error response includes error code and message
+  - Subscription remains in original state (not upgraded)
+  - User receives appropriate error notification
+  - Payment method may be marked as invalid
+
+variables:
+  access_token: null
+  subscription_id: null
+  payment_method_id: null
+  error_code: null
+  error_message: null
+

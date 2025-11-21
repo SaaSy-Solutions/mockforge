@@ -5,6 +5,7 @@
 
 pub mod integrations;
 pub mod manager;
+pub mod semantic_manager;
 pub mod store;
 pub mod types;
 
@@ -16,6 +17,7 @@ pub mod slack_formatter;
 pub mod jira_formatter;
 
 pub use manager::IncidentManager;
+pub use semantic_manager::{SemanticIncident, SemanticIncidentManager};
 pub use store::IncidentStore;
 pub use types::{
     DriftIncident, ExternalTicket, IncidentQuery, IncidentSeverity, IncidentStatus, IncidentType,

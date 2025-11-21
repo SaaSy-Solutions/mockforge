@@ -5,6 +5,7 @@
 
 use crate::consistency::ConsistencyEngine;
 use crate::snapshots::types::{SnapshotComponents, SnapshotManifest, SnapshotMetadata};
+use crate::workspace_persistence::WorkspacePersistence;
 use crate::Result;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
@@ -57,7 +58,9 @@ impl SnapshotManager {
         workspace_id: String,
         components: SnapshotComponents,
         consistency_engine: Option<&ConsistencyEngine>,
-        // TODO: Add other component sources (VBR, Recorder, etc.) as they're integrated
+        workspace_persistence: Option<&WorkspacePersistence>,
+        vbr_state: Option<serde_json::Value>,
+        recorder_state: Option<serde_json::Value>,
     ) -> Result<SnapshotManifest> {
         info!("Saving snapshot '{}' for workspace '{}'", name, workspace_id);
 
@@ -89,11 +92,54 @@ impl SnapshotManager {
 
         // Save workspace config if requested
         if components.workspace_config {
-            // TODO: Load and save workspace config when workspace persistence is integrated
             let config_path = temp_dir.join("workspace_config.yaml");
-            let empty_config = serde_yaml::to_string(&serde_json::json!({}))?;
-            fs::write(&config_path, empty_config).await?;
-            debug!("Saved workspace config placeholder to {}", config_path.display());
+            if let Some(persistence) = workspace_persistence {
+                match persistence.load_workspace(&workspace_id).await {
+                    Ok(workspace) => {
+                        let config_yaml = serde_yaml::to_string(&workspace)
+                            .map_err(|e| crate::Error::generic(format!("Failed to serialize workspace: {}", e)))?;
+                        fs::write(&config_path, config_yaml).await?;
+                        debug!("Saved workspace config to {}", config_path.display());
+                    }
+                    Err(e) => {
+                        warn!("Failed to load workspace config for snapshot: {}. Saving empty config.", e);
+                        let empty_config = serde_yaml::to_string(&serde_json::json!({}))?;
+                        fs::write(&config_path, empty_config).await?;
+                    }
+                }
+            } else {
+                warn!("Workspace persistence not provided, saving empty workspace config");
+                let empty_config = serde_yaml::to_string(&serde_json::json!({}))?;
+                fs::write(&config_path, empty_config).await?;
+            }
+        }
+
+        // Save VBR state if requested
+        if components.vbr_state {
+            let vbr_path = temp_dir.join("vbr_state.json");
+            if let Some(state) = vbr_state {
+                let state_json = serde_json::to_string_pretty(&state)?;
+                fs::write(&vbr_path, state_json).await?;
+                debug!("Saved VBR state to {}", vbr_path.display());
+            } else {
+                warn!("VBR state requested but not provided, saving empty state");
+                let empty_state = serde_json::json!({});
+                fs::write(&vbr_path, serde_json::to_string_pretty(&empty_state)?).await?;
+            }
+        }
+
+        // Save Recorder state if requested
+        if components.recorder_state {
+            let recorder_path = temp_dir.join("recorder_state.json");
+            if let Some(state) = recorder_state {
+                let state_json = serde_json::to_string_pretty(&state)?;
+                fs::write(&recorder_path, state_json).await?;
+                debug!("Saved Recorder state to {}", recorder_path.display());
+            } else {
+                warn!("Recorder state requested but not provided, saving empty state");
+                let empty_state = serde_json::json!({});
+                fs::write(&recorder_path, serde_json::to_string_pretty(&empty_state)?).await?;
+            }
         }
 
         // Save protocol states if requested
@@ -163,13 +209,16 @@ impl SnapshotManager {
     /// Load a snapshot and restore system state
     ///
     /// Restores the specified components from a snapshot.
+    /// Returns the manifest and optionally the VBR and Recorder state as JSON
+    /// (caller is responsible for restoring them to their respective systems).
     pub async fn load_snapshot(
         &self,
         name: String,
         workspace_id: String,
         components: Option<SnapshotComponents>,
         consistency_engine: Option<&ConsistencyEngine>,
-    ) -> Result<SnapshotManifest> {
+        workspace_persistence: Option<&WorkspacePersistence>,
+    ) -> Result<(SnapshotManifest, Option<serde_json::Value>, Option<serde_json::Value>)> {
         info!("Loading snapshot '{}' for workspace '{}'", name, workspace_id);
 
         let snapshot_dir = self.snapshot_dir(&workspace_id, &name);
@@ -213,13 +262,56 @@ impl SnapshotManager {
         if components_to_restore.workspace_config && manifest.components.workspace_config {
             let config_path = snapshot_dir.join("workspace_config.yaml");
             if config_path.exists() {
-                // TODO: Restore workspace config when workspace persistence is integrated
-                debug!("Loaded workspace config from {}", config_path.display());
+                if let Some(persistence) = workspace_persistence {
+                    let config_yaml = fs::read_to_string(&config_path).await?;
+                    let workspace: crate::workspace::Workspace = serde_yaml::from_str(&config_yaml)
+                        .map_err(|e| crate::Error::generic(format!("Failed to deserialize workspace: {}", e)))?;
+                    persistence.save_workspace(&workspace).await?;
+                    debug!("Restored workspace config from {}", config_path.display());
+                } else {
+                    warn!("Workspace persistence not provided, skipping workspace config restoration");
+                }
+            } else {
+                warn!("Workspace config file not found in snapshot: {}", config_path.display());
             }
         }
 
+        // Load VBR state if requested (return as JSON for caller to restore)
+        let vbr_state = if components_to_restore.vbr_state && manifest.components.vbr_state {
+            let vbr_path = snapshot_dir.join("vbr_state.json");
+            if vbr_path.exists() {
+                let vbr_json = fs::read_to_string(&vbr_path).await?;
+                let state: serde_json::Value = serde_json::from_str(&vbr_json)
+                    .map_err(|e| crate::Error::generic(format!("Failed to parse VBR state: {}", e)))?;
+                debug!("Loaded VBR state from {}", vbr_path.display());
+                Some(state)
+            } else {
+                warn!("VBR state file not found in snapshot: {}", vbr_path.display());
+                None
+            }
+        } else {
+            None
+        };
+
+        // Load Recorder state if requested (return as JSON for caller to restore)
+        let recorder_state = if components_to_restore.recorder_state && manifest.components.recorder_state {
+            let recorder_path = snapshot_dir.join("recorder_state.json");
+            if recorder_path.exists() {
+                let recorder_json = fs::read_to_string(&recorder_path).await?;
+                let state: serde_json::Value = serde_json::from_str(&recorder_json)
+                    .map_err(|e| crate::Error::generic(format!("Failed to parse Recorder state: {}", e)))?;
+                debug!("Loaded Recorder state from {}", recorder_path.display());
+                Some(state)
+            } else {
+                warn!("Recorder state file not found in snapshot: {}", recorder_path.display());
+                None
+            }
+        } else {
+            None
+        };
+
         info!("Snapshot '{}' loaded successfully", name);
-        Ok(manifest)
+        Ok((manifest, vbr_state, recorder_state))
     }
 
     /// List all snapshots for a workspace

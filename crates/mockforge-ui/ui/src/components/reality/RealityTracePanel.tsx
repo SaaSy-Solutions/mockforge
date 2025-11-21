@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Info, User, Calendar, Zap, Activity, TrendingUp } from 'lucide-react';
+import { Info, User, Calendar, Zap, Activity, TrendingUp, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 
@@ -27,6 +27,12 @@ interface RealityTraceMetadata {
 interface RealityTracePanelProps {
   requestId?: string;
   className?: string;
+  /**
+   * Optional callback for navigation when clicking on deep-links
+   * @param target - The target to navigate to ('persona' | 'scenario' | 'chaos')
+   * @param id - The ID of the resource to navigate to
+   */
+  onNavigate?: (target: 'persona' | 'scenario' | 'chaos', id: string) => void;
 }
 
 /**
@@ -38,7 +44,7 @@ interface RealityTracePanelProps {
  * - Active persona and scenario
  * - Active chaos and latency profiles
  */
-export function RealityTracePanel({ requestId, className }: RealityTracePanelProps) {
+export function RealityTracePanel({ requestId, className, onNavigate }: RealityTracePanelProps) {
   const [traceData, setTraceData] = useState<RealityTraceMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,9 +239,22 @@ export function RealityTracePanel({ requestId, className }: RealityTracePanelPro
               Active Persona
             </div>
             {traceData.active_persona_id ? (
-              <Badge variant="outline" className="font-mono text-xs">
-                {traceData.active_persona_id}
-              </Badge>
+              <div
+                onClick={() => onNavigate?.('persona', traceData.active_persona_id!)}
+                className={`flex items-center gap-1 w-fit ${
+                  onNavigate
+                    ? 'cursor-pointer hover:opacity-80 transition-opacity'
+                    : ''
+                }`}
+                title={onNavigate ? 'Click to view persona config' : undefined}
+              >
+                <Badge variant="outline" className="font-mono text-xs">
+                  {traceData.active_persona_id}
+                </Badge>
+                {onNavigate && (
+                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                )}
+              </div>
             ) : (
               <span className="text-sm text-muted-foreground">None</span>
             )}
@@ -246,9 +265,22 @@ export function RealityTracePanel({ requestId, className }: RealityTracePanelPro
               Active Scenario
             </div>
             {traceData.active_scenario ? (
-              <Badge variant="outline" className="font-mono text-xs">
-                {traceData.active_scenario}
-              </Badge>
+              <div
+                onClick={() => onNavigate?.('scenario', traceData.active_scenario!)}
+                className={`flex items-center gap-1 w-fit ${
+                  onNavigate
+                    ? 'cursor-pointer hover:opacity-80 transition-opacity'
+                    : ''
+                }`}
+                title={onNavigate ? 'Click to view scenario config' : undefined}
+              >
+                <Badge variant="outline" className="font-mono text-xs">
+                  {traceData.active_scenario}
+                </Badge>
+                {onNavigate && (
+                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                )}
+              </div>
             ) : (
               <span className="text-sm text-muted-foreground">None</span>
             )}
@@ -264,9 +296,23 @@ export function RealityTracePanel({ requestId, className }: RealityTracePanelPro
             </div>
             <div className="flex flex-wrap gap-1">
               {traceData.active_chaos_profiles.map((profile, idx) => (
-                <Badge key={idx} variant="destructive" className="text-xs">
-                  {profile}
-                </Badge>
+                <div
+                  key={idx}
+                  onClick={() => onNavigate?.('chaos', profile)}
+                  className={`flex items-center gap-1 ${
+                    onNavigate
+                      ? 'cursor-pointer hover:opacity-80 transition-opacity'
+                      : ''
+                  }`}
+                  title={onNavigate ? 'Click to view chaos profile config' : undefined}
+                >
+                  <Badge variant="destructive" className="text-xs">
+                    {profile}
+                  </Badge>
+                  {onNavigate && (
+                    <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                  )}
+                </div>
               ))}
             </div>
           </div>

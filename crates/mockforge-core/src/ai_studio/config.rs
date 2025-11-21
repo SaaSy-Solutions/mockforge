@@ -5,6 +5,27 @@
 
 use serde::{Deserialize, Serialize};
 
+/// AI mode for workspace
+///
+/// Controls how AI-generated artifacts are used at runtime.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum AiMode {
+    /// Generate once and freeze - AI is only used to produce config/templates.
+    /// Runtime mocks use frozen artifacts (no LLM calls).
+    GenerateOnceFreeze,
+
+    /// Live mode - AI is used dynamically at runtime for each request.
+    Live,
+}
+
+impl Default for AiMode {
+    fn default() -> Self {
+        Self::Live
+    }
+}
+
 /// AI Studio configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -22,10 +43,27 @@ pub struct AiStudioConfig {
     pub features: FeatureConfig,
 }
 
+/// Freeze mode for deterministic artifacts
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum FreezeMode {
+    /// Auto-freeze: Automatically freeze artifacts after generation
+    Auto,
+    /// Manual freeze: Require explicit user action to freeze artifacts
+    Manual,
+}
+
+impl Default for FreezeMode {
+    fn default() -> Self {
+        Self::Manual
+    }
+}
+
 /// Deterministic mode configuration
 ///
-/// When enabled, AI-generated artifacts are automatically frozen to
-/// deterministic YAML/JSON files for version control and reproducible testing.
+/// When enabled, AI-generated artifacts are frozen to deterministic YAML/JSON files
+/// for version control and reproducible testing. Supports both auto and manual freeze modes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DeterministicModeConfig {
@@ -33,7 +71,12 @@ pub struct DeterministicModeConfig {
     #[serde(default = "default_false")]
     pub enabled: bool,
 
+    /// Freeze mode: auto (freeze immediately) or manual (require explicit action)
+    #[serde(default)]
+    pub mode: FreezeMode,
+
     /// Automatically freeze AI-generated artifacts after creation
+    /// (deprecated: use mode instead, but kept for backward compatibility)
     #[serde(default = "default_true")]
     pub auto_freeze: bool,
 
@@ -44,15 +87,28 @@ pub struct DeterministicModeConfig {
     /// Directory to store frozen artifacts
     #[serde(default = "default_freeze_directory")]
     pub freeze_directory: String,
+
+    /// Whether to track metadata (LLM version, prompt hash, output hash)
+    #[serde(default = "default_true")]
+    pub track_metadata: bool,
+}
+
+impl DeterministicModeConfig {
+    /// Check if auto-freeze is enabled (either via mode or legacy auto_freeze flag)
+    pub fn is_auto_freeze_enabled(&self) -> bool {
+        self.mode == FreezeMode::Auto || self.auto_freeze
+    }
 }
 
 impl Default for DeterministicModeConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            auto_freeze: true,
+            mode: FreezeMode::Manual,
+            auto_freeze: true, // Legacy support
             freeze_format: "yaml".to_string(),
             freeze_directory: ".mockforge/frozen".to_string(),
+            track_metadata: true,
         }
     }
 }

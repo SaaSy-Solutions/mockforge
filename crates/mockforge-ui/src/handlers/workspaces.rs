@@ -7,7 +7,10 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
-use mockforge_core::{MultiTenantWorkspaceRegistry, TenantWorkspace, Workspace, WorkspaceStats};
+use mockforge_core::{
+    MultiTenantWorkspaceRegistry, TenantWorkspace, Workspace, WorkspaceStats,
+    workspace::{MockEnvironment, MockEnvironmentName, MockEnvironmentManager},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -309,6 +312,281 @@ pub async fn get_workspace_stats(
         Ok(tenant_ws) => Ok(Json(ApiResponse::success(tenant_ws.stats.clone()))),
         Err(e) => {
             tracing::error!("Failed to get workspace stats for {}: {}", workspace_id, e);
+            Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+            )
+                .into_response())
+        }
+    }
+}
+
+/// Mock environment response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MockEnvironmentResponse {
+    pub name: String,
+    pub id: String,
+    pub workspace_id: String,
+    pub reality_config: Option<serde_json::Value>,
+    pub chaos_config: Option<serde_json::Value>,
+    pub drift_budget_config: Option<serde_json::Value>,
+}
+
+/// Mock environment manager response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MockEnvironmentManagerResponse {
+    pub workspace_id: String,
+    pub active_environment: Option<String>,
+    pub environments: Vec<MockEnvironmentResponse>,
+}
+
+/// List all mock environments for a workspace
+pub async fn list_mock_environments(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+) -> Result<Json<ApiResponse<MockEnvironmentManagerResponse>>, Response> {
+    let registry = state.registry.read().await;
+
+    match registry.get_workspace(&workspace_id) {
+        Ok(tenant_ws) => {
+            let mock_envs = tenant_ws.workspace.get_mock_environments();
+            let environments: Vec<MockEnvironmentResponse> = mock_envs
+                .list_environments()
+                .into_iter()
+                .map(|env| MockEnvironmentResponse {
+                    name: env.name.as_str().to_string(),
+                    id: env.id.clone(),
+                    workspace_id: env.workspace_id.clone(),
+                    reality_config: env.reality_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                    chaos_config: env.chaos_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                    drift_budget_config: env.drift_budget_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                })
+                .collect();
+
+            let response = MockEnvironmentManagerResponse {
+                workspace_id: workspace_id.clone(),
+                active_environment: mock_envs.active_environment.map(|e| e.as_str().to_string()),
+                environments,
+            };
+
+            Ok(Json(ApiResponse::success(response)))
+        }
+        Err(e) => {
+            tracing::error!("Failed to get workspace {}: {}", workspace_id, e);
+            Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+            )
+                .into_response())
+        }
+    }
+}
+
+/// Get a specific mock environment
+pub async fn get_mock_environment(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, env_name)): Path<(String, String)>,
+) -> Result<Json<ApiResponse<MockEnvironmentResponse>>, Response> {
+    let registry = state.registry.read().await;
+
+    let env_name_enum = match env_name.to_lowercase().as_str() {
+        "dev" => MockEnvironmentName::Dev,
+        "test" => MockEnvironmentName::Test,
+        "prod" => MockEnvironmentName::Prod,
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("Invalid environment name: '{}'. Must be 'dev', 'test', or 'prod'", env_name)})),
+            )
+                .into_response());
+        }
+    };
+
+    match registry.get_workspace(&workspace_id) {
+        Ok(tenant_ws) => {
+            match tenant_ws.workspace.get_mock_environment(env_name_enum) {
+                Some(env) => {
+                    let response = MockEnvironmentResponse {
+                        name: env.name.as_str().to_string(),
+                        id: env.id.clone(),
+                        workspace_id: env.workspace_id.clone(),
+                        reality_config: env.reality_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                        chaos_config: env.chaos_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                        drift_budget_config: env.drift_budget_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                    };
+                    Ok(Json(ApiResponse::success(response)))
+                }
+                None => Err((
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"error": format!("Environment '{}' not found in workspace '{}'", env_name, workspace_id)})),
+                )
+                    .into_response()),
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to get workspace {}: {}", workspace_id, e);
+            Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+            )
+                .into_response())
+        }
+    }
+}
+
+/// Set active mock environment
+#[derive(Debug, Clone, Deserialize)]
+pub struct SetActiveEnvironmentRequest {
+    pub environment: String,
+}
+
+pub async fn set_active_mock_environment(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+    Json(request): Json<SetActiveEnvironmentRequest>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+
+    let env_name = match request.environment.to_lowercase().as_str() {
+        "dev" => MockEnvironmentName::Dev,
+        "test" => MockEnvironmentName::Test,
+        "prod" => MockEnvironmentName::Prod,
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("Invalid environment name: '{}'. Must be 'dev', 'test', or 'prod'", request.environment)})),
+            )
+                .into_response());
+        }
+    };
+
+    match registry.get_workspace(&workspace_id) {
+        Ok(mut tenant_ws) => {
+            match tenant_ws.workspace.set_active_mock_environment(env_name) {
+                Ok(_) => {
+                    // Save the updated workspace
+                    if let Err(e) = registry.update_workspace(&workspace_id, tenant_ws.workspace.clone()) {
+                        tracing::error!("Failed to save workspace: {}", e);
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({"error": "Failed to save workspace"})),
+                        )
+                            .into_response());
+                    }
+
+                    tracing::info!("Set active environment to '{}' for workspace '{}'", request.environment, workspace_id);
+                    Ok(Json(ApiResponse::success(format!(
+                        "Active environment set to '{}'",
+                        request.environment
+                    ))))
+                }
+                Err(e) => Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": e.to_string()})),
+                )
+                    .into_response()),
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to get workspace {}: {}", workspace_id, e);
+            Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+            )
+                .into_response())
+        }
+    }
+}
+
+/// Update mock environment configuration
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateMockEnvironmentRequest {
+    pub reality_config: Option<serde_json::Value>,
+    pub chaos_config: Option<serde_json::Value>,
+    pub drift_budget_config: Option<serde_json::Value>,
+}
+
+pub async fn update_mock_environment(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, env_name)): Path<(String, String)>,
+    Json(request): Json<UpdateMockEnvironmentRequest>,
+) -> Result<Json<ApiResponse<MockEnvironmentResponse>>, Response> {
+    let mut registry = state.registry.write().await;
+
+    let env_name_enum = match env_name.to_lowercase().as_str() {
+        "dev" => MockEnvironmentName::Dev,
+        "test" => MockEnvironmentName::Test,
+        "prod" => MockEnvironmentName::Prod,
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("Invalid environment name: '{}'. Must be 'dev', 'test', or 'prod'", env_name)})),
+            )
+                .into_response());
+        }
+    };
+
+    match registry.get_workspace(&workspace_id) {
+        Ok(mut tenant_ws) => {
+            // Parse the configs from JSON
+            let reality_config = request.reality_config.and_then(|v| {
+                serde_json::from_value(v).ok()
+            });
+            let chaos_config = request.chaos_config.and_then(|v| {
+                serde_json::from_value(v).ok()
+            });
+            let drift_budget_config = request.drift_budget_config.and_then(|v| {
+                serde_json::from_value(v).ok()
+            });
+
+            // Update the environment config
+            match tenant_ws.workspace.set_mock_environment_config(
+                env_name_enum,
+                reality_config,
+                chaos_config,
+                drift_budget_config,
+            ) {
+                Ok(_) => {
+                    // Save the updated workspace
+                    if let Err(e) = registry.update_workspace(&workspace_id, tenant_ws.workspace.clone()) {
+                        tracing::error!("Failed to save workspace: {}", e);
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({"error": "Failed to save workspace"})),
+                        )
+                            .into_response());
+                    }
+
+                    // Get the updated environment
+                    match tenant_ws.workspace.get_mock_environment(env_name_enum) {
+                        Some(env) => {
+                            let response = MockEnvironmentResponse {
+                                name: env.name.as_str().to_string(),
+                                id: env.id.clone(),
+                                workspace_id: env.workspace_id.clone(),
+                                reality_config: env.reality_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                                chaos_config: env.chaos_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                                drift_budget_config: env.drift_budget_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                            };
+                            tracing::info!("Updated environment '{}' for workspace '{}'", env_name, workspace_id);
+                            Ok(Json(ApiResponse::success(response)))
+                        }
+                        None => Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({"error": "Failed to retrieve updated environment"})),
+                        )
+                            .into_response()),
+                    }
+                }
+                Err(e) => Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": e.to_string()})),
+                )
+                    .into_response()),
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to get workspace {}: {}", workspace_id, e);
             Err((
                 StatusCode::NOT_FOUND,
                 Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),

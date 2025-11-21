@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO promotion_history (\n                id, workspace_id, entity_type, entity_id, entity_version,\n                from_environment, to_environment, promoted_by, status,\n                comments, metadata, created_at, updated_at\n            )\n            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": []
+  },
+  "hash": "a7b626b2f8b7bdc3eeecba7f5323c1f993a9e26666325e1490d14e8b1244be0e"
+}

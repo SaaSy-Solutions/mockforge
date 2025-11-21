@@ -8,12 +8,15 @@
 //! - Automatic revocation
 
 use crate::security::{
+    emit_security_event_async,
+    events::{EventActor, EventOutcome, EventTarget, SecurityEvent, SecurityEventType},
     justification_storage::{AccessJustification, JustificationStorage},
     mfa_tracking::{MfaStatus, MfaStorage},
 };
 use crate::Error;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -298,9 +301,32 @@ impl PrivilegedAccessManager {
             return Err(Error::Generic("Request is not pending manager approval".to_string()));
         }
 
+        let user_id = request.user_id;
         request.manager_approval = Some(approver_id);
         request.status = RequestStatus::PendingSecurity;
         request.updated_at = Utc::now();
+
+        // Emit security event for manager approval
+        let event = SecurityEvent::new(SecurityEventType::AuthzPrivilegeEscalation, None, None)
+            .with_actor(EventActor {
+                user_id: Some(approver_id.to_string()),
+                username: None,
+                ip_address: None,
+                user_agent: None,
+            })
+            .with_target(EventTarget {
+                resource_type: Some("privileged_access_request".to_string()),
+                resource_id: Some(request_id.to_string()),
+                method: None,
+            })
+            .with_outcome(EventOutcome {
+                success: true,
+                reason: Some("Manager approval granted".to_string()),
+            })
+            .with_metadata("request_user_id".to_string(), serde_json::json!(user_id.to_string()))
+            .with_metadata("requested_role".to_string(), serde_json::json!(format!("{:?}", request.requested_role)));
+
+        emit_security_event_async(event);
 
         Ok(())
     }
@@ -338,6 +364,29 @@ impl PrivilegedAccessManager {
             just_storage.set_justification(justification).await?;
         }
 
+        // Emit security event for security approval
+        let event = SecurityEvent::new(SecurityEventType::AuthzPrivilegeEscalation, None, None)
+            .with_actor(EventActor {
+                user_id: Some(approver_id.to_string()),
+                username: None,
+                ip_address: None,
+                user_agent: None,
+            })
+            .with_target(EventTarget {
+                resource_type: Some("privileged_access_request".to_string()),
+                resource_id: Some(request_id.to_string()),
+                method: None,
+            })
+            .with_outcome(EventOutcome {
+                success: true,
+                reason: Some("Security approval granted".to_string()),
+            })
+            .with_metadata("request_user_id".to_string(), serde_json::json!(request.user_id.to_string()))
+            .with_metadata("requested_role".to_string(), serde_json::json!(format!("{:?}", request.requested_role)))
+            .with_metadata("expiration_days".to_string(), serde_json::json!(expiration_days));
+
+        emit_security_event_async(event);
+
         Ok(())
     }
 
@@ -348,8 +397,30 @@ impl PrivilegedAccessManager {
             .get_mut(&request_id)
             .ok_or_else(|| Error::Generic("Request not found".to_string()))?;
 
+        let user_id = request.user_id;
         request.status = RequestStatus::Denied;
         request.updated_at = Utc::now();
+
+        // Emit security event for request denial
+        let event = SecurityEvent::new(SecurityEventType::AuthzAccessDenied, None, None)
+            .with_actor(EventActor {
+                user_id: Some(user_id.to_string()),
+                username: None,
+                ip_address: None,
+                user_agent: None,
+            })
+            .with_target(EventTarget {
+                resource_type: Some("privileged_access_request".to_string()),
+                resource_id: Some(request_id.to_string()),
+                method: None,
+            })
+            .with_outcome(EventOutcome {
+                success: false,
+                reason: Some(reason.clone()),
+            })
+            .with_metadata("requested_role".to_string(), serde_json::json!(format!("{:?}", request.requested_role)));
+
+        emit_security_event_async(event);
 
         Ok(())
     }
@@ -395,10 +466,35 @@ impl PrivilegedAccessManager {
         let mut actions = self.actions.write().await;
         actions.push(action.clone());
 
-        // Check if this is a sensitive action that requires alerting
-        if self.config.sensitive_actions.contains(&action_type) {
-            // TODO: Emit security event for sensitive action
-        }
+        // Emit security event for all privileged actions
+        // Use higher severity for sensitive actions
+        let event_type = if self.config.sensitive_actions.contains(&action_type) {
+            SecurityEventType::AuthzPrivilegeEscalation
+        } else {
+            SecurityEventType::AuthzAccessGranted
+        };
+
+        let event = SecurityEvent::new(event_type, None, None)
+            .with_actor(EventActor {
+                user_id: Some(action.user_id.to_string()),
+                username: None,
+                ip_address: action.ip_address.clone(),
+                user_agent: action.user_agent.clone(),
+            })
+            .with_target(EventTarget {
+                resource_type: Some(format!("privileged_action_{:?}", action_type)),
+                resource_id: Some(action.action_id.to_string()),
+                method: action.resource.clone(),
+            })
+            .with_outcome(EventOutcome {
+                success: true,
+                reason: action.details.clone(),
+            })
+            .with_metadata("action_type".to_string(), serde_json::json!(format!("{:?}", action_type)))
+            .with_metadata("session_id".to_string(), serde_json::json!(action.session_id.clone().unwrap_or_default()));
+
+        // Emit asynchronously to avoid blocking
+        emit_security_event_async(event);
 
         Ok(action.action_id)
     }
@@ -429,6 +525,10 @@ impl PrivilegedAccessManager {
         }
         drop(sessions);
 
+        // Clone values before moving into session
+        let ip_address_clone = ip_address.clone();
+        let user_agent_clone = user_agent.clone();
+
         let session = PrivilegedSession {
             session_id: session_id.clone(),
             user_id,
@@ -441,7 +541,28 @@ impl PrivilegedAccessManager {
         };
 
         let mut sessions = self.sessions.write().await;
-        sessions.insert(session_id, session);
+        sessions.insert(session_id.clone(), session);
+
+        // Emit security event for privileged session start
+        let event = SecurityEvent::new(SecurityEventType::AuthzPrivilegeEscalation, None, None)
+            .with_actor(EventActor {
+                user_id: Some(user_id.to_string()),
+                username: None,
+                ip_address: ip_address_clone,
+                user_agent: user_agent_clone,
+            })
+            .with_target(EventTarget {
+                resource_type: Some("privileged_session".to_string()),
+                resource_id: Some(session_id.clone()),
+                method: Some(format!("{:?}", role)),
+            })
+            .with_outcome(EventOutcome {
+                success: true,
+                reason: Some("Privileged session started".to_string()),
+            })
+            .with_metadata("role".to_string(), serde_json::json!(format!("{:?}", role)));
+
+        emit_security_event_async(event);
 
         Ok(())
     }
@@ -459,7 +580,31 @@ impl PrivilegedAccessManager {
     pub async fn end_session(&self, session_id: &str) -> Result<(), Error> {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(session_id) {
+            let user_id = session.user_id;
+            let role = session.role;
             session.is_active = false;
+
+            // Emit security event for privileged session end
+            let event = SecurityEvent::new(SecurityEventType::AuthzAccessGranted, None, None)
+                .with_actor(EventActor {
+                    user_id: Some(user_id.to_string()),
+                    username: None,
+                    ip_address: session.ip_address.clone(),
+                    user_agent: session.user_agent.clone(),
+                })
+                .with_target(EventTarget {
+                    resource_type: Some("privileged_session".to_string()),
+                    resource_id: Some(session_id.to_string()),
+                    method: Some(format!("{:?}", role)),
+                })
+                .with_outcome(EventOutcome {
+                    success: true,
+                    reason: Some("Privileged session ended".to_string()),
+                })
+                .with_metadata("role".to_string(), serde_json::json!(format!("{:?}", role)))
+                .with_metadata("duration_seconds".to_string(), serde_json::json!((Utc::now() - session.started_at).num_seconds()));
+
+            emit_security_event_async(event);
         }
         Ok(())
     }

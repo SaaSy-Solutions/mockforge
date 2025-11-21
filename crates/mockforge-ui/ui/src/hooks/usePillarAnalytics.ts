@@ -59,7 +59,29 @@ export interface PillarUsageMetrics {
   ai?: AiPillarMetrics | null;
 }
 
-const API_BASE_URL = '/api/v1';
+const API_BASE_URL = '/api/v2/analytics/pillars';
+
+/**
+ * Convert time range string to duration in seconds
+ */
+function timeRangeToDuration(timeRange: string): number {
+  const match = timeRange.match(/^(\d+)([hdw])$/);
+  if (!match) return 3600; // Default to 1 hour
+
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+
+  switch (unit) {
+    case 'h':
+      return value * 3600;
+    case 'd':
+      return value * 86400;
+    case 'w':
+      return value * 604800;
+    default:
+      return 3600;
+  }
+}
 
 /**
  * Fetch pillar metrics for a workspace
@@ -74,22 +96,31 @@ export const usePillarMetrics = (
     queryFn: async () => {
       let url: string;
       if (workspaceId) {
-        url = `${API_BASE_URL}/workspaces/${workspaceId}/analytics/pillars`;
+        url = `${API_BASE_URL}/workspace/${workspaceId}`;
       } else if (orgId) {
-        url = `${API_BASE_URL}/organizations/${orgId}/analytics/pillars`;
+        url = `${API_BASE_URL}/org/${orgId}`;
       } else {
         throw new Error('Either workspaceId or orgId must be provided');
       }
 
       const params = new URLSearchParams();
       if (query.time_range) {
-        params.append('time_range', query.time_range);
+        // Convert time range to duration
+        const duration = timeRangeToDuration(query.time_range);
+        params.append('duration', duration.toString());
+      } else {
+        params.append('duration', '3600'); // Default 1 hour
       }
 
-      const response = await axios.get<PillarUsageMetrics>(
+      const response = await axios.get<{ success: boolean; data: PillarUsageMetrics }>(
         `${url}?${params.toString()}`
       );
-      return response.data;
+      
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      
+      throw new Error('Failed to fetch pillar metrics');
     },
     enabled: !!(workspaceId || orgId),
     staleTime: 30000, // 30 seconds

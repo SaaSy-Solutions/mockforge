@@ -1423,6 +1423,10 @@ pub async fn build_router_with_chains(
     .await
 }
 
+
+// Template expansion is now handled by mockforge_core::template_expansion
+// which is explicitly isolated from the templating module to avoid Send issues
+
 /// Build the base HTTP router with chaining and multi-tenant support
 #[allow(clippy::too_many_arguments)]
 pub async fn build_router_with_chains_and_multi_tenant(
@@ -1539,107 +1543,27 @@ pub async fn build_router_with_chains_and_multi_tenant(
         }
     }
 
-    // Helper function to recursively expand templates in JSON values
-    fn expand_templates_in_json(
-        value: &serde_json::Value,
-        context: &mockforge_core::ai_response::RequestContext,
-    ) -> serde_json::Value {
-        use mockforge_core::ai_response::expand_prompt_template;
-        use serde_json::Value;
-
-        match value {
-            Value::String(s) => {
-                // Normalize {{request.query.name}} to {{query.name}} format
-                let normalized = s
-                    .replace("{{request.query.", "{{query.")
-                    .replace("{{request.path.", "{{path.")
-                    .replace("{{request.headers.", "{{headers.")
-                    .replace("{{request.body.", "{{body.")
-                    .replace("{{request.method}}", "{{method}}")
-                    .replace("{{request.path}}", "{{path}}");
-
-                // Handle || operator: extract template part and default value separately
-                // Pattern: "Hello {{query.name || \"world\"}}" -> extract "Hello {{query.name}}" and "world"
-                let (template_part, default_value) = if normalized.contains("||") {
-                    // Find the template part before || and default after ||
-                    // Pattern: "Hello {{query.name || \"world\"}}"
-                    // We need to find {{... || "..."}} and split it
-                    if let Some(open_idx) = normalized.find("{{") {
-                        if let Some(close_idx) = normalized[open_idx..].find("}}") {
-                            let template_block = &normalized[open_idx..open_idx + close_idx + 2];
-                            if let Some(pipe_idx) = template_block.find("||") {
-                                // Split: "{{query.name || \"world\"}}" -> "{{query.name " and " \"world\"}}"
-                                let before_pipe = &template_block[..pipe_idx].trim();
-                                let after_pipe = &template_block[pipe_idx + 2..].trim();
-
-                                // Extract template variable name (remove {{ and trim)
-                                let template_var = before_pipe.trim_start_matches("{{").trim();
-                                // Replace the entire template block with just the template variable
-                                let replacement = format!("{{{{{}}}}}}}", template_var);
-                                let template = normalized.replace(template_block, &replacement);
-
-                                // Extract default value: " \"world\"}}" -> "world"
-                                let mut default =
-                                    after_pipe.trim_end_matches("}}").trim().to_string();
-                                // Remove quotes
-                                default = default
-                                    .trim_matches('"')
-                                    .trim_matches('\'')
-                                    .trim_matches('\\')
-                                    .to_string();
-                                default = default.trim().to_string();
-
-                                (template, Some(default))
-                            } else {
-                                (normalized, None)
-                            }
-                        } else {
-                            (normalized, None)
-                        }
-                    } else {
-                        (normalized, None)
-                    }
-                } else {
-                    (normalized, None)
-                };
-
-                // Expand the template part
-                let mut expanded = expand_prompt_template(&template_part, context);
-
-                // If template wasn't fully expanded and we have a default, use default
-                // Otherwise use the expanded value
-                let final_expanded = if (expanded.contains("{{query.")
-                    || expanded.contains("{{path.")
-                    || expanded.contains("{{headers."))
-                    && default_value.is_some()
-                {
-                    default_value.unwrap()
-                } else {
-                    // Clean up any stray closing braces that might remain
-                    // This can happen if template replacement left partial braces
-                    while expanded.ends_with('}') && !expanded.ends_with("}}") {
-                        expanded.pop();
-                    }
-                    expanded
-                };
-
-                Value::String(final_expanded)
-            }
-            Value::Array(arr) => {
-                Value::Array(arr.iter().map(|v| expand_templates_in_json(v, context)).collect())
-            }
-            Value::Object(obj) => {
-                let mut new_obj = serde_json::Map::new();
-                for (k, v) in obj {
-                    new_obj.insert(k.clone(), expand_templates_in_json(v, context));
+    // Register custom routes from config with advanced routing features
+    // Create RouteChaosInjector for advanced fault injection and latency
+    let route_chaos_injector = if let Some(ref route_configs) = route_configs {
+        if !route_configs.is_empty() {
+            match mockforge_core::RouteChaosInjector::new(route_configs.clone()) {
+                Ok(injector) => {
+                    info!("Initialized advanced routing features for {} route(s)", route_configs.len());
+                    Some(std::sync::Arc::new(injector))
                 }
-                Value::Object(new_obj)
+                Err(e) => {
+                    warn!("Failed to initialize advanced routing features: {}. Using basic routing.", e);
+                    None
+                }
             }
-            _ => value.clone(),
+        } else {
+            None
         }
-    }
+    } else {
+        None
+    };
 
-    // Register custom routes from config
     if let Some(route_configs) = route_configs {
         use axum::http::StatusCode;
         use axum::response::IntoResponse;
@@ -1648,28 +1572,29 @@ pub async fn build_router_with_chains_and_multi_tenant(
             info!("Registering {} custom route(s) from config", route_configs.len());
         }
 
+        let injector = route_chaos_injector.clone();
         for route_config in route_configs {
             let status = route_config.response.status;
             let body = route_config.response.body.clone();
             let headers = route_config.response.headers.clone();
             let path = route_config.path.clone();
             let method = route_config.method.clone();
-            let latency_config = route_config.latency.clone();
 
             // Create handler that returns the configured response with template expansion
             // Supports both basic templates ({{uuid}}, {{now}}) and request-aware templates
             // ({{request.query.name}}, {{request.path.id}}, {{request.headers.name}})
             // Register route using `any()` since we need full Request access for template expansion
             let expected_method = method.to_uppercase();
+            let injector_clone = injector.clone();
             app = app.route(
                 &path,
                 axum::routing::any(move |req: axum::http::Request<axum::body::Body>| {
                     let body = body.clone();
                     let headers = headers.clone();
                     let expand = template_expand;
-                    let latency = latency_config.clone();
                     let expected = expected_method.clone();
                     let status_code = status;
+                    let chaos_injector = injector_clone.clone();
 
                     async move {
                         // Check if request method matches expected method
@@ -1683,49 +1608,24 @@ pub async fn build_router_with_chains_and_multi_tenant(
                                 .into_response();
                         }
 
-                        // Apply latency injection if configured
-                        // Calculate delay before any await to avoid Send issues
-                        let delay_ms = if let Some(ref lat) = latency {
-                            if lat.enabled {
-                                use rand::{rng, Rng};
-
-                                // Check probability - generate all random values before await
-                                let mut rng = rng();
-                                let roll: f64 = rng.random();
-
-                                if roll < lat.probability {
-                                    if let Some(fixed) = lat.fixed_delay_ms {
-                                        // Fixed delay with optional jitter
-                                        let jitter =
-                                            (fixed as f64 * lat.jitter_percent / 100.0) as u64;
-                                        let jitter_amount = if jitter > 0 {
-                                            rng.random_range(0..=jitter)
-                                        } else {
-                                            0
-                                        };
-                                        Some(fixed + jitter_amount)
-                                    } else if let Some((min, max)) = lat.random_delay_range_ms {
-                                        // Random delay range
-                                        Some(rng.random_range(min..=max))
-                                    } else {
-                                        // Default to 0 if no delay specified
-                                        Some(0)
-                                    }
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
+                        // Apply advanced routing features (fault injection and latency) if available
+                        if let Some(ref injector) = chaos_injector {
+                            // Check for fault injection first
+                            if let Some(fault_response) = injector.get_fault_response(req.method(), req.uri()) {
+                                // Return fault response
+                                let mut response = axum::Json(serde_json::json!({
+                                    "error": fault_response.error_message,
+                                    "fault_type": fault_response.fault_type,
+                                })).into_response();
+                                *response.status_mut() = StatusCode::from_u16(fault_response.status_code)
+                                    .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+                                return response;
                             }
-                        } else {
-                            None
-                        };
 
-                        // Apply delay if calculated (after all random generation is done)
-                        if let Some(delay) = delay_ms {
-                            if delay > 0 {
-                                use tokio::time::{sleep, Duration};
-                                sleep(Duration::from_millis(delay)).await;
+                            // Apply advanced latency injection (supports all distributions)
+                            if let Err(e) = injector.inject_latency(req.method(), req.uri()).await {
+                                // Log error but continue with request processing
+                                tracing::warn!("Failed to inject latency: {}", e);
                             }
                         }
 
@@ -1733,6 +1633,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
                         let mut body_value = body.unwrap_or(serde_json::json!({}));
 
                         // Apply template expansion if enabled
+                        // Use spawn_blocking to isolate template expansion from async context
+                        // This ensures Send safety even though expand_prompt_template doesn't use rng()
                         if expand {
                             use mockforge_core::ai_response::RequestContext;
                             use serde_json::Value;
@@ -1755,26 +1657,37 @@ pub async fn build_router_with_chains_and_multi_tenant(
                                 .unwrap_or_default();
 
                             // Extract headers
-                            let request_headers: HashMap<String, Value> =
-                                req.headers()
-                                    .iter()
-                                    .filter_map(|(name, value)| {
-                                        value.to_str().ok().map(|v| {
-                                            (name.to_string(), Value::String(v.to_string()))
-                                        })
-                                    })
-                                    .collect();
+                            let headers: HashMap<String, Value> = req
+                                .headers()
+                                .iter()
+                                .map(|(k, v)| (k.to_string(), Value::String(v.to_str().unwrap_or_default().to_string())))
+                                .collect();
 
-                            // Note: Request body extraction for {{request.body.field}} would go here
-                            // For now, we skip it to avoid consuming the body
+                            // Create RequestContext for expand_prompt_template
+                            let context = RequestContext {
+                                method,
+                                path,
+                                query_params,
+                                headers,
+                                body: None, // Body extraction would require reading the request stream
+                                path_params: HashMap::new(),
+                                multipart_fields: HashMap::new(),
+                                multipart_files: HashMap::new(),
+                            };
 
-                            // Build request context
-                            let context = RequestContext::new(method.clone(), path.clone())
-                                .with_query_params(query_params)
-                                .with_headers(request_headers);
-
-                            // Recursively expand templates in JSON structure
-                            body_value = expand_templates_in_json(&body_value, &context);
+                            // Perform template expansion in spawn_blocking to ensure Send safety
+                            // Use template_expansion module which is explicitly isolated from templating
+                            // This is Send-safe because it doesn't use rng() or any non-Send types
+                            let body_value_clone = body_value.clone();
+                            let context_clone = context.clone();
+                            body_value = match tokio::task::spawn_blocking(move || {
+                                mockforge_core::template_expansion::expand_templates_in_json(body_value_clone, &context_clone)
+                            })
+                            .await
+                            {
+                                Ok(result) => result,
+                                Err(_) => body_value, // Fallback to original on error
+                            };
                         }
 
                         let mut response = axum::Json(body_value).into_response();
@@ -2050,11 +1963,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
     };
 
     // Add drift budget and incident management endpoints
-    {
-        use crate::handlers::drift_budget::{drift_budget_router, DriftBudgetState};
-        use crate::middleware::drift_tracking::DriftTrackingState;
-        use mockforge_core::ai_contract_diff::ContractDiffAnalyzer;
-        use mockforge_core::consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder};
+    // Initialize shared components for drift tracking and protocol contracts
+    let (drift_engine, incident_manager, drift_config) = {
         use mockforge_core::contract_drift::{DriftBudgetConfig, DriftBudgetEngine};
         use mockforge_core::incidents::{IncidentManager, IncidentStore};
         use std::sync::Arc;
@@ -2066,6 +1976,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
         // Initialize incident store and manager
         let incident_store = Arc::new(IncidentStore::default());
         let incident_manager = Arc::new(IncidentManager::new(incident_store.clone()));
+
+        (drift_engine, incident_manager, drift_config)
+    };
+
+    {
+        use crate::handlers::drift_budget::{drift_budget_router, DriftBudgetState};
+        use crate::middleware::drift_tracking::DriftTrackingState;
+        use mockforge_core::ai_contract_diff::ContractDiffAnalyzer;
+        use mockforge_core::consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder};
+        use std::sync::Arc;
 
         // Initialize usage recorder and consumer detector
         let usage_recorder = Arc::new(UsageRecorder::default());
@@ -2140,8 +2060,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
         ));
 
         let drift_state = DriftBudgetState {
-            engine: drift_engine,
-            incident_manager,
+            engine: drift_engine.clone(),
+            incident_manager: incident_manager.clone(),
             gitops_handler: None, // Can be initialized later if GitOps is configured
         };
 
@@ -2149,7 +2069,169 @@ pub async fn build_router_with_chains_and_multi_tenant(
         debug!("Drift budget and incident management endpoints mounted at /api/v1/drift");
     }
 
+    // Add governance endpoints (forecasting, semantic drift, threat modeling, contract health)
+    {
+        use crate::handlers::contract_health::{contract_health_router, ContractHealthState};
+        use crate::handlers::forecasting::{forecasting_router, ForecastingState};
+        use crate::handlers::semantic_drift::{semantic_drift_router, SemanticDriftState};
+        use crate::handlers::threat_modeling::{threat_modeling_router, ThreatModelingState};
+        use mockforge_core::contract_drift::forecasting::{Forecaster, ForecastingConfig};
+        use mockforge_core::contract_drift::threat_modeling::{ThreatAnalyzer, ThreatModelingConfig};
+        use mockforge_core::incidents::semantic_manager::SemanticIncidentManager;
+        use std::sync::Arc;
+
+        // Initialize forecasting
+        let forecasting_config = ForecastingConfig::default();
+        let forecaster = Arc::new(Forecaster::new(forecasting_config));
+        let forecasting_state = ForecastingState {
+            forecaster,
+            database: database.clone(),
+        };
+
+        // Initialize semantic drift manager
+        let semantic_manager = Arc::new(SemanticIncidentManager::new());
+        let semantic_state = SemanticDriftState {
+            manager: semantic_manager,
+            database: database.clone(),
+        };
+
+        // Initialize threat analyzer
+        let threat_config = ThreatModelingConfig::default();
+        let threat_analyzer = match ThreatAnalyzer::new(threat_config) {
+            Ok(analyzer) => Arc::new(analyzer),
+            Err(e) => {
+                warn!("Failed to create threat analyzer: {}. Using default.", e);
+                Arc::new(ThreatAnalyzer::new(ThreatModelingConfig::default()).unwrap_or_else(|_| {
+                    // Fallback to a minimal config if default also fails
+                    ThreatAnalyzer::new(ThreatModelingConfig {
+                        enabled: false,
+                        ..Default::default()
+                    }).expect("Failed to create fallback threat analyzer")
+                }))
+            }
+        };
+        // Load webhook configs from ServerConfig
+        let mut webhook_configs = Vec::new();
+        let config_paths = [
+            "config.yaml",
+            "mockforge.yaml",
+            "tools/mockforge/config.yaml",
+            "../tools/mockforge/config.yaml",
+        ];
+
+        for path in &config_paths {
+            if let Ok(config) = mockforge_core::config::load_config(path).await {
+                if !config.incidents.webhooks.is_empty() {
+                    webhook_configs = config.incidents.webhooks.clone();
+                    info!(
+                        "Loaded {} webhook configs from config: {}",
+                        webhook_configs.len(),
+                        path
+                    );
+                    break;
+                }
+            }
+        }
+
+        if webhook_configs.is_empty() {
+            debug!("No webhook configs found in config files, using empty list");
+        }
+
+        let threat_state = ThreatModelingState {
+            analyzer: threat_analyzer,
+            webhook_configs,
+            database: database.clone(),
+        };
+
+        // Initialize contract health state
+        let contract_health_state = ContractHealthState {
+            incident_manager: incident_manager.clone(),
+            semantic_manager: Arc::new(SemanticIncidentManager::new()),
+        };
+
+        // Register routers
+        app = app.merge(forecasting_router(forecasting_state));
+        debug!("Forecasting endpoints mounted at /api/v1/forecasts");
+
+        app = app.merge(semantic_drift_router(semantic_state));
+        debug!("Semantic drift endpoints mounted at /api/v1/semantic-drift");
+
+        app = app.merge(threat_modeling_router(threat_state));
+        debug!("Threat modeling endpoints mounted at /api/v1/threats");
+
+        app = app.merge(contract_health_router(contract_health_state));
+        debug!("Contract health endpoints mounted at /api/v1/contract-health");
+    }
+
+    // Add protocol contracts endpoints with fitness registry initialization
+    {
+        use crate::handlers::protocol_contracts::{protocol_contracts_router, ProtocolContractState};
+        use mockforge_core::contract_drift::{
+            ConsumerImpactAnalyzer, ConsumerMappingRegistry, FitnessFunctionRegistry,
+            ProtocolContractRegistry,
+        };
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        // Initialize protocol contract registry
+        let contract_registry = Arc::new(RwLock::new(ProtocolContractRegistry::new()));
+
+        // Initialize fitness function registry and load from config
+        let mut fitness_registry = FitnessFunctionRegistry::new();
+
+        // Try to load config and populate fitness rules
+        let config_paths = [
+            "config.yaml",
+            "mockforge.yaml",
+            "tools/mockforge/config.yaml",
+            "../tools/mockforge/config.yaml",
+        ];
+
+        let mut config_loaded = false;
+        for path in &config_paths {
+            if let Ok(config) = mockforge_core::config::load_config(path).await {
+                if !config.contracts.fitness_rules.is_empty() {
+                    if let Err(e) = fitness_registry.load_from_config(&config.contracts.fitness_rules) {
+                        warn!("Failed to load fitness rules from config {}: {}", path, e);
+                    } else {
+                        info!(
+                            "Loaded {} fitness rules from config: {}",
+                            config.contracts.fitness_rules.len(),
+                            path
+                        );
+                        config_loaded = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if !config_loaded {
+            debug!("No fitness rules found in config files, using empty registry");
+        }
+
+        let fitness_registry = Arc::new(RwLock::new(fitness_registry));
+
+        // Reuse drift engine and incident manager from drift budget section
+
+        // Initialize consumer impact analyzer
+        let consumer_mapping_registry = mockforge_core::contract_drift::ConsumerMappingRegistry::new();
+        let consumer_analyzer = Arc::new(RwLock::new(ConsumerImpactAnalyzer::new(consumer_mapping_registry)));
+
+        let protocol_state = ProtocolContractState {
+            registry: contract_registry,
+            drift_engine: Some(drift_engine.clone()),
+            incident_manager: Some(incident_manager.clone()),
+            fitness_registry: Some(fitness_registry),
+            consumer_analyzer: Some(consumer_analyzer),
+        };
+
+        app = app.nest("/api/v1/contracts", protocol_contracts_router(protocol_state));
+        debug!("Protocol contracts endpoints mounted at /api/v1/contracts");
+    }
+
     // Add behavioral cloning middleware (optional - applies learned behavior to requests)
+    #[cfg(feature = "behavioral-cloning")]
     {
         use crate::middleware::behavioral_cloning::BehavioralCloningMiddlewareState;
         use std::path::PathBuf;
@@ -2224,6 +2306,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     }
 
     // Add behavioral cloning endpoints
+    #[cfg(feature = "behavioral-cloning")]
     {
         use crate::handlers::behavioral_cloning::{
             behavioral_cloning_router, BehavioralCloningState,
@@ -2265,10 +2348,18 @@ pub async fn build_router_with_chains_and_multi_tenant(
             engine: consistency_engine.clone(),
         };
 
+        // Create X-Ray state first (needed for middleware)
+        use crate::handlers::xray::XRayState;
+        let xray_state = Arc::new(XRayState {
+            engine: consistency_engine.clone(),
+            request_contexts: std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        });
+
         // Create consistency middleware state
         let consistency_middleware_state = ConsistencyMiddlewareState {
             engine: consistency_engine.clone(),
             adapter: http_adapter,
+            xray_state: Some(xray_state.clone()),
         };
 
         // Add consistency middleware (before other middleware to inject state early)
@@ -2319,6 +2410,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             let snapshot_state = SnapshotState {
                 manager: snapshot_manager,
                 consistency_engine: Some(consistency_engine.clone()),
+                workspace_persistence: None, // Can be initialized later if workspace persistence is available
             };
 
             app = app.merge(snapshot_router(snapshot_state));
@@ -2326,11 +2418,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
             // Add X-Ray API endpoints for browser extension
             {
-                use crate::handlers::xray::{xray_router, XRayState};
-                let xray_state = XRayState {
-                    engine: consistency_engine.clone(),
-                };
-                app = app.merge(xray_router(xray_state));
+                use crate::handlers::xray::xray_router;
+                app = app.merge(xray_router((*xray_state).clone()));
                 debug!("X-Ray API endpoints mounted at /api/v1/xray");
             }
         }

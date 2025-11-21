@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "E-commerce Catalog Contract",
+  "description": "Contract schemas for product catalog endpoints",
+  "version": "1.0.0",
+  "endpoints": {
+    "/api/products": {
+      "GET": {
+        "request": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "description": "Filter by product category"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        },
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["products"],
+            "properties": {
+              "products": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "name", "price", "stock_quantity"],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "price": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "stock_quantity": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "category": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "total": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products/{product_id}": {
+      "GET": {
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["product"],
+            "properties": {
+              "product": {
+                "type": "object",
+                "required": ["id", "name", "price", "stock_quantity"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "price": {
+                    "type": "number"
+                  },
+                  "stock_quantity": {
+                    "type": "integer"
+                  },
+                  "category": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+              "error": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": ["PRODUCT_NOT_FOUND"]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+

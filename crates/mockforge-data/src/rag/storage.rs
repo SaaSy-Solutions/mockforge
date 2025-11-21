@@ -598,19 +598,19 @@ impl StorageFactory {
     /// Create file-based storage
     pub fn create_file(_path: &str) -> Result<Box<dyn DocumentStorage>> {
         // Placeholder for file-based storage implementation
-        Err(mockforge_core::Error::generic("File storage not yet implemented"))
+        Err(crate::Error::generic("File storage not yet implemented"))
     }
 
     /// Create database storage
     pub fn create_database(_connection_string: &str) -> Result<Box<dyn DocumentStorage>> {
         // Placeholder for database storage implementation
-        Err(mockforge_core::Error::generic("Database storage not yet implemented"))
+        Err(crate::Error::generic("Database storage not yet implemented"))
     }
 
     /// Create vector database storage
     pub fn create_vector_db(_config: HashMap<String, String>) -> Result<Box<dyn DocumentStorage>> {
         // Placeholder for vector database storage implementation
-        Err(mockforge_core::Error::generic("Vector database storage not yet implemented"))
+        Err(crate::Error::generic("Vector database storage not yet implemented"))
     }
 }
 

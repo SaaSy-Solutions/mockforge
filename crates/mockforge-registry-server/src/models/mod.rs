@@ -39,7 +39,7 @@ pub use saml_assertion::SAMLAssertionId;
 pub use scenario::{Scenario, ScenarioVersion};
 pub use scenario_promotion::{PromotionStatus, ScenarioEnvironmentVersion, ScenarioPromotion};
 pub use scenario_review::ScenarioReview;
-pub use settings::{OrgSetting, UserSetting, BYOKConfig};
+pub use settings::{OrgSetting, UserSetting, BYOKConfig, OrgAiSettings, AiFeatureFlags};
 pub use subscription::Subscription;
 pub use sso::{SSOConfiguration, SSOSession};
 pub use template::{Template, TemplateCategory, TemplateVersion};

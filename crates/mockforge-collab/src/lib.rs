@@ -1,3 +1,5 @@
+//! Pillars: [Cloud]
+//!
 //! # MockForge Collaboration
 //!
 //! Cloud collaboration features for MockForge including team workspaces,
@@ -70,6 +72,7 @@ pub mod merge;
 pub mod middleware;
 pub mod models;
 pub mod permissions;
+pub mod promotion;
 pub mod server;
 pub mod sync;
 pub mod user;
@@ -88,6 +91,7 @@ pub use history::{Commit, History, Snapshot, VersionControl};
 pub use merge::MergeService;
 pub use models::{TeamWorkspace, User, UserRole, WorkspaceMember};
 pub use permissions::{Permission, PermissionChecker, RolePermissions};
+pub use promotion::PromotionService;
 pub use server::CollabServer;
 pub use sync::{SyncEngine, SyncMessage, SyncState};
 pub use workspace::{WorkspaceManager, WorkspaceService};

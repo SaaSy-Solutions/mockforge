@@ -591,22 +591,144 @@ async fn handle_sync_start(
     let local_workspace_dir =
         local_dir.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
+    // Create sync manager with the config
+    let mut sync_manager = mockforge_core::workspace::sync::WorkspaceSyncManager::new(sync_config);
+
+    // Create workspace persistence to load workspaces
+    let persistence = mockforge_core::workspace_persistence::WorkspacePersistence::new(
+        &local_workspace_dir.to_string_lossy(),
+    )
+    .await
+    .context("Failed to create workspace persistence")?;
+
     if all {
         println!("{}", "🔄 Syncing all workspaces...".cyan());
-        // TODO: Implement sync all workspaces
-        println!("{}", "⚠️  Syncing all workspaces not yet fully implemented".yellow());
+        
+        // Get all workspace IDs
+        let workspace_ids = persistence
+            .list_workspace_ids()
+            .await
+            .context("Failed to list workspace IDs")?;
+        
+        if workspace_ids.is_empty() {
+            println!("{}", "ℹ️  No workspaces found to sync".yellow());
+            return Ok(());
+        }
+
+        println!("   Found {} workspace(s) to sync", workspace_ids.len());
+
+        let mut successful = 0;
+        let mut failed = 0;
+        let mut total_conflicts = 0;
+
+        // Sync each workspace
+        for workspace_id in workspace_ids {
+            print!("   Syncing {}... ", workspace_id);
+            match persistence.load_workspace(&workspace_id).await {
+                Ok(mut workspace) => {
+                    match sync_manager.sync_workspace(&mut workspace).await {
+                        Ok(result) => {
+                            if result.success {
+                                successful += 1;
+                                total_conflicts += result.conflicts.len();
+                                println!("{}", "✓".green());
+                                
+                                // Save workspace if it was modified
+                                if result.changes_count > 0 {
+                                    if let Err(e) = persistence.save_workspace(&workspace).await {
+                                        eprintln!("   Warning: Failed to save workspace after sync: {}", e);
+                                    }
+                                }
+                                
+                                // Report conflicts if any
+                                if !result.conflicts.is_empty() {
+                                    println!("     {} conflict(s) detected", result.conflicts.len());
+                                }
+                            } else {
+                                failed += 1;
+                                println!("{}", "✗".red());
+                                if let Some(error) = result.error {
+                                    println!("     Error: {}", error);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            failed += 1;
+                            println!("{}", "✗".red());
+                            println!("     Error: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    failed += 1;
+                    println!("{}", "✗".red());
+                    println!("     Failed to load workspace: {}", e);
+                }
+            }
+        }
+
+        println!();
+        println!("{}", "📊 Sync Summary".cyan());
+        println!("   Successful: {}", successful);
+        println!("   Failed: {}", failed);
+        println!("   Total conflicts: {}", total_conflicts);
+        
+        if successful > 0 {
+            println!("{}", "✅ Sync completed".green());
+        } else if failed > 0 {
+            println!("{}", "❌ All syncs failed".red());
+        }
     } else if let Some(workspace_id) = workspace {
         println!("{}", format!("🔄 Syncing workspace: {}", workspace_id).cyan());
 
-        // Create sync service
-        // Create sync service with workspace directory
-        let sync_service = SyncService::new(&local_workspace_dir);
+        // Load workspace
+        let mut workspace = persistence
+            .load_workspace(&workspace_id)
+            .await
+            .context(format!("Failed to load workspace: {}", workspace_id))?;
 
-        // Start sync service
-        sync_service.start().await.context("Failed to start sync service")?;
+        // Perform sync
+        match sync_manager.sync_workspace(&mut workspace).await {
+            Ok(result) => {
+                if result.success {
+                    println!("{}", "✅ Sync completed successfully".green());
+                    println!("   Changes: {}", result.changes_count);
+                    println!("   Conflicts: {}", result.conflicts.len());
+                    
+                    // Save workspace if it was modified
+                    if result.changes_count > 0 {
+                        persistence
+                            .save_workspace(&workspace)
+                            .await
+                            .context("Failed to save workspace after sync")?;
+                        println!("   Workspace saved");
+                    }
+                    
+                    // Report conflicts if any
+                    if !result.conflicts.is_empty() {
+                        println!("{}", "⚠️  Conflicts detected:".yellow());
+                        for conflict in &result.conflicts {
+                            println!("     - {} ({})", conflict.entity_id, conflict.entity_type);
+                        }
+                    }
+                } else {
+                    println!("{}", "❌ Sync failed".red());
+                    if let Some(error) = result.error {
+                        println!("   Error: {}", error);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("{}", "❌ Sync failed".red());
+                return Err(anyhow::anyhow!("Sync error: {}", e));
+            }
+        }
 
-        // Start monitoring workspace if watch is enabled
+        // Start sync service for monitoring if watch is enabled
         if watch {
+            let sync_service = SyncService::new(&local_workspace_dir);
+            sync_service.start().await.context("Failed to start sync service")?;
+            
             println!("{}", "👀 Watching for file changes...".cyan());
             sync_service
                 .monitor_workspace(&workspace_id, &local_workspace_dir.to_string_lossy())
@@ -614,15 +736,6 @@ async fn handle_sync_start(
                 .context("Failed to start monitoring workspace")?;
             println!("{}", "✅ File watching started".green());
         }
-
-        // TODO: Implement actual sync operation
-        // For now, just verify the service is running
-        println!("{}", "✅ Sync service started successfully".green());
-        println!("   Workspace: {}", workspace_id);
-        println!("   Directory: {}", local_workspace_dir.display());
-
-        // Note: Actual sync implementation would go here
-        // This is a placeholder for the cloud sync functionality
     } else {
         return Err(anyhow::anyhow!("Either --workspace or --all must be specified"));
     }
@@ -833,9 +946,44 @@ async fn handle_cloud_workspace_unlink(local_workspace: PathBuf) -> Result<()> {
     let sync_config_path = local_workspace.join(".mockforge").join("sync.yaml");
 
     if sync_config_path.exists() {
-        // TODO: Update config to remove cloud link
-        println!("{}", "🔓 Unlinking workspace from cloud".cyan());
-        println!("{}", "⚠️  Workspace unlinking not yet fully implemented".yellow());
+        // Load existing sync config
+        let config_content = tokio::fs::read_to_string(&sync_config_path)
+            .await
+            .context("Failed to read sync config")?;
+        
+        let mut sync_config: SyncConfig = serde_yaml::from_str(&config_content)
+            .context("Failed to parse sync config")?;
+        
+        // Disable sync or remove cloud provider
+        match &mut sync_config.provider {
+            SyncProvider::Cloud { .. } => {
+                // Disable sync
+                sync_config.enabled = false;
+                
+                // Save updated config
+                let updated_config = serde_yaml::to_string(&sync_config)
+                    .context("Failed to serialize sync config")?;
+                tokio::fs::write(&sync_config_path, updated_config)
+                    .await
+                    .context("Failed to write sync config")?;
+                
+                println!("{}", "🔓 Unlinking workspace from cloud".cyan());
+                println!("{}", "✅ Sync configuration disabled".green());
+                println!("   Note: sync.yaml file still exists but sync is disabled");
+                println!("   To fully remove, delete: {}", sync_config_path.display());
+            }
+            _ => {
+                // Not a cloud provider, just disable
+                sync_config.enabled = false;
+                let updated_config = serde_yaml::to_string(&sync_config)
+                    .context("Failed to serialize sync config")?;
+                tokio::fs::write(&sync_config_path, updated_config)
+                    .await
+                    .context("Failed to write sync config")?;
+                
+                println!("{}", "🔓 Sync disabled".cyan());
+            }
+        }
     } else {
         println!("{}", "ℹ️  No sync configuration found".yellow());
     }

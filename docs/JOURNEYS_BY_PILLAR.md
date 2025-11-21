@@ -96,28 +96,89 @@ mockforge serve --ai-enabled
 # Use MockAI to generate mocks from natural language
 ```
 
+### [DevX] DevX-First Onboarding
+
+**Start here if:** You care about developer experience. You want easy-to-use SDKs, code generators, interactive playgrounds, and ergonomic tooling.
+
+**Journey:** [DevX-First Onboarding](../book/src/getting-started/devx-first.md)
+
+**Key Features:**
+- Multi-Language SDKs - Rust, Node.js, Python, Go, Java, .NET
+- Client Code Generation - TypeScript, React, Vue, Angular, Svelte
+- Interactive Playground - Visual endpoint builder and testing
+- CLI Tooling - Comprehensive command-line interface
+- Plugin System - Extend MockForge with custom functionality
+
+**Perfect for:**
+- Developers who want to integrate mocks into their test suites quickly
+- Teams needing client code generation for their APIs
+- Developers who prefer interactive playgrounds over configuration files
+- Teams wanting plugin-based extensibility
+
+**Quick Start:**
+```bash
+# Install SDK for your language
+npm install @mockforge/sdk  # Node.js
+pip install mockforge-sdk   # Python
+# Or use the playground
+mockforge serve --playground
+```
+
+### [Cloud] Cloud-First Onboarding
+
+**Start here if:** You're a team or organization that needs collaboration, sharing, and governance. You want to share mock scenarios across teams and leverage the marketplace.
+
+**Journey:** [Cloud-First Onboarding](../book/src/getting-started/cloud-first.md)
+
+**Key Features:**
+- Organization Management - Multi-tenant workspaces and team collaboration
+- Scenario Marketplace - Discover and publish pre-built scenarios
+- Registry Server - Centralized mock distribution
+- Cloud Workspaces - Synchronization and backup
+- Governance & Access Control - RBAC and audit logging
+
+**Perfect for:**
+- Teams needing to share mock scenarios
+- Organizations requiring workspace management
+- Teams wanting to discover and use marketplace scenarios
+- Organizations needing governance and access controls
+
+**Quick Start:**
+```bash
+# Login to MockForge Cloud
+mockforge cloud login
+
+# Create or join an organization
+mockforge cloud org create my-org
+
+# Browse marketplace scenarios
+mockforge marketplace list
+```
+
 ## Choosing Your Journey
 
 ### By Role
 
-- **Frontend Developer** → Start with [Reality-First](reality-first.md)
-- **API/Platform Team** → Start with [Contracts-First](contracts-first.md)
-- **Rapid Prototyper** → Start with [AI-First](ai-first.md)
-- **DevOps Engineer** → Start with [Contracts-First](contracts-first.md) or [Cloud features](../docs/PILLARS.md#cloud--registry-orgs-governance-monetization-marketplace)
+- **Frontend Developer** → Start with [Reality-First](../book/src/getting-started/reality-first.md)
+- **API/Platform Team** → Start with [Contracts-First](../book/src/getting-started/contracts-first.md)
+- **Rapid Prototyper** → Start with [AI-First](../book/src/getting-started/ai-first.md)
+- **SDK/CLI Developer** → Start with [DevX-First](../book/src/getting-started/devx-first.md)
+- **DevOps Engineer** → Start with [Contracts-First](../book/src/getting-started/contracts-first.md) or [Cloud-First](../book/src/getting-started/cloud-first.md)
+- **Team Lead** → Start with [Cloud-First](../book/src/getting-started/cloud-first.md)
 
 ### By Use Case
 
-- **Need realistic test data** → [Reality-First](reality-first.md)
-- **Need contract validation** → [Contracts-First](contracts-first.md)
-- **Want to generate mocks quickly** → [AI-First](ai-first.md)
-- **Need team collaboration** → [Cloud features](../docs/PILLARS.md#cloud--registry-orgs-governance-monetization-marketplace)
-- **Want better developer experience** → [DevX features](../docs/PILLARS.md#devx--sdks-generators-playgrounds-ergonomics)
+- **Need realistic test data** → [Reality-First](../book/src/getting-started/reality-first.md)
+- **Need contract validation** → [Contracts-First](../book/src/getting-started/contracts-first.md)
+- **Want to generate mocks quickly** → [AI-First](../book/src/getting-started/ai-first.md)
+- **Want better developer experience** → [DevX-First](../book/src/getting-started/devx-first.md)
+- **Need team collaboration** → [Cloud-First](../book/src/getting-started/cloud-first.md)
 
 ### By Team Size
 
-- **Solo Developer** → Start with [Reality-First](reality-first.md) or [AI-First](ai-first.md)
-- **Small Team (2-10)** → Start with [Contracts-First](contracts-first.md) or [Reality-First](reality-first.md)
-- **Large Team (10+)** → Start with [Contracts-First](contracts-first.md) and explore [Cloud features](../docs/PILLARS.md#cloud--registry-orgs-governance-monetization-marketplace)
+- **Solo Developer** → Start with [Reality-First](../book/src/getting-started/reality-first.md) or [AI-First](../book/src/getting-started/ai-first.md)
+- **Small Team (2-10)** → Start with [Contracts-First](../book/src/getting-started/contracts-first.md) or [Reality-First](../book/src/getting-started/reality-first.md)
+- **Large Team (10+)** → Start with [Contracts-First](../book/src/getting-started/contracts-first.md) and explore [Cloud-First](../book/src/getting-started/cloud-first.md)
 
 ## Cross-Pillar Exploration
 
@@ -125,21 +186,38 @@ After mastering one pillar, explore complementary pillars:
 
 ### From Reality
 
-- **Add validation** → Explore [Contracts](contracts-first.md)
-- **Improve workflow** → Explore [DevX](../docs/PILLARS.md#devx--sdks-generators-playgrounds-ergonomics)
-- **Enhance with AI** → Explore [AI](ai-first.md)
+- **Add validation** → Explore [Contracts](../book/src/getting-started/contracts-first.md)
+- **Improve workflow** → Explore [DevX](../book/src/getting-started/devx-first.md)
+- **Enable collaboration** → Explore [Cloud](../book/src/getting-started/cloud-first.md)
+- **Enhance with AI** → Explore [AI](../book/src/getting-started/ai-first.md)
 
 ### From Contracts
 
-- **Add realism** → Explore [Reality](reality-first.md)
-- **Improve workflow** → Explore [DevX](../docs/PILLARS.md#devx--sdks-generators-playgrounds-ergonomics)
-- **Enhance analysis** → Explore [AI](ai-first.md)
+- **Add realism** → Explore [Reality](../book/src/getting-started/reality-first.md)
+- **Improve workflow** → Explore [DevX](../book/src/getting-started/devx-first.md)
+- **Enable collaboration** → Explore [Cloud](../book/src/getting-started/cloud-first.md)
+- **Enhance analysis** → Explore [AI](../book/src/getting-started/ai-first.md)
+
+### From DevX
+
+- **Add realism** → Explore [Reality](../book/src/getting-started/reality-first.md)
+- **Add validation** → Explore [Contracts](../book/src/getting-started/contracts-first.md)
+- **Enable collaboration** → Explore [Cloud](../book/src/getting-started/cloud-first.md)
+- **Enhance with AI** → Explore [AI](../book/src/getting-started/ai-first.md)
+
+### From Cloud
+
+- **Add realism** → Explore [Reality](../book/src/getting-started/reality-first.md)
+- **Add validation** → Explore [Contracts](../book/src/getting-started/contracts-first.md)
+- **Improve workflow** → Explore [DevX](../book/src/getting-started/devx-first.md)
+- **Enhance with AI** → Explore [AI](../book/src/getting-started/ai-first.md)
 
 ### From AI
 
-- **Add realism** → Explore [Reality](reality-first.md)
-- **Add validation** → Explore [Contracts](contracts-first.md)
-- **Improve workflow** → Explore [DevX](../docs/PILLARS.md#devx--sdks-generators-playgrounds-ergonomics)
+- **Add realism** → Explore [Reality](../book/src/getting-started/reality-first.md)
+- **Add validation** → Explore [Contracts](../book/src/getting-started/contracts-first.md)
+- **Improve workflow** → Explore [DevX](../book/src/getting-started/devx-first.md)
+- **Enable collaboration** → Explore [Cloud](../book/src/getting-started/cloud-first.md)
 
 ## Next Steps
 

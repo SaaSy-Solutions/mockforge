@@ -24,29 +24,29 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-opentelemetry = "0.22"
 mockforge-core = { version = "0.3.2", path = "../mockforge-core" }
-mockforge-http = { version = "0.3.0", optional = true }
-mockforge-ws = { version = "0.3.0", optional = true }
-mockforge-grpc = { version = "0.3.0", optional = true }
-mockforge-graphql = { version = "0.3.0", optional = true }
-mockforge-smtp = { version = "0.3.0", optional = true }
-mockforge-mqtt = { version = "0.3.0", optional = true }
+mockforge-http = { version = "0.3.2", path = "../mockforge-http", optional = true }
+mockforge-ws = { version = "0.3.2", path = "../mockforge-ws", optional = true }
+mockforge-grpc = { version = "0.3.2", path = "../mockforge-grpc", optional = true }
+mockforge-graphql = { version = "0.3.2", path = "../mockforge-graphql", optional = true }
+mockforge-smtp = { version = "0.3.2", path = "../mockforge-smtp", optional = true }
+mockforge-mqtt = { version = "0.3.2", path = "../mockforge-mqtt", optional = true }
 mockforge-data = { version = "0.3.2", path = "../mockforge-data" }
-mockforge-ui = "^0.3.0"
-mockforge-observability = "0.3.0"
-mockforge-tracing = "0.3.0"
-mockforge-recorder = "0.3.0"
-mockforge-bench = "0.3.0"
-mockforge-ftp = { version = "0.3.0", optional = true }
-mockforge-kafka = { version = "0.3.0", optional = true }
-mockforge-amqp = { version = "0.3.0", optional = true }
-mockforge-tcp = { version = "0.3.0", optional = true }
-mockforge-tunnel = "0.3.0"
-mockforge-vbr = "0.3.0"
+mockforge-ui = { version = "0.3.2", path = "../mockforge-ui" }
+mockforge-observability = { version = "0.3.2", path = "../mockforge-observability" }
+mockforge-tracing = { version = "0.3.2", path = "../mockforge-tracing" }
+mockforge-recorder = { version = "0.3.2", path = "../mockforge-recorder" }
+mockforge-bench = { version = "0.3.2", path = "../mockforge-bench" }
+mockforge-ftp = { version = "0.3.2", path = "../mockforge-ftp", optional = true }
+mockforge-kafka = { version = "0.3.2", path = "../mockforge-kafka", optional = true }
+mockforge-amqp = { version = "0.3.2", path = "../mockforge-amqp", optional = true }
+mockforge-tcp = { version = "0.3.2", path = "../mockforge-tcp", optional = true }
+mockforge-tunnel = { version = "0.3.2", path = "../mockforge-tunnel" }
+mockforge-vbr = { version = "0.3.2", path = "../mockforge-vbr" }
 mockforge-plugin-core = { version = "0.3.2", path = "../mockforge-plugin-core" }
-mockforge-plugin-loader = "0.3.0"
-mockforge-scenarios = { version = "0.3.0", features = ["studio-packs"] }
-mockforge-chaos = "0.3.0"
-mockforge-schema = "0.3.0"
+mockforge-plugin-loader = { version = "0.3.2", path = "../mockforge-plugin-loader" }
+mockforge-scenarios = { version = "0.3.2", path = "../mockforge-scenarios", features = ["studio-packs"] }
+mockforge-chaos = { version = "0.3.2", path = "../mockforge-chaos" }
+mockforge-schema = { version = "0.3.0", path = "../mockforge-schema" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
@@ -71,6 +71,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { workspace = true }
 openapiv3 = "2.0"
 async-trait = "0.1"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
 lapin = { version = "2.3", optional = true }
 rdkafka = { version = "0.38", optional = true }
 futures-lite = { version = "2.0", optional = true }

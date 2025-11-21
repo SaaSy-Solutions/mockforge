@@ -311,6 +311,104 @@ impl Default for PillarMetadata {
     }
 }
 
+/// Parse pillar tags from a list of scenario tags
+///
+/// Extracts pillar tags in the format `[PillarName]` from a list of tags.
+/// Pillar tags are recognized in formats like:
+/// - `[Cloud]`
+/// - `[Contracts]`
+/// - `[Reality]`
+/// - `[Cloud][Contracts][Reality]` (multiple pillars in one tag)
+///
+/// # Examples
+///
+/// ```
+/// use mockforge_core::pillars::{Pillar, parse_pillar_tags_from_scenario_tags};
+///
+/// let tags = vec!["[Cloud]".to_string(), "auth".to_string(), "[Contracts][Reality]".to_string()];
+/// let pillars = parse_pillar_tags_from_scenario_tags(&tags);
+/// assert!(pillars.contains(&Pillar::Cloud));
+/// assert!(pillars.contains(&Pillar::Contracts));
+/// assert!(pillars.contains(&Pillar::Reality));
+/// assert_eq!(pillars.len(), 3);
+/// ```
+pub fn parse_pillar_tags_from_scenario_tags(tags: &[String]) -> Vec<Pillar> {
+    let mut pillars = Vec::new();
+    let tag_re = regex::Regex::new(r"\[([^\]]+)\]").ok();
+    
+    if tag_re.is_none() {
+        return pillars;
+    }
+    
+    let tag_re = tag_re.unwrap();
+    
+    for tag in tags {
+        // Extract all [PillarName] patterns from the tag
+        for cap in tag_re.captures_iter(tag) {
+            if let Some(pillar_name) = cap.get(1) {
+                if let Some(pillar) = Pillar::from_str(pillar_name.as_str()) {
+                    if !pillars.contains(&pillar) {
+                        pillars.push(pillar);
+                    }
+                }
+            }
+        }
+    }
+    
+    pillars
+}
+
+/// Check if a tag string contains pillar tags
+///
+/// Returns true if the tag contains at least one valid pillar tag in bracket notation.
+///
+/// # Examples
+///
+/// ```
+/// use mockforge_core::pillars::has_pillar_tags;
+///
+/// assert!(has_pillar_tags("[Cloud]"));
+/// assert!(has_pillar_tags("[Contracts][Reality]"));
+/// assert!(has_pillar_tags("auth-[Cloud]-test"));
+/// assert!(!has_pillar_tags("auth"));
+/// assert!(!has_pillar_tags("[Invalid]"));
+/// ```
+pub fn has_pillar_tags(tag: &str) -> bool {
+    let tag_re = regex::Regex::new(r"\[([^\]]+)\]").ok();
+    
+    if let Some(tag_re) = tag_re {
+        for cap in tag_re.captures_iter(tag) {
+            if let Some(pillar_name) = cap.get(1) {
+                if Pillar::from_str(pillar_name.as_str()).is_some() {
+                    return true;
+                }
+            }
+        }
+    }
+    
+    false
+}
+
+/// Extract pillar metadata from scenario tags
+///
+/// Parses all pillar tags from a list of scenario tags and returns them as PillarMetadata.
+///
+/// # Examples
+///
+/// ```
+/// use mockforge_core::pillars::{Pillar, pillar_metadata_from_scenario_tags};
+///
+/// let tags = vec!["[Cloud]".to_string(), "[Contracts]".to_string(), "auth".to_string()];
+/// let metadata = pillar_metadata_from_scenario_tags(&tags);
+/// assert!(metadata.has_pillar(Pillar::Cloud));
+/// assert!(metadata.has_pillar(Pillar::Contracts));
+/// assert!(!metadata.has_pillar(Pillar::Reality));
+/// ```
+pub fn pillar_metadata_from_scenario_tags(tags: &[String]) -> PillarMetadata {
+    let pillars = parse_pillar_tags_from_scenario_tags(tags);
+    PillarMetadata::from(pillars)
+}
+
 impl From<Vec<Pillar>> for PillarMetadata {
     fn from(pillars: Vec<Pillar>) -> Self {
         Self {
@@ -405,5 +503,57 @@ mod tests {
 
         let doc3 = "//! No pillars here";
         assert!(PillarMetadata::from_doc_comment(doc3).is_none());
+    }
+
+    #[test]
+    fn test_parse_pillar_tags_from_scenario_tags() {
+        use super::{parse_pillar_tags_from_scenario_tags, Pillar};
+
+        let tags = vec!["[Cloud]".to_string(), "auth".to_string(), "[Contracts][Reality]".to_string()];
+        let pillars = parse_pillar_tags_from_scenario_tags(&tags);
+        assert!(pillars.contains(&Pillar::Cloud));
+        assert!(pillars.contains(&Pillar::Contracts));
+        assert!(pillars.contains(&Pillar::Reality));
+        assert_eq!(pillars.len(), 3);
+
+        let tags2 = vec!["normal".to_string(), "test".to_string()];
+        let pillars2 = parse_pillar_tags_from_scenario_tags(&tags2);
+        assert!(pillars2.is_empty());
+
+        let tags3 = vec!["[Cloud][Contracts][Reality]".to_string()];
+        let pillars3 = parse_pillar_tags_from_scenario_tags(&tags3);
+        assert_eq!(pillars3.len(), 3);
+        assert!(pillars3.contains(&Pillar::Cloud));
+        assert!(pillars3.contains(&Pillar::Contracts));
+        assert!(pillars3.contains(&Pillar::Reality));
+    }
+
+    #[test]
+    fn test_has_pillar_tags() {
+        use super::has_pillar_tags;
+
+        assert!(has_pillar_tags("[Cloud]"));
+        assert!(has_pillar_tags("[Contracts][Reality]"));
+        assert!(has_pillar_tags("auth-[Cloud]-test"));
+        assert!(!has_pillar_tags("auth"));
+        assert!(!has_pillar_tags("[Invalid]"));
+        assert!(!has_pillar_tags(""));
+    }
+
+    #[test]
+    fn test_pillar_metadata_from_scenario_tags() {
+        use super::{pillar_metadata_from_scenario_tags, Pillar};
+
+        let tags = vec!["[Cloud]".to_string(), "[Contracts]".to_string(), "auth".to_string()];
+        let metadata = pillar_metadata_from_scenario_tags(&tags);
+        assert!(metadata.has_pillar(Pillar::Cloud));
+        assert!(metadata.has_pillar(Pillar::Contracts));
+        assert!(!metadata.has_pillar(Pillar::Reality));
+
+        let tags2 = vec!["[Cloud][Contracts][Reality]".to_string()];
+        let metadata2 = pillar_metadata_from_scenario_tags(&tags2);
+        assert!(metadata2.has_pillar(Pillar::Cloud));
+        assert!(metadata2.has_pillar(Pillar::Contracts));
+        assert!(metadata2.has_pillar(Pillar::Reality));
     }
 }

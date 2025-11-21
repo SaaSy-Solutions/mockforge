@@ -13,7 +13,7 @@ use mockforge_core::consistency::{
     get_user_orders_via_graph, ConsistencyEngine, EntityState, UnifiedState,
 };
 use mockforge_core::reality::RealityLevel;
-use mockforge_data::{LifecycleState, PersonaLifecycle, PersonaProfile};
+use mockforge_data::{LifecyclePreset, LifecycleState, PersonaLifecycle, PersonaProfile};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_json::Value;
@@ -92,6 +92,15 @@ pub struct SetPersonaLifecycleRequest {
     pub initial_state: String,
 }
 
+/// Request to apply a lifecycle preset to a persona
+#[derive(Debug, Deserialize)]
+pub struct ApplyLifecyclePresetRequest {
+    /// Persona ID
+    pub persona_id: String,
+    /// Lifecycle preset name (e.g., "subscription", "loan", "order_fulfillment", "user_engagement")
+    pub preset: String,
+}
+
 /// Query parameters for workspace operations
 #[derive(Debug, Deserialize)]
 pub struct WorkspaceQuery {
@@ -127,6 +136,9 @@ pub async fn set_persona(
     Query(params): Query<WorkspaceQuery>,
     Json(request): Json<SetPersonaRequest>,
 ) -> Result<Json<Value>, StatusCode> {
+    // Clone persona_id before moving request.persona
+    let persona_id = request.persona.id.clone();
+    
     state
         .engine
         .set_active_persona(&params.workspace, request.persona)
@@ -135,6 +147,18 @@ pub async fn set_persona(
             error!("Failed to set persona: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    // Record pillar usage for persona activation
+    mockforge_core::pillar_tracking::record_reality_usage(
+        Some(params.workspace.clone()),
+        None,
+        "smart_personas_usage",
+        serde_json::json!({
+            "persona_id": persona_id,
+            "action": "activated"
+        }),
+    )
+    .await;
 
     info!("Set persona for workspace: {}", params.workspace);
     Ok(Json(serde_json::json!({
@@ -571,6 +595,157 @@ pub async fn update_persona_lifecycles(
     })))
 }
 
+/// List all available lifecycle presets
+///
+/// GET /api/v1/consistency/lifecycle-presets
+pub async fn list_lifecycle_presets() -> Json<Value> {
+    let presets: Vec<serde_json::Value> = LifecyclePreset::all()
+        .iter()
+        .map(|preset| {
+            serde_json::json!({
+                "name": preset.name(),
+                "id": format!("{:?}", preset).to_lowercase(),
+                "description": preset.description(),
+            })
+        })
+        .collect();
+
+    Json(serde_json::json!({
+        "presets": presets,
+    }))
+}
+
+/// Get details of a specific lifecycle preset
+///
+/// GET /api/v1/consistency/lifecycle-presets/{preset_name}
+pub async fn get_lifecycle_preset_details(
+    Path(preset_name): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    // Parse preset name
+    let preset = match preset_name.to_lowercase().as_str() {
+        "subscription" => LifecyclePreset::Subscription,
+        "loan" => LifecyclePreset::Loan,
+        "order_fulfillment" | "orderfulfillment" => LifecyclePreset::OrderFulfillment,
+        "user_engagement" | "userengagement" => LifecyclePreset::UserEngagement,
+        _ => {
+            error!("Unknown lifecycle preset: {}", preset_name);
+            return Err(StatusCode::NOT_FOUND);
+        }
+    };
+
+    // Create a sample lifecycle to get the structure
+    let sample_lifecycle = PersonaLifecycle::from_preset(preset, "sample".to_string());
+
+    // Build response with preset details
+    let response = serde_json::json!({
+        "preset": {
+            "name": preset.name(),
+            "id": format!("{:?}", preset).to_lowercase(),
+            "description": preset.description(),
+        },
+        "initial_state": format!("{:?}", sample_lifecycle.current_state),
+        "states": sample_lifecycle
+            .transition_rules
+            .iter()
+            .map(|rule| {
+                serde_json::json!({
+                    "from": format!("{:?}", sample_lifecycle.current_state),
+                    "to": format!("{:?}", rule.to),
+                    "after_days": rule.after_days,
+                    "condition": rule.condition,
+                })
+            })
+            .collect::<Vec<_>>(),
+        "affected_endpoints": match preset {
+            LifecyclePreset::Subscription => vec!["billing", "support", "subscription"],
+            LifecyclePreset::Loan => vec!["loan", "loans", "credit", "application"],
+            LifecyclePreset::OrderFulfillment => vec!["order", "orders", "fulfillment", "shipment", "delivery"],
+            LifecyclePreset::UserEngagement => vec!["profile", "user", "users", "activity", "engagement", "notifications"],
+        },
+    });
+
+    Ok(Json(response))
+}
+
+/// Apply a lifecycle preset to a persona
+///
+/// POST /api/v1/consistency/lifecycle-presets/apply?workspace={workspace_id}
+pub async fn apply_lifecycle_preset(
+    State(state): State<ConsistencyState>,
+    Query(params): Query<WorkspaceQuery>,
+    Json(request): Json<ApplyLifecyclePresetRequest>,
+) -> Result<Json<Value>, StatusCode> {
+    // Parse preset name
+    let preset = match request.preset.to_lowercase().as_str() {
+        "subscription" => LifecyclePreset::Subscription,
+        "loan" => LifecyclePreset::Loan,
+        "order_fulfillment" | "orderfulfillment" => LifecyclePreset::OrderFulfillment,
+        "user_engagement" | "userengagement" => LifecyclePreset::UserEngagement,
+        _ => {
+            error!("Unknown lifecycle preset: {}", request.preset);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
+
+    // Get unified state
+    let mut unified_state = state.engine.get_state(&params.workspace).await.ok_or_else(|| {
+        error!("State not found for workspace: {}", params.workspace);
+        StatusCode::NOT_FOUND
+    })?;
+
+    // Check if persona exists and is active
+    if let Some(ref mut persona) = unified_state.active_persona {
+        if persona.id != request.persona_id {
+            error!(
+                "Persona {} not found or not active in workspace: {}",
+                request.persona_id, params.workspace
+            );
+            return Err(StatusCode::NOT_FOUND);
+        }
+
+        // Create lifecycle from preset
+        let lifecycle = PersonaLifecycle::from_preset(preset, request.persona_id.clone());
+
+        // Apply lifecycle to persona
+        persona.set_lifecycle(lifecycle.clone());
+
+        // Apply lifecycle effects to persona traits
+        let effects = lifecycle.apply_lifecycle_effects();
+        for (key, value) in effects {
+            persona.set_trait(key, value);
+        }
+
+        // Update the persona in the engine
+        state
+            .engine
+            .set_active_persona(&params.workspace, persona.clone())
+            .await
+            .map_err(|e| {
+                error!("Failed to apply lifecycle preset: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        info!(
+            "Applied lifecycle preset {:?} to persona {} in workspace: {}",
+            preset, request.persona_id, params.workspace
+        );
+
+        return Ok(Json(serde_json::json!({
+            "success": true,
+            "workspace": params.workspace,
+            "persona_id": request.persona_id,
+            "preset": preset.name(),
+            "lifecycle_state": format!("{:?}", lifecycle.current_state),
+        })));
+    }
+
+    error!(
+        "No active persona found in workspace: {}",
+        params.workspace
+    );
+    Err(StatusCode::NOT_FOUND)
+}
+
 /// Create consistency router
 pub fn consistency_router(state: ConsistencyState) -> axum::Router {
     use axum::routing::{get, post};
@@ -582,6 +757,10 @@ pub fn consistency_router(state: ConsistencyState) -> axum::Router {
         .route("/api/v1/consistency/persona", post(set_persona))
         .route("/api/v1/consistency/persona/lifecycle", post(set_persona_lifecycle))
         .route("/api/v1/consistency/persona/update-lifecycles", post(update_persona_lifecycles))
+        // Lifecycle preset management
+        .route("/api/v1/consistency/lifecycle-presets", get(list_lifecycle_presets))
+        .route("/api/v1/consistency/lifecycle-presets/{preset_name}", get(get_lifecycle_preset_details))
+        .route("/api/v1/consistency/lifecycle-presets/apply", post(apply_lifecycle_preset))
         // Scenario management
         .route("/api/v1/consistency/scenario", post(set_scenario))
         // Reality level management

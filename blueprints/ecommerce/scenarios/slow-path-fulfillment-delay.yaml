@@ -1,0 +1,99 @@
+id: slow-path-fulfillment-delay
+name: Slow Path - Order Fulfillment Delay
+type: slow_path
+description: Order fulfillment processing with intentional delays simulating warehouse processing and shipping delays
+tags:
+  - fulfillment
+  - shipping
+  - performance
+  - delay
+
+steps:
+  - id: get-order
+    name: Get Order Details
+    method: GET
+    path: /api/orders/{{order_id}}
+    expected_status: 200
+    continue_on_failure: false
+    delay_ms: 200  # Small initial delay
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      order_status: body.order.status
+
+  - id: process-order-slow
+    name: Process Order (Delayed)
+    method: POST
+    path: /api/orders/{{order_id}}/process
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [get-order]
+    delay_ms: 2500  # 2.5 second delay simulating warehouse processing
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      processing_status: body.order.status
+
+  - id: update-inventory-slow
+    name: Update Inventory (Delayed)
+    method: PATCH
+    path: /api/inventory/update
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [process-order-slow]
+    delay_ms: 1800  # 1.8 second delay for inventory updates
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      order_id: "{{order_id}}"
+      action: "reserve"
+
+  - id: create-shipment-slow
+    name: Create Shipment (Delayed)
+    method: POST
+    path: /api/shipments
+    expected_status: 201
+    continue_on_failure: false
+    depends_on: [update-inventory-slow]
+    delay_ms: 3000  # 3 second delay for shipment creation
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      order_id: "{{order_id}}"
+      carrier: "standard"
+    extract:
+      shipment_id: body.shipment.id
+      tracking_number: body.shipment.tracking_number
+
+  - id: update-order-status
+    name: Update Order Status to Shipped
+    method: PATCH
+    path: /api/orders/{{order_id}}
+    expected_status: 200
+    continue_on_failure: false
+    depends_on: [create-shipment-slow]
+    delay_ms: 1000  # 1 second delay
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      status: "shipped"
+      shipment_id: "{{shipment_id}}"
+      tracking_number: "{{tracking_number}}"
+
+expected_outcomes:
+  - All steps eventually complete successfully (2xx status codes)
+  - Total execution time exceeds 8 seconds due to intentional delays
+  - Order is processed and inventory is updated
+  - Shipment is created with tracking number
+  - Order status transitions through: pending → processing → shipped
+  - User experiences realistic fulfillment processing delays
+  - System handles slow responses gracefully
+
+variables:
+  access_token: null
+  order_id: null
+  order_status: null
+  processing_status: null
+  shipment_id: null
+  tracking_number: null
+

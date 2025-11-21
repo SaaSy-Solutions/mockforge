@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "B2C SaaS Authentication Contract",
+  "description": "Contract schemas for authentication endpoints",
+  "version": "1.0.0",
+  "endpoints": {
+    "/api/auth/signup": {
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["email", "password", "name"],
+          "properties": {
+            "email": {
+              "type": "string",
+              "format": "email",
+              "description": "User email address"
+            },
+            "password": {
+              "type": "string",
+              "minLength": 8,
+              "description": "User password"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "User full name"
+            }
+          }
+        },
+        "response": {
+          "201": {
+            "type": "object",
+            "required": ["user", "access_token"],
+            "properties": {
+              "user": {
+                "type": "object",
+                "required": ["id", "email", "name"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "User ID"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              "access_token": {
+                "type": "string",
+                "description": "JWT access token"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["email", "password"],
+          "properties": {
+            "email": {
+              "type": "string",
+              "format": "email"
+            },
+            "password": {
+              "type": "string"
+            }
+          }
+        },
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["access_token", "user"],
+            "properties": {
+              "access_token": {
+                "type": "string"
+              },
+              "user": {
+                "type": "object",
+                "required": ["id", "email", "name"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+              "error": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": ["INVALID_CREDENTIALS"]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+

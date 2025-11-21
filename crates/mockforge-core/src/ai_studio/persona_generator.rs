@@ -4,18 +4,25 @@
 //! It creates personas with realistic traits, backstories, and lifecycle configurations
 //! based on natural language descriptions.
 
+use crate::ai_studio::artifact_freezer::{ArtifactFreezer, FreezeMetadata};
+use crate::ai_studio::config::DeterministicModeConfig;
 use crate::intelligent_behavior::llm_client::LlmClient;
 use crate::intelligent_behavior::types::LlmGenerationRequest;
 use crate::intelligent_behavior::IntelligentBehaviorConfig;
 use crate::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 /// Persona generator for creating personas from descriptions
 pub struct PersonaGenerator {
     /// LLM client for generating persona details
     llm_client: LlmClient,
+    /// Configuration (for accessing LLM provider/model info)
+    config: IntelligentBehaviorConfig,
 }
 
 impl PersonaGenerator {
@@ -23,14 +30,16 @@ impl PersonaGenerator {
     pub fn new() -> Self {
         let config = IntelligentBehaviorConfig::default();
         Self {
-            llm_client: LlmClient::new(config.behavior_model),
+            llm_client: LlmClient::new(config.behavior_model.clone()),
+            config,
         }
     }
 
     /// Create a new persona generator with custom configuration
     pub fn with_config(config: IntelligentBehaviorConfig) -> Self {
         Self {
-            llm_client: LlmClient::new(config.behavior_model),
+            llm_client: LlmClient::new(config.behavior_model.clone()),
+            config,
         }
     }
 
@@ -41,10 +50,42 @@ impl PersonaGenerator {
     /// - A narrative backstory
     /// - Appropriate lifecycle configuration
     /// - Domain-specific characteristics
+    ///
+    /// In deterministic mode (ai_mode = generate_once_freeze), this method will
+    /// first check for frozen artifacts before generating new ones.
     pub async fn generate(
         &self,
         request: &PersonaGenerationRequest,
+        ai_mode: Option<crate::ai_studio::config::AiMode>,
+        deterministic_config: Option<&DeterministicModeConfig>,
     ) -> Result<PersonaGenerationResponse> {
+        // In deterministic mode, check for frozen artifacts first
+        if ai_mode == Some(crate::ai_studio::config::AiMode::GenerateOnceFreeze) {
+            let freezer = ArtifactFreezer::new();
+            
+            // Create identifier from description hash
+            let mut hasher = DefaultHasher::new();
+            request.description.hash(&mut hasher);
+            let description_hash = format!("{:x}", hasher.finish());
+            
+            // Try to load frozen artifact
+            if let Some(frozen) = freezer.load_frozen("persona", Some(&description_hash)).await? {
+                // Extract persona from frozen content (remove metadata)
+                let mut persona = frozen.content.clone();
+                if let Some(obj) = persona.as_object_mut() {
+                    obj.remove("_frozen_metadata");
+                }
+                
+                return Ok(PersonaGenerationResponse {
+                    persona: Some(persona),
+                    message: format!(
+                        "Loaded frozen persona artifact from {} (deterministic mode)",
+                        frozen.path
+                    ),
+                    frozen_artifact: Some(frozen),
+                });
+            }
+        }
         // Build system prompt for persona generation
         let system_prompt = r#"You are an expert at creating realistic user personas for API testing.
 Generate a complete persona profile from a natural language description.
@@ -134,13 +175,59 @@ Make the persona realistic and consistent. Traits should align with the descript
             "lifecycle_state": persona_json.get("lifecycle_state"),
         });
 
+        // Auto-freeze if enabled
+        let frozen_artifact = if let Some(config) = deterministic_config {
+            if config.enabled && config.is_auto_freeze_enabled() {
+                let freezer = ArtifactFreezer::new();
+                
+                // Calculate prompt hash
+                let mut hasher = Sha256::new();
+                hasher.update(request.description.as_bytes());
+                let prompt_hash = format!("{:x}", hasher.finalize());
+
+                // Create metadata
+                let metadata = if config.track_metadata {
+                    Some(FreezeMetadata {
+                        llm_provider: Some(self.config.behavior_model.llm_provider.clone()),
+                        llm_model: Some(self.config.behavior_model.model.clone()),
+                        llm_version: None,
+                        prompt_hash: Some(prompt_hash),
+                        output_hash: None, // Will be calculated by freezer
+                        original_prompt: Some(request.description.clone()),
+                    })
+                } else {
+                    None
+                };
+
+                let freeze_request = crate::ai_studio::artifact_freezer::FreezeRequest {
+                    artifact_type: "persona".to_string(),
+                    content: persona_value.clone(),
+                    format: config.freeze_format.clone(),
+                    path: None,
+                    metadata,
+                };
+
+                freezer.auto_freeze_if_enabled(&freeze_request, config).await?
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Ok(PersonaGenerationResponse {
             persona: Some(persona_value),
             message: format!(
-                "Successfully generated persona '{}' with {} traits",
+                "Successfully generated persona '{}' with {} traits{}",
                 persona_name,
-                traits.len()
+                traits.len(),
+                if frozen_artifact.is_some() {
+                    " (auto-frozen)"
+                } else {
+                    ""
+                }
             ),
+            frozen_artifact,
         })
     }
 
@@ -186,6 +273,7 @@ Return the updated persona in the same JSON structure as the input."#;
         Ok(PersonaGenerationResponse {
             persona: Some(response),
             message: "Successfully updated persona".to_string(),
+            frozen_artifact: None,
         })
     }
 }
@@ -217,4 +305,8 @@ pub struct PersonaGenerationResponse {
 
     /// Status message
     pub message: String,
+
+    /// Frozen artifact (if auto-freeze was enabled)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frozen_artifact: Option<crate::ai_studio::artifact_freezer::FrozenArtifact>,
 }

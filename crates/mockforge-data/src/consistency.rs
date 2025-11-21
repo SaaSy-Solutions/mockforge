@@ -8,7 +8,7 @@
 use crate::domains::Domain;
 use crate::persona::{PersonaGenerator, PersonaProfile, PersonaRegistry};
 use crate::persona_graph::{PersonaGraph, PersonaNode};
-use mockforge_core::Result;
+use crate::Result;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};

@@ -57,6 +57,8 @@ pub fn create_router() -> Router<AppState> {
         // Organization settings routes
         .route("/api/v1/organizations/:org_id/settings", get(handlers::organization_settings::get_organization_settings))
         .route("/api/v1/organizations/:org_id/settings", patch(handlers::organization_settings::update_organization_settings))
+        .route("/api/v1/organizations/:org_id/settings/ai", get(handlers::organization_settings::get_organization_ai_settings))
+        .route("/api/v1/organizations/:org_id/settings/ai", patch(handlers::organization_settings::update_organization_ai_settings))
         .route("/api/v1/organizations/:org_id/usage", get(handlers::organization_settings::get_organization_usage))
         .route("/api/v1/organizations/:org_id/billing", get(handlers::organization_settings::get_organization_billing))
         // Pillar analytics routes

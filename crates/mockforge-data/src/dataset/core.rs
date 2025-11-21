@@ -4,7 +4,7 @@
 //! including dataset definitions, rows, and basic operations.
 
 use crate::{DataConfig, OutputFormat};
-use mockforge_core::{Error, Result};
+use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

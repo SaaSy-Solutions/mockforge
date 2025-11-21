@@ -59,6 +59,23 @@ setup:
       name: Order Fulfillment Flow
       description: Order processing, shipping, and delivery tracking
 
+  scenarios:
+    - id: happy-path-checkout
+      name: Happy Path - Complete Checkout
+      type: happy_path
+      description: Successful shopping cart to checkout flow with payment processing
+      file: scenarios/happy-path-checkout.yaml
+    - id: known-failure-out-of-stock
+      name: Known Failure - Out of Stock
+      type: known_failure
+      description: Product out of stock scenario where item cannot be added to cart
+      file: scenarios/known-failure-out-of-stock.yaml
+    - id: slow-path-fulfillment-delay
+      name: Slow Path - Order Fulfillment Delay
+      type: slow_path
+      description: Order fulfillment processing with intentional delays
+      file: scenarios/slow-path-fulfillment-delay.yaml
+
   playground:
     enabled: true
     collection_file: playground/collection.json
@@ -80,6 +97,16 @@ files:
   - README.md
   - personas/
   - flows/
+  - scenarios/
+  - contracts/
   - playground/
+
+contracts:
+  - file: contracts/catalog-contract.json
+    description: Product catalog endpoint contracts
+  - file: contracts/cart-contract.json
+    description: Shopping cart endpoint contracts
+  - file: contracts/order-contract.json
+    description: Order management endpoint contracts
 
 readme: README.md

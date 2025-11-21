@@ -588,6 +588,73 @@ impl AccessReviewEngine {
         Ok(())
     }
 
+    /// Update user permissions in a review
+    ///
+    /// This method updates the user's permissions/roles as part of a review action.
+    /// It tracks the permission change in the review and updates the review item.
+    pub fn update_user_permissions(
+        &mut self,
+        review_id: &str,
+        user_id: Uuid,
+        updated_by: Uuid,
+        new_roles: Vec<String>,
+        new_permissions: Vec<String>,
+        reason: Option<String>,
+    ) -> Result<(), crate::Error> {
+        let review = self
+            .active_reviews
+            .get_mut(review_id)
+            .ok_or_else(|| crate::Error::Generic(format!("Review {} not found", review_id)))?;
+
+        let items = self.user_review_items.get_mut(review_id).ok_or_else(|| {
+            crate::Error::Generic(format!("Review items for {} not found", review_id))
+        })?;
+
+        let item = items.get_mut(&user_id).ok_or_else(|| {
+            crate::Error::Generic(format!("User {} not found in review", user_id))
+        })?;
+
+        // Store old permissions for tracking
+        let old_roles = item.access_info.roles.clone();
+        let old_permissions = item.access_info.permissions.clone();
+
+        // Update the access info
+        item.access_info.roles = new_roles.clone();
+        item.access_info.permissions = new_permissions.clone();
+
+        // Mark as reviewed if permissions were reduced
+        let roles_reduced = new_roles.len() < old_roles.len();
+        let permissions_reduced = new_permissions.len() < old_permissions.len();
+
+        if roles_reduced || permissions_reduced {
+            item.status = "permissions_updated".to_string();
+            review.items_reviewed += 1;
+            review.pending_approvals = review.pending_approvals.saturating_sub(1);
+            review.actions_taken.permissions_reduced += 1;
+        }
+
+        // Store permission change metadata
+        let change_metadata = serde_json::json!({
+            "updated_by": updated_by.to_string(),
+            "old_roles": old_roles,
+            "new_roles": new_roles,
+            "old_permissions": old_permissions,
+            "new_permissions": new_permissions,
+            "reason": reason,
+            "updated_at": chrono::Utc::now(),
+        });
+        review
+            .metadata
+            .insert(format!("permission_update_{}", user_id), change_metadata);
+
+        Ok(())
+    }
+
+    /// Get review items for a review
+    pub fn get_review_items(&self, review_id: &str) -> Option<&HashMap<Uuid, UserReviewItem>> {
+        self.user_review_items.get(review_id)
+    }
+
     /// Get a review by ID
     pub fn get_review(&self, review_id: &str) -> Option<&AccessReview> {
         self.active_reviews.get(review_id)
@@ -596,11 +663,6 @@ impl AccessReviewEngine {
     /// Get all active reviews
     pub fn get_all_reviews(&self) -> Vec<&AccessReview> {
         self.active_reviews.values().collect()
-    }
-
-    /// Get review items for a review
-    pub fn get_review_items(&self, review_id: &str) -> Option<&HashMap<Uuid, UserReviewItem>> {
-        self.user_review_items.get(review_id)
     }
 
     /// Check for reviews that need auto-revocation

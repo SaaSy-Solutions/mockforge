@@ -13,7 +13,7 @@ use crate::time_travel::VirtualClock;
 use crate::Config;
 use chrono::{Duration as ChronoDuration, Utc};
 use once_cell::sync::{Lazy, OnceCell};
-use rand::{rng, Rng};
+use rand::{thread_rng, Rng};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -282,11 +282,11 @@ pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> Stri
 
     // Randoms
     if out.contains("{{rand.int}}") {
-        let n: i64 = rng().random_range(0..=1_000_000);
+        let n: i64 = thread_rng().random_range(0..=1_000_000);
         out = out.replace("{{rand.int}}", &n.to_string());
     }
     if out.contains("{{rand.float}}") {
-        let n: f64 = rng().random();
+        let n: f64 = thread_rng().random();
         out = out.replace("{{rand.float}}", &format!("{:.6}", n));
     }
     out = replace_randint_ranges(&out);
@@ -343,7 +343,7 @@ pub trait FakerProvider {
     }
     /// Generate a fake email address
     fn email(&self) -> String {
-        format!("user{}@example.com", rng().random_range(1000..=9999))
+        format!("user{}@example.com", thread_rng().random_range(1000..=9999))
     }
     /// Generate a fake person name
     fn name(&self) -> String {
@@ -407,7 +407,7 @@ fn replace_randint_ranges(input: &str) -> String {
             let a: i64 = caps.get(1).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
             let b: i64 = caps.get(2).map(|m| m.as_str().parse().unwrap_or(100)).unwrap_or(100);
             let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
-            let n: i64 = rng().random_range(lo..=hi);
+            let n: i64 = thread_rng().random_range(lo..=hi);
             s = RANDINT_RE.replace(&s, n.to_string()).to_string();
         } else {
             break;
@@ -419,10 +419,6 @@ fn replace_randint_ranges(input: &str) -> String {
 /// Replace `{{ now+1d }}` style templates in input string
 ///
 /// This is a convenience wrapper around `replace_now_offset_with_time` that uses the current time.
-/// Currently kept for future templating enhancements.
-///
-/// TODO: Integrate into full templating system when date/time placeholders are implemented
-#[allow(dead_code)] // TODO: Remove when date/time template feature is implemented
 fn replace_now_offset(input: &str) -> String {
     replace_now_offset_with_time(input, Utc::now())
 }
@@ -701,15 +697,15 @@ fn replace_with_fallback(input: &str) -> String {
         out = out.replace("{{faker.uuid}}", &uuid::Uuid::new_v4().to_string());
     }
     if out.contains("{{faker.email}}") {
-        let user: String = (0..8).map(|_| (b'a' + (rng().random::<u8>() % 26)) as char).collect();
-        let dom: String = (0..6).map(|_| (b'a' + (rng().random::<u8>() % 26)) as char).collect();
+        let user: String = (0..8).map(|_| (b'a' + (thread_rng().random::<u8>() % 26)) as char).collect();
+        let dom: String = (0..6).map(|_| (b'a' + (thread_rng().random::<u8>() % 26)) as char).collect();
         out = out.replace("{{faker.email}}", &format!("{}@{}.example", user, dom));
     }
     if out.contains("{{faker.name}}") {
         let firsts = ["Alex", "Sam", "Taylor", "Jordan", "Casey", "Riley"];
         let lasts = ["Smith", "Lee", "Patel", "Garcia", "Kim", "Brown"];
-        let fi = rng().random::<u8>() as usize % firsts.len();
-        let li = rng().random::<u8>() as usize % lasts.len();
+        let fi = thread_rng().random::<u8>() as usize % firsts.len();
+        let li = thread_rng().random::<u8>() as usize % lasts.len();
         out = out.replace("{{faker.name}}", &format!("{} {}", firsts[fi], lasts[li]));
     }
     out

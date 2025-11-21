@@ -21,6 +21,8 @@ pub use validation::*;
 use crate::ai_response::RequestContext;
 use crate::openapi::response::AiGenerator;
 use crate::openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
+use crate::reality_continuum::response_trace::ResponseGenerationTrace;
+use crate::schema_diff::validation_diff;
 use crate::templating::expand_tokens as core_expand_tokens;
 use crate::{latency::LatencyInjector, overrides::Overrides, Error, Result};
 use axum::extract::{Path as AxumPath, RawQuery};
@@ -558,8 +560,70 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
-                // Return the mock response with the correct status code
+                // Capture final payload and run schema validation for trace
+                let mut trace = ResponseGenerationTrace::new();
+                trace.set_final_payload(final_response.clone());
+
+                // Extract response schema and run validation diff
+                if let Some((_status_code, response_ref)) = operation
+                    .responses
+                    .responses
+                    .iter()
+                    .filter_map(|(status, resp)| match status {
+                        openapiv3::StatusCode::Code(code) if *code == selected_status => {
+                            resp.as_item().map(|r| ((*code), r))
+                        }
+                        openapiv3::StatusCode::Range(range)
+                            if *range >= 200 && *range < 300 =>
+                        {
+                            resp.as_item().map(|r| (200, r))
+                        }
+                        _ => None,
+                    })
+                    .next()
+                    .or_else(|| {
+                        // Fallback to first 2xx response
+                        operation
+                            .responses
+                            .responses
+                            .iter()
+                            .filter_map(|(status, resp)| match status {
+                                openapiv3::StatusCode::Code(code)
+                                    if *code >= 200 && *code < 300 =>
+                                {
+                                    resp.as_item().map(|r| ((*code), r))
+                                }
+                                _ => None,
+                            })
+                            .next()
+                    })
+                {
+                    // response_ref is already a Response, not a ReferenceOr
+                    let response_item = response_ref;
+                    // Extract schema from application/json content
+                    if let Some(content) = response_item.content.get("application/json") {
+                        if let Some(schema_ref) = &content.schema {
+                            // Convert OpenAPI schema to JSON Schema Value
+                            // Try to convert the schema to JSON Schema format
+                            if let Some(schema) = schema_ref.as_item() {
+                                // Convert OpenAPI Schema to JSON Schema Value
+                                // Use serde_json::to_value as a starting point
+                                if let Ok(schema_json) = serde_json::to_value(schema) {
+                                    // Run validation diff
+                                    let validation_errors = validation_diff(
+                                        &schema_json,
+                                        &final_response,
+                                    );
+                                    trace.set_schema_validation_diff(validation_errors);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Store trace in response extensions for later retrieval by logging middleware
                 let mut response = Json(final_response).into_response();
+                response.extensions_mut().insert(trace);
                 *response.status_mut() = axum::http::StatusCode::from_u16(selected_status)
                     .unwrap_or(axum::http::StatusCode::OK);
                 response
@@ -1332,47 +1396,79 @@ impl OpenApiRouteRegistry {
                     let mockai_query = query.0;
 
                     // If MockAI is enabled, use it to process the request
-                    if let Some(mockai_arc) = mockai {
-                        let mockai_guard = mockai_arc.read().await;
+                    // CRITICAL FIX: Skip MockAI for GET, HEAD, and OPTIONS requests
+                    // These are read-only operations and should use OpenAPI response generation
+                    // MockAI's mutation analysis incorrectly treats GET requests as "Create" mutations
+                    let method_upper = route.method.to_uppercase();
+                    let should_use_mockai = matches!(
+                        method_upper.as_str(),
+                        "POST" | "PUT" | "PATCH" | "DELETE"
+                    );
 
-                        // Build MockAI request
-                        let mut mockai_headers = HashMap::new();
-                        for (k, v) in headers.iter() {
-                            mockai_headers
-                                .insert(k.to_string(), v.to_str().unwrap_or("").to_string());
-                        }
+                    if should_use_mockai {
+                        if let Some(mockai_arc) = mockai {
+                            let mockai_guard = mockai_arc.read().await;
 
-                        let mockai_request = MockAIRequest {
-                            method: route.method.clone(),
-                            path: route.path.clone(),
-                            body: body.as_ref().map(|Json(b)| b.clone()),
-                            query_params: mockai_query,
-                            headers: mockai_headers,
-                        };
-
-                        // Process request through MockAI
-                        match mockai_guard.process_request(&mockai_request).await {
-                            Ok(mockai_response) => {
-                                tracing::debug!(
-                                    "MockAI generated response with status: {}",
-                                    mockai_response.status_code
-                                );
-                                return (
-                                    axum::http::StatusCode::from_u16(mockai_response.status_code)
-                                        .unwrap_or(axum::http::StatusCode::OK),
-                                    axum::response::Json(mockai_response.body),
-                                );
+                            // Build MockAI request
+                            let mut mockai_headers = HashMap::new();
+                            for (k, v) in headers.iter() {
+                                mockai_headers
+                                    .insert(k.to_string(), v.to_str().unwrap_or("").to_string());
                             }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "MockAI processing failed for {} {}: {}, falling back to standard response",
-                                    route.method,
-                                    route.path,
-                                    e
-                                );
-                                // Fall through to standard response generation
+
+                            let mockai_request = MockAIRequest {
+                                method: route.method.clone(),
+                                path: route.path.clone(),
+                                body: body.as_ref().map(|Json(b)| b.clone()),
+                                query_params: mockai_query,
+                                headers: mockai_headers,
+                            };
+
+                            // Process request through MockAI
+                            match mockai_guard.process_request(&mockai_request).await {
+                                Ok(mockai_response) => {
+                                    // Check if MockAI returned an empty object (signals to use OpenAPI generation)
+                                    let is_empty = mockai_response.body.is_object()
+                                        && mockai_response.body.as_object()
+                                            .map(|obj| obj.is_empty())
+                                            .unwrap_or(false);
+                                    
+                                    if is_empty {
+                                        tracing::debug!(
+                                            "MockAI returned empty object for {} {}, falling back to OpenAPI response generation",
+                                            route.method,
+                                            route.path
+                                        );
+                                        // Fall through to standard OpenAPI response generation
+                                    } else {
+                                        tracing::debug!(
+                                            "MockAI generated response with status: {}",
+                                            mockai_response.status_code
+                                        );
+                                        return (
+                                            axum::http::StatusCode::from_u16(mockai_response.status_code)
+                                                .unwrap_or(axum::http::StatusCode::OK),
+                                            axum::response::Json(mockai_response.body),
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "MockAI processing failed for {} {}: {}, falling back to standard response",
+                                        route.method,
+                                        route.path,
+                                        e
+                                    );
+                                    // Fall through to standard response generation
+                                }
                             }
                         }
+                    } else {
+                        tracing::debug!(
+                            "Skipping MockAI for {} request {} - using OpenAPI response generation",
+                            method_upper,
+                            route.path
+                        );
                     }
 
                     // Fallback to standard response generation

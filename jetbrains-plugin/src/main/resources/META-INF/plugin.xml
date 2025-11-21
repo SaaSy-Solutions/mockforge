@@ -1,0 +1,80 @@
+<idea-plugin>
+    <id>com.mockforge.plugin</id>
+    <name>MockForge</name>
+    <version>0.1.0</version>
+    <vendor email="team@mockforge.dev" url="https://mockforge.dev">MockForge Team</vendor>
+
+    <description><![CDATA[
+        MockForge IDE integration for JetBrains IDEs.
+        
+        Features:
+        - Config validation for mockforge.yaml and mockforge.toml files using JSON Schema
+        - Autocomplete for configuration keys and values
+        - Generate Mock Scenario code action for OpenAPI specifications
+        - Inline preview of mock responses when hovering over endpoint references
+        - Real-time linting for MockForge configuration files
+    ]]></description>
+
+    <change-notes><![CDATA[
+        <h3>Initial Release</h3>
+        <ul>
+            <li>Config validation using JSON Schema</li>
+            <li>Autocomplete for MockForge configuration files</li>
+            <li>Generate Mock Scenario code action</li>
+            <li>Inline preview of mock responses</li>
+        </ul>
+    ]]></change-notes>
+
+    <!-- Plugin dependencies -->
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.yaml</depends>
+    <depends>com.intellij.toml</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- File type registration for MockForge config files -->
+        <fileType name="MockForge Config" implementationClass="com.mockforge.plugin.MockForgeConfigFileType" extensions="mockforge.yaml;mockforge.yml;mockforge.toml" />
+        
+        <!-- Config validation inspection -->
+        <localInspection 
+            language="YAML" 
+            shortName="MockForgeConfigValidation"
+            displayName="MockForge Config Validation"
+            groupName="MockForge"
+            enabledByDefault="true"
+            implementationClass="com.mockforge.plugin.inspections.MockForgeConfigInspection" />
+        
+        <localInspection 
+            language="TOML" 
+            shortName="MockForgeConfigValidationToml"
+            displayName="MockForge Config Validation"
+            groupName="MockForge"
+            enabledByDefault="true"
+            implementationClass="com.mockforge.plugin.inspections.MockForgeConfigInspection" />
+        
+        <!-- Hover provider for config documentation -->
+        <lang.documentationProvider language="YAML" implementationClass="com.mockforge.plugin.MockForgeDocumentationProvider" />
+        <lang.documentationProvider language="TOML" implementationClass="com.mockforge.plugin.MockForgeDocumentationProvider" />
+        
+        <!-- Completion contributor for autocomplete -->
+        <completion.contributor language="YAML" implementationClass="com.mockforge.plugin.MockForgeCompletionContributor" />
+        <completion.contributor language="TOML" implementationClass="com.mockforge.plugin.MockForgeCompletionContributor" />
+        
+        <!-- Line marker provider for code files (endpoint detection) -->
+        <codeInsight.lineMarkerProvider language="JavaScript" implementationClass="com.mockforge.plugin.MockForgeLineMarkerProvider" />
+        <codeInsight.lineMarkerProvider language="TypeScript" implementationClass="com.mockforge.plugin.MockForgeLineMarkerProvider" />
+        <codeInsight.lineMarkerProvider language="Python" implementationClass="com.mockforge.plugin.MockForgeLineMarkerProvider" />
+    </extensions>
+
+    <actions>
+        <!-- Generate Mock Scenario intention action -->
+        <action 
+            id="MockForge.GenerateMockScenario"
+            class="com.mockforge.plugin.actions.GenerateMockScenarioAction"
+            text="Generate MockForge Scenario"
+            description="Generate MockForge scenario file from OpenAPI specification">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <add-to-group group-id="CodeMenu" anchor="first"/>
+        </action>
+    </actions>
+</idea-plugin>
+

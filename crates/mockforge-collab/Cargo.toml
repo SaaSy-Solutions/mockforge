@@ -68,6 +68,17 @@ similar = "2.6"
 # Hashing for state snapshots
 sha2 = "0.10"
 
+# Azure Storage support (optional)
+azure_storage_blobs = { version = "0.19", optional = true }
+azure_identity = { version = "0.20", optional = true }
+
+# Google Cloud Storage support (optional)
+google-cloud-storage = { version = "0.12", optional = true }
+
+# AWS S3 support (optional)
+aws-sdk-s3 = { version = "1", optional = true }
+aws-config = { version = "1", optional = true }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tempfile = "3.13"
@@ -80,3 +91,6 @@ default = ["sqlite"]
 sqlite = []
 postgres = []
 cloud = []
+azure = ["azure_storage_blobs", "azure_identity"]
+gcs = ["google-cloud-storage"]
+s3 = ["aws-sdk-s3", "aws-config"]

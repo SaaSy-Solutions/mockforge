@@ -7,7 +7,7 @@ use crate::{
     faker::EnhancedFaker,
     rag::{RagConfig, RagEngine},
 };
-use mockforge_core::{Error, Result};
+use crate::{Error, Result};
 use rand::Rng;
 use regex::Regex;
 use serde_json::{json, Value};

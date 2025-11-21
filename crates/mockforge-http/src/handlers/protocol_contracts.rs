@@ -28,6 +28,14 @@ use base64::{engine::general_purpose, Engine as _};
 pub struct ProtocolContractState {
     /// Protocol contract registry
     pub registry: Arc<RwLock<ProtocolContractRegistry>>,
+    /// Optional drift budget engine for evaluating contract changes
+    pub drift_engine: Option<Arc<mockforge_core::contract_drift::DriftBudgetEngine>>,
+    /// Optional incident manager for creating drift incidents
+    pub incident_manager: Option<Arc<mockforge_core::incidents::IncidentManager>>,
+    /// Optional fitness function registry for evaluating fitness rules
+    pub fitness_registry: Option<Arc<RwLock<mockforge_core::contract_drift::FitnessFunctionRegistry>>>,
+    /// Optional consumer impact analyzer
+    pub consumer_analyzer: Option<Arc<RwLock<mockforge_core::contract_drift::ConsumerImpactAnalyzer>>>,
 }
 
 /// Request to create a gRPC contract
@@ -619,12 +627,167 @@ pub async fn compare_contracts_handler(
             )
         })?;
 
+    // Evaluate drift and create incidents if drift engine is available
+    let mut drift_evaluation = None;
+    if let (Some(ref drift_engine), Some(ref incident_manager)) =
+        (&state.drift_engine, &state.incident_manager) {
+
+        // Get protocol type
+        let protocol = new_contract.protocol();
+
+        // For each operation in the contract, evaluate drift
+        let operations = new_contract.operations();
+        for operation in operations {
+            let operation_id = &operation.id;
+
+            // Determine endpoint and method from operation type
+            let (endpoint, method) = match &operation.operation_type {
+                mockforge_core::contract_drift::protocol_contracts::OperationType::HttpEndpoint { path, method } => {
+                    (path.clone(), method.clone())
+                }
+                mockforge_core::contract_drift::protocol_contracts::OperationType::GrpcMethod { service, method } => {
+                    (format!("{}.{}", service, method), "grpc".to_string())
+                }
+                mockforge_core::contract_drift::protocol_contracts::OperationType::WebSocketMessage { message_type, .. } => {
+                    (message_type.clone(), "websocket".to_string())
+                }
+                mockforge_core::contract_drift::protocol_contracts::OperationType::MqttTopic { topic, qos: _ } => {
+                    (topic.clone(), "mqtt".to_string())
+                }
+                mockforge_core::contract_drift::protocol_contracts::OperationType::KafkaTopic { topic, key_schema: _, value_schema: _ } => {
+                    (topic.clone(), "kafka".to_string())
+                }
+            };
+
+            // Evaluate drift budget (for protocol contracts, we need to use evaluate_with_specs equivalent)
+            // Since we don't have OpenAPI specs for protocol contracts, we'll use a simplified evaluation
+            // that works with the diff result directly
+            let drift_result = drift_engine.evaluate(
+                &diff_result,
+                &endpoint,
+                &method,
+            );
+
+            // Run fitness tests if registry is available
+            let mut drift_result_with_fitness = drift_result.clone();
+            if let Some(ref fitness_registry) = state.fitness_registry {
+                let rt = tokio::runtime::Handle::try_current();
+                if let Ok(handle) = rt {
+                    let fitness_results = handle.block_on(async {
+                       let guard = fitness_registry.read().await;
+                       guard.evaluate_all_protocol(
+                           Some(old_contract),
+                           new_contract,
+                           &diff_result,
+                           operation_id,
+                           None, // workspace_id
+                           None, // service_name
+                       )
+                    });
+                    if let Ok(results) = fitness_results {
+                        drift_result_with_fitness.fitness_test_results = results;
+                        if drift_result_with_fitness.fitness_test_results.iter().any(|r| !r.passed) {
+                            drift_result_with_fitness.should_create_incident = true;
+                        }
+                    }
+                }
+            }
+
+            // Analyze consumer impact if analyzer is available
+            // Use operation_id for more flexible protocol-specific matching
+            if let Some(ref consumer_analyzer) = state.consumer_analyzer {
+                let rt = tokio::runtime::Handle::try_current();
+                if let Ok(handle) = rt {
+                    let impact = handle.block_on(async {
+                        let guard = consumer_analyzer.read().await;
+                        // Use analyze_impact_with_operation_id for better protocol support
+                        guard.analyze_impact_with_operation_id(&endpoint, &method, Some(operation_id))
+                    });
+                    if let Some(impact) = impact {
+                        drift_result_with_fitness.consumer_impact = Some(impact);
+                    }
+                }
+            }
+
+            // Create incident if budget is exceeded or breaking changes detected
+            if drift_result_with_fitness.should_create_incident {
+                let incident_type = if drift_result_with_fitness.breaking_changes > 0 {
+                    mockforge_core::incidents::types::IncidentType::BreakingChange
+                } else {
+                    mockforge_core::incidents::types::IncidentType::ThresholdExceeded
+                };
+
+                let severity = if drift_result_with_fitness.breaking_changes > 0 {
+                    mockforge_core::incidents::types::IncidentSeverity::High
+                } else if drift_result_with_fitness.potentially_breaking_changes > 0 {
+                    mockforge_core::incidents::types::IncidentSeverity::Medium
+                } else {
+                    mockforge_core::incidents::types::IncidentSeverity::Low
+                };
+
+                let details = serde_json::json!({
+                    "breaking_changes": drift_result_with_fitness.breaking_changes,
+                    "potentially_breaking_changes": drift_result_with_fitness.potentially_breaking_changes,
+                    "non_breaking_changes": drift_result_with_fitness.non_breaking_changes,
+                    "budget_exceeded": drift_result_with_fitness.budget_exceeded,
+                    "operation_id": operation_id,
+                    "operation_type": format!("{:?}", operation.operation_type),
+                });
+
+                let before_sample = Some(serde_json::json!({
+                    "contract_id": old_contract.contract_id(),
+                    "version": old_contract.version(),
+                    "protocol": format!("{:?}", old_contract.protocol()),
+                    "operation_id": operation_id,
+                }));
+
+                let after_sample = Some(serde_json::json!({
+                    "contract_id": new_contract.contract_id(),
+                    "version": new_contract.version(),
+                    "protocol": format!("{:?}", new_contract.protocol()),
+                    "operation_id": operation_id,
+                    "mismatches": diff_result.mismatches,
+                }));
+
+                let _incident = incident_manager
+                    .create_incident_with_samples(
+                        endpoint.clone(),
+                        method.clone(),
+                        incident_type,
+                        severity,
+                        details,
+                        None, // budget_id
+                        None, // workspace_id
+                        None, // sync_cycle_id
+                        None, // contract_diff_id
+                        before_sample,
+                        after_sample,
+                        Some(drift_result_with_fitness.fitness_test_results.clone()),
+                        drift_result_with_fitness.consumer_impact.clone(),
+                        Some(protocol),
+                    )
+                    .await;
+            }
+
+            drift_evaluation = Some(serde_json::json!({
+                "operation_id": operation_id,
+                "endpoint": endpoint,
+                "method": method,
+                "budget_exceeded": drift_result_with_fitness.budget_exceeded,
+                "breaking_changes": drift_result_with_fitness.breaking_changes,
+                "fitness_test_results": drift_result_with_fitness.fitness_test_results,
+                "consumer_impact": drift_result_with_fitness.consumer_impact,
+            }));
+        }
+    }
+
     Ok(Json(serde_json::json!({
         "matches": diff_result.matches,
         "confidence": diff_result.confidence,
         "mismatches": diff_result.mismatches,
         "recommendations": diff_result.recommendations,
         "corrections": diff_result.corrections,
+        "drift_evaluation": drift_evaluation,
     })))
 }
 

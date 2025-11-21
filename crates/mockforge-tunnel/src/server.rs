@@ -4,6 +4,7 @@
 //! and local development. It's not production-ready but sufficient for testing.
 
 use crate::{TunnelConfig, TunnelStatus};
+use async_trait::async_trait;
 use axum::{
     body::Body,
     extract::{Request, State},
@@ -20,6 +21,66 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+/// Trait for tunnel storage backends
+#[async_trait]
+pub trait TunnelStoreTrait: Send + Sync {
+    async fn create_tunnel(&self, config: &TunnelConfig) -> crate::Result<TunnelStatus>;
+    async fn get_tunnel(&self, tunnel_id: &str) -> crate::Result<TunnelStatus>;
+    async fn delete_tunnel(&self, tunnel_id: &str) -> crate::Result<()>;
+    async fn list_tunnels(&self) -> Vec<TunnelStatus>;
+    async fn get_tunnel_by_subdomain(&self, subdomain: &str) -> crate::Result<TunnelStatus>;
+    async fn get_tunnel_by_id(&self, tunnel_id: &str) -> crate::Result<TunnelStatus>;
+    async fn record_request(&self, tunnel_id: &str, bytes: u64);
+}
+
+/// Wrapper type for tunnel store trait objects
+/// This allows us to use trait objects with Axum's State while maintaining Clone
+#[derive(Clone)]
+pub struct TunnelStoreWrapper {
+    inner: Arc<dyn TunnelStoreTrait>,
+}
+
+impl TunnelStoreWrapper {
+    pub fn new(store: Arc<dyn TunnelStoreTrait>) -> Self {
+        Self { inner: store }
+    }
+}
+
+#[async_trait]
+impl TunnelStoreTrait for TunnelStoreWrapper {
+    async fn create_tunnel(&self, config: &TunnelConfig) -> crate::Result<TunnelStatus> {
+        self.inner.create_tunnel(config).await
+    }
+
+    async fn get_tunnel(&self, tunnel_id: &str) -> crate::Result<TunnelStatus> {
+        self.inner.get_tunnel(tunnel_id).await
+    }
+
+    async fn delete_tunnel(&self, tunnel_id: &str) -> crate::Result<()> {
+        self.inner.delete_tunnel(tunnel_id).await
+    }
+
+    async fn list_tunnels(&self) -> Vec<TunnelStatus> {
+        self.inner.list_tunnels().await
+    }
+
+    async fn get_tunnel_by_subdomain(&self, subdomain: &str) -> crate::Result<TunnelStatus> {
+        self.inner.get_tunnel_by_subdomain(subdomain).await
+    }
+
+    async fn get_tunnel_by_id(&self, tunnel_id: &str) -> crate::Result<TunnelStatus> {
+        self.inner.get_tunnel_by_id(tunnel_id).await
+    }
+
+    async fn record_request(&self, tunnel_id: &str, bytes: u64) {
+        self.inner.record_request(tunnel_id, bytes).await
+    }
+
+    async fn cleanup_expired(&self) -> crate::Result<u64> {
+        self.inner.cleanup_expired().await
+    }
+}
 
 /// In-memory tunnel store
 #[derive(Clone)]
@@ -136,6 +197,37 @@ impl TunnelStore {
     }
 }
 
+#[async_trait]
+impl TunnelStoreTrait for TunnelStore {
+    async fn create_tunnel(&self, config: &TunnelConfig) -> crate::Result<TunnelStatus> {
+        self.create_tunnel(config).await
+    }
+
+    async fn get_tunnel(&self, tunnel_id: &str) -> crate::Result<TunnelStatus> {
+        self.get_tunnel(tunnel_id).await
+    }
+
+    async fn delete_tunnel(&self, tunnel_id: &str) -> crate::Result<()> {
+        self.delete_tunnel(tunnel_id).await
+    }
+
+    async fn list_tunnels(&self) -> Vec<TunnelStatus> {
+        self.list_tunnels().await
+    }
+
+    async fn get_tunnel_by_subdomain(&self, subdomain: &str) -> crate::Result<TunnelStatus> {
+        self.get_tunnel_by_subdomain(subdomain).await
+    }
+
+    async fn get_tunnel_by_id(&self, tunnel_id: &str) -> crate::Result<TunnelStatus> {
+        self.get_tunnel_by_id(tunnel_id).await
+    }
+
+    async fn record_request(&self, tunnel_id: &str, bytes: u64) {
+        self.record_request(tunnel_id, bytes).await
+    }
+}
+
 /// Create tunnel API handler
 async fn create_tunnel_handler(
     State(store): State<TunnelStore>,
@@ -163,7 +255,7 @@ async fn create_tunnel_handler(
 
 /// Get tunnel status API handler
 async fn get_tunnel_handler(
-    State(store): State<TunnelStore>,
+    State(store): State<TunnelStoreWrapper>,
     axum::extract::Path(tunnel_id): axum::extract::Path<String>,
 ) -> Result<Json<TunnelStatus>, (StatusCode, String)> {
     match store.get_tunnel(&tunnel_id).await {
@@ -174,7 +266,7 @@ async fn get_tunnel_handler(
 
 /// Delete tunnel API handler
 async fn delete_tunnel_handler(
-    State(store): State<TunnelStore>,
+    State(store): State<TunnelStoreWrapper>,
     axum::extract::Path(tunnel_id): axum::extract::Path<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     match store.delete_tunnel(&tunnel_id).await {
@@ -184,7 +276,7 @@ async fn delete_tunnel_handler(
 }
 
 /// List tunnels API handler
-async fn list_tunnels_handler(State(store): State<TunnelStore>) -> Json<Vec<TunnelStatus>> {
+async fn list_tunnels_handler(State(store): State<TunnelStoreWrapper>) -> Json<Vec<TunnelStatus>> {
     let tunnels = store.list_tunnels().await;
     Json(tunnels)
 }
@@ -226,7 +318,7 @@ fn extract_subdomain(host: &str) -> Option<String> {
 
 /// Path-based proxy handler for /tunnel/<tunnel_id>/<path>
 async fn path_based_proxy_handler(
-    State(store): State<TunnelStore>,
+    State(store): State<TunnelStoreWrapper>,
     axum::extract::Path((tunnel_id, path)): axum::extract::Path<(String, String)>,
     method: Method,
     uri: Uri,
@@ -269,7 +361,7 @@ async fn path_based_proxy_handler(
 
 /// Host-header-based proxy handler (fallback)
 async fn host_header_proxy_handler(
-    State(store): State<TunnelStore>,
+    State(store): State<TunnelStoreWrapper>,
     headers: HeaderMap,
     method: Method,
     uri: Uri,
@@ -299,7 +391,7 @@ async fn host_header_proxy_handler(
 
 /// Forward a request to the tunnel's local URL
 async fn forward_request(
-    store: &TunnelStore,
+    store: &TunnelStoreWrapper,
     tunnel: &TunnelStatus,
     method: &Method,
     uri: &Uri,
@@ -457,7 +549,7 @@ async fn forward_request(
 
 /// Root path handler for /tunnel/<tunnel_id> or /tunnel/<tunnel_id>/
 async fn root_path_proxy_handler(
-    State(store): State<TunnelStore>,
+    State(store): State<TunnelStoreWrapper>,
     axum::extract::Path(tunnel_id): axum::extract::Path<String>,
     method: Method,
     uri: Uri,
@@ -478,7 +570,7 @@ async fn root_path_proxy_handler(
 }
 
 /// Create the tunnel server router
-pub fn create_tunnel_server_router() -> Router<TunnelStore> {
+pub fn create_tunnel_server_router() -> Router<TunnelStoreWrapper> {
     Router::new()
         .route("/health", get(health_handler))
         .route("/api/tunnels", post(create_tunnel_handler))
@@ -498,7 +590,8 @@ pub fn create_tunnel_server_router() -> Router<TunnelStore> {
 /// Start a test tunnel server
 pub async fn start_test_server(port: u16) -> crate::Result<SocketAddr> {
     let store = TunnelStore::new();
-    let router = create_tunnel_server_router().with_state(store);
+    let store_wrapper = TunnelStoreWrapper::new(Arc::new(store));
+    let router = create_tunnel_server_router().with_state(store_wrapper);
 
     let addr = if port == 0 {
         // Bind to any available port

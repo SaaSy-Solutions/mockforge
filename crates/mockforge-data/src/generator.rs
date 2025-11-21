@@ -6,7 +6,7 @@ use crate::{
     schema::SchemaDefinition,
     DataConfig, GenerationResult,
 };
-use mockforge_core::Result;
+use crate::Result;
 use std::time::Instant;
 
 /// Data generator for creating synthetic datasets
@@ -243,7 +243,7 @@ impl BatchGenerator {
 /// Utility functions for data generation
 pub mod utils {
     use super::*;
-    use mockforge_core::Result;
+    use crate::Result;
 
     /// Generate sample data from a simple schema definition
     pub async fn generate_sample_data(

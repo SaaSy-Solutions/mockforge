@@ -1,5 +1,5 @@
 import { logger } from '@/utils/logger';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Activity,
   Plus,
@@ -14,8 +14,11 @@ import {
   Folder,
   Tag,
   Route,
+  BarChart3,
+  TrendingUp,
 } from 'lucide-react';
-import { driftApi, type FitnessFunction, type CreateFitnessFunctionRequest, type FitnessTestResult } from '../services/driftApi';
+import { driftApi, type FitnessFunction, type CreateFitnessFunctionRequest, type FitnessTestResult, type DriftIncident } from '../services/driftApi';
+import { useDriftIncidents } from '../hooks/useApi';
 import {
   PageHeader,
   ModernCard,
@@ -453,18 +456,237 @@ function FitnessFunctionForm({
   );
 }
 
+// Global fitness summary component
+function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
+  // Aggregate fitness test results from all incidents
+  const summary = useMemo(() => {
+    let totalTests = 0;
+    let passedTests = 0;
+    let failedTests = 0;
+    const endpointResults: Map<string, { passed: number; failed: number; total: number }> = new Map();
+    const functionResults: Map<string, { passed: number; failed: number; total: number }> = new Map();
+
+    incidents.forEach((incident) => {
+      if (incident.fitness_test_results && incident.fitness_test_results.length > 0) {
+        const endpointKey = `${incident.method} ${incident.endpoint}`;
+        
+        incident.fitness_test_results.forEach((result) => {
+          totalTests++;
+          if (result.passed) {
+            passedTests++;
+          } else {
+            failedTests++;
+          }
+
+          // Aggregate by endpoint
+          const endpointStats = endpointResults.get(endpointKey) || { passed: 0, failed: 0, total: 0 };
+          endpointStats.total++;
+          if (result.passed) {
+            endpointStats.passed++;
+          } else {
+            endpointStats.failed++;
+          }
+          endpointResults.set(endpointKey, endpointStats);
+
+          // Aggregate by function
+          const functionName = result.function_name || result.function_id;
+          const functionStats = functionResults.get(functionName) || { passed: 0, failed: 0, total: 0 };
+          functionStats.total++;
+          if (result.passed) {
+            functionStats.passed++;
+          } else {
+            functionStats.failed++;
+          }
+          functionResults.set(functionName, functionStats);
+        });
+      }
+    });
+
+    return {
+      totalTests,
+      passedTests,
+      failedTests,
+      passRate: totalTests > 0 ? (passedTests / totalTests) * 100 : 0,
+      endpointResults: Array.from(endpointResults.entries()).map(([endpoint, stats]) => ({
+        endpoint,
+        ...stats,
+      })),
+      functionResults: Array.from(functionResults.entries()).map(([functionName, stats]) => ({
+        functionName,
+        ...stats,
+      })),
+    };
+  }, [incidents]);
+
+  if (summary.totalTests === 0) {
+    return (
+      <EmptyState
+        icon={Activity}
+        title="No Fitness Test Results"
+        description="Fitness test results will appear here once contract drift is detected"
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <ModernCard className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Total Tests</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                {summary.totalTests}
+              </p>
+            </div>
+            <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+              <BarChart3 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+          </div>
+        </ModernCard>
+
+        <ModernCard className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Passed</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                {summary.passedTests}
+              </p>
+            </div>
+            <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
+              <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+            </div>
+          </div>
+        </ModernCard>
+
+        <ModernCard className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Failed</p>
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
+                {summary.failedTests}
+              </p>
+            </div>
+            <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-lg">
+              <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
+            </div>
+          </div>
+        </ModernCard>
+
+        <ModernCard className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Pass Rate</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                {summary.passRate.toFixed(1)}%
+              </p>
+            </div>
+            <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+              <TrendingUp className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            </div>
+          </div>
+        </ModernCard>
+      </div>
+
+      {/* Per-Endpoint Results */}
+      {summary.endpointResults.length > 0 && (
+        <Section title="Per-Endpoint Fitness Results" subtitle="Fitness test results grouped by endpoint">
+          <ModernCard>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Endpoint</th>
+                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Total</th>
+                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Passed</th>
+                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Failed</th>
+                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Pass Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.endpointResults.map((result, idx) => {
+                    const passRate = result.total > 0 ? (result.passed / result.total) * 100 : 0;
+                    return (
+                      <tr key={idx} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="p-3 text-sm font-mono text-gray-900 dark:text-gray-100">{result.endpoint}</td>
+                        <td className="p-3 text-sm text-gray-600 dark:text-gray-400">{result.total}</td>
+                        <td className="p-3 text-sm text-green-600 dark:text-green-400">{result.passed}</td>
+                        <td className="p-3 text-sm text-red-600 dark:text-red-400">{result.failed}</td>
+                        <td className="p-3">
+                          <span className={`text-sm font-semibold ${passRate >= 80 ? 'text-green-600 dark:text-green-400' : passRate >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {passRate.toFixed(1)}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </ModernCard>
+        </Section>
+      )}
+
+      {/* Per-Function Results */}
+      {summary.functionResults.length > 0 && (
+        <Section title="Per-Function Results" subtitle="Fitness test results grouped by function">
+          <ModernCard>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Function</th>
+                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Total</th>
+                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Passed</th>
+                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Failed</th>
+                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Pass Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.functionResults.map((result, idx) => {
+                    const passRate = result.total > 0 ? (result.passed / result.total) * 100 : 0;
+                    return (
+                      <tr key={idx} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="p-3 text-sm text-gray-900 dark:text-gray-100">{result.functionName}</td>
+                        <td className="p-3 text-sm text-gray-600 dark:text-gray-400">{result.total}</td>
+                        <td className="p-3 text-sm text-green-600 dark:text-green-400">{result.passed}</td>
+                        <td className="p-3 text-sm text-red-600 dark:text-red-400">{result.failed}</td>
+                        <td className="p-3">
+                          <span className={`text-sm font-semibold ${passRate >= 80 ? 'text-green-600 dark:text-green-400' : passRate >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {passRate.toFixed(1)}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </ModernCard>
+        </Section>
+      )}
+    </div>
+  );
+}
+
 export function FitnessFunctionsPage() {
   const queryClient = useQueryClient();
   const [editingFunction, setEditingFunction] = useState<FitnessFunction | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [testResults, setTestResults] = useState<FitnessTestResult[] | null>(null);
   const [showTestResults, setShowTestResults] = useState(false);
+  const [showSummary, setShowSummary] = useState(true);
 
   // Fetch fitness functions
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['fitness-functions'],
     queryFn: () => driftApi.listFitnessFunctions(),
   });
+
+  // Fetch incidents to aggregate fitness results
+  const { data: incidentsData } = useDriftIncidents({}, { refetchInterval: 10000 });
+  const incidents = incidentsData?.incidents || [];
 
   // Create mutation
   const createMutation = useMutation({
@@ -557,14 +779,26 @@ export function FitnessFunctionsPage() {
         <div className="text-sm text-gray-600 dark:text-gray-400">
           {functions.length} fitness function{functions.length !== 1 ? 's' : ''} registered
         </div>
-        <Button onClick={() => {
-          setEditingFunction(null);
-          setShowForm(true);
-        }}>
-          <Plus className="w-4 h-4 mr-2" />
-          Create Fitness Function
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowSummary(!showSummary)}>
+            {showSummary ? 'Hide' : 'Show'} Summary
+          </Button>
+          <Button onClick={() => {
+            setEditingFunction(null);
+            setShowForm(true);
+          }}>
+            <Plus className="w-4 h-4 mr-2" />
+            Create Fitness Function
+          </Button>
+        </div>
       </div>
+
+      {/* Global Fitness Summary */}
+      {showSummary && (
+        <Section title="Global Fitness Summary" subtitle="Aggregate fitness test results across all endpoints">
+          <GlobalFitnessSummary incidents={incidents} />
+        </Section>
+      )}
 
       {/* Fitness Functions List */}
       <Section title="Registered Fitness Functions">

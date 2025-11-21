@@ -2,6 +2,7 @@
 
 use clap::Subcommand;
 use mockforge_plugin_loader::{InstallOptions, PluginInstaller, PluginLoaderConfig, PluginSource};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
@@ -347,6 +348,7 @@ async fn handle_plugin_init(
 ) -> anyhow::Result<()> {
     use std::fs;
     use std::path::Path;
+    use std::process::Command;
 
     // Validate plugin type
     let valid_types = [
@@ -375,22 +377,36 @@ async fn handle_plugin_init(
         );
     }
 
-    // Create output directory
+    // Remove existing directory if force is enabled
     if output_dir.exists() && force {
         fs::remove_dir_all(&output_dir)?;
     }
-    fs::create_dir_all(&output_dir)?;
 
     println!("🚀 Creating new {} plugin: {}", plugin_type, name);
 
-    // Get template directory
-    let template_dir = get_template_dir()?;
+    // Try to use cargo-generate if available
+    let cargo_generate_available = Command::new("cargo-generate")
+        .arg("--version")
+        .output()
+        .is_ok();
 
-    // Copy template files
-    copy_template_files(&template_dir, &output_dir, &name, &plugin_type)?;
+    if cargo_generate_available {
+        // Use cargo-generate to scaffold the project
+        use_cargo_generate(&name, &plugin_type, &output_dir).await?;
+    } else {
+        // Fall back to manual file copying
+        println!("⚠️  cargo-generate not found, using manual template copying");
+        println!("   Install cargo-generate for better template support: cargo install cargo-generate");
+        
+        // Get template directory
+        let template_dir = get_template_dir()?;
 
-    // Generate plugin-specific code
-    generate_plugin_code(&output_dir, &name, &plugin_type)?;
+        // Copy template files
+        copy_template_files(&template_dir, &output_dir, &name, &plugin_type)?;
+
+        // Generate plugin-specific code
+        generate_plugin_code(&output_dir, &name, &plugin_type)?;
+    }
 
     println!("✅ Plugin project created successfully!");
     println!("\nNext steps:");
@@ -400,6 +416,103 @@ async fn handle_plugin_init(
     println!("  4. Build: cargo build --target wasm32-wasi --release");
     println!("  5. Test: cargo test");
     println!("  6. Install: mockforge plugin install .");
+
+    Ok(())
+}
+
+/// Use cargo-generate to scaffold a plugin project
+async fn use_cargo_generate(
+    plugin_name: &str,
+    plugin_type: &str,
+    output_dir: &Path,
+) -> anyhow::Result<()> {
+    use std::process::Command;
+    use std::env;
+
+    // Get template directory
+    let template_dir = get_template_dir()?;
+    
+    // Convert to absolute path
+    let template_path = template_dir.canonicalize()
+        .or_else(|_| std::env::current_dir().map(|cwd| cwd.join(&template_dir)))?;
+
+    println!("  📦 Using cargo-generate to scaffold plugin...");
+
+    // Generate a title from the name (capitalize first letter of each word)
+    let plugin_title = plugin_name
+        .split('-')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    // Build cargo-generate command with non-interactive mode
+    let mut cmd = Command::new("cargo-generate");
+    cmd.arg("generate")
+        .arg("--path")
+        .arg(&template_path)
+        .arg("--name")
+        .arg(plugin_name)
+        .arg("--silent") // Non-interactive mode
+        // Define template variables using --define flags
+        .arg("--define")
+        .arg(format!("plugin_name={}", plugin_name))
+        .arg("--define")
+        .arg(format!("plugin_type={}", plugin_type))
+        .arg("--define")
+        .arg(format!("plugin_title={}", plugin_title))
+        .arg("--define")
+        .arg(format!("plugin_description=MockForge {} plugin", plugin_type))
+        .arg("--define")
+        .arg("author_name=Your Name")
+        .arg("--define")
+        .arg("author_email=your.email@example.com")
+        .arg("--define")
+        .arg("max_memory_mb=10")
+        .arg("--define")
+        .arg("max_cpu_time_ms=1000")
+        .arg("--define")
+        .arg("allow_network=false")
+        .arg("--define")
+        .arg("allow_filesystem=false");
+
+    // Set the output directory parent (cargo-generate creates the directory)
+    // cargo-generate creates the directory with the name specified by --name
+    let parent_dir = output_dir.parent()
+        .unwrap_or_else(|| Path::new("."));
+    
+    cmd.current_dir(parent_dir);
+
+    // Execute cargo-generate
+    let output = cmd.output()
+        .map_err(|e| anyhow::anyhow!("Failed to execute cargo-generate: {}. Install it with: cargo install cargo-generate", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        eprintln!("cargo-generate stderr: {}", stderr);
+        eprintln!("cargo-generate stdout: {}", stdout);
+        anyhow::bail!("cargo-generate failed to create plugin project");
+    }
+
+    // If output directory name doesn't match, rename it
+    let generated_dir = parent_dir.join(plugin_name);
+    if generated_dir != output_dir && generated_dir.exists() {
+        if output_dir.exists() {
+            fs::remove_dir_all(&output_dir)?;
+        }
+        fs::rename(&generated_dir, output_dir)?;
+    }
+
+    println!("  ✓ Plugin scaffolded using cargo-generate");
+
+    // Generate plugin-specific code (still needed for type-specific implementations)
+    generate_plugin_code(output_dir, plugin_name, plugin_type)?;
 
     Ok(())
 }

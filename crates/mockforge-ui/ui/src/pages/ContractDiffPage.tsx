@@ -33,6 +33,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AIStudioNav } from '../components/ai/AIStudioNav';
 
 // Confidence indicator component
 function ConfidenceIndicator({ confidence }: { confidence: number }) {
@@ -77,6 +78,15 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
     );
   }
 
+  // Check if any mismatch has classification metadata
+  const hasClassification = mismatches.some(m => 
+    m.context && (m.context.is_additive !== undefined || m.context.is_breaking !== undefined)
+  );
+  
+  // Check if any mismatch has schema format or protocol info
+  const hasSchemaFormat = mismatches.some(m => m.context?.schema_format);
+  const hasProtocolInfo = mismatches.some(m => m.context?.service || m.context?.method);
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
@@ -84,37 +94,112 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
           <tr className="border-b border-gray-200">
             <th className="text-left p-3 font-semibold text-sm text-gray-700">Path</th>
             <th className="text-left p-3 font-semibold text-sm text-gray-700">Type</th>
+            {hasClassification && (
+              <th className="text-left p-3 font-semibold text-sm text-gray-700">Classification</th>
+            )}
+            {hasSchemaFormat && (
+              <th className="text-left p-3 font-semibold text-sm text-gray-700">Schema Format</th>
+            )}
+            {hasProtocolInfo && (
+              <th className="text-left p-3 font-semibold text-sm text-gray-700">Protocol Info</th>
+            )}
             <th className="text-left p-3 font-semibold text-sm text-gray-700">Severity</th>
             <th className="text-left p-3 font-semibold text-sm text-gray-700">Confidence</th>
             <th className="text-left p-3 font-semibold text-sm text-gray-700">Description</th>
           </tr>
         </thead>
         <tbody>
-          {mismatches.map((mismatch, idx) => (
-            <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-              <td className="p-3 text-sm font-mono text-gray-900">{mismatch.path}</td>
-              <td className="p-3 text-sm text-gray-600">{mismatch.mismatch_type}</td>
-              <td className="p-3">
-                <SeverityBadge severity={mismatch.severity} />
-              </td>
-              <td className="p-3">
-                <ConfidenceIndicator confidence={mismatch.confidence} />
-              </td>
-              <td className="p-3 text-sm text-gray-700">
-                <div>{mismatch.description}</div>
-                {mismatch.expected && (
-                  <div className="mt-1 text-xs text-gray-500">
-                    <span className="font-semibold">Expected:</span> {mismatch.expected}
-                  </div>
+          {mismatches.map((mismatch, idx) => {
+            const isAdditive = mismatch.context?.is_additive === true;
+            const isBreaking = mismatch.context?.is_breaking === true;
+            const changeCategory = mismatch.context?.change_category as string | undefined;
+            const schemaFormat = mismatch.context?.schema_format as string | undefined;
+            const service = mismatch.context?.service as string | undefined;
+            const method = mismatch.context?.method as string | undefined;
+            const fieldName = mismatch.context?.field_name as string | undefined;
+            
+            return (
+              <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="p-3 text-sm font-mono text-gray-900">{mismatch.path}</td>
+                <td className="p-3 text-sm text-gray-600">{mismatch.mismatch_type}</td>
+                {hasClassification && (
+                  <td className="p-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isBreaking && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                          Breaking
+                        </span>
+                      )}
+                      {isAdditive && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">
+                          Additive
+                        </span>
+                      )}
+                      {changeCategory && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {changeCategory.replace(/_/g, ' ')}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                 )}
-                {mismatch.actual && (
-                  <div className="mt-1 text-xs text-gray-500">
-                    <span className="font-semibold">Actual:</span> {mismatch.actual}
-                  </div>
+                {hasSchemaFormat && (
+                  <td className="p-3">
+                    {schemaFormat && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                        {schemaFormat.replace(/_/g, ' ').toUpperCase()}
+                      </span>
+                    )}
+                  </td>
                 )}
-              </td>
-            </tr>
-          ))}
+                {hasProtocolInfo && (
+                  <td className="p-3">
+                    <div className="flex flex-col gap-1 text-xs">
+                      {service && (
+                        <span className="text-gray-600 dark:text-gray-400">
+                          <span className="font-semibold">Service:</span> {service}
+                        </span>
+                      )}
+                      {method && (
+                        <span className="text-gray-600 dark:text-gray-400">
+                          <span className="font-semibold">Method:</span> {method}
+                        </span>
+                      )}
+                      {fieldName && (
+                        <span className="text-gray-600 dark:text-gray-400">
+                          <span className="font-semibold">Field:</span> {fieldName}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                )}
+                <td className="p-3">
+                  <SeverityBadge severity={mismatch.severity} />
+                </td>
+                <td className="p-3">
+                  <ConfidenceIndicator confidence={mismatch.confidence} />
+                </td>
+                <td className="p-3 text-sm text-gray-700">
+                  <div>{mismatch.description}</div>
+                  {mismatch.expected && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      <span className="font-semibold">Expected:</span> {mismatch.expected}
+                    </div>
+                  )}
+                  {mismatch.actual && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      <span className="font-semibold">Actual:</span> {mismatch.actual}
+                    </div>
+                  )}
+                  {mismatch.context?.old_type && mismatch.context?.new_type && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      <span className="font-semibold">Type Change:</span> {mismatch.context.old_type} → {mismatch.context.new_type}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -315,6 +400,7 @@ export function ContractDiffPage() {
 
   return (
     <div className="space-y-6 p-6">
+      <AIStudioNav currentPage="Contract Diff" showQuickActions={false} />
       <div className="flex items-center justify-between">
         <PageHeader
           title="Contract Diff Analysis"
@@ -558,6 +644,22 @@ export function ContractDiffPage() {
                     <p className="text-sm text-gray-600">
                       {analysisResult.mismatches.length} mismatch(es) found
                     </p>
+                    {/* Show protocol and schema format info if available */}
+                    {(analysisResult.metadata?.contract_format || selectedProtocol !== 'http') && (
+                      <div className="flex items-center gap-2 mt-1">
+                        {selectedProtocol !== 'http' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                            <Network className="w-3 h-3 mr-1" />
+                            {selectedProtocol.toUpperCase()}
+                          </span>
+                        )}
+                        {analysisResult.metadata?.contract_format && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            Format: {analysisResult.metadata.contract_format}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <ConfidenceIndicator confidence={analysisResult.confidence} />

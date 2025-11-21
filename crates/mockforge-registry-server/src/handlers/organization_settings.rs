@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{Organization, OrgMember, OrgRole, OrgSetting, BYOKConfig, User, Subscription},
+    models::{Organization, OrgMember, OrgRole, OrgSetting, BYOKConfig, OrgAiSettings, User, Subscription},
     AppState,
 };
 
@@ -326,4 +326,87 @@ pub struct SubscriptionInfo {
     pub current_period_start: Option<chrono::NaiveDate>,
     pub current_period_end: Option<chrono::NaiveDate>,
     pub cancel_at_period_end: bool,
+}
+
+/// Get organization AI settings
+pub async fn get_organization_ai_settings(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(org_id): Path<Uuid>,
+) -> ApiResult<Json<OrgAiSettings>> {
+    let pool = state.db.pool();
+
+    // Get organization
+    let org = Organization::find_by_id(pool, org_id)
+        .await
+        .map_err(|e| ApiError::Database(e))?
+        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    // Verify user has access
+    if org.owner_id != user_id {
+        let member = OrgMember::find(pool, org_id, user_id)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
+        if member.is_none() {
+            return Err(ApiError::InvalidRequest(
+                "You don't have access to this organization".to_string(),
+            ));
+        }
+    }
+
+    // Get AI settings
+    let ai_setting = OrgSetting::get(pool, org_id, "ai_settings")
+        .await
+        .map_err(|e| ApiError::Database(e))?;
+
+    let ai_settings = if let Some(setting) = &ai_setting {
+        serde_json::from_value(setting.setting_value.clone())
+            .unwrap_or_else(|_| OrgAiSettings::default())
+    } else {
+        OrgAiSettings::default()
+    };
+
+    Ok(Json(ai_settings))
+}
+
+/// Update organization AI settings
+pub async fn update_organization_ai_settings(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(org_id): Path<Uuid>,
+    Json(request): Json<OrgAiSettings>,
+) -> ApiResult<Json<OrgAiSettings>> {
+    let pool = state.db.pool();
+
+    // Get organization
+    let org = Organization::find_by_id(pool, org_id)
+        .await
+        .map_err(|e| ApiError::Database(e))?
+        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    // Verify user is owner or admin
+    let is_owner = org.owner_id == user_id;
+    let is_admin = if !is_owner {
+        if let Ok(Some(member)) = OrgMember::find(pool, org_id, user_id).await {
+            matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if !is_owner && !is_admin {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    // Save AI settings
+    let config_value = serde_json::to_value(&request)
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to serialize AI settings: {}", e)))?;
+
+    OrgSetting::set(pool, org_id, "ai_settings", config_value)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
+
+    Ok(Json(request))
 }

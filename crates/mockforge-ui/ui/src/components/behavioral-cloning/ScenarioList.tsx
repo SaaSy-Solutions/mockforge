@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Eye, Play, FileCode } from 'lucide-react';
+import { Download, Eye, Play, FileCode, Snowflake, Sparkles } from 'lucide-react';
 import type { Scenario } from '../../types';
 import { apiService } from '../../services/api';
 import { ModernCard, ModernBadge } from '../ui/DesignSystem';
@@ -57,6 +57,28 @@ export function ScenarioList({ scenarios, onRefresh }: ScenarioListProps) {
               <div className="flex items-center gap-3 mb-2">
                 <h3 className="text-lg font-semibold">{scenario.name}</h3>
                 <ModernBadge variant="outline">v{scenario.version}</ModernBadge>
+                {scenario.ai_generated && (
+                  <ModernBadge 
+                    variant="secondary" 
+                    size="sm"
+                    className="flex items-center gap-1"
+                    title="AI-generated scenario"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    AI
+                  </ModernBadge>
+                )}
+                {scenario.frozen && (
+                  <ModernBadge 
+                    variant="outline" 
+                    size="sm"
+                    className="flex items-center gap-1 border-blue-300 text-blue-700"
+                    title={`Frozen artifact (deterministic mode)${scenario.frozen_path ? `: ${scenario.frozen_path}` : ''}`}
+                  >
+                    <Snowflake className="h-3 w-3" />
+                    Frozen
+                  </ModernBadge>
+                )}
                 {scenario.tags && scenario.tags.length > 0 && (
                   <div className="flex gap-2">
                     {scenario.tags.map((tag) => (

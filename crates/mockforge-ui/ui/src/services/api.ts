@@ -1846,6 +1846,105 @@ class RealityApiService {
   }
 }
 
+class ConsistencyApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await authenticatedFetch(url, options);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  /**
+   * List all available lifecycle presets
+   */
+  async listLifecyclePresets(): Promise<{
+    presets: Array<{
+      name: string;
+      id: string;
+      description: string;
+    }>;
+  }> {
+    return this.fetchJson('/api/v1/consistency/lifecycle-presets') as Promise<{
+      presets: Array<{
+        name: string;
+        id: string;
+        description: string;
+      }>;
+    }>;
+  }
+
+  /**
+   * Get details of a specific lifecycle preset
+   */
+  async getLifecyclePresetDetails(presetName: string): Promise<{
+    preset: {
+      name: string;
+      id: string;
+      description: string;
+    };
+    initial_state: string;
+    states: Array<{
+      from: string;
+      to: string;
+      after_days: number | null;
+      condition: string | null;
+    }>;
+    affected_endpoints: string[];
+  }> {
+    return this.fetchJson(`/api/v1/consistency/lifecycle-presets/${encodeURIComponent(presetName)}`) as Promise<{
+      preset: {
+        name: string;
+        id: string;
+        description: string;
+      };
+      initial_state: string;
+      states: Array<{
+        from: string;
+        to: string;
+        after_days: number | null;
+        condition: string | null;
+      }>;
+      affected_endpoints: string[];
+    }>;
+  }
+
+  /**
+   * Apply a lifecycle preset to a persona
+   */
+  async applyLifecyclePreset(
+    workspace: string,
+    personaId: string,
+    preset: string
+  ): Promise<{
+    success: boolean;
+    workspace: string;
+    persona_id: string;
+    preset: string;
+    lifecycle_state: string;
+  }> {
+    return this.fetchJson(`/api/v1/consistency/lifecycle-presets/apply?workspace=${encodeURIComponent(workspace)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ persona_id: personaId, preset }),
+    }) as Promise<{
+      success: boolean;
+      workspace: string;
+      persona_id: string;
+      preset: string;
+      lifecycle_state: string;
+    }>;
+  }
+}
+
 class PluginsApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
     const response = await authenticatedFetch(url, options);
@@ -2005,6 +2104,18 @@ export interface Mismatch {
   confidence: number;
   expected?: string;
   actual?: string;
+  context?: {
+    is_additive?: boolean;
+    is_breaking?: boolean;
+    change_category?: string;
+    schema_format?: string;
+    service?: string;
+    method?: string;
+    field_name?: string;
+    old_type?: string;
+    new_type?: string;
+    [key: string]: any;
+  };
 }
 
 export interface Recommendation {
@@ -2632,6 +2743,7 @@ export const pluginsApi = new PluginsApiService();
 export const chaosApi = new ChaosApiService();
 export const timeTravelApi = new TimeTravelApiService();
 export const realityApi = new RealityApiService();
+export const consistencyApi = new ConsistencyApiService();
 export const verificationApi = new VerificationApiService();
 export const contractDiffApi = new ContractDiffApiService();
 export { proxyApi, type ProxyRule, type ProxyRuleRequest, type ProxyRulesResponse, type ProxyInspectResponse };
