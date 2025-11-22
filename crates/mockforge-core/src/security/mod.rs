@@ -13,7 +13,9 @@ pub mod change_management;
 pub mod change_management_global;
 pub mod compliance_dashboard;
 pub mod compliance_dashboard_global;
+pub mod email;
 pub mod emitter;
+pub mod slack;
 pub mod events;
 pub mod justification_storage;
 pub mod mfa_tracking;
@@ -52,10 +54,12 @@ pub use compliance_dashboard_global::{
     get_global_compliance_dashboard_engine, init_global_compliance_dashboard_engine,
     is_compliance_dashboard_engine_initialized,
 };
+pub use email::{EmailConfig, EmailMessage, EmailProvider, EmailService};
 pub use emitter::{
     emit_security_event, emit_security_event_async, init_global_siem_emitter,
     is_siem_emitter_initialized,
 };
+pub use slack::{SlackConfig, SlackMessage, SlackMethod, SlackService};
 pub use events::{
     EventActor, EventOutcome, EventTarget, SecurityEvent, SecurityEventSeverity, SecurityEventType,
 };

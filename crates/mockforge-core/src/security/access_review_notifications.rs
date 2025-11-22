@@ -4,8 +4,13 @@
 //! including email, Slack, and other notification channels.
 
 use crate::security::access_review::{AccessReview, UserReviewItem};
+use crate::security::email::{EmailMessage, EmailService};
+use crate::security::slack::{SlackMessage, SlackService};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
 /// Notification channel types
@@ -49,12 +54,76 @@ impl Default for NotificationConfig {
 /// Notification service for access reviews
 pub struct AccessReviewNotificationService {
     config: NotificationConfig,
+    /// Email service for sending email notifications
+    email_service: Option<Arc<EmailService>>,
+    /// Slack service for sending Slack notifications
+    slack_service: Option<Arc<SlackService>>,
+    /// HTTP client for webhook notifications
+    webhook_client: Option<reqwest::Client>,
 }
 
 impl AccessReviewNotificationService {
     /// Create a new notification service
     pub fn new(config: NotificationConfig) -> Self {
-        Self { config }
+        // Initialize email service if email notifications are enabled
+        let email_service = if config.channels.contains(&NotificationChannel::Email) {
+            Some(Arc::new(EmailService::from_env()))
+        } else {
+            None
+        };
+
+        // Initialize Slack service if Slack notifications are enabled
+        let slack_service = if config.channels.contains(&NotificationChannel::Slack) {
+            Some(Arc::new(SlackService::from_env()))
+        } else {
+            None
+        };
+
+        // Initialize webhook client if webhook notifications are enabled
+        let webhook_client = if config.channels.contains(&NotificationChannel::Webhook) {
+            Some(
+                reqwest::Client::builder()
+                    .timeout(Duration::from_secs(10))
+                    .build()
+                    .expect("Failed to create HTTP client for webhook notifications"),
+            )
+        } else {
+            None
+        };
+
+        Self {
+            config,
+            email_service,
+            slack_service,
+            webhook_client,
+        }
+    }
+
+    /// Create a new notification service with a custom email service
+    pub fn with_email_service(config: NotificationConfig, email_service: Arc<EmailService>) -> Self {
+        let slack_service = if config.channels.contains(&NotificationChannel::Slack) {
+            Some(Arc::new(SlackService::from_env()))
+        } else {
+            None
+        };
+
+        let webhook_client = if config.channels.contains(&NotificationChannel::Webhook) {
+            Some(
+                reqwest::Client::builder()
+                    .timeout(Duration::from_secs(10))
+                    .build()
+                    .expect("Failed to create HTTP client for webhook notifications"),
+            )
+        } else {
+            None
+        };
+
+        Self {
+            config,
+            email_service: Some(email_service),
+            slack_service,
+            webhook_client,
+        }
     }
 
     /// Send notification for a new review
@@ -184,42 +253,190 @@ impl AccessReviewNotificationService {
         Ok(())
     }
 
-    /// Send email notification (placeholder - would integrate with email service)
+    /// Send email notification via email service
     async fn send_email(
         &self,
-        _subject: &str,
-        _message: &str,
-        _recipients: &[String],
+        subject: &str,
+        message: &str,
+        recipients: &[String],
     ) -> Result<(), String> {
-        // TODO: Integrate with email service (SMTP, SendGrid, etc.)
-        debug!("Email notification would be sent to: {:?}", _recipients);
-        info!("Email notification: {} - {}", _subject, _message);
+        if recipients.is_empty() {
+            debug!("No email recipients specified, skipping email notification");
+            return Ok(());
+        }
+
+        // If email service is not available, log and return
+        let email_service = match &self.email_service {
+            Some(service) => service,
+            None => {
+                debug!("Email service not configured, logging notification instead");
+                info!("Email notification (not sent): {} - {}", subject, message);
+                return Ok(());
+            }
+        };
+
+        // Convert plain text message to HTML (simple conversion)
+        // Escape HTML special characters
+        let html_escaped: String = message
+            .chars()
+            .map(|c| match c {
+                '<' => "&lt;".to_string(),
+                '>' => "&gt;".to_string(),
+                '&' => "&amp;".to_string(),
+                '"' => "&quot;".to_string(),
+                '\'' => "&#x27;".to_string(),
+                _ => c.to_string(),
+            })
+            .collect();
+
+        let html_body = format!(
+            "<html><body><pre style=\"font-family: sans-serif; white-space: pre-wrap;\">{}</pre></body></html>",
+            html_escaped
+        );
+
+        // Send email to each recipient
+        for recipient in recipients {
+            let email_message = EmailMessage {
+                to: recipient.clone(),
+                subject: subject.to_string(),
+                html_body: html_body.clone(),
+                text_body: message.to_string(),
+            };
+
+            match email_service.send(email_message).await {
+                Ok(()) => {
+                    info!("Email notification sent successfully to {}", recipient);
+                }
+                Err(e) => {
+                    error!("Failed to send email notification to {}: {}", recipient, e);
+                    // Continue sending to other recipients even if one fails
+                }
+            }
+        }
+
         Ok(())
     }
 
-    /// Send Slack notification (placeholder - would integrate with Slack API)
+    /// Send Slack notification via Slack service
     async fn send_slack(
         &self,
-        _subject: &str,
-        _message: &str,
-        _recipients: &[String],
+        subject: &str,
+        message: &str,
+        recipients: &[String],
     ) -> Result<(), String> {
-        // TODO: Integrate with Slack API
-        debug!("Slack notification would be sent to: {:?}", _recipients);
-        info!("Slack notification: {} - {}", _subject, _message);
+        if recipients.is_empty() {
+            debug!("No Slack recipients specified, skipping Slack notification");
+            return Ok(());
+        }
+
+        // If Slack service is not available, log and return
+        let slack_service = match &self.slack_service {
+            Some(service) => service,
+            None => {
+                debug!("Slack service not configured, logging notification instead");
+                info!("Slack notification (not sent): {} - {}", subject, message);
+                return Ok(());
+            }
+        };
+
+        // Create Slack message with subject as title
+        let slack_message = SlackMessage {
+            channel: None, // Will use default channel or recipient-specific channel
+            text: format!("{}\n\n{}", subject, message),
+            title: Some(subject.to_string()),
+            fields: Vec::new(),
+        };
+
+        // Send to each recipient (recipients are treated as channel names or user IDs)
+        for recipient in recipients {
+            let mut msg = slack_message.clone();
+            msg.channel = Some(recipient.clone());
+
+            match slack_service.send(msg).await {
+                Ok(()) => {
+                    info!("Slack notification sent successfully to {}", recipient);
+                }
+                Err(e) => {
+                    error!("Failed to send Slack notification to {}: {}", recipient, e);
+                    // Continue sending to other recipients even if one fails
+                }
+            }
+        }
+
         Ok(())
     }
 
-    /// Send webhook notification (placeholder - would make HTTP request)
+    /// Send webhook notification via HTTP POST
     async fn send_webhook(
         &self,
-        _subject: &str,
-        _message: &str,
-        _recipients: &[String],
+        subject: &str,
+        message: &str,
+        recipients: &[String],
     ) -> Result<(), String> {
-        // TODO: Make HTTP POST to webhook URL
-        debug!("Webhook notification would be sent to: {:?}", _recipients);
-        info!("Webhook notification: {} - {}", _subject, _message);
+        if recipients.is_empty() {
+            debug!("No webhook URLs specified, skipping webhook notification");
+            return Ok(());
+        }
+
+        // If webhook client is not available, log and return
+        let webhook_client = match &self.webhook_client {
+            Some(client) => client,
+            None => {
+                debug!("Webhook client not configured, logging notification instead");
+                info!("Webhook notification (not sent): {} - {}", subject, message);
+                return Ok(());
+            }
+        };
+
+        // Build webhook payload
+        let payload = json!({
+            "subject": subject,
+            "message": message,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "source": "mockforge_access_review",
+        });
+
+        // Get webhook URL from channel config or use recipients as URLs
+        let webhook_urls = if let Some(webhook_url) = self.config.channel_config
+            .get("webhook")
+            .and_then(|v| v.get("url"))
+            .and_then(|v| v.as_str())
+        {
+            vec![webhook_url.to_string()]
+        } else {
+            // Use recipients as webhook URLs
+            recipients.to_vec()
+        };
+
+        // Send webhook to each URL
+        for webhook_url in webhook_urls {
+            match webhook_client
+                .post(&webhook_url)
+                .header("Content-Type", "application/json")
+                .json(&payload)
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    let status = response.status();
+                    if status.is_success() {
+                        info!("Webhook notification sent successfully to {}", webhook_url);
+                    } else {
+                        let error_text = response.text().await.unwrap_or_default();
+                        error!(
+                            "Webhook notification failed to {} ({}): {}",
+                            webhook_url, status, error_text
+                        );
+                        // Continue sending to other webhooks even if one fails
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to send webhook notification to {}: {}", webhook_url, e);
+                    // Continue sending to other webhooks even if one fails
+                }
+            }
+        }
+
         Ok(())
     }
 }
