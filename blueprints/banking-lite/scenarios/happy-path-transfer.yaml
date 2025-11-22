@@ -98,4 +98,3 @@ variables:
   destination_balance: null
   transfer_id: null
   transfer_status: null
-

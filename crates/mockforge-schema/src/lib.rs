@@ -31,9 +31,9 @@ pub fn generate_config_schema() -> serde_json::Value {
     // Generate schema from ServerConfig
     // ServerConfig needs to have JsonSchema derive (via feature flag)
     let schema = schema_for!(mockforge_core::ServerConfig);
-    
+
     let mut schema_value = serde_json::to_value(schema).expect("Failed to serialize schema");
-    
+
     // Add metadata for better IDE support
     if let Some(obj) = schema_value.as_object_mut() {
         obj.insert("$schema".to_string(), serde_json::json!("http://json-schema.org/draft-07/schema#"));
@@ -43,7 +43,7 @@ pub fn generate_config_schema() -> serde_json::Value {
              This schema provides autocomplete and validation for mockforge.yaml files."
         ));
     }
-    
+
     schema_value
 }
 
@@ -53,9 +53,9 @@ pub fn generate_config_schema() -> serde_json::Value {
 /// mock environment realism levels.
 pub fn generate_reality_schema() -> serde_json::Value {
     let schema = schema_for!(mockforge_core::config::RealitySliderConfig);
-    
+
     let mut schema_value = serde_json::to_value(schema).expect("Failed to serialize reality schema");
-    
+
     // Add metadata for better IDE support
     if let Some(obj) = schema_value.as_object_mut() {
         obj.insert("$schema".to_string(), serde_json::json!("http://json-schema.org/draft-07/schema#"));
@@ -65,7 +65,7 @@ pub fn generate_reality_schema() -> serde_json::Value {
              Maps reality levels (1-5) to specific subsystem settings."
         ));
     }
-    
+
     schema_value
 }
 
@@ -76,9 +76,9 @@ pub fn generate_reality_schema() -> serde_json::Value {
 pub fn generate_persona_schema() -> serde_json::Value {
     // Generate schema for PersonaRegistryConfig which contains persona definitions
     let schema = schema_for!(mockforge_core::config::PersonaRegistryConfig);
-    
+
     let mut schema_value = serde_json::to_value(schema).expect("Failed to serialize persona schema");
-    
+
     // Add metadata for better IDE support
     if let Some(obj) = schema_value.as_object_mut() {
         obj.insert("$schema".to_string(), serde_json::json!("http://json-schema.org/draft-07/schema#"));
@@ -88,7 +88,7 @@ pub fn generate_persona_schema() -> serde_json::Value {
              Defines personas with unique IDs, domains, traits, and deterministic seeds."
         ));
     }
-    
+
     schema_value
 }
 
@@ -328,12 +328,12 @@ pub fn generate_config_schema_json() -> String {
 /// Returns a HashMap with schema names as keys and JSON Schema values.
 pub fn generate_all_schemas() -> std::collections::HashMap<String, serde_json::Value> {
     let mut schemas = std::collections::HashMap::new();
-    
+
     schemas.insert("mockforge-config".to_string(), generate_config_schema());
     schemas.insert("reality-config".to_string(), generate_reality_schema());
     schemas.insert("persona-config".to_string(), generate_persona_schema());
     schemas.insert("blueprint-config".to_string(), generate_blueprint_schema());
-    
+
     schemas
 }
 
@@ -449,19 +449,19 @@ pub fn detect_schema_type(file_path: &std::path::Path) -> Option<String> {
     if file_name == "mockforge.yaml" || file_name == "mockforge.yml" || file_name == "mockforge.json" {
         return Some("mockforge-config".to_string());
     }
-    
+
     if file_name == "blueprint.yaml" || file_name == "blueprint.yml" {
         return Some("blueprint-config".to_string());
     }
-    
+
     if path_str.contains("reality") {
         return Some("reality-config".to_string());
     }
-    
+
     if path_str.contains("persona") {
         return Some("persona-config".to_string());
     }
-    
+
     // Default to main config
     Some("mockforge-config".to_string())
 }

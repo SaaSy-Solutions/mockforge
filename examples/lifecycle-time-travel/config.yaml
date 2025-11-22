@@ -274,4 +274,3 @@ observability:
   request_logging:
     enabled: true
     include_trace_metadata: true
-

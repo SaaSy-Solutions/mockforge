@@ -28,4 +28,3 @@ CREATE INDEX idx_promotion_entity ON promotion_history(entity_type, entity_id);
 CREATE INDEX idx_promotion_status ON promotion_history(status);
 CREATE INDEX idx_promotion_created ON promotion_history(created_at);
 CREATE INDEX idx_promotion_environments ON promotion_history(from_environment, to_environment);
-

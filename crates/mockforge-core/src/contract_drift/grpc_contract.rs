@@ -139,7 +139,7 @@ impl GrpcContract {
                 context.insert("is_breaking".to_string(), serde_json::json!(true));
                 context.insert("change_category".to_string(), serde_json::json!("service_removed"));
                 context.insert("service".to_string(), serde_json::json!(service_name));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::EndpointNotFound,
                     path: service_name.clone(),
@@ -164,7 +164,7 @@ impl GrpcContract {
                 context.insert("is_breaking".to_string(), serde_json::json!(false));
                 context.insert("change_category".to_string(), serde_json::json!("service_added"));
                 context.insert("service".to_string(), serde_json::json!(service_name));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::UnexpectedField,
                     path: service_name.clone(),
@@ -224,7 +224,7 @@ impl GrpcContract {
             MismatchType::TypeMismatch => (false, true),      // Type changed
             MismatchType::SchemaMismatch => (false, true),    // Signature changed
             MismatchType::MissingRequiredField => (false, true), // Required field added
-            
+
             // Additive changes
             MismatchType::UnexpectedField => {
                 // Check severity - Low severity usually means additive (new method/field)
@@ -233,7 +233,7 @@ impl GrpcContract {
                     _ => (false, false), // Medium/High severity unexpected fields might be breaking
                 }
             }
-            
+
             // Potentially breaking (depends on context)
             MismatchType::FormatMismatch | MismatchType::ConstraintViolation => {
                 match mismatch.severity {
@@ -241,7 +241,7 @@ impl GrpcContract {
                     _ => (false, false),
                 }
             }
-            
+
             // Not applicable for proto changes
             _ => (false, false),
         }
@@ -272,7 +272,7 @@ impl GrpcContract {
                 context.insert("change_category".to_string(), serde_json::json!("method_removed"));
                 context.insert("service".to_string(), serde_json::json!(service_name));
                 context.insert("method".to_string(), serde_json::json!(method_name));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::EndpointNotFound,
                     path: path.clone(),
@@ -297,7 +297,7 @@ impl GrpcContract {
                 context.insert("change_category".to_string(), serde_json::json!("method_added"));
                 context.insert("service".to_string(), serde_json::json!(service_name));
                 context.insert("method".to_string(), serde_json::json!(method_name));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::UnexpectedField,
                     path: path.clone(),
@@ -327,7 +327,7 @@ impl GrpcContract {
             let method_mismatches =
                 Self::diff_method_signatures(&old_method, &new_method, &service_name)?;
             mismatches.extend(method_mismatches);
-            
+
             // Compare message fields if message types are the same
             // This helps detect field-level changes even when message type names match
             let old_input = old_method.input();
@@ -342,7 +342,7 @@ impl GrpcContract {
                 )?;
                 mismatches.extend(input_field_mismatches);
             }
-            
+
             let old_output = old_method.output();
             let new_output = new_method.output();
             if old_output.full_name() == new_output.full_name() {
@@ -380,7 +380,7 @@ impl GrpcContract {
             context.insert("method".to_string(), serde_json::json!(method_name));
             context.insert("old_type".to_string(), serde_json::json!(old_method.input().full_name()));
             context.insert("new_type".to_string(), serde_json::json!(new_method.input().full_name()));
-            
+
             mismatches.push(Mismatch {
                 mismatch_type: MismatchType::TypeMismatch,
                 path: format!("{}.input", path),
@@ -408,7 +408,7 @@ impl GrpcContract {
             context.insert("method".to_string(), serde_json::json!(method_name));
             context.insert("old_type".to_string(), serde_json::json!(old_method.output().full_name()));
             context.insert("new_type".to_string(), serde_json::json!(new_method.output().full_name()));
-            
+
             mismatches.push(Mismatch {
                 mismatch_type: MismatchType::TypeMismatch,
                 path: format!("{}.output", path),
@@ -437,7 +437,7 @@ impl GrpcContract {
             context.insert("streaming_type".to_string(), serde_json::json!("client"));
             context.insert("old_value".to_string(), serde_json::json!(old_method.is_client_streaming()));
             context.insert("new_value".to_string(), serde_json::json!(new_method.is_client_streaming()));
-            
+
             mismatches.push(Mismatch {
                 mismatch_type: MismatchType::SchemaMismatch,
                 path: path.clone(),
@@ -464,7 +464,7 @@ impl GrpcContract {
             context.insert("streaming_type".to_string(), serde_json::json!("server"));
             context.insert("old_value".to_string(), serde_json::json!(old_method.is_server_streaming()));
             context.insert("new_value".to_string(), serde_json::json!(new_method.is_server_streaming()));
-            
+
             mismatches.push(Mismatch {
                 mismatch_type: MismatchType::SchemaMismatch,
                 path: path.clone(),
@@ -499,7 +499,7 @@ impl GrpcContract {
         method_name: Option<&str>,
     ) -> Result<Vec<Mismatch>, ContractError> {
         let mut mismatches = Vec::new();
-        
+
         // Collect field information
         let old_fields: std::collections::HashMap<u32, prost_reflect::FieldDescriptor> = old_message
             .fields()
@@ -509,7 +509,7 @@ impl GrpcContract {
             .fields()
             .map(|f| (f.number(), f))
             .collect();
-        
+
         // Check for removed fields (breaking change)
         for (field_number, old_field) in &old_fields {
             if !new_fields.contains_key(field_number) {
@@ -525,7 +525,7 @@ impl GrpcContract {
                 context.insert("field_number".to_string(), serde_json::json!(*field_number));
                 context.insert("field_name".to_string(), serde_json::json!(old_field.name()));
                 context.insert("field_type".to_string(), serde_json::json!(format!("{:?}", old_field.kind())));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::EndpointNotFound,
                     path: field_path.clone(),
@@ -544,7 +544,7 @@ impl GrpcContract {
                 });
             }
         }
-        
+
         // Check for added fields
         for (field_number, new_field) in &new_fields {
             if !old_fields.contains_key(field_number) {
@@ -564,7 +564,7 @@ impl GrpcContract {
                 context.insert("field_name".to_string(), serde_json::json!(new_field.name()));
                 context.insert("field_type".to_string(), serde_json::json!(format!("{:?}", new_field.kind())));
                 context.insert("is_required".to_string(), serde_json::json!(is_required));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: if is_required { MismatchType::MissingRequiredField } else { MismatchType::UnexpectedField },
                     path: field_path.clone(),
@@ -584,7 +584,7 @@ impl GrpcContract {
                 });
             }
         }
-        
+
         // Check for field type changes (same field number, different type)
         for (field_number, old_field) in &old_fields {
             if let Some(new_field) = new_fields.get(field_number) {
@@ -602,7 +602,7 @@ impl GrpcContract {
                     context.insert("field_number".to_string(), serde_json::json!(*field_number));
                     context.insert("old_name".to_string(), serde_json::json!(old_field.name()));
                     context.insert("new_name".to_string(), serde_json::json!(new_field.name()));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::SchemaMismatch,
                         path: field_path.clone(),
@@ -620,7 +620,7 @@ impl GrpcContract {
                         context,
                     });
                 }
-                
+
                 // Check if field type changed (breaking)
                 if old_field.kind() != new_field.kind() {
                     let field_path = format!("{}.field_{}", path_prefix, field_number);
@@ -636,7 +636,7 @@ impl GrpcContract {
                     context.insert("field_name".to_string(), serde_json::json!(old_field.name()));
                     context.insert("old_type".to_string(), serde_json::json!(format!("{:?}", old_field.kind())));
                     context.insert("new_type".to_string(), serde_json::json!(format!("{:?}", new_field.kind())));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::TypeMismatch,
                         path: field_path.clone(),
@@ -654,7 +654,7 @@ impl GrpcContract {
                         context,
                     });
                 }
-                
+
                 // Check if cardinality changed (e.g., optional to required - breaking)
                 if old_field.cardinality() != new_field.cardinality() {
                     let old_cardinality = old_field.cardinality();
@@ -664,7 +664,7 @@ impl GrpcContract {
                         (prost_reflect::Cardinality::Optional, prost_reflect::Cardinality::Required)
                             | (prost_reflect::Cardinality::Repeated, prost_reflect::Cardinality::Required)
                     );
-                    
+
                     let field_path = format!("{}.field_{}", path_prefix, field_number);
                     let mut context = HashMap::new();
                     context.insert("is_additive".to_string(), serde_json::json!(!is_breaking));
@@ -678,7 +678,7 @@ impl GrpcContract {
                     context.insert("field_name".to_string(), serde_json::json!(old_field.name()));
                     context.insert("old_cardinality".to_string(), serde_json::json!(format!("{:?}", old_cardinality)));
                     context.insert("new_cardinality".to_string(), serde_json::json!(format!("{:?}", new_cardinality)));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: if is_breaking { MismatchType::MissingRequiredField } else { MismatchType::SchemaMismatch },
                         path: field_path.clone(),
@@ -699,7 +699,7 @@ impl GrpcContract {
                 }
             }
         }
-        
+
         Ok(mismatches)
     }
 }

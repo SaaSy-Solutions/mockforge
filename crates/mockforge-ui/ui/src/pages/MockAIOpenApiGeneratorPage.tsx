@@ -104,11 +104,11 @@ export function MockAIOpenApiGeneratorPage() {
       const response = await apiService.generateOpenApiFromTraffic(request);
       setResult(response);
       setShowPreview(true);
-      
+
       // Track that OpenAPI has been generated
       localStorage.setItem('mockai-openapi-generated', 'true');
       localStorage.setItem('mockai-openapi-last-generated', new Date().toISOString());
-      
+
       toast.success('OpenAPI specification generated successfully');
     } catch (err) {
       const errorMessage =

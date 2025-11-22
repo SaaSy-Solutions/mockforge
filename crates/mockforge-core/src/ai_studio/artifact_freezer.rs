@@ -208,7 +208,7 @@ impl ArtifactFreezer {
             let path = entry.path();
             if path.is_file() {
                 let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                
+
                 // Check if file matches pattern
                 let matches = if identifier.is_some() {
                     file_name.contains(artifact_type) && file_name.contains(identifier.unwrap())

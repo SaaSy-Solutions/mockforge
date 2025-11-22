@@ -445,4 +445,3 @@ See `examples/lifecycle-time-travel/README.md` for detailed instructions.
 - [REALITY_TRACE.md](REALITY_TRACE.md) - Understanding response generation
 - [TIME_TRAVEL.md](TIME_TRAVEL.md) - Detailed time travel documentation
 - [REALITY_CONTINUUM.md](REALITY_CONTINUUM.md) - Reality blending features
-

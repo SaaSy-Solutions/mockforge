@@ -147,4 +147,3 @@ impl Default for Forecaster {
         Self::new(ForecastingConfig::default())
     }
 }
-

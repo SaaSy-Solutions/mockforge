@@ -74,12 +74,12 @@ impl MockGenerator {
         // In deterministic mode, check for frozen artifacts first
         if ai_mode == Some(crate::ai_studio::config::AiMode::GenerateOnceFreeze) {
             let freezer = ArtifactFreezer::new();
-            
+
             // Create identifier from description hash
             let mut hasher = DefaultHasher::new();
             description.hash(&mut hasher);
             let description_hash = format!("{:x}", hasher.finish());
-            
+
             // Try to load frozen artifact
             if let Some(frozen) = freezer.load_frozen("mock", Some(&description_hash)).await? {
                 // Extract spec from frozen content (remove metadata)
@@ -87,7 +87,7 @@ impl MockGenerator {
                 if let Some(obj) = spec.as_object_mut() {
                     obj.remove("_frozen_metadata");
                 }
-                
+
                 return Ok(MockGenerationResult {
                     spec: Some(spec),
                     message: format!(
@@ -99,7 +99,7 @@ impl MockGenerator {
                 });
             }
         }
-        
+
         // Parse the natural language command
         let parsed = self.parser.parse_command(description).await?;
 
@@ -113,7 +113,7 @@ impl MockGenerator {
         let frozen_artifact = if let Some(config) = deterministic_config {
             if config.enabled && config.is_auto_freeze_enabled() {
                 let freezer = ArtifactFreezer::new();
-                
+
                 // Calculate prompt hash
                 let mut hasher = Sha256::new();
                 hasher.update(description.as_bytes());

@@ -3,7 +3,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Json;
 use globwalk::GlobWalkerBuilder;
-use rand::{rng, Rng};
+use rand::{thread_rng, Rng};
 use serde::Deserialize;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
@@ -76,7 +76,7 @@ impl LatencyProfiles {
         if let Some(p) = profile {
             let base = p.fixed_ms.unwrap_or(0);
             let jitter = p.jitter_ms.unwrap_or(0);
-            let mut rng = rng();
+            let mut rng = thread_rng();
             let extra: u64 = if jitter > 0 {
                 rng.random_range(0..=jitter)
             } else {

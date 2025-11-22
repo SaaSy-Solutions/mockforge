@@ -93,7 +93,7 @@ function App() {
   useEffect(() => {
     const handleNavigate = (event: CustomEvent<{ target: 'persona' | 'scenario' | 'chaos'; id: string }>) => {
       const { target, id } = event.detail;
-      
+
       if (target === 'chaos') {
         setActiveTab('chaos');
         // ChaosPage can read URL params or we can pass via state

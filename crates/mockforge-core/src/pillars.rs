@@ -335,13 +335,13 @@ impl Default for PillarMetadata {
 pub fn parse_pillar_tags_from_scenario_tags(tags: &[String]) -> Vec<Pillar> {
     let mut pillars = Vec::new();
     let tag_re = regex::Regex::new(r"\[([^\]]+)\]").ok();
-    
+
     if tag_re.is_none() {
         return pillars;
     }
-    
+
     let tag_re = tag_re.unwrap();
-    
+
     for tag in tags {
         // Extract all [PillarName] patterns from the tag
         for cap in tag_re.captures_iter(tag) {
@@ -354,7 +354,7 @@ pub fn parse_pillar_tags_from_scenario_tags(tags: &[String]) -> Vec<Pillar> {
             }
         }
     }
-    
+
     pillars
 }
 
@@ -375,7 +375,7 @@ pub fn parse_pillar_tags_from_scenario_tags(tags: &[String]) -> Vec<Pillar> {
 /// ```
 pub fn has_pillar_tags(tag: &str) -> bool {
     let tag_re = regex::Regex::new(r"\[([^\]]+)\]").ok();
-    
+
     if let Some(tag_re) = tag_re {
         for cap in tag_re.captures_iter(tag) {
             if let Some(pillar_name) = cap.get(1) {
@@ -385,7 +385,7 @@ pub fn has_pillar_tags(tag: &str) -> bool {
             }
         }
     }
-    
+
     false
 }
 

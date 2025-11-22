@@ -126,7 +126,7 @@ impl LatencyProfile {
 
     /// Calculate latency for a request with optional tags
     pub fn calculate_latency(&self, tags: &[String]) -> Duration {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         // Check for tag overrides (use the first matching tag)
         // Note: Tag overrides always use fixed latency for simplicity
@@ -231,13 +231,13 @@ impl FaultConfig {
             return true;
         }
 
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         rng.random_bool(self.failure_rate)
     }
 
     /// Get a random failure response
     pub fn get_failure_response(&self) -> (u16, Option<serde_json::Value>) {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         let status_code = if self.status_codes.is_empty() {
             500

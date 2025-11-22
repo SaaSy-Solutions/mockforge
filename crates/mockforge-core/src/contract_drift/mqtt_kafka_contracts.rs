@@ -187,7 +187,7 @@ impl MqttContract {
                 // Detect schema format and compare schemas
                 let old_format = Self::detect_schema_format(&old_topic.schema);
                 let new_format = Self::detect_schema_format(&new_topic.schema);
-                
+
                 // Check for schema format changes (breaking change)
                 if old_format != new_format {
                     let mut context = HashMap::new();
@@ -197,7 +197,7 @@ impl MqttContract {
                     context.insert("topic".to_string(), serde_json::json!(topic_name));
                     context.insert("old_format".to_string(), serde_json::json!(old_format));
                     context.insert("new_format".to_string(), serde_json::json!(new_format));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::SchemaMismatch,
                         path: format!("{}.schema_format", topic_name),
@@ -213,7 +213,7 @@ impl MqttContract {
                         context,
                     });
                 }
-                
+
                 // Compare schemas based on format
                 let schema_mismatches = match (old_format.as_str(), new_format.as_str()) {
                     ("json_schema", "json_schema") => {
@@ -328,7 +328,7 @@ impl MqttContract {
                 context.insert("change_category".to_string(), serde_json::json!("field_removed"));
                 context.insert("field_name".to_string(), serde_json::json!(field_name));
                 context.insert("schema_format".to_string(), serde_json::json!("avro"));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::EndpointNotFound,
                     path: format!("{}.{}", path_prefix, field_name),
@@ -349,7 +349,7 @@ impl MqttContract {
                 // In Avro, fields without defaults are required
                 let has_default = new_field.get("default").is_some();
                 let is_required = !has_default;
-                
+
                 let mut context = HashMap::new();
                 context.insert("is_additive".to_string(), serde_json::json!(!is_required));
                 context.insert("is_breaking".to_string(), serde_json::json!(is_required));
@@ -357,7 +357,7 @@ impl MqttContract {
                 context.insert("field_name".to_string(), serde_json::json!(field_name));
                 context.insert("schema_format".to_string(), serde_json::json!("avro"));
                 context.insert("has_default".to_string(), serde_json::json!(has_default));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: if is_required { MismatchType::MissingRequiredField } else { MismatchType::UnexpectedField },
                     path: format!("{}.{}", path_prefix, field_name),
@@ -378,7 +378,7 @@ impl MqttContract {
                 let old_field = old_fields_map[field_name];
                 let old_type = old_field.get("type");
                 let new_type = new_field.get("type");
-                
+
                 if old_type != new_type {
                     let mut context = HashMap::new();
                     context.insert("is_additive".to_string(), serde_json::json!(false));
@@ -388,7 +388,7 @@ impl MqttContract {
                     context.insert("schema_format".to_string(), serde_json::json!("avro"));
                     context.insert("old_type".to_string(), serde_json::json!(old_type));
                     context.insert("new_type".to_string(), serde_json::json!(new_type));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::TypeMismatch,
                         path: format!("{}.{}", path_prefix, field_name),
@@ -428,7 +428,7 @@ impl MqttContract {
                     context.insert("change_category".to_string(), serde_json::json!("property_removed"));
                     context.insert("field_name".to_string(), serde_json::json!(prop_name));
                     context.insert("schema_format".to_string(), serde_json::json!("json_shape"));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::UnexpectedField,
                         path: format!("{}.{}", path_prefix, prop_name),
@@ -452,7 +452,7 @@ impl MqttContract {
                     context.insert("change_category".to_string(), serde_json::json!("property_added"));
                     context.insert("field_name".to_string(), serde_json::json!(prop_name));
                     context.insert("schema_format".to_string(), serde_json::json!("json_shape"));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::UnexpectedField,
                         path: format!("{}.{}", path_prefix, prop_name),
@@ -472,7 +472,7 @@ impl MqttContract {
                     let new_type = new_obj[prop_name].as_str().or_else(|| {
                         new_obj[prop_name].get("type").and_then(|t| t.as_str())
                     });
-                    
+
                     if old_type != new_type {
                         let mut context = HashMap::new();
                         context.insert("is_additive".to_string(), serde_json::json!(false));
@@ -482,7 +482,7 @@ impl MqttContract {
                         context.insert("schema_format".to_string(), serde_json::json!("json_shape"));
                         context.insert("old_type".to_string(), serde_json::json!(old_type));
                         context.insert("new_type".to_string(), serde_json::json!(new_type));
-                        
+
                         mismatches.push(Mismatch {
                             mismatch_type: MismatchType::TypeMismatch,
                             path: format!("{}.{}", path_prefix, prop_name),
@@ -531,7 +531,7 @@ impl MqttContract {
                 context.insert("change_category".to_string(), serde_json::json!("required_field_added"));
                 context.insert("field_name".to_string(), serde_json::json!(new_req));
                 context.insert("schema_format".to_string(), serde_json::json!("json_schema"));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::MissingRequiredField,
                     path: format!("{}.{}", path_prefix, new_req),
@@ -544,7 +544,7 @@ impl MqttContract {
                     context,
                 });
             }
-            
+
             // Check for removed required fields (additive - field is now optional)
             for removed_req in old_required_set.difference(&new_required_set) {
                 let mut context = HashMap::new();
@@ -553,7 +553,7 @@ impl MqttContract {
                 context.insert("change_category".to_string(), serde_json::json!("required_field_removed"));
                 context.insert("field_name".to_string(), serde_json::json!(removed_req));
                 context.insert("schema_format".to_string(), serde_json::json!("json_schema"));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::UnexpectedField,
                     path: format!("{}.{}", path_prefix, removed_req),
@@ -588,7 +588,7 @@ impl MqttContract {
                             context.insert("old_type".to_string(), serde_json::json!(old_type));
                             context.insert("new_type".to_string(), serde_json::json!(new_type));
                             context.insert("schema_format".to_string(), serde_json::json!("json_schema"));
-                            
+
                             mismatches.push(Mismatch {
                                 mismatch_type: MismatchType::TypeMismatch,
                                 path: format!("{}.{}", path_prefix, prop_name),
@@ -617,7 +617,7 @@ impl MqttContract {
                 context.insert("change_category".to_string(), serde_json::json!("property_removed"));
                 context.insert("field_name".to_string(), serde_json::json!(prop_name));
                 context.insert("schema_format".to_string(), serde_json::json!("json_schema"));
-                
+
                 mismatches.push(Mismatch {
                         mismatch_type: MismatchType::UnexpectedField,
                         path: format!("{}.{}", path_prefix, prop_name),
@@ -631,7 +631,7 @@ impl MqttContract {
                     });
                 }
             }
-            
+
             // Check for new properties (additive change)
             for prop_name in new_props.keys() {
                 if !old_props.contains_key(prop_name) {
@@ -641,7 +641,7 @@ impl MqttContract {
                 context.insert("change_category".to_string(), serde_json::json!("property_added"));
                 context.insert("field_name".to_string(), serde_json::json!(prop_name));
                 context.insert("schema_format".to_string(), serde_json::json!("json_schema"));
-                
+
                 mismatches.push(Mismatch {
                         mismatch_type: MismatchType::UnexpectedField,
                         path: format!("{}.{}", path_prefix, prop_name),

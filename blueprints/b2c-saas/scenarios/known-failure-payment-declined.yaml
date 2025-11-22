@@ -94,4 +94,3 @@ variables:
   payment_method_id: null
   error_code: null
   error_message: null
-

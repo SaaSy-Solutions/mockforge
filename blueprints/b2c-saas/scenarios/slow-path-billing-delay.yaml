@@ -100,4 +100,3 @@ variables:
   invoice_amount: null
   payment_id: null
   payment_status: null
-

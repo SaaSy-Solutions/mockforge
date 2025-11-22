@@ -420,4 +420,3 @@ async fn test_prod_promotion_with_pillar_tags() {
     let reason_str = reason2.unwrap();
     assert!(reason_str.contains("production") || reason_str.contains("Production"));
 }
-

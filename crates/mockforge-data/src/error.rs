@@ -75,4 +75,3 @@ impl Error {
         Self::Generic(message.into())
     }
 }
-

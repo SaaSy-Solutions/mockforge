@@ -79,10 +79,10 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
   }
 
   // Check if any mismatch has classification metadata
-  const hasClassification = mismatches.some(m => 
+  const hasClassification = mismatches.some(m =>
     m.context && (m.context.is_additive !== undefined || m.context.is_breaking !== undefined)
   );
-  
+
   // Check if any mismatch has schema format or protocol info
   const hasSchemaFormat = mismatches.some(m => m.context?.schema_format);
   const hasProtocolInfo = mismatches.some(m => m.context?.service || m.context?.method);
@@ -117,7 +117,7 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
             const service = mismatch.context?.service as string | undefined;
             const method = mismatch.context?.method as string | undefined;
             const fieldName = mismatch.context?.field_name as string | undefined;
-            
+
             return (
               <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="p-3 text-sm font-mono text-gray-900">{mismatch.path}</td>

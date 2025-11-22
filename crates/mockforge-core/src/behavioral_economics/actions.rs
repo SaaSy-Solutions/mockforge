@@ -148,4 +148,3 @@ mod tests {
         assert!(result.contains("fraud_detected"));
     }
 }
-

@@ -281,4 +281,3 @@ pub struct FailureInjectionConfig {
     /// Tag-based failure configs
     pub tag_configs: HashMap<String, Value>,
 }
-

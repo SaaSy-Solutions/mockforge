@@ -138,7 +138,7 @@ pub async fn set_persona(
 ) -> Result<Json<Value>, StatusCode> {
     // Clone persona_id before moving request.persona
     let persona_id = request.persona.id.clone();
-    
+
     state
         .engine
         .set_active_persona(&params.workspace, request.persona)

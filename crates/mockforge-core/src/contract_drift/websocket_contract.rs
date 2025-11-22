@@ -191,7 +191,7 @@ impl WebSocketContract {
                 context.insert("is_breaking".to_string(), serde_json::json!(true));
                 context.insert("change_category".to_string(), serde_json::json!("message_type_removed"));
                 context.insert("message_type".to_string(), serde_json::json!(message_type_id));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::EndpointNotFound,
                     path: message_type_id.clone(),
@@ -216,7 +216,7 @@ impl WebSocketContract {
                 context.insert("is_breaking".to_string(), serde_json::json!(false));
                 context.insert("change_category".to_string(), serde_json::json!("message_type_added"));
                 context.insert("message_type".to_string(), serde_json::json!(message_type_id));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::UnexpectedField,
                     path: message_type_id.clone(),
@@ -252,7 +252,7 @@ impl WebSocketContract {
                     context.insert("message_type".to_string(), serde_json::json!(message_type_id));
                     context.insert("old_topic".to_string(), serde_json::json!(old_type.topic));
                     context.insert("new_topic".to_string(), serde_json::json!(new_type.topic));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::SchemaMismatch,
                         path: format!("{}.topic", message_type_id),
@@ -278,7 +278,7 @@ impl WebSocketContract {
                     context.insert("message_type".to_string(), serde_json::json!(message_type_id));
                     context.insert("old_direction".to_string(), serde_json::json!(format!("{:?}", old_type.direction)));
                     context.insert("new_direction".to_string(), serde_json::json!(format!("{:?}", new_type.direction)));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::SchemaMismatch,
                         path: format!("{}.direction", message_type_id),
@@ -376,7 +376,7 @@ impl WebSocketContract {
             context.insert("message_type".to_string(), serde_json::json!(message_type_id));
             context.insert("old_format".to_string(), serde_json::json!(old_format));
             context.insert("new_format".to_string(), serde_json::json!(new_format));
-            
+
             mismatches.push(Mismatch {
                 mismatch_type: MismatchType::SchemaMismatch,
                 path: format!("{}.schema_format", message_type_id),
@@ -493,7 +493,7 @@ impl WebSocketContract {
                 context.insert("change_category".to_string(), serde_json::json!("field_removed"));
                 context.insert("field_name".to_string(), serde_json::json!(field_name));
                 context.insert("schema_format".to_string(), serde_json::json!("avro"));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::EndpointNotFound,
                     path: format!("{}.{}", path_prefix, field_name),
@@ -514,7 +514,7 @@ impl WebSocketContract {
                 // In Avro, fields without defaults are required
                 let has_default = new_field.get("default").is_some();
                 let is_required = !has_default;
-                
+
                 let mut context = HashMap::new();
                 context.insert("is_additive".to_string(), serde_json::json!(!is_required));
                 context.insert("is_breaking".to_string(), serde_json::json!(is_required));
@@ -522,7 +522,7 @@ impl WebSocketContract {
                 context.insert("field_name".to_string(), serde_json::json!(field_name));
                 context.insert("schema_format".to_string(), serde_json::json!("avro"));
                 context.insert("has_default".to_string(), serde_json::json!(has_default));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: if is_required { MismatchType::MissingRequiredField } else { MismatchType::UnexpectedField },
                     path: format!("{}.{}", path_prefix, field_name),
@@ -543,7 +543,7 @@ impl WebSocketContract {
                 let old_field = old_fields_map[field_name];
                 let old_type = old_field.get("type");
                 let new_type = new_field.get("type");
-                
+
                 if old_type != new_type {
                     let mut context = HashMap::new();
                     context.insert("is_additive".to_string(), serde_json::json!(false));
@@ -553,7 +553,7 @@ impl WebSocketContract {
                     context.insert("schema_format".to_string(), serde_json::json!("avro"));
                     context.insert("old_type".to_string(), serde_json::json!(old_type));
                     context.insert("new_type".to_string(), serde_json::json!(new_type));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::TypeMismatch,
                         path: format!("{}.{}", path_prefix, field_name),
@@ -593,7 +593,7 @@ impl WebSocketContract {
                     context.insert("change_category".to_string(), serde_json::json!("property_removed"));
                     context.insert("field_name".to_string(), serde_json::json!(prop_name));
                     context.insert("schema_format".to_string(), serde_json::json!("json_shape"));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::UnexpectedField,
                         path: format!("{}.{}", path_prefix, prop_name),
@@ -617,7 +617,7 @@ impl WebSocketContract {
                     context.insert("change_category".to_string(), serde_json::json!("property_added"));
                     context.insert("field_name".to_string(), serde_json::json!(prop_name));
                     context.insert("schema_format".to_string(), serde_json::json!("json_shape"));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::UnexpectedField,
                         path: format!("{}.{}", path_prefix, prop_name),
@@ -637,7 +637,7 @@ impl WebSocketContract {
                     let new_type = new_obj[prop_name].as_str().or_else(|| {
                         new_obj[prop_name].get("type").and_then(|t| t.as_str())
                     });
-                    
+
                     if old_type != new_type {
                         let mut context = HashMap::new();
                         context.insert("is_additive".to_string(), serde_json::json!(false));
@@ -647,7 +647,7 @@ impl WebSocketContract {
                         context.insert("schema_format".to_string(), serde_json::json!("json_shape"));
                         context.insert("old_type".to_string(), serde_json::json!(old_type));
                         context.insert("new_type".to_string(), serde_json::json!(new_type));
-                        
+
                         mismatches.push(Mismatch {
                             mismatch_type: MismatchType::TypeMismatch,
                             path: format!("{}.{}", path_prefix, prop_name),
@@ -695,7 +695,7 @@ impl WebSocketContract {
                 context.insert("is_breaking".to_string(), serde_json::json!(true));
                 context.insert("change_category".to_string(), serde_json::json!("required_field_added"));
                 context.insert("field_name".to_string(), serde_json::json!(new_req));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::MissingRequiredField,
                     path: format!("{}.{}", path_prefix, new_req),
@@ -708,7 +708,7 @@ impl WebSocketContract {
                     context,
                 });
             }
-            
+
             // Check for removed required fields (additive - field is now optional)
             for removed_req in old_required_set.difference(&new_required_set) {
                 let mut context = HashMap::new();
@@ -716,7 +716,7 @@ impl WebSocketContract {
                 context.insert("is_breaking".to_string(), serde_json::json!(false));
                 context.insert("change_category".to_string(), serde_json::json!("required_field_removed"));
                 context.insert("field_name".to_string(), serde_json::json!(removed_req));
-                
+
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::UnexpectedField,
                     path: format!("{}.{}", path_prefix, removed_req),
@@ -750,7 +750,7 @@ impl WebSocketContract {
                             context.insert("field_name".to_string(), serde_json::json!(prop_name));
                             context.insert("old_type".to_string(), serde_json::json!(old_type));
                             context.insert("new_type".to_string(), serde_json::json!(new_type));
-                            
+
                             mismatches.push(Mismatch {
                                 mismatch_type: MismatchType::TypeMismatch,
                                 path: format!("{}.{}", path_prefix, prop_name),
@@ -774,7 +774,7 @@ impl WebSocketContract {
                     context.insert("is_breaking".to_string(), serde_json::json!(false));
                     context.insert("change_category".to_string(), serde_json::json!("property_added"));
                     context.insert("field_name".to_string(), serde_json::json!(prop_name));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::UnexpectedField,
                         path: format!("{}.{}", path_prefix, prop_name),
@@ -797,7 +797,7 @@ impl WebSocketContract {
                     context.insert("is_breaking".to_string(), serde_json::json!(true));
                     context.insert("change_category".to_string(), serde_json::json!("property_removed"));
                     context.insert("field_name".to_string(), serde_json::json!(prop_name));
-                    
+
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::UnexpectedField,
                         path: format!("{}.{}", path_prefix, prop_name),

@@ -483,4 +483,3 @@ mod tests {
         assert!(pack.validate().is_ok());
     }
 }
-

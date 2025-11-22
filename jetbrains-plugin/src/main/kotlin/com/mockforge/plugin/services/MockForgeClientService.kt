@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Service for connecting to MockForge server
- * 
+ *
  * This service:
  * - Manages connection to MockForge server (if running)
  * - Fetches mock responses for inline preview
@@ -17,19 +17,19 @@ import java.util.concurrent.TimeUnit
  */
 @Service(Service.Level.PROJECT)
 class MockForgeClientService(private val project: Project) {
-    
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(2, TimeUnit.SECONDS)
         .readTimeout(2, TimeUnit.SECONDS)
         .build()
-    
+
     private var serverUrl: String = "http://localhost:3000"
     private var isConnected: Boolean = false
-    
+
     companion object {
         fun getInstance(project: Project): MockForgeClientService = project.service()
     }
-    
+
     /**
      * Set MockForge server URL
      */
@@ -37,7 +37,7 @@ class MockForgeClientService(private val project: Project) {
         this.serverUrl = url
         this.isConnected = false
     }
-    
+
     /**
      * Get mock response for an endpoint
      */
@@ -48,7 +48,7 @@ class MockForgeClientService(private val project: Project) {
                 return null
             }
         }
-        
+
         return try {
             // Query MockForge API for mock response
             // This would use the MockForge API endpoint
@@ -64,7 +64,7 @@ class MockForgeClientService(private val project: Project) {
             null
         }
     }
-    
+
     /**
      * Check if MockForge server is running
      */
@@ -74,7 +74,7 @@ class MockForgeClientService(private val project: Project) {
                 .url("$serverUrl/__mockforge/api/stats")
                 .get()
                 .build()
-            
+
             val response = client.newCall(request).execute()
             isConnected = response.isSuccessful
             isConnected
@@ -83,7 +83,7 @@ class MockForgeClientService(private val project: Project) {
             false
         }
     }
-    
+
     /**
      * Get connection status
      */
@@ -100,4 +100,3 @@ data class MockResponse(
     val headers: Map<String, String>,
     val body: String
 )
-

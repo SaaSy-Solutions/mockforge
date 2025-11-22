@@ -85,4 +85,3 @@ mod tests {
         assert_eq!(config.rules.len(), 1);
     }
 }
-

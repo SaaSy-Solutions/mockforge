@@ -71,7 +71,7 @@ export function AIStudioPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
-  
+
   // Contract Diff state
   const [selectedCapture, setSelectedCapture] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<ContractDiffResult | null>(null);
@@ -850,7 +850,7 @@ export function AIStudioPage() {
             .map((msg, idx) => {
               const isFrozen = msg.content?.includes('frozen') || msg.content?.includes('Frozen') || msg.data?.persona?._frozen_metadata;
               const isAiGenerated = true; // All personas from this tab are AI-generated
-              
+
               return (
               <Card key={idx} className="p-6">
                 <div className="space-y-4">
@@ -1034,7 +1034,7 @@ export function AIStudioPage() {
             <Card className="p-6">
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Captured Requests</h3>
-                
+
                 {/* Filters */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1384,7 +1384,7 @@ export function AIStudioPage() {
                     </p>
                   </div>
                 </div>
-                
+
                 {/* Budget Progress */}
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">Budget Progress</p>
@@ -1406,8 +1406,8 @@ export function AIStudioPage() {
                     <div className="space-y-3">
                       {Object.entries(usageStats.feature_breakdown).map(([feature, stats]) => {
                         const featureName = feature.replace('AiFeature::', '').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        const percentage = usageStats.tokens_used > 0 
-                          ? (stats.tokens_used / usageStats.tokens_used) * 100 
+                        const percentage = usageStats.tokens_used > 0
+                          ? (stats.tokens_used / usageStats.tokens_used) * 100
                           : 0;
                         return (
                           <div key={feature} className="p-4 border border-gray-200 rounded-lg">

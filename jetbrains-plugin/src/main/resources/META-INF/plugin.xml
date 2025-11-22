@@ -6,7 +6,7 @@
 
     <description><![CDATA[
         MockForge IDE integration for JetBrains IDEs.
-        
+
         Features:
         - Config validation for mockforge.yaml and mockforge.toml files using JSON Schema
         - Autocomplete for configuration keys and values
@@ -33,32 +33,32 @@
     <extensions defaultExtensionNs="com.intellij">
         <!-- File type registration for MockForge config files -->
         <fileType name="MockForge Config" implementationClass="com.mockforge.plugin.MockForgeConfigFileType" extensions="mockforge.yaml;mockforge.yml;mockforge.toml" />
-        
+
         <!-- Config validation inspection -->
-        <localInspection 
-            language="YAML" 
+        <localInspection
+            language="YAML"
             shortName="MockForgeConfigValidation"
             displayName="MockForge Config Validation"
             groupName="MockForge"
             enabledByDefault="true"
             implementationClass="com.mockforge.plugin.inspections.MockForgeConfigInspection" />
-        
-        <localInspection 
-            language="TOML" 
+
+        <localInspection
+            language="TOML"
             shortName="MockForgeConfigValidationToml"
             displayName="MockForge Config Validation"
             groupName="MockForge"
             enabledByDefault="true"
             implementationClass="com.mockforge.plugin.inspections.MockForgeConfigInspection" />
-        
+
         <!-- Hover provider for config documentation -->
         <lang.documentationProvider language="YAML" implementationClass="com.mockforge.plugin.MockForgeDocumentationProvider" />
         <lang.documentationProvider language="TOML" implementationClass="com.mockforge.plugin.MockForgeDocumentationProvider" />
-        
+
         <!-- Completion contributor for autocomplete -->
         <completion.contributor language="YAML" implementationClass="com.mockforge.plugin.MockForgeCompletionContributor" />
         <completion.contributor language="TOML" implementationClass="com.mockforge.plugin.MockForgeCompletionContributor" />
-        
+
         <!-- Line marker provider for code files (endpoint detection) -->
         <codeInsight.lineMarkerProvider language="JavaScript" implementationClass="com.mockforge.plugin.MockForgeLineMarkerProvider" />
         <codeInsight.lineMarkerProvider language="TypeScript" implementationClass="com.mockforge.plugin.MockForgeLineMarkerProvider" />
@@ -67,7 +67,7 @@
 
     <actions>
         <!-- Generate Mock Scenario intention action -->
-        <action 
+        <action
             id="MockForge.GenerateMockScenario"
             class="com.mockforge.plugin.actions.GenerateMockScenarioAction"
             text="Generate MockForge Scenario"
@@ -77,4 +77,3 @@
         </action>
     </actions>
 </idea-plugin>
-

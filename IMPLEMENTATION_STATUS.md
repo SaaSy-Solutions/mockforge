@@ -8,14 +8,14 @@
   - Statistical modeling (change probability, break probability)
   - Multi-window forecasting (30/90/180 days)
   - Hierarchical aggregation (workspace/service/endpoint)
-  
+
 - ✅ **Semantic Drift Detection**: Complete implementation
   - Layer 2 semantic analysis (extends AI Contract Diff)
   - Rule-based detection (description changes, enum narrowing, etc.)
   - LLM-powered semantic analysis
   - Soft-breaking heuristic scoring
   - Configurable confidence threshold (default 0.65)
-  
+
 - ✅ **Contract Threat Modeling**: Complete implementation
   - PII detection
   - DoS risk analysis (unbounded arrays)
@@ -77,7 +77,7 @@ The following handlers have TODO comments for database row mapping. These are **
 ### mockforge-cli Compilation
 - **Issue**: `mockforge-cli` fails to compile due to dependency on published `mockforge-collab-0.3.1` from crates.io
 - **Root Cause**: Published crate doesn't include `.sqlx` query cache
-- **Solution**: 
+- **Solution**:
   - ✅ Local `mockforge-collab@0.3.2` compiles successfully
   - ✅ `.sqlx` directory is configured to be included in published crate (`Cargo.toml` line 14)
   - ✅ Verification script created (`verify-publish.sh`)
@@ -90,9 +90,8 @@ All core functionality is implemented and compiles successfully. The TODO commen
 **Compilation Status:**
 ```bash
 ✅ mockforge-core:     Compiles
-✅ mockforge-http:     Compiles  
+✅ mockforge-http:     Compiles
 ✅ mockforge-schema:   Compiles
 ✅ mockforge-collab:   Compiles (local 0.3.2)
 ⚠️ mockforge-cli:      Compiles with dependency warnings (resolved when 0.3.2 is published)
 ```
-

@@ -15,7 +15,7 @@ repositories {
 intellij {
     version.set("2023.3")
     type.set("IC") // IntelliJ IDEA Community Edition
-    
+
     // Plugin name and description
     plugins.set(listOf("yaml", "com.intellij.toml"))
 }
@@ -23,23 +23,23 @@ intellij {
 dependencies {
     // Kotlin standard library
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-    
+
     // JSON Schema validation
     implementation("com.networknt:json-schema-validator:1.0.76")
-    
+
     // YAML parsing
     implementation("org.yaml:snakeyaml:2.2")
-    
+
     // TOML parsing
     implementation("com.moandjiezana.toml:toml4j:0.7.2")
-    
+
     // HTTP client for connecting to MockForge server
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    
+
     // JSON processing
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.2")
-    
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
@@ -54,11 +54,11 @@ tasks {
     patchPluginXml {
         sinceBuild.set("233")
         untilBuild.set("241.*")
-        
+
         // Plugin description
         pluginDescription.set("""
             MockForge IDE integration for JetBrains IDEs.
-            
+
             Features:
             - Config validation for mockforge.yaml and mockforge.toml files
             - Autocomplete for configuration keys and values
@@ -66,7 +66,7 @@ tasks {
             - Inline preview of mock responses when hovering over endpoint references
             - Real-time linting for MockForge configuration files
         """.trimIndent())
-        
+
         // Change notes
         changeNotes.set("""
             <h3>Initial Release</h3>
@@ -89,4 +89,3 @@ tasks {
         token.set(System.getenv("PUBLISH_TOKEN"))
     }
 }
-

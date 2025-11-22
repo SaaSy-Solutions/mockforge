@@ -73,7 +73,8 @@ azure_storage_blobs = { version = "0.19", optional = true }
 azure_identity = { version = "0.20", optional = true }
 
 # Google Cloud Storage support (optional)
-google-cloud-storage = { version = "0.12", optional = true }
+# Updated to 1.4.0 to address security vulnerabilities in transitive dependencies
+google-cloud-storage = { version = "1.4", optional = true }
 
 # AWS S3 support (optional)
 aws-sdk-s3 = { version = "1", optional = true }

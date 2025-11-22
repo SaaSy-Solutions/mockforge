@@ -273,7 +273,9 @@ pub mod request_chaining;
 pub mod request_fingerprint;
 pub mod request_logger;
 pub mod request_scripting;
-pub mod route_chaos;
+// Route chaos has been moved to mockforge-route-chaos crate to avoid Send issues
+// Import directly from mockforge-route-chaos crate instead of re-exporting here
+// to avoid circular dependency (mockforge-route-chaos depends on mockforge-core for config types)
 pub mod routing;
 /// Runtime validation for SDKs (request/response validation at runtime)
 pub mod runtime_validation;
@@ -404,7 +406,8 @@ pub use request_logger::{
     create_grpc_log_entry, create_http_log_entry, create_websocket_log_entry, get_global_logger,
     init_global_logger, log_request_global, CentralizedRequestLogger, RequestLogEntry,
 };
-pub use route_chaos::{RouteChaosInjector, RouteFaultResponse, RouteMatcher};
+// Route chaos types moved to mockforge-route-chaos crate
+// Import directly: use mockforge_route_chaos::{RouteChaosInjector, RouteFaultResponse, RouteMatcher};
 pub use routing::{HttpMethod, Route, RouteRegistry};
 pub use runtime_validation::{
     RuntimeValidationError, RuntimeValidationResult, RuntimeValidatorConfig, SchemaMetadata,

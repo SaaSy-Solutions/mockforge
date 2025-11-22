@@ -18,14 +18,14 @@ Use this structure for **every** guide (blog, video, social). Keep it concise an
 - Optional: Node >= <version>, Docker (if used), Git
 
 ## Steps (3–7 steps; code + screenshots)
-1) <Step name>  
+1) <Step name>
    - What & Why
    - Command(s):
      ```bash
      # commands
      ```
    - Expected result / screenshot prompt
-2) <Step name>  
+2) <Step name>
    - ...
 
 ## Gotchas & Debugging

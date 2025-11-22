@@ -116,4 +116,3 @@ pub fn check_and_update_lifecycle_transitions(
 
     false // No transition occurred
 }
-

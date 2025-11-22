@@ -65,4 +65,3 @@ CREATE INDEX IF NOT EXISTS idx_semantic_incidents_llm_analysis ON semantic_drift
 
 -- GIN index for details JSONB queries
 CREATE INDEX IF NOT EXISTS idx_semantic_incidents_details ON semantic_drift_incidents USING GIN (details);
-

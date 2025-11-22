@@ -462,7 +462,7 @@ impl ComplianceDashboardEngine {
 
         // Incident Response - Calculate from privileged access and SIEM
         use crate::security::is_privileged_access_manager_initialized;
-        
+
         let incident_response_effectiveness = if is_privileged_access_manager_initialized().await
             && is_siem_emitter_initialized().await
         {

@@ -6,30 +6,30 @@ import com.intellij.psi.PsiManager
 
 /**
  * Documentation provider for MockForge configuration files
- * 
+ *
  * Provides hover documentation for configuration keys
  */
 class MockForgeDocumentationProvider : DocumentationProvider {
-    
+
     override fun getQuickNavigateInfo(element: PsiElement, originalElement: PsiElement): String? {
         return getDocumentation(element)
     }
-    
+
     override fun generateDoc(element: PsiElement, originalElement: PsiElement?): String? {
         return getDocumentation(element)
     }
-    
+
     private fun getDocumentation(element: PsiElement): String? {
         val text = element.text
-        
+
         // Check if this is a config key
         val key = extractConfigKey(text)
         if (key == null) return null
-        
+
         // Return documentation for the key
         return getKeyDocumentation(key)
     }
-    
+
     private fun extractConfigKey(text: String): String? {
         // Extract key from YAML/TOML format
         val trimmed = text.trim()
@@ -39,7 +39,7 @@ class MockForgeDocumentationProvider : DocumentationProvider {
             else -> null
         }
     }
-    
+
     private fun getKeyDocumentation(key: String): String? {
         val docs = mapOf(
             "reality_level" to "Reality level controls how realistic mock responses are. Values: static, light, moderate, high, chaos",
@@ -52,8 +52,7 @@ class MockForgeDocumentationProvider : DocumentationProvider {
             "admin" to "Admin UI configuration",
             "observability" to "Metrics, tracing, and observability configuration",
         )
-        
+
         return docs[key]
     }
 }
-

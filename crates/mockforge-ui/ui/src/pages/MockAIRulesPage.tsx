@@ -141,10 +141,10 @@ export function MockAIRulesPage() {
 
   const handleExampleClick = (exampleId: string) => {
     // Find the explanation that contains this example
-    const explanation = explanations.find(exp => 
+    const explanation = explanations.find(exp =>
       exp.examples?.some(ex => ex.id === exampleId)
     );
-    
+
     if (explanation) {
       const example = explanation.examples?.find(ex => ex.id === exampleId);
       if (example) {

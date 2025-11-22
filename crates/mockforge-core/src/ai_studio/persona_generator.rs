@@ -62,12 +62,12 @@ impl PersonaGenerator {
         // In deterministic mode, check for frozen artifacts first
         if ai_mode == Some(crate::ai_studio::config::AiMode::GenerateOnceFreeze) {
             let freezer = ArtifactFreezer::new();
-            
+
             // Create identifier from description hash
             let mut hasher = DefaultHasher::new();
             request.description.hash(&mut hasher);
             let description_hash = format!("{:x}", hasher.finish());
-            
+
             // Try to load frozen artifact
             if let Some(frozen) = freezer.load_frozen("persona", Some(&description_hash)).await? {
                 // Extract persona from frozen content (remove metadata)
@@ -75,7 +75,7 @@ impl PersonaGenerator {
                 if let Some(obj) = persona.as_object_mut() {
                     obj.remove("_frozen_metadata");
                 }
-                
+
                 return Ok(PersonaGenerationResponse {
                     persona: Some(persona),
                     message: format!(
@@ -179,7 +179,7 @@ Make the persona realistic and consistent. Traits should align with the descript
         let frozen_artifact = if let Some(config) = deterministic_config {
             if config.enabled && config.is_auto_freeze_enabled() {
                 let freezer = ArtifactFreezer::new();
-                
+
                 // Calculate prompt hash
                 let mut hasher = Sha256::new();
                 hasher.update(request.description.as_bytes());

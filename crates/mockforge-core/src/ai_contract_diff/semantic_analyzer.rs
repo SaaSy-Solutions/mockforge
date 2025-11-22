@@ -173,7 +173,7 @@ impl SemanticAnalyzer {
                         "TRACE" => item.trace.as_ref(),
                         _ => None,
                     }?;
-                    
+
                     operation.responses
                         .responses
                         .get(&openapiv3::StatusCode::Code(200))
@@ -360,12 +360,12 @@ impl SemanticAnalyzer {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| serde_json::to_string(&response).unwrap_or_default());
-        
+
         let confidence = response
             .get("confidence")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.5);
-        
+
         let soft_breaking_score = response
             .get("soft_breaking_score")
             .and_then(|v| v.as_f64())
@@ -513,4 +513,3 @@ Provide your analysis in JSON format with:
         (total_score / mismatches.len() as f64).min(1.0)
     }
 }
-

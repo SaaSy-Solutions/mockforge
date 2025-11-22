@@ -7,12 +7,12 @@ import com.intellij.psi.PsiElement
 
 /**
  * Completion contributor for MockForge configuration files
- * 
+ *
  * Provides autocomplete suggestions for configuration keys and values
  * based on JSON Schema definitions
  */
 class MockForgeCompletionContributor : CompletionContributor() {
-    
+
     init {
         // Register completion for YAML and TOML files
         extend(
@@ -21,7 +21,7 @@ class MockForgeCompletionContributor : CompletionContributor() {
             MockForgeCompletionProvider()
         )
     }
-    
+
     private class MockForgeCompletionProvider : com.intellij.codeInsight.completion.CompletionProvider<CompletionParameters>() {
         override fun addCompletions(
             parameters: CompletionParameters,
@@ -30,16 +30,16 @@ class MockForgeCompletionContributor : CompletionContributor() {
         ) {
             val file = parameters.originalFile
             val element = parameters.position
-            
+
             // Check if this is a MockForge config file
             val fileName = file.name.lowercase()
             if (!fileName.contains("mockforge") && !fileName.contains("blueprint")) {
                 return
             }
-            
+
             // Get text before cursor
             val textBeforeCursor = getTextBeforeCursor(element)
-            
+
             // Provide completions based on context
             val completions = when {
                 // Top-level keys
@@ -52,7 +52,7 @@ class MockForgeCompletionContributor : CompletionContributor() {
                 textBeforeCursor.contains("drift_budget:") -> getDriftBudgetCompletions()
                 else -> emptyList()
             }
-            
+
             completions.forEach { completion ->
                 result.addElement(
                     LookupElementBuilder.create(completion.key)
@@ -61,20 +61,20 @@ class MockForgeCompletionContributor : CompletionContributor() {
                 )
             }
         }
-        
+
         private fun getTextBeforeCursor(element: PsiElement): String {
             val file = element.containingFile
             val offset = element.textOffset
             return file.text.substring(0, offset)
         }
-        
+
         private fun isTopLevelContext(text: String): Boolean {
             val lines = text.split('\n')
             val lastLine = lines.lastOrNull() ?: return true
             // Check if we're at top level (no indentation or minimal indentation)
             return lastLine.trim().isEmpty() || !lastLine.trimStart().startsWith("  ")
         }
-        
+
         private fun getTopLevelCompletions(): List<CompletionItem> {
             return listOf(
                 CompletionItem("http", "Module", "HTTP server configuration"),
@@ -87,7 +87,7 @@ class MockForgeCompletionContributor : CompletionContributor() {
                 CompletionItem("observability", "Module", "Observability configuration"),
             )
         }
-        
+
         private fun getRealityLevelCompletions(): List<CompletionItem> {
             return listOf(
                 CompletionItem("static", "Value", "Static stubs - no simulation"),
@@ -97,7 +97,7 @@ class MockForgeCompletionContributor : CompletionContributor() {
                 CompletionItem("chaos", "Value", "Production chaos - full realism"),
             )
         }
-        
+
         private fun getPersonaCompletions(): List<CompletionItem> {
             return listOf(
                 CompletionItem("id", "Property", "Persona identifier"),
@@ -106,7 +106,7 @@ class MockForgeCompletionContributor : CompletionContributor() {
                 CompletionItem("traits", "Property", "Persona traits"),
             )
         }
-        
+
         private fun getDriftBudgetCompletions(): List<CompletionItem> {
             return listOf(
                 CompletionItem("enabled", "Property", "Enable drift budget monitoring"),
@@ -115,11 +115,10 @@ class MockForgeCompletionContributor : CompletionContributor() {
             )
         }
     }
-    
+
     private data class CompletionItem(
         val key: String,
         val type: String,
         val description: String
     )
 }
-

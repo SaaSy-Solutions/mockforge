@@ -249,7 +249,7 @@ impl BurstLossState {
                     false // Don't drop this packet
                 } else {
                     // Still in burst - apply loss rate
-                    let mut rng = rand::rng();
+                    let mut rng = rand::thread_rng();
                     rng.random_bool(config.loss_rate_during_burst)
                 }
             }
@@ -265,7 +265,7 @@ impl BurstLossState {
                     // End recovery
                     self.recovery_start = None;
                     // Check if we should start a new burst
-                    let mut rng = rand::rng();
+                    let mut rng = rand::thread_rng();
                     if rng.random_bool(config.burst_probability) {
                         self.in_burst = true;
                         self.burst_start = Some(now);
@@ -280,7 +280,7 @@ impl BurstLossState {
             }
             (false, _, None) => {
                 // Not in burst or recovery - check if we should start a burst
-                let mut rng = rand::rng();
+                let mut rng = rand::thread_rng();
                 if rng.random_bool(config.burst_probability) {
                     self.in_burst = true;
                     self.burst_start = Some(now);

@@ -27,11 +27,11 @@ check_pillar_tags() {
 
   # Check [Unreleased] section
   local unreleased_section=$(awk '/^## \[Unreleased\]/{p=1} p{print} /^## \[[0-9]/ && p{exit}' "$changelog_file" 2>/dev/null || true)
-  
+
   if [ -n "$unreleased_section" ]; then
     # Check if Unreleased section has entries (not just headers)
     local has_entries=$(echo "$unreleased_section" | grep -qE '^### (Added|Changed|Deprecated|Removed|Fixed|Security)' || echo "")
-    
+
     if [ -n "$has_entries" ]; then
       # Check if the Unreleased section contains at least one pillar tag
       if ! echo "$unreleased_section" | grep -qE '\[(Reality|Contracts|DevX|Cloud|AI)\]'; then

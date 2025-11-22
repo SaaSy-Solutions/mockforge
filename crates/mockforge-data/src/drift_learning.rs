@@ -759,7 +759,7 @@ impl PersonaBehaviorLearner {
                 };
                 learned_traits.insert(trait_key, trait_value);
             }
-            
+
             // Update persona traits in registry
             if !learned_traits.is_empty() {
                 persona_registry.update_persona(persona_id, learned_traits)?;
@@ -830,4 +830,3 @@ mod tests {
         assert!(pattern.is_none()); // Not enough samples
     }
 }
-

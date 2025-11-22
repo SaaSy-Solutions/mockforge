@@ -7,12 +7,12 @@
  */
 
 import React, { useState } from 'react';
-import { 
-  BookOpen, 
-  ChevronRight, 
-  Clock, 
-  ArrowRight, 
-  CheckCircle2, 
+import {
+  BookOpen,
+  ChevronRight,
+  Clock,
+  ArrowRight,
+  CheckCircle2,
   Loader2,
   Info,
   Zap,
@@ -27,10 +27,10 @@ import { Badge } from '../ui/Badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog';
 import { Alert } from '../ui/DesignSystem';
 import { toast } from 'sonner';
-import { 
-  useLifecyclePresets, 
-  useLifecyclePresetDetails, 
-  useApplyLifecyclePreset 
+import {
+  useLifecyclePresets,
+  useLifecyclePresetDetails,
+  useApplyLifecyclePreset
 } from '../../hooks/useApi';
 import { cn } from '../../utils/cn';
 
@@ -54,10 +54,10 @@ const PRESET_COLORS: Record<string, string> = {
   user_engagement: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
 };
 
-export function LifecyclePresetLibrary({ 
-  className, 
+export function LifecyclePresetLibrary({
+  className,
   workspace = 'default',
-  activePersonaId 
+  activePersonaId
 }: LifecyclePresetLibraryProps) {
   const { data: presetsData, isLoading: presetsLoading } = useLifecyclePresets();
   const applyMutation = useApplyLifecyclePreset();
@@ -369,4 +369,3 @@ export function LifecyclePresetLibrary({
     </Card>
   );
 }
-

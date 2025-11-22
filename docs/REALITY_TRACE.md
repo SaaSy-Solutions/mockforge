@@ -235,4 +235,3 @@ Template Expansion Steps shows:
 - [REALITY_CONTINUUM.md](REALITY_CONTINUUM.md) - Understand reality blending
 - [OBSERVABILITY.md](OBSERVABILITY.md) - General observability features
 - [LIFECYCLES_AND_TIME.md](LIFECYCLES_AND_TIME.md) - Lifecycle presets and time travel
-

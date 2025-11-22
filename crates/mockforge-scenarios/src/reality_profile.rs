@@ -256,4 +256,3 @@ mod tests {
         assert!(invalid_rate.validate().is_err());
     }
 }
-

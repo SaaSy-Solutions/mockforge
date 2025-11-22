@@ -397,7 +397,7 @@ async fn handle_plugin_init(
         // Fall back to manual file copying
         println!("⚠️  cargo-generate not found, using manual template copying");
         println!("   Install cargo-generate for better template support: cargo install cargo-generate");
-        
+
         // Get template directory
         let template_dir = get_template_dir()?;
 
@@ -431,7 +431,7 @@ async fn use_cargo_generate(
 
     // Get template directory
     let template_dir = get_template_dir()?;
-    
+
     // Convert to absolute path
     let template_path = template_dir.canonicalize()
         .or_else(|_| std::env::current_dir().map(|cwd| cwd.join(&template_dir)))?;
@@ -485,7 +485,7 @@ async fn use_cargo_generate(
     // cargo-generate creates the directory with the name specified by --name
     let parent_dir = output_dir.parent()
         .unwrap_or_else(|| Path::new("."));
-    
+
     cmd.current_dir(parent_dir);
 
     // Execute cargo-generate

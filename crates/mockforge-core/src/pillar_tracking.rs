@@ -233,4 +233,3 @@ mod tests {
         assert_eq!(recorded[0].metric_name, "blended_reality_ratio");
     }
 }
-

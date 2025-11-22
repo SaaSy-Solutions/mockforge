@@ -55,37 +55,37 @@ async fn query_drift_incidents(
     window_days: u32,
 ) -> Result<Vec<DriftIncident>> {
     let window_start = Utc::now() - chrono::Duration::days(window_days as i64);
-    
+
     let mut query = String::from(
         "SELECT id, workspace_id, endpoint, method, incident_type, severity, status,
          detected_at, details, created_at, updated_at, resolved_at, budget_id,
          sync_cycle_id, contract_diff_id, before_sample, after_sample,
          fitness_test_results, affected_consumers, protocol
-         FROM drift_incidents 
+         FROM drift_incidents
          WHERE detected_at >= $1",
     );
-    
+
     let mut bind_index = 2;
-    
+
     if let Some(ws_id) = workspace_id {
         query.push_str(&format!(" AND workspace_id = ${}", bind_index));
         bind_index += 1;
     }
-    
+
     if let Some(ep) = endpoint {
         query.push_str(&format!(" AND endpoint = ${}", bind_index));
         bind_index += 1;
     }
-    
+
     if let Some(m) = method {
         query.push_str(&format!(" AND method = ${}", bind_index));
         bind_index += 1;
     }
-    
+
     query.push_str(" ORDER BY detected_at DESC");
-    
+
     let mut query_builder = sqlx::query(&query).bind(window_start);
-    
+
     if let Some(ws_id) = workspace_id {
         let uuid = Uuid::parse_str(ws_id).ok();
         query_builder = query_builder.bind(uuid);
@@ -96,12 +96,12 @@ async fn query_drift_incidents(
     if let Some(m) = method {
         query_builder = query_builder.bind(m);
     }
-    
+
     let rows = query_builder
         .fetch_all(pool)
         .await
         .map_err(|e| Error::generic(&format!("Failed to query drift incidents: {}", e)))?;
-    
+
     let mut incidents = Vec::new();
     for row in rows {
         match map_row_to_drift_incident(&row) {
@@ -112,14 +112,14 @@ async fn query_drift_incidents(
             }
         }
     }
-    
+
     Ok(incidents)
 }
 
 /// Map database row to DriftIncident
 fn map_row_to_drift_incident(row: &sqlx::postgres::PgRow) -> Result<DriftIncident> {
     use sqlx::Row;
-    
+
     let id: Uuid = row.try_get("id")
         .map_err(|e| Error::generic(&format!("Failed to get id: {}", e)))?;
     let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok();
@@ -149,13 +149,13 @@ fn map_row_to_drift_incident(row: &sqlx::postgres::PgRow) -> Result<DriftInciden
     let fitness_test_results: Option<serde_json::Value> = row.try_get("fitness_test_results").ok();
     let affected_consumers: Option<serde_json::Value> = row.try_get("affected_consumers").ok();
     let protocol: Option<String> = row.try_get("protocol").ok();
-    
+
     let incident_type = match incident_type_str.as_str() {
         "breaking_change" => IncidentType::BreakingChange,
         "threshold_exceeded" => IncidentType::ThresholdExceeded,
         _ => return Err(Error::generic(&format!("Invalid incident_type: {}", incident_type_str))),
     };
-    
+
     let severity = match severity_str.as_str() {
         "low" => IncidentSeverity::Low,
         "medium" => IncidentSeverity::Medium,
@@ -163,7 +163,7 @@ fn map_row_to_drift_incident(row: &sqlx::postgres::PgRow) -> Result<DriftInciden
         "critical" => IncidentSeverity::Critical,
         _ => return Err(Error::generic(&format!("Invalid severity: {}", severity_str))),
     };
-    
+
     let status = match status_str.as_str() {
         "open" => IncidentStatus::Open,
         "acknowledged" => IncidentStatus::Acknowledged,
@@ -171,21 +171,21 @@ fn map_row_to_drift_incident(row: &sqlx::postgres::PgRow) -> Result<DriftInciden
         "closed" => IncidentStatus::Closed,
         _ => return Err(Error::generic(&format!("Invalid status: {}", status_str))),
     };
-    
+
     // Parse fitness_test_results JSONB array
     let fitness_results = if let Some(json) = fitness_test_results {
         serde_json::from_value(json).unwrap_or_default()
     } else {
         Vec::new()
     };
-    
+
     // Parse affected_consumers JSONB object
     let consumers = if let Some(json) = affected_consumers {
         serde_json::from_value(json).ok()
     } else {
         None
     };
-    
+
     // Parse protocol
     let protocol_enum = protocol.and_then(|p| {
         match p.as_str() {
@@ -197,7 +197,7 @@ fn map_row_to_drift_incident(row: &sqlx::postgres::PgRow) -> Result<DriftInciden
             _ => None,
         }
     });
-    
+
     Ok(DriftIncident {
         id: id.to_string(),
         budget_id: budget_id.map(|u| u.to_string()),
@@ -289,17 +289,17 @@ pub async fn handle_forecast_generate(
     // Generate forecast for each unique endpoint/method combination
     use std::collections::HashMap;
     let mut endpoint_groups: HashMap<(String, String), Vec<&DriftIncident>> = HashMap::new();
-    
+
     for incident in &incidents {
         let key = (incident.endpoint.clone(), incident.method.clone());
         endpoint_groups.entry(key).or_insert_with(Vec::new).push(incident);
     }
 
     info!("Generating forecasts for {} endpoint(s)...", endpoint_groups.len());
-    
+
     for ((endpoint, method), group_incidents) in endpoint_groups {
         let incidents_slice: Vec<DriftIncident> = group_incidents.iter().map(|i| (*i).clone()).collect();
-        
+
         if let Some(forecast) = forecaster.generate_forecast(
             &incidents_slice,
             workspace_id.clone(),
@@ -454,44 +454,44 @@ async fn query_semantic_incidents(
     use mockforge_core::ai_contract_diff::SemanticChangeType;
     use mockforge_core::incidents::semantic_manager::SemanticIncident;
     use mockforge_core::incidents::types::{IncidentSeverity, IncidentStatus};
-    
+
     let window_start = Utc::now() - chrono::Duration::days(days);
-    
+
     let mut query = String::from(
         "SELECT id, workspace_id, endpoint, method, semantic_change_type, severity, status,
          semantic_confidence, soft_breaking_score, llm_analysis, before_semantic_state,
          after_semantic_state, details, related_drift_incident_id, contract_diff_id,
          external_ticket_id, external_ticket_url, detected_at, created_at, acknowledged_at,
          resolved_at, closed_at, updated_at
-         FROM semantic_drift_incidents 
+         FROM semantic_drift_incidents
          WHERE detected_at >= $1",
     );
-    
+
     let mut bind_index = 2;
-    
+
     if let Some(ws_id) = workspace_id {
         query.push_str(&format!(" AND workspace_id = ${}", bind_index));
         bind_index += 1;
     }
-    
+
     query.push_str(" ORDER BY detected_at DESC LIMIT 100");
-    
+
     let mut query_builder = sqlx::query(&query).bind(window_start);
-    
+
     if let Some(ws_id) = workspace_id {
         let uuid = Uuid::parse_str(ws_id).ok();
         query_builder = query_builder.bind(uuid);
     }
-    
+
     let rows = query_builder
         .fetch_all(pool)
         .await
         .map_err(|e| Error::generic(&format!("Failed to query semantic incidents: {}", e)))?;
-    
+
     let mut incidents = Vec::new();
     for row in rows {
         use sqlx::Row;
-        
+
         let id: Uuid = row.try_get("id")
             .map_err(|e| Error::generic(&format!("Failed to get id: {}", e)))?;
         let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok();
@@ -526,7 +526,7 @@ async fn query_semantic_incidents(
         let closed_at: Option<DateTime<Utc>> = row.try_get("closed_at").ok();
         let updated_at: DateTime<Utc> = row.try_get("updated_at")
             .map_err(|e| Error::generic(&format!("Failed to get updated_at: {}", e)))?;
-        
+
         let change_type = match change_type_str.as_str() {
             "description_change" => SemanticChangeType::DescriptionChange,
             "enum_narrowing" => SemanticChangeType::EnumNarrowing,
@@ -537,7 +537,7 @@ async fn query_semantic_incidents(
             "soft_breaking_change" => SemanticChangeType::SoftBreakingChange,
             _ => continue,
         };
-        
+
         let severity = match severity_str.as_str() {
             "low" => IncidentSeverity::Low,
             "medium" => IncidentSeverity::Medium,
@@ -545,7 +545,7 @@ async fn query_semantic_incidents(
             "critical" => IncidentSeverity::Critical,
             _ => continue,
         };
-        
+
         let status = match status_str.as_str() {
             "open" => IncidentStatus::Open,
             "acknowledged" => IncidentStatus::Acknowledged,
@@ -553,7 +553,7 @@ async fn query_semantic_incidents(
             "closed" => IncidentStatus::Closed,
             _ => continue,
         };
-        
+
         incidents.push(SemanticIncident {
             id: id.to_string(),
             workspace_id: workspace_id.map(|u| u.to_string()),
@@ -580,7 +580,7 @@ async fn query_semantic_incidents(
             updated_at: updated_at.timestamp(),
         });
     }
-    
+
     Ok(incidents)
 }
 
@@ -591,33 +591,33 @@ async fn query_threat_assessments(
     service_id: Option<&str>,
 ) -> Result<Vec<ThreatAssessment>> {
     use sqlx::Row;
-    
+
     let mut query = String::from(
         "SELECT id, workspace_id, service_id, service_name, endpoint, method,
          aggregation_level, threat_level, threat_score, threat_categories,
          findings, remediation_suggestions, assessed_at
-         FROM contract_threat_assessments 
+         FROM contract_threat_assessments
          WHERE 1=1",
     );
-    
+
     let mut bind_index = 1;
     let mut params: Vec<Option<Uuid>> = Vec::new();
     let mut string_params: Vec<Option<String>> = Vec::new();
-    
+
     if let Some(ws_id) = workspace_id {
         query.push_str(&format!(" AND workspace_id = ${}", bind_index));
         bind_index += 1;
         params.push(Uuid::parse_str(ws_id).ok());
     }
-    
+
     if let Some(svc_id) = service_id {
         query.push_str(&format!(" AND service_id = ${}", bind_index));
         bind_index += 1;
         string_params.push(Some(svc_id.to_string()));
     }
-    
+
     query.push_str(" ORDER BY assessed_at DESC LIMIT 50");
-    
+
     // Build query with parameters
     let mut query_builder = sqlx::query(&query);
     for param in params {
@@ -626,12 +626,12 @@ async fn query_threat_assessments(
     for param in string_params {
         query_builder = query_builder.bind(param);
     }
-    
+
     let rows = query_builder
         .fetch_all(pool)
         .await
         .map_err(|e| Error::generic(&format!("Failed to query threat assessments: {}", e)))?;
-    
+
     let mut assessments = Vec::new();
     for row in rows {
         match map_row_to_threat_assessment(&row) {
@@ -642,7 +642,7 @@ async fn query_threat_assessments(
             }
         }
     }
-    
+
     Ok(assessments)
 }
 
@@ -650,7 +650,7 @@ async fn query_threat_assessments(
 fn map_row_to_threat_assessment(row: &sqlx::postgres::PgRow) -> Result<ThreatAssessment> {
     use sqlx::Row;
     use mockforge_core::contract_drift::threat_modeling::{ThreatCategory, ThreatFinding, RemediationSuggestion};
-    
+
     let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok();
     let service_id: Option<String> = row.try_get("service_id").ok();
     let service_name: Option<String> = row.try_get("service_name").ok();
@@ -667,14 +667,14 @@ fn map_row_to_threat_assessment(row: &sqlx::postgres::PgRow) -> Result<ThreatAss
     let remediations_json: serde_json::Value = row.try_get("remediation_suggestions").unwrap_or_default();
     let assessed_at: DateTime<Utc> = row.try_get("assessed_at")
         .map_err(|e| Error::generic(&format!("Failed to get assessed_at: {}", e)))?;
-    
+
     let aggregation_level = match aggregation_level_str.as_str() {
         "workspace" => mockforge_core::contract_drift::threat_modeling::AggregationLevel::Workspace,
         "service" => mockforge_core::contract_drift::threat_modeling::AggregationLevel::Service,
         "endpoint" => mockforge_core::contract_drift::threat_modeling::AggregationLevel::Endpoint,
         _ => return Err(Error::generic(&format!("Invalid aggregation_level: {}", aggregation_level_str))),
     };
-    
+
     let threat_level = match threat_level_str.as_str() {
         "low" => ThreatLevel::Low,
         "medium" => ThreatLevel::Medium,
@@ -682,11 +682,11 @@ fn map_row_to_threat_assessment(row: &sqlx::postgres::PgRow) -> Result<ThreatAss
         "critical" => ThreatLevel::Critical,
         _ => return Err(Error::generic(&format!("Invalid threat_level: {}", threat_level_str))),
     };
-    
+
     let threat_categories: Vec<ThreatCategory> = serde_json::from_value(threat_categories_json).unwrap_or_default();
     let findings: Vec<ThreatFinding> = serde_json::from_value(findings_json).unwrap_or_default();
     let remediation_suggestions: Vec<RemediationSuggestion> = serde_json::from_value(remediations_json).unwrap_or_default();
-    
+
     Ok(ThreatAssessment {
         workspace_id: workspace_id.map(|u| u.to_string()),
         service_id,
@@ -777,40 +777,40 @@ pub async fn handle_governance_status(
 
         // Display summary
         println!("\n=== Governance Health Summary ===");
-        
+
         // Drift incidents summary
         let open_drift = drift_incidents.iter().filter(|i| matches!(i.status, IncidentStatus::Open)).count();
         let critical_drift = drift_incidents.iter().filter(|i| matches!(i.severity, IncidentSeverity::Critical)).count();
         let breaking_changes = drift_incidents.iter().filter(|i| matches!(i.incident_type, IncidentType::BreakingChange)).count();
-        
+
         println!("\nDrift Incidents (last 30 days):");
         println!("  Total: {}", drift_incidents.len());
         println!("  Open: {}", open_drift);
         println!("  Critical: {}", critical_drift);
         println!("  Breaking Changes: {}", breaking_changes);
-        
+
         // Semantic incidents summary
         let open_semantic = semantic_incidents.iter().filter(|i| matches!(i.status, IncidentStatus::Open)).count();
         let high_confidence = semantic_incidents.iter().filter(|i| i.semantic_confidence >= 0.8).count();
         let soft_breaking = semantic_incidents.iter().filter(|i| i.soft_breaking_score >= 0.65).count();
-        
+
         println!("\nSemantic Incidents (last 30 days):");
         println!("  Total: {}", semantic_incidents.len());
         println!("  Open: {}", open_semantic);
         println!("  High Confidence (>=0.8): {}", high_confidence);
         println!("  Soft-Breaking (>=0.65): {}", soft_breaking);
-        
+
         // Threat assessments summary
         let critical_threats = threat_assessments.iter().filter(|a| matches!(a.threat_level, ThreatLevel::Critical)).count();
         let high_threats = threat_assessments.iter().filter(|a| matches!(a.threat_level, ThreatLevel::High)).count();
         let total_findings: usize = threat_assessments.iter().map(|a| a.findings.len()).sum();
-        
+
         println!("\nThreat Assessments:");
         println!("  Total: {}", threat_assessments.len());
         println!("  Critical: {}", critical_threats);
         println!("  High: {}", high_threats);
         println!("  Total Findings: {}", total_findings);
-        
+
         // Overall health score (simple calculation)
         let total_issues = open_drift + open_semantic + critical_threats;
         let health_status = if total_issues == 0 {
@@ -822,10 +822,10 @@ pub async fn handle_governance_status(
         } else {
             "Critical"
         };
-        
+
         println!("\nOverall Health Status: {}", health_status);
         println!("  Total Open Issues: {}", total_issues);
-        
+
     } else {
         warn!("Database not available. Set DATABASE_URL environment variable to enable governance status queries.");
         info!("Workspace: {}", ws_display);
@@ -837,4 +837,3 @@ pub async fn handle_governance_status(
     info!("Governance status check completed");
     Ok(())
 }
-

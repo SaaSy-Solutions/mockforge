@@ -469,7 +469,7 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
     incidents.forEach((incident) => {
       if (incident.fitness_test_results && incident.fitness_test_results.length > 0) {
         const endpointKey = `${incident.method} ${incident.endpoint}`;
-        
+
         incident.fitness_test_results.forEach((result) => {
           totalTests++;
           if (result.passed) {

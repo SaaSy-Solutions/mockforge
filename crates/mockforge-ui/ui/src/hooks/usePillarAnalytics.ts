@@ -115,11 +115,11 @@ export const usePillarMetrics = (
       const response = await axios.get<{ success: boolean; data: PillarUsageMetrics }>(
         `${url}?${params.toString()}`
       );
-      
+
       if (response.data.success && response.data.data) {
         return response.data.data;
       }
-      
+
       throw new Error('Failed to fetch pillar metrics');
     },
     enabled: !!(workspaceId || orgId),

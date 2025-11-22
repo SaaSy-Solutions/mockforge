@@ -1,12 +1,12 @@
 # Social Pack — Guide 01
 
 ## X/LinkedIn Thread (5–7 bullets)
-1) Your UI is ready. Your backend isn’t. Enter Mockforge.  
-2) Spin up a realistic API in minutes—no waiting on other teams.  
-3) Deterministic data, dynamic templates, and chaos knobs (latency, faults).  
-4) Use it locally, in CI, or as branch previews.  
-5) Works with Playwright/Cypress/MSW.  
-6) Demo repo + CLI in the first comment.  
+1) Your UI is ready. Your backend isn’t. Enter Mockforge.
+2) Spin up a realistic API in minutes—no waiting on other teams.
+3) Deterministic data, dynamic templates, and chaos knobs (latency, faults).
+4) Use it locally, in CI, or as branch previews.
+5) Works with Playwright/Cypress/MSW.
+6) Demo repo + CLI in the first comment.
 7) Next: Routes 101 & Dynamic Responses.
 
 ## 3 Single-Post Options

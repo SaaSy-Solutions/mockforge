@@ -334,4 +334,3 @@ impl Default for SemanticIncidentManager {
         Self::new()
     }
 }
-

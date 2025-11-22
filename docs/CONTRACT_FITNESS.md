@@ -1,6 +1,6 @@
 # Contract Fitness Functions
 
-**Version:** 0.3.6  
+**Version:** 0.3.6
 **Theme:** Contracts as a first-class 'fitness & impact' system
 
 ## Overview
@@ -20,16 +20,16 @@ contracts:
       scope: "/v1/mobile/*"
       type: response_size_delta
       max_percent_increase: 25
-    
+
     - name: "No new required fields"
       scope: "/v1/public/*"
       type: no_new_required_fields
-    
+
     - name: "Field Count Limit"
       scope: "service:user-service"
       type: field_count
       max_fields: 50
-    
+
     - name: "Schema Complexity Limit"
       scope: "workspace:prod"
       type: schema_complexity
@@ -219,7 +219,7 @@ contracts:
       scope: "user.UserService.*"  # All methods in UserService
       type: response_size_delta
       max_percent_increase: 20.0
-    
+
     - name: "No breaking changes in payment service"
       scope: "payment.PaymentService.*"
       type: no_new_required_fields
@@ -328,12 +328,12 @@ contracts:
       scope: "/v1/mobile/*"
       type: response_size_delta
       max_percent_increase: 5.0
-    
+
     # No breaking changes for mobile
     - name: "Mobile backward compatibility"
       scope: "/v1/mobile/*"
       type: no_new_required_fields
-    
+
     # Limit mobile schema complexity
     - name: "Mobile schema simplicity"
       scope: "/v1/mobile/*"
@@ -351,7 +351,7 @@ contracts:
       scope: "service:user-service"
       type: field_count
       max_fields: 25
-    
+
     # Payment service needs strict compatibility
     - name: "Payment service compatibility"
       scope: "service:payment-service"
@@ -368,7 +368,7 @@ contracts:
       scope: "workspace:prod"
       type: response_size_delta
       max_percent_increase: 5.0
-    
+
     - name: "Production schema complexity"
       scope: "workspace:prod"
       type: schema_complexity
@@ -385,18 +385,18 @@ contracts:
       scope: "user.UserService.*"
       type: response_size_delta
       max_percent_increase: 10.0
-    
+
     # Prevent breaking changes in payment gRPC service
     - name: "Payment gRPC compatibility"
       scope: "payment.PaymentService.*"
       type: no_new_required_fields
-    
+
     # Keep gRPC message schemas focused
     - name: "gRPC message field limit"
       scope: "order.OrderService.*"
       type: field_count
       max_fields: 30
-    
+
     # Limit gRPC message complexity
     - name: "gRPC schema depth limit"
       scope: "global"
@@ -439,12 +439,12 @@ contracts:
       scope: "user_*"
       type: response_size_delta
       max_percent_increase: 20.0
-    
+
     # Prevent breaking changes in presence messages
     - name: "Presence message compatibility"
       scope: "presence:*"
       type: no_new_required_fields
-    
+
     # Limit WebSocket message schema complexity
     - name: "WebSocket schema depth"
       scope: "global"
@@ -485,18 +485,18 @@ contracts:
       scope: "devices/+/telemetry"
       type: response_size_delta
       max_percent_increase: 15.0
-    
+
     # Limit field count for device messages
     - name: "Device message field limit"
       scope: "devices/*"
       type: field_count
       max_fields: 20
-    
+
     # Prevent breaking changes in event streams
     - name: "Event stream compatibility"
       scope: "events/*"
       type: no_new_required_fields
-    
+
     # Keep Kafka message schemas simple
     - name: "Kafka schema complexity"
       scope: "user-events"
@@ -537,24 +537,24 @@ contracts:
       scope: "global"
       type: response_size_delta
       max_percent_increase: 25.0
-    
+
     # HTTP-specific rules
     - name: "HTTP mobile API size"
       scope: "/v1/mobile/*"
       type: response_size_delta
       max_percent_increase: 5.0
-    
+
     # gRPC-specific rules
     - name: "gRPC service compatibility"
       scope: "user.UserService.*"
       type: no_new_required_fields
-    
+
     # WebSocket-specific rules
     - name: "WebSocket message complexity"
       scope: "presence:*"
       type: schema_complexity
       max_depth: 3
-    
+
     # MQTT-specific rules
     - name: "MQTT topic field limit"
       scope: "devices/*"
@@ -606,4 +606,3 @@ Fitness functions can be managed via the Admin UI or API:
 - [Protocol Contracts Documentation](./PROTOCOL_CONTRACTS.md) - Contract definitions across protocols
 - [Drift Budgets](./DRIFT_BUDGETS.md) - Managing drift budgets and thresholds
 - [Consumer Impact Analysis](./CONSUMER_IMPACT_ANALYSIS.md) - Understanding consumer impact
-

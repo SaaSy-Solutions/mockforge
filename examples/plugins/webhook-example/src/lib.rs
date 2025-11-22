@@ -173,7 +173,7 @@ impl ResponsePlugin for WebhookExamplePlugin {
         let mut headers = HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
         headers.insert("User-Agent".to_string(), "MockForge-Webhook-Plugin/1.0".to_string());
-        
+
         if let Some(sig) = signature {
             headers.insert("X-Webhook-Signature".to_string(), sig);
         }
@@ -181,7 +181,7 @@ impl ResponsePlugin for WebhookExamplePlugin {
         // In a real implementation, you would make an HTTP request here
         // For this example, we'll simulate the webhook call
         // Note: Actual HTTP calls require network capabilities to be enabled
-        
+
         // Simulate webhook processing
         let webhook_response = json!({
             "status": "sent",
@@ -286,7 +286,7 @@ mod tests {
     fn create_test_request() -> ResponseRequest {
         let mut headers = HeaderMap::new();
         headers.insert("content-type", "application/json".parse().unwrap());
-        
+
         ResponseRequest::from_axum(
             Method::POST,
             "http://localhost:3000/api/webhook".parse().unwrap(),
@@ -337,11 +337,11 @@ mod tests {
 
         let result = plugin.generate_response(&context, &request, &config).await;
         assert!(result.is_ok());
-        
+
         let plugin_result = result.unwrap();
         assert!(plugin_result.success);
         assert!(plugin_result.data.is_some());
-        
+
         let response_data = plugin_result.data.unwrap();
         assert_eq!(response_data.status_code, 200);
         assert!(!response_data.body.is_empty());
@@ -371,7 +371,7 @@ mod tests {
         let config = WebhookConfig::default();
         let plugin = WebhookExamplePlugin::new(config);
         let caps = plugin.capabilities();
-        
+
         assert!(caps.network.allow_http);
         assert!(!caps.network.allowed_hosts.is_empty());
     }

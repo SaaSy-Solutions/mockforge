@@ -165,4 +165,3 @@ mod tests {
         assert!(rule.validate().is_err());
     }
 }
-

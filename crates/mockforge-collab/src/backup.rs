@@ -687,6 +687,16 @@ impl BackupService {
     ) -> Result<()> {
         #[cfg(feature = "gcs")]
         {
+            // TODO: Update to google-cloud-storage 1.4.0 API
+            // The API has changed significantly. Need to migrate to new API structure.
+            // Temporarily disabled to fix security vulnerability in ring dependency.
+            return Err(CollabError::Internal(
+                "GCS deletion is temporarily disabled due to API migration. \
+                 The google-cloud-storage crate was updated to 1.4.0 to fix security vulnerabilities. \
+                 This feature needs to be updated to use the new API.".to_string(),
+            ));
+
+            /* OLD API - needs migration
             use google_cloud_storage::client::{Client, ClientConfig};
             use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
             use google_cloud_storage::http::objects::Object;
@@ -756,6 +766,7 @@ impl BackupService {
 
             tracing::info!("Successfully deleted GCS object: {}", backup_url);
             Ok(())
+            */
         }
 
         #[cfg(not(feature = "gcs"))]

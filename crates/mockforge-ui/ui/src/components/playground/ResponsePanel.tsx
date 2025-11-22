@@ -319,7 +319,7 @@ export function ResponsePanel() {
         {/* Reality Trace Panel */}
         {displayResponse && displayResponse.request_id && (
           <div className="mt-4">
-            <RealityTracePanel 
+            <RealityTracePanel
               requestId={displayResponse.request_id}
               onNavigate={(target, id) => {
                 // Navigate to the appropriate page based on target

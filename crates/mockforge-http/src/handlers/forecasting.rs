@@ -152,28 +152,28 @@ pub async fn list_forecasts(
 
     // Build query with proper bindings using sqlx
     let mut query_builder = sqlx::query(&query);
-    
+
     if let Some(ws_id) = &params.workspace_id {
         let uuid = Uuid::parse_str(ws_id).ok();
         query_builder = query_builder.bind(uuid);
     }
-    
+
     if let Some(svc_id) = &params.service_id {
         query_builder = query_builder.bind(svc_id);
     }
-    
+
     if let Some(ep) = &params.endpoint {
         query_builder = query_builder.bind(ep);
     }
-    
+
     if let Some(m) = &params.method {
         query_builder = query_builder.bind(m);
     }
-    
+
     if let Some(window) = params.window_days {
         query_builder = query_builder.bind(window as i32);
     }
-    
+
     // Execute query
     let rows = query_builder
         .fetch_all(pool)
@@ -236,7 +236,7 @@ pub async fn get_service_forecasts(
 
     // Query forecasts for this service
     let rows = sqlx::query(
-        "SELECT * FROM api_change_forecasts 
+        "SELECT * FROM api_change_forecasts
          WHERE service_id = $1 AND expires_at > NOW()
          ORDER BY predicted_at DESC LIMIT 50",
     )
@@ -292,7 +292,7 @@ pub async fn get_endpoint_forecasts(
     let method = params.method.as_deref().unwrap_or("%");
 
     let rows = sqlx::query(
-        "SELECT * FROM api_change_forecasts 
+        "SELECT * FROM api_change_forecasts
          WHERE endpoint = $1 AND method LIKE $2 AND expires_at > NOW()
          ORDER BY predicted_at DESC LIMIT 50",
     )

@@ -265,7 +265,7 @@ impl ConsumerImpactAnalyzer {
     ) -> Option<ConsumerImpact> {
         // Try direct lookup first
         let mut mapping = self.registry.get_mapping(endpoint, method);
-        
+
         // If operation_id is provided and different from endpoint, try it
         if mapping.is_none() {
             if let Some(op_id) = operation_id {
@@ -274,14 +274,14 @@ impl ConsumerImpactAnalyzer {
                 }
             }
         }
-        
+
         // If not found and this looks like a protocol-specific operation, try alternative formats
         if mapping.is_none() {
             // For gRPC: endpoint might be "service.method", try with method="grpc"
             if method == "grpc" || (method.contains("grpc") && (endpoint.contains('.') || operation_id.map(|id| id.contains('.')).unwrap_or(false))) {
                 // Try exact match first with endpoint
                 mapping = self.registry.get_mapping(endpoint, "grpc");
-                
+
                 // Try with operation_id if different
                 if mapping.is_none() {
                     if let Some(op_id) = operation_id {
@@ -290,7 +290,7 @@ impl ConsumerImpactAnalyzer {
                         }
                     }
                 }
-                
+
                 // Try service-level matching (e.g., "user.UserService.*" matches "user.UserService.GetUser")
                 if mapping.is_none() {
                     let lookup_key = operation_id.unwrap_or(endpoint);
@@ -301,7 +301,7 @@ impl ConsumerImpactAnalyzer {
                             // Try "service.*" pattern
                             let service_pattern = format!("{}.*", parts[0..parts.len()-1].join("."));
                             mapping = self.try_wildcard_match(&service_pattern, "grpc");
-                            
+
                             // If still not found, try just service name
                             if mapping.is_none() {
                                 let service_name = parts[0..parts.len()-1].join(".");
@@ -315,7 +315,7 @@ impl ConsumerImpactAnalyzer {
             else if method == "websocket" || method.contains("websocket") {
                 // Try exact match first
                 mapping = self.registry.get_mapping(endpoint, "websocket");
-                
+
                 // Try with operation_id if different
                 if mapping.is_none() {
                     if let Some(op_id) = operation_id {
@@ -324,14 +324,14 @@ impl ConsumerImpactAnalyzer {
                         }
                     }
                 }
-                
+
                 // If endpoint contains ':', try extracting message_type (format: "topic:message_type")
                 if mapping.is_none() && endpoint.contains(':') {
                     if let Some(message_type) = endpoint.split(':').nth(1) {
                         mapping = self.registry.get_mapping(message_type, "websocket");
                     }
                 }
-                
+
                 // Try with operation_id if it contains ':'
                 if mapping.is_none() {
                     if let Some(op_id) = operation_id {
@@ -347,7 +347,7 @@ impl ConsumerImpactAnalyzer {
             else if method == "mqtt" || method == "kafka" || method.contains("mqtt") || method.contains("kafka") {
                 let protocol = if method.contains("mqtt") { "mqtt" } else { "kafka" };
                 mapping = self.registry.get_mapping(endpoint, protocol);
-                
+
                 // Try with operation_id if different
                 if mapping.is_none() {
                     if let Some(op_id) = operation_id {
@@ -356,7 +356,7 @@ impl ConsumerImpactAnalyzer {
                         }
                     }
                 }
-                
+
                 // Try wildcard matching for topic patterns (e.g., "devices/+/telemetry" matches "devices/device1/telemetry")
                 if mapping.is_none() {
                     let lookup_key = operation_id.unwrap_or(endpoint);
@@ -364,7 +364,7 @@ impl ConsumerImpactAnalyzer {
                 }
             }
         }
-        
+
         let mapping = mapping?;
 
         // Collect all affected SDK methods and apps
@@ -424,7 +424,7 @@ impl ConsumerImpactAnalyzer {
     fn try_wildcard_match(&self, pattern: &str, method: &str) -> Option<&ConsumerMapping> {
         // Remove trailing ".*" from pattern
         let base_pattern = pattern.strip_suffix(".*").unwrap_or(pattern);
-        
+
         // Try to find mappings that start with the base pattern
         for (key, mapping) in &self.registry.mappings {
             if key.starts_with(&format!("{} ", method)) {
@@ -434,7 +434,7 @@ impl ConsumerImpactAnalyzer {
                 }
             }
         }
-        
+
         None
     }
 
@@ -446,14 +446,14 @@ impl ConsumerImpactAnalyzer {
         for (key, mapping) in &self.registry.mappings {
             if key.starts_with(&format!("{} ", method)) {
                 let pattern = &mapping.endpoint;
-                
+
                 // Check if pattern matches topic using MQTT wildcard rules
                 if self.matches_topic_pattern(topic, pattern) {
                     return Some(mapping);
                 }
             }
         }
-        
+
         None
     }
 
@@ -467,18 +467,18 @@ impl ConsumerImpactAnalyzer {
         if topic == pattern {
             return true;
         }
-        
+
         // Handle wildcards
         if pattern.contains('+') || pattern.contains('#') {
             let topic_parts: Vec<&str> = topic.split('/').collect();
             let pattern_parts: Vec<&str> = pattern.split('/').collect();
-            
+
             // Handle multi-level wildcard at the end
             if pattern.ends_with("/#") {
                 let base_pattern = &pattern[..pattern.len() - 2];
                 return topic.starts_with(base_pattern);
             }
-            
+
             // Handle single-level wildcards
             if topic_parts.len() == pattern_parts.len() {
                 for (topic_part, pattern_part) in topic_parts.iter().zip(pattern_parts.iter()) {
@@ -489,7 +489,7 @@ impl ConsumerImpactAnalyzer {
                 return true;
             }
         }
-        
+
         false
     }
 }

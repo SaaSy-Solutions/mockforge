@@ -182,7 +182,7 @@ impl ScenarioPromotionWorkflow {
 
         // Parse pillar tags from scenario tags
         let pillar_tags = parse_pillar_tags_from_scenario_tags(scenario_tags);
-        
+
         // Check for high-impact pillar tag combinations
         if !pillar_tags.is_empty() {
             // Check if any pillar tag combination matches high-impact patterns
@@ -212,7 +212,7 @@ impl ScenarioPromotionWorkflow {
                     return (true, Some(reason));
                 }
             }
-            
+
             // Check if specific pillar tags require approval
             for required_pillar in &approval_rules.require_approval_pillars {
                 if pillar_tags.contains(required_pillar) {
@@ -496,9 +496,9 @@ mod tests {
     #[test]
     fn test_requires_approval_with_pillar_tags() {
         use crate::pillars::Pillar;
-        
+
         let rules = ApprovalRules::default();
-        
+
         // Test with [Cloud][Contracts][Reality] combination (high-impact pattern)
         let tags = vec!["[Cloud][Contracts][Reality]".to_string()];
         let (requires, reason) =
@@ -523,7 +523,7 @@ mod tests {
     #[test]
     fn test_matches_pillar_pattern() {
         use crate::pillars::Pillar;
-        
+
         let tags = vec![Pillar::Cloud, Pillar::Contracts, Pillar::Reality];
         let pattern = vec![Pillar::Cloud, Pillar::Contracts, Pillar::Reality];
         assert!(ScenarioPromotionWorkflow::matches_pillar_pattern(&tags, &pattern));

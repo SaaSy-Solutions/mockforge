@@ -59,7 +59,7 @@ pub async fn execute_logs_command(
 
     // Try Admin API first
     let admin_url = admin_url.unwrap_or_else(|| "http://localhost:9080".to_string());
-    
+
     if follow {
         stream_logs_from_api(&admin_url, method, path, status, json).await
     } else {
@@ -353,13 +353,13 @@ async fn follow_log_file(file_path: PathBuf, json: bool) -> Result<()> {
 /// Get log file path from config
 async fn get_log_file_from_config(config_path: &PathBuf) -> Result<PathBuf> {
     use mockforge_core::config::load_config_auto;
-    
+
     let config = load_config_auto(config_path).await?;
-    
+
     if let Some(file_path) = config.logging.file_path {
         return Ok(PathBuf::from(file_path));
     }
-    
+
     anyhow::bail!("No log file path configured")
 }
 
@@ -429,4 +429,3 @@ fn print_log_entry(log: &LogEntry) {
         timestamp, status_str, method_str, path, response_time, size
     );
 }
-

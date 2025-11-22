@@ -430,4 +430,3 @@ pub struct BreakingChange {
     /// Impact assessment
     pub impact: String,
 }
-

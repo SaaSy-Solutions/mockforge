@@ -186,7 +186,7 @@ export const useAuthStore = create<AuthStore>()(
             user: userData,
             isLoading: false,
           });
-          
+
           // Optionally persist to localStorage as backup
           if (typeof window !== 'undefined') {
             localStorage.setItem('mockforge-user-profile', JSON.stringify(userData));

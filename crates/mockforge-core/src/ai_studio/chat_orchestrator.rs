@@ -327,7 +327,7 @@ impl ChatOrchestrator {
                 use crate::ai_studio::contract_diff_handler::ContractDiffHandler;
                 let handler = ContractDiffHandler::new()
                     .map_err(|e| crate::Error::generic(format!("Failed to create ContractDiffHandler: {}", e)))?;
-                
+
                 // For now, we don't have direct access to specs/requests in the orchestrator
                 // The handler will provide guidance on how to use contract diff
                 match handler.analyze_from_query(&request.message, None, None).await {
@@ -336,7 +336,7 @@ impl ChatOrchestrator {
                         if let Some(link) = &query_result.link_to_viewer {
                             message.push_str(&format!("\n\nView details: {}", link));
                         }
-                        
+
                         Ok(ChatResponse {
                             intent: ChatIntent::ContractDiff,
                             message,

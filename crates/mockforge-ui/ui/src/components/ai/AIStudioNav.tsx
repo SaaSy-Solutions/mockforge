@@ -28,7 +28,7 @@ interface AIStudioNavProps {
 
 export function AIStudioNav({ currentPage, showQuickActions = true }: AIStudioNavProps) {
   const location = useLocation();
-  
+
   // Build breadcrumbs based on current path
   const breadcrumbs = buildBreadcrumbs(location.pathname, currentPage);
 
@@ -136,7 +136,7 @@ function buildBreadcrumbs(pathname: string, currentPage?: string): BreadcrumbIte
 
   // Split path and build breadcrumbs
   const pathParts = pathname.split('/').filter(Boolean);
-  
+
   // If we're not on AI Studio home, add the current page
   if (pathname !== '/ai-studio' && pathname !== '/') {
     const pageName = currentPage || pathMap[pathname] || pathParts[pathParts.length - 1];
@@ -163,4 +163,3 @@ export function BackToAIStudio() {
     </Link>
   );
 }
-

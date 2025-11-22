@@ -3,13 +3,19 @@
 //! Provides route-specific chaos engineering capabilities that allow configuring
 //! fault injection and latency on a per-route basis, with support for multiple
 //! fault types and various latency distributions.
+//!
+//! This crate is isolated from mockforge-core to avoid Send issues. It only uses
+//! thread_rng() (which is Send-safe) and does not import rng() from rand.
 
-use crate::config::{
+use mockforge_core::config::{
     LatencyDistribution, RouteConfig, RouteFaultInjectionConfig, RouteFaultType, RouteLatencyConfig,
 };
-use crate::{Error, Result};
-use axum::http::{HeaderMap, Method, StatusCode, Uri};
-use rand::{rng, Rng};
+use mockforge_core::{Error, Result};
+use mockforge_core::priority_handler::{RouteChaosInjectorTrait, RouteFaultResponse as CoreRouteFaultResponse};
+use axum::http::{Method, Uri};
+use async_trait::async_trait;
+use rand::thread_rng;
+use rand::Rng;
 use regex::Regex;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -129,6 +135,23 @@ pub struct RouteChaosInjector {
     matcher: RouteMatcher,
 }
 
+#[async_trait]
+impl RouteChaosInjectorTrait for RouteChaosInjector {
+    /// Inject latency for this request
+    async fn inject_latency(&self, method: &Method, uri: &Uri) -> Result<()> {
+        self.inject_latency_impl(method, uri).await
+    }
+
+    /// Get fault injection response for a request
+    fn get_fault_response(&self, method: &Method, uri: &Uri) -> Option<CoreRouteFaultResponse> {
+        self.get_fault_response_impl(method, uri).map(|r| CoreRouteFaultResponse {
+            status_code: r.status_code,
+            error_message: r.error_message,
+            fault_type: r.fault_type,
+        })
+    }
+}
+
 impl RouteChaosInjector {
     /// Create a new route chaos injector
     pub fn new(routes: Vec<RouteConfig>) -> Result<Self> {
@@ -149,8 +172,8 @@ impl RouteChaosInjector {
             return None;
         }
 
-        // Check probability
-        let mut rng = rng();
+        // Check probability - using thread_rng() which is Send-safe
+        let mut rng = thread_rng();
         if rng.random::<f64>() > fault_config.probability {
             return None;
         }
@@ -168,8 +191,8 @@ impl RouteChaosInjector {
         })
     }
 
-    /// Inject latency for this request
-    pub async fn inject_latency(&self, method: &Method, uri: &Uri) -> Result<()> {
+    /// Inject latency for this request (internal implementation)
+    async fn inject_latency_impl(&self, method: &Method, uri: &Uri) -> Result<()> {
         let route = match self.matcher.match_route(method, uri) {
             Some(r) => r,
             None => return Ok(()), // No route match, no latency injection
@@ -184,13 +207,20 @@ impl RouteChaosInjector {
             return Ok(());
         }
 
-        // Check probability
-        let mut rng = rng();
-        if rng.random::<f64>() > latency_config.probability {
-            return Ok(());
-        }
+        // Calculate delay before any await point to ensure Send safety
+        // All RNG operations must complete before the await
+        let delay_ms = {
+            // Check probability - using thread_rng() which is Send-safe
+            let mut rng = thread_rng();
+            if rng.random::<f64>() > latency_config.probability {
+                return Ok(());
+            }
 
-        let delay_ms = self.calculate_delay(latency_config)?;
+            // Calculate delay (all RNG operations happen here, before await)
+            self.calculate_delay(latency_config)?
+        };
+
+        // Now we can await safely - all RNG operations are complete
         if delay_ms > 0 {
             debug!("Injecting per-route latency: {}ms for {} {}", delay_ms, method, uri.path());
             sleep(Duration::from_millis(delay_ms)).await;
@@ -201,7 +231,8 @@ impl RouteChaosInjector {
 
     /// Calculate delay based on latency configuration
     fn calculate_delay(&self, config: &RouteLatencyConfig) -> Result<u64> {
-        let mut rng = rng();
+        // Using thread_rng() which is Send-safe
+        let mut rng = thread_rng();
 
         let base_delay = match &config.distribution {
             LatencyDistribution::Fixed => config.fixed_delay_ms.unwrap_or(0),
@@ -247,8 +278,8 @@ impl RouteChaosInjector {
         Ok(delay)
     }
 
-    /// Get fault injection response for a request
-    pub fn get_fault_response(&self, method: &Method, uri: &Uri) -> Option<RouteFaultResponse> {
+    /// Get fault injection response for a request (internal implementation)
+    fn get_fault_response_impl(&self, method: &Method, uri: &Uri) -> Option<RouteFaultResponse> {
         let fault_result = self.should_inject_fault(method, uri)?;
 
         match &fault_result.fault_type {
@@ -312,7 +343,7 @@ pub struct RouteFaultResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{RouteConfig, RouteResponseConfig};
+    use mockforge_core::config::{RouteConfig, RouteResponseConfig};
 
     fn create_test_route(path: &str, method: &str) -> RouteConfig {
         RouteConfig {
@@ -360,7 +391,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_latency_injection() {
-        use crate::config::RouteLatencyConfig;
+        use mockforge_core::config::RouteLatencyConfig;
 
         let mut route = create_test_route("/test", "GET");
         route.latency = Some(RouteLatencyConfig {
@@ -382,7 +413,7 @@ mod tests {
 
     #[test]
     fn test_fault_injection() {
-        use crate::config::{RouteFaultInjectionConfig, RouteFaultType};
+        use mockforge_core::config::{RouteFaultInjectionConfig, RouteFaultType};
 
         let mut route = create_test_route("/test", "GET");
         route.fault_injection = Some(RouteFaultInjectionConfig {

@@ -276,4 +276,3 @@ cargo test promotion_workflow -- --nocapture
 - Full documentation: `docs/CLOUD_ENVIRONMENTS.md`
 - API reference: See documentation for endpoint details
 - Governance guide: Included in CLOUD_ENVIRONMENTS.md
-

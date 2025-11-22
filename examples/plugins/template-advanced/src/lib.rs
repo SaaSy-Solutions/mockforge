@@ -467,7 +467,7 @@ mod tests {
         let config = AdvancedTemplateConfig::default();
         let plugin = AdvancedTemplatePlugin::new(config);
         let caps = plugin.capabilities();
-        
+
         assert!(!caps.network.allow_http);
         assert_eq!(caps.resources.max_memory_bytes, 15 * 1024 * 1024);
     }

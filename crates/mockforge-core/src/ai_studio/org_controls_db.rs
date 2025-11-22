@@ -327,10 +327,10 @@ impl OrgControlsAccessor for DbOrgControls {
         let current_requests: i64 = if let Some(ws_uuid) = workspace_uuid {
             sqlx::query_scalar::<_, i64>(
                 r#"
-                SELECT COUNT(*) 
-                FROM org_ai_usage 
-                WHERE org_id = $1 
-                  AND workspace_id = $2 
+                SELECT COUNT(*)
+                FROM org_ai_usage
+                WHERE org_id = $1
+                  AND workspace_id = $2
                   AND created_at >= $3
                 "#
             )
@@ -343,9 +343,9 @@ impl OrgControlsAccessor for DbOrgControls {
         } else {
             sqlx::query_scalar::<_, i64>(
                 r#"
-                SELECT COUNT(*) 
-                FROM org_ai_usage 
-                WHERE org_id = $1 
+                SELECT COUNT(*)
+                FROM org_ai_usage
+                WHERE org_id = $1
                   AND workspace_id IS NULL
                   AND created_at >= $3
                 "#
@@ -474,8 +474,8 @@ impl OrgControlsAccessor for DbOrgControls {
         // Update budget counters
         if let Some(ws_uuid) = workspace_uuid {
             sqlx::query(
-                "UPDATE org_ai_budgets 
-                 SET current_tokens_used = current_tokens_used + $1, 
+                "UPDATE org_ai_budgets
+                 SET current_tokens_used = current_tokens_used + $1,
                      current_calls_used = current_calls_used + 1,
                      updated_at = NOW()
                  WHERE org_id = $2 AND workspace_id = $3"
@@ -488,8 +488,8 @@ impl OrgControlsAccessor for DbOrgControls {
             .map_err(|e| crate::Error::generic(format!("Failed to update budget: {}", e)))?;
         } else {
             sqlx::query(
-                "UPDATE org_ai_budgets 
-                 SET current_tokens_used = current_tokens_used + $1, 
+                "UPDATE org_ai_budgets
+                 SET current_tokens_used = current_tokens_used + $1,
                      current_calls_used = current_calls_used + 1,
                      updated_at = NOW()
                  WHERE org_id = $2 AND workspace_id IS NULL"
@@ -542,4 +542,3 @@ struct FeatureToggleRow {
     feature_name: String,
     enabled: bool,
 }
-

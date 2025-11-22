@@ -6064,14 +6064,14 @@ enum SchemaCommands {
         /// If file, generates only the specified schema type
         #[arg(short, long)]
         output: Option<PathBuf>,
-        
+
         /// Schema type to generate (config, reality, persona, blueprint, all)
         /// If not specified and output is a file, defaults to 'config'
         /// If not specified and output is a directory, generates all schemas
         #[arg(short, long, default_value = "all")]
         r#type: String,
     },
-    
+
     /// Validate configuration files against JSON Schemas
     ///
     /// Validates MockForge configuration files against their corresponding
@@ -6085,20 +6085,20 @@ enum SchemaCommands {
         /// Config file to validate (mutually exclusive with --directory)
         #[arg(short, long)]
         file: Option<PathBuf>,
-        
+
         /// Directory containing config files to validate (mutually exclusive with --file)
         #[arg(short, long)]
         directory: Option<PathBuf>,
-        
+
         /// Schema type to use for validation (config, reality, persona, blueprint)
         /// If not specified, will attempt to auto-detect from file path
         #[arg(long)]
         schema_type: Option<String>,
-        
+
         /// Directory containing schema files (default: looks for schemas/ in current directory)
         #[arg(long)]
         schema_dir: Option<PathBuf>,
-        
+
         /// Exit with error code if validation fails (useful for CI)
         #[arg(long)]
         strict: bool,
@@ -6122,7 +6122,7 @@ async fn handle_schema(
     match command {
         SchemaCommands::Generate { output, r#type } => {
             let schemas = generate_all_schemas();
-            
+
             // Determine what to generate
             let types_to_generate: Vec<&str> = if r#type == "all" {
                 vec!["mockforge-config", "reality-config", "persona-config", "blueprint-config"]
@@ -6132,12 +6132,12 @@ async fn handle_schema(
 
             if let Some(output_path) = output {
                 let output_path = Path::new(&output_path);
-                
+
                 // Check if output is a directory or file
                 if output_path.is_dir() || !output_path.exists() && output_path.extension().is_none() {
                     // Directory mode: generate all requested schemas
                     fs::create_dir_all(output_path)?;
-                    
+
                     for schema_type in &types_to_generate {
                         if let Some(schema) = schemas.get(*schema_type) {
                             let filename = format!("{}.schema.json", schema_type.replace("-", "_"));
@@ -6147,7 +6147,7 @@ async fn handle_schema(
                             println!("  ✓ Generated: {}", file_path.display());
                         }
                     }
-                    
+
                     println!("\n✅ Generated {} schema(s) in {}", types_to_generate.len(), output_path.display());
                     println!("\nTo use in your IDE:");
                     println!("  1. Install a YAML schema extension (e.g., 'YAML' by Red Hat)");
@@ -6333,7 +6333,7 @@ async fn handle_schema(
             // Summary
             let valid_count = validation_results.iter().filter(|r| r.valid).count();
             let total_count = validation_results.len();
-            
+
             println!("\n📊 Summary: {} of {} file(s) passed validation", valid_count, total_count);
 
             if has_errors {
@@ -6951,7 +6951,7 @@ async fn handle_init(
     // If blueprint is provided, use blueprint creation instead
     if let Some(blueprint_id) = blueprint {
         println!("🚀 Creating project from blueprint '{}'...", blueprint_id);
-        
+
         // Determine project directory
         let project_dir = if name == "." {
             std::env::current_dir()?

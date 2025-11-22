@@ -349,4 +349,3 @@ pub fn contract_health_router(state: ContractHealthState) -> axum::Router {
         .route("/api/v1/contract-health/timeline", get(get_timeline))
         .with_state(state)
 }
-

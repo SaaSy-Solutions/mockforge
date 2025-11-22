@@ -521,7 +521,7 @@ impl OpenApiRouteRegistry {
                     tracing::debug!("Handling request for route: {} {}", route.method, route.path);
                     let (status, response, trace) = route.mock_response_with_status_and_scenario_and_trace(None);
                     tracing::debug!("Generated response with status: {}", status);
-                    
+
                     // Create response with trace attached to extensions
                     use axum::response::IntoResponse;
                     let mut axum_response = (
@@ -529,10 +529,10 @@ impl OpenApiRouteRegistry {
                             .unwrap_or(axum::http::StatusCode::OK),
                         axum::response::Json(response),
                     ).into_response();
-                    
+
                     // Attach trace to response extensions so logging middleware can pick it up
                     axum_response.extensions_mut().insert(trace);
-                    
+
                     axum_response
                 }
             };

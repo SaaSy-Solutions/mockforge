@@ -1,7 +1,7 @@
 //! Enhanced failure injection system with per-tag include/exclude filters
 //! and error rate configuration.
 
-use rand::{rng, Rng};
+use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 
 /// Failure injection configuration
@@ -111,7 +111,7 @@ impl FailureInjector {
             return true;
         }
 
-        let mut rng = rng();
+        let mut rng = thread_rng();
         rng.random_bool(error_rate)
     }
 
@@ -140,7 +140,7 @@ impl FailureInjector {
             .unwrap_or_else(|| "Injected failure".to_string());
 
         // Select a random status code
-        let mut rng = rng();
+        let mut rng = thread_rng();
         let status_code = if status_codes.is_empty() {
             500
         } else {

@@ -5,7 +5,7 @@
 ### X-Ray Request Context Storage
 - **Status**: ✅ Implemented
 - **Location**: `crates/mockforge-http/src/handlers/xray.rs`
-- **Implementation**: 
+- **Implementation**:
   - Added `RequestContextSnapshot` struct to store state snapshots
   - Added `request_contexts` field to `XRayState` for in-memory storage
   - Implemented `store_request_context()` function called by middleware
@@ -88,4 +88,3 @@ This script checks:
 - ✅ Database row mapping for forecasts
 - ✅ Database queries for contract health timeline
 - ✅ Threat findings and remediation mapping
-

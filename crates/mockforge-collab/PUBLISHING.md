@@ -57,4 +57,3 @@ When adding new SQL queries:
 4. Verify they're included: `cargo package --list | grep "\.sqlx"`
 
 The build script will automatically detect and use the cached queries.
-

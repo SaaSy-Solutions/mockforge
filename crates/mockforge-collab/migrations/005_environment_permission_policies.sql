@@ -19,4 +19,3 @@ CREATE INDEX idx_env_policy_workspace ON environment_permission_policies(workspa
 CREATE INDEX idx_env_policy_env ON environment_permission_policies(environment);
 CREATE INDEX idx_env_policy_permission ON environment_permission_policies(permission);
 CREATE INDEX idx_env_policy_env_perm ON environment_permission_policies(environment, permission);
-

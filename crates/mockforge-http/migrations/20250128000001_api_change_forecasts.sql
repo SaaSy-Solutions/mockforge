@@ -38,4 +38,3 @@ CREATE INDEX IF NOT EXISTS idx_forecasts_workspace_service_window ON api_change_
 
 -- Composite index for endpoint-level queries
 CREATE INDEX IF NOT EXISTS idx_forecasts_endpoint_window ON api_change_forecasts(endpoint, method, forecast_window_days);
-

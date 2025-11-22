@@ -20,7 +20,7 @@ export function registerOpenPlaygroundCommand(context: vscode.ExtensionContext):
                 // Determine playground URL
                 // Try embedded admin first, then standalone
                 let playgroundUrl: string;
-                
+
                 // Check if admin is embedded (common pattern)
                 // We'll try the embedded path first, then standalone
                 const embeddedUrl = `${serverUrl}/admin/#/playground`;
@@ -41,7 +41,7 @@ export function registerOpenPlaygroundCommand(context: vscode.ExtensionContext):
 
                 // Open in external browser
                 await vscode.env.openExternal(vscode.Uri.parse(playgroundUrl));
-                
+
                 Logger.info(`Opened playground: ${playgroundUrl}`);
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -53,4 +53,3 @@ export function registerOpenPlaygroundCommand(context: vscode.ExtensionContext):
 
     context.subscriptions.push(command);
 }
-

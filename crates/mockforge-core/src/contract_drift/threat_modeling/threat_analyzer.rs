@@ -205,4 +205,3 @@ impl Default for ThreatAnalyzer {
         Self::new(ThreatModelingConfig::default()).unwrap()
     }
 }
-

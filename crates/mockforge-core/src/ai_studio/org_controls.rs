@@ -322,4 +322,3 @@ impl Default for OrgControls {
         Self::new(OrgAiControlsConfig::default())
     }
 }
-

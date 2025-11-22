@@ -57,4 +57,3 @@ CREATE INDEX IF NOT EXISTS idx_forecast_stats_patterns ON forecast_statistics US
 
 -- GIN index for pattern types array queries
 CREATE INDEX IF NOT EXISTS idx_forecast_stats_pattern_types ON forecast_statistics USING GIN (detected_pattern_types);
-

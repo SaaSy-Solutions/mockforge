@@ -33,7 +33,7 @@ This will create `mockforge-vscode-0.1.0.vsix` in the `vscode-extension` directo
    ```bash
    vsce login saasy-solutions
    ```
-   
+
    You'll need a Personal Access Token (PAT) from Azure DevOps with the "Marketplace (manage)" scope.
 
 3. **Publish the extension**:
@@ -145,4 +145,3 @@ To automate publishing in CI/CD:
 - ✅ CHANGELOG.md created
 - ✅ package.json configured with publisher and metadata
 - ⏳ Ready for first-time publishing to marketplace
-

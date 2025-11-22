@@ -603,13 +603,13 @@ async fn handle_sync_start(
 
     if all {
         println!("{}", "🔄 Syncing all workspaces...".cyan());
-        
+
         // Get all workspace IDs
         let workspace_ids = persistence
             .list_workspace_ids()
             .await
             .context("Failed to list workspace IDs")?;
-        
+
         if workspace_ids.is_empty() {
             println!("{}", "ℹ️  No workspaces found to sync".yellow());
             return Ok(());
@@ -632,14 +632,14 @@ async fn handle_sync_start(
                                 successful += 1;
                                 total_conflicts += result.conflicts.len();
                                 println!("{}", "✓".green());
-                                
+
                                 // Save workspace if it was modified
                                 if result.changes_count > 0 {
                                     if let Err(e) = persistence.save_workspace(&workspace).await {
                                         eprintln!("   Warning: Failed to save workspace after sync: {}", e);
                                     }
                                 }
-                                
+
                                 // Report conflicts if any
                                 if !result.conflicts.is_empty() {
                                     println!("     {} conflict(s) detected", result.conflicts.len());
@@ -672,7 +672,7 @@ async fn handle_sync_start(
         println!("   Successful: {}", successful);
         println!("   Failed: {}", failed);
         println!("   Total conflicts: {}", total_conflicts);
-        
+
         if successful > 0 {
             println!("{}", "✅ Sync completed".green());
         } else if failed > 0 {
@@ -694,7 +694,7 @@ async fn handle_sync_start(
                     println!("{}", "✅ Sync completed successfully".green());
                     println!("   Changes: {}", result.changes_count);
                     println!("   Conflicts: {}", result.conflicts.len());
-                    
+
                     // Save workspace if it was modified
                     if result.changes_count > 0 {
                         persistence
@@ -703,7 +703,7 @@ async fn handle_sync_start(
                             .context("Failed to save workspace after sync")?;
                         println!("   Workspace saved");
                     }
-                    
+
                     // Report conflicts if any
                     if !result.conflicts.is_empty() {
                         println!("{}", "⚠️  Conflicts detected:".yellow());
@@ -728,7 +728,7 @@ async fn handle_sync_start(
         if watch {
             let sync_service = SyncService::new(&local_workspace_dir);
             sync_service.start().await.context("Failed to start sync service")?;
-            
+
             println!("{}", "👀 Watching for file changes...".cyan());
             sync_service
                 .monitor_workspace(&workspace_id, &local_workspace_dir.to_string_lossy())
@@ -950,23 +950,23 @@ async fn handle_cloud_workspace_unlink(local_workspace: PathBuf) -> Result<()> {
         let config_content = tokio::fs::read_to_string(&sync_config_path)
             .await
             .context("Failed to read sync config")?;
-        
+
         let mut sync_config: SyncConfig = serde_yaml::from_str(&config_content)
             .context("Failed to parse sync config")?;
-        
+
         // Disable sync or remove cloud provider
         match &mut sync_config.provider {
             SyncProvider::Cloud { .. } => {
                 // Disable sync
                 sync_config.enabled = false;
-                
+
                 // Save updated config
                 let updated_config = serde_yaml::to_string(&sync_config)
                     .context("Failed to serialize sync config")?;
                 tokio::fs::write(&sync_config_path, updated_config)
                     .await
                     .context("Failed to write sync config")?;
-                
+
                 println!("{}", "🔓 Unlinking workspace from cloud".cyan());
                 println!("{}", "✅ Sync configuration disabled".green());
                 println!("   Note: sync.yaml file still exists but sync is disabled");
@@ -980,7 +980,7 @@ async fn handle_cloud_workspace_unlink(local_workspace: PathBuf) -> Result<()> {
                 tokio::fs::write(&sync_config_path, updated_config)
                     .await
                     .context("Failed to write sync config")?;
-                
+
                 println!("{}", "🔓 Sync disabled".cyan());
             }
         }

@@ -94,4 +94,3 @@ CREATE INDEX IF NOT EXISTS idx_threat_findings_field_path ON threat_findings(fie
 
 -- GIN index for context JSONB
 CREATE INDEX IF NOT EXISTS idx_threat_findings_context ON threat_findings USING GIN (context);
-

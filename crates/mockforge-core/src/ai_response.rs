@@ -173,74 +173,18 @@ impl RequestContext {
 }
 
 /// Expand template variables in a prompt string using request context
-pub fn expand_prompt_template(template: &str, context: &RequestContext) -> String {
-    let mut result = template.to_string();
-
-    // Replace {{method}}
-    result = result.replace("{{method}}", &context.method);
-
-    // Replace {{path}}
-    result = result.replace("{{path}}", &context.path);
-
-    // Replace {{body.*}} variables
-    if let Some(body) = &context.body {
-        result = expand_json_variables(&result, "body", body);
-    }
-
-    // Replace {{path.*}} variables
-    result = expand_map_variables(&result, "path", &context.path_params);
-
-    // Replace {{query.*}} variables
-    result = expand_map_variables(&result, "query", &context.query_params);
-
-    // Replace {{headers.*}} variables
-    result = expand_map_variables(&result, "headers", &context.headers);
-
-    // Replace {{multipart.*}} variables for form fields
-    result = expand_map_variables(&result, "multipart", &context.multipart_fields);
-
-    result
-}
-
-/// Expand template variables from a JSON value
-fn expand_json_variables(template: &str, prefix: &str, value: &Value) -> String {
-    let mut result = template.to_string();
-
-    // Handle object fields
-    if let Some(obj) = value.as_object() {
-        for (key, val) in obj {
-            let placeholder = format!("{{{{{}.{}}}}}", prefix, key);
-            let replacement = match val {
-                Value::String(s) => s.clone(),
-                Value::Number(n) => n.to_string(),
-                Value::Bool(b) => b.to_string(),
-                Value::Null => "null".to_string(),
-                _ => serde_json::to_string(val).unwrap_or_default(),
-            };
-            result = result.replace(&placeholder, &replacement);
-        }
-    }
-
-    result
-}
-
-/// Expand template variables from a HashMap
-fn expand_map_variables(template: &str, prefix: &str, map: &HashMap<String, Value>) -> String {
-    let mut result = template.to_string();
-
-    for (key, val) in map {
-        let placeholder = format!("{{{{{}.{}}}}}", prefix, key);
-        let replacement = match val {
-            Value::String(s) => s.clone(),
-            Value::Number(n) => n.to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::Null => "null".to_string(),
-            _ => serde_json::to_string(val).unwrap_or_default(),
-        };
-        result = result.replace(&placeholder, &replacement);
-    }
-
-    result
+///
+/// This function is re-exported from mockforge-template-expansion crate.
+/// Import it directly from that crate to avoid Send issues.
+///
+/// For backwards compatibility, you can also use:
+/// ```rust
+/// use mockforge_template_expansion::expand_prompt_template;
+/// ```
+pub fn expand_prompt_template(_template: &str, _context: &RequestContext) -> String {
+    // This is a placeholder - the actual implementation is in mockforge-template-expansion
+    // This function should not be called directly. Use mockforge_template_expansion::expand_prompt_template instead.
+    unimplemented!("expand_prompt_template has been moved to mockforge-template-expansion crate. Use mockforge_template_expansion::expand_prompt_template instead.")
 }
 
 #[cfg(test)]

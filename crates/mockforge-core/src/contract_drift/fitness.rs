@@ -840,10 +840,10 @@ impl FitnessFunctionRegistry {
         for (idx, rule_config) in config_rules.iter().enumerate() {
             // Generate a stable ID based on index and name
             let id = format!("config-rule-{}", idx);
-            
+
             // Parse scope string into FitnessScope
             let scope = parse_scope(&rule_config.scope)?;
-            
+
             // Convert rule type and create function type with validation
             let function_type = match rule_config.rule_type {
                 FitnessRuleType::ResponseSizeDelta => {
@@ -857,7 +857,7 @@ impl FitnessFunctionRegistry {
                                 rule_config.name
                             ))
                         })?;
-                    
+
                     // Validate value range
                     if max_increase < 0.0 {
                         return Err(crate::Error::generic(format!(
@@ -865,7 +865,7 @@ impl FitnessFunctionRegistry {
                             rule_config.name, max_increase
                         )));
                     }
-                    
+
                     // Warn about unnecessary fields
                     if rule_config.max_fields.is_some() {
                         tracing::warn!(
@@ -879,7 +879,7 @@ impl FitnessFunctionRegistry {
                             rule_config.name
                         );
                     }
-                    
+
                     FitnessFunctionType::ResponseSize {
                         max_increase_percent: max_increase,
                     }
@@ -890,7 +890,7 @@ impl FitnessFunctionRegistry {
                         FitnessScope::Endpoint { pattern } => pattern.clone(),
                         _ => "*".to_string(), // Default to all endpoints if scope is global/service
                     };
-                    
+
                     // Warn about unnecessary fields
                     if rule_config.max_percent_increase.is_some() {
                         tracing::warn!(
@@ -910,7 +910,7 @@ impl FitnessFunctionRegistry {
                             rule_config.name
                         );
                     }
-                    
+
                     FitnessFunctionType::RequiredField {
                         path_pattern,
                         allow_new_required: false,
@@ -925,7 +925,7 @@ impl FitnessFunctionRegistry {
                             rule_config.name
                         ))
                     })?;
-                    
+
                     // Validate value range
                     if max_fields == 0 {
                         return Err(crate::Error::generic(format!(
@@ -933,7 +933,7 @@ impl FitnessFunctionRegistry {
                             rule_config.name, max_fields
                         )));
                     }
-                    
+
                     // Warn about unnecessary fields
                     if rule_config.max_percent_increase.is_some() {
                         tracing::warn!(
@@ -947,7 +947,7 @@ impl FitnessFunctionRegistry {
                             rule_config.name
                         );
                     }
-                    
+
                     FitnessFunctionType::FieldCount { max_fields }
                 }
                 FitnessRuleType::SchemaComplexity => {
@@ -959,7 +959,7 @@ impl FitnessFunctionRegistry {
                             rule_config.name
                         ))
                     })?;
-                    
+
                     // Validate value range
                     if max_depth == 0 {
                         return Err(crate::Error::generic(format!(
@@ -967,7 +967,7 @@ impl FitnessFunctionRegistry {
                             rule_config.name, max_depth
                         )));
                     }
-                    
+
                     // Warn about unnecessary fields
                     if rule_config.max_percent_increase.is_some() {
                         tracing::warn!(
@@ -981,7 +981,7 @@ impl FitnessFunctionRegistry {
                             rule_config.name
                         );
                     }
-                    
+
                     FitnessFunctionType::SchemaComplexity { max_depth }
                 }
             };
@@ -1042,25 +1042,25 @@ impl FitnessFunctionRegistry {
 /// - "workspace:prod" -> FitnessScope::Workspace { workspace_id: "prod" }
 fn parse_scope(scope_str: &str) -> crate::Result<FitnessScope> {
     let scope_str = scope_str.trim();
-    
+
     if scope_str == "global" {
         return Ok(FitnessScope::Global);
     }
-    
+
     // Check for workspace: prefix
     if let Some(workspace_id) = scope_str.strip_prefix("workspace:") {
         return Ok(FitnessScope::Workspace {
             workspace_id: workspace_id.to_string(),
         });
     }
-    
+
     // Check for service: prefix
     if let Some(service_name) = scope_str.strip_prefix("service:") {
         return Ok(FitnessScope::Service {
             service_name: service_name.to_string(),
         });
     }
-    
+
     // Otherwise, treat as endpoint pattern
     Ok(FitnessScope::Endpoint {
         pattern: scope_str.to_string(),

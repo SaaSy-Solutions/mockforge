@@ -15,22 +15,22 @@
 - Optional: Docker if your sample app uses it
 
 ## Steps (≈7)
-0) Install Mockforge  
+0) Install Mockforge
    - Why: get the CLI tool ready before creating your first mock.
    - Choose one method:
-   
+
    **Method 1: Cargo Install (Recommended)**
    ```bash
    cargo install mockforge-cli
    ```
-   
+
    **Method 2: Docker**
    ```bash
    git clone https://github.com/SaaSy-Solutions/mockforge.git
    cd mockforge
    docker build -t mockforge .
    ```
-   
+
    **Method 3: Build from Source**
    ```bash
    git clone https://github.com/SaaSy-Solutions/mockforge.git
@@ -39,14 +39,14 @@
    # Binary will be at target/release/mockforge
    # Or install globally: cargo install --path crates/mockforge-cli
    ```
-   
+
    - Verify installation:
      ```bash
      mockforge --version
      ```
    - Result: Mockforge CLI is ready to use.
 
-1) Install & init a project  
+1) Install & init a project
    - Why: set up a self-contained mock workspace.
    - Commands:
      ```bash
@@ -55,7 +55,7 @@
      ```
    - Result: `mockforge.yaml` config file created.
 
-2) Create a simple route (config file)  
+2) Create a simple route (config file)
    - Edit `mockforge.yaml` to add a route:
      ```yaml
      routes:
@@ -68,7 +68,7 @@
      ```
    - Alternative: Use the Admin UI (start server with `--admin` flag) → "Add Route" → fill method/path/body.
 
-3) Start the mock server  
+3) Start the mock server
    ```bash
    mockforge serve --http-port 4000
    # health check
@@ -77,7 +77,7 @@
    - Expect: `{"message":"Hello from Mockforge"}`
    - Note: Press Ctrl+C to stop the server.
 
-4) Make it dynamic (request-aware)  
+4) Make it dynamic (request-aware)
    - Update `mockforge.yaml`:
      ```yaml
      routes:
@@ -99,7 +99,7 @@
      ```
    - Expect: `{"message":"Hello Ray"}`
 
-5) Add latency to simulate real-world issues  
+5) Add latency to simulate real-world issues
    - Update `mockforge.yaml`:
      ```yaml
      routes:
@@ -120,14 +120,14 @@
      ```
    - Why: surface client timeouts/spinners in the UI.
 
-6) Wire into tests (Playwright/Cypress example)  
+6) Wire into tests (Playwright/Cypress example)
    - Example (Playwright):
      ```ts
      // tests/example.spec.ts
      import { exec } from 'child_process';
      import { promisify } from 'util';
      const execAsync = promisify(exec);
-     
+
      test.beforeAll(async () => {
        // Start server in background
        await execAsync('mockforge serve --http-port 4000 &');
@@ -155,9 +155,9 @@
 - **Hybrid:** Proxy/record real traffic once, then run offline with sanitized replays.
 
 ## Gotchas & Debugging
-- **404 on /api/hello** → Route path mismatch (`/api/hello` vs `/api/hello/`). Fix path in config.  
-- **Port conflict** → Pass `--http-port 4001` or free port.  
-- **Dynamic template errors** → Ensure `response_template_expand: true` in config. Check template syntax uses `{{request.query.param}}` format.  
+- **404 on /api/hello** → Route path mismatch (`/api/hello` vs `/api/hello/`). Fix path in config.
+- **Port conflict** → Pass `--http-port 4001` or free port.
+- **Dynamic template errors** → Ensure `response_template_expand: true` in config. Check template syntax uses `{{request.query.param}}` format.
 - **Tests flapping** → Wait for server to be ready before running tests (add sleep or health check).
 - **Template not expanding** → Set `http.response_template_expand: true` in `mockforge.yaml` or `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true` env var.
 
@@ -188,7 +188,7 @@ jobs:
 ```
 
 ## Next Up (cross-links)
-- **Routes 101**: static responses, headers, cookies  
+- **Routes 101**: static responses, headers, cookies
 - **Dynamic Responses**: templating & generators
 
 ## Assets
@@ -196,7 +196,7 @@ jobs:
 - Copy-paste snippets: see `snippets/` folder
 
 ## Shorts Pack
-- Post 1: “Spin up a ‘realistic’ backend in 5 minutes with Mockforge. Deterministic, scriptable, and CI-friendly.”  
-- Post 2: “Stop waiting on flaky APIs. Mockforge lets you design-first, then test UI and flows reliably.”  
-- Post 3: “Chaos on demand: latency & faults to harden your client—without touching prod.”  
+- Post 1: “Spin up a ‘realistic’ backend in 5 minutes with Mockforge. Deterministic, scriptable, and CI-friendly.”
+- Post 2: “Stop waiting on flaky APIs. Mockforge lets you design-first, then test UI and flows reliably.”
+- Post 3: “Chaos on demand: latency & faults to harden your client—without touching prod.”
 - Clip idea (20–30s): terminal split-screen: `mockforge init → edit config → serve → curl` with result, then UI view of the route.

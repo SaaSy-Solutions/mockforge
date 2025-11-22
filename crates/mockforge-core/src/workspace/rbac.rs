@@ -91,7 +91,7 @@ impl EnvironmentPermissionChecker {
         environment: MockEnvironmentName,
     ) -> bool {
         let key = (environment, permission.to_string());
-        
+
         if let Some(policies) = self.policies.get(&key) {
             // Check if any policy allows this role
             policies.iter().any(|policy| policy.allows_role(role))
@@ -165,4 +165,3 @@ pub fn check_environment_permission(
     // Check environment-specific policy
     checker.has_permission(role, permission, env)
 }
-

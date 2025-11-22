@@ -53,4 +53,3 @@ echo "✅ Package includes $PACKAGE_COUNT .sqlx query cache files"
 echo ""
 echo "✅ All checks passed! The published crate will include the .sqlx directory."
 echo "   Users installing from crates.io will be able to compile without a database connection."
-

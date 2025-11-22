@@ -1432,7 +1432,7 @@ impl OpenApiRouteRegistry {
                                         && mockai_response.body.as_object()
                                             .map(|obj| obj.is_empty())
                                             .unwrap_or(false);
-                                    
+
                                     if is_empty {
                                         tracing::debug!(
                                             "MockAI returned empty object for {} {}, falling back to OpenAPI response generation",

@@ -13,4 +13,3 @@ pub use forecaster::Forecaster;
 pub use pattern_analyzer::PatternAnalyzer;
 pub use statistical_model::StatisticalModel;
 pub use types::*;
-

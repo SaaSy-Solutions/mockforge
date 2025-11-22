@@ -100,7 +100,7 @@ cargo sqlx prepare --database-url "sqlite:/tmp/prepare.db"
 
 **Cause**: You're trying to use offline mode but the cache is missing, or you're trying to prepare queries without a database.
 
-**Solution**: 
+**Solution**:
 - If you want offline mode: Ensure `.sqlx/` directory exists and is up-to-date
 - If you want to prepare queries: Set up a database and provide `DATABASE_URL`
 

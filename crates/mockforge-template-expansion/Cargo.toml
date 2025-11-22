@@ -1,0 +1,19 @@
+[package]
+name = "mockforge-template-expansion"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Send-safe template expansion for request context variables (isolated from templating module)"
+
+[dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

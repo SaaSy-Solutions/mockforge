@@ -22,16 +22,16 @@ use tracing::debug;
 /// This enables pillar-based usage tracking in telemetry.
 fn determine_pillar_from_path(path: &str) -> &'static str {
     let path_lower = path.to_lowercase();
-    
+
     // Reality pillar patterns
-    if path_lower.contains("/reality") 
+    if path_lower.contains("/reality")
         || path_lower.contains("/personas")
         || path_lower.contains("/chaos")
         || path_lower.contains("/fidelity")
         || path_lower.contains("/continuum") {
         return "reality";
     }
-    
+
     // Contracts pillar patterns
     if path_lower.contains("/contracts")
         || path_lower.contains("/validation")
@@ -40,7 +40,7 @@ fn determine_pillar_from_path(path: &str) -> &'static str {
         || path_lower.contains("/sync") {
         return "contracts";
     }
-    
+
     // DevX pillar patterns
     if path_lower.contains("/sdk")
         || path_lower.contains("/playground")
@@ -49,7 +49,7 @@ fn determine_pillar_from_path(path: &str) -> &'static str {
         || path_lower.contains("/generator") {
         return "devx";
     }
-    
+
     // Cloud pillar patterns
     if path_lower.contains("/registry")
         || path_lower.contains("/workspace")
@@ -58,7 +58,7 @@ fn determine_pillar_from_path(path: &str) -> &'static str {
         || path_lower.contains("/collab") {
         return "cloud";
     }
-    
+
     // AI pillar patterns
     if path_lower.contains("/ai")
         || path_lower.contains("/mockai")
@@ -67,7 +67,7 @@ fn determine_pillar_from_path(path: &str) -> &'static str {
         || path_lower.contains("/studio") {
         return "ai";
     }
-    
+
     // Default to unknown if no pattern matches
     "unknown"
 }

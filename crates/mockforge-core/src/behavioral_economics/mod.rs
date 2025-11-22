@@ -47,4 +47,3 @@ pub use conditions::{BehaviorCondition, ConditionEvaluator};
 pub use config::BehavioralEconomicsConfig;
 pub use engine::BehavioralEconomicsEngine;
 pub use rules::{BehaviorRule, RuleType};
-

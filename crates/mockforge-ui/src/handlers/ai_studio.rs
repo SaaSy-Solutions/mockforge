@@ -13,7 +13,7 @@ use jsonptr::PointerBuf;
 use mockforge_core::ai_studio::{
     get_conversation_store, initialize_conversation_store, ArtifactFreezer, BudgetConfig,
     BudgetManager, ChatContext, ChatMessage, ChatOrchestrator, ChatRequest, ChatResponse,
-    DebugAnalyzer, DebugRequest, DebugResponse, DebugContextIntegrator, FreezeRequest, FrozenArtifact, 
+    DebugAnalyzer, DebugRequest, DebugResponse, DebugContextIntegrator, FreezeRequest, FrozenArtifact,
     MockGenerator, PersonaGenerationRequest, PersonaGenerationResponse, PersonaGenerator, UsageStats,
     ContractDiffHandler, ContractDiffQueryResult, OrgControls, OrgAiControlsConfig,
     config::AiMode,
@@ -173,7 +173,7 @@ pub async fn generate_mock(
     }
 
     let generator = MockGenerator::new();
-    
+
     // Get workspace config to check ai_mode and deterministic config
     let ai_mode = if let Some(workspace_id) = &request.workspace_id {
         // Try to load workspace to get ai_mode
@@ -330,7 +330,7 @@ pub async fn generate_persona(
         base_persona_id: request.base_persona_id,
         workspace_id: request.workspace_id.clone(),
     };
-    
+
     // Get workspace config to check ai_mode and deterministic config
     let ai_mode = if let Some(workspace_id) = &request.workspace_id {
         if let Ok(workspace) = state.workspace_persistence.load_workspace(workspace_id).await {
@@ -466,10 +466,10 @@ pub async fn list_frozen(
 ) -> Result<ResponseJson<ApiResponse<Vec<FrozenArtifact>>>, StatusCode> {
     let freezer = ArtifactFreezer::new();
     let base_dir = freezer.base_dir().to_path_buf();
-    
+
     // Read all files from the freeze directory
     let mut artifacts = Vec::new();
-    
+
     if let Ok(mut entries) = tokio::fs::read_dir(&base_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
@@ -481,13 +481,13 @@ pub async fn list_frozen(
                         continue;
                     }
                 }
-                
+
                 // Try to load the frozen artifact
                 let content = match tokio::fs::read_to_string(&path).await {
                     Ok(c) => c,
                     Err(_) => continue,
                 };
-                
+
                 let content_value: Value = if path.extension().and_then(|e| e.to_str()) == Some("yaml")
                     || path.extension().and_then(|e| e.to_str()) == Some("yml")
                 {
@@ -501,18 +501,18 @@ pub async fn list_frozen(
                         Err(_) => continue,
                     }
                 };
-                
+
                 // Extract metadata from content
                 let metadata = content_value.get("_frozen_metadata")
                     .and_then(|m| serde_json::from_value(m.clone()).ok());
-                
+
                 // Extract output_hash from metadata
                 let output_hash = content_value
                     .get("_frozen_metadata")
                     .and_then(|m| m.get("output_hash"))
                     .and_then(|h| h.as_str())
                     .map(|s| s.to_string());
-                
+
                 // Determine artifact type from filename or metadata
                 let artifact_type = content_value
                     .get("_frozen_metadata")
@@ -523,7 +523,7 @@ pub async fn list_frozen(
                         // Fallback: extract from filename
                         file_name.split('_').next().unwrap_or("unknown").to_string()
                     });
-                
+
                 artifacts.push(FrozenArtifact {
                     artifact_type,
                     content: content_value,
@@ -541,10 +541,10 @@ pub async fn list_frozen(
             }
         }
     }
-    
+
     // Sort by path (most recent first if timestamps are in filename)
     artifacts.sort_by(|a, b| b.path.cmp(&a.path));
-    
+
     Ok(ResponseJson(ApiResponse::success(artifacts)))
 }
 
@@ -585,7 +585,7 @@ pub async fn apply_patch(
     // Determine config file path
     let config_path = request.config_path
         .unwrap_or_else(|| "mockforge.yaml".to_string());
-    
+
     // Load the config file
     let config_content = match tokio::fs::read_to_string(&config_path).await {
         Ok(content) => content,
@@ -596,7 +596,7 @@ pub async fn apply_patch(
             ))));
         }
     };
-    
+
     // Parse config as JSON (works for YAML too via serde_yaml)
     let mut config_value: Value = if config_path.ends_with(".yaml") || config_path.ends_with(".yml") {
         serde_yaml::from_str(&config_content).map_err(|e| {
@@ -607,7 +607,7 @@ pub async fn apply_patch(
             StatusCode::BAD_REQUEST
         })?
     };
-    
+
     // Parse patch operations
     let patch_ops: Patch = if let Some(ops_array) = request.patch.get("operations").and_then(|v| v.as_array()) {
         // Multiple operations
@@ -620,23 +620,23 @@ pub async fn apply_patch(
         // Single operation
         Patch(vec![parse_patch_operation(&request.patch)?])
     };
-    
+
     // Apply patch
     patch(&mut config_value, &patch_ops).map_err(|e| {
         StatusCode::BAD_REQUEST
     })?;
-    
+
     // Save updated config
     let updated_content = if config_path.ends_with(".yaml") || config_path.ends_with(".yml") {
         serde_yaml::to_string(&config_value).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     } else {
         serde_json::to_string_pretty(&config_value).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     };
-    
+
     tokio::fs::write(&config_path, updated_content).await.map_err(|e| {
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    
+
     Ok(ResponseJson(ApiResponse::success(serde_json::json!({
         "message": "Patch applied successfully",
         "config_path": config_path,
@@ -647,18 +647,18 @@ pub async fn apply_patch(
 /// Parse a single patch operation from JSON
 fn parse_patch_operation(op: &Value) -> Result<json_patch::PatchOperation, StatusCode> {
     use json_patch::{AddOperation, CopyOperation, MoveOperation, PatchOperation, RemoveOperation, ReplaceOperation, TestOperation};
-    
+
     let op_type = op.get("op")
         .and_then(|v| v.as_str())
         .ok_or(StatusCode::BAD_REQUEST)?;
-    
+
     let path_str = op.get("path")
         .and_then(|v| v.as_str())
         .ok_or(StatusCode::BAD_REQUEST)?;
-    
+
     let path: PointerBuf = path_str.parse()
         .map_err(|_| StatusCode::BAD_REQUEST)?;
-    
+
     match op_type {
         "add" => {
             let value = op.get("value")
@@ -779,7 +779,7 @@ pub async fn get_org_usage(
                     .unwrap()
             }
         });
-    
+
     let period_end = params.get("period_end")
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
         .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -789,19 +789,19 @@ pub async fn get_org_usage(
     // In production with database access, you would:
     // 1. Get database pool from State
     // 2. Query org_ai_usage_logs table:
-    //    SELECT 
+    //    SELECT
     //      SUM(tokens_used) as total_tokens,
     //      SUM(cost_usd) as total_cost,
     //      COUNT(*) as total_calls,
     //      feature_name,
     //      COUNT(DISTINCT user_id) as unique_users
     //    FROM org_ai_usage_logs
-    //    WHERE org_id = $1 
+    //    WHERE org_id = $1
     //      AND (workspace_id = $2 OR $2 IS NULL)
     //      AND created_at >= $3
     //      AND created_at <= $4
     //    GROUP BY feature_name
-    
+
     // For now, return structure that matches what the query would return
     Ok(ResponseJson(ApiResponse::success(serde_json::json!({
         "org_id": org_id,

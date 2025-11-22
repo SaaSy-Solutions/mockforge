@@ -1,6 +1,6 @@
 /**
  * Pillar Analytics Page
- * 
+ *
  * Displays pillar usage analytics dashboard for workspaces and organizations
  */
 
@@ -36,4 +36,3 @@ export const PillarAnalyticsPage: React.FC = () => {
 };
 
 export default PillarAnalyticsPage;
-

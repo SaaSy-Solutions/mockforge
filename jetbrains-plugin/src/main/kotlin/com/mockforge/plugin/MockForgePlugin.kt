@@ -7,7 +7,7 @@ import com.mockforge.plugin.services.MockForgeClientService
 
 /**
  * Main plugin class for MockForge JetBrains integration
- * 
+ *
  * This plugin provides:
  * - Config validation for mockforge.yaml and mockforge.toml files
  * - Autocomplete for configuration keys and values
@@ -16,7 +16,7 @@ import com.mockforge.plugin.services.MockForgeClientService
  * - Real-time linting for MockForge configuration files
  */
 class MockForgePlugin : StartupActivity {
-    
+
     override fun runActivity(project: Project) {
         // Initialize services when project opens
         // Services are lazy-loaded, so just accessing them initializes them
@@ -24,4 +24,3 @@ class MockForgePlugin : StartupActivity {
         MockForgeClientService.getInstance(project)
     }
 }
-

@@ -163,7 +163,7 @@ pub async fn store_request_context(
     };
 
     let mut contexts = state.request_contexts.write().await;
-    
+
     // Limit storage to last 1000 requests per workspace to prevent memory bloat
     // Remove oldest entries if we exceed the limit
     let workspace_entries: Vec<_> = contexts
@@ -171,7 +171,7 @@ pub async fn store_request_context(
         .filter(|(_, s)| s.workspace_id == workspace_id)
         .map(|(k, _)| k.clone())
         .collect();
-    
+
     if workspace_entries.len() >= 1000 {
         // Remove oldest 100 entries for this workspace
         let mut timestamps: Vec<_> = workspace_entries
@@ -181,12 +181,12 @@ pub async fn store_request_context(
             })
             .collect();
         timestamps.sort_by_key(|(_, ts)| *ts);
-        
+
         for (id, _) in timestamps.iter().take(100) {
             contexts.remove(id);
         }
     }
-    
+
     contexts.insert(request_id, snapshot);
 }
 

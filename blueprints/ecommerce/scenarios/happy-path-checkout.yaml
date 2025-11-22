@@ -102,4 +102,3 @@ variables:
   payment_id: null
   payment_status: null
   order_id: null
-

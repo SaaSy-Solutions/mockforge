@@ -474,4 +474,3 @@ mod tests {
         assert!(!analysis.patterns.is_empty());
     }
 }
-

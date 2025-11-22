@@ -5,4 +5,3 @@
 
 #[cfg(feature = "database")]
 pub mod forecasting_service;
-

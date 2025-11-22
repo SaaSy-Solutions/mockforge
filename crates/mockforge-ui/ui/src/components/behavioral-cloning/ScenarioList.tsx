@@ -17,7 +17,7 @@ export function ScenarioList({ scenarios, onRefresh }: ScenarioListProps) {
     try {
       setExporting(scenario.id);
       const content = await apiService.exportScenario(scenario.id, format);
-      
+
       // Create download link
       const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
@@ -58,8 +58,8 @@ export function ScenarioList({ scenarios, onRefresh }: ScenarioListProps) {
                 <h3 className="text-lg font-semibold">{scenario.name}</h3>
                 <ModernBadge variant="outline">v{scenario.version}</ModernBadge>
                 {scenario.ai_generated && (
-                  <ModernBadge 
-                    variant="secondary" 
+                  <ModernBadge
+                    variant="secondary"
                     size="sm"
                     className="flex items-center gap-1"
                     title="AI-generated scenario"
@@ -69,8 +69,8 @@ export function ScenarioList({ scenarios, onRefresh }: ScenarioListProps) {
                   </ModernBadge>
                 )}
                 {scenario.frozen && (
-                  <ModernBadge 
-                    variant="outline" 
+                  <ModernBadge
+                    variant="outline"
                     size="sm"
                     className="flex items-center gap-1 border-blue-300 text-blue-700"
                     title={`Frozen artifact (deterministic mode)${scenario.frozen_path ? `: ${scenario.frozen_path}` : ''}`}
@@ -123,4 +123,3 @@ export function ScenarioList({ scenarios, onRefresh }: ScenarioListProps) {
     </div>
   );
 }
-

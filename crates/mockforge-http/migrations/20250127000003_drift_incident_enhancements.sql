@@ -18,4 +18,3 @@ CREATE INDEX IF NOT EXISTS idx_drift_incidents_protocol ON drift_incidents(proto
 
 -- Create index on fitness_test_results for querying (using GIN index for JSONB)
 CREATE INDEX IF NOT EXISTS idx_drift_incidents_fitness_results ON drift_incidents USING GIN (fitness_test_results);
-

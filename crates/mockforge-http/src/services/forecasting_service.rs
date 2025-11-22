@@ -67,4 +67,3 @@ impl Default for ForecastingService {
         Self::new(ForecastingConfig::default())
     }
 }
-

@@ -579,4 +579,3 @@ let gitops = PromotionGitOpsConfig::new(
 - [Workspace Management](./workspace-management.md)
 - [RBAC Guide](./rbac-guide.md)
 - [Analytics Documentation](./analytics.md)
-

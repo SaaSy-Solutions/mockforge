@@ -310,4 +310,3 @@ impl Default for StatisticalModel {
         Self::new()
     }
 }
-

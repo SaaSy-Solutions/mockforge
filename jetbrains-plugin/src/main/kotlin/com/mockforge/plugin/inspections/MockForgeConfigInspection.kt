@@ -11,15 +11,15 @@ import org.toml.lang.psi.TomlFile
 
 /**
  * Inspection tool for validating MockForge configuration files
- * 
+ *
  * Provides real-time validation of mockforge.yaml, mockforge.toml, and blueprint.yaml files
  * using JSON Schema validation
  */
 class MockForgeConfigInspection : LocalInspectionTool() {
-    
+
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean): PsiElementVisitor {
         val file = holder.file
-        
+
         // Check if this is a MockForge config file
         val validator = ConfigValidatorService.getInstance(holder.project)
         val schemaType = when {
@@ -39,17 +39,17 @@ class MockForgeConfigInspection : LocalInspectionTool() {
             }
             else -> null
         }
-        
+
         if (schemaType == null) {
             return PsiElementVisitor.EMPTY_VISITOR
         }
-        
+
         return object : PsiElementVisitor() {
             override fun visitFile(file: PsiFile) {
                 // Validate the entire file
                 val content = file.text
                 val errors = validator.validate(content, schemaType)
-                
+
                 // Report errors as problems
                 errors.forEach { error ->
                     // Find the element at the error location
@@ -72,20 +72,19 @@ class MockForgeConfigInspection : LocalInspectionTool() {
             }
         }
     }
-    
+
     /**
      * Find PSI element at given line and column
      */
     private fun findElementAtLocation(file: PsiFile, line: Int, column: Int): com.intellij.psi.PsiElement? {
         if (line < 0) return null
-        
+
         val lines = file.text.split('\n')
         if (line >= lines.size) return null
-        
+
         val targetLine = lines[line]
         val offset = lines.take(line).sumOf { it.length + 1 } + column.coerceAtMost(targetLine.length)
-        
+
         return file.findElementAt(offset)
     }
 }
-

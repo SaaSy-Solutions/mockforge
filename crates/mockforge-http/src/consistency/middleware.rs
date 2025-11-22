@@ -112,7 +112,7 @@ pub async fn consistency_middleware(req: Request, next: Next) -> Response<Body> 
                 let unified_state_clone = unified_state.clone();
                 let request_id_clone = request_id.clone();
                 let workspace_id_clone = workspace_id.clone();
-                
+
                 // Store snapshot asynchronously (don't block request processing)
                 let xray_state_clone = xray_state.clone();
                 tokio::spawn(async move {

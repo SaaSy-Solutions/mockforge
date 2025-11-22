@@ -429,7 +429,7 @@ pub fn create_admin_router(
                     .unwrap()
                     .join("mockforge-collab")
                     .join("migrations");
-                
+
                 // Use sqlx::migrate::Migrator for runtime migration
                 match sqlx::migrate::Migrator::new(migrations_path.as_path()).await {
                     Ok(migrator) => {

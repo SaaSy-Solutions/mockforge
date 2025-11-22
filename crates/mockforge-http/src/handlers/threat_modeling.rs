@@ -108,7 +108,7 @@ pub async fn get_workspace_threats(
 
     // Query latest assessment from database
     let row = sqlx::query(
-        "SELECT * FROM contract_threat_assessments 
+        "SELECT * FROM contract_threat_assessments
          WHERE workspace_id = $1 AND aggregation_level = 'workspace'
          ORDER BY assessed_at DESC LIMIT 1",
     )
@@ -159,7 +159,7 @@ pub async fn get_service_threats(
     };
 
     let row = sqlx::query(
-        "SELECT * FROM contract_threat_assessments 
+        "SELECT * FROM contract_threat_assessments
          WHERE service_id = $1 AND aggregation_level = 'service'
          ORDER BY assessed_at DESC LIMIT 1",
     )
@@ -216,7 +216,7 @@ pub async fn get_endpoint_threats(
         .unwrap_or("%");
 
     let row = sqlx::query(
-        "SELECT * FROM contract_threat_assessments 
+        "SELECT * FROM contract_threat_assessments
          WHERE endpoint = $1 AND method LIKE $2 AND aggregation_level = 'endpoint'
          ORDER BY assessed_at DESC LIMIT 1",
     )

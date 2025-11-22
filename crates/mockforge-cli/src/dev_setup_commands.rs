@@ -102,14 +102,14 @@ pub async fn execute_dev_setup(args: DevSetupArgs) -> anyhow::Result<()> {
 
     // Detect existing MockForge workspace
     let (detected_base_url, detected_reality_level) = detect_mockforge_workspace(&project_root)?;
-    
+
     // Use detected values or fall back to provided/default values
     let base_url = if args.base_url == "http://localhost:3000" && detected_base_url.is_some() {
         detected_base_url.as_ref().unwrap().clone()
     } else {
         args.base_url.clone()
     };
-    
+
     let reality_level = if args.reality_level == "moderate" && detected_reality_level.is_some() {
         detected_reality_level.as_ref().unwrap().clone()
     } else {
@@ -128,7 +128,7 @@ pub async fn execute_dev_setup(args: DevSetupArgs) -> anyhow::Result<()> {
 
     // Check if workspace was created from a blueprint
     let blueprint_spec = detect_blueprint_origin(&project_root)?;
-    
+
     // Auto-detect OpenAPI spec if not provided
     let spec_path = if args.spec.is_some() {
         args.spec.clone()
@@ -287,7 +287,7 @@ fn load_config_values(config_path: &Path) -> anyhow::Result<(Option<String>, Opt
             .get("host")
             .and_then(|v| v.as_str())
             .unwrap_or("localhost");
-        
+
         // Convert 0.0.0.0 to localhost for client usage
         let host_str = if host == "0.0.0.0" { "localhost" } else { host };
         Some(format!("http://{}:{}", host_str, port))
@@ -362,7 +362,7 @@ fn auto_detect_openapi_spec(project_root: &Path) -> anyhow::Result<Option<PathBu
 /// Check if file is a valid OpenAPI specification
 fn is_valid_openapi_spec(path: &Path) -> anyhow::Result<bool> {
     let content = fs::read_to_string(path)?;
-    
+
     // Try parsing as JSON
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
         if json.get("openapi").is_some() || json.get("swagger").is_some() {
@@ -445,10 +445,10 @@ fn detect_blueprint_origin(project_root: &Path) -> anyhow::Result<Option<PathBuf
     // 1. README mentions blueprint
     // 2. scenarios/ directory exists (blueprint-specific)
     // 3. contracts/ directory exists (blueprint-specific)
-    
+
     let has_scenarios = project_root.join("scenarios").exists();
     let has_contracts = project_root.join("contracts").exists();
-    
+
     if has_scenarios || has_contracts {
         // This looks like a blueprint-based workspace
         // Check config for openapi_spec reference
@@ -456,7 +456,7 @@ fn detect_blueprint_origin(project_root: &Path) -> anyhow::Result<Option<PathBuf
             project_root.join("mockforge.yaml"),
             project_root.join("mockforge.yml"),
         ];
-        
+
         for config_path in &config_paths {
             if config_path.exists() {
                 if let Ok(Some(spec_path)) = extract_spec_from_config(config_path, project_root) {
@@ -466,21 +466,21 @@ fn detect_blueprint_origin(project_root: &Path) -> anyhow::Result<Option<PathBuf
                 }
             }
         }
-        
+
         // Also check for openapi.yaml in root (common blueprint location)
         let openapi_candidates = [
             project_root.join("openapi.yaml"),
             project_root.join("openapi.json"),
             project_root.join("openapi.yml"),
         ];
-        
+
         for candidate in &openapi_candidates {
             if candidate.exists() && is_valid_openapi_spec(candidate)? {
                 return Ok(Some(candidate.clone()));
             }
         }
     }
-    
+
     Ok(None)
 }
 
@@ -579,7 +579,7 @@ export function formatApiError(error: unknown): string {{
  */
 export function isNetworkError(error: unknown): boolean {{
   if (error instanceof Error) {{
-    return error.message.includes('fetch') || 
+    return error.message.includes('fetch') ||
            error.message.includes('network') ||
            error.message.includes('Failed to fetch');
   }}
@@ -635,15 +635,15 @@ export interface UpdateUserRequest {{
 
 /**
  * Hook to fetch all users
- * 
+ *
  * @example
  * ```tsx
  * function UserList() {{
  *   const {{ data: users, isLoading, error }} = useUsers();
- *   
+ *
  *   if (isLoading) return <div>Loading...</div>;
  *   if (error) return <div>Error: {{formatApiError(error)}}</div>;
- *   
+ *
  *   return (
  *     <ul>
  *       {{users?.map(user => (
@@ -684,17 +684,17 @@ export function useUsers() {{
 
 /**
  * Hook to fetch a single user by ID
- * 
+ *
  * @param id - User ID
  * @example
  * ```tsx
  * function UserProfile({{ userId }}: {{ userId: string }}) {{
  *   const {{ data: user, isLoading, error }} = useUser(userId);
- *   
+ *
  *   if (isLoading) return <div>Loading user...</div>;
  *   if (error) return <div>Error: {{formatApiError(error)}}</div>;
  *   if (!user) return <div>User not found</div>;
- *   
+ *
  *   return (
  *     <div>
  *       <h1>{{user.name}}</h1>
@@ -731,16 +731,16 @@ export function useUser(id: string) {{
 
 /**
  * Hook to create a new user
- * 
+ *
  * @example
  * ```tsx
  * function CreateUserForm() {{
  *   const createUser = useCreateUser();
- *   
+ *
  *   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {{
  *     e.preventDefault();
  *     const formData = new FormData(e.currentTarget);
- *     
+ *
  *     try {{
  *       await createUser.mutateAsync({{
  *         name: formData.get('name') as string,
@@ -751,7 +751,7 @@ export function useUser(id: string) {{
  *       alert(`Failed to create user: ${{formatApiError(error)}}`);
  *     }}
  *   }};
- *   
+ *
  *   return (
  *     <form onSubmit={{handleSubmit}}>
  *       <input name="name" placeholder="Name" required />
@@ -779,12 +779,12 @@ export function useCreateUser() {{
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify(userData),
       }});
-      
+
       if (!response.ok) {{
         const errorBody = await response.json().catch(() => ({{}}));
         throw new Error(`Failed to create user: ${{response.status}} ${{response.statusText}}`);
       }}
-      
+
       return response.json();
     }},
     onSuccess: () => {{
@@ -800,19 +800,19 @@ export function useCreateUser() {{
 
 /**
  * Hook to update an existing user
- * 
+ *
  * @example
  * ```tsx
- * function EditUserForm({{ userId, initialData }}: {{ 
- *   userId: string; 
- *   initialData: User 
+ * function EditUserForm({{ userId, initialData }}: {{
+ *   userId: string;
+ *   initialData: User
  * }}) {{
  *   const updateUser = useUpdateUser();
- *   
+ *
  *   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {{
  *     e.preventDefault();
  *     const formData = new FormData(e.currentTarget);
- *     
+ *
  *     try {{
  *       await updateUser.mutateAsync({{
  *         id: userId,
@@ -824,7 +824,7 @@ export function useCreateUser() {{
  *       alert(`Failed to update user: ${{formatApiError(error)}}`);
  *     }}
  *   }};
- *   
+ *
  *   return (
  *     <form onSubmit={{handleSubmit}}>
  *       <input name="name" defaultValue={{initialData.name}} required />
@@ -847,12 +847,12 @@ export function useUpdateUser() {{
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify(userData),
       }});
-      
+
       if (!response.ok) {{
         const errorBody = await response.json().catch(() => ({{}}));
         throw new Error(`Failed to update user: ${{response.status}} ${{response.statusText}}`);
       }}
-      
+
       return response.json();
     }},
     onSuccess: (_, variables) => {{
@@ -877,7 +877,7 @@ export function useDeleteUser() {{
       const response = await fetch(`${{MOCKFORGE_BASE_URL}}/api/users/${{id}}`, {{
         method: 'DELETE',
       }});
-      
+
       if (!response.ok) {{
         const errorBody = await response.json().catch(() => ({{}}));
         throw new Error(`Failed to delete user: ${{response.status}} ${{response.statusText}}`);
@@ -957,7 +957,7 @@ import {{ useUsers, useCreateUser, formatApiError }} from './hooks';
 
 /**
  * Example UserList component
- * 
+ *
  * This component demonstrates:
  * - Fetching data with useUsers hook
  * - Creating new users with useCreateUser hook
@@ -971,7 +971,7 @@ export function UserList() {{
   const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {{
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    
+
     try {{
       await createUser.mutateAsync({{
         name: formData.get('name') as string,
@@ -1006,7 +1006,7 @@ export function UserList() {{
   return (
     <div style={{ padding: '20px' }}>
       <h1>Users</h1>
-      
+
       <form onSubmit={{handleCreateUser}} style={{ marginBottom: '20px', padding: '10px', border: '1px solid #ccc' }}>
         <h3>Create New User</h3>
         <div style={{ marginBottom: '10px' }}>
@@ -1023,8 +1023,8 @@ export function UserList() {{
             required
             style={{ padding: '8px', width: '200px', marginRight: '10px' }}
           />
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={{createUser.isPending}}
             style={{ padding: '8px 16px' }}
           >
@@ -1043,8 +1043,8 @@ export function UserList() {{
         {{users && users.length > 0 ? (
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {{{{users.map((user) => (
-              <li 
-                key={{{{user.id}}}} 
+              <li
+                key={{{{user.id}}}}
                 style={{{{ padding: '10px', marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px' }}}}
               >
                 <strong>{{{{user.name}}}}</strong> - {{{{user.email}}}}
@@ -1568,29 +1568,29 @@ fn find_tsconfig(project_root: &Path) -> Option<PathBuf> {
         project_root.join("tsconfig.app.json"),
         project_root.join("tsconfig.base.json"),
     ];
-    
+
     for path in &paths {
         if path.exists() {
             return Some(path.clone());
         }
     }
-    
+
     None
 }
 
 /// Verify TypeScript compilation (if tsc is available)
 fn verify_typescript_compilation(tsconfig_path: &Path) -> anyhow::Result<()> {
     use std::process::Command;
-    
+
     // Check if tsc is available
     let tsc_check = Command::new("tsc")
         .arg("--version")
         .output();
-    
+
     if tsc_check.is_err() {
         return Err(anyhow::anyhow!("tsc not found"));
     }
-    
+
     // Try to compile the generated files
     let project_dir = tsconfig_path.parent().unwrap_or(Path::new("."));
     let compile_result = Command::new("tsc")
@@ -1599,7 +1599,7 @@ fn verify_typescript_compilation(tsconfig_path: &Path) -> anyhow::Result<()> {
         .arg(tsconfig_path)
         .current_dir(project_dir)
         .output();
-    
+
     match compile_result {
         Ok(output) => {
             if output.status.success() {

@@ -45,7 +45,7 @@ impl DosAnalyzer {
                     ("OPTIONS", path_item.options.as_ref()),
                     ("TRACE", path_item.trace.as_ref()),
                 ];
-                
+
                 for (method, operation_opt) in methods {
                     let Some(operation) = operation_opt else { continue };
                     let base_path = format!("{}.{}", method, path);
@@ -193,4 +193,3 @@ impl Default for DosAnalyzer {
         Self::new(None, 10)
     }
 }
-

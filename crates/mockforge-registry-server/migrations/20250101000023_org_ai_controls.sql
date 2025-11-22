@@ -99,4 +99,3 @@ COMMENT ON TABLE org_ai_usage_logs IS 'Audit log of all AI usage for billing, an
 COMMENT ON COLUMN org_ai_budgets.workspace_id IS 'NULL for org-level budget, specific UUID for workspace-level override';
 COMMENT ON COLUMN org_ai_rate_limits.workspace_id IS 'NULL for org-level rate limit, specific UUID for workspace-level override';
 COMMENT ON COLUMN org_ai_feature_toggles.workspace_id IS 'NULL for org-level feature toggle, specific UUID for workspace-level override';
-

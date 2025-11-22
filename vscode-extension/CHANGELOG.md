@@ -39,4 +39,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VS Code 1.85.0 or higher
 
 [0.1.0]: https://github.com/SaaSy-Solutions/mockforge/releases/tag/vscode-extension-v0.1.0
-

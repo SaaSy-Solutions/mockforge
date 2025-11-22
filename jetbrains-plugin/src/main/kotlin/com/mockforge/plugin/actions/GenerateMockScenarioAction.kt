@@ -12,19 +12,19 @@ import javax.swing.Icon
 
 /**
  * Intention action to generate MockForge scenario from OpenAPI specification
- * 
+ *
  * Detects OpenAPI specifications and generates MockForge scenario files
  * from OpenAPI operations
  */
 class GenerateMockScenarioAction : IntentionAction, PriorityAction {
-    
+
     override fun getText(): String = "Generate MockForge Scenario"
-    
+
     override fun getFamilyName(): String = "MockForge"
-    
+
     override fun isAvailable(project: Project, editor: Editor?, file: PsiFile?): Boolean {
         if (file == null) return false
-        
+
         // Check if this looks like an OpenAPI spec
         val content = file.text
         return content.contains("openapi:") ||
@@ -32,15 +32,15 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
                content.contains("swagger:") ||
                content.contains("\"swagger\"")
     }
-    
+
     override fun invoke(project: Project, editor: Editor?, file: PsiFile?) {
         if (file == null || editor == null) return
-        
+
         try {
             // Parse OpenAPI spec
             val content = file.text
             val spec = parseOpenAPISpec(content, file.name)
-            
+
             if (spec == null) {
                 com.intellij.openapi.ui.Messages.showErrorDialog(
                     project,
@@ -49,10 +49,10 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
                 )
                 return
             }
-            
+
             // Extract operations
             val operations = extractOperations(spec)
-            
+
             if (operations.isEmpty()) {
                 com.intellij.openapi.ui.Messages.showInfoMessage(
                     project,
@@ -61,11 +61,11 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
                 )
                 return
             }
-            
+
             // Ask user which operations to generate scenarios for
             val selectedOperations = selectOperations(project, operations)
             if (selectedOperations.isEmpty()) return
-            
+
             // Ask for scenario name
             val scenarioName = com.intellij.openapi.ui.Messages.showInputDialog(
                 project,
@@ -75,14 +75,14 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
                 "generated-scenario",
                 null
             ) ?: return
-            
+
             // Generate scenario file
             val scenarioContent = generateScenarioYaml(scenarioName, selectedOperations)
-            
+
             // Save scenario file
             val outputPath = File(file.containingDirectory.virtualFile.path, "$scenarioName.yaml")
             outputPath.writeText(scenarioContent)
-            
+
             // Open the generated file
             val virtualFile = com.intellij.openapi.vfs.LocalFileSystem.getInstance()
                 .refreshAndFindFileByPath(outputPath.absolutePath)
@@ -93,13 +93,13 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
                         true
                     )
             }
-            
+
             com.intellij.openapi.ui.Messages.showInfoMessage(
                 project,
                 "Generated MockForge scenario: ${outputPath.name}",
                 "Generate Mock Scenario"
             )
-            
+
         } catch (e: Exception) {
             com.intellij.openapi.ui.Messages.showErrorDialog(
                 project,
@@ -108,13 +108,13 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
             )
         }
     }
-    
+
     override fun startInWriteAction(): Boolean = false
-    
+
     override fun getPriority(): PriorityAction.Priority = PriorityAction.Priority.NORMAL
-    
+
     override fun getIcon(): Icon? = null
-    
+
     /**
      * Parse OpenAPI specification
      */
@@ -134,25 +134,25 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
             null
         }
     }
-    
+
     /**
      * Extract operations from OpenAPI spec
      */
     private fun extractOperations(spec: Map<*, *>): List<Operation> {
         val operations = mutableListOf<Operation>()
-        
+
         val paths = spec["paths"] as? Map<*, *> ?: return emptyList()
-        
+
         paths.forEach { (path, pathItem) ->
             val pathStr = path.toString()
             val pathItemMap = pathItem as? Map<*, *> ?: return@forEach
-            
+
             // Extract operations (get, post, put, patch, delete, etc.)
             listOf("get", "post", "put", "patch", "delete", "options", "head").forEach { method ->
                 val operation = pathItemMap[method] as? Map<*, *> ?: return@forEach
                 val operationId = (operation["operationId"] as? String) ?: "${method}_${pathStr.replace("/", "_")}"
                 val summary = (operation["summary"] as? String) ?: ""
-                
+
                 operations.add(Operation(
                     method = method.uppercase(),
                     path = pathStr,
@@ -161,10 +161,10 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
                 ))
             }
         }
-        
+
         return operations
     }
-    
+
     /**
      * Select operations to generate scenarios for
      */
@@ -173,7 +173,7 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
         // In a full implementation, show a dialog to select operations
         return operations
     }
-    
+
     /**
      * Generate scenario YAML from operations
      */
@@ -186,7 +186,7 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
         yaml.appendLine("description: Auto-generated scenario from OpenAPI specification")
         yaml.appendLine()
         yaml.appendLine("steps:")
-        
+
         operations.forEachIndexed { index, operation ->
             yaml.appendLine("  - step: ${index + 1}")
             yaml.appendLine("    name: ${operation.summary.ifBlank { operation.operationId }}")
@@ -200,10 +200,10 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
             yaml.appendLine("        {}")
             yaml.appendLine()
         }
-        
+
         return yaml.toString()
     }
-    
+
     private data class Operation(
         val method: String,
         val path: String,
@@ -211,4 +211,3 @@ class GenerateMockScenarioAction : IntentionAction, PriorityAction {
         val summary: String
     )
 }
-

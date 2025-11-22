@@ -361,4 +361,3 @@ pub async fn get_pillar_usage_summary(
         }
     }
 }
-

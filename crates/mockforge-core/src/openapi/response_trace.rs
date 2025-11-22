@@ -127,4 +127,3 @@ pub fn generate_response_with_trace(
 
     Ok((response, trace))
 }
-

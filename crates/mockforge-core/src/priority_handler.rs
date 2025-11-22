@@ -8,13 +8,37 @@ use crate::stateful_handler::StatefulResponseHandler;
 use crate::{
     CustomFixtureLoader, Error, FailureInjector, ProxyHandler, RealityContinuumEngine,
     RecordReplayHandler, RequestFingerprint, ResponsePriority, ResponseSource, Result,
-    RouteChaosInjector,
 };
+// RouteChaosInjector moved to mockforge-route-chaos crate to avoid Send issues
+// We define a trait here that RouteChaosInjector can implement to avoid circular dependency
 use async_trait::async_trait;
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+/// Fault injection response (defined in mockforge-core to avoid circular dependency)
+#[derive(Debug, Clone)]
+pub struct RouteFaultResponse {
+    /// HTTP status code
+    pub status_code: u16,
+    /// Error message
+    pub error_message: String,
+    /// Fault type identifier
+    pub fault_type: String,
+}
+
+/// Trait for route chaos injection (fault injection and latency)
+/// This trait is defined in mockforge-core to avoid circular dependency.
+/// The concrete RouteChaosInjector in mockforge-route-chaos implements this trait.
+#[async_trait]
+pub trait RouteChaosInjectorTrait: Send + Sync {
+    /// Inject latency for this request
+    async fn inject_latency(&self, method: &Method, uri: &Uri) -> Result<()>;
+
+    /// Get fault injection response for a request
+    fn get_fault_response(&self, method: &Method, uri: &Uri) -> Option<RouteFaultResponse>;
+}
 
 /// Trait for behavioral scenario replay engines
 #[async_trait]
@@ -56,7 +80,8 @@ pub struct PriorityHttpHandler {
     /// Stateful response handler
     stateful_handler: Option<Arc<StatefulResponseHandler>>,
     /// Per-route chaos injector (fault injection and latency)
-    route_chaos_injector: Option<Arc<RouteChaosInjector>>,
+    /// Uses trait object to avoid circular dependency with mockforge-route-chaos
+    route_chaos_injector: Option<Arc<dyn RouteChaosInjectorTrait>>,
     /// Failure injector (global/tag-based)
     failure_injector: Option<FailureInjector>,
     /// Proxy handler
@@ -154,7 +179,7 @@ impl PriorityHttpHandler {
     }
 
     /// Set per-route chaos injector
-    pub fn with_route_chaos_injector(mut self, injector: Arc<RouteChaosInjector>) -> Self {
+    pub fn with_route_chaos_injector(mut self, injector: Arc<dyn RouteChaosInjectorTrait>) -> Self {
         self.route_chaos_injector = Some(injector);
         self
     }

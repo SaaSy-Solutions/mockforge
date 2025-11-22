@@ -116,13 +116,13 @@ function IncidentTypeBadge({ type }: { type: IncidentType }) {
 }
 
 // Protocol-specific display component
-function ProtocolDisplay({ 
-  protocol, 
-  endpoint, 
-  method 
-}: { 
-  protocol: string; 
-  endpoint: string; 
+function ProtocolDisplay({
+  protocol,
+  endpoint,
+  method
+}: {
+  protocol: string;
+  endpoint: string;
   method: string;
 }) {
   // Parse protocol-specific information
@@ -179,7 +179,7 @@ function ProtocolDisplay({
       </div>
     );
   }
-  
+
   // Fallback for other protocols
   return (
     <div className="flex items-center gap-2">
@@ -217,10 +217,10 @@ function IncidentRow({
               <div className="flex items-center gap-2">
                 {/* Protocol-specific display */}
                 {incident.protocol && incident.protocol !== 'http' ? (
-                  <ProtocolDisplay 
-                    protocol={incident.protocol} 
-                    endpoint={incident.endpoint} 
-                    method={incident.method} 
+                  <ProtocolDisplay
+                    protocol={incident.protocol}
+                    endpoint={incident.endpoint}
+                    method={incident.method}
                   />
                 ) : (
                   <>
@@ -547,9 +547,9 @@ export function IncidentDashboardPage() {
   // Filter incidents by search term and protocol
   const filteredIncidents = useMemo(() => {
     if (!incidentsData?.incidents) return [];
-    
+
     let filtered = incidentsData.incidents;
-    
+
     // Apply protocol filter
     if (protocolFilter !== 'all') {
       filtered = filtered.filter((incident) => {
@@ -559,7 +559,7 @@ export function IncidentDashboardPage() {
         return incident.protocol === protocolFilter;
       });
     }
-    
+
     // Apply search term filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
@@ -570,7 +570,7 @@ export function IncidentDashboardPage() {
           incident.id.toLowerCase().includes(search)
       );
     }
-    
+
     return filtered;
   }, [incidentsData, searchTerm, protocolFilter]);
 

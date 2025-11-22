@@ -284,4 +284,3 @@ mod tests {
         assert!(evaluator.evaluate(&condition).unwrap());
     }
 }
-

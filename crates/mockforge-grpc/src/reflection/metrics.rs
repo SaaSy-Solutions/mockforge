@@ -215,9 +215,9 @@ pub fn global_registry() -> &'static MetricsRegistry {
 fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static str {
     let service_lower = service_name.to_lowercase();
     let method_lower = method_name.to_lowercase();
-    
+
     // Reality pillar patterns
-    if service_lower.contains("reality") 
+    if service_lower.contains("reality")
         || service_lower.contains("persona")
         || service_lower.contains("chaos")
         || method_lower.contains("reality")
@@ -225,7 +225,7 @@ fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static
         || method_lower.contains("chaos") {
         return "reality";
     }
-    
+
     // Contracts pillar patterns
     if service_lower.contains("contract")
         || service_lower.contains("validation")
@@ -235,7 +235,7 @@ fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static
         || method_lower.contains("drift") {
         return "contracts";
     }
-    
+
     // DevX pillar patterns
     if service_lower.contains("sdk")
         || service_lower.contains("plugin")
@@ -243,7 +243,7 @@ fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static
         || method_lower.contains("plugin") {
         return "devx";
     }
-    
+
     // Cloud pillar patterns
     if service_lower.contains("registry")
         || service_lower.contains("workspace")
@@ -252,7 +252,7 @@ fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static
         || method_lower.contains("workspace") {
         return "cloud";
     }
-    
+
     // AI pillar patterns
     if service_lower.contains("ai")
         || service_lower.contains("mockai")
@@ -260,7 +260,7 @@ fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static
         || method_lower.contains("llm") {
         return "ai";
     }
-    
+
     // Default to unknown if no pattern matches
     "unknown"
 }

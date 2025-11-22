@@ -31,7 +31,7 @@ This workspace showcases:
    ```bash
    # Get order status (will reflect current lifecycle state)
    curl http://localhost:3000/api/orders/123
-   
+
    # Get shipment tracking (updates based on lifecycle state)
    curl http://localhost:3000/api/orders/123/shipment
    ```
@@ -197,4 +197,3 @@ See `config.yaml` for the complete workspace configuration including:
 - [Reality Trace Documentation](../docs/REALITY_TRACE.md)
 - [Lifecycles and Time Documentation](../docs/LIFECYCLES_AND_TIME.md)
 - [Personas Documentation](../docs/PERSONAS.md)
-

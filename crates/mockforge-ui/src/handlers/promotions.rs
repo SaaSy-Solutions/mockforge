@@ -579,4 +579,3 @@ pub async fn get_entity_promotion_history(
         )))),
     }
 }
-

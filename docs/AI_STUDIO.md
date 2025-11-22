@@ -36,7 +36,7 @@ Analyze test failures and get AI-powered suggestions with comprehensive context 
   - **Persona Registry**: Active persona, traits, relationships
   - **Chaos Engine**: Active chaos rules, fault injection, network profiles
 
-- **Intelligent Suggestions**: 
+- **Intelligent Suggestions**:
   - Explains which mock scenario/persona/reality setting likely caused the failure
   - Suggests specific fixes: "Tighten validation here" or "Add an explicit error example for this case"
   - Links to relevant artifacts for quick navigation
@@ -45,7 +45,7 @@ Analyze test failures and get AI-powered suggestions with comprehensive context 
 
 **Example:**
 ```
-Paste test failure logs → Get root cause analysis with context → 
+Paste test failure logs → Get root cause analysis with context →
 See which persona/reality setting caused it → Apply suggested fixes
 ```
 
@@ -428,4 +428,3 @@ Apply a JSON Patch suggestion to configuration.
 - Artifact versioning and rollback
 - Multi-workspace usage aggregation
 - Cost alerts and notifications
-

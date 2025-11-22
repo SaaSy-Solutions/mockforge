@@ -124,7 +124,7 @@ impl PromotionService {
         let status_str = status.to_string();
         let created_at_str = now.to_rfc3339();
         let updated_at_str = now.to_rfc3339();
-        
+
         sqlx::query!(
             r#"
             INSERT INTO promotion_history (
@@ -314,7 +314,7 @@ impl PromotionService {
         promotion_id: Uuid,
     ) -> Result<Option<PromotionHistoryEntry>> {
         let promotion_id_str = promotion_id.to_string();
-        
+
         use sqlx::Row;
         let row = sqlx::query(
             r#"
@@ -613,7 +613,7 @@ impl PromotionService {
                 let pr_url: Option<String> = row.get("pr_url");
                 let metadata: Option<String> = row.get("metadata");
                 let created_at: String = row.get("created_at");
-                
+
                 let from_env = MockEnvironmentName::from_str(&from_environment)
                     .ok_or_else(|| CollabError::Internal(format!("Invalid from_environment: {}", from_environment)))?;
                 let to_env = MockEnvironmentName::from_str(&to_environment)
@@ -657,4 +657,3 @@ impl PromotionService {
         promotions
     }
 }
-

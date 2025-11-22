@@ -419,4 +419,3 @@ echo "All tests passed!"
 3. Verify UI displays correctly for all protocols
 4. Test with real consumer mappings
 5. Verify webhook notifications include all information
-

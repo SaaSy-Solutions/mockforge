@@ -19,4 +19,3 @@ pub use remediation_generator::RemediationGenerator;
 pub use schema_analyzer::SchemaAnalyzer;
 pub use threat_analyzer::ThreatAnalyzer;
 pub use types::*;
-

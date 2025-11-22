@@ -939,13 +939,13 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
 
                     StudioPackCommands::Create { name, output } => {
                         println!("🎨 Creating studio pack: {}", name);
-                        
+
                         // Load current workspace configuration
                         let config_path = std::env::current_dir()
                             .ok()
                             .and_then(|d| Some(d.join("mockforge.yaml")))
                             .filter(|p| p.exists());
-                        
+
                         let config = if let Some(ref path) = config_path {
                             match load_config(path).await {
                                 Ok(c) => c,
@@ -995,7 +995,7 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                                     "max_fields": rule.max_fields,
                                     "max_depth": rule.max_depth,
                                 });
-                                
+
                                 mockforge_scenarios::domain_pack::StudioContractDiff {
                                     name: rule.name.clone(),
                                     description: None,
@@ -1009,7 +1009,7 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                         // For now, use default moderate realism
                         let reality_blends = {
                             let reality_ratio = 0.5; // Default to moderate realism
-                            
+
                             vec![mockforge_scenarios::domain_pack::StudioRealityBlend {
                                 name: "default".to_string(),
                                 description: Some("Default reality blend from config".to_string()),
@@ -1042,11 +1042,11 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                         let output_path = output
                             .map(std::path::PathBuf::from)
                             .unwrap_or_else(|| std::path::PathBuf::from(format!("{}.yaml", name)));
-                        
+
                         // Write manifest to file
                         let yaml_content = serde_yaml::to_string(&manifest)
                             .map_err(|e| anyhow::anyhow!("Failed to serialize manifest: {}", e))?;
-                        
+
                         std::fs::write(&output_path, yaml_content)
                             .map_err(|e| anyhow::anyhow!("Failed to write manifest: {}", e))?;
 
@@ -1672,48 +1672,48 @@ async fn load_config_with_fallback() -> anyhow::Result<(ServerConfig, std::path:
 /// Helper function to save behavior rule to config
 async fn save_behavior_rule_to_config(rule: BehaviorRule) -> anyhow::Result<()> {
     let (mut config, config_path) = load_config_with_fallback().await?;
-    
+
     // Check if rule already exists and remove it
     config.behavioral_economics.rules.retain(|r| r.name != rule.name);
-    
+
     // Add the new rule
     config.behavioral_economics.rules.push(rule);
-    
+
     // Save config
     save_config(&config_path, &config)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
-    
+
     Ok(())
 }
 
 /// Helper function to remove behavior rule from config
 async fn remove_behavior_rule_from_config(rule_name: &str) -> anyhow::Result<bool> {
     let (mut config, config_path) = load_config_with_fallback().await?;
-    
+
     let initial_len = config.behavioral_economics.rules.len();
     config.behavioral_economics.rules.retain(|r| r.name != rule_name);
     let removed = config.behavioral_economics.rules.len() < initial_len;
-    
+
     if removed {
         save_config(&config_path, &config)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
     }
-    
+
     Ok(removed)
 }
 
 /// Helper function to update behavioral economics engine enabled status
 async fn update_behavioral_economics_enabled(enabled: bool) -> anyhow::Result<()> {
     let (mut config, config_path) = load_config_with_fallback().await?;
-    
+
     config.behavioral_economics.enabled = enabled;
-    
+
     save_config(&config_path, &config)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
-    
+
     Ok(())
 }
 
@@ -1826,7 +1826,7 @@ pub async fn handle_behavior_rule_command(
         BehaviorRuleCommands::List => {
             println!("Behavior rules:");
             let (config, _) = load_config_with_fallback().await?;
-            
+
             if config.behavioral_economics.rules.is_empty() {
                 println!("  No behavior rules configured");
             } else {
@@ -1875,12 +1875,12 @@ pub async fn handle_behavior_rule_command(
         BehaviorRuleCommands::Status => {
             println!("Behavioral Economics Engine Status:");
             let (config, _) = load_config_with_fallback().await?;
-            
+
             println!("  Enabled: {}", config.behavioral_economics.enabled);
             println!("  Rules: {}", config.behavioral_economics.rules.len());
             println!("  Global Sensitivity: {}", config.behavioral_economics.global_sensitivity);
             println!("  Evaluation Interval: {}ms", config.behavioral_economics.evaluation_interval_ms);
-            
+
             if !config.behavioral_economics.rules.is_empty() {
                 println!("\n  Active Rules:");
                 for rule in &config.behavioral_economics.rules {
@@ -1909,13 +1909,13 @@ where
     F: FnOnce(&mut mockforge_core::config::DriftLearningConfig),
 {
     let (mut config, config_path) = load_config_with_fallback().await?;
-    
+
     updater(&mut config.drift_learning);
-    
+
     save_config(&config_path, &config)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
-    
+
     Ok(())
 }
 
@@ -1961,7 +1961,7 @@ pub async fn handle_drift_learning_command(
         DriftLearningCommands::Status => {
             println!("Drift Learning Status:");
             let (config, _) = load_config_with_fallback().await?;
-            
+
             println!("  Enabled: {}", config.drift_learning.enabled);
             println!("  Mode: {:?}", config.drift_learning.mode);
             println!("  Sensitivity: {}", config.drift_learning.sensitivity);
@@ -1970,14 +1970,14 @@ pub async fn handle_drift_learning_command(
             println!("  Persona Adaptation: {}", config.drift_learning.persona_adaptation);
             println!("  Persona Learning Configs: {}", config.drift_learning.persona_learning.len());
             println!("  Endpoint Learning Configs: {}", config.drift_learning.endpoint_learning.len());
-            
+
             if !config.drift_learning.persona_learning.is_empty() {
                 println!("\n  Persona Learning:");
                 for (persona_id, enabled) in &config.drift_learning.persona_learning {
                     println!("    - {}: {}", persona_id, if *enabled { "enabled" } else { "disabled" });
                 }
             }
-            
+
             if !config.drift_learning.endpoint_learning.is_empty() {
                 println!("\n  Endpoint Learning:");
                 for (endpoint, enabled) in &config.drift_learning.endpoint_learning {

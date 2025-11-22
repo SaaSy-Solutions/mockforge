@@ -233,4 +233,3 @@ pub fn get_default_security_baseline() -> Value {
         }
     })
 }
-

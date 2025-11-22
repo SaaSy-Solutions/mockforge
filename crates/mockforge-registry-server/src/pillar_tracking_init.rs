@@ -57,4 +57,3 @@ pub async fn init_pillar_tracking(analytics_db: Option<Arc<AnalyticsDatabase>>) 
         tracing::debug!("Pillar tracking not initialized (analytics database not available)");
     }
 }
-
