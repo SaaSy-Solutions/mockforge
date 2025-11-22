@@ -2211,6 +2211,10 @@ pub fn management_router(state: ManagementState) -> Router {
     let router = router
         .route("/ai/generate-spec", post(generate_ai_spec));
 
+    // Snapshot diff endpoints
+    let router = router
+        .nest("/snapshot-diff", crate::handlers::snapshot_diff::snapshot_diff_router(state.clone()));
+
     #[cfg(feature = "behavioral-cloning")]
     let router = router
         .route("/mockai/generate-openapi", post(generate_openapi_from_traffic));

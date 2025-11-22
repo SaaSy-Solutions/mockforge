@@ -26,6 +26,7 @@ pub mod risk_simulation;
 pub mod scenario_studio;
 pub mod semantic_drift;
 pub mod snapshots;
+pub mod snapshot_diff;
 pub mod threat_modeling;
 pub mod token_lifecycle;
 pub mod webhook_test;

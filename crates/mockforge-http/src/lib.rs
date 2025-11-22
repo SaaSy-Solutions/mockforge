@@ -1427,6 +1427,41 @@ pub async fn build_router_with_chains(
 // Template expansion is now handled by mockforge_core::template_expansion
 // which is explicitly isolated from the templating module to avoid Send issues
 
+/// Helper function to apply route chaos injection (fault injection and latency)
+/// This is extracted to avoid capturing RouteChaosInjector in the closure, which causes Send issues
+/// Uses mockforge-route-chaos crate which is isolated from mockforge-core to avoid Send issues
+/// Uses the RouteChaosInjectorTrait from mockforge-core to avoid circular dependency
+async fn apply_route_chaos(
+    injector: Option<&dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>,
+    method: &axum::http::Method,
+    uri: &axum::http::Uri,
+) -> Option<axum::response::Response> {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    if let Some(injector) = injector {
+        // Check for fault injection first
+        if let Some(fault_response) = injector.get_fault_response(method, uri) {
+            // Return fault response
+            let mut response = axum::Json(serde_json::json!({
+                "error": fault_response.error_message,
+                "fault_type": fault_response.fault_type,
+            }))
+            .into_response();
+            *response.status_mut() = StatusCode::from_u16(fault_response.status_code)
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            return Some(response);
+        }
+
+        // Inject latency if configured (this is async and may delay the request)
+        if let Err(e) = injector.inject_latency(method, uri).await {
+            tracing::warn!("Failed to inject latency: {}", e);
+        }
+    }
+
+    None // No fault response, processing should continue
+}
+
 /// Build the base HTTP router with chaining and multi-tenant support
 #[allow(clippy::too_many_arguments)]
 pub async fn build_router_with_chains_and_multi_tenant(
@@ -1545,24 +1580,26 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Register custom routes from config with advanced routing features
     // Create RouteChaosInjector for advanced fault injection and latency
-    let route_chaos_injector = if let Some(ref route_configs) = route_configs {
-        if !route_configs.is_empty() {
-            match mockforge_core::RouteChaosInjector::new(route_configs.clone()) {
-                Ok(injector) => {
-                    info!("Initialized advanced routing features for {} route(s)", route_configs.len());
-                    Some(std::sync::Arc::new(injector))
+    // Store as trait object to avoid circular dependency (RouteChaosInjectorTrait is in mockforge-core)
+    let route_chaos_injector: Option<std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>> = 
+        if let Some(ref route_configs) = route_configs {
+            if !route_configs.is_empty() {
+                match mockforge_route_chaos::RouteChaosInjector::new(route_configs.clone()) {
+                    Ok(injector) => {
+                        info!("Initialized advanced routing features for {} route(s)", route_configs.len());
+                        Some(std::sync::Arc::new(injector) as std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>)
+                    }
+                    Err(e) => {
+                        warn!("Failed to initialize advanced routing features: {}. Using basic routing.", e);
+                        None
+                    }
                 }
-                Err(e) => {
-                    warn!("Failed to initialize advanced routing features: {}. Using basic routing.", e);
-                    None
-                }
+            } else {
+                None
             }
         } else {
             None
-        }
-    } else {
-        None
-    };
+        };
 
     if let Some(route_configs) = route_configs {
         use axum::http::StatusCode;
@@ -1585,16 +1622,21 @@ pub async fn build_router_with_chains_and_multi_tenant(
             // ({{request.query.name}}, {{request.path.id}}, {{request.headers.name}})
             // Register route using `any()` since we need full Request access for template expansion
             let expected_method = method.to_uppercase();
+            // Clone Arc for the closure - Arc is Send-safe
+            // Note: RouteChaosInjector is marked as Send+Sync via unsafe impl, but the compiler
+            // is conservative because rng() is available in the rand crate, even though we use thread_rng()
             let injector_clone = injector.clone();
             app = app.route(
                 &path,
+                #[allow(clippy::non_send_fields_in_send_ty)]
                 axum::routing::any(move |req: axum::http::Request<axum::body::Body>| {
                     let body = body.clone();
                     let headers = headers.clone();
                     let expand = template_expand;
                     let expected = expected_method.clone();
                     let status_code = status;
-                    let chaos_injector = injector_clone.clone();
+                    // Clone Arc again for the async block
+                    let injector_for_chaos = injector_clone.clone();
 
                     async move {
                         // Check if request method matches expected method
@@ -1609,34 +1651,20 @@ pub async fn build_router_with_chains_and_multi_tenant(
                         }
 
                         // Apply advanced routing features (fault injection and latency) if available
-                        if let Some(ref injector) = chaos_injector {
-                            // Check for fault injection first
-                            if let Some(fault_response) = injector.get_fault_response(req.method(), req.uri()) {
-                                // Return fault response
-                                let mut response = axum::Json(serde_json::json!({
-                                    "error": fault_response.error_message,
-                                    "fault_type": fault_response.fault_type,
-                                })).into_response();
-                                *response.status_mut() = StatusCode::from_u16(fault_response.status_code)
-                                    .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-                                return response;
-                            }
-
-                            // Apply advanced latency injection (supports all distributions)
-                            if let Err(e) = injector.inject_latency(req.method(), req.uri()).await {
-                                // Log error but continue with request processing
-                                tracing::warn!("Failed to inject latency: {}", e);
-                            }
+                        // Use helper function to avoid capturing RouteChaosInjector in closure
+                        // Pass the Arc as a reference to the helper function
+                        if let Some(fault_response) = apply_route_chaos(injector_for_chaos.as_deref(), req.method(), req.uri()).await {
+                            return fault_response;
                         }
 
                         // Create JSON response from body, or empty object if None
                         let mut body_value = body.unwrap_or(serde_json::json!({}));
 
                         // Apply template expansion if enabled
-                        // Use spawn_blocking to isolate template expansion from async context
-                        // This ensures Send safety even though expand_prompt_template doesn't use rng()
+                        // Use mockforge-template-expansion crate which is completely isolated
+                        // from mockforge-core to avoid Send issues (no rng() in dependency chain)
                         if expand {
-                            use mockforge_core::ai_response::RequestContext;
+                            use mockforge_template_expansion::RequestContext;
                             use serde_json::Value;
                             use std::collections::HashMap;
 
@@ -1660,10 +1688,17 @@ pub async fn build_router_with_chains_and_multi_tenant(
                             let headers: HashMap<String, Value> = req
                                 .headers()
                                 .iter()
-                                .map(|(k, v)| (k.to_string(), Value::String(v.to_str().unwrap_or_default().to_string())))
+                                .map(|(k, v)| {
+                                    (
+                                        k.to_string(),
+                                        Value::String(v.to_str().unwrap_or_default().to_string()),
+                                    )
+                                })
                                 .collect();
 
                             // Create RequestContext for expand_prompt_template
+                            // Using RequestContext from mockforge-template-expansion (not mockforge-core)
+                            // to avoid bringing rng() into scope
                             let context = RequestContext {
                                 method,
                                 path,
@@ -1676,12 +1711,15 @@ pub async fn build_router_with_chains_and_multi_tenant(
                             };
 
                             // Perform template expansion in spawn_blocking to ensure Send safety
-                            // Use template_expansion module which is explicitly isolated from templating
-                            // This is Send-safe because it doesn't use rng() or any non-Send types
+                            // The template expansion crate is completely isolated from mockforge-core
+                            // and doesn't have rng() in its dependency chain
                             let body_value_clone = body_value.clone();
                             let context_clone = context.clone();
                             body_value = match tokio::task::spawn_blocking(move || {
-                                mockforge_core::template_expansion::expand_templates_in_json(body_value_clone, &context_clone)
+                                mockforge_template_expansion::expand_templates_in_json(
+                                    body_value_clone,
+                                    &context_clone,
+                                )
                             })
                             .await
                             {
@@ -2661,6 +2699,51 @@ pub async fn build_router_with_chains_and_multi_tenant(
         // Apply auth middleware
         app = app.layer(axum::middleware::from_fn_with_state(auth_state, auth_middleware));
         info!("Applied OAuth authentication middleware from deceptive deploy configuration");
+    }
+
+    // Add runtime daemon 404 detection middleware (if enabled)
+    #[cfg(feature = "runtime-daemon")]
+    {
+        use mockforge_runtime_daemon::{AutoGenerator, NotFoundDetector, RuntimeDaemonConfig};
+        use std::sync::Arc;
+
+        // Load runtime daemon config from environment
+        let daemon_config = RuntimeDaemonConfig::from_env();
+        
+        if daemon_config.enabled {
+            info!("Runtime daemon enabled - auto-creating mocks from 404s");
+            
+            // Determine management API URL (default to localhost:3000)
+            let management_api_url = std::env::var("MOCKFORGE_MANAGEMENT_API_URL")
+                .unwrap_or_else(|_| {
+                    let port = std::env::var("MOCKFORGE_HTTP_PORT")
+                        .unwrap_or_else(|_| "3000".to_string());
+                    format!("http://localhost:{}", port)
+                });
+
+            // Create auto-generator
+            let generator = Arc::new(AutoGenerator::new(
+                daemon_config.clone(),
+                management_api_url,
+            ));
+
+            // Create detector and set generator
+            let detector = NotFoundDetector::new(daemon_config.clone());
+            detector.set_generator(generator).await;
+
+            // Add middleware layer
+            let detector_clone = detector.clone();
+            app = app.layer(axum::middleware::from_fn(
+                move |req: axum::extract::Request, next: axum::middleware::Next| {
+                    let detector = detector_clone.clone();
+                    async move {
+                        detector.detect_and_auto_create(req, next).await
+                    }
+                },
+            ));
+            
+            debug!("Runtime daemon 404 detection middleware added");
+        }
     }
 
     // Add contract diff middleware for automatic request capture

@@ -36,9 +36,10 @@ members = [
     "crates/mockforge-tunnel",
     "crates/mockforge-vbr",
     "crates/mockforge-schema",
+    "crates/mockforge-runtime-daemon",
     "desktop-app",
     "tests"  # Integration tests package
-]
+, "crates/mockforge-template-expansion"]
 exclude = [
     "crates/mockforge-registry-server",
 ]

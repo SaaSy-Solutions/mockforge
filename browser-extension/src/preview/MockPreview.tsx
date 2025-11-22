@@ -10,11 +10,12 @@ import { MockPreviewService } from './MockPreviewService';
 
 interface MockPreviewProps {
     request: CapturedRequest | null;
+    existingMock?: MockConfig;
     onSave?: (mock: MockConfig) => void;
     onCancel?: () => void;
 }
 
-export function MockPreview({ request, onSave, onCancel }: MockPreviewProps) {
+export function MockPreview({ request, existingMock, onSave, onCancel }: MockPreviewProps) {
     const [mock, setMock] = useState<MockConfig | null>(null);
     const [previewEnabled, setPreviewEnabled] = useState(false);
     const [previewService] = useState(() => new MockPreviewService());
@@ -28,10 +29,16 @@ export function MockPreview({ request, onSave, onCancel }: MockPreviewProps) {
     }, []);
 
     useEffect(() => {
-        if (request) {
+        if (existingMock) {
+            // Initialize from existing mock for editing
+            setMock(existingMock);
+            setOriginalResponse(existingMock.response?.body);
+            setEditedResponse(JSON.stringify(existingMock.response?.body || {}, null, 2));
+            setJsonError(null);
+        } else if (request) {
             initializeMockFromRequest(request);
         }
-    }, [request]);
+    }, [request, existingMock]);
 
     const checkPreviewMode = async () => {
         try {
@@ -298,7 +305,7 @@ export function MockPreview({ request, onSave, onCancel }: MockPreviewProps) {
                         cursor: jsonError ? 'not-allowed' : 'pointer',
                     }}
                 >
-                    {previewEnabled ? 'Save Preview Mock' : 'Create Mock in MockForge'}
+                    {existingMock ? 'Update Mock' : previewEnabled ? 'Save Preview Mock' : 'Create Mock in MockForge'}
                 </button>
                 {onCancel && (
                     <button
