@@ -409,7 +409,7 @@ impl DriftBudgetEngine {
         }
 
         // Priority 5: Default budget
-        self.config.default_budget.clone().unwrap_or_else(DriftBudget::default)
+        self.config.default_budget.clone().unwrap_or_default()
     }
 
     /// Get budget for a specific endpoint (backward compatibility)

@@ -16,6 +16,7 @@ pub struct MergeService {
 
 impl MergeService {
     /// Create a new merge service
+    #[must_use]
     pub fn new(db: Pool<Sqlite>) -> Self {
         Self {
             db: db.clone(),
@@ -122,7 +123,7 @@ impl MergeService {
 
     /// Perform a three-way merge between two workspaces
     ///
-    /// Merges changes from source_workspace into target_workspace.
+    /// Merges changes from `source_workspace` into `target_workspace`.
     /// Returns the merged state and any conflicts.
     pub async fn merge_workspaces(
         &self,
@@ -186,7 +187,7 @@ impl MergeService {
         let merge_commit_id_str = merge.merge_commit_id.map(|id| id.to_string());
         let status_str = serde_json::to_string(&merge.status)?;
         let conflict_data_str =
-            merge.conflict_data.as_ref().map(|v| serde_json::to_string(v)).transpose()?;
+            merge.conflict_data.as_ref().map(serde_json::to_string).transpose()?;
         let merged_by_str = merge.merged_by.map(|id| id.to_string());
         let merged_at_str = merge.merged_at.map(|dt| dt.to_rfc3339());
         let created_at_str = merge.created_at.to_rfc3339();
@@ -298,7 +299,7 @@ impl MergeService {
                         let new_path = if path.is_empty() {
                             key.clone()
                         } else {
-                            format!("{}.{}", path, key)
+                            format!("{path}.{key}")
                         };
 
                         match (base_val, source_val, target_val) {
@@ -367,16 +368,14 @@ impl MergeService {
 
             // Handle arrays - simple approach: use target, mark as conflict if different
             (Value::Array(base_arr), Value::Array(source_arr), Value::Array(target_arr)) => {
-                if base_arr != source_arr || base_arr != target_arr {
-                    if source_arr != target_arr {
-                        conflicts.push(MergeConflict {
-                            path: path.to_string(),
-                            base_value: Some(base.clone()),
-                            source_value: Some(source.clone()),
-                            target_value: Some(target.clone()),
-                            conflict_type: ConflictType::Modified,
-                        });
-                    }
+                if (base_arr != source_arr || base_arr != target_arr) && source_arr != target_arr {
+                    conflicts.push(MergeConflict {
+                        path: path.to_string(),
+                        base_value: Some(base.clone()),
+                        source_value: Some(source.clone()),
+                        target_value: Some(target.clone()),
+                        conflict_type: ConflictType::Modified,
+                    });
                 }
             }
 
@@ -469,24 +468,24 @@ impl MergeService {
         )
         .fetch_optional(&self.db)
         .await?
-        .ok_or_else(|| CollabError::Internal(format!("Merge not found: {}", merge_id)))?;
+        .ok_or_else(|| CollabError::Internal(format!("Merge not found: {merge_id}")))?;
 
         Ok(WorkspaceMerge {
             id: Uuid::parse_str(&row.id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             source_workspace_id: Uuid::parse_str(&row.source_workspace_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             target_workspace_id: Uuid::parse_str(&row.target_workspace_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             base_commit_id: Uuid::parse_str(&row.base_commit_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             source_commit_id: Uuid::parse_str(&row.source_commit_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             target_commit_id: Uuid::parse_str(&row.target_commit_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             merge_commit_id: row.merge_commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
             status: serde_json::from_str(&row.status)
-                .map_err(|e| CollabError::Internal(format!("Invalid status: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid status: {e}")))?,
             conflict_data: row.conflict_data.as_ref().and_then(|s| serde_json::from_str(s).ok()),
             merged_by: row.merged_by.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
             merged_at: row
@@ -494,13 +493,13 @@ impl MergeService {
                 .as_ref()
                 .map(|s| {
                     chrono::DateTime::parse_from_rfc3339(s)
-                        .map(|dt| dt.with_timezone(&chrono::Utc))
-                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))
                 })
                 .transpose()?,
             created_at: chrono::DateTime::parse_from_rfc3339(&row.created_at)
-                .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
-                .with_timezone(&chrono::Utc),
+                .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
+                .with_timezone(&Utc),
         })
     }
 
@@ -537,23 +536,23 @@ impl MergeService {
             .map(|row| {
                 Ok(WorkspaceMerge {
                     id: Uuid::parse_str(&row.id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     source_workspace_id: Uuid::parse_str(&row.source_workspace_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     target_workspace_id: Uuid::parse_str(&row.target_workspace_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     base_commit_id: Uuid::parse_str(&row.base_commit_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     source_commit_id: Uuid::parse_str(&row.source_commit_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     target_commit_id: Uuid::parse_str(&row.target_commit_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     merge_commit_id: row
                         .merge_commit_id
                         .as_ref()
                         .and_then(|s| Uuid::parse_str(s).ok()),
                     status: serde_json::from_str(&row.status)
-                        .map_err(|e| CollabError::Internal(format!("Invalid status: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid status: {e}")))?,
                     conflict_data: row
                         .conflict_data
                         .as_ref()
@@ -564,15 +563,15 @@ impl MergeService {
                         .as_ref()
                         .map(|s| {
                             chrono::DateTime::parse_from_rfc3339(s)
-                                .map(|dt| dt.with_timezone(&chrono::Utc))
+                                .map(|dt| dt.with_timezone(&Utc))
                                 .map_err(|e| {
-                                    CollabError::Internal(format!("Invalid timestamp: {}", e))
+                                    CollabError::Internal(format!("Invalid timestamp: {e}"))
                                 })
                         })
                         .transpose()?,
                     created_at: chrono::DateTime::parse_from_rfc3339(&row.created_at)
-                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
-                        .with_timezone(&chrono::Utc),
+                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
+                        .with_timezone(&Utc),
                 })
             })
             .collect();

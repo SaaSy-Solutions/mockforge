@@ -4,13 +4,13 @@
 
 use crate::error::{Error, Result};
 use crate::scenario_studio::types::{
-    FlowCondition, FlowConnection, FlowDefinition, FlowStep, StepType, ConditionOperator,
+    ConditionOperator, FlowCondition, FlowDefinition, FlowStep, StepType,
 };
 use chrono::Utc;
+use regex::Regex;
+use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
-use reqwest::Client;
-use regex::Regex;
 
 /// Result of executing a flow step
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -162,7 +162,7 @@ impl FlowExecutor {
         let error = if success {
             None
         } else {
-            step_results.iter().find_map(|r| r.error.as_ref()).map(|e| e.clone())
+            step_results.iter().find_map(|r| r.error.as_ref()).cloned()
         };
 
         Ok(FlowExecutionResult {
@@ -177,7 +177,7 @@ impl FlowExecutor {
 
     /// Find the starting steps in a flow (steps with no incoming connections)
     fn find_start_steps(&self, flow: &FlowDefinition) -> Vec<String> {
-        let mut has_incoming: std::collections::HashSet<String> =
+        let has_incoming: std::collections::HashSet<String> =
             flow.connections.iter().map(|c| c.to_step_id.clone()).collect();
 
         flow.steps
@@ -198,9 +198,7 @@ impl FlowExecutor {
         }
 
         let (success, response, error) = match step.step_type {
-            StepType::ApiCall => {
-                self.execute_api_call(step).await
-            }
+            StepType::ApiCall => self.execute_api_call(step).await,
             StepType::Condition => {
                 // Conditions are evaluated before step execution
                 (true, None, None)
@@ -212,20 +210,12 @@ impl FlowExecutor {
             StepType::Loop => {
                 // Loop execution is handled at the flow level, not step level
                 // This should not be reached in normal execution
-                (
-                    false,
-                    None,
-                    Some("Loop steps must be handled at flow level".to_string()),
-                )
+                (false, None, Some("Loop steps must be handled at flow level".to_string()))
             }
             StepType::Parallel => {
                 // Parallel execution is handled at the flow level, not step level
                 // This should not be reached in normal execution
-                (
-                    false,
-                    None,
-                    Some("Parallel steps must be handled at flow level".to_string()),
-                )
+                (false, None, Some("Parallel steps must be handled at flow level".to_string()))
             }
         };
 
@@ -258,22 +248,14 @@ impl FlowExecutor {
         let method = match step.method.as_ref() {
             Some(m) => m,
             None => {
-                return (
-                    false,
-                    None,
-                    Some("API call step missing method".to_string()),
-                );
+                return (false, None, Some("API call step missing method".to_string()));
             }
         };
 
         let endpoint = match step.endpoint.as_ref() {
             Some(e) => e,
             None => {
-                return (
-                    false,
-                    None,
-                    Some("API call step missing endpoint".to_string()),
-                );
+                return (false, None, Some("API call step missing endpoint".to_string()));
             }
         };
 
@@ -291,11 +273,7 @@ impl FlowExecutor {
             "HEAD" => reqwest::Method::HEAD,
             "OPTIONS" => reqwest::Method::OPTIONS,
             _ => {
-                return (
-                    false,
-                    None,
-                    Some(format!("Unsupported HTTP method: {}", method)),
-                );
+                return (false, None, Some(format!("Unsupported HTTP method: {}", method)));
             }
         };
 
@@ -310,9 +288,7 @@ impl FlowExecutor {
         // Add body if present
         if let Some(ref body_value) = body {
             if let Ok(json_body) = serde_json::to_string(body_value) {
-                request = request
-                    .header("Content-Type", "application/json")
-                    .body(json_body);
+                request = request.header("Content-Type", "application/json").body(json_body);
             }
         }
 
@@ -351,11 +327,7 @@ impl FlowExecutor {
                         })
                     }
                     Err(e) => {
-                        return (
-                            false,
-                            None,
-                            Some(format!("Failed to read response body: {}", e)),
-                        );
+                        return (false, None, Some(format!("Failed to read response body: {}", e)));
                     }
                 };
 
@@ -368,13 +340,7 @@ impl FlowExecutor {
 
                 (true, Some(full_response), None)
             }
-            Err(e) => {
-                (
-                    false,
-                    None,
-                    Some(format!("API call failed: {}", e)),
-                )
-            }
+            Err(e) => (false, None, Some(format!("API call failed: {}", e))),
         }
     }
 
@@ -410,11 +376,7 @@ impl FlowExecutor {
                 Value::Object(new_map)
             }
             Value::Array(arr) => {
-                Value::Array(
-                    arr.iter()
-                        .map(|v| self.substitute_variables_in_value(v))
-                        .collect(),
-                )
+                Value::Array(arr.iter().map(|v| self.substitute_variables_in_value(v)).collect())
             }
             _ => value.clone(),
         }
@@ -447,18 +409,10 @@ impl FlowExecutor {
         let result = match condition.operator {
             ConditionOperator::Eq => left_value == *right_value,
             ConditionOperator::Ne => left_value != *right_value,
-            ConditionOperator::Gt => {
-                self.compare_values(&left_value, right_value, |a, b| a > b)
-            }
-            ConditionOperator::Gte => {
-                self.compare_values(&left_value, right_value, |a, b| a >= b)
-            }
-            ConditionOperator::Lt => {
-                self.compare_values(&left_value, right_value, |a, b| a < b)
-            }
-            ConditionOperator::Lte => {
-                self.compare_values(&left_value, right_value, |a, b| a <= b)
-            }
+            ConditionOperator::Gt => self.compare_values(&left_value, right_value, |a, b| a > b),
+            ConditionOperator::Gte => self.compare_values(&left_value, right_value, |a, b| a >= b),
+            ConditionOperator::Lt => self.compare_values(&left_value, right_value, |a, b| a < b),
+            ConditionOperator::Lte => self.compare_values(&left_value, right_value, |a, b| a <= b),
             ConditionOperator::Contains => {
                 if let (Some(left_str), Some(right_str)) =
                     (left_value.as_str(), right_value.as_str())
@@ -481,9 +435,7 @@ impl FlowExecutor {
                 if let (Some(left_str), Some(right_str)) =
                     (left_value.as_str(), right_value.as_str())
                 {
-                    Regex::new(right_str)
-                        .map(|re| re.is_match(left_str))
-                        .unwrap_or(false)
+                    Regex::new(right_str).map(|re| re.is_match(left_str)).unwrap_or(false)
                 } else {
                     false
                 }
@@ -517,11 +469,7 @@ impl FlowExecutor {
         let mut all_results = Vec::new();
 
         // Get loop configuration from metadata
-        let loop_count = loop_step
-            .metadata
-            .get("loop_count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(1);
+        let loop_count = loop_step.metadata.get("loop_count").and_then(|v| v.as_u64()).unwrap_or(1);
 
         let loop_condition = loop_step.metadata.get("loop_condition");
 
@@ -542,8 +490,7 @@ impl FlowExecutor {
             // Set loop iteration variable
             self.variables
                 .insert("loop_iteration".to_string(), serde_json::json!(iteration));
-            self.variables
-                .insert("loop_index".to_string(), serde_json::json!(iteration));
+            self.variables.insert("loop_index".to_string(), serde_json::json!(iteration));
 
             // Check loop condition if specified
             if let Some(condition_value) = loop_condition {
@@ -654,16 +601,17 @@ impl FlowExecutor {
                 }
 
                 // Execute the step
-                branch_executor.execute_step(&step_clone).await.unwrap_or_else(|e| {
-                    FlowStepResult {
+                branch_executor
+                    .execute_step(&step_clone)
+                    .await
+                    .unwrap_or_else(|e| FlowStepResult {
                         step_id: step_clone.id.clone(),
                         success: false,
                         response: None,
                         error: Some(format!("Execution error: {}", e)),
                         duration_ms: 0,
                         extracted_variables: HashMap::new(),
-                    }
-                })
+                    })
             });
 
             tasks.push(task);

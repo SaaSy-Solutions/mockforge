@@ -55,6 +55,41 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
   // Enable live preview of lifecycle updates when time changes
   useLivePreviewLifecycleUpdates(workspace, status?.enabled ?? false);
 
+  // Extract values before early return - hooks must be called before any conditional returns
+  const isEnabled = status?.enabled ?? false;
+  const virtualTime = status?.current_time;
+  const realTime = status?.real_time;
+  const scaleFactor = status?.scale_factor ?? 1.0;
+
+  // Calculate time range for slider (30 days before/after current time)
+  // This useMemo MUST be called before any early returns to follow Rules of Hooks
+  const timeRange = useMemo(() => {
+    if (!virtualTime || !realTime) return { min: 0, max: 100, current: 50 };
+    const current = new Date(virtualTime).getTime();
+    const real = new Date(realTime).getTime();
+    const range = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
+    const min = real - range;
+    const max = real + range;
+    const normalized = ((current - min) / (max - min)) * 100;
+    return { min: 0, max: 100, current: Math.max(0, Math.min(100, normalized)) };
+  }, [virtualTime, realTime]);
+
+  // Sync slider with virtual time
+  // This useEffect MUST be called before any early returns to follow Rules of Hooks
+  useEffect(() => {
+    if (isEnabled && virtualTime) {
+      setSliderValue(timeRange.current);
+    }
+  }, [isEnabled, virtualTime, timeRange.current]);
+
+  // Sync scale with status
+  // This useEffect MUST be called before any early returns to follow Rules of Hooks
+  useEffect(() => {
+    if (status?.scale_factor !== undefined) {
+      setTimeScale(status.scale_factor);
+    }
+  }, [status?.scale_factor]);
+
   const handleEnable = () => {
     enableMutation.mutate({});
   };
@@ -92,6 +127,7 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
     }
   };
 
+  // Early return AFTER all hooks have been called
   if (isLoading) {
     return (
       <Card className="p-6 animate-pulse">
@@ -99,37 +135,6 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
       </Card>
     );
   }
-
-  const isEnabled = status?.enabled ?? false;
-  const virtualTime = status?.current_time;
-  const realTime = status?.real_time;
-  const scaleFactor = status?.scale_factor ?? 1.0;
-
-  // Calculate time range for slider (30 days before/after current time)
-  const timeRange = useMemo(() => {
-    if (!virtualTime || !realTime) return { min: 0, max: 100, current: 50 };
-    const current = new Date(virtualTime).getTime();
-    const real = new Date(realTime).getTime();
-    const range = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
-    const min = real - range;
-    const max = real + range;
-    const normalized = ((current - min) / (max - min)) * 100;
-    return { min: 0, max: 100, current: Math.max(0, Math.min(100, normalized)) };
-  }, [virtualTime, realTime]);
-
-  // Sync slider with virtual time
-  useEffect(() => {
-    if (isEnabled && virtualTime) {
-      setSliderValue(timeRange.current);
-    }
-  }, [isEnabled, virtualTime, timeRange.current]);
-
-  // Sync scale with status
-  useEffect(() => {
-    if (status?.scale_factor !== undefined) {
-      setTimeScale(status.scale_factor);
-    }
-  }, [status?.scale_factor]);
 
   // Format datetime-local input value
   const getDateTimeLocalValue = (isoString?: string) => {
@@ -420,7 +425,9 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
                 size="sm"
                 className="w-full text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-200"
                 onClick={() => {
-                  window.location.href = '/time-travel';
+                  // Dispatch navigation event to change active tab
+                  // This prevents full page refresh and uses client-side navigation
+                  window.dispatchEvent(new CustomEvent('navigate-tab', { detail: { tab: 'time-travel' } }));
                 }}
               >
                 Open Full Time Travel Page

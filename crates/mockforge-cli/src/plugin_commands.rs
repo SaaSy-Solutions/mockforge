@@ -347,7 +347,7 @@ async fn handle_plugin_init(
     force: bool,
 ) -> anyhow::Result<()> {
     use std::fs;
-    use std::path::Path;
+
     use std::process::Command;
 
     // Validate plugin type
@@ -385,10 +385,7 @@ async fn handle_plugin_init(
     println!("🚀 Creating new {} plugin: {}", plugin_type, name);
 
     // Try to use cargo-generate if available
-    let cargo_generate_available = Command::new("cargo-generate")
-        .arg("--version")
-        .output()
-        .is_ok();
+    let cargo_generate_available = Command::new("cargo-generate").arg("--version").output().is_ok();
 
     if cargo_generate_available {
         // Use cargo-generate to scaffold the project
@@ -396,7 +393,9 @@ async fn handle_plugin_init(
     } else {
         // Fall back to manual file copying
         println!("⚠️  cargo-generate not found, using manual template copying");
-        println!("   Install cargo-generate for better template support: cargo install cargo-generate");
+        println!(
+            "   Install cargo-generate for better template support: cargo install cargo-generate"
+        );
 
         // Get template directory
         let template_dir = get_template_dir()?;
@@ -427,13 +426,13 @@ async fn use_cargo_generate(
     output_dir: &Path,
 ) -> anyhow::Result<()> {
     use std::process::Command;
-    use std::env;
 
     // Get template directory
     let template_dir = get_template_dir()?;
 
     // Convert to absolute path
-    let template_path = template_dir.canonicalize()
+    let template_path = template_dir
+        .canonicalize()
         .or_else(|_| std::env::current_dir().map(|cwd| cwd.join(&template_dir)))?;
 
     println!("  📦 Using cargo-generate to scaffold plugin...");
@@ -483,14 +482,17 @@ async fn use_cargo_generate(
 
     // Set the output directory parent (cargo-generate creates the directory)
     // cargo-generate creates the directory with the name specified by --name
-    let parent_dir = output_dir.parent()
-        .unwrap_or_else(|| Path::new("."));
+    let parent_dir = output_dir.parent().unwrap_or_else(|| Path::new("."));
 
     cmd.current_dir(parent_dir);
 
     // Execute cargo-generate
-    let output = cmd.output()
-        .map_err(|e| anyhow::anyhow!("Failed to execute cargo-generate: {}. Install it with: cargo install cargo-generate", e))?;
+    let output = cmd.output().map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to execute cargo-generate: {}. Install it with: cargo install cargo-generate",
+            e
+        )
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -504,7 +506,7 @@ async fn use_cargo_generate(
     let generated_dir = parent_dir.join(plugin_name);
     if generated_dir != output_dir && generated_dir.exists() {
         if output_dir.exists() {
-            fs::remove_dir_all(&output_dir)?;
+            fs::remove_dir_all(output_dir)?;
         }
         fs::rename(&generated_dir, output_dir)?;
     }

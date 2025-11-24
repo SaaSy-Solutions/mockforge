@@ -100,50 +100,50 @@ impl Default for RetentionConfig {
 
 // Default value functions
 
-fn default_aggregation_interval() -> u64 {
+const fn default_aggregation_interval() -> u64 {
     60 // 1 minute
 }
 
-fn default_rollup_interval() -> u64 {
+const fn default_rollup_interval() -> u64 {
     1 // 1 hour
 }
 
-fn default_batch_size() -> usize {
+const fn default_batch_size() -> usize {
     1000
 }
 
-fn default_max_query_results() -> usize {
+const fn default_max_query_results() -> usize {
     10000
 }
 
-fn default_minute_retention() -> u32 {
+const fn default_minute_retention() -> u32 {
     7 // 7 days
 }
 
-fn default_hour_retention() -> u32 {
+const fn default_hour_retention() -> u32 {
     30 // 30 days
 }
 
-fn default_day_retention() -> u32 {
+const fn default_day_retention() -> u32 {
     365 // 1 year
 }
 
-fn default_error_retention() -> u32 {
+const fn default_error_retention() -> u32 {
     7 // 7 days
 }
 
-fn default_client_retention() -> u32 {
+const fn default_client_retention() -> u32 {
     30 // 30 days
 }
 
-fn default_traffic_retention() -> u32 {
+const fn default_traffic_retention() -> u32 {
     90 // 90 days
 }
 
-fn default_snapshot_retention() -> u32 {
+const fn default_snapshot_retention() -> u32 {
     90 // 90 days
 }
 
-fn default_cleanup_interval() -> u32 {
+const fn default_cleanup_interval() -> u32 {
     24 // Daily
 }

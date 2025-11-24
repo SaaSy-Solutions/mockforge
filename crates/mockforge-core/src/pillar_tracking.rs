@@ -20,7 +20,10 @@ static ANALYTICS_DB: Lazy<Arc<RwLock<Option<Arc<dyn PillarUsageRecorder>>>>> =
 #[async_trait::async_trait]
 pub trait PillarUsageRecorder: Send + Sync {
     /// Record a pillar usage event
-    async fn record(&self, event: PillarUsageEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn record(
+        &self,
+        event: PillarUsageEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// Pillar usage event (simplified version for internal use)
@@ -59,14 +62,7 @@ pub async fn record_reality_usage(
     metric_name: &str,
     metric_value: Value,
 ) {
-    record_pillar_usage(
-        workspace_id,
-        org_id,
-        Pillar::Reality,
-        metric_name,
-        metric_value,
-    )
-    .await;
+    record_pillar_usage(workspace_id, org_id, Pillar::Reality, metric_name, metric_value).await;
 }
 
 /// Record a contracts pillar usage event
@@ -82,14 +78,7 @@ pub async fn record_contracts_usage(
     metric_name: &str,
     metric_value: Value,
 ) {
-    record_pillar_usage(
-        workspace_id,
-        org_id,
-        Pillar::Contracts,
-        metric_name,
-        metric_value,
-    )
-    .await;
+    record_pillar_usage(workspace_id, org_id, Pillar::Contracts, metric_name, metric_value).await;
 }
 
 /// Record a DevX pillar usage event
@@ -105,14 +94,7 @@ pub async fn record_devx_usage(
     metric_name: &str,
     metric_value: Value,
 ) {
-    record_pillar_usage(
-        workspace_id,
-        org_id,
-        Pillar::DevX,
-        metric_name,
-        metric_value,
-    )
-    .await;
+    record_pillar_usage(workspace_id, org_id, Pillar::DevX, metric_name, metric_value).await;
 }
 
 /// Record a cloud pillar usage event
@@ -128,14 +110,7 @@ pub async fn record_cloud_usage(
     metric_name: &str,
     metric_value: Value,
 ) {
-    record_pillar_usage(
-        workspace_id,
-        org_id,
-        Pillar::Cloud,
-        metric_name,
-        metric_value,
-    )
-    .await;
+    record_pillar_usage(workspace_id, org_id, Pillar::Cloud, metric_name, metric_value).await;
 }
 
 /// Record an AI pillar usage event
@@ -151,14 +126,7 @@ pub async fn record_ai_usage(
     metric_name: &str,
     metric_value: Value,
 ) {
-    record_pillar_usage(
-        workspace_id,
-        org_id,
-        Pillar::Ai,
-        metric_name,
-        metric_value,
-    )
-    .await;
+    record_pillar_usage(workspace_id, org_id, Pillar::Ai, metric_name, metric_value).await;
 }
 
 /// Record a pillar usage event (internal helper)
@@ -201,7 +169,10 @@ mod tests {
 
     #[async_trait::async_trait]
     impl PillarUsageRecorder for TestRecorder {
-        async fn record(&self, event: PillarUsageEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        async fn record(
+            &self,
+            event: PillarUsageEvent,
+        ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let mut events = self.events.write().await;
             events.push(event);
             Ok(())

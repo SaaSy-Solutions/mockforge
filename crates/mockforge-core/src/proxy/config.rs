@@ -220,14 +220,13 @@ impl ProxyConfig {
         }
 
         // If there are rules, check if any rule matches with condition evaluation
-        if !self.rules.is_empty() {
-            if find_matching_rule(&self.rules, method, uri, headers, body, |pattern, path| {
+        if !self.rules.is_empty()
+            && find_matching_rule(&self.rules, method, uri, headers, body, |pattern, path| {
                 self.path_matches_pattern(pattern, path)
             })
             .is_some()
-            {
-                return true;
-            }
+        {
+            return true;
         }
 
         // If no rules match, check prefix logic (only if no rules have conditions)

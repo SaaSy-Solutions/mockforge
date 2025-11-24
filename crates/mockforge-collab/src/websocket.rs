@@ -118,7 +118,7 @@ async fn handle_client_message(
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
 ) -> Result<()> {
     let message: SyncMessage = serde_json::from_str(text)
-        .map_err(|e| CollabError::InvalidInput(format!("Invalid JSON: {}", e)))?;
+        .map_err(|e| CollabError::InvalidInput(format!("Invalid JSON: {e}")))?;
 
     match message {
         SyncMessage::Subscribe { workspace_id } => {
@@ -141,7 +141,7 @@ async fn handle_client_message(
                 sender
                     .send(Message::Text(json.into()))
                     .await
-                    .map_err(|e| CollabError::Internal(format!("Failed to send: {}", e)))?;
+                    .map_err(|e| CollabError::Internal(format!("Failed to send: {e}")))?;
             }
         }
 
@@ -168,7 +168,7 @@ async fn handle_client_message(
                     sender
                         .send(Message::Text(json.into()))
                         .await
-                        .map_err(|e| CollabError::Internal(format!("Failed to send: {}", e)))?;
+                        .map_err(|e| CollabError::Internal(format!("Failed to send: {e}")))?;
                 }
             }
         }
@@ -179,7 +179,7 @@ async fn handle_client_message(
             sender
                 .send(Message::Text(json.into()))
                 .await
-                .map_err(|e| CollabError::Internal(format!("Failed to send: {}", e)))?;
+                .map_err(|e| CollabError::Internal(format!("Failed to send: {e}")))?;
         }
 
         _ => {

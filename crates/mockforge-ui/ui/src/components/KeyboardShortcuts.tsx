@@ -6,8 +6,8 @@
 
 import { useEffect } from 'react';
 import { isTauri, listenToTauriEvent } from '@/utils/tauri';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 
 const SHORTCUTS = [
   { keys: ['Ctrl/Cmd', 'Shift', 'S'], action: 'Start Server', event: 'shortcut-start-server' },

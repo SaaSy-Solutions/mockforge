@@ -11,7 +11,7 @@ use crate::security::{
     emit_security_event_async,
     events::{EventActor, EventOutcome, EventTarget, SecurityEvent, SecurityEventType},
     justification_storage::{AccessJustification, JustificationStorage},
-    mfa_tracking::{MfaStatus, MfaStorage},
+    mfa_tracking::MfaStorage,
 };
 use crate::Error;
 use chrono::{DateTime, Duration, Utc};
@@ -324,7 +324,10 @@ impl PrivilegedAccessManager {
                 reason: Some("Manager approval granted".to_string()),
             })
             .with_metadata("request_user_id".to_string(), serde_json::json!(user_id.to_string()))
-            .with_metadata("requested_role".to_string(), serde_json::json!(format!("{:?}", request.requested_role)));
+            .with_metadata(
+                "requested_role".to_string(),
+                serde_json::json!(format!("{:?}", request.requested_role)),
+            );
 
         emit_security_event_async(event);
 
@@ -381,8 +384,14 @@ impl PrivilegedAccessManager {
                 success: true,
                 reason: Some("Security approval granted".to_string()),
             })
-            .with_metadata("request_user_id".to_string(), serde_json::json!(request.user_id.to_string()))
-            .with_metadata("requested_role".to_string(), serde_json::json!(format!("{:?}", request.requested_role)))
+            .with_metadata(
+                "request_user_id".to_string(),
+                serde_json::json!(request.user_id.to_string()),
+            )
+            .with_metadata(
+                "requested_role".to_string(),
+                serde_json::json!(format!("{:?}", request.requested_role)),
+            )
             .with_metadata("expiration_days".to_string(), serde_json::json!(expiration_days));
 
         emit_security_event_async(event);
@@ -418,7 +427,10 @@ impl PrivilegedAccessManager {
                 success: false,
                 reason: Some(reason.clone()),
             })
-            .with_metadata("requested_role".to_string(), serde_json::json!(format!("{:?}", request.requested_role)));
+            .with_metadata(
+                "requested_role".to_string(),
+                serde_json::json!(format!("{:?}", request.requested_role)),
+            );
 
         emit_security_event_async(event);
 
@@ -490,8 +502,14 @@ impl PrivilegedAccessManager {
                 success: true,
                 reason: action.details.clone(),
             })
-            .with_metadata("action_type".to_string(), serde_json::json!(format!("{:?}", action_type)))
-            .with_metadata("session_id".to_string(), serde_json::json!(action.session_id.clone().unwrap_or_default()));
+            .with_metadata(
+                "action_type".to_string(),
+                serde_json::json!(format!("{:?}", action_type)),
+            )
+            .with_metadata(
+                "session_id".to_string(),
+                serde_json::json!(action.session_id.clone().unwrap_or_default()),
+            );
 
         // Emit asynchronously to avoid blocking
         emit_security_event_async(event);
@@ -509,10 +527,8 @@ impl PrivilegedAccessManager {
         user_agent: Option<String>,
     ) -> Result<(), Error> {
         // Check MFA compliance
-        if !self.check_mfa_compliance(user_id).await? {
-            if self.config.auto_suspend_no_mfa {
-                return Err(Error::Generic("MFA not enabled for privileged user".to_string()));
-            }
+        if !self.check_mfa_compliance(user_id).await? && self.config.auto_suspend_no_mfa {
+            return Err(Error::Generic("MFA not enabled for privileged user".to_string()));
         }
 
         // Check concurrent session limit
@@ -602,7 +618,10 @@ impl PrivilegedAccessManager {
                     reason: Some("Privileged session ended".to_string()),
                 })
                 .with_metadata("role".to_string(), serde_json::json!(format!("{:?}", role)))
-                .with_metadata("duration_seconds".to_string(), serde_json::json!((Utc::now() - session.started_at).num_seconds()));
+                .with_metadata(
+                    "duration_seconds".to_string(),
+                    serde_json::json!((Utc::now() - session.started_at).num_seconds()),
+                );
 
             emit_security_event_async(event);
         }

@@ -76,7 +76,7 @@ impl EnvironmentPermissionChecker {
     /// Add a policy
     pub fn add_policy(&mut self, policy: EnvironmentPermissionPolicy) {
         let key = (policy.environment, policy.permission.clone());
-        self.policies.entry(key).or_insert_with(Vec::new).push(policy);
+        self.policies.entry(key).or_default().push(policy);
     }
 
     /// Check if a role has permission in an environment

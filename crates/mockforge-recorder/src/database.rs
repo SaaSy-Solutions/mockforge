@@ -929,7 +929,7 @@ impl RecorderDatabase {
             std::collections::HashMap::new();
         for request in requests {
             if let Some(trace_id) = &request.trace_id {
-                grouped.entry(trace_id.clone()).or_insert_with(Vec::new).push(request);
+                grouped.entry(trace_id.clone()).or_default().push(request);
             }
         }
 
@@ -937,7 +937,7 @@ impl RecorderDatabase {
         let mut result: Vec<(String, Vec<RecordedRequest>)> = grouped
             .into_iter()
             .filter(|(_, requests)| {
-                min_requests_per_trace.map_or(true, |min| requests.len() >= min as usize)
+                min_requests_per_trace.is_none_or(|min| requests.len() >= min as usize)
             })
             .collect();
 

@@ -5,7 +5,7 @@ use clap::Subcommand;
 use mockforge_core::behavioral_economics::BehaviorRule;
 use mockforge_core::config::{load_config, save_config, ServerConfig};
 use mockforge_scenarios::{
-    DomainPackInstaller, InstallOptions, RealityProfilePackManifest, ScenarioInstaller, ScenarioRegistry,
+    DomainPackInstaller, InstallOptions, ScenarioInstaller, ScenarioRegistry,
     ScenarioReviewSubmission,
 };
 use mockforge_vbr::entities::Entity;
@@ -829,7 +829,6 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
 
             PackCommands::Studio { command } => {
                 use mockforge_scenarios::StudioPackInstaller;
-                use std::path::PathBuf;
 
                 let packs_dir = dirs::data_dir()
                     .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
@@ -943,7 +942,7 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                         // Load current workspace configuration
                         let config_path = std::env::current_dir()
                             .ok()
-                            .and_then(|d| Some(d.join("mockforge.yaml")))
+                            .map(|d| d.join("mockforge.yaml"))
                             .filter(|p| p.exists());
 
                         let config = if let Some(ref path) = config_path {
@@ -1544,9 +1543,7 @@ pub enum DriftLearningCommands {
 }
 
 /// Handle reality profile pack commands
-pub async fn handle_reality_profile_command(
-    command: RealityProfileCommands,
-) -> anyhow::Result<()> {
+pub async fn handle_reality_profile_command(command: RealityProfileCommands) -> anyhow::Result<()> {
     use mockforge_scenarios::RealityProfilePackInstaller;
 
     let installer = RealityProfilePackInstaller::new()?;
@@ -1593,11 +1590,17 @@ pub async fn handle_reality_profile_command(
             } else {
                 println!("Installed reality profile packs:");
                 for pack in packs {
-                    println!("  - {} v{} ({})", pack.manifest.name, pack.manifest.version, pack.manifest.domain);
+                    println!(
+                        "  - {} v{} ({})",
+                        pack.manifest.name, pack.manifest.version, pack.manifest.domain
+                    );
                 }
             }
         }
-        RealityProfileCommands::Apply { pack_name, workspace } => {
+        RealityProfileCommands::Apply {
+            pack_name,
+            workspace,
+        } => {
             println!("🎯 Applying reality profile pack: {} to workspace: {}", pack_name, workspace);
 
             let pack_info = installer.get_pack(&pack_name)?;
@@ -1640,16 +1643,16 @@ pub async fn handle_reality_profile_command(
 fn get_config_path() -> std::path::PathBuf {
     std::env::current_dir()
         .ok()
-        .and_then(|d| {
+        .map(|d| {
             let yaml_path = d.join("mockforge.yaml");
             if yaml_path.exists() {
-                Some(yaml_path)
+                yaml_path
             } else {
                 let yml_path = d.join("mockforge.yml");
                 if yml_path.exists() {
-                    Some(yml_path)
+                    yml_path
                 } else {
-                    Some(d.join("mockforge.yaml")) // Default to .yaml for new files
+                    d.join("mockforge.yaml") // Default to .yaml for new files
                 }
             }
         })
@@ -1718,12 +1721,8 @@ async fn update_behavioral_economics_enabled(enabled: bool) -> anyhow::Result<()
 }
 
 /// Handle behavioral economics rule commands
-pub async fn handle_behavior_rule_command(
-    command: BehaviorRuleCommands,
-) -> anyhow::Result<()> {
-    use mockforge_core::behavioral_economics::{
-        BehaviorAction, BehaviorCondition, BehaviorRule,
-    };
+pub async fn handle_behavior_rule_command(command: BehaviorRuleCommands) -> anyhow::Result<()> {
+    use mockforge_core::behavioral_economics::{BehaviorAction, BehaviorCondition, BehaviorRule};
 
     match command {
         BehaviorRuleCommands::Add {
@@ -1744,24 +1743,20 @@ pub async fn handle_behavior_rule_command(
             // Parse condition
             let behavior_condition = match condition.as_str() {
                 "latency" => {
-                    let threshold_ms = threshold
-                        .and_then(|t| t.parse::<u64>().ok())
-                        .unwrap_or(400);
+                    let threshold_ms = threshold.and_then(|t| t.parse::<u64>().ok()).unwrap_or(400);
                     BehaviorCondition::LatencyThreshold {
                         endpoint: endpoint.clone(),
                         threshold_ms,
                     }
                 }
                 "load" => {
-                    let threshold_rps = threshold
-                        .and_then(|t| t.parse::<f64>().ok())
-                        .unwrap_or(100.0);
+                    let threshold_rps =
+                        threshold.and_then(|t| t.parse::<f64>().ok()).unwrap_or(100.0);
                     BehaviorCondition::LoadPressure { threshold_rps }
                 }
                 "error-rate" => {
-                    let error_threshold = threshold
-                        .and_then(|t| t.parse::<f64>().ok())
-                        .unwrap_or(0.1);
+                    let error_threshold =
+                        threshold.and_then(|t| t.parse::<f64>().ok()).unwrap_or(0.1);
                     BehaviorCondition::ErrorRate {
                         endpoint: endpoint.clone(),
                         threshold: error_threshold,
@@ -1774,9 +1769,7 @@ pub async fn handle_behavior_rule_command(
             // Parse action
             let behavior_action = match action.as_str() {
                 "modify-conversion-rate" => {
-                    let multiplier = parameter
-                        .and_then(|p| p.parse::<f64>().ok())
-                        .unwrap_or(0.8);
+                    let multiplier = parameter.and_then(|p| p.parse::<f64>().ok()).unwrap_or(0.8);
                     BehaviorAction::ModifyConversionRate { multiplier }
                 }
                 "decline-transaction" => {
@@ -1784,15 +1777,11 @@ pub async fn handle_behavior_rule_command(
                     BehaviorAction::DeclineTransaction { reason }
                 }
                 "increase-churn" => {
-                    let factor = parameter
-                        .and_then(|p| p.parse::<f64>().ok())
-                        .unwrap_or(1.5);
+                    let factor = parameter.and_then(|p| p.parse::<f64>().ok()).unwrap_or(1.5);
                     BehaviorAction::IncreaseChurnProbability { factor }
                 }
                 "change-status" => {
-                    let status = parameter
-                        .and_then(|p| p.parse::<u16>().ok())
-                        .unwrap_or(500);
+                    let status = parameter.and_then(|p| p.parse::<u16>().ok()).unwrap_or(500);
                     BehaviorAction::ChangeResponseStatus { status }
                 }
                 "noop" => BehaviorAction::NoOp,
@@ -1831,9 +1820,15 @@ pub async fn handle_behavior_rule_command(
                 println!("  No behavior rules configured");
             } else {
                 for rule in &config.behavioral_economics.rules {
-                    println!("  - {} ({:?}, priority: {})", rule.name, rule.rule_type, rule.priority);
+                    println!(
+                        "  - {} ({:?}, priority: {})",
+                        rule.name, rule.rule_type, rule.priority
+                    );
                     match &rule.condition {
-                        BehaviorCondition::LatencyThreshold { endpoint, threshold_ms } => {
+                        BehaviorCondition::LatencyThreshold {
+                            endpoint,
+                            threshold_ms,
+                        } => {
                             println!("    Condition: latency > {}ms on {}", threshold_ms, endpoint);
                         }
                         BehaviorCondition::LoadPressure { threshold_rps } => {
@@ -1879,7 +1874,10 @@ pub async fn handle_behavior_rule_command(
             println!("  Enabled: {}", config.behavioral_economics.enabled);
             println!("  Rules: {}", config.behavioral_economics.rules.len());
             println!("  Global Sensitivity: {}", config.behavioral_economics.global_sensitivity);
-            println!("  Evaluation Interval: {}ms", config.behavioral_economics.evaluation_interval_ms);
+            println!(
+                "  Evaluation Interval: {}ms",
+                config.behavioral_economics.evaluation_interval_ms
+            );
 
             if !config.behavioral_economics.rules.is_empty() {
                 println!("\n  Active Rules:");
@@ -1894,7 +1892,9 @@ pub async fn handle_behavior_rule_command(
 }
 
 /// Helper function to convert LearningMode to DriftLearningMode
-fn learning_mode_to_drift_mode(mode: &str) -> anyhow::Result<mockforge_core::config::DriftLearningMode> {
+fn learning_mode_to_drift_mode(
+    mode: &str,
+) -> anyhow::Result<mockforge_core::config::DriftLearningMode> {
     match mode {
         "behavioral" => Ok(mockforge_core::config::DriftLearningMode::Behavioral),
         "statistical" => Ok(mockforge_core::config::DriftLearningMode::Statistical),
@@ -1920,9 +1920,7 @@ where
 }
 
 /// Handle drift learning commands
-pub async fn handle_drift_learning_command(
-    command: DriftLearningCommands,
-) -> anyhow::Result<()> {
+pub async fn handle_drift_learning_command(command: DriftLearningCommands) -> anyhow::Result<()> {
     match command {
         DriftLearningCommands::Enable {
             sensitivity,
@@ -1947,7 +1945,8 @@ pub async fn handle_drift_learning_command(
                 config.min_samples = min_samples as u64;
                 config.persona_adaptation = persona_adaptation;
                 // Note: traffic_mirroring is not in DriftLearningConfig, may need to be added
-            }).await?;
+            })
+            .await?;
 
             println!("✅ Drift learning enabled");
         }
@@ -1955,7 +1954,8 @@ pub async fn handle_drift_learning_command(
             println!("❌ Disabling drift learning");
             update_drift_learning_config(|config| {
                 config.enabled = false;
-            }).await?;
+            })
+            .await?;
             println!("✅ Drift learning disabled");
         }
         DriftLearningCommands::Status => {
@@ -1968,20 +1968,34 @@ pub async fn handle_drift_learning_command(
             println!("  Decay: {}", config.drift_learning.decay);
             println!("  Min Samples: {}", config.drift_learning.min_samples);
             println!("  Persona Adaptation: {}", config.drift_learning.persona_adaptation);
-            println!("  Persona Learning Configs: {}", config.drift_learning.persona_learning.len());
-            println!("  Endpoint Learning Configs: {}", config.drift_learning.endpoint_learning.len());
+            println!(
+                "  Persona Learning Configs: {}",
+                config.drift_learning.persona_learning.len()
+            );
+            println!(
+                "  Endpoint Learning Configs: {}",
+                config.drift_learning.endpoint_learning.len()
+            );
 
             if !config.drift_learning.persona_learning.is_empty() {
                 println!("\n  Persona Learning:");
                 for (persona_id, enabled) in &config.drift_learning.persona_learning {
-                    println!("    - {}: {}", persona_id, if *enabled { "enabled" } else { "disabled" });
+                    println!(
+                        "    - {}: {}",
+                        persona_id,
+                        if *enabled { "enabled" } else { "disabled" }
+                    );
                 }
             }
 
             if !config.drift_learning.endpoint_learning.is_empty() {
                 println!("\n  Endpoint Learning:");
                 for (endpoint, enabled) in &config.drift_learning.endpoint_learning {
-                    println!("    - {}: {}", endpoint, if *enabled { "enabled" } else { "disabled" });
+                    println!(
+                        "    - {}: {}",
+                        endpoint,
+                        if *enabled { "enabled" } else { "disabled" }
+                    );
                 }
             }
         }
@@ -1993,7 +2007,8 @@ pub async fn handle_drift_learning_command(
             );
             update_drift_learning_config(|config| {
                 config.endpoint_learning.insert(endpoint, enable);
-            }).await?;
+            })
+            .await?;
             println!("✅ Endpoint learning configuration updated");
         }
         DriftLearningCommands::Persona { persona_id, enable } => {
@@ -2004,7 +2019,8 @@ pub async fn handle_drift_learning_command(
             );
             update_drift_learning_config(|config| {
                 config.persona_learning.insert(persona_id, enable);
-            }).await?;
+            })
+            .await?;
             println!("✅ Persona learning configuration updated");
         }
     }

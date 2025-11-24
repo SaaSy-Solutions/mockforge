@@ -61,9 +61,9 @@ impl SyncSnapshot {
     ) -> Self {
         let id = format!(
             "snapshot_{}_{}_{}",
-            endpoint.replace('/', "_").replace('{', "").replace('}', ""),
+            endpoint.replace('/', "_").replace(['{', '}'], ""),
             method.to_lowercase(),
-            uuid::Uuid::new_v4().to_string()[..8].to_string()
+            &uuid::Uuid::new_v4().to_string()[..8]
         );
 
         Self {

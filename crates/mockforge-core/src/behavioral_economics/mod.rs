@@ -42,7 +42,7 @@ pub mod config;
 pub mod engine;
 pub mod rules;
 
-pub use actions::{BehaviorAction, ActionExecutor};
+pub use actions::{ActionExecutor, BehaviorAction};
 pub use conditions::{BehaviorCondition, ConditionEvaluator};
 pub use config::BehavioralEconomicsConfig;
 pub use engine::BehavioralEconomicsEngine;

@@ -196,7 +196,7 @@ impl MutationRule {
 
                 // If the time has already passed today, move to tomorrow
                 if next <= from {
-                    next = next + Duration::days(1);
+                    next += Duration::days(1);
                 }
 
                 Some(next)
@@ -347,17 +347,12 @@ impl MutationRuleManager {
         use regex::Regex;
 
         // Convert record to Value for easier manipulation
-        let record_value: Value = Value::Object(
-            record
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-        );
+        let record_value: Value =
+            Value::Object(record.iter().map(|(k, v)| (k.clone(), v.clone())).collect());
 
         // Substitute variables in expression (e.g., "{{field}}" -> actual value)
-        let re = Regex::new(r"\{\{([^}]+)\}\}").map_err(|e| {
-            Error::generic(format!("Failed to compile regex: {}", e))
-        })?;
+        let re = Regex::new(r"\{\{([^}]+)\}\}")
+            .map_err(|e| Error::generic(format!("Failed to compile regex: {}", e)))?;
 
         let substituted = re.replace_all(expression, |caps: &regex::Captures| {
             let var_name = caps.get(1).unwrap().as_str().trim();
@@ -398,8 +393,10 @@ impl MutationRuleManager {
         let substituted_str = substituted.to_string();
 
         // Check for mathematical operations
-        if substituted_str.contains('+') || substituted_str.contains('-')
-            || substituted_str.contains('*') || substituted_str.contains('/')
+        if substituted_str.contains('+')
+            || substituted_str.contains('-')
+            || substituted_str.contains('*')
+            || substituted_str.contains('/')
         {
             // Try to parse and evaluate as math expression
             if let Ok(result) = Self::evaluate_math_expression(&substituted_str) {
@@ -471,19 +468,16 @@ impl MutationRuleManager {
                     current_num.push(ch);
                 }
                 _ => {
-                    return Err(Error::generic(format!(
-                        "Invalid character in expression: {}",
-                        ch
-                    )));
+                    return Err(Error::generic(format!("Invalid character in expression: {}", ch)));
                 }
             }
         }
 
         // Handle last number
         if !current_num.is_empty() {
-            let num: f64 = current_num.parse().map_err(|_| {
-                Error::generic(format!("Invalid number: {}", current_num))
-            })?;
+            let num: f64 = current_num
+                .parse()
+                .map_err(|_| Error::generic(format!("Invalid number: {}", current_num)))?;
 
             match last_op {
                 '+' => result += num,
@@ -718,23 +712,14 @@ impl MutationRuleManager {
                         database.execute(&update_query, &[new_value, pk_value.clone()]).await?;
                     }
                 }
-                MutationOperation::Transform {
-                    field,
-                    expression,
-                } => {
+                MutationOperation::Transform { field, expression } => {
                     // Evaluate transformation expression
-                    let transformed_value = Self::evaluate_transformation_expression(
-                        &expression,
-                        &record,
-                    )?;
+                    let transformed_value =
+                        Self::evaluate_transformation_expression(expression, &record)?;
 
-                    let update_query = format!(
-                        "UPDATE {} SET {} = ? WHERE {} = ?",
-                        table_name, field, pk_field
-                    );
-                    database
-                        .execute(&update_query, &[transformed_value, pk_value.clone()])
-                        .await?;
+                    let update_query =
+                        format!("UPDATE {} SET {} = ? WHERE {} = ?", table_name, field, pk_field);
+                    database.execute(&update_query, &[transformed_value, pk_value.clone()]).await?;
                 }
                 MutationOperation::UpdateStatus { status } => {
                     let update_query =

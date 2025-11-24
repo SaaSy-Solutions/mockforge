@@ -9,8 +9,6 @@ use mockforge_data::PersonaGraph;
 use serde_json::Value;
 #[cfg(not(feature = "persona-graph"))]
 type PersonaGraph = ();
-use std::collections::HashMap;
-use tracing::debug;
 
 /// Enrich a user response with related entities from the persona graph
 ///

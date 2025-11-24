@@ -15,7 +15,7 @@ use mockforge_core::{
     Error, Result,
 };
 use std::path::PathBuf;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 /// Handle the contract-diff analyze command
 pub async fn handle_contract_diff_analyze(
@@ -53,7 +53,7 @@ pub async fn handle_contract_diff_analyze(
     };
 
     // Create analyzer
-    let analyzer_config = config.unwrap_or_else(ContractDiffConfig::default);
+    let analyzer_config = config.unwrap_or_default();
     let analyzer = ContractDiffAnalyzer::new(analyzer_config)?;
 
     // Analyze
@@ -152,7 +152,7 @@ pub async fn handle_contract_diff_generate_patch(
     };
 
     // Analyze
-    let analyzer_config = config.unwrap_or_else(ContractDiffConfig::default);
+    let analyzer_config = config.unwrap_or_default();
     let analyzer = ContractDiffAnalyzer::new(analyzer_config)?;
     let result = analyzer.analyze(&request, &spec).await?;
 

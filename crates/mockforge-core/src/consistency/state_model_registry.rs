@@ -4,7 +4,6 @@
 //! across protocols. Workspaces with the same state model share persona graphs
 //! and unified state, ensuring consistency across protocols.
 
-use crate::consistency::types::UnifiedState;
 use crate::consistency::ConsistencyEngine;
 use crate::Result;
 use std::collections::{HashMap, HashSet};

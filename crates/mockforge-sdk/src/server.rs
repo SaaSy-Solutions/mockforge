@@ -7,7 +7,6 @@ use axum::Router;
 use mockforge_core::config::{RouteConfig, RouteResponseConfig};
 use mockforge_core::{Config, ServerConfig};
 use serde_json::Value;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use tokio::task::JoinHandle;
 
@@ -24,7 +23,8 @@ pub struct MockServer {
 
 impl MockServer {
     /// Create a new mock server builder
-    pub fn new() -> MockServerBuilder {
+    #[must_use]
+    pub const fn new() -> MockServerBuilder {
         MockServerBuilder::new()
     }
 
@@ -36,9 +36,9 @@ impl MockServer {
         let port = server_config.http.port;
         let host = server_config.http.host.clone();
 
-        let address: SocketAddr = format!("{}:{}", host, port)
+        let address: SocketAddr = format!("{host}:{port}")
             .parse()
-            .map_err(|e| Error::InvalidConfig(format!("Invalid address: {}", e)))?;
+            .map_err(|e| Error::InvalidConfig(format!("Invalid address: {e}")))?;
 
         Ok(Self {
             port,
@@ -60,7 +60,7 @@ impl MockServer {
         let router = self.build_simple_router();
 
         // Create shutdown channel
-        let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         self.shutdown_tx = Some(shutdown_tx);
 
         let address = self.address;
@@ -103,7 +103,7 @@ impl MockServer {
             let client = reqwest::Client::builder()
                 .timeout(tokio::time::Duration::from_millis(100))
                 .build()
-                .map_err(|e| Error::General(format!("Failed to create HTTP client: {}", e)))?;
+                .map_err(|e| Error::General(format!("Failed to create HTTP client: {e}")))?;
 
             match client.get(format!("{}/health", self.url())).send().await {
                 Ok(response) if response.status().is_success() => return Ok(()),
@@ -219,17 +219,20 @@ impl MockServer {
     }
 
     /// Get the server port
-    pub fn port(&self) -> u16 {
+    #[must_use]
+    pub const fn port(&self) -> u16 {
         self.port
     }
 
     /// Get the server base URL
+    #[must_use]
     pub fn url(&self) -> String {
         format!("http://{}", self.address)
     }
 
     /// Check if the server is running
-    pub fn is_running(&self) -> bool {
+    #[must_use]
+    pub const fn is_running(&self) -> bool {
         self.server_handle.is_some()
     }
 }

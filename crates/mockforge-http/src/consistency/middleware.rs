@@ -9,7 +9,6 @@ use mockforge_core::consistency::ConsistencyEngine;
 use mockforge_core::request_logger::RealityTraceMetadata;
 use std::sync::Arc;
 use tracing::debug;
-use uuid::Uuid;
 
 /// Consistency middleware state
 #[derive(Clone)]
@@ -121,7 +120,8 @@ pub async fn consistency_middleware(req: Request, next: Next) -> Response<Body> 
                         request_id_clone,
                         workspace_id_clone,
                         &unified_state_clone,
-                    ).await;
+                    )
+                    .await;
                 });
             }
 

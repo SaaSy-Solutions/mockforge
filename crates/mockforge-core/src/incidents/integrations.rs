@@ -164,7 +164,7 @@ impl ExternalIntegration for JiraIntegration {
 
         // Convert result to HashMap
         let metadata = if let serde_json::Value::Object(map) = result {
-            map.into_iter().map(|(k, v)| (k, v)).collect()
+            map.into_iter().collect()
         } else {
             std::collections::HashMap::new()
         };

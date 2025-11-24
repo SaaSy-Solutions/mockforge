@@ -62,7 +62,7 @@ impl ErrorBuilder {
             let mut sugg = self.suggestions.join("\n");
             if let Some(url) = &self.help_url {
                 if !sugg.is_empty() {
-                    sugg.push_str("\n");
+                    sugg.push('\n');
                 }
                 sugg.push_str(&format!("📚 More help: {}", url));
             }
@@ -108,7 +108,7 @@ pub fn config_not_found_error(path: &PathBuf) -> CliError {
     )
     .with_suggestion("Create a configuration file: mockforge init .".to_string())
     .with_suggestion("Or use the wizard: mockforge wizard".to_string())
-    .with_suggestion(format!("Or specify a different config: mockforge serve --config <path>"))
+    .with_suggestion("Or specify a different config: mockforge serve --config <path>".to_string())
     .with_help_url("https://docs.mockforge.dev/getting-started/five-minute-api.html")
     .build()
 }

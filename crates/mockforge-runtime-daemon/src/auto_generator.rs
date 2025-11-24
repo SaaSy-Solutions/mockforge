@@ -93,7 +93,7 @@ impl AutoGenerator {
         // Call the management API to create the mock
         let client = reqwest::Client::new();
         let url = format!("{}/__mockforge/api/mocks", self.management_api_url);
-        
+
         let response = client
             .post(&url)
             .json(&mock_config)
@@ -107,10 +107,8 @@ impl AutoGenerator {
             anyhow::bail!("Management API returned {}: {}", status, text);
         }
 
-        let created_mock: serde_json::Value = response
-            .json()
-            .await
-            .context("Failed to parse response from management API")?;
+        let created_mock: serde_json::Value =
+            response.json().await.context("Failed to parse response from management API")?;
 
         let mock_id = created_mock
             .get("id")
@@ -122,23 +120,29 @@ impl AutoGenerator {
     }
 
     /// Generate an intelligent response based on the method and path
-    async fn generate_intelligent_response(&self, method: &str, path: &str) -> Result<serde_json::Value> {
+    async fn generate_intelligent_response(
+        &self,
+        method: &str,
+        path: &str,
+    ) -> Result<serde_json::Value> {
         // Use AI generation if enabled
         #[cfg(feature = "ai")]
         if self.config.ai_generation {
             return self.generate_ai_response(method, path).await;
         }
-        
+
         // Fallback to pattern-based generation
 
         // Infer entity type from path
         let entity_type = self.infer_entity_type(path);
-        
+
         // Generate a basic response structure
         let response = match method.to_uppercase().as_str() {
             "GET" => {
                 // For GET, return a single object or array based on path
-                if path.ends_with('/') || !path.split('/').last().unwrap_or("").parse::<u64>().is_ok() {
+                if path.ends_with('/')
+                    || path.split('/').next_back().unwrap_or("").parse::<u64>().is_err()
+                {
                     // Looks like a collection endpoint
                     json!([{
                         "id": "{{uuid}}",
@@ -148,7 +152,7 @@ impl AutoGenerator {
                 } else {
                     // Looks like a single resource endpoint
                     json!({
-                        "id": path.split('/').last().unwrap_or("123"),
+                        "id": path.split('/').next_back().unwrap_or("123"),
                         "name": format!("Sample {}", entity_type),
                         "created_at": "{{now}}",
                     })
@@ -166,7 +170,7 @@ impl AutoGenerator {
             "PUT" | "PATCH" => {
                 // For PUT/PATCH, return the updated resource
                 json!({
-                    "id": path.split('/').last().unwrap_or("123"),
+                    "id": path.split('/').next_back().unwrap_or("123"),
                     "name": format!("Updated {}", entity_type),
                     "updated_at": "{{now}}",
                 })
@@ -224,8 +228,7 @@ impl AutoGenerator {
         let mut generator = IntelligentMockGenerator::new(ai_config)
             .context("Failed to create intelligent mock generator")?;
 
-        let response = generator.generate().await
-            .context("Failed to generate AI response")?;
+        let response = generator.generate().await.context("Failed to generate AI response")?;
 
         info!("Generated AI-powered response for {} {}", method, path);
         Ok(response)
@@ -248,8 +251,8 @@ impl AutoGenerator {
             _ => LlmProvider::OpenAI,
         };
 
-        let model = std::env::var("MOCKFORGE_RAG_MODEL")
-            .unwrap_or_else(|_| "gpt-3.5-turbo".to_string());
+        let model =
+            std::env::var("MOCKFORGE_RAG_MODEL").unwrap_or_else(|_| "gpt-3.5-turbo".to_string());
 
         let api_key = std::env::var("MOCKFORGE_RAG_API_KEY").ok();
 
@@ -309,10 +312,13 @@ impl AutoGenerator {
                 // For POST, add status field
                 let mut schema = base_schema.clone();
                 if let Some(props) = schema.get_mut("properties").and_then(|p| p.as_object_mut()) {
-                    props.insert("status".to_string(), json!({
-                        "type": "string",
-                        "enum": ["created", "pending", "active"]
-                    }));
+                    props.insert(
+                        "status".to_string(),
+                        json!({
+                            "type": "string",
+                            "enum": ["created", "pending", "active"]
+                        }),
+                    );
                 }
                 schema
             }
@@ -320,10 +326,13 @@ impl AutoGenerator {
                 // For PUT/PATCH, add updated_at
                 let mut schema = base_schema.clone();
                 if let Some(props) = schema.get_mut("properties").and_then(|p| p.as_object_mut()) {
-                    props.insert("updated_at".to_string(), json!({
-                        "type": "string",
-                        "format": "date-time"
-                    }));
+                    props.insert(
+                        "updated_at".to_string(),
+                        json!({
+                            "type": "string",
+                            "format": "date-time"
+                        }),
+                    );
                 }
                 schema
             }
@@ -335,18 +344,18 @@ impl AutoGenerator {
     fn infer_entity_type(&self, path: &str) -> String {
         // Extract entity type from path (e.g., /api/users -> "user")
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-        
+
         if let Some(last_part) = parts.last() {
             // Remove common prefixes and pluralization
             let entity = last_part
                 .trim_end_matches('s') // Remove plural 's'
                 .to_lowercase();
-            
+
             if !entity.is_empty() {
                 return entity;
             }
         }
-        
+
         "resource".to_string()
     }
 
@@ -364,24 +373,22 @@ impl AutoGenerator {
         // Create types directory if it doesn't exist
         let types_dir = output_dir.join("types");
         if !types_dir.exists() {
-            std::fs::create_dir_all(&types_dir)
-                .context("Failed to create types directory")?;
+            std::fs::create_dir_all(&types_dir).context("Failed to create types directory")?;
         }
 
         // Generate TypeScript type from the response schema
         let entity_type = self.infer_entity_type(path);
         let type_name = self.sanitize_type_name(&entity_type);
-        
+
         // Get the response schema we built earlier
         let schema = self.build_schema_for_entity(&entity_type, method);
-        
+
         // Generate TypeScript interface
         let ts_type = self.generate_typescript_interface(&type_name, &schema, method)?;
-        
+
         // Write TypeScript type file
         let ts_file = types_dir.join(format!("{}.ts", type_name.to_lowercase()));
-        std::fs::write(&ts_file, ts_type)
-            .context("Failed to write TypeScript type file")?;
+        std::fs::write(&ts_file, ts_type).context("Failed to write TypeScript type file")?;
 
         // Also generate JSON schema
         let json_schema = self.generate_json_schema(&type_name, &schema)?;
@@ -389,9 +396,14 @@ impl AutoGenerator {
         std::fs::write(&json_file, serde_json::to_string_pretty(&json_schema)?)
             .context("Failed to write JSON schema file")?;
 
-        info!("Generated types for {} {}: {} and {}.schema.json", 
-              method, path, ts_file.display(), json_file.display());
-        
+        info!(
+            "Generated types for {} {}: {} and {}.schema.json",
+            method,
+            path,
+            ts_file.display(),
+            json_file.display()
+        );
+
         Ok(())
     }
 
@@ -407,15 +419,17 @@ impl AutoGenerator {
         code.push_str("// Auto-generated by MockForge Runtime Daemon\n\n");
 
         // Determine if it's an array or object
-        let schema_type = schema.get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("object");
+        let schema_type = schema.get("type").and_then(|v| v.as_str()).unwrap_or("object");
 
         if schema_type == "array" {
             // Generate array type
             if let Some(items) = schema.get("items") {
                 let item_type_name = format!("{}Item", type_name);
-                code.push_str(&self.generate_typescript_interface(&item_type_name, items, method)?);
+                code.push_str(&self.generate_typescript_interface(
+                    &item_type_name,
+                    items,
+                    method,
+                )?);
                 code.push_str(&format!("export type {} = {}[];\n", type_name, item_type_name));
             } else {
                 code.push_str(&format!("export type {} = any[];\n", type_name));
@@ -423,9 +437,10 @@ impl AutoGenerator {
         } else {
             // Generate interface
             code.push_str(&format!("export interface {} {{\n", type_name));
-            
+
             if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
-                let required = schema.get("required")
+                let required = schema
+                    .get("required")
                     .and_then(|r| r.as_array())
                     .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
                     .unwrap_or_default();
@@ -434,11 +449,11 @@ impl AutoGenerator {
                     let prop_type = self.schema_value_to_typescript_type(prop_schema)?;
                     let is_optional = !required.contains(&prop_name.as_str());
                     let optional_marker = if is_optional { "?" } else { "" };
-                    
+
                     code.push_str(&format!("  {}{}: {};\n", prop_name, optional_marker, prop_type));
                 }
             }
-            
+
             code.push_str("}\n");
         }
 
@@ -447,9 +462,7 @@ impl AutoGenerator {
 
     /// Convert a JSON schema value to TypeScript type string
     fn schema_value_to_typescript_type(&self, schema: &serde_json::Value) -> Result<String> {
-        let schema_type = schema.get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("any");
+        let schema_type = schema.get("type").and_then(|v| v.as_str()).unwrap_or("any");
 
         match schema_type {
             "string" => {
@@ -557,18 +570,21 @@ impl AutoGenerator {
         // Create client-stubs directory if it doesn't exist
         let stubs_dir = output_dir.join("client-stubs");
         if !stubs_dir.exists() {
-            fs::create_dir_all(&stubs_dir).await
+            fs::create_dir_all(&stubs_dir)
+                .await
                 .context("Failed to create client-stubs directory")?;
         }
 
         // Generate client stub code
         let entity_type = self.infer_entity_type(path);
         let function_name = self.generate_function_name(method, path);
-        let stub_code = self.generate_client_stub_code(method, path, &function_name, &entity_type)?;
+        let stub_code =
+            self.generate_client_stub_code(method, path, &function_name, &entity_type)?;
 
         // Write TypeScript client stub file
         let stub_file = stubs_dir.join(format!("{}.ts", function_name.to_lowercase()));
-        fs::write(&stub_file, stub_code).await
+        fs::write(&stub_file, stub_code)
+            .await
             .context("Failed to write client stub file")?;
 
         info!("Generated client stub for {} {}: {}", method, path, stub_file.display());
@@ -588,9 +604,9 @@ impl AutoGenerator {
         };
 
         // Check if path has an ID parameter (single resource)
-        let has_id = path.split('/').any(|segment| {
-            segment.starts_with('{') && segment.ends_with('}')
-        });
+        let has_id = path
+            .split('/')
+            .any(|segment| segment.starts_with('{') && segment.ends_with('}'));
 
         if has_id && method.to_uppercase() == "GET" {
             format!("{}{}", method_prefix, self.sanitize_type_name(&entity_type))
@@ -611,7 +627,7 @@ impl AutoGenerator {
     ) -> Result<String> {
         let method_upper = method.to_uppercase();
         let type_name = self.sanitize_type_name(entity_type);
-        
+
         // Extract path parameters
         let path_params: Vec<String> = path
             .split('/')
@@ -632,7 +648,7 @@ impl AutoGenerator {
                 params.push_str(", ");
             }
         }
-        
+
         // Add request body parameter for POST/PUT/PATCH
         if matches!(method_upper.as_str(), "POST" | "PUT" | "PATCH") {
             params.push_str(&format!("data?: Partial<{}>", type_name));
@@ -649,10 +665,8 @@ impl AutoGenerator {
         // Build endpoint path with template literals
         let mut endpoint_path = path.to_string();
         for param in &path_params {
-            endpoint_path = endpoint_path.replace(
-                &format!("{{{}}}", param),
-                &format!("${{{}}}", param)
-            );
+            endpoint_path =
+                endpoint_path.replace(&format!("{{{}}}", param), &format!("${{{}}}", param));
         }
 
         // Generate the stub code
@@ -664,14 +678,14 @@ import type {{ {} }} from '../types/{}';
 
 /**
  * {} {} endpoint
- * 
+ *
  * @param {} - Request parameters
  * @returns Promise resolving to {} response
  */
 export async function {}({}): Promise<{}> {{
   const endpoint = `{}`;
   const url = `${{baseUrl}}${{endpoint}}`;
-  
+
   const response = await fetch(url, {{
     method: '{}',
     headers: {{
@@ -680,11 +694,11 @@ export async function {}({}): Promise<{}> {{
     }},
     {}{}
   }});
-  
+
   if (!response.ok) {{
     throw new Error(`Request failed: ${{response.status}} ${{response.statusText}}`);
   }}
-  
+
   return response.json();
 }}
 
@@ -694,20 +708,31 @@ export async function {}({}): Promise<{}> {{
  */
 export let baseUrl = 'http://localhost:3000';
 "#,
-            method, path,
-            type_name, entity_type.to_lowercase(),
-            method, path,
-            if params.is_empty() { "headers?: Record<string, string>" } else { &params },
+            method,
+            path,
+            type_name,
+            entity_type.to_lowercase(),
+            method,
+            path,
+            if params.is_empty() {
+                "headers?: Record<string, string>"
+            } else {
+                &params
+            },
             type_name,
             function_name,
-            if params.is_empty() { "headers?: Record<string, string>" } else { &params },
+            if params.is_empty() {
+                "headers?: Record<string, string>"
+            } else {
+                &params
+            },
             type_name,
             endpoint_path,
             method_upper,
             if matches!(method_upper.as_str(), "POST" | "PUT" | "PATCH") {
                 "body: JSON.stringify(data || {}),\n    ".to_string()
             } else if method_upper == "GET" && !path_params.is_empty() {
-                format!("{}const queryString = queryParams ? '?' + new URLSearchParams(queryParams).toString() : '';\n  const urlWithQuery = url + queryString;\n  ", 
+                format!("{}const queryString = queryParams ? '?' + new URLSearchParams(queryParams).toString() : '';\n  const urlWithQuery = url + queryString;\n  ",
                     if !path_params.is_empty() { "" } else { "" })
             } else {
                 String::new()
@@ -725,14 +750,14 @@ export let baseUrl = 'http://localhost:3000';
     /// Update the OpenAPI schema with the new endpoint
     async fn update_openapi_schema(&self, method: &str, path: &str) -> Result<()> {
         use mockforge_core::openapi::OpenApiSpec;
-        use std::path::PathBuf;
 
         // Determine OpenAPI spec file path
         let spec_path = self.find_or_create_openapi_spec_path().await?;
-        
+
         // Load existing spec or create new one
         let mut spec = if spec_path.exists() {
-            OpenApiSpec::from_file(&spec_path).await
+            OpenApiSpec::from_file(&spec_path)
+                .await
                 .context("Failed to load existing OpenAPI spec")?
         } else {
             // Create a new OpenAPI spec
@@ -806,8 +831,7 @@ export let baseUrl = 'http://localhost:3000';
             }
         });
 
-        OpenApiSpec::from_json(spec_json)
-            .context("Failed to create new OpenAPI spec")
+        OpenApiSpec::from_json(spec_json).context("Failed to create new OpenAPI spec")
     }
 
     /// Add an endpoint to the OpenAPI spec
@@ -818,21 +842,23 @@ export let baseUrl = 'http://localhost:3000';
         path: &str,
     ) -> Result<()> {
         // Get the raw document to modify
-        let mut spec_json = spec.raw_document.clone()
+        let mut spec_json = spec
+            .raw_document
+            .clone()
             .ok_or_else(|| anyhow::anyhow!("OpenAPI spec missing raw document"))?;
 
         // Ensure paths object exists
-        if !spec_json.get("paths").is_some() {
+        if spec_json.get("paths").is_none() {
             spec_json["paths"] = json!({});
         }
 
-        let paths = spec_json.get_mut("paths")
+        let paths = spec_json
+            .get_mut("paths")
             .and_then(|p| p.as_object_mut())
             .ok_or_else(|| anyhow::anyhow!("Failed to get paths object"))?;
 
         // Get or create path item
-        let path_entry = paths.entry(path.to_string())
-            .or_insert_with(|| json!({}));
+        let path_entry = paths.entry(path.to_string()).or_insert_with(|| json!({}));
 
         // Convert method to lowercase for OpenAPI
         let method_lower = method.to_lowercase();
@@ -868,12 +894,11 @@ export let baseUrl = 'http://localhost:3000';
     fn generate_operation_id(&self, method: &str, path: &str) -> String {
         let entity_type = self.infer_entity_type(path);
         let method_lower = method.to_lowercase();
-        
+
         // Convert path segments to camelCase
-        let path_parts: Vec<&str> = path.split('/')
-            .filter(|s| !s.is_empty() && !s.starts_with('{'))
-            .collect();
-        
+        let path_parts: Vec<&str> =
+            path.split('/').filter(|s| !s.is_empty() && !s.starts_with('{')).collect();
+
         if path_parts.is_empty() {
             format!("{}_{}", method_lower, entity_type)
         } else {
@@ -883,7 +908,7 @@ export let baseUrl = 'http://localhost:3000';
                 let mut chars = part.chars();
                 if let Some(first) = chars.next() {
                     op_id.push(first.to_uppercase().next().unwrap_or(first));
-                    op_id.push_str(&chars.as_str());
+                    op_id.push_str(chars.as_str());
                 }
             }
             op_id
@@ -898,18 +923,20 @@ export let baseUrl = 'http://localhost:3000';
     ) -> Result<()> {
         use tokio::fs;
 
-        let spec_json = spec.raw_document.clone()
+        let spec_json = spec
+            .raw_document
+            .clone()
             .ok_or_else(|| anyhow::anyhow!("OpenAPI spec missing raw document"))?;
 
         // Determine format based on file extension
-        let is_yaml = path.extension()
+        let is_yaml = path
+            .extension()
             .and_then(|s| s.to_str())
             .map(|s| s == "yaml" || s == "yml")
             .unwrap_or(false);
 
         let content = if is_yaml {
-            serde_yaml::to_string(&spec_json)
-                .context("Failed to serialize OpenAPI spec to YAML")?
+            serde_yaml::to_string(&spec_json).context("Failed to serialize OpenAPI spec to YAML")?
         } else {
             serde_json::to_string_pretty(&spec_json)
                 .context("Failed to serialize OpenAPI spec to JSON")?
@@ -917,12 +944,12 @@ export let baseUrl = 'http://localhost:3000';
 
         // Create parent directory if it doesn't exist
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).await
+            fs::create_dir_all(parent)
+                .await
                 .context("Failed to create OpenAPI spec directory")?;
         }
 
-        fs::write(path, content).await
-            .context("Failed to write OpenAPI spec file")?;
+        fs::write(path, content).await.context("Failed to write OpenAPI spec file")?;
 
         Ok(())
     }
@@ -931,7 +958,6 @@ export let baseUrl = 'http://localhost:3000';
     async fn create_scenario(&self, method: &str, path: &str, mock_id: &str) -> Result<()> {
         use std::path::PathBuf;
         use tokio::fs;
-        use chrono::Utc;
 
         // Determine output directory
         let output_dir = if let Some(ref workspace_dir) = self.config.workspace_dir {
@@ -943,7 +969,8 @@ export let baseUrl = 'http://localhost:3000';
         // Create scenarios directory if it doesn't exist
         let scenarios_dir = output_dir.join("scenarios");
         if !scenarios_dir.exists() {
-            fs::create_dir_all(&scenarios_dir).await
+            fs::create_dir_all(&scenarios_dir)
+                .await
                 .context("Failed to create scenarios directory")?;
         }
 
@@ -954,7 +981,8 @@ export let baseUrl = 'http://localhost:3000';
 
         // Create scenario directory
         if !scenario_dir.exists() {
-            fs::create_dir_all(&scenario_dir).await
+            fs::create_dir_all(&scenario_dir)
+                .await
                 .context("Failed to create scenario directory")?;
         }
 
@@ -963,17 +991,19 @@ export let baseUrl = 'http://localhost:3000';
 
         // Write scenario.yaml
         let manifest_path = scenario_dir.join("scenario.yaml");
-        let manifest_yaml = serde_yaml::to_string(&manifest)
-            .context("Failed to serialize scenario manifest")?;
-        fs::write(&manifest_path, manifest_yaml).await
+        let manifest_yaml =
+            serde_yaml::to_string(&manifest).context("Failed to serialize scenario manifest")?;
+        fs::write(&manifest_path, manifest_yaml)
+            .await
             .context("Failed to write scenario manifest")?;
 
         // Create a basic config.yaml for the scenario
         let config = self.generate_scenario_config(method, path, mock_id)?;
         let config_path = scenario_dir.join("config.yaml");
-        let config_yaml = serde_yaml::to_string(&config)
-            .context("Failed to serialize scenario config")?;
-        fs::write(&config_path, config_yaml).await
+        let config_yaml =
+            serde_yaml::to_string(&config).context("Failed to serialize scenario config")?;
+        fs::write(&config_path, config_yaml)
+            .await
             .context("Failed to write scenario config")?;
 
         info!("Created scenario '{}' at {}", scenario_name, scenario_dir.display());
@@ -1044,7 +1074,8 @@ export let baseUrl = 'http://localhost:3000';
         mock_id: &str,
     ) -> Result<serde_json::Value> {
         let entity_type = self.infer_entity_type(path);
-        let response_body = serde_json::to_value(self.build_schema_for_entity(&entity_type, method))?;
+        let response_body =
+            serde_json::to_value(self.build_schema_for_entity(&entity_type, method))?;
 
         let config = json!({
             "http": {
@@ -1083,4 +1114,3 @@ mod tests {
         assert_eq!(generator.infer_entity_type("/api"), "resource");
     }
 }
-

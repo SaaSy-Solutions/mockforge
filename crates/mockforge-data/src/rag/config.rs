@@ -30,6 +30,8 @@ pub enum EmbeddingProvider {
     OpenAI,
     /// Generic OpenAI-compatible embeddings API
     OpenAICompatible,
+    /// Local Ollama instance
+    Ollama,
 }
 
 /// RAG configuration
@@ -264,23 +266,17 @@ impl RagConfig {
         }
 
         if self.chunk_overlap >= self.chunk_size {
-            return Err(crate::Error::generic(
-                "Chunk overlap must be less than chunk size",
-            ));
+            return Err(crate::Error::generic("Chunk overlap must be less than chunk size"));
         }
 
         if !(0.0..=1.0).contains(&self.similarity_threshold) {
-            return Err(crate::Error::generic(
-                "Similarity threshold must be between 0.0 and 1.0",
-            ));
+            return Err(crate::Error::generic("Similarity threshold must be between 0.0 and 1.0"));
         }
 
         if self.hybrid_search {
             let total_weight = self.semantic_weight + self.keyword_weight;
             if (total_weight - 1.0).abs() > f32::EPSILON {
-                return Err(crate::Error::generic(
-                    "Hybrid search weights must sum to 1.0",
-                ));
+                return Err(crate::Error::generic("Hybrid search weights must sum to 1.0"));
             }
         }
 

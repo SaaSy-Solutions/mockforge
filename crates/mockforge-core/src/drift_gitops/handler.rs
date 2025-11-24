@@ -165,11 +165,8 @@ impl DriftGitOpsHandler {
         }
 
         // Generate branch name
-        let branch = format!(
-            "{}/{}",
-            self.config.branch_prefix,
-            uuid::Uuid::new_v4().to_string()[..8].to_string()
-        );
+        let branch =
+            format!("{}/{}", self.config.branch_prefix, &uuid::Uuid::new_v4().to_string()[..8]);
 
         // Generate PR title and body
         let title = self.generate_pr_title(incidents);
@@ -193,6 +190,9 @@ impl DriftGitOpsHandler {
         match pr_generator.create_pr(pr_request).await {
             Ok(result) => {
                 tracing::info!("Created drift GitOps PR: {} - {}", result.number, result.url);
+                // Note: Pipeline event emission for drift threshold exceeded should be handled
+                // by the caller that invokes this method, to avoid circular dependencies.
+                // The caller can check if a PR was created and emit the appropriate event.
                 Ok(Some(result))
             }
             Err(e) => {
@@ -273,7 +273,7 @@ impl DriftGitOpsHandler {
             .config
             .fixtures_dir
             .as_ref()
-            .map(|d| PathBuf::from(d))
+            .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("fixtures"));
 
         let method = incident.method.to_lowercase();
@@ -374,7 +374,7 @@ impl DriftGitOpsHandler {
                 body.push_str(&format!("- **Non-Breaking Changes**: {}\n", non_breaking_changes));
             }
 
-            body.push_str("\n");
+            body.push('\n');
         }
 
         body.push_str("---\n");

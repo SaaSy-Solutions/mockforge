@@ -9,8 +9,8 @@
 use crate::ai_studio::budget_manager::AiFeature;
 #[cfg(feature = "database")]
 use crate::ai_studio::org_controls::{
-    BudgetCheckResult, OrgAiControlsConfig, OrgBudgetConfig, OrgControlsAccessor, OrgRateLimitConfig,
-    RateLimitCheckResult,
+    BudgetCheckResult, OrgAiControlsConfig, OrgBudgetConfig, OrgControlsAccessor,
+    OrgRateLimitConfig, RateLimitCheckResult,
 };
 #[cfg(feature = "database")]
 use crate::Result;
@@ -53,13 +53,12 @@ impl OrgControlsAccessor for DbOrgControls {
     ) -> Result<Option<OrgAiControlsConfig>> {
         let org_uuid = Uuid::parse_str(org_id)
             .map_err(|e| crate::Error::generic(format!("Invalid org_id: {}", e)))?;
-        let workspace_uuid = workspace_id
-            .and_then(|w| Uuid::parse_str(w).ok());
+        let workspace_uuid = workspace_id.and_then(|w| Uuid::parse_str(w).ok());
 
         // Load budget config
         let budget = if let Some(ws_uuid) = workspace_uuid {
             sqlx::query_as::<_, BudgetRow>(
-                "SELECT * FROM org_ai_budgets WHERE org_id = $1 AND workspace_id = $2"
+                "SELECT * FROM org_ai_budgets WHERE org_id = $1 AND workspace_id = $2",
             )
             .bind(org_uuid)
             .bind(ws_uuid)
@@ -68,7 +67,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .map_err(|e| crate::Error::generic(format!("Failed to load budget: {}", e)))?
         } else {
             sqlx::query_as::<_, BudgetRow>(
-                "SELECT * FROM org_ai_budgets WHERE org_id = $1 AND workspace_id IS NULL"
+                "SELECT * FROM org_ai_budgets WHERE org_id = $1 AND workspace_id IS NULL",
             )
             .bind(org_uuid)
             .fetch_optional(&self.pool)
@@ -79,7 +78,7 @@ impl OrgControlsAccessor for DbOrgControls {
         // Load rate limit config
         let rate_limit = if let Some(ws_uuid) = workspace_uuid {
             sqlx::query_as::<_, RateLimitRow>(
-                "SELECT * FROM org_ai_rate_limits WHERE org_id = $1 AND workspace_id = $2"
+                "SELECT * FROM org_ai_rate_limits WHERE org_id = $1 AND workspace_id = $2",
             )
             .bind(org_uuid)
             .bind(ws_uuid)
@@ -88,7 +87,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .map_err(|e| crate::Error::generic(format!("Failed to load rate limit: {}", e)))?
         } else {
             sqlx::query_as::<_, RateLimitRow>(
-                "SELECT * FROM org_ai_rate_limits WHERE org_id = $1 AND workspace_id IS NULL"
+                "SELECT * FROM org_ai_rate_limits WHERE org_id = $1 AND workspace_id IS NULL",
             )
             .bind(org_uuid)
             .fetch_optional(&self.pool)
@@ -99,7 +98,7 @@ impl OrgControlsAccessor for DbOrgControls {
         // Load feature toggles
         let toggles_query = if let Some(ws_uuid) = workspace_uuid {
             sqlx::query_as::<_, FeatureToggleRow>(
-                "SELECT * FROM org_ai_feature_toggles WHERE org_id = $1 AND workspace_id = $2"
+                "SELECT * FROM org_ai_feature_toggles WHERE org_id = $1 AND workspace_id = $2",
             )
             .bind(org_uuid)
             .bind(ws_uuid)
@@ -107,7 +106,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .await
         } else {
             sqlx::query_as::<_, FeatureToggleRow>(
-                "SELECT * FROM org_ai_feature_toggles WHERE org_id = $1 AND workspace_id IS NULL"
+                "SELECT * FROM org_ai_feature_toggles WHERE org_id = $1 AND workspace_id IS NULL",
             )
             .bind(org_uuid)
             .fetch_all(&self.pool)
@@ -123,17 +122,21 @@ impl OrgControlsAccessor for DbOrgControls {
         }
 
         // Build config from database rows
-        let budget_config = budget.map(|b| OrgBudgetConfig {
-            max_tokens_per_period: b.max_tokens_per_period as u64,
-            period_type: b.period_type,
-            max_calls_per_period: b.max_calls_per_period as u64,
-        }).unwrap_or_default();
+        let budget_config = budget
+            .map(|b| OrgBudgetConfig {
+                max_tokens_per_period: b.max_tokens_per_period as u64,
+                period_type: b.period_type,
+                max_calls_per_period: b.max_calls_per_period as u64,
+            })
+            .unwrap_or_default();
 
-        let rate_limit_config = rate_limit.map(|r| OrgRateLimitConfig {
-            rate_limit_per_minute: r.rate_limit_per_minute as u64,
-            rate_limit_per_hour: r.rate_limit_per_hour.map(|v| v as u64),
-            rate_limit_per_day: r.rate_limit_per_day.map(|v| v as u64),
-        }).unwrap_or_default();
+        let rate_limit_config = rate_limit
+            .map(|r| OrgRateLimitConfig {
+                rate_limit_per_minute: r.rate_limit_per_minute as u64,
+                rate_limit_per_hour: r.rate_limit_per_hour.map(|v| v as u64),
+                rate_limit_per_day: r.rate_limit_per_day.map(|v| v as u64),
+            })
+            .unwrap_or_default();
 
         let mut feature_toggles = HashMap::new();
         for toggle in toggles {
@@ -156,13 +159,12 @@ impl OrgControlsAccessor for DbOrgControls {
     ) -> Result<BudgetCheckResult> {
         let org_uuid = Uuid::parse_str(org_id)
             .map_err(|e| crate::Error::generic(format!("Invalid org_id: {}", e)))?;
-        let workspace_uuid = workspace_id
-            .and_then(|w| Uuid::parse_str(w).ok());
+        let workspace_uuid = workspace_id.and_then(|w| Uuid::parse_str(w).ok());
 
         // Get current budget
         let budget = if let Some(ws_uuid) = workspace_uuid {
             sqlx::query_as::<_, BudgetRow>(
-                "SELECT * FROM org_ai_budgets WHERE org_id = $1 AND workspace_id = $2"
+                "SELECT * FROM org_ai_budgets WHERE org_id = $1 AND workspace_id = $2",
             )
             .bind(org_uuid)
             .bind(ws_uuid)
@@ -170,15 +172,15 @@ impl OrgControlsAccessor for DbOrgControls {
             .await
         } else {
             sqlx::query_as::<_, BudgetRow>(
-                "SELECT * FROM org_ai_budgets WHERE org_id = $1 AND workspace_id IS NULL"
+                "SELECT * FROM org_ai_budgets WHERE org_id = $1 AND workspace_id IS NULL",
             )
             .bind(org_uuid)
             .fetch_optional(&self.pool)
             .await
         };
 
-        let budget = budget
-            .map_err(|e| crate::Error::generic(format!("Failed to check budget: {}", e)))?;
+        let budget =
+            budget.map_err(|e| crate::Error::generic(format!("Failed to check budget: {}", e)))?;
 
         if let Some(b) = budget {
             // Check if period has expired and reset if needed
@@ -209,7 +211,8 @@ impl OrgControlsAccessor for DbOrgControls {
             };
 
             // Check limits
-            let tokens_allowed = current_tokens + estimated_tokens <= b.max_tokens_per_period as u64;
+            let tokens_allowed =
+                current_tokens + estimated_tokens <= b.max_tokens_per_period as u64;
             let calls_allowed = current_calls < b.max_calls_per_period as u64;
             let allowed = tokens_allowed && calls_allowed;
 
@@ -252,13 +255,12 @@ impl OrgControlsAccessor for DbOrgControls {
     ) -> Result<RateLimitCheckResult> {
         let org_uuid = Uuid::parse_str(org_id)
             .map_err(|e| crate::Error::generic(format!("Invalid org_id: {}", e)))?;
-        let workspace_uuid = workspace_id
-            .and_then(|w| Uuid::parse_str(w).ok());
+        let workspace_uuid = workspace_id.and_then(|w| Uuid::parse_str(w).ok());
 
         // Load rate limit configuration
         let rate_limit_config = if let Some(ws_uuid) = workspace_uuid {
             sqlx::query_as::<_, RateLimitRow>(
-                "SELECT * FROM org_ai_rate_limits WHERE org_id = $1 AND workspace_id = $2"
+                "SELECT * FROM org_ai_rate_limits WHERE org_id = $1 AND workspace_id = $2",
             )
             .bind(org_uuid)
             .bind(ws_uuid)
@@ -267,7 +269,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .map_err(|e| crate::Error::generic(format!("Failed to load rate limit: {}", e)))?
         } else {
             sqlx::query_as::<_, RateLimitRow>(
-                "SELECT * FROM org_ai_rate_limits WHERE org_id = $1 AND workspace_id IS NULL"
+                "SELECT * FROM org_ai_rate_limits WHERE org_id = $1 AND workspace_id IS NULL",
             )
             .bind(org_uuid)
             .fetch_optional(&self.pool)
@@ -332,7 +334,7 @@ impl OrgControlsAccessor for DbOrgControls {
                 WHERE org_id = $1
                   AND workspace_id = $2
                   AND created_at >= $3
-                "#
+                "#,
             )
             .bind(org_uuid)
             .bind(ws_uuid)
@@ -348,7 +350,7 @@ impl OrgControlsAccessor for DbOrgControls {
                 WHERE org_id = $1
                   AND workspace_id IS NULL
                   AND created_at >= $3
-                "#
+                "#,
             )
             .bind(org_uuid)
             .bind(window_start_dt)
@@ -398,8 +400,7 @@ impl OrgControlsAccessor for DbOrgControls {
     ) -> Result<bool> {
         let org_uuid = Uuid::parse_str(org_id)
             .map_err(|e| crate::Error::generic(format!("Invalid org_id: {}", e)))?;
-        let workspace_uuid = workspace_id
-            .and_then(|w| Uuid::parse_str(w).ok());
+        let workspace_uuid = workspace_id.and_then(|w| Uuid::parse_str(w).ok());
 
         let result = if let Some(ws_uuid) = workspace_uuid {
             sqlx::query(
@@ -440,10 +441,8 @@ impl OrgControlsAccessor for DbOrgControls {
     ) -> Result<()> {
         let org_uuid = Uuid::parse_str(org_id)
             .map_err(|e| crate::Error::generic(format!("Invalid org_id: {}", e)))?;
-        let workspace_uuid = workspace_id
-            .and_then(|w| Uuid::parse_str(w).ok());
-        let user_uuid = user_id
-            .and_then(|u| Uuid::parse_str(u).ok());
+        let workspace_uuid = workspace_id.and_then(|w| Uuid::parse_str(w).ok());
+        let user_uuid = user_id.and_then(|u| Uuid::parse_str(u).ok());
 
         let feature_name = match feature {
             AiFeature::MockAi => "mock_generation",
@@ -478,7 +477,7 @@ impl OrgControlsAccessor for DbOrgControls {
                  SET current_tokens_used = current_tokens_used + $1,
                      current_calls_used = current_calls_used + 1,
                      updated_at = NOW()
-                 WHERE org_id = $2 AND workspace_id = $3"
+                 WHERE org_id = $2 AND workspace_id = $3",
             )
             .bind(tokens as i64)
             .bind(org_uuid)
@@ -492,7 +491,7 @@ impl OrgControlsAccessor for DbOrgControls {
                  SET current_tokens_used = current_tokens_used + $1,
                      current_calls_used = current_calls_used + 1,
                      updated_at = NOW()
-                 WHERE org_id = $2 AND workspace_id IS NULL"
+                 WHERE org_id = $2 AND workspace_id IS NULL",
             )
             .bind(tokens as i64)
             .bind(org_uuid)

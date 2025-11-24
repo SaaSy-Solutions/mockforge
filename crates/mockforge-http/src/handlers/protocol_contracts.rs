@@ -11,8 +11,8 @@ use mockforge_core::contract_drift::protocol_contracts::{
     compare_contracts, ProtocolContractRegistry,
 };
 use mockforge_core::contract_drift::{
-    GrpcContract, KafkaContract, KafkaTopicSchema, MqttContract, MqttTopicSchema,
-    SchemaFormat, TopicSchema, WebSocketContract, WebSocketMessageType,
+    GrpcContract, KafkaContract, KafkaTopicSchema, MqttContract, MqttTopicSchema, SchemaFormat,
+    TopicSchema, WebSocketContract, WebSocketMessageType,
 };
 use mockforge_core::protocol_abstraction::Protocol;
 use serde::{Deserialize, Serialize};
@@ -33,9 +33,11 @@ pub struct ProtocolContractState {
     /// Optional incident manager for creating drift incidents
     pub incident_manager: Option<Arc<mockforge_core::incidents::IncidentManager>>,
     /// Optional fitness function registry for evaluating fitness rules
-    pub fitness_registry: Option<Arc<RwLock<mockforge_core::contract_drift::FitnessFunctionRegistry>>>,
+    pub fitness_registry:
+        Option<Arc<RwLock<mockforge_core::contract_drift::FitnessFunctionRegistry>>>,
     /// Optional consumer impact analyzer
-    pub consumer_analyzer: Option<Arc<RwLock<mockforge_core::contract_drift::ConsumerImpactAnalyzer>>>,
+    pub consumer_analyzer:
+        Option<Arc<RwLock<mockforge_core::contract_drift::ConsumerImpactAnalyzer>>>,
 }
 
 /// Request to create a gRPC contract
@@ -261,17 +263,15 @@ pub async fn get_contract(
 ) -> Result<Json<ProtocolContractResponse>, (StatusCode, Json<serde_json::Value>)> {
     let registry = state.registry.read().await;
 
-    let contract = registry
-        .get(&contract_id)
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({
-                    "error": "Contract not found",
-                    "contract_id": contract_id
-                })),
-            )
-        })?;
+    let contract = registry.get(&contract_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "Contract not found",
+                "contract_id": contract_id
+            })),
+        )
+    })?;
 
     let contract_json = contract.to_json().map_err(|e| {
         (
@@ -297,15 +297,16 @@ pub async fn create_grpc_contract(
     Json(request): Json<CreateGrpcContractRequest>,
 ) -> Result<Json<ProtocolContractResponse>, (StatusCode, Json<serde_json::Value>)> {
     // Decode base64 descriptor set
-    let descriptor_bytes = general_purpose::STANDARD.decode(&request.descriptor_set).map_err(|e| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({
-                "error": "Invalid base64 descriptor set",
-                "message": e.to_string()
-            })),
-        )
-    })?;
+    let descriptor_bytes =
+        general_purpose::STANDARD.decode(&request.descriptor_set).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "Invalid base64 descriptor set",
+                    "message": e.to_string()
+                })),
+            )
+        })?;
 
     // Create descriptor pool from bytes
     // Note: GrpcContract::from_descriptor_set handles the descriptor pool creation
@@ -615,23 +616,21 @@ pub async fn compare_contracts_handler(
         )
     })?;
 
-    let diff_result = compare_contracts(old_contract, new_contract)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "error": "Failed to compare contracts",
-                    "message": e.to_string()
-                })),
-            )
-        })?;
+    let diff_result = compare_contracts(old_contract, new_contract).await.map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Failed to compare contracts",
+                "message": e.to_string()
+            })),
+        )
+    })?;
 
     // Evaluate drift and create incidents if drift engine is available
     let mut drift_evaluation = None;
     if let (Some(ref drift_engine), Some(ref incident_manager)) =
-        (&state.drift_engine, &state.incident_manager) {
-
+        (&state.drift_engine, &state.incident_manager)
+    {
         // Get protocol type
         let protocol = new_contract.protocol();
 
@@ -662,11 +661,7 @@ pub async fn compare_contracts_handler(
             // Evaluate drift budget (for protocol contracts, we need to use evaluate_with_specs equivalent)
             // Since we don't have OpenAPI specs for protocol contracts, we'll use a simplified evaluation
             // that works with the diff result directly
-            let drift_result = drift_engine.evaluate(
-                &diff_result,
-                &endpoint,
-                &method,
-            );
+            let drift_result = drift_engine.evaluate(&diff_result, &endpoint, &method);
 
             // Run fitness tests if registry is available
             let mut drift_result_with_fitness = drift_result.clone();
@@ -674,19 +669,20 @@ pub async fn compare_contracts_handler(
                 let rt = tokio::runtime::Handle::try_current();
                 if let Ok(handle) = rt {
                     let fitness_results = handle.block_on(async {
-                       let guard = fitness_registry.read().await;
-                       guard.evaluate_all_protocol(
-                           Some(old_contract),
-                           new_contract,
-                           &diff_result,
-                           operation_id,
-                           None, // workspace_id
-                           None, // service_name
-                       )
+                        let guard = fitness_registry.read().await;
+                        guard.evaluate_all_protocol(
+                            Some(old_contract),
+                            new_contract,
+                            &diff_result,
+                            operation_id,
+                            None, // workspace_id
+                            None, // service_name
+                        )
                     });
                     if let Ok(results) = fitness_results {
                         drift_result_with_fitness.fitness_test_results = results;
-                        if drift_result_with_fitness.fitness_test_results.iter().any(|r| !r.passed) {
+                        if drift_result_with_fitness.fitness_test_results.iter().any(|r| !r.passed)
+                        {
                             drift_result_with_fitness.should_create_incident = true;
                         }
                     }
@@ -701,7 +697,11 @@ pub async fn compare_contracts_handler(
                     let impact = handle.block_on(async {
                         let guard = consumer_analyzer.read().await;
                         // Use analyze_impact_with_operation_id for better protocol support
-                        guard.analyze_impact_with_operation_id(&endpoint, &method, Some(operation_id))
+                        guard.analyze_impact_with_operation_id(
+                            &endpoint,
+                            &method,
+                            Some(operation_id),
+                        )
                     });
                     if let Some(impact) = impact {
                         drift_result_with_fitness.consumer_impact = Some(impact);
@@ -834,10 +834,8 @@ pub async fn validate_message(
         metadata: request.metadata.unwrap_or_default(),
     };
 
-    let validation_result = contract
-        .validate(&request.operation_id, &contract_request)
-        .await
-        .map_err(|e| {
+    let validation_result =
+        contract.validate(&request.operation_id, &contract_request).await.map_err(|e| {
             (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({

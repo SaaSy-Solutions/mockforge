@@ -51,12 +51,12 @@ pub enum AnalyticsError {
 
 impl From<String> for AnalyticsError {
     fn from(s: String) -> Self {
-        AnalyticsError::Other(s)
+        Self::Other(s)
     }
 }
 
 impl From<&str> for AnalyticsError {
     fn from(s: &str) -> Self {
-        AnalyticsError::Other(s.to_string())
+        Self::Other(s.to_string())
     }
 }

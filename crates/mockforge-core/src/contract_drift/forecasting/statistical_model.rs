@@ -33,9 +33,8 @@ impl StatisticalModel {
             super::types::ForecastAggregationLevel::Workspace
         };
 
-        let window_days = (analysis.window_end - analysis.window_start)
-            .num_seconds() as f64
-            / 86400.0;
+        let window_days =
+            (analysis.window_end - analysis.window_start).num_seconds() as f64 / 86400.0;
 
         let change_frequency = if window_days > 0.0 {
             analysis.total_changes as f64 / window_days
@@ -63,11 +62,8 @@ impl StatisticalModel {
             })
             .collect();
 
-        let detected_pattern_types: Vec<_> = analysis
-            .patterns
-            .iter()
-            .map(|p| p.pattern_type.clone())
-            .collect();
+        let detected_pattern_types: Vec<_> =
+            analysis.patterns.iter().map(|p| p.pattern_type.clone()).collect();
 
         ForecastStatistics {
             workspace_id,
@@ -128,11 +124,7 @@ impl StatisticalModel {
     }
 
     /// Predict probability from historical frequency
-    fn predict_from_frequency(
-        &self,
-        analysis: &PatternAnalysis,
-        forecast_window_days: u32,
-    ) -> f64 {
+    fn predict_from_frequency(&self, analysis: &PatternAnalysis, forecast_window_days: u32) -> f64 {
         if analysis.avg_change_interval_days == 0.0 {
             return 0.0;
         }
@@ -152,9 +144,7 @@ impl StatisticalModel {
         pattern: &super::types::ForecastPattern,
         forecast_window_days: u32,
     ) -> f64 {
-        let days_since_last = (Utc::now() - pattern.last_occurrence)
-            .num_seconds() as f64
-            / 86400.0;
+        let days_since_last = (Utc::now() - pattern.last_occurrence).num_seconds() as f64 / 86400.0;
 
         let forecast_days = forecast_window_days as f64;
 
@@ -195,8 +185,8 @@ impl StatisticalModel {
 
         // Fallback: use ratio of breaking to total changes
         if analysis.total_changes > 0 {
-            let breaking_ratio = analysis.total_breaking_changes as f64
-                / analysis.total_changes as f64;
+            let breaking_ratio =
+                analysis.total_breaking_changes as f64 / analysis.total_changes as f64;
             let change_prob = self.predict_change_probability(analysis, forecast_window_days);
             change_prob * breaking_ratio
         } else {
@@ -205,28 +195,25 @@ impl StatisticalModel {
     }
 
     /// Predict next expected change date
-    pub fn predict_next_change_date(
-        &self,
-        analysis: &PatternAnalysis,
-    ) -> Option<DateTime<Utc>> {
+    pub fn predict_next_change_date(&self, analysis: &PatternAnalysis) -> Option<DateTime<Utc>> {
         if analysis.patterns.is_empty() {
             // Use average interval
             if analysis.avg_change_interval_days > 0.0 {
                 let last_change = analysis.window_end;
-                return Some(last_change + Duration::days(analysis.avg_change_interval_days as i64));
+                return Some(
+                    last_change + Duration::days(analysis.avg_change_interval_days as i64),
+                );
             }
             return None;
         }
 
         // Use most confident pattern
-        let best_pattern = analysis
-            .patterns
-            .iter()
-            .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal))?;
+        let best_pattern = analysis.patterns.iter().max_by(|a, b| {
+            a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal)
+        })?;
 
-        let days_since_last = (Utc::now() - best_pattern.last_occurrence)
-            .num_seconds() as f64
-            / 86400.0;
+        let days_since_last =
+            (Utc::now() - best_pattern.last_occurrence).num_seconds() as f64 / 86400.0;
 
         if days_since_last >= best_pattern.frequency_days {
             // Overdue - predict soon
@@ -239,16 +226,11 @@ impl StatisticalModel {
     }
 
     /// Predict next expected breaking change date
-    pub fn predict_next_break_date(
-        &self,
-        analysis: &PatternAnalysis,
-    ) -> Option<DateTime<Utc>> {
+    pub fn predict_next_break_date(&self, analysis: &PatternAnalysis) -> Option<DateTime<Utc>> {
         if let Some(avg_breaking_interval) = analysis.avg_breaking_change_interval_days {
             if avg_breaking_interval > 0.0 {
                 let last_breaking = analysis.window_end;
-                return Some(
-                    last_breaking + Duration::days(avg_breaking_interval as i64),
-                );
+                return Some(last_breaking + Duration::days(avg_breaking_interval as i64));
             }
         }
 
@@ -258,26 +240,19 @@ impl StatisticalModel {
             .iter()
             .find(|p| matches!(p.pattern_type, super::types::PatternType::BreakingChange))?;
 
-        let days_since_last = (Utc::now() - breaking_pattern.last_occurrence)
-            .num_seconds() as f64
-            / 86400.0;
+        let days_since_last =
+            (Utc::now() - breaking_pattern.last_occurrence).num_seconds() as f64 / 86400.0;
 
         if days_since_last >= breaking_pattern.frequency_days {
             Some(Utc::now() + Duration::days(7))
         } else {
             let days_until_next = breaking_pattern.frequency_days - days_since_last;
-            Some(
-                breaking_pattern.last_occurrence + Duration::days(days_until_next as i64),
-            )
+            Some(breaking_pattern.last_occurrence + Duration::days(days_until_next as i64))
         }
     }
 
     /// Calculate forecast confidence
-    pub fn calculate_confidence(
-        &self,
-        analysis: &PatternAnalysis,
-        min_incidents: usize,
-    ) -> f64 {
+    pub fn calculate_confidence(&self, analysis: &PatternAnalysis, min_incidents: usize) -> f64 {
         if analysis.total_changes < min_incidents {
             return 0.3; // Low confidence with insufficient data
         }
@@ -288,11 +263,7 @@ impl StatisticalModel {
 
         // 2. Pattern confidence (if patterns detected)
         let pattern_factor = if !analysis.patterns.is_empty() {
-            analysis
-                .patterns
-                .iter()
-                .map(|p| p.confidence)
-                .sum::<f64>()
+            analysis.patterns.iter().map(|p| p.confidence).sum::<f64>()
                 / analysis.patterns.len() as f64
         } else {
             0.5 // Medium if no clear patterns

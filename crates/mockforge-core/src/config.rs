@@ -527,6 +527,7 @@ impl Default for RouteLatencyConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Default)]
 pub struct DeceptiveDeployConfig {
     /// Enable deceptive deploy mode
     pub enabled: bool,
@@ -546,21 +547,6 @@ pub struct DeceptiveDeployConfig {
     /// Deceptive canary mode configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub canary: Option<crate::deceptive_canary::DeceptiveCanaryConfig>,
-}
-
-impl Default for DeceptiveDeployConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            cors: None,
-            rate_limit: None,
-            headers: HashMap::new(),
-            oauth: None,
-            custom_domain: None,
-            auto_tunnel: false,
-            canary: None,
-        }
-    }
 }
 
 impl DeceptiveDeployConfig {
@@ -1669,6 +1655,7 @@ impl Default for RagConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Default)]
 pub struct PersonaRegistryConfig {
     /// Enable persistence (save personas to disk)
     #[serde(default = "default_false")]
@@ -1679,16 +1666,6 @@ pub struct PersonaRegistryConfig {
     /// Default traits for new personas
     #[serde(default)]
     pub default_traits: HashMap<String, String>,
-}
-
-impl Default for PersonaRegistryConfig {
-    fn default() -> Self {
-        Self {
-            persistent: false,
-            storage_path: None,
-            default_traits: HashMap::new(),
-        }
-    }
 }
 
 /// MockAI (Behavioral Mock Intelligence) configuration
@@ -1746,23 +1723,17 @@ pub struct ObservabilityConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
+#[derive(Default)]
 pub struct SecurityConfig {
     /// Security monitoring configuration
     pub monitoring: SecurityMonitoringConfig,
-}
-
-impl Default for SecurityConfig {
-    fn default() -> Self {
-        Self {
-            monitoring: SecurityMonitoringConfig::default(),
-        }
-    }
 }
 
 /// Security monitoring configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Default)]
 pub struct SecurityMonitoringConfig {
     /// SIEM integration configuration
     pub siem: crate::security::siem::SiemConfig,
@@ -1776,22 +1747,6 @@ pub struct SecurityMonitoringConfig {
     pub compliance_dashboard: crate::security::compliance_dashboard::ComplianceDashboardConfig,
     /// Risk assessment configuration
     pub risk_assessment: crate::security::risk_assessment::RiskAssessmentConfig,
-}
-
-impl Default for SecurityMonitoringConfig {
-    fn default() -> Self {
-        Self {
-            siem: crate::security::siem::SiemConfig::default(),
-            access_review: crate::security::access_review::AccessReviewConfig::default(),
-            privileged_access: crate::security::privileged_access::PrivilegedAccessConfig::default(
-            ),
-            change_management: crate::security::change_management::ChangeManagementConfig::default(
-            ),
-            compliance_dashboard:
-                crate::security::compliance_dashboard::ComplianceDashboardConfig::default(),
-            risk_assessment: crate::security::risk_assessment::RiskAssessmentConfig::default(),
-        }
-    }
 }
 
 /// Prometheus metrics configuration

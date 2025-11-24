@@ -87,8 +87,9 @@ export function useDashboard() {
       }
       return dashboardApi.getDashboard();
     },
-    refetchInterval: 30000, // Refetch every 30 seconds
-    staleTime: 10000, // Consider data stale after 10 seconds
+    refetchInterval: 5000, // Refetch every 5 seconds for real-time updates
+    refetchIntervalInBackground: true, // Continue refetching even when tab is in background
+    staleTime: 2000, // Consider data stale after 2 seconds
   });
 }
 
@@ -1016,8 +1017,13 @@ export function useUpdatePersonaLifecycles() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
+      // Handle 405 (Method Not Allowed) gracefully - endpoint may not be implemented
+      if (response.status === 405) {
+        console.debug('[TimeTravel] Persona lifecycle update endpoint not available (405)');
+        return null; // Return null instead of throwing to prevent error UI
+      }
       if (!response.ok) {
-        throw new Error('Failed to update persona lifecycles');
+        throw new Error(`Failed to update persona lifecycles: ${response.status}`);
       }
       return response.json();
     },
@@ -1025,6 +1031,12 @@ export function useUpdatePersonaLifecycles() {
       // Invalidate relevant queries to refresh responses
       queryClient.invalidateQueries({ queryKey: ['consistency', 'state'] });
       queryClient.invalidateQueries({ queryKey: ['consistency', 'persona'] });
+    },
+    onError: (error) => {
+      // Only log errors that aren't 405 (which we handle gracefully)
+      if (!error.message?.includes('405')) {
+        console.warn('[TimeTravel] Failed to update persona lifecycles:', error);
+      }
     },
   });
 }
@@ -1054,6 +1066,10 @@ export function useLivePreviewLifecycleUpdates(workspace: string = 'default', en
         onSuccess: () => {
           // Lifecycle states have been updated, responses will be refreshed automatically
           // via query invalidation in the mutation
+        },
+        onError: () => {
+          // Silently handle errors (405 is expected if endpoint doesn't exist)
+          // This prevents error UI from showing for missing endpoints
         },
       });
     }

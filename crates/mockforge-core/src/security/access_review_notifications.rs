@@ -11,7 +11,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// Notification channel types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,7 +100,10 @@ impl AccessReviewNotificationService {
     }
 
     /// Create a new notification service with a custom email service
-    pub fn with_email_service(config: NotificationConfig, email_service: Arc<EmailService>) -> Self {
+    pub fn with_email_service(
+        config: NotificationConfig,
+        email_service: Arc<EmailService>,
+    ) -> Self {
         let slack_service = if config.channels.contains(&NotificationChannel::Slack) {
             Some(Arc::new(SlackService::from_env()))
         } else {
@@ -397,7 +400,9 @@ impl AccessReviewNotificationService {
         });
 
         // Get webhook URL from channel config or use recipients as URLs
-        let webhook_urls = if let Some(webhook_url) = self.config.channel_config
+        let webhook_urls = if let Some(webhook_url) = self
+            .config
+            .channel_config
             .get("webhook")
             .and_then(|v| v.get("url"))
             .and_then(|v| v.as_str())

@@ -278,7 +278,11 @@ impl ConsumerImpactAnalyzer {
         // If not found and this looks like a protocol-specific operation, try alternative formats
         if mapping.is_none() {
             // For gRPC: endpoint might be "service.method", try with method="grpc"
-            if method == "grpc" || (method.contains("grpc") && (endpoint.contains('.') || operation_id.map(|id| id.contains('.')).unwrap_or(false))) {
+            if method == "grpc"
+                || (method.contains("grpc")
+                    && (endpoint.contains('.')
+                        || operation_id.map(|id| id.contains('.')).unwrap_or(false)))
+            {
                 // Try exact match first with endpoint
                 mapping = self.registry.get_mapping(endpoint, "grpc");
 
@@ -299,12 +303,13 @@ impl ConsumerImpactAnalyzer {
                         let parts: Vec<&str> = lookup_key.split('.').collect();
                         if parts.len() >= 2 {
                             // Try "service.*" pattern
-                            let service_pattern = format!("{}.*", parts[0..parts.len()-1].join("."));
+                            let service_pattern =
+                                format!("{}.*", parts[0..parts.len() - 1].join("."));
                             mapping = self.try_wildcard_match(&service_pattern, "grpc");
 
                             // If still not found, try just service name
                             if mapping.is_none() {
-                                let service_name = parts[0..parts.len()-1].join(".");
+                                let service_name = parts[0..parts.len() - 1].join(".");
                                 mapping = self.registry.get_mapping(&service_name, "grpc");
                             }
                         }
@@ -344,8 +349,16 @@ impl ConsumerImpactAnalyzer {
                 }
             }
             // For MQTT/Kafka: endpoint is topic, try with protocol as method
-            else if method == "mqtt" || method == "kafka" || method.contains("mqtt") || method.contains("kafka") {
-                let protocol = if method.contains("mqtt") { "mqtt" } else { "kafka" };
+            else if method == "mqtt"
+                || method == "kafka"
+                || method.contains("mqtt")
+                || method.contains("kafka")
+            {
+                let protocol = if method.contains("mqtt") {
+                    "mqtt"
+                } else {
+                    "kafka"
+                };
                 mapping = self.registry.get_mapping(endpoint, protocol);
 
                 // Try with operation_id if different
@@ -474,8 +487,7 @@ impl ConsumerImpactAnalyzer {
             let pattern_parts: Vec<&str> = pattern.split('/').collect();
 
             // Handle multi-level wildcard at the end
-            if pattern.ends_with("/#") {
-                let base_pattern = &pattern[..pattern.len() - 2];
+            if let Some(base_pattern) = pattern.strip_suffix("/#") {
                 return topic.starts_with(base_pattern);
             }
 

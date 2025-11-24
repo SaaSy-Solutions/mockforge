@@ -2,22 +2,20 @@
 //!
 //! This module provides HTTP handlers for managing business flows in the Scenario Studio.
 
-use axum::response::Response as AxumResponse;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::Json,
 };
 use mockforge_core::scenario_studio::{
     FlowDefinition, FlowExecutionResult, FlowExecutor, FlowType, FlowVariant,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
-use uuid::Uuid;
 
 /// State for scenario studio handlers
 #[derive(Clone)]
@@ -291,7 +289,7 @@ pub async fn list_flow_variants(
 
 /// Create scenario studio router
 pub fn scenario_studio_router(state: ScenarioStudioState) -> axum::Router {
-    use axum::routing::{delete, get, post, put};
+    use axum::routing::{get, post};
     use axum::Router;
 
     Router::new()

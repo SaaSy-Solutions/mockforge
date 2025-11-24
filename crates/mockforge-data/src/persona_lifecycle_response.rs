@@ -157,7 +157,10 @@ pub fn apply_user_engagement_lifecycle_effects(response: &mut Value, lifecycle: 
                 obj.insert("last_active".to_string(), Value::String("recent".to_string()));
                 obj.insert("engagement_score".to_string(), Value::Number(10.into()));
                 obj.insert("recent_activity".to_string(), Value::Array(vec![]));
-                obj.insert("notification_preferences".to_string(), Value::Object(serde_json::Map::new()));
+                obj.insert(
+                    "notification_preferences".to_string(),
+                    Value::Object(serde_json::Map::new()),
+                );
                 obj.insert("engagement_alerts".to_string(), Value::Bool(false));
             }
             LifecycleState::Active => {
@@ -166,16 +169,22 @@ pub fn apply_user_engagement_lifecycle_effects(response: &mut Value, lifecycle: 
                 obj.insert("engagement_level".to_string(), Value::String("medium".to_string()));
                 obj.insert("last_active".to_string(), Value::String("recent".to_string()));
                 obj.insert("engagement_score".to_string(), Value::Number(75.into()));
-                obj.insert("recent_activity".to_string(), Value::Array(vec![
-                    serde_json::json!({"type": "login", "timestamp": "recent"}),
-                    serde_json::json!({"type": "action", "timestamp": "recent"}),
-                ]));
-                obj.insert("notification_preferences".to_string(), Value::Object({
-                    let mut prefs = serde_json::Map::new();
-                    prefs.insert("email".to_string(), Value::Bool(true));
-                    prefs.insert("push".to_string(), Value::Bool(true));
-                    prefs
-                }));
+                obj.insert(
+                    "recent_activity".to_string(),
+                    Value::Array(vec![
+                        serde_json::json!({"type": "login", "timestamp": "recent"}),
+                        serde_json::json!({"type": "action", "timestamp": "recent"}),
+                    ]),
+                );
+                obj.insert(
+                    "notification_preferences".to_string(),
+                    Value::Object({
+                        let mut prefs = serde_json::Map::new();
+                        prefs.insert("email".to_string(), Value::Bool(true));
+                        prefs.insert("push".to_string(), Value::Bool(true));
+                        prefs
+                    }),
+                );
                 obj.insert("engagement_alerts".to_string(), Value::Bool(false));
             }
             LifecycleState::ChurnRisk => {
@@ -185,14 +194,20 @@ pub fn apply_user_engagement_lifecycle_effects(response: &mut Value, lifecycle: 
                 obj.insert("last_active".to_string(), Value::String("30_days_ago".to_string()));
                 obj.insert("engagement_score".to_string(), Value::Number(25.into()));
                 obj.insert("recent_activity".to_string(), Value::Array(vec![]));
-                obj.insert("notification_preferences".to_string(), Value::Object({
-                    let mut prefs = serde_json::Map::new();
-                    prefs.insert("email".to_string(), Value::Bool(true));
-                    prefs.insert("push".to_string(), Value::Bool(false));
-                    prefs
-                }));
+                obj.insert(
+                    "notification_preferences".to_string(),
+                    Value::Object({
+                        let mut prefs = serde_json::Map::new();
+                        prefs.insert("email".to_string(), Value::Bool(true));
+                        prefs.insert("push".to_string(), Value::Bool(false));
+                        prefs
+                    }),
+                );
                 obj.insert("engagement_alerts".to_string(), Value::Bool(true));
-                obj.insert("churn_risk_reason".to_string(), Value::String("inactivity".to_string()));
+                obj.insert(
+                    "churn_risk_reason".to_string(),
+                    Value::String("inactivity".to_string()),
+                );
             }
             LifecycleState::Churned => {
                 // Churned users have no engagement
@@ -201,7 +216,10 @@ pub fn apply_user_engagement_lifecycle_effects(response: &mut Value, lifecycle: 
                 obj.insert("last_active".to_string(), Value::String("90_days_ago".to_string()));
                 obj.insert("engagement_score".to_string(), Value::Number(0.into()));
                 obj.insert("recent_activity".to_string(), Value::Array(vec![]));
-                obj.insert("notification_preferences".to_string(), Value::Object(serde_json::Map::new()));
+                obj.insert(
+                    "notification_preferences".to_string(),
+                    Value::Object(serde_json::Map::new()),
+                );
                 obj.insert("engagement_alerts".to_string(), Value::Bool(false));
                 obj.insert("churned_at".to_string(), Value::String("recent".to_string()));
             }
@@ -340,7 +358,8 @@ pub fn apply_lifecycle_effects(
         "loan" | "loans" | "credit" | "application" => {
             apply_loan_lifecycle_effects(response, lifecycle);
         }
-        "profile" | "user" | "users" | "activity" | "engagement" | "notifications" | "notification" => {
+        "profile" | "user" | "users" | "activity" | "engagement" | "notifications"
+        | "notification" => {
             apply_user_engagement_lifecycle_effects(response, lifecycle);
         }
         _ => {

@@ -3,12 +3,7 @@
 //! This module provides middleware that detects 404 responses and triggers
 //! automatic mock generation.
 
-use axum::{
-    extract::Request,
-    http::{Method, StatusCode, Uri},
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -52,11 +47,7 @@ impl NotFoundDetector {
     }
 
     /// Middleware function that detects 404s and triggers auto-generation
-    pub async fn detect_and_auto_create(
-        self,
-        request: Request,
-        next: Next,
-    ) -> Response {
+    pub async fn detect_and_auto_create(self, request: Request, next: Next) -> Response {
         // Extract request details before consuming the request
         let method = request.method().clone();
         let uri = request.uri().clone();
@@ -81,10 +72,7 @@ impl NotFoundDetector {
             return response;
         }
 
-        info!(
-            "Detected 404 for {} {}, triggering auto-generation",
-            method, path
-        );
+        info!("Detected 404 for {} {}, triggering auto-generation", method, path);
 
         // Try to auto-generate a mock
         let generator = self.generator.read().await;
@@ -128,4 +116,3 @@ mod tests {
         assert!(!detector.should_exclude("/api/users"));
     }
 }
-

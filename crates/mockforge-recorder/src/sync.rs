@@ -385,7 +385,7 @@ impl SyncService {
 
                             // Compare responses
                             let comparison = ResponseComparator::compare(
-                                original_response.status_code as i32,
+                                original_response.status_code,
                                 &original_headers,
                                 &original_body,
                                 status as i32,
@@ -410,7 +410,7 @@ impl SyncService {
                                 };
 
                                 let snapshot_after = crate::sync_snapshots::SnapshotData {
-                                    status_code: status as u16,
+                                    status_code: status,
                                     headers: response_headers.clone(),
                                     body: response_body.clone(),
                                     body_json: serde_json::from_slice(&response_body).ok(),

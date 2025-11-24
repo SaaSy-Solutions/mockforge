@@ -188,9 +188,8 @@ impl ScenarioPromotionWorkflow {
             // Check if any pillar tag combination matches high-impact patterns
             for pattern in &approval_rules.high_impact_pillar_patterns {
                 if Self::matches_pillar_pattern(&pillar_tags, pattern) {
-                    let pillar_names: Vec<String> = pillar_tags.iter()
-                        .map(|p| p.display_name())
-                        .collect();
+                    let pillar_names: Vec<String> =
+                        pillar_tags.iter().map(|p| p.display_name()).collect();
                     let reason = if target_environment == MockEnvironmentName::Prod {
                         format!(
                             "High-impact pillar tag combination {} requires approval for production",
@@ -229,10 +228,7 @@ impl ScenarioPromotionWorkflow {
                             required_pillar.display_name()
                         )
                     } else {
-                        format!(
-                            "Pillar tag {} requires approval",
-                            required_pillar.display_name()
-                        )
+                        format!("Pillar tag {} requires approval", required_pillar.display_name())
                     };
                     return (true, Some(reason));
                 }
@@ -366,9 +362,11 @@ impl Default for ApprovalRules {
             ],
             // High-impact pillar tag combinations
             // Scenarios tagged with [Cloud][Contracts][Reality] require approval
-            high_impact_pillar_patterns: vec![
-                vec![Pillar::Cloud, Pillar::Contracts, Pillar::Reality],
-            ],
+            high_impact_pillar_patterns: vec![vec![
+                Pillar::Cloud,
+                Pillar::Contracts,
+                Pillar::Reality,
+            ]],
             custom_rules: Vec::new(),
             prod_requires_approval: true,
             dev_to_test_requires_approval: false,
@@ -528,7 +526,12 @@ mod tests {
         let pattern = vec![Pillar::Cloud, Pillar::Contracts, Pillar::Reality];
         assert!(ScenarioPromotionWorkflow::matches_pillar_pattern(&tags, &pattern));
 
-        let tags2 = vec![Pillar::Cloud, Pillar::Contracts, Pillar::Reality, Pillar::Ai];
+        let tags2 = vec![
+            Pillar::Cloud,
+            Pillar::Contracts,
+            Pillar::Reality,
+            Pillar::Ai,
+        ];
         let pattern2 = vec![Pillar::Cloud, Pillar::Contracts];
         assert!(ScenarioPromotionWorkflow::matches_pillar_pattern(&tags2, &pattern2));
 

@@ -20,7 +20,7 @@ use tokio::fs as async_fs;
 use tracing::{info, warn};
 
 /// Installation options
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InstallOptions {
     /// Force reinstall even if scenario already exists
     pub force: bool,
@@ -30,16 +30,6 @@ pub struct InstallOptions {
 
     /// Expected checksum for verification (URL sources)
     pub expected_checksum: Option<String>,
-}
-
-impl Default for InstallOptions {
-    fn default() -> Self {
-        Self {
-            force: false,
-            skip_validation: false,
-            expected_checksum: None,
-        }
-    }
 }
 
 /// Scenario installer
@@ -110,15 +100,15 @@ impl ScenarioInstaller {
                 path.clone()
             }
             ScenarioSource::Url { url, checksum } => {
-                self.download_from_url(&url, checksum.as_deref()).await?
+                self.download_from_url(url, checksum.as_deref()).await?
             }
             ScenarioSource::Git {
                 url,
                 reference,
                 subdirectory,
-            } => self.clone_from_git(&url, reference.as_deref(), subdirectory.as_deref()).await?,
+            } => self.clone_from_git(url, reference.as_deref(), subdirectory.as_deref()).await?,
             ScenarioSource::Registry { name, version } => {
-                self.download_from_registry(&name, version.as_deref()).await?
+                self.download_from_registry(name, version.as_deref()).await?
             }
         };
 
@@ -158,15 +148,15 @@ impl ScenarioInstaller {
                 path.clone()
             }
             ScenarioSource::Url { url, checksum } => {
-                self.download_from_url(&url, checksum.as_deref()).await?
+                self.download_from_url(url, checksum.as_deref()).await?
             }
             ScenarioSource::Git {
                 url,
                 reference,
                 subdirectory,
-            } => self.clone_from_git(&url, reference.as_deref(), subdirectory.as_deref()).await?,
+            } => self.clone_from_git(url, reference.as_deref(), subdirectory.as_deref()).await?,
             ScenarioSource::Registry { name, version } => {
-                self.download_from_registry(&name, version.as_deref()).await?
+                self.download_from_registry(name, version.as_deref()).await?
             }
         };
 
@@ -627,9 +617,9 @@ impl ScenarioInstaller {
         } else if file_name.ends_with(".tar.gz") || file_name.ends_with(".tgz") {
             self.extract_tar_gz(&temp_file, &cached_path).await?
         } else {
-            return Err(ScenarioError::InvalidSource(format!(
-                "Unsupported package format from registry"
-            )));
+            return Err(ScenarioError::InvalidSource(
+                "Unsupported package format from registry".to_string(),
+            ));
         };
 
         info!("Scenario downloaded from registry to: {}", scenario_dir.display());
@@ -840,7 +830,7 @@ impl ScenarioInstaller {
             };
 
             let scenario_spec_content =
-                std::fs::read_to_string(scenario_spec_path).map_err(|e| ScenarioError::Io(e))?;
+                std::fs::read_to_string(scenario_spec_path).map_err(ScenarioError::Io)?;
 
             // Try to parse as JSON first, then YAML
             let scenario_spec: Value = if scenario_spec_path
@@ -849,9 +839,9 @@ impl ScenarioInstaller {
                 .map(|ext| ext == "json")
                 .unwrap_or(false)
             {
-                serde_json::from_str(&scenario_spec_content).map_err(|e| ScenarioError::Serde(e))?
+                serde_json::from_str(&scenario_spec_content).map_err(ScenarioError::Serde)?
             } else {
-                serde_yaml::from_str(&scenario_spec_content).map_err(|e| ScenarioError::Yaml(e))?
+                serde_yaml::from_str(&scenario_spec_content).map_err(ScenarioError::Yaml)?
             };
 
             // Check if existing OpenAPI spec exists
@@ -868,7 +858,7 @@ impl ScenarioInstaller {
             {
                 // Align schemas
                 let existing_spec_content =
-                    std::fs::read_to_string(existing_path).map_err(|e| ScenarioError::Io(e))?;
+                    std::fs::read_to_string(existing_path).map_err(ScenarioError::Io)?;
 
                 let existing_spec: Value = if existing_path
                     .extension()
@@ -876,11 +866,9 @@ impl ScenarioInstaller {
                     .map(|ext| ext == "json")
                     .unwrap_or(false)
                 {
-                    serde_json::from_str(&existing_spec_content)
-                        .map_err(|e| ScenarioError::Serde(e))?
+                    serde_json::from_str(&existing_spec_content).map_err(ScenarioError::Serde)?
                 } else {
-                    serde_yaml::from_str(&existing_spec_content)
-                        .map_err(|e| ScenarioError::Yaml(e))?
+                    serde_yaml::from_str(&existing_spec_content).map_err(ScenarioError::Yaml)?
                 };
 
                 let alignment_result =
@@ -890,7 +878,7 @@ impl ScenarioInstaller {
                     if let Some(merged_spec) = alignment_result.merged_spec {
                         // Write merged spec
                         let merged_json = serde_json::to_string_pretty(&merged_spec)
-                            .map_err(|e| ScenarioError::Serde(e))?;
+                            .map_err(ScenarioError::Serde)?;
                         std::fs::write(&openapi_dest, merged_json).map_err(|e| {
                             ScenarioError::Storage(format!(
                                 "Failed to write merged openapi.json: {}",

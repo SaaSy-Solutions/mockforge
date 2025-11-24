@@ -26,3 +26,11 @@ export { RequestRateChart } from './RequestRateChart';
 export { SummaryCards } from './SummaryCards';
 export { SystemMetricsCard } from './SystemMetricsCard';
 export { WebSocketMetricsCard } from './WebSocketMetricsCard';
+
+// Coverage Metrics components (MockOps)
+export { CoverageMetricsDashboard } from './CoverageMetricsDashboard';
+export { ScenarioUsageHeatmap } from './ScenarioUsageHeatmap';
+export { PersonaCIHits } from './PersonaCIHits';
+export { EndpointCoverage } from './EndpointCoverage';
+export { RealityLevelStaleness } from './RealityLevelStaleness';
+export { DriftPercentageDashboard } from './DriftPercentageDashboard';

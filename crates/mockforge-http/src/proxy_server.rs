@@ -4,17 +4,10 @@
 //! certificate injection, and comprehensive request/response logging.
 
 use axum::{
-    extract::Request,
-    http::{HeaderMap, Method, StatusCode, Uri},
-    middleware::Next,
-    response::Response,
-    routing::{any, get},
-    Router,
+    extract::Request, http::StatusCode, middleware::Next, response::Response, routing::get, Router,
 };
-use mockforge_core::proxy::{
-    body_transform::BodyTransformationMiddleware, config::ProxyConfig, handler::ProxyHandler,
-};
-use serde::{Deserialize, Serialize};
+use mockforge_core::proxy::{body_transform::BodyTransformationMiddleware, config::ProxyConfig};
+use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;

@@ -14,18 +14,16 @@ use crate::openapi::OpenApiSpec;
 use crate::reality_continuum::config::{
     ContinuumConfig, ContinuumRule, MergeStrategy, TransitionMode,
 };
-use crate::scenarios::types::{ScenarioDefinition, ScenarioParameter, ScenarioStep};
+use crate::scenarios::types::{ScenarioDefinition, ScenarioStep};
 use crate::voice::command_parser::{EndpointRequirement, ModelRequirement, ParsedCommand};
 use crate::voice::command_parser::{
-    EntityRequirement, ParsedDriftBudget, ParsedRealityContinuum, ParsedWorkspaceCreation,
-    PersonaRequirement, ScenarioRequirement,
+    ParsedDriftBudget, ParsedRealityContinuum, ParsedWorkspaceCreation,
 };
 use crate::voice::spec_generator::VoiceSpecGenerator;
 use crate::Result;
 use crate::Workspace;
 use mockforge_data::{Domain, PersonaProfile};
 use std::collections::HashMap;
-use uuid::Uuid;
 
 /// Result of building a workspace
 #[derive(Debug, Clone)]
@@ -221,11 +219,8 @@ impl WorkspaceBuilder {
             let persona_id = format!("persona:{}", Self::sanitize_id(&persona_req.name));
 
             // Create persona
-            let mut persona = PersonaProfile::with_traits(
-                persona_id.clone(),
-                domain.clone(),
-                persona_req.traits.clone(),
-            );
+            let mut persona =
+                PersonaProfile::with_traits(persona_id.clone(), domain, persona_req.traits.clone());
 
             // Set backstory from description
             persona.backstory = Some(persona_req.description.clone());

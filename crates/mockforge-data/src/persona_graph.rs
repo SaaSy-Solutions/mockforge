@@ -3,7 +3,6 @@
 //! This module provides graph-based relationship management for personas,
 //! enabling coherent persona switching across related entities (user → orders → payments → support tickets).
 
-use crate::persona::PersonaProfile;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
@@ -39,7 +38,7 @@ impl PersonaNode {
     pub fn add_relationship(&mut self, relationship_type: String, related_persona_id: String) {
         self.relationships
             .entry(relationship_type)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(related_persona_id);
     }
 
@@ -120,11 +119,11 @@ impl PersonaGraph {
 
         // Add forward edge
         let mut edges = self.edges.write().unwrap();
-        edges.entry(from.clone()).or_insert_with(Vec::new).push(edge.clone());
+        edges.entry(from.clone()).or_default().push(edge.clone());
 
         // Add reverse edge
         let mut reverse_edges = self.reverse_edges.write().unwrap();
-        reverse_edges.entry(to_clone.clone()).or_insert_with(Vec::new).push(edge);
+        reverse_edges.entry(to_clone.clone()).or_default().push(edge);
 
         // Update node relationships
         if let Some(node) = self.get_node(&from) {

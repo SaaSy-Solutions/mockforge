@@ -11,12 +11,7 @@
 //! - Service discovery integration
 //! - Graceful shutdown coordination
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-    routing::{get, Router},
-};
+use axum::{extract::State, http::StatusCode, response::Json, routing::get};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};

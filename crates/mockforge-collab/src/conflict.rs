@@ -50,7 +50,8 @@ pub struct ConflictResolver {
 
 impl ConflictResolver {
     /// Create a new conflict resolver
-    pub fn new(default_strategy: MergeStrategy) -> Self {
+    #[must_use]
+    pub const fn new(default_strategy: MergeStrategy) -> Self {
         Self { default_strategy }
     }
 
@@ -214,7 +215,7 @@ impl ConflictResolver {
                     let new_path = if path.is_empty() {
                         key.clone()
                     } else {
-                        format!("{}.{}", path, key)
+                        format!("{path}.{key}")
                     };
 
                     let ours_val = ours_obj.get(key);

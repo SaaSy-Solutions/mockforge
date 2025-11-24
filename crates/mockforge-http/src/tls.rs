@@ -6,7 +6,7 @@ use mockforge_core::config::HttpTlsConfig;
 use mockforge_core::Result;
 use std::sync::Arc;
 use tokio_rustls::TlsAcceptor;
-use tracing::{error, info};
+use tracing::info;
 
 /// Load TLS acceptor from certificate and key files
 ///

@@ -2,7 +2,7 @@
 //!
 //! Provides real-time GraphQL subscriptions over WebSocket connections.
 
-use async_graphql::{Response, Value};
+use async_graphql::Value;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;

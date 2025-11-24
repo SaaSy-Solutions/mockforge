@@ -56,7 +56,7 @@ async fn handle_publish_command(
     mqtt_options.set_keep_alive(Duration::from_secs(5));
 
     // Create client
-    let (client, mut eventloop) = AsyncClient::new(mqtt_options, 10);
+    let (client, eventloop) = AsyncClient::new(mqtt_options, 10);
 
     // Convert QoS level
     let qos_level = match qos {
@@ -175,11 +175,11 @@ async fn handle_topics_list() -> Result<(), Box<dyn std::error::Error + Send + S
                     println!("📭 No active MQTT topics found");
                 } else {
                     println!("📬 Found {} active topics:", topics.len());
-                    println!("{:<50} {}", "Topic", "Type");
+                    println!("{:<50} Type", "Topic");
                     println!("{}", "-".repeat(70));
 
                     for topic in topics {
-                        println!("{:<50} {}", topic, "subscription/retained");
+                        println!("{:<50} subscription/retained", topic);
                     }
                 }
             } else if response.status() == reqwest::StatusCode::NOT_FOUND {
@@ -434,7 +434,7 @@ async fn handle_clients_list() -> Result<(), Box<dyn std::error::Error + Send + 
                     println!("📭 No connected MQTT clients");
                 } else {
                     println!("📬 Found {} connected clients:", clients.len());
-                    println!("{:<30} {:<20} {}", "Client ID", "Connected At", "Subscriptions");
+                    println!("{:<30} {:<20} Subscriptions", "Client ID", "Connected At");
                     println!("{}", "-".repeat(80));
 
                     for client_info in clients {

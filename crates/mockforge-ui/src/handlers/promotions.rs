@@ -4,24 +4,23 @@
 
 use axum::{
     extract::{Path, Query, State},
-    http::{StatusCode, HeaderMap},
-    response::{IntoResponse, Json, Response},
+    http::{HeaderMap, StatusCode},
+    response::{Json, Response},
 };
+use mockforge_collab::promotion::PromotionService;
 use mockforge_core::workspace::{
+    mock_environment::MockEnvironmentName,
     scenario_promotion::{
         ApprovalRules, PromotionEntityType, PromotionRequest, PromotionStatus,
         ScenarioPromotionWorkflow,
     },
-    mock_environment::MockEnvironmentName,
 };
-use mockforge_collab::promotion::PromotionService;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::handlers::workspaces::{ApiResponse, WorkspaceState};
-use crate::models::ApiResponse as ModelsApiResponse;
-use crate::rbac::{extract_user_context, UserContext};
+use crate::rbac::extract_user_context;
 
 /// Promotion state
 #[derive(Clone)]
@@ -131,21 +130,19 @@ pub async fn create_promotion(
     Json(body): Json<CreatePromotionRequest>,
 ) -> Result<Json<ApiResponse<PromotionResponse>>, Response> {
     // Extract user context from headers (set by RBAC middleware)
-    let user_context = extract_user_context(&headers)
-        .ok_or_else(|| {
-            Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body("User authentication required".into())
-                .unwrap()
-        })?;
+    let user_context = extract_user_context(&headers).ok_or_else(|| {
+        Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body("User authentication required".into())
+            .unwrap()
+    })?;
 
-    let user_id = Uuid::parse_str(&user_context.user_id)
-        .map_err(|_| {
-            Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body("Invalid user ID".into())
-                .unwrap()
-        })?;
+    let user_id = Uuid::parse_str(&user_context.user_id).map_err(|_| {
+        Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body("Invalid user ID".into())
+            .unwrap()
+    })?;
     // Parse entity type
     let entity_type = match body.entity_type.to_lowercase().as_str() {
         "scenario" => PromotionEntityType::Scenario,
@@ -182,7 +179,9 @@ pub async fn create_promotion(
 
     // Determine if approval is required
     // If not explicitly set, check using approval workflow (for scenarios with tags)
-    let (requires_approval, approval_reason) = if let Some(explicit_approval) = body.requires_approval {
+    let (requires_approval, approval_reason) = if let Some(explicit_approval) =
+        body.requires_approval
+    {
         (
             explicit_approval,
             if explicit_approval {
@@ -195,11 +194,8 @@ pub async fn create_promotion(
         // For scenarios, check approval workflow if tags are provided
         let scenario_tags = body.scenario_tags.as_deref().unwrap_or(&[]);
         let approval_rules = ApprovalRules::default();
-        let (requires, reason) = ScenarioPromotionWorkflow::requires_approval(
-            scenario_tags,
-            to_env,
-            &approval_rules,
-        );
+        let (requires, reason) =
+            ScenarioPromotionWorkflow::requires_approval(scenario_tags, to_env, &approval_rules);
         (requires, reason)
     } else {
         // Default: require approval for safety
@@ -255,20 +251,12 @@ pub async fn create_promotion(
     // Record promotion
     let promotion_id = match state
         .promotion_service
-        .record_promotion(
-            &promotion_request,
-            user_id,
-            PromotionStatus::Pending,
-            workspace_config,
-        )
+        .record_promotion(&promotion_request, user_id, PromotionStatus::Pending, workspace_config)
         .await
     {
         Ok(id) => id,
         Err(e) => {
-            return Ok(Json(ApiResponse::error(format!(
-                "Failed to create promotion: {}",
-                e
-            ))));
+            return Ok(Json(ApiResponse::error(format!("Failed to create promotion: {}", e))));
         }
     };
 
@@ -306,11 +294,7 @@ pub async fn get_promotion(
     };
 
     // Get promotion by ID
-    match state
-        .promotion_service
-        .get_promotion_by_id(promotion_uuid)
-        .await
-    {
+    match state.promotion_service.get_promotion_by_id(promotion_uuid).await {
         Ok(Some(promotion)) => {
             let response = PromotionResponse {
                 promotion_id: promotion.promotion_id,
@@ -328,13 +312,8 @@ pub async fn get_promotion(
             };
             Ok(Json(ApiResponse::success(response)))
         }
-        Ok(None) => Ok(Json(ApiResponse::error(
-            "Promotion not found".to_string(),
-        ))),
-        Err(e) => Ok(Json(ApiResponse::error(format!(
-            "Failed to get promotion: {}",
-            e
-        )))),
+        Ok(None) => Ok(Json(ApiResponse::error("Promotion not found".to_string()))),
+        Err(e) => Ok(Json(ApiResponse::error(format!("Failed to get promotion: {}", e)))),
     }
 }
 
@@ -348,13 +327,12 @@ pub async fn update_promotion_status(
     Json(body): Json<UpdatePromotionStatusRequest>,
 ) -> Result<Json<ApiResponse<PromotionResponse>>, Response> {
     // Extract user context from headers (set by RBAC middleware)
-    let user_context = extract_user_context(&headers)
-        .ok_or_else(|| {
-            Response::builder()
-                .status(StatusCode::UNAUTHORIZED)
-                .body("User authentication required".into())
-                .unwrap()
-        })?;
+    let user_context = extract_user_context(&headers).ok_or_else(|| {
+        Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body("User authentication required".into())
+            .unwrap()
+    })?;
     let promotion_uuid = match Uuid::parse_str(&promotion_id) {
         Ok(uuid) => uuid,
         Err(_) => {
@@ -370,24 +348,18 @@ pub async fn update_promotion_status(
         "completed" => PromotionStatus::Completed,
         "failed" => PromotionStatus::Failed,
         _ => {
-            return Ok(Json(ApiResponse::error(format!(
-                "Invalid status: {}",
-                body.status
-            ))));
+            return Ok(Json(ApiResponse::error(format!("Invalid status: {}", body.status))));
         }
     };
 
     // Use authenticated user as approver if approving/rejecting
     let approver_id = if matches!(status, PromotionStatus::Approved | PromotionStatus::Rejected) {
-        Some(
-            Uuid::parse_str(&user_context.user_id)
-                .map_err(|_| {
-                    Response::builder()
-                        .status(StatusCode::BAD_REQUEST)
-                        .body("Invalid user ID".into())
-                        .unwrap()
-                })?
-        )
+        Some(Uuid::parse_str(&user_context.user_id).map_err(|_| {
+            Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("Invalid user ID".into())
+                .unwrap()
+        })?)
     } else {
         body.approved_by.and_then(|s| Uuid::parse_str(&s).ok())
     };
@@ -400,11 +372,7 @@ pub async fn update_promotion_status(
     {
         Ok(_) => {
             // Get updated promotion
-            match state
-                .promotion_service
-                .get_promotion_by_id(promotion_uuid)
-                .await
-            {
+            match state.promotion_service.get_promotion_by_id(promotion_uuid).await {
                 Ok(Some(promotion)) => {
                     let response = PromotionResponse {
                         promotion_id: promotion.promotion_id,
@@ -422,19 +390,15 @@ pub async fn update_promotion_status(
                     };
                     Ok(Json(ApiResponse::success(response)))
                 }
-                Ok(None) => Ok(Json(ApiResponse::error(
-                    "Promotion not found after update".to_string(),
-                ))),
-                Err(e) => Ok(Json(ApiResponse::error(format!(
-                    "Failed to get updated promotion: {}",
-                    e
-                )))),
+                Ok(None) => {
+                    Ok(Json(ApiResponse::error("Promotion not found after update".to_string())))
+                }
+                Err(e) => {
+                    Ok(Json(ApiResponse::error(format!("Failed to get updated promotion: {}", e))))
+                }
             }
         }
-        Err(e) => Ok(Json(ApiResponse::error(format!(
-            "Failed to update promotion status: {}",
-            e
-        )))),
+        Err(e) => Ok(Json(ApiResponse::error(format!("Failed to update promotion status: {}", e)))),
     }
 }
 
@@ -488,10 +452,7 @@ pub async fn list_workspace_promotions(
 
             Ok(Json(ApiResponse::success(responses)))
         }
-        Err(e) => Ok(Json(ApiResponse::error(format!(
-            "Failed to list promotions: {}",
-            e
-        )))),
+        Err(e) => Ok(Json(ApiResponse::error(format!("Failed to list promotions: {}", e)))),
     }
 }
 
@@ -502,11 +463,7 @@ pub async fn list_pending_promotions(
     State(state): State<PromotionState>,
     Query(query): Query<ListPromotionsQuery>,
 ) -> Result<Json<ApiResponse<Vec<PromotionResponse>>>, Response> {
-    match state
-        .promotion_service
-        .get_pending_promotions(None)
-        .await
-    {
+    match state.promotion_service.get_pending_promotions(None).await {
         Ok(promotions) => {
             let responses: Vec<PromotionResponse> = promotions
                 .into_iter()
@@ -529,10 +486,7 @@ pub async fn list_pending_promotions(
 
             Ok(Json(ApiResponse::success(responses)))
         }
-        Err(e) => Ok(Json(ApiResponse::error(format!(
-            "Failed to list pending promotions: {}",
-            e
-        )))),
+        Err(e) => Ok(Json(ApiResponse::error(format!("Failed to list pending promotions: {}", e)))),
     }
 }
 
@@ -557,10 +511,7 @@ pub async fn get_entity_promotion_history(
         "persona" => PromotionEntityType::Persona,
         "config" => PromotionEntityType::Config,
         _ => {
-            return Ok(Json(ApiResponse::error(format!(
-                "Invalid entity type: {}",
-                entity_type
-            ))));
+            return Ok(Json(ApiResponse::error(format!("Invalid entity type: {}", entity_type))));
         }
     };
 
@@ -573,9 +524,6 @@ pub async fn get_entity_promotion_history(
             let history_json = serde_json::to_value(history).unwrap_or(serde_json::json!({}));
             Ok(Json(ApiResponse::success(history_json)))
         }
-        Err(e) => Ok(Json(ApiResponse::error(format!(
-            "Failed to get promotion history: {}",
-            e
-        )))),
+        Err(e) => Ok(Json(ApiResponse::error(format!("Failed to get promotion history: {}", e)))),
     }
 }

@@ -163,15 +163,14 @@ impl DeceptiveCanaryRouter {
         }
 
         // Apply routing strategy
-        let should_route = match self.config.routing_strategy {
+
+        match self.config.routing_strategy {
             CanaryRoutingStrategy::ConsistentHash => {
                 self.consistent_hash_route(user_id, ip_address)
             }
             CanaryRoutingStrategy::Random => self.random_route(),
             CanaryRoutingStrategy::RoundRobin => self.round_robin_route(),
-        };
-
-        should_route
+        }
     }
 
     /// Check if request matches team identification criteria
@@ -263,7 +262,7 @@ impl DeceptiveCanaryRouter {
     fn round_robin_route(&self) -> bool {
         let counter = self.round_robin_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let cycle_size = (1.0 / self.config.traffic_percentage) as u64;
-        (counter % cycle_size) == 0
+        counter.is_multiple_of(cycle_size)
     }
 
     /// Get current configuration

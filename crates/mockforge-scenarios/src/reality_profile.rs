@@ -5,7 +5,6 @@
 //! These operate at a different level than domain packs - they define how mocks
 //! behave under various conditions rather than what entities and schemas exist.
 
-use crate::domain_pack::{StudioChaosRule, StudioPersona};
 use crate::error::{Result, ScenarioError};
 use mockforge_core::latency::LatencyDistribution;
 use serde::{Deserialize, Serialize};

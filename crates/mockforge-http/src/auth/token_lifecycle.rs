@@ -75,7 +75,7 @@ impl TokenRevocationStore {
 
     /// Revoke all tokens for a user
     pub async fn revoke_user_tokens(&self, user_id: String, reason: String) {
-        let mut user_tokens = self.user_revoked_tokens.write().await;
+        let user_tokens = self.user_revoked_tokens.write().await;
         if let Some(token_ids) = user_tokens.get(&user_id) {
             let mut tokens = self.revoked_tokens.write().await;
             for token_id in token_ids {
@@ -102,7 +102,7 @@ impl TokenRevocationStore {
     pub async fn cleanup_expired(&self) {
         let now = Utc::now().timestamp();
         let mut tokens = self.revoked_tokens.write().await;
-        tokens.retain(|_, revoked| revoked.expires_at.map_or(true, |exp| exp > now));
+        tokens.retain(|_, revoked| revoked.expires_at.is_none_or(|exp| exp > now));
     }
 }
 
@@ -187,7 +187,7 @@ impl KeyRotationState {
         let now = Utc::now().timestamp();
         let keys = self.active_keys.read().await;
         keys.values()
-            .filter(|key| key.inactive_at.map_or(true, |inactive_at| inactive_at > now))
+            .filter(|key| key.inactive_at.is_none_or(|inactive_at| inactive_at > now))
             .cloned()
             .collect()
     }
@@ -202,7 +202,7 @@ impl KeyRotationState {
     pub async fn cleanup_old_keys(&self) {
         let now = Utc::now().timestamp();
         let mut keys = self.active_keys.write().await;
-        keys.retain(|_, key| key.inactive_at.map_or(true, |inactive_at| inactive_at > now));
+        keys.retain(|_, key| key.inactive_at.is_none_or(|inactive_at| inactive_at > now));
     }
 }
 

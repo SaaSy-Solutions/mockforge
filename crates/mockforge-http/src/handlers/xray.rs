@@ -9,13 +9,12 @@ use axum::{
     response::Json,
 };
 use mockforge_core::consistency::ConsistencyEngine;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
-use uuid::Uuid;
 
 /// Request context snapshot - stores the state that was active when a request was made
 #[derive(Debug, Clone)]
@@ -129,7 +128,10 @@ pub async fn get_request_context(
     drop(contexts);
 
     // Fallback: return current state if snapshot not found
-    debug!("Request context not found for request_id: {}, returning current state", request_id);
+    debug!(
+        "Request context not found for request_id: {}, returning current state",
+        request_id
+    );
     let unified_state = state.engine.get_state(&params.workspace).await.ok_or_else(|| {
         debug!("No state found for workspace: {}", params.workspace);
         StatusCode::NOT_FOUND
@@ -176,9 +178,7 @@ pub async fn store_request_context(
         // Remove oldest 100 entries for this workspace
         let mut timestamps: Vec<_> = workspace_entries
             .iter()
-            .filter_map(|id| {
-                contexts.get(id).map(|s| (id.clone(), s.timestamp))
-            })
+            .filter_map(|id| contexts.get(id).map(|s| (id.clone(), s.timestamp)))
             .collect();
         timestamps.sort_by_key(|(_, ts)| *ts);
 

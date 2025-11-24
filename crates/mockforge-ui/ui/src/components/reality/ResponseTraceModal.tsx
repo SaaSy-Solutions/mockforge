@@ -7,7 +7,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '../ui/dialog';
+} from '../ui/Dialog';
 
 /**
  * Response Generation Trace

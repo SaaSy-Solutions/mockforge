@@ -106,11 +106,9 @@ pub fn import_openapi_spec(
             // Note: OpenAPI 2.0 support is currently limited to validation.
             // Full parsing requires conversion to OpenAPI 3.x format.
             // For now, return a helpful error suggesting conversion.
-            return Err(format!(
-                "OpenAPI 2.0 (Swagger) specifications are detected but not yet fully supported for parsing. \
+            return Err("OpenAPI 2.0 (Swagger) specifications are detected but not yet fully supported for parsing. \
                 Please convert your Swagger 2.0 spec to OpenAPI 3.x format. \
-                You can use tools like 'swagger2openapi' or the online converter at https://editor.swagger.io/ to convert your spec."
-            ));
+                You can use tools like 'swagger2openapi' or the online converter at https://editor.swagger.io/ to convert your spec.".to_string());
         }
         crate::spec_parser::SpecFormat::OpenApi30 | crate::spec_parser::SpecFormat::OpenApi31 => {
             let validation = crate::spec_parser::OpenApiValidator::validate(&json_value, format);

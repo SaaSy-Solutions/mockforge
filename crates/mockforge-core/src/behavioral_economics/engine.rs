@@ -50,8 +50,7 @@ impl BehavioralEconomicsEngine {
 
     /// Create engine with default config
     pub fn default() -> Self {
-        Self::new(BehavioralEconomicsConfig::default())
-            .expect("Failed to create default engine")
+        Self::new(BehavioralEconomicsConfig::default()).expect("Failed to create default engine")
     }
 
     /// Get condition evaluator (for updating metrics)
@@ -78,10 +77,7 @@ impl BehavioralEconomicsEngine {
                     match self.action_executor.execute(&rule.action) {
                         Ok(action_desc) => {
                             info!("Executed action for rule '{}': {}", rule.name, action_desc);
-                            executed_actions.push(format!(
-                                "{}: {}",
-                                rule.name, action_desc
-                            ));
+                            executed_actions.push(format!("{}: {}", rule.name, action_desc));
                         }
                         Err(e) => {
                             warn!("Failed to execute action for rule '{}': {}", rule.name, e);
@@ -160,9 +156,7 @@ mod tests {
             BehaviorAction::NoOp,
             100,
         );
-        let config = BehavioralEconomicsConfig::new()
-            .enable()
-            .with_rule(rule);
+        let config = BehavioralEconomicsConfig::new().enable().with_rule(rule);
         let engine = BehavioralEconomicsEngine::new(config).unwrap();
         let results = engine.evaluate().await.unwrap();
         assert!(!results.is_empty());
@@ -176,9 +170,7 @@ mod tests {
             BehaviorAction::NoOp,
             100,
         );
-        let config = BehavioralEconomicsConfig::new()
-            .disable()
-            .with_rule(rule);
+        let config = BehavioralEconomicsConfig::new().disable().with_rule(rule);
         let engine = BehavioralEconomicsEngine::new(config).unwrap();
         let results = engine.evaluate().await.unwrap();
         assert!(results.is_empty());

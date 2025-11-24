@@ -509,7 +509,11 @@ mod tests {
     fn test_parse_pillar_tags_from_scenario_tags() {
         use super::{parse_pillar_tags_from_scenario_tags, Pillar};
 
-        let tags = vec!["[Cloud]".to_string(), "auth".to_string(), "[Contracts][Reality]".to_string()];
+        let tags = vec![
+            "[Cloud]".to_string(),
+            "auth".to_string(),
+            "[Contracts][Reality]".to_string(),
+        ];
         let pillars = parse_pillar_tags_from_scenario_tags(&tags);
         assert!(pillars.contains(&Pillar::Cloud));
         assert!(pillars.contains(&Pillar::Contracts));
@@ -544,7 +548,11 @@ mod tests {
     fn test_pillar_metadata_from_scenario_tags() {
         use super::{pillar_metadata_from_scenario_tags, Pillar};
 
-        let tags = vec!["[Cloud]".to_string(), "[Contracts]".to_string(), "auth".to_string()];
+        let tags = vec![
+            "[Cloud]".to_string(),
+            "[Contracts]".to_string(),
+            "auth".to_string(),
+        ];
         let metadata = pillar_metadata_from_scenario_tags(&tags);
         assert!(metadata.has_pillar(Pillar::Cloud));
         assert!(metadata.has_pillar(Pillar::Contracts));

@@ -3,7 +3,7 @@
 //! This module provides functionality to record multi-step flows by grouping
 //! requests by trace_id, session_id, or client IP + time window.
 
-use crate::database::{FlowMetadataRow, FlowStepRow, RecorderDatabase};
+use crate::database::RecorderDatabase;
 use crate::models::RecordedRequest;
 use anyhow::Result;
 use chrono::{DateTime, Utc};

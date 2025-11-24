@@ -3,12 +3,7 @@
 //! This middleware integrates drift budget evaluation and consumer usage tracking
 //! with contract diff analysis.
 
-use axum::{
-    body::Body,
-    extract::{Request, State},
-    http::Response,
-    middleware::Next,
-};
+use axum::{body::Body, extract::Request, http::Response, middleware::Next};
 use mockforge_core::{
     ai_contract_diff::ContractDiffAnalyzer,
     consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder},
@@ -161,7 +156,7 @@ pub async fn drift_tracking_middleware_with_extensions(
                             before_sample,
                             after_sample,
                             Some(drift_result.fitness_test_results.clone()), // fitness_test_results
-                            drift_result.consumer_impact.clone(), // affected_consumers
+                            drift_result.consumer_impact.clone(),            // affected_consumers
                             Some(mockforge_core::protocol_abstraction::Protocol::Http), // protocol
                         )
                         .await;

@@ -18,28 +18,23 @@ fn main() {
     // Only enable offline mode if we have actual query cache files
     if sqlx_dir.exists() && sqlx_dir.is_dir() {
         // Count query cache files to ensure we have some
-        let query_files = std::fs::read_dir(&sqlx_dir)
-            .ok()
-            .map(|entries| {
-                entries
-                    .filter_map(|e| e.ok())
-                    .filter(|e| {
-                        e.path()
-                            .extension()
-                            .and_then(|ext| ext.to_str())
-                            .map(|ext| ext == "json")
-                            .unwrap_or(false)
-                    })
-                    .count()
-            })
-            .unwrap_or(0);
+        let query_files = std::fs::read_dir(&sqlx_dir).ok().map_or(0, |entries| {
+            entries
+                .filter_map(Result::ok)
+                .filter(|e| {
+                    e.path()
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .is_some_and(|ext| ext == "json")
+                })
+                .count()
+        });
 
         // Enable SQLx offline mode if we have query cache files
         if query_files > 0 {
             println!("cargo:rustc-env=SQLX_OFFLINE=true");
             println!(
-                "cargo:warning=SQLx offline mode enabled (found {} cached queries). If you see compilation errors about missing queries, run: cargo sqlx prepare --database-url <your-database-url>",
-                query_files
+                "cargo:warning=SQLx offline mode enabled (found {query_files} cached queries). If you see compilation errors about missing queries, run: cargo sqlx prepare --database-url <your-database-url>"
             );
         } else {
             eprintln!(

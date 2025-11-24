@@ -1,12 +1,12 @@
 //! Data generator implementation
 
+use crate::Result;
 use crate::{
     faker::EnhancedFaker,
     rag::{RagConfig, RagEngine},
     schema::SchemaDefinition,
     DataConfig, GenerationResult,
 };
-use crate::Result;
 use std::time::Instant;
 
 /// Data generator for creating synthetic datasets

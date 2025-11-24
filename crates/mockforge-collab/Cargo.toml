@@ -19,6 +19,7 @@ workspace = true
 [dependencies]
 # Core dependencies
 mockforge-core = { version = "0.3.2", path = "../mockforge-core" }
+mockforge-pipelines = { version = "0.3.2", path = "../mockforge-pipelines", optional = true }
 
 # Serialization
 serde = { workspace = true }
@@ -95,3 +96,4 @@ cloud = []
 azure = ["azure_storage_blobs", "azure_identity"]
 gcs = ["google-cloud-storage"]
 s3 = ["aws-sdk-s3", "aws-config"]
+pipelines = ["mockforge-pipelines"]

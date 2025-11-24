@@ -135,12 +135,10 @@ impl OpenApiRoute {
         let op_id = operation.operation_id.as_deref().unwrap_or("unknown");
 
         // Try operation-specific env var first: MOCKFORGE_RESPONSE_SELECTION_<OPERATION_ID>
-        if let Some(op_env_var) = std::env::var(format!(
+        if let Ok(op_env_var) = std::env::var(format!(
             "MOCKFORGE_RESPONSE_SELECTION_{}",
             op_id.to_uppercase().replace('-', "_")
-        ))
-        .ok()
-        {
+        )) {
             if let Some(mode) = ResponseSelectionMode::from_str(&op_env_var) {
                 tracing::debug!(
                     "Using response selection mode from env var for operation {}: {:?}",
@@ -152,7 +150,7 @@ impl OpenApiRoute {
         }
 
         // Check global env var: MOCKFORGE_RESPONSE_SELECTION_MODE
-        if let Some(global_mode_str) = std::env::var("MOCKFORGE_RESPONSE_SELECTION_MODE").ok() {
+        if let Ok(global_mode_str) = std::env::var("MOCKFORGE_RESPONSE_SELECTION_MODE") {
             if let Some(mode) = ResponseSelectionMode::from_str(&global_mode_str) {
                 tracing::debug!("Using global response selection mode from env var: {:?}", mode);
                 return mode;
@@ -361,8 +359,11 @@ impl OpenApiRoute {
     pub fn mock_response_with_status_and_scenario_and_trace(
         &self,
         scenario: Option<&str>,
-    ) -> (u16, serde_json::Value, crate::reality_continuum::response_trace::ResponseGenerationTrace) {
-        use crate::openapi::response::ResponseGenerator;
+    ) -> (
+        u16,
+        serde_json::Value,
+        crate::reality_continuum::response_trace::ResponseGenerationTrace,
+    ) {
         use crate::openapi::response_trace;
         use crate::reality_continuum::response_trace::ResponseGenerationTrace;
 
@@ -417,14 +418,8 @@ impl OpenApiRoute {
                 // Create a minimal trace for fallback
                 let mut trace = ResponseGenerationTrace::new();
                 trace.set_final_payload(response_body.clone());
-                trace.add_metadata(
-                    "fallback".to_string(),
-                    serde_json::json!(true),
-                );
-                trace.add_metadata(
-                    "error".to_string(),
-                    serde_json::json!(e.to_string()),
-                );
+                trace.add_metadata("fallback".to_string(), serde_json::json!(true));
+                trace.add_metadata("error".to_string(), serde_json::json!(e.to_string()));
                 (status_code, response_body, trace)
             }
         }

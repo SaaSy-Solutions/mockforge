@@ -5,14 +5,11 @@
 //! or "compare the last 3 versions" via the AI Studio chat interface.
 
 use crate::ai_contract_diff::{
-    ContractDiffAnalyzer, ContractDiffConfig, ContractDiffResult, CapturedRequest,
+    CapturedRequest, ContractDiffAnalyzer, ContractDiffConfig, ContractDiffResult,
 };
-use crate::intelligent_behavior::{
-    config::IntelligentBehaviorConfig, llm_client::LlmClient, types::LlmGenerationRequest,
-};
+use crate::intelligent_behavior::{config::IntelligentBehaviorConfig, llm_client::LlmClient};
 use crate::{OpenApiSpec, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 /// Contract diff handler for NL queries
 pub struct ContractDiffHandler {
@@ -240,10 +237,8 @@ impl ContractDiffHandler {
             return Ok("Contract validation passed - no mismatches detected.".to_string());
         }
 
-        let mut summary = format!(
-            "Found {} mismatch(es) between request and contract.",
-            result.mismatches.len()
-        );
+        let mut summary =
+            format!("Found {} mismatch(es) between request and contract.", result.mismatches.len());
 
         if filters.breaking_only {
             let breaking = result
@@ -280,7 +275,10 @@ impl ContractDiffHandler {
             // Extract request ID if mentioned
             let request_id = self.extract_request_id(query);
             let filters = self.extract_filters(query);
-            return Ok(ContractDiffIntent::AnalyzeRequest { request_id, filters });
+            return Ok(ContractDiffIntent::AnalyzeRequest {
+                request_id,
+                filters,
+            });
         }
 
         if query_lower.contains("compare") || query_lower.contains("diff") {
@@ -293,7 +291,10 @@ impl ContractDiffHandler {
             });
         }
 
-        if query_lower.contains("summarize") || query_lower.contains("summary") || query_lower.contains("drift") {
+        if query_lower.contains("summarize")
+            || query_lower.contains("summary")
+            || query_lower.contains("drift")
+        {
             let filters = self.extract_filters(query);
             return Ok(ContractDiffIntent::SummarizeDrift { filters });
         }
@@ -325,7 +326,11 @@ impl ContractDiffHandler {
         let mut paths = Vec::new();
 
         for word in words {
-            if word.ends_with(".yaml") || word.ends_with(".yml") || word.ends_with(".json") || word.starts_with("http") {
+            if word.ends_with(".yaml")
+                || word.ends_with(".yml")
+                || word.ends_with(".json")
+                || word.starts_with("http")
+            {
                 paths.push(word.to_string());
             }
         }
@@ -341,7 +346,8 @@ impl ContractDiffHandler {
     fn extract_filters(&self, query: &str) -> ContractDiffFilters {
         let query_lower = query.to_lowercase();
         ContractDiffFilters {
-            breaking_only: query_lower.contains("breaking") || query_lower.contains("breaking change"),
+            breaking_only: query_lower.contains("breaking")
+                || query_lower.contains("breaking change"),
             endpoint_filter: if query_lower.contains("mobile") {
                 Some("mobile".to_string())
             } else if query_lower.contains("api") {

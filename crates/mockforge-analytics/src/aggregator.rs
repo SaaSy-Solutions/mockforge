@@ -8,7 +8,7 @@
 use crate::config::AnalyticsConfig;
 use crate::database::AnalyticsDatabase;
 use crate::error::Result;
-use crate::models::*;
+use crate::models::{AnalyticsFilter, EndpointStats, HourMetricsAggregate, MetricsAggregate};
 use chrono::{Timelike, Utc};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -39,7 +39,7 @@ impl PrometheusClient {
         url.push_str(&format!("?query={}", urlencoding::encode(query)));
 
         if let Some(t) = time {
-            url.push_str(&format!("&time={}", t));
+            url.push_str(&format!("&time={t}"));
         }
 
         let response = self.client.get(&url).send().await?.json::<PrometheusResponse>().await?;
@@ -163,11 +163,10 @@ impl MetricsAggregator {
         debug!("Aggregating metrics for minute: {}", minute_start);
 
         // Query request counts by protocol, method, path
-        let query = format!(
-            r"sum by (protocol, method, path, status) (
-                increase(mockforge_requests_by_path_total{{}}[1m]) > 0
+        let query = r"sum by (protocol, method, path, status) (
+                increase(mockforge_requests_by_path_total{}[1m]) > 0
             )"
-        );
+        .to_string();
 
         let response = self.prom_client.query(&query, Some(timestamp)).await?;
 
@@ -177,8 +176,7 @@ impl MetricsAggregator {
             let protocol = result
                 .metric
                 .get("protocol")
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "unknown".to_string());
+                .map_or_else(|| "unknown".to_string(), ToString::to_string);
             let method = result.metric.get("method").cloned();
             let endpoint = result.metric.get("path").cloned();
             let status_code = result.metric.get("status").and_then(|s| s.parse::<i32>().ok());
@@ -194,8 +192,7 @@ impl MetricsAggregator {
                 (&Some(protocol.clone()), &method, &endpoint)
             {
                 format!(
-                    r#"histogram_quantile(0.95, sum(rate(mockforge_request_duration_by_path_seconds_bucket{{protocol="{}",method="{}",path="{}"}}[1m])) by (le)) * 1000"#,
-                    p, m, e
+                    r#"histogram_quantile(0.95, sum(rate(mockforge_request_duration_by_path_seconds_bucket{{protocol="{p}",method="{m}",path="{e}"}}[1m])) by (le)) * 1000"#
                 )
             } else {
                 continue;

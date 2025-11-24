@@ -4,7 +4,6 @@
 //! It supports event filtering, retry logic, and webhook signing.
 
 use super::types::{ContractEvent, RetryConfig, WebhookConfig, WebhookPayload, WebhookResult};
-use crate::Result;
 use chrono::Utc;
 use reqwest::Client;
 use serde_json::json;
@@ -83,7 +82,7 @@ impl WebhookDispatcher {
 
     /// Build webhook payload from event
     fn build_payload(&self, event: &ContractEvent, webhook: &WebhookConfig) -> WebhookPayload {
-        let mut data = match event {
+        let data = match event {
             ContractEvent::MismatchDetected {
                 endpoint,
                 method,

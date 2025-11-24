@@ -4,7 +4,7 @@
 //! A/B test configuration, and applies the variant response.
 
 use crate::handlers::ab_testing::ABTestingState;
-use axum::{body::Body, extract::Request, http::StatusCode, middleware::Next, response::Response};
+use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 use mockforge_core::ab_testing::{apply_variant_to_response, select_variant};
 use std::time::Instant;
 use tracing::{debug, trace};

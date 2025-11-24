@@ -8,7 +8,6 @@ use crate::intelligent_behavior::config::BehaviorModelConfig;
 use crate::intelligent_behavior::llm_client::LlmClient;
 use crate::intelligent_behavior::types::LlmGenerationRequest;
 use crate::Result;
-use serde_json::json;
 
 /// Remediation generator using AI
 pub struct RemediationGenerator {
@@ -42,7 +41,10 @@ impl RemediationGenerator {
             None
         };
 
-        Ok(Self { llm_client, enabled })
+        Ok(Self {
+            llm_client,
+            enabled,
+        })
     }
 
     /// Generate remediation suggestions for findings
@@ -104,15 +106,10 @@ impl RemediationGenerator {
             })
             .unwrap_or_else(|| "No remediation suggestion available".to_string());
 
-        let code_example = response
-            .get("code_example")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+        let code_example =
+            response.get("code_example").and_then(|v| v.as_str()).map(|s| s.to_string());
 
-        let confidence = response
-            .get("confidence")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.7);
+        let confidence = response.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.7);
 
         Ok(RemediationSuggestion {
             finding_id: format!("finding_{}", finding.field_path.as_deref().unwrap_or("unknown")),
@@ -145,7 +142,9 @@ Format your response as JSON:
   "code_example": "example code or schema change",
   "confidence": 0.8
 }}"#,
-            finding.finding_type, finding.severity, finding.description,
+            finding.finding_type,
+            finding.severity,
+            finding.description,
             finding.field_path.as_deref().unwrap_or("N/A")
         )
     }
@@ -166,11 +165,11 @@ Format your response as JSON:
     }
 
     /// Generate basic remediation without AI
-    fn generate_basic_remediations(&self, findings: &[ThreatFinding]) -> Vec<RemediationSuggestion> {
-        findings
-            .iter()
-            .map(|f| self.generate_basic_remediation(f))
-            .collect()
+    fn generate_basic_remediations(
+        &self,
+        findings: &[ThreatFinding],
+    ) -> Vec<RemediationSuggestion> {
+        findings.iter().map(|f| self.generate_basic_remediation(f)).collect()
     }
 
     /// Generate a basic remediation for a finding
@@ -178,33 +177,38 @@ Format your response as JSON:
         let (suggestion, code_example) = match finding.finding_type {
             super::types::ThreatCategory::UnboundedArrays => (
                 "Add maxItems constraint to array schema to prevent DoS attacks".to_string(),
-                Some(r#"{
+                Some(
+                    r#"{
   "type": "array",
   "items": {...},
   "maxItems": 100
-}"#.to_string()),
+}"#
+                    .to_string(),
+                ),
             ),
             super::types::ThreatCategory::PiiExposure => (
-                "Review field name and ensure PII is properly masked or removed from responses".to_string(),
+                "Review field name and ensure PII is properly masked or removed from responses"
+                    .to_string(),
                 None,
             ),
             super::types::ThreatCategory::StackTraceLeakage => (
                 "Sanitize error messages to remove stack traces and internal details".to_string(),
-                Some(r#"{
+                Some(
+                    r#"{
   "error": {
     "message": "An error occurred",
     "code": "ERROR_CODE"
   }
-}"#.to_string()),
+}"#
+                    .to_string(),
+                ),
             ),
             super::types::ThreatCategory::ExcessiveOptionalFields => (
-                "Consider making more fields required or splitting into separate schemas".to_string(),
+                "Consider making more fields required or splitting into separate schemas"
+                    .to_string(),
                 None,
             ),
-            _ => (
-                format!("Address the {} issue in the API contract", finding.finding_type),
-                None,
-            ),
+            _ => (format!("Address the {} issue in the API contract", finding.finding_type), None),
         };
 
         RemediationSuggestion {

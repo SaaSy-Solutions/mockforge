@@ -4,8 +4,7 @@
 //! users to test and visualize mock endpoints.
 
 use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
+    extract::{Path, State},
     response::Json,
 };
 use chrono::Utc;

@@ -3,7 +3,6 @@
 //! This module provides functions to convert PEM-encoded keys to JWK format
 //! for the JWKS endpoint.
 
-use base64::engine::general_purpose::STANDARD;
 use mockforge_core::Error;
 
 use super::oidc::{JwkKey, JwkPublicKey};

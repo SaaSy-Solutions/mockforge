@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     response::{
         sse::{Event, Sse},
-        IntoResponse, Json, Response,
+        IntoResponse, Json,
     },
     routing::{delete, get, post, put},
     Router,
@@ -313,8 +313,7 @@ fn matches_wildcard_pattern(pattern: &str, path: &str) -> bool {
 fn json_path_exists(json: &serde_json::Value, json_path: &str) -> bool {
     // Simple implementation - for full JSONPath support, use a library like jsonpath-rs
     // This handles simple paths like $.field or $.field.subfield
-    if json_path.starts_with("$.") {
-        let path = &json_path[2..];
+    if let Some(path) = json_path.strip_prefix("$.") {
         let parts: Vec<&str> = path.split('.').collect();
 
         let mut current = json;
@@ -2208,16 +2207,16 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/proxy/inspect", get(get_proxy_inspect));
 
     // AI-powered features
-    let router = router
-        .route("/ai/generate-spec", post(generate_ai_spec));
+    let router = router.route("/ai/generate-spec", post(generate_ai_spec));
 
     // Snapshot diff endpoints
-    let router = router
-        .nest("/snapshot-diff", crate::handlers::snapshot_diff::snapshot_diff_router(state.clone()));
+    let router = router.nest(
+        "/snapshot-diff",
+        crate::handlers::snapshot_diff::snapshot_diff_router(state.clone()),
+    );
 
     #[cfg(feature = "behavioral-cloning")]
-    let router = router
-        .route("/mockai/generate-openapi", post(generate_openapi_from_traffic));
+    let router = router.route("/mockai/generate-openapi", post(generate_openapi_from_traffic));
 
     let router = router
         .route("/mockai/learn", post(learn_from_examples))
@@ -2714,7 +2713,7 @@ async fn mqtt_messages_stream(
     State(state): State<ManagementState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let mut rx = state.message_events.subscribe();
+    let rx = state.message_events.subscribe();
     let topic_filter = params.get("topic").cloned();
 
     let stream = stream::unfold(rx, move |mut rx| {

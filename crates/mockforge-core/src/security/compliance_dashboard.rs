@@ -377,7 +377,7 @@ impl ComplianceDashboardEngine {
     ) -> Result<HashMap<ControlCategory, ControlEffectiveness>, Error> {
         use crate::security::{
             get_global_access_review_service, get_global_change_management_engine,
-            get_global_privileged_access_manager, is_siem_emitter_initialized,
+            is_siem_emitter_initialized,
         };
 
         let mut effectiveness = HashMap::new();

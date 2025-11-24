@@ -13,7 +13,7 @@ use chrono;
 use openapiv3::{Operation, ReferenceOr, Response, Responses, Schema};
 use rand::{thread_rng, Rng};
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use uuid;
 
 /// Trait for AI response generation
@@ -249,7 +249,11 @@ impl ResponseGenerator {
         tracing::debug!(
             "Finding response for status code {}: {:?}",
             status_code,
-            if response.is_some() { "found" } else { "not found" }
+            if response.is_some() {
+                "found"
+            } else {
+                "not found"
+            }
         );
 
         match response {
@@ -1369,7 +1373,7 @@ impl ResponseGenerator {
 
             // Vary hive_type fields
             if let Some(hive_type_val) = obj.get_mut("hive_type") {
-                if let Some(_) = hive_type_val.as_str() {
+                if hive_type_val.as_str().is_some() {
                     let hive_types = ["langstroth", "top_bar", "warre", "flow_hive", "national"];
                     let type_index = (item_index - 1) as usize % hive_types.len();
                     *hive_type_val = Value::String(hive_types[type_index].to_string());
@@ -1380,7 +1384,7 @@ impl ResponseGenerator {
             if let Some(queen_val) = obj.get_mut("queen") {
                 if let Some(queen_obj) = queen_val.as_object_mut() {
                     if let Some(breed_val) = queen_obj.get_mut("breed") {
-                        if let Some(_) = breed_val.as_str() {
+                        if breed_val.as_str().is_some() {
                             let breeds =
                                 ["italian", "carniolan", "russian", "buckfast", "caucasian"];
                             let breed_index = (item_index - 1) as usize % breeds.len();
@@ -1398,7 +1402,7 @@ impl ResponseGenerator {
                     }
                     // Vary queen mark color
                     if let Some(color_val) = queen_obj.get_mut("mark_color") {
-                        if let Some(_) = color_val.as_str() {
+                        if color_val.as_str().is_some() {
                             let colors = ["yellow", "white", "red", "green", "blue"];
                             let color_index = (item_index - 1) as usize % colors.len();
                             *color_val = Value::String(colors[color_index].to_string());
@@ -1540,7 +1544,7 @@ impl ResponseGenerator {
         child_entity_name: &str,
     ) -> Option<u64> {
         // Look for parent entity schema
-        let parent_schema_name = format!("{}", parent_entity_name);
+        let parent_schema_name = parent_entity_name.to_string();
         let count_field_name = format!("{}_count", child_entity_name);
 
         // Try to find the schema

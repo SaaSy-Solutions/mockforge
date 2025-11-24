@@ -168,15 +168,13 @@ impl RealityProfilePackManifest {
 
     /// Load manifest from file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = std::fs::read_to_string(path.as_ref())
-            .map_err(|e| ScenarioError::Io(e))?;
+        let content = std::fs::read_to_string(path.as_ref()).map_err(ScenarioError::Io)?;
         Self::from_str(&content)
     }
 
     /// Load manifest from string
     pub fn from_str(content: &str) -> Result<Self> {
-        let manifest: Self = serde_yaml::from_str(content)
-            .map_err(|e| ScenarioError::Yaml(e))?;
+        let manifest: Self = serde_yaml::from_str(content).map_err(ScenarioError::Yaml)?;
         manifest.validate()?;
         Ok(manifest)
     }
@@ -272,12 +270,12 @@ impl RealityProfilePackManifest {
             .map(|ext| ext == "yaml" || ext == "yml")
             .unwrap_or(true)
         {
-            serde_yaml::to_string(self).map_err(|e| ScenarioError::Yaml(e))?
+            serde_yaml::to_string(self).map_err(ScenarioError::Yaml)?
         } else {
-            serde_json::to_string_pretty(self).map_err(|e| ScenarioError::Serde(e))?
+            serde_json::to_string_pretty(self).map_err(ScenarioError::Serde)?
         };
 
-        std::fs::write(path.as_ref(), content).map_err(|e| ScenarioError::Io(e))?;
+        std::fs::write(path.as_ref(), content).map_err(ScenarioError::Io)?;
 
         Ok(())
     }
@@ -332,7 +330,10 @@ impl RealityProfilePackInstaller {
     /// Initialize the pack installer (create directories)
     pub fn init(&self) -> Result<()> {
         std::fs::create_dir_all(&self.packs_dir).map_err(|e| {
-            ScenarioError::Storage(format!("Failed to create reality profile packs directory: {}", e))
+            ScenarioError::Storage(format!(
+                "Failed to create reality profile packs directory: {}",
+                e
+            ))
         })?;
         Ok(())
     }
@@ -345,8 +346,8 @@ impl RealityProfilePackInstaller {
 
         let mut packs = Vec::new();
 
-        for entry in std::fs::read_dir(&self.packs_dir).map_err(|e| ScenarioError::Io(e))? {
-            let entry = entry.map_err(|e| ScenarioError::Io(e))?;
+        for entry in std::fs::read_dir(&self.packs_dir).map_err(ScenarioError::Io)? {
+            let entry = entry.map_err(ScenarioError::Io)?;
             let pack_path = entry.path();
 
             if pack_path.is_dir() {
@@ -422,10 +423,7 @@ impl RealityProfilePackInstaller {
     ) -> Result<RealityProfilePackApplyResult> {
         use tracing::{info, warn};
 
-        info!(
-            "Applying reality profile pack: {} v{}",
-            manifest.name, manifest.version
-        );
+        info!("Applying reality profile pack: {} v{}", manifest.name, manifest.version);
 
         let mut result = RealityProfilePackApplyResult {
             pack_name: manifest.name.clone(),
@@ -481,10 +479,7 @@ impl RealityProfilePackInstaller {
 
         // 5. Apply data mutation behaviors (would need integration with drift engine)
         result.data_mutation_behaviors_applied = manifest.data_mutation_behaviors.len();
-        info!(
-            "Applied {} data mutation behaviors",
-            result.data_mutation_behaviors_applied
-        );
+        info!("Applied {} data mutation behaviors", result.data_mutation_behaviors_applied);
 
         // 6. Apply protocol behaviors
         result.protocol_behaviors_applied = manifest.protocol_behaviors.len();
@@ -504,13 +499,14 @@ impl RealityProfilePackInstaller {
     }
 
     /// Configure a persona from a reality profile pack
-    async fn configure_persona(&self, studio_persona: &crate::domain_pack::StudioPersona) -> Result<()> {
-        use mockforge_data::domains::Domain;
+    async fn configure_persona(
+        &self,
+        studio_persona: &crate::domain_pack::StudioPersona,
+    ) -> Result<()> {
         use mockforge_data::PersonaProfile;
 
         // Parse domain
-        let domain = parse_domain(&studio_persona.domain)
-            .map_err(|e| ScenarioError::Generic(e))?;
+        let domain = parse_domain(&studio_persona.domain).map_err(ScenarioError::Generic)?;
 
         // Create persona profile
         let mut persona = PersonaProfile::new(studio_persona.id.clone(), domain);
@@ -552,7 +548,7 @@ impl RealityProfilePackInstaller {
         // TODO: Deserialize into ChaosConfig and apply to workspace
         // This would require access to a ChaosEngine or workspace configuration
         serde_json::from_value::<Value>(chaos_rule.chaos_config.clone())
-            .map_err(|e| ScenarioError::Serde(e))?;
+            .map_err(ScenarioError::Serde)?;
 
         Ok(())
     }

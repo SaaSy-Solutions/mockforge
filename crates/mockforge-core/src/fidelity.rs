@@ -73,10 +73,8 @@ impl SchemaComparator {
     /// Count the number of fields in a schema
     fn count_fields(schema: &Value) -> usize {
         match schema {
-            Value::Object(map) => {
-                map.len() + map.values().map(|v| Self::count_fields(v)).sum::<usize>()
-            }
-            Value::Array(arr) => arr.iter().map(|v| Self::count_fields(v)).sum(),
+            Value::Object(map) => map.len() + map.values().map(Self::count_fields).sum::<usize>(),
+            Value::Array(arr) => arr.iter().map(Self::count_fields).sum(),
             _ => 1,
         }
     }
@@ -193,9 +191,9 @@ impl SampleComparator {
         // In a real implementation, this would compare statistical distributions
         // For now, just check if value types match
         let mock_types: std::collections::HashSet<String> =
-            mock_samples.iter().map(|v| Self::type_of(v)).collect();
+            mock_samples.iter().map(Self::type_of).collect();
         let real_types: std::collections::HashSet<String> =
-            real_samples.iter().map(|v| Self::type_of(v)).collect();
+            real_samples.iter().map(Self::type_of).collect();
 
         let intersection = mock_types.intersection(&real_types).count();
         let union = mock_types.union(&real_types).count();

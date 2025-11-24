@@ -10,7 +10,6 @@ use crate::intelligent_behavior::llm_client::LlmClient;
 use crate::intelligent_behavior::types::LlmGenerationRequest;
 use crate::openapi::OpenApiSpec;
 use crate::Result;
-use chrono::Utc;
 use openapiv3;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -155,41 +154,35 @@ impl SemanticAnalyzer {
     ) -> Option<Value> {
         // This is a simplified extraction - in practice, you'd properly
         // navigate the OpenAPI spec structure
-        spec.spec
-            .paths
-            .paths
-            .get(endpoint_path)
-            .and_then(|path_item| {
-                path_item.as_item().and_then(|item| {
-                    // Get operation based on method
-                    let operation = match method.to_uppercase().as_str() {
-                        "GET" => item.get.as_ref(),
-                        "POST" => item.post.as_ref(),
-                        "PUT" => item.put.as_ref(),
-                        "DELETE" => item.delete.as_ref(),
-                        "PATCH" => item.patch.as_ref(),
-                        "HEAD" => item.head.as_ref(),
-                        "OPTIONS" => item.options.as_ref(),
-                        "TRACE" => item.trace.as_ref(),
-                        _ => None,
-                    }?;
+        spec.spec.paths.paths.get(endpoint_path).and_then(|path_item| {
+            path_item.as_item().and_then(|item| {
+                // Get operation based on method
+                let operation = match method.to_uppercase().as_str() {
+                    "GET" => item.get.as_ref(),
+                    "POST" => item.post.as_ref(),
+                    "PUT" => item.put.as_ref(),
+                    "DELETE" => item.delete.as_ref(),
+                    "PATCH" => item.patch.as_ref(),
+                    "HEAD" => item.head.as_ref(),
+                    "OPTIONS" => item.options.as_ref(),
+                    "TRACE" => item.trace.as_ref(),
+                    _ => None,
+                }?;
 
-                    operation.responses
-                        .responses
-                        .get(&openapiv3::StatusCode::Code(200))
-                        .and_then(|resp| {
-                            resp.as_item().and_then(|r| {
-                                r.content
-                                    .get("application/json")
-                                    .and_then(|media| {
-                                        media.schema.as_ref().map(|s| {
-                                            serde_json::to_value(s).unwrap_or_default()
-                                        })
-                                    })
+                operation.responses.responses.get(&openapiv3::StatusCode::Code(200)).and_then(
+                    |resp| {
+                        resp.as_item().and_then(|r| {
+                            r.content.get("application/json").and_then(|media| {
+                                media
+                                    .schema
+                                    .as_ref()
+                                    .map(|s| serde_json::to_value(s).unwrap_or_default())
                             })
                         })
-                })
+                    },
+                )
             })
+        })
     }
 
     /// Detect rule-based semantic changes
@@ -256,12 +249,10 @@ impl SemanticAnalyzer {
             return true; // Empty to non-empty or vice versa is significant
         }
 
-        let common_words: usize = before_words
-            .iter()
-            .filter(|w| after_words.contains(w))
-            .count();
+        let common_words: usize = before_words.iter().filter(|w| after_words.contains(w)).count();
 
-        let change_ratio = 1.0 - (common_words as f64 / before_words.len().max(after_words.len()) as f64);
+        let change_ratio =
+            1.0 - (common_words as f64 / before_words.len().max(after_words.len()) as f64);
         change_ratio > 0.3
     }
 
@@ -273,8 +264,7 @@ impl SemanticAnalyzer {
             before.get("enum").and_then(|v| v.as_array()),
             after.get("enum").and_then(|v| v.as_array()),
         ) {
-            let before_set: std::collections::HashSet<&Value> =
-                before_enum.iter().collect();
+            let before_set: std::collections::HashSet<&Value> = before_enum.iter().collect();
             let after_set: std::collections::HashSet<&Value> = after_enum.iter().collect();
 
             let removed: Vec<_> = before_set.difference(&after_set).collect();
@@ -319,7 +309,9 @@ impl SemanticAnalyzer {
                     method: None,
                     expected: Some("nullable: true".to_string()),
                     actual: Some("nullable: false (hidden behind oneOf/anyOf)".to_string()),
-                    description: "Field became non-nullable but change is hidden behind oneOf/anyOf".to_string(),
+                    description:
+                        "Field became non-nullable but change is hidden behind oneOf/anyOf"
+                            .to_string(),
                     severity: MismatchSeverity::High,
                     confidence: 0.8,
                     context: HashMap::new(),
@@ -361,15 +353,10 @@ impl SemanticAnalyzer {
             .map(|s| s.to_string())
             .unwrap_or_else(|| serde_json::to_string(&response).unwrap_or_default());
 
-        let confidence = response
-            .get("confidence")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.5);
+        let confidence = response.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.5);
 
-        let soft_breaking_score = response
-            .get("soft_breaking_score")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.5);
+        let soft_breaking_score =
+            response.get("soft_breaking_score").and_then(|v| v.as_f64()).unwrap_or(0.5);
 
         Ok(serde_json::json!({
             "analysis": analysis,
@@ -429,15 +416,11 @@ Provide your analysis in JSON format with:
         before: Value,
         after: Value,
     ) -> SemanticDriftResult {
-        let semantic_confidence = llm_result
-            .get("semantic_confidence")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.7);
+        let semantic_confidence =
+            llm_result.get("semantic_confidence").and_then(|v| v.as_f64()).unwrap_or(0.7);
 
-        let soft_breaking_score = llm_result
-            .get("soft_breaking_score")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.5);
+        let soft_breaking_score =
+            llm_result.get("soft_breaking_score").and_then(|v| v.as_f64()).unwrap_or(0.5);
 
         let change_type_str = llm_result
             .get("change_type")
@@ -455,7 +438,7 @@ Provide your analysis in JSON format with:
         };
 
         // Merge rule-based mismatches with any from LLM
-        let mut semantic_mismatches = rule_based;
+        let semantic_mismatches = rule_based;
 
         SemanticDriftResult {
             semantic_confidence,

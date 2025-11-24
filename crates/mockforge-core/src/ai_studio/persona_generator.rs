@@ -11,7 +11,6 @@ use crate::intelligent_behavior::types::LlmGenerationRequest;
 use crate::intelligent_behavior::IntelligentBehaviorConfig;
 use crate::Result;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;

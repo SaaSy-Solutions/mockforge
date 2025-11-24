@@ -8,7 +8,7 @@ use crate::Error;
 use once_cell::sync::Lazy;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 /// Global SIEM emitter instance
 static GLOBAL_SIEM_EMITTER: Lazy<Arc<RwLock<Option<SiemEmitter>>>> =

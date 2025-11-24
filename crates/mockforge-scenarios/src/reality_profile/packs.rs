@@ -302,10 +302,13 @@ pub fn create_healthcare_hl7_pack() -> RealityProfilePackManifest {
         params: {
             let mut params = HashMap::new();
             params.insert("states".to_string(), json!(["pending", "active", "archived"]));
-            params.insert("transitions".to_string(), json!({
-                "pending": [("active", 0.8), ("archived", 0.2)],
-                "active": [("archived", 0.1)]
-            }));
+            params.insert(
+                "transitions".to_string(),
+                json!({
+                    "pending": [("active", 0.8), ("archived", 0.2)],
+                    "active": [("archived", 0.1)]
+                }),
+            );
             params
         },
     });
@@ -399,11 +402,14 @@ pub fn create_iot_fleet_chaos_pack() -> RealityProfilePackManifest {
         params: {
             let mut params = HashMap::new();
             params.insert("states".to_string(), json!(["online", "offline", "degraded"]));
-            params.insert("transitions".to_string(), json!({
-                "online": [("offline", 0.1), ("degraded", 0.05)],
-                "degraded": [("online", 0.3), ("offline", 0.2)],
-                "offline": [("online", 0.5), ("degraded", 0.1)]
-            }));
+            params.insert(
+                "transitions".to_string(),
+                json!({
+                    "online": [("offline", 0.1), ("degraded", 0.05)],
+                    "degraded": [("online", 0.3), ("offline", 0.2)],
+                    "offline": [("online", 0.5), ("degraded", 0.1)]
+                }),
+            );
             params
         },
     });
@@ -419,7 +425,9 @@ pub fn create_iot_fleet_chaos_pack() -> RealityProfilePackManifest {
         ProtocolBehavior {
             protocol: "mqtt".to_string(),
             behaviors: mqtt_behavior,
-            description: Some("MQTT QoS 1 with retained messages and persistent sessions".to_string()),
+            description: Some(
+                "MQTT QoS 1 with retained messages and persistent sessions".to_string(),
+            ),
         },
     );
 

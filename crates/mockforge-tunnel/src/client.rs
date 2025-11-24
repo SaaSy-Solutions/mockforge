@@ -66,10 +66,10 @@ impl TunnelClient {
         // Forward request body if present
         let body_bytes =
             axum::body::to_bytes(request.into_body(), usize::MAX).await.map_err(|e| {
-                crate::TunnelError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to read request body: {}", e),
-                ))
+                crate::TunnelError::Io(std::io::Error::other(format!(
+                    "Failed to read request body: {}",
+                    e
+                )))
             })?;
 
         if !body_bytes.is_empty() {

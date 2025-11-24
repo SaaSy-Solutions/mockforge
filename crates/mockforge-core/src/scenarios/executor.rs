@@ -1,9 +1,5 @@
 //! Scenario executor that converts scenarios to chains and executes them
 
-use crate::chain_execution::{ChainExecutionEngine, ChainExecutionResult, ChainExecutionStatus};
-use crate::request_chaining::{
-    ChainConfig, ChainDefinition, ChainLink, ChainRequest, RequestBody, RequestChainRegistry,
-};
 use crate::scenarios::registry::ScenarioRegistry;
 use crate::scenarios::types::{ScenarioDefinition, ScenarioResult, ScenarioStep, StepResult};
 use crate::{Error, Result};
@@ -237,7 +233,7 @@ impl ScenarioExecutor {
                 let success = step
                     .expected_status
                     .map(|expected| status == expected)
-                    .unwrap_or(status >= 200 && status < 300);
+                    .unwrap_or((200..300).contains(&status));
 
                 // Extract variables from response
                 let mut extracted = HashMap::new();

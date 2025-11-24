@@ -120,10 +120,8 @@ async fn fetch_logs_from_api(
         );
     }
 
-    let api_response: ApiResponse<Vec<LogEntry>> = response
-        .json()
-        .await
-        .context("Failed to parse API response")?;
+    let api_response: ApiResponse<Vec<LogEntry>> =
+        response.json().await.context("Failed to parse API response")?;
 
     if !api_response.success {
         anyhow::bail!(
@@ -210,10 +208,8 @@ async fn stream_logs_from_api(
                 if let Ok(api_response) = response.json::<ApiResponse<Vec<LogEntry>>>().await {
                     if let Some(logs) = api_response.data {
                         // Filter to only show new logs
-                        let new_logs: Vec<_> = logs
-                            .iter()
-                            .filter(|log| log.timestamp > last_seen_timestamp)
-                            .collect();
+                        let new_logs: Vec<_> =
+                            logs.iter().filter(|log| log.timestamp > last_seen_timestamp).collect();
 
                         if !new_logs.is_empty() {
                             if let Some(last_log) = new_logs.last() {
@@ -243,11 +239,7 @@ async fn stream_logs_from_api(
 }
 
 /// Read logs from file
-async fn read_logs_from_file(
-    file_path: PathBuf,
-    follow: bool,
-    json: bool,
-) -> Result<()> {
+async fn read_logs_from_file(file_path: PathBuf, follow: bool, json: bool) -> Result<()> {
     if !file_path.exists() {
         anyhow::bail!("Log file does not exist: {}", file_path.display());
     }
@@ -391,14 +383,8 @@ fn print_log_entry(log: &LogEntry) {
         &log.timestamp
     };
 
-    let response_time = log
-        .response_time
-        .map(|t| t.to_string())
-        .unwrap_or_else(|| "-".to_string());
-    let size = log
-        .size
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "-".to_string());
+    let response_time = log.response_time.map(|t| t.to_string()).unwrap_or_else(|| "-".to_string());
+    let size = log.size.map(|s| s.to_string()).unwrap_or_else(|| "-".to_string());
 
     // Color code status
     let status_str = if log.status >= 500 {
@@ -410,11 +396,11 @@ fn print_log_entry(log: &LogEntry) {
     };
 
     let method_str = match log.method.as_str() {
-        "GET" => format!("\x1b[34m{}\x1b[0m", log.method),    // Blue
-        "POST" => format!("\x1b[32m{}\x1b[0m", log.method),   // Green
-        "PUT" => format!("\x1b[33m{}\x1b[0m", log.method),    // Yellow
+        "GET" => format!("\x1b[34m{}\x1b[0m", log.method), // Blue
+        "POST" => format!("\x1b[32m{}\x1b[0m", log.method), // Green
+        "PUT" => format!("\x1b[33m{}\x1b[0m", log.method), // Yellow
         "DELETE" => format!("\x1b[31m{}\x1b[0m", log.method), // Red
-        "PATCH" => format!("\x1b[35m{}\x1b[0m", log.method),  // Magenta
+        "PATCH" => format!("\x1b[35m{}\x1b[0m", log.method), // Magenta
         _ => log.method.clone(),
     };
 

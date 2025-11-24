@@ -3,12 +3,11 @@
 //! This module provides functionality for extracting and recording which fields
 //! consumers actually use from API responses.
 
-use crate::consumer_contracts::types::{ConsumerIdentifier, ConsumerUsage};
+use crate::consumer_contracts::types::ConsumerUsage;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use uuid::Uuid;
 
 /// Recorder for tracking consumer usage
 #[derive(Debug, Clone)]

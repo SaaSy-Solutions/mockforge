@@ -1,6 +1,6 @@
 //! Keyboard shortcuts for MockForge Desktop
 
-use tauri::{AppHandle, Manager, Window};
+use tauri::{AppHandle, Manager};
 
 /// Register global keyboard shortcuts
 pub fn register_shortcuts(app: &AppHandle) -> Result<(), String> {

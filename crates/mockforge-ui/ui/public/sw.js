@@ -1,8 +1,8 @@
 // Service Worker for MockForge Admin UI
 // Provides offline functionality and caching
 
-const CACHE_NAME = 'mockforge-admin-v1';
-const RUNTIME_CACHE = 'mockforge-runtime-v1';
+const CACHE_NAME = 'mockforge-admin-v3';
+const RUNTIME_CACHE = 'mockforge-runtime-v3';
 
 // Assets to cache immediately on install
 const PRECACHE_ASSETS = [
@@ -12,6 +12,8 @@ const PRECACHE_ASSETS = [
   '/mockforge-icon-32.png',
   '/mockforge-icon-48.png',
   '/mockforge-icon.png',
+  '/mockforge-logo-40.png',
+  '/mockforge-logo-80.png',
   '/mockforge-logo.png'
 ];
 

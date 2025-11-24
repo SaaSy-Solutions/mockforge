@@ -242,7 +242,7 @@ impl BackstoryGenerator {
 
     /// Add a custom backstory template for a domain
     pub fn add_template(&mut self, domain: Domain, template: BackstoryTemplate) {
-        self.templates.entry(domain).or_insert_with(Vec::new).push(template);
+        self.templates.entry(domain).or_default().push(template);
     }
 }
 

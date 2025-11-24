@@ -28,7 +28,8 @@ fn determine_pillar_from_path(path: &str) -> &'static str {
         || path_lower.contains("/personas")
         || path_lower.contains("/chaos")
         || path_lower.contains("/fidelity")
-        || path_lower.contains("/continuum") {
+        || path_lower.contains("/continuum")
+    {
         return "reality";
     }
 
@@ -37,7 +38,8 @@ fn determine_pillar_from_path(path: &str) -> &'static str {
         || path_lower.contains("/validation")
         || path_lower.contains("/drift")
         || path_lower.contains("/schema")
-        || path_lower.contains("/sync") {
+        || path_lower.contains("/sync")
+    {
         return "contracts";
     }
 
@@ -46,7 +48,8 @@ fn determine_pillar_from_path(path: &str) -> &'static str {
         || path_lower.contains("/playground")
         || path_lower.contains("/plugins")
         || path_lower.contains("/cli")
-        || path_lower.contains("/generator") {
+        || path_lower.contains("/generator")
+    {
         return "devx";
     }
 
@@ -55,7 +58,8 @@ fn determine_pillar_from_path(path: &str) -> &'static str {
         || path_lower.contains("/workspace")
         || path_lower.contains("/org")
         || path_lower.contains("/marketplace")
-        || path_lower.contains("/collab") {
+        || path_lower.contains("/collab")
+    {
         return "cloud";
     }
 
@@ -64,7 +68,8 @@ fn determine_pillar_from_path(path: &str) -> &'static str {
         || path_lower.contains("/mockai")
         || path_lower.contains("/voice")
         || path_lower.contains("/llm")
-        || path_lower.contains("/studio") {
+        || path_lower.contains("/studio")
+    {
         return "ai";
     }
 

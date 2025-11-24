@@ -6,7 +6,6 @@
 use super::types::{ForecastPattern, PatternAnalysis, PatternType};
 use crate::incidents::types::{DriftIncident, IncidentType};
 use chrono::{DateTime, Duration, Utc};
-use std::collections::HashMap;
 
 /// Pattern analyzer for detecting change patterns
 pub struct PatternAnalyzer {
@@ -49,8 +48,8 @@ impl PatternAnalyzer {
         let mut sorted_incidents: Vec<_> = incidents
             .iter()
             .filter(|inc| {
-                let detected = DateTime::<Utc>::from_timestamp(inc.detected_at, 0)
-                    .unwrap_or_else(|| Utc::now());
+                let detected =
+                    DateTime::<Utc>::from_timestamp(inc.detected_at, 0).unwrap_or_else(Utc::now);
                 detected >= window_start && detected <= window_end
             })
             .collect();
@@ -105,9 +104,9 @@ impl PatternAnalyzer {
         let mut intervals = Vec::new();
         for i in 1..incidents.len() {
             let prev_time = DateTime::<Utc>::from_timestamp(incidents[i - 1].detected_at, 0)
-                .unwrap_or_else(|| Utc::now());
+                .unwrap_or_else(Utc::now);
             let curr_time = DateTime::<Utc>::from_timestamp(incidents[i].detected_at, 0)
-                .unwrap_or_else(|| Utc::now());
+                .unwrap_or_else(Utc::now);
 
             let duration = curr_time.signed_duration_since(prev_time);
             let days = duration.num_seconds() as f64 / 86400.0;
@@ -131,9 +130,9 @@ impl PatternAnalyzer {
         let mut intervals = Vec::new();
         for i in 1..breaking.len() {
             let prev_time = DateTime::<Utc>::from_timestamp(breaking[i - 1].detected_at, 0)
-                .unwrap_or_else(|| Utc::now());
+                .unwrap_or_else(Utc::now);
             let curr_time = DateTime::<Utc>::from_timestamp(breaking[i].detected_at, 0)
-                .unwrap_or_else(|| Utc::now());
+                .unwrap_or_else(Utc::now);
 
             let duration = curr_time.signed_duration_since(prev_time);
             let days = duration.num_seconds() as f64 / 86400.0;
@@ -186,18 +185,15 @@ impl PatternAnalyzer {
         let avg_interval = intervals.iter().sum::<f64>() / intervals.len() as f64;
 
         // Calculate standard deviation
-        let variance = intervals
-            .iter()
-            .map(|x| (x - avg_interval).powi(2))
-            .sum::<f64>()
+        let variance = intervals.iter().map(|x| (x - avg_interval).powi(2)).sum::<f64>()
             / intervals.len() as f64;
         let stddev = variance.sqrt();
 
         // Check for weekly pattern (6-8 days)
-        if avg_interval >= 6.0 && avg_interval <= 8.0 && stddev < 2.0 {
+        if (6.0..=8.0).contains(&avg_interval) && stddev < 2.0 {
             if let Some(last) = incidents.last() {
-                let last_time = DateTime::<Utc>::from_timestamp(last.detected_at, 0)
-                    .unwrap_or_else(|| Utc::now());
+                let last_time =
+                    DateTime::<Utc>::from_timestamp(last.detected_at, 0).unwrap_or_else(Utc::now);
                 let confidence = self.calculate_pattern_confidence(intervals, avg_interval, stddev);
                 patterns.push(ForecastPattern {
                     pattern_type: PatternType::WeeklyUpdate,
@@ -211,10 +207,10 @@ impl PatternAnalyzer {
         }
 
         // Check for monthly pattern (28-32 days)
-        if avg_interval >= 28.0 && avg_interval <= 32.0 && stddev < 5.0 {
+        if (28.0..=32.0).contains(&avg_interval) && stddev < 5.0 {
             if let Some(last) = incidents.last() {
-                let last_time = DateTime::<Utc>::from_timestamp(last.detected_at, 0)
-                    .unwrap_or_else(|| Utc::now());
+                let last_time =
+                    DateTime::<Utc>::from_timestamp(last.detected_at, 0).unwrap_or_else(Utc::now);
                 let confidence = self.calculate_pattern_confidence(intervals, avg_interval, stddev);
                 patterns.push(ForecastPattern {
                     pattern_type: PatternType::MonthlyMaintenance,
@@ -228,10 +224,10 @@ impl PatternAnalyzer {
         }
 
         // Check for quarterly pattern (88-92 days)
-        if avg_interval >= 88.0 && avg_interval <= 92.0 && stddev < 10.0 {
+        if (88.0..=92.0).contains(&avg_interval) && stddev < 10.0 {
             if let Some(last) = incidents.last() {
-                let last_time = DateTime::<Utc>::from_timestamp(last.detected_at, 0)
-                    .unwrap_or_else(|| Utc::now());
+                let last_time =
+                    DateTime::<Utc>::from_timestamp(last.detected_at, 0).unwrap_or_else(Utc::now);
                 let confidence = self.calculate_pattern_confidence(intervals, avg_interval, stddev);
                 patterns.push(ForecastPattern {
                     pattern_type: PatternType::QuarterlyRefactor,
@@ -265,16 +261,13 @@ impl PatternAnalyzer {
         }
 
         let avg_interval = intervals.iter().sum::<f64>() / intervals.len() as f64;
-        let variance = intervals
-            .iter()
-            .map(|x| (x - avg_interval).powi(2))
-            .sum::<f64>()
+        let variance = intervals.iter().map(|x| (x - avg_interval).powi(2)).sum::<f64>()
             / intervals.len() as f64;
         let stddev = variance.sqrt();
 
         if let Some(last) = breaking.last() {
-            let last_time = DateTime::<Utc>::from_timestamp(last.detected_at, 0)
-                .unwrap_or_else(|| Utc::now());
+            let last_time =
+                DateTime::<Utc>::from_timestamp(last.detected_at, 0).unwrap_or_else(Utc::now);
             let confidence = self.calculate_pattern_confidence(&intervals, avg_interval, stddev);
             vec![ForecastPattern {
                 pattern_type: PatternType::BreakingChange,
@@ -313,16 +306,13 @@ impl PatternAnalyzer {
             let intervals = self.calculate_intervals(&field_additions);
             if !intervals.is_empty() {
                 let avg_interval = intervals.iter().sum::<f64>() / intervals.len() as f64;
-                let variance = intervals
-                    .iter()
-                    .map(|x| (x - avg_interval).powi(2))
-                    .sum::<f64>()
+                let variance = intervals.iter().map(|x| (x - avg_interval).powi(2)).sum::<f64>()
                     / intervals.len() as f64;
                 let stddev = variance.sqrt();
 
                 if let Some(last) = field_additions.last() {
                     let last_time = DateTime::<Utc>::from_timestamp(last.detected_at, 0)
-                        .unwrap_or_else(|| Utc::now());
+                        .unwrap_or_else(Utc::now);
                     let confidence =
                         self.calculate_pattern_confidence(&intervals, avg_interval, stddev);
                     return vec![ForecastPattern {
@@ -383,10 +373,7 @@ impl PatternAnalyzer {
         let frequency = change_count as f64 / window_days;
 
         let avg_interval = intervals.iter().sum::<f64>() / intervals.len() as f64;
-        let variance = intervals
-            .iter()
-            .map(|x| (x - avg_interval).powi(2))
-            .sum::<f64>()
+        let variance = intervals.iter().map(|x| (x - avg_interval).powi(2)).sum::<f64>()
             / intervals.len() as f64;
         let coefficient_of_variation = if avg_interval > 0.0 {
             variance.sqrt() / avg_interval

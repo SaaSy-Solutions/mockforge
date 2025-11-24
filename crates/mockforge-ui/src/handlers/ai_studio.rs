@@ -13,10 +13,9 @@ use jsonptr::PointerBuf;
 use mockforge_core::ai_studio::{
     get_conversation_store, initialize_conversation_store, ArtifactFreezer, BudgetConfig,
     BudgetManager, ChatContext, ChatMessage, ChatOrchestrator, ChatRequest, ChatResponse,
-    DebugAnalyzer, DebugRequest, DebugResponse, DebugContextIntegrator, FreezeRequest, FrozenArtifact,
-    MockGenerator, PersonaGenerationRequest, PersonaGenerationResponse, PersonaGenerator, UsageStats,
-    ContractDiffHandler, ContractDiffQueryResult, OrgControls, OrgAiControlsConfig,
-    config::AiMode,
+    ContractDiffHandler, ContractDiffQueryResult, DebugAnalyzer, DebugContextIntegrator,
+    DebugRequest, DebugResponse, FreezeRequest, FrozenArtifact, MockGenerator, OrgAiControlsConfig,
+    OrgControls, PersonaGenerationRequest, PersonaGenerationResponse, PersonaGenerator, UsageStats,
 };
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 use serde::{Deserialize, Serialize};
@@ -199,7 +198,15 @@ pub async fn generate_mock(
         None
     };
 
-    match generator.generate(&request.description, request.workspace_id.as_deref(), ai_mode, deterministic_config.as_ref()).await {
+    match generator
+        .generate(
+            &request.description,
+            request.workspace_id.as_deref(),
+            ai_mode,
+            deterministic_config.as_ref(),
+        )
+        .await
+    {
         Ok(result) => {
             let response = GenerateMockResponse {
                 spec: result.spec,
@@ -352,7 +359,10 @@ pub async fn generate_persona(
         None
     };
 
-    match generator.generate(&persona_request, ai_mode, deterministic_config.as_ref()).await {
+    match generator
+        .generate(&persona_request, ai_mode, deterministic_config.as_ref())
+        .await
+    {
         Ok(response) => Ok(ResponseJson(ApiResponse::success(response))),
         Err(e) => {
             Ok(ResponseJson(ApiResponse::error(format!("Failed to generate persona: {}", e))))
@@ -488,7 +498,8 @@ pub async fn list_frozen(
                     Err(_) => continue,
                 };
 
-                let content_value: Value = if path.extension().and_then(|e| e.to_str()) == Some("yaml")
+                let content_value: Value = if path.extension().and_then(|e| e.to_str())
+                    == Some("yaml")
                     || path.extension().and_then(|e| e.to_str()) == Some("yml")
                 {
                     match serde_yaml::from_str(&content) {
@@ -503,7 +514,8 @@ pub async fn list_frozen(
                 };
 
                 // Extract metadata from content
-                let metadata = content_value.get("_frozen_metadata")
+                let metadata = content_value
+                    .get("_frozen_metadata")
                     .and_then(|m| serde_json::from_value(m.clone()).ok());
 
                 // Extract output_hash from metadata
@@ -583,8 +595,7 @@ pub async fn apply_patch(
     Json(request): Json<ApplyPatchRequest>,
 ) -> Result<ResponseJson<ApiResponse<Value>>, StatusCode> {
     // Determine config file path
-    let config_path = request.config_path
-        .unwrap_or_else(|| "mockforge.yaml".to_string());
+    let config_path = request.config_path.unwrap_or_else(|| "mockforge.yaml".to_string());
 
     // Load the config file
     let config_content = match tokio::fs::read_to_string(&config_path).await {
@@ -598,44 +609,37 @@ pub async fn apply_patch(
     };
 
     // Parse config as JSON (works for YAML too via serde_yaml)
-    let mut config_value: Value = if config_path.ends_with(".yaml") || config_path.ends_with(".yml") {
-        serde_yaml::from_str(&config_content).map_err(|e| {
-            StatusCode::BAD_REQUEST
-        })?
+    let mut config_value: Value = if config_path.ends_with(".yaml") || config_path.ends_with(".yml")
+    {
+        serde_yaml::from_str(&config_content).map_err(|e| StatusCode::BAD_REQUEST)?
     } else {
-        serde_json::from_str(&config_content).map_err(|e| {
-            StatusCode::BAD_REQUEST
-        })?
+        serde_json::from_str(&config_content).map_err(|e| StatusCode::BAD_REQUEST)?
     };
 
     // Parse patch operations
-    let patch_ops: Patch = if let Some(ops_array) = request.patch.get("operations").and_then(|v| v.as_array()) {
-        // Multiple operations
-        Patch(ops_array.iter()
-            .filter_map(|op| {
-                parse_patch_operation(op).ok()
-            })
-            .collect())
-    } else {
-        // Single operation
-        Patch(vec![parse_patch_operation(&request.patch)?])
-    };
+    let patch_ops: Patch =
+        if let Some(ops_array) = request.patch.get("operations").and_then(|v| v.as_array()) {
+            // Multiple operations
+            Patch(ops_array.iter().filter_map(|op| parse_patch_operation(op).ok()).collect())
+        } else {
+            // Single operation
+            Patch(vec![parse_patch_operation(&request.patch)?])
+        };
 
     // Apply patch
-    patch(&mut config_value, &patch_ops).map_err(|e| {
-        StatusCode::BAD_REQUEST
-    })?;
+    patch(&mut config_value, &patch_ops).map_err(|e| StatusCode::BAD_REQUEST)?;
 
     // Save updated config
     let updated_content = if config_path.ends_with(".yaml") || config_path.ends_with(".yml") {
         serde_yaml::to_string(&config_value).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     } else {
-        serde_json::to_string_pretty(&config_value).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        serde_json::to_string_pretty(&config_value)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     };
 
-    tokio::fs::write(&config_path, updated_content).await.map_err(|e| {
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    tokio::fs::write(&config_path, updated_content)
+        .await
+        .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(ResponseJson(ApiResponse::success(serde_json::json!({
         "message": "Patch applied successfully",
@@ -646,64 +650,48 @@ pub async fn apply_patch(
 
 /// Parse a single patch operation from JSON
 fn parse_patch_operation(op: &Value) -> Result<json_patch::PatchOperation, StatusCode> {
-    use json_patch::{AddOperation, CopyOperation, MoveOperation, PatchOperation, RemoveOperation, ReplaceOperation, TestOperation};
+    use json_patch::{AddOperation, PatchOperation, RemoveOperation, ReplaceOperation};
 
-    let op_type = op.get("op")
-        .and_then(|v| v.as_str())
-        .ok_or(StatusCode::BAD_REQUEST)?;
+    let op_type = op.get("op").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
 
-    let path_str = op.get("path")
-        .and_then(|v| v.as_str())
-        .ok_or(StatusCode::BAD_REQUEST)?;
+    let path_str = op.get("path").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
 
-    let path: PointerBuf = path_str.parse()
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let path: PointerBuf = path_str.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
 
     match op_type {
         "add" => {
-            let value = op.get("value")
-                .ok_or(StatusCode::BAD_REQUEST)?;
+            let value = op.get("value").ok_or(StatusCode::BAD_REQUEST)?;
             Ok(PatchOperation::Add(AddOperation {
                 path,
                 value: value.clone(),
             }))
         }
-        "remove" => {
-            Ok(PatchOperation::Remove(RemoveOperation { path }))
-        }
+        "remove" => Ok(PatchOperation::Remove(RemoveOperation { path })),
         "replace" => {
-            let value = op.get("value")
-                .ok_or(StatusCode::BAD_REQUEST)?;
+            let value = op.get("value").ok_or(StatusCode::BAD_REQUEST)?;
             Ok(PatchOperation::Replace(ReplaceOperation {
                 path,
                 value: value.clone(),
             }))
         }
         "copy" => {
-            let from = op.get("from")
-                .and_then(|v| v.as_str())
-                .ok_or(StatusCode::BAD_REQUEST)?;
-            let from_path: PointerBuf = from.parse()
-                .map_err(|_| StatusCode::BAD_REQUEST)?;
+            let from = op.get("from").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
+            let from_path: PointerBuf = from.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
             Ok(PatchOperation::Copy(json_patch::CopyOperation {
                 path,
                 from: from_path,
             }))
         }
         "move" => {
-            let from = op.get("from")
-                .and_then(|v| v.as_str())
-                .ok_or(StatusCode::BAD_REQUEST)?;
-            let from_path: PointerBuf = from.parse()
-                .map_err(|_| StatusCode::BAD_REQUEST)?;
+            let from = op.get("from").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
+            let from_path: PointerBuf = from.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
             Ok(PatchOperation::Move(json_patch::MoveOperation {
                 path,
                 from: from_path,
             }))
         }
         "test" => {
-            let value = op.get("value")
-                .ok_or(StatusCode::BAD_REQUEST)?;
+            let value = op.get("value").ok_or(StatusCode::BAD_REQUEST)?;
             Ok(PatchOperation::Test(json_patch::TestOperation {
                 path,
                 value: value.clone(),
@@ -726,12 +714,14 @@ pub async fn get_org_controls(
     // In production, this would be injected via State
     let org_controls = OrgControls::new(OrgAiControlsConfig::default());
 
-    match org_controls.load_org_config(
-        org_id.as_deref().unwrap_or("default"),
-        workspace_id.as_deref()
-    ).await {
+    match org_controls
+        .load_org_config(org_id.as_deref().unwrap_or("default"), workspace_id.as_deref())
+        .await
+    {
         Ok(controls) => Ok(ResponseJson(ApiResponse::success(controls))),
-        Err(e) => Ok(ResponseJson(ApiResponse::error(format!("Failed to get org controls: {}", e)))),
+        Err(e) => {
+            Ok(ResponseJson(ApiResponse::error(format!("Failed to get org controls: {}", e))))
+        }
     }
 }
 
@@ -765,7 +755,8 @@ pub async fn get_org_usage(
     let workspace_id = params.get("workspace_id").cloned();
 
     // Get period filter (default to current month)
-    let period_start = params.get("period_start")
+    let period_start = params
+        .get("period_start")
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
         .map(|dt| dt.with_timezone(&chrono::Utc))
         .unwrap_or_else(|| {
@@ -780,10 +771,11 @@ pub async fn get_org_usage(
             }
         });
 
-    let period_end = params.get("period_end")
+    let period_end = params
+        .get("period_end")
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
         .map(|dt| dt.with_timezone(&chrono::Utc))
-        .unwrap_or_else(|| chrono::Utc::now());
+        .unwrap_or_else(chrono::Utc::now);
 
     // Note: Database querying requires a database connection pool
     // In production with database access, you would:
@@ -839,11 +831,10 @@ pub async fn contract_diff_query(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let handler = ContractDiffHandler::new()
-        .map_err(|e| {
-            tracing::error!("Failed to create ContractDiffHandler: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let handler = ContractDiffHandler::new().map_err(|e| {
+        tracing::error!("Failed to create ContractDiffHandler: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // For now, we don't have direct access to specs/requests in the handler
     // In production, these would be loaded from workspace/request storage

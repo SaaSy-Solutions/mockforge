@@ -10,7 +10,7 @@ use mockforge_core::protocol_abstraction::Protocol;
 use mockforge_core::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// HTTP protocol adapter for consistency engine
 ///

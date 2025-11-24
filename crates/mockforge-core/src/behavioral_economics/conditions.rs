@@ -151,54 +151,57 @@ impl ConditionEvaluator {
         match condition {
             BehaviorCondition::Always => Ok(true),
 
-            BehaviorCondition::LatencyThreshold { endpoint, threshold_ms } => {
+            BehaviorCondition::LatencyThreshold {
+                endpoint,
+                threshold_ms,
+            } => {
                 // Simple pattern matching (supports wildcards)
-                let matches = self
-                    .latency_metrics
-                    .iter()
-                    .any(|(ep, latency)| {
-                        self.matches_pattern(ep, endpoint) && *latency > *threshold_ms
-                    });
+                let matches = self.latency_metrics.iter().any(|(ep, latency)| {
+                    self.matches_pattern(ep, endpoint) && *latency > *threshold_ms
+                });
                 Ok(matches)
             }
 
-            BehaviorCondition::LoadPressure { threshold_rps } => {
-                Ok(self.load_rps > *threshold_rps)
-            }
+            BehaviorCondition::LoadPressure { threshold_rps } => Ok(self.load_rps > *threshold_rps),
 
-            BehaviorCondition::PricingChange { product_id, threshold: _ } => {
+            BehaviorCondition::PricingChange {
+                product_id,
+                threshold: _,
+            } => {
                 // Check if price change exceeds threshold
                 // This is simplified - in practice, you'd track price history
                 Ok(self.pricing_data.contains_key(product_id))
             }
 
-            BehaviorCondition::FraudSuspicion { user_id, risk_score } => {
+            BehaviorCondition::FraudSuspicion {
+                user_id,
+                risk_score,
+            } => {
                 let score = self.fraud_scores.get(user_id).copied().unwrap_or(0.0);
                 Ok(score > *risk_score)
             }
 
             BehaviorCondition::CustomerSegment { segment } => {
-                Ok(self
-                    .customer_segments
-                    .values()
-                    .any(|s| s == segment))
+                Ok(self.customer_segments.values().any(|s| s == segment))
             }
 
-            BehaviorCondition::ErrorRate { endpoint, threshold } => {
+            BehaviorCondition::ErrorRate {
+                endpoint,
+                threshold,
+            } => {
                 let matches = self
                     .error_rates
                     .iter()
-                    .any(|(ep, rate)| {
-                        self.matches_pattern(ep, endpoint) && *rate > *threshold
-                    });
+                    .any(|(ep, rate)| self.matches_pattern(ep, endpoint) && *rate > *threshold);
                 Ok(matches)
             }
 
-            BehaviorCondition::Composite { operator, conditions } => {
-                let results: Result<Vec<bool>> = conditions
-                    .iter()
-                    .map(|c| self.evaluate(c))
-                    .collect();
+            BehaviorCondition::Composite {
+                operator,
+                conditions,
+            } => {
+                let results: Result<Vec<bool>> =
+                    conditions.iter().map(|c| self.evaluate(c)).collect();
                 let results = results?;
 
                 match operator {
@@ -238,9 +241,7 @@ mod tests {
     #[test]
     fn test_always_condition() {
         let evaluator = ConditionEvaluator::new();
-        assert!(evaluator
-            .evaluate(&BehaviorCondition::Always)
-            .unwrap());
+        assert!(evaluator.evaluate(&BehaviorCondition::Always).unwrap());
     }
 
     #[test]
@@ -260,7 +261,9 @@ mod tests {
         let mut evaluator = ConditionEvaluator::new();
         evaluator.update_load(150.0);
         assert!(evaluator
-            .evaluate(&BehaviorCondition::LoadPressure { threshold_rps: 100.0 })
+            .evaluate(&BehaviorCondition::LoadPressure {
+                threshold_rps: 100.0
+            })
             .unwrap());
     }
 
@@ -277,7 +280,9 @@ mod tests {
                     endpoint: "/api/checkout".to_string(),
                     threshold_ms: 400,
                 },
-                BehaviorCondition::LoadPressure { threshold_rps: 100.0 },
+                BehaviorCondition::LoadPressure {
+                    threshold_rps: 100.0,
+                },
             ],
         };
 

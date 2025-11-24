@@ -51,9 +51,9 @@ pub mod mockai_integration;
 pub mod package;
 pub mod preview;
 pub mod reality_profile;
+pub mod reality_profile_pack;
 #[path = "reality_profile/packs.rs"]
 pub mod reality_profile_packs;
-pub mod reality_profile_pack;
 pub mod registry;
 pub mod schema_alignment;
 pub mod source;
@@ -67,14 +67,6 @@ pub use domain_pack::{
     DomainPackInfo, DomainPackInstaller, DomainPackManifest, FieldRealityRule, PackScenario,
     StudioChaosRule, StudioContractDiff, StudioPersona, StudioRealityBlend,
 };
-pub use reality_profile::{
-    DataMutationBehavior, ErrorCondition, ErrorDistribution, LatencyCurve, MutationCondition,
-    MutationType, ProtocolBehavior,
-};
-pub use reality_profile_pack::{
-    RealityProfileCompatibilityInfo, RealityProfilePackApplyResult, RealityProfilePackInfo,
-    RealityProfilePackInstaller, RealityProfilePackManifest,
-};
 pub use error::{Result, ScenarioError};
 pub use installer::{InstallOptions, ScenarioInstaller};
 pub use manifest::{CompatibilityInfo, PluginDependency, ScenarioCategory, ScenarioManifest};
@@ -83,6 +75,18 @@ pub use mockai_integration::{
 };
 pub use package::{PackageValidation, ScenarioPackage};
 pub use preview::{CompatibilityCheck, OpenApiEndpoint, ScenarioPreview};
+pub use reality_profile::{
+    DataMutationBehavior, ErrorCondition, ErrorDistribution, LatencyCurve, MutationCondition,
+    MutationType, ProtocolBehavior,
+};
+pub use reality_profile_pack::{
+    RealityProfileCompatibilityInfo, RealityProfilePackApplyResult, RealityProfilePackInfo,
+    RealityProfilePackInstaller, RealityProfilePackManifest,
+};
+pub use reality_profile_packs::{
+    create_ecommerce_peak_season_pack, create_fintech_fraud_pack, create_healthcare_hl7_pack,
+    create_iot_fleet_chaos_pack,
+};
 pub use registry::{
     RegistryClient, ScenarioPublishRequest, ScenarioPublishResponse, ScenarioRegistry,
     ScenarioRegistryEntry, ScenarioReview, ScenarioReviewSubmission, ScenarioSearchQuery,
@@ -99,10 +103,6 @@ pub use storage::{InstalledScenario, ScenarioStorage};
 pub use studio_pack::packs::{
     create_ecommerce_peak_day_pack, create_fintech_fraud_lab_pack,
     create_healthcare_outage_drill_pack,
-};
-pub use reality_profile_packs::{
-    create_ecommerce_peak_season_pack, create_fintech_fraud_pack, create_healthcare_hl7_pack,
-    create_iot_fleet_chaos_pack,
 };
 pub use studio_pack::{StudioPackInstallResult, StudioPackInstaller};
 pub use vbr_integration::{

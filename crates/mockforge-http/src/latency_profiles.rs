@@ -1,7 +1,4 @@
 //! Operation-aware latency/failure profiles (per operationId and per tag).
-use axum::extract::State;
-use axum::http::StatusCode;
-use axum::response::Json;
 use globwalk::GlobWalkerBuilder;
 use rand::{thread_rng, Rng};
 use serde::Deserialize;

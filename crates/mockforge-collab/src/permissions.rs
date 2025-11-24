@@ -51,29 +51,29 @@ pub enum Permission {
 impl std::fmt::Display for Permission {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Permission::WorkspaceCreate => write!(f, "WorkspaceCreate"),
-            Permission::WorkspaceRead => write!(f, "WorkspaceRead"),
-            Permission::WorkspaceUpdate => write!(f, "WorkspaceUpdate"),
-            Permission::WorkspaceDelete => write!(f, "WorkspaceDelete"),
-            Permission::WorkspaceArchive => write!(f, "WorkspaceArchive"),
-            Permission::WorkspaceManageMembers => write!(f, "WorkspaceManageMembers"),
-            Permission::MockCreate => write!(f, "MockCreate"),
-            Permission::MockRead => write!(f, "MockRead"),
-            Permission::MockUpdate => write!(f, "MockUpdate"),
-            Permission::MockDelete => write!(f, "MockDelete"),
-            Permission::InviteMembers => write!(f, "InviteMembers"),
-            Permission::RemoveMembers => write!(f, "RemoveMembers"),
-            Permission::ChangeRoles => write!(f, "ChangeRoles"),
-            Permission::ViewHistory => write!(f, "ViewHistory"),
-            Permission::CreateSnapshot => write!(f, "CreateSnapshot"),
-            Permission::RestoreSnapshot => write!(f, "RestoreSnapshot"),
-            Permission::ManageSettings => write!(f, "ManageSettings"),
-            Permission::ManageIntegrations => write!(f, "ManageIntegrations"),
-            Permission::ScenarioModifyChaosRules => write!(f, "ScenarioModifyChaosRules"),
-            Permission::ScenarioModifyRealityDefaults => write!(f, "ScenarioModifyRealityDefaults"),
-            Permission::ScenarioPromote => write!(f, "ScenarioPromote"),
-            Permission::ScenarioApprove => write!(f, "ScenarioApprove"),
-            Permission::ScenarioModifyDriftBudgets => write!(f, "ScenarioModifyDriftBudgets"),
+            Self::WorkspaceCreate => write!(f, "WorkspaceCreate"),
+            Self::WorkspaceRead => write!(f, "WorkspaceRead"),
+            Self::WorkspaceUpdate => write!(f, "WorkspaceUpdate"),
+            Self::WorkspaceDelete => write!(f, "WorkspaceDelete"),
+            Self::WorkspaceArchive => write!(f, "WorkspaceArchive"),
+            Self::WorkspaceManageMembers => write!(f, "WorkspaceManageMembers"),
+            Self::MockCreate => write!(f, "MockCreate"),
+            Self::MockRead => write!(f, "MockRead"),
+            Self::MockUpdate => write!(f, "MockUpdate"),
+            Self::MockDelete => write!(f, "MockDelete"),
+            Self::InviteMembers => write!(f, "InviteMembers"),
+            Self::RemoveMembers => write!(f, "RemoveMembers"),
+            Self::ChangeRoles => write!(f, "ChangeRoles"),
+            Self::ViewHistory => write!(f, "ViewHistory"),
+            Self::CreateSnapshot => write!(f, "CreateSnapshot"),
+            Self::RestoreSnapshot => write!(f, "RestoreSnapshot"),
+            Self::ManageSettings => write!(f, "ManageSettings"),
+            Self::ManageIntegrations => write!(f, "ManageIntegrations"),
+            Self::ScenarioModifyChaosRules => write!(f, "ScenarioModifyChaosRules"),
+            Self::ScenarioModifyRealityDefaults => write!(f, "ScenarioModifyRealityDefaults"),
+            Self::ScenarioPromote => write!(f, "ScenarioPromote"),
+            Self::ScenarioApprove => write!(f, "ScenarioApprove"),
+            Self::ScenarioModifyDriftBudgets => write!(f, "ScenarioModifyDriftBudgets"),
         }
     }
 }
@@ -83,6 +83,7 @@ pub struct RolePermissions;
 
 impl RolePermissions {
     /// Get all permissions for a role
+    #[must_use]
     pub fn get_permissions(role: UserRole) -> Vec<Permission> {
         match role {
             UserRole::Admin => vec![
@@ -134,6 +135,7 @@ impl RolePermissions {
     }
 
     /// Check if a role has a specific permission
+    #[must_use]
     pub fn has_permission(role: UserRole, permission: Permission) -> bool {
         Self::get_permissions(role).contains(&permission)
     }
@@ -149,8 +151,7 @@ impl PermissionChecker {
             Ok(())
         } else {
             Err(CollabError::AuthorizationFailed(format!(
-                "Role {:?} does not have permission {:?}",
-                user_role, required_permission
+                "Role {user_role:?} does not have permission {required_permission:?}"
             )))
         }
     }
@@ -171,8 +172,7 @@ impl PermissionChecker {
             }
         }
         Err(CollabError::AuthorizationFailed(format!(
-            "Role {:?} does not have any of the required permissions",
-            user_role
+            "Role {user_role:?} does not have any of the required permissions"
         )))
     }
 }

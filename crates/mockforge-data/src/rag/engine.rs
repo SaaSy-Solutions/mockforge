@@ -373,6 +373,10 @@ impl RagEngine {
             EmbeddingProvider::OpenAICompatible => {
                 self.generate_openai_compatible_embedding(text, model).await
             }
+            EmbeddingProvider::Ollama => {
+                // Ollama uses OpenAI-compatible API for embeddings
+                self.generate_openai_compatible_embedding(text, model).await
+            }
         }
     }
 
@@ -583,10 +587,7 @@ impl RagEngine {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "OpenAI API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
@@ -622,10 +623,7 @@ impl RagEngine {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
@@ -676,10 +674,7 @@ impl RagEngine {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "OpenAI API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
@@ -741,10 +736,7 @@ impl RagEngine {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;

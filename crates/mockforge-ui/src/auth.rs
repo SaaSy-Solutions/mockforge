@@ -21,7 +21,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration as StdDuration, Instant};
 use tokio::sync::RwLock;
-use uuid::Uuid;
 
 use crate::handlers::AdminState;
 use crate::models::ApiResponse;
@@ -212,6 +211,12 @@ impl RateLimiter {
     }
 }
 
+impl Default for UserStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UserStore {
     pub fn new() -> Self {
         let users = Arc::new(RwLock::new(HashMap::new()));
@@ -329,7 +334,7 @@ impl UserStore {
 
         // Create user
         let user = User {
-            id: format!("{}-{}", username, uuid::Uuid::new_v4().to_string()),
+            id: format!("{}-{}", username, uuid::Uuid::new_v4()),
             username: username.clone(),
             password_hash,
             role,
@@ -377,7 +382,7 @@ pub fn generate_token(
         exp: exp.timestamp(),
     };
 
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(&secret))
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(secret))
 }
 
 /// Generate refresh token
@@ -390,7 +395,7 @@ pub fn generate_refresh_token(user: &User) -> Result<String, jsonwebtoken::error
 pub fn validate_token(token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
     let secret = JWT_SECRET;
     let token_data =
-        decode::<Claims>(token, &DecodingKey::from_secret(&secret), &Validation::default())?;
+        decode::<Claims>(token, &DecodingKey::from_secret(secret), &Validation::default())?;
 
     Ok(token_data.claims)
 }

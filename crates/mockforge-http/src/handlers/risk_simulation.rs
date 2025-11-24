@@ -4,11 +4,11 @@
 //! and managing risk engine configuration.
 
 use axum::{extract::State, http::StatusCode, response::Json};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::auth::risk_engine::{RiskEngine, RiskEngineConfig};
+use crate::auth::risk_engine::RiskEngine;
 
 /// Risk simulation state
 #[derive(Clone)]

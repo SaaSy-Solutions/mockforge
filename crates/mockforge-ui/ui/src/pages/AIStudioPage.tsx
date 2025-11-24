@@ -269,10 +269,9 @@ export function AIStudioPage() {
               onClick={() => setActiveTab(tab.id)}
               className={`
                 py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2
-                ${
-                  activeTab === tab.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ${activeTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }
               `}
             >
@@ -314,11 +313,10 @@ export function AIStudioPage() {
                       className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                       <div
-                        className={`max-w-[80%] rounded-lg p-3 ${
-                          msg.role === 'user'
+                        className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user'
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-white border border-gray-200'
-                        }`}
+                          }`}
                       >
                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                         {msg.intent && (
@@ -852,136 +850,137 @@ export function AIStudioPage() {
               const isAiGenerated = true; // All personas from this tab are AI-generated
 
               return (
-              <Card key={idx} className="p-6">
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-lg font-semibold">Generated Persona</h3>
-                      {isAiGenerated && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded border border-purple-300" title="AI-generated persona">
-                          <Sparkles className="h-3 w-3" />
-                          AI
-                        </span>
-                      )}
-                      {isFrozen && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded border border-blue-300" title="Frozen artifact (deterministic mode)">
-                          <Snowflake className="h-3 w-3" />
-                          Frozen
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                  </div>
-                  {msg.data?.persona && (
-                    <div className="space-y-3">
-                      {msg.data.persona.name && (
-                        <div>
-                          <h4 className="font-medium mb-1">Name</h4>
-                          <p className="text-sm">{msg.data.persona.name}</p>
-                        </div>
-                      )}
-                      {msg.data.persona.id && (
-                        <div>
-                          <h4 className="font-medium mb-1">ID</h4>
-                          <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                            {msg.data.persona.id}
-                          </code>
-                        </div>
-                      )}
-                      {msg.data.persona.domain && (
-                        <div>
-                          <h4 className="font-medium mb-1">Domain</h4>
-                          <span className="text-sm px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                            {msg.data.persona.domain}
+                <Card key={idx} className="p-6">
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-lg font-semibold">Generated Persona</h3>
+                        {isAiGenerated && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded border border-purple-300" title="AI-generated persona">
+                            <Sparkles className="h-3 w-3" />
+                            AI
                           </span>
-                        </div>
-                      )}
-                      {msg.data.persona.traits && Object.keys(msg.data.persona.traits).length > 0 && (
-                        <div>
-                          <h4 className="font-medium mb-2">Traits</h4>
-                          <div className="grid grid-cols-2 gap-2">
-                            {Object.entries(msg.data.persona.traits).map(([key, value]) => (
-                              <div key={key} className="p-2 bg-gray-50 rounded">
-                                <div className="text-xs font-medium text-gray-600">{key}</div>
-                                <div className="text-sm">{String(value)}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {msg.data.persona.backstory && (
-                        <div>
-                          <h4 className="font-medium mb-1">Backstory</h4>
-                          <p className="text-sm text-muted-foreground">{msg.data.persona.backstory}</p>
-                        </div>
-                      )}
-                      {msg.data.persona.lifecycle_state && (
-                        <div>
-                          <h4 className="font-medium mb-1">Lifecycle State</h4>
-                          <span className="text-sm px-2 py-1 bg-green-100 text-green-700 rounded">
-                            {msg.data.persona.lifecycle_state}
+                        )}
+                        {isFrozen && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded border border-blue-300" title="Frozen artifact (deterministic mode)">
+                            <Snowflake className="h-3 w-3" />
+                            Frozen
                           </span>
-                        </div>
-                      )}
-                      <div className="pt-3 border-t flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={async () => {
-                            try {
-                              const response = await fetch('/__mockforge/ai-studio/freeze', {
-                                method: 'POST',
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                  artifact_type: 'persona',
-                                  content: msg.data.persona,
-                                  format: 'yaml',
-                                }),
-                              });
-                              if (response.ok) {
-                                const result = await response.json();
-                                if (result.success) {
-                                  toast.success('Persona frozen successfully!', {
-                                    description: `Saved to ${result.data.path}`,
-                                  });
-                                }
-                              }
-                            } catch (err) {
-                              logger.error('Failed to freeze persona', err);
-                              toast.error('Failed to freeze persona');
-                            }
-                          }}
-                        >
-                          <Download className="h-3 w-3 mr-1" />
-                          Freeze
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            const personaJson = JSON.stringify(msg.data.persona, null, 2);
-                            const blob = new Blob([personaJson], {
-                              type: 'application/json',
-                            });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `persona-${msg.data.persona.name || 'generated'}.json`;
-                            a.click();
-                            URL.revokeObjectURL(url);
-                          }}
-                        >
-                          <Download className="h-3 w-3 mr-1" />
-                          Download
-                        </Button>
+                        )}
                       </div>
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                     </div>
-                  )}
-                </div>
-              </Card>
-            ))}
+                    {msg.data?.persona && (
+                      <div className="space-y-3">
+                        {msg.data.persona.name && (
+                          <div>
+                            <h4 className="font-medium mb-1">Name</h4>
+                            <p className="text-sm">{msg.data.persona.name}</p>
+                          </div>
+                        )}
+                        {msg.data.persona.id && (
+                          <div>
+                            <h4 className="font-medium mb-1">ID</h4>
+                            <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                              {msg.data.persona.id}
+                            </code>
+                          </div>
+                        )}
+                        {msg.data.persona.domain && (
+                          <div>
+                            <h4 className="font-medium mb-1">Domain</h4>
+                            <span className="text-sm px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                              {msg.data.persona.domain}
+                            </span>
+                          </div>
+                        )}
+                        {msg.data.persona.traits && Object.keys(msg.data.persona.traits).length > 0 && (
+                          <div>
+                            <h4 className="font-medium mb-2">Traits</h4>
+                            <div className="grid grid-cols-2 gap-2">
+                              {Object.entries(msg.data.persona.traits).map(([key, value]) => (
+                                <div key={key} className="p-2 bg-gray-50 rounded">
+                                  <div className="text-xs font-medium text-gray-600">{key}</div>
+                                  <div className="text-sm">{String(value)}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {msg.data.persona.backstory && (
+                          <div>
+                            <h4 className="font-medium mb-1">Backstory</h4>
+                            <p className="text-sm text-muted-foreground">{msg.data.persona.backstory}</p>
+                          </div>
+                        )}
+                        {msg.data.persona.lifecycle_state && (
+                          <div>
+                            <h4 className="font-medium mb-1">Lifecycle State</h4>
+                            <span className="text-sm px-2 py-1 bg-green-100 text-green-700 rounded">
+                              {msg.data.persona.lifecycle_state}
+                            </span>
+                          </div>
+                        )}
+                        <div className="pt-3 border-t flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                const response = await fetch('/__mockforge/ai-studio/freeze', {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                  },
+                                  body: JSON.stringify({
+                                    artifact_type: 'persona',
+                                    content: msg.data.persona,
+                                    format: 'yaml',
+                                  }),
+                                });
+                                if (response.ok) {
+                                  const result = await response.json();
+                                  if (result.success) {
+                                    toast.success('Persona frozen successfully!', {
+                                      description: `Saved to ${result.data.path}`,
+                                    });
+                                  }
+                                }
+                              } catch (err) {
+                                logger.error('Failed to freeze persona', err);
+                                toast.error('Failed to freeze persona');
+                              }
+                            }}
+                          >
+                            <Download className="h-3 w-3 mr-1" />
+                            Freeze
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const personaJson = JSON.stringify(msg.data.persona, null, 2);
+                              const blob = new Blob([personaJson], {
+                                type: 'application/json',
+                              });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `persona-${msg.data.persona.name || 'generated'}.json`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            }}
+                          >
+                            <Download className="h-3 w-3 mr-1" />
+                            Download
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
         </div>
       )}
 
@@ -1078,9 +1077,8 @@ export function AIStudioPage() {
                       <div
                         key={capture.id}
                         onClick={() => setSelectedCapture(capture.id || null)}
-                        className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                          selectedCapture === capture.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                        }`}
+                        className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${selectedCapture === capture.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
@@ -1195,12 +1193,10 @@ export function AIStudioPage() {
                         </p>
                       </div>
                     </div>
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full ${
-                      analysisResult.confidence >= 0.8 ? 'bg-green-100' : analysisResult.confidence >= 0.5 ? 'bg-yellow-100' : 'bg-red-100'
-                    }`}>
-                      <span className={`text-sm font-medium ${
-                        analysisResult.confidence >= 0.8 ? 'text-green-600' : analysisResult.confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600'
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full ${analysisResult.confidence >= 0.8 ? 'bg-green-100' : analysisResult.confidence >= 0.5 ? 'bg-yellow-100' : 'bg-red-100'
                       }`}>
+                      <span className={`text-sm font-medium ${analysisResult.confidence >= 0.8 ? 'text-green-600' : analysisResult.confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600'
+                        }`}>
                         {Math.round(analysisResult.confidence * 100)}%
                       </span>
                     </div>
@@ -1226,12 +1222,11 @@ export function AIStudioPage() {
                                 <td className="p-3 text-sm font-mono text-gray-900">{mismatch.path}</td>
                                 <td className="p-3 text-sm text-gray-600">{mismatch.mismatch_type}</td>
                                 <td className="p-3">
-                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                    mismatch.severity === 'critical' ? 'bg-red-100 text-red-800' :
-                                    mismatch.severity === 'high' ? 'bg-orange-100 text-orange-800' :
-                                    mismatch.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-blue-100 text-blue-800'
-                                  }`}>
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${mismatch.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                                      mismatch.severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                                        mismatch.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                          'bg-blue-100 text-blue-800'
+                                    }`}>
                                     {mismatch.severity.toUpperCase()}
                                   </span>
                                 </td>
@@ -1261,12 +1256,10 @@ export function AIStudioPage() {
                                   </div>
                                 )}
                               </div>
-                              <div className={`inline-flex items-center px-2 py-1 rounded-full ${
-                                rec.confidence >= 0.8 ? 'bg-green-100' : rec.confidence >= 0.5 ? 'bg-yellow-100' : 'bg-red-100'
-                              }`}>
-                                <span className={`text-sm font-medium ${
-                                  rec.confidence >= 0.8 ? 'text-green-600' : rec.confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600'
+                              <div className={`inline-flex items-center px-2 py-1 rounded-full ${rec.confidence >= 0.8 ? 'bg-green-100' : rec.confidence >= 0.5 ? 'bg-yellow-100' : 'bg-red-100'
                                 }`}>
+                                <span className={`text-sm font-medium ${rec.confidence >= 0.8 ? 'text-green-600' : rec.confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600'
+                                  }`}>
                                   {Math.round(rec.confidence * 100)}%
                                 </span>
                               </div>
@@ -1299,12 +1292,10 @@ export function AIStudioPage() {
                                   )}
                                 </div>
                               </div>
-                              <div className={`inline-flex items-center px-2 py-1 rounded-full ${
-                                correction.confidence >= 0.8 ? 'bg-green-100' : correction.confidence >= 0.5 ? 'bg-yellow-100' : 'bg-red-100'
-                              }`}>
-                                <span className={`text-sm font-medium ${
-                                  correction.confidence >= 0.8 ? 'text-green-600' : correction.confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600'
+                              <div className={`inline-flex items-center px-2 py-1 rounded-full ${correction.confidence >= 0.8 ? 'bg-green-100' : correction.confidence >= 0.5 ? 'bg-yellow-100' : 'bg-red-100'
                                 }`}>
+                                <span className={`text-sm font-medium ${correction.confidence >= 0.8 ? 'text-green-600' : correction.confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600'
+                                  }`}>
                                   {Math.round(correction.confidence * 100)}%
                                 </span>
                               </div>

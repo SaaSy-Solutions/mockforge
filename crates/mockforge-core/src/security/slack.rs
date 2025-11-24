@@ -48,8 +48,7 @@ pub struct SlackConfig {
 impl SlackConfig {
     /// Create Slack config from environment variables
     pub fn from_env() -> Self {
-        let method = std::env::var("SLACK_METHOD")
-            .unwrap_or_else(|_| "disabled".to_string());
+        let method = std::env::var("SLACK_METHOD").unwrap_or_else(|_| "disabled".to_string());
 
         Self {
             method: SlackMethod::from_str(&method),
@@ -111,7 +110,11 @@ impl SlackService {
     }
 
     /// Send message to multiple channels/recipients
-    pub async fn send_to_multiple(&self, message: SlackMessage, recipients: &[String]) -> Result<()> {
+    pub async fn send_to_multiple(
+        &self,
+        message: SlackMessage,
+        recipients: &[String],
+    ) -> Result<()> {
         let mut errors = Vec::new();
 
         for recipient in recipients {
@@ -131,7 +134,10 @@ impl SlackService {
         }
 
         if !errors.is_empty() {
-            anyhow::bail!("Failed to send Slack messages to some recipients: {}", errors.join("; "));
+            anyhow::bail!(
+                "Failed to send Slack messages to some recipients: {}",
+                errors.join("; ")
+            );
         }
 
         Ok(())
@@ -139,7 +145,10 @@ impl SlackService {
 
     /// Send message via Slack Incoming Webhook
     async fn send_via_webhook(&self, message: SlackMessage) -> Result<()> {
-        let webhook_url = self.config.webhook_url.as_ref()
+        let webhook_url = self
+            .config
+            .webhook_url
+            .as_ref()
             .context("Slack webhook requires SLACK_WEBHOOK_URL environment variable")?;
 
         #[derive(Serialize)]
@@ -178,7 +187,8 @@ impl SlackService {
 
         if !message.fields.is_empty() {
             attachment.fields = Some(
-                message.fields
+                message
+                    .fields
                     .iter()
                     .map(|(title, value)| SlackField {
                         title: title.clone(),
@@ -197,7 +207,8 @@ impl SlackService {
             attachments: Some(attachments),
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(webhook_url)
             .header("Content-Type", "application/json")
             .json(&payload)
@@ -217,13 +228,15 @@ impl SlackService {
 
     /// Send message via Slack Web API (chat.postMessage)
     async fn send_via_webapi(&self, message: SlackMessage) -> Result<()> {
-        let bot_token = self.config.bot_token.as_ref()
+        let bot_token = self
+            .config
+            .bot_token
+            .as_ref()
             .context("Slack Web API requires SLACK_BOT_TOKEN environment variable")?;
 
-        let channel = message.channel
-            .as_ref()
-            .or(self.config.default_channel.as_ref())
-            .context("Slack Web API requires channel (set SLACK_DEFAULT_CHANNEL or provide in message)")?;
+        let channel = message.channel.as_ref().or(self.config.default_channel.as_ref()).context(
+            "Slack Web API requires channel (set SLACK_DEFAULT_CHANNEL or provide in message)",
+        )?;
 
         #[derive(Serialize)]
         struct SlackApiPayload {
@@ -254,7 +267,8 @@ impl SlackService {
         }));
 
         if !message.fields.is_empty() {
-            let fields: Vec<serde_json::Value> = message.fields
+            let fields: Vec<serde_json::Value> = message
+                .fields
                 .iter()
                 .map(|(title, value)| {
                     serde_json::json!({
@@ -273,10 +287,15 @@ impl SlackService {
         let payload = SlackApiPayload {
             channel: channel.clone(),
             text: message.text.clone(),
-            blocks: if blocks.is_empty() { None } else { Some(blocks) },
+            blocks: if blocks.is_empty() {
+                None
+            } else {
+                Some(blocks)
+            },
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://slack.com/api/chat.postMessage")
             .header("Authorization", format!("Bearer {}", bot_token))
             .header("Content-Type", "application/json")
@@ -292,14 +311,13 @@ impl SlackService {
         }
 
         // Check Slack API response for errors
-        let api_response: serde_json::Value = response.json().await
-            .context("Failed to parse Slack API response")?;
+        let api_response: serde_json::Value =
+            response.json().await.context("Failed to parse Slack API response")?;
 
         if let Some(ok) = api_response.get("ok").and_then(|v| v.as_bool()) {
             if !ok {
-                let error_msg = api_response.get("error")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Unknown error");
+                let error_msg =
+                    api_response.get("error").and_then(|v| v.as_str()).unwrap_or("Unknown error");
                 anyhow::bail!("Slack API returned error: {}", error_msg);
             }
         }

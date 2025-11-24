@@ -47,6 +47,7 @@ mockforge-plugin-loader = { version = "0.3.2", path = "../mockforge-plugin-loade
 mockforge-scenarios = { version = "0.3.2", path = "../mockforge-scenarios", features = ["studio-packs"] }
 mockforge-chaos = { version = "0.3.2", path = "../mockforge-chaos" }
 mockforge-schema = { version = "0.3.0", path = "../mockforge-schema" }
+mockforge-pipelines = { version = "0.3.2", path = "../mockforge-pipelines", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
@@ -98,6 +99,7 @@ kafka = ["mockforge-kafka", "rdkafka"]
 amqp = ["mockforge-amqp", "lapin", "futures-lite"]
 smtp = ["mockforge-smtp", "mockforge-http/smtp"]
 tcp = ["mockforge-tcp"]
+pipelines = ["dep:mockforge-pipelines"]
 
 [dev-dependencies]
 assert_cmd = "2.0"

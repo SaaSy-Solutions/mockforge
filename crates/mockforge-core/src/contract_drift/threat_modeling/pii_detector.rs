@@ -6,7 +6,6 @@
 use super::types::{ThreatCategory, ThreatFinding, ThreatLevel};
 use crate::openapi::OpenApiSpec;
 use regex::Regex;
-use serde_json::Value;
 use std::collections::HashMap;
 
 /// PII detector for API contracts
@@ -70,7 +69,9 @@ impl PiiDetector {
                 ];
 
                 for (method, operation_opt) in methods {
-                    let Some(operation) = operation_opt else { continue };
+                    let Some(operation) = operation_opt else {
+                        continue;
+                    };
                     // Analyze request body
                     if let Some(request_body) = &operation.request_body {
                         if let Some(ref_or_item) = request_body.as_item() {
@@ -135,7 +136,9 @@ impl PiiDetector {
             }
 
             // Check properties
-            if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj_type)) = &schema.schema_kind {
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj_type)) =
+                &schema.schema_kind
+            {
                 for (prop_name, prop_schema) in &obj_type.properties {
                     let field_path = format!("{}.{}", base_path, prop_name);
 
@@ -156,7 +159,8 @@ impl PiiDetector {
 
                     // Recursively check nested schemas
                     if let openapiv3::ReferenceOr::Item(prop_schema_item) = prop_schema {
-                        if let Some(prop_desc) = &prop_schema_item.as_ref().schema_data.description {
+                        if let Some(prop_desc) = &prop_schema_item.as_ref().schema_data.description
+                        {
                             if self.contains_pii_keywords(prop_desc) {
                                 findings.push(ThreatFinding {
                                     finding_type: ThreatCategory::PiiExposure,
@@ -193,9 +197,7 @@ impl PiiDetector {
     /// Check if a field name indicates PII
     fn is_pii_field_name(&self, field_name: &str) -> bool {
         let field_lower = field_name.to_lowercase();
-        self.pii_field_names
-            .iter()
-            .any(|pii_name| field_lower.contains(pii_name))
+        self.pii_field_names.iter().any(|pii_name| field_lower.contains(pii_name))
     }
 }
 

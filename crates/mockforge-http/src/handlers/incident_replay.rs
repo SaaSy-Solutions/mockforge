@@ -1,6 +1,6 @@
 //! Incident Replay API handlers
 
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::response::Json;
 use mockforge_chaos::incident_replay::{
     IncidentFormatAdapter, IncidentReplayGenerator, IncidentTimeline,

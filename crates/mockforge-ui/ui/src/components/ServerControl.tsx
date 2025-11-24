@@ -15,8 +15,8 @@ import {
   type ServerStatus,
 } from '@/utils/tauri';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/Badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Loader2, Play, Square, RefreshCw } from 'lucide-react';
 
 export function ServerControl() {

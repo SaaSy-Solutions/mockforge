@@ -74,7 +74,7 @@ fn detect_system_theme() -> SystemTheme {
 
         // Check gsettings (GNOME)
         if let Ok(output) = std::process::Command::new("gsettings")
-            .args(&["get", "org.gnome.desktop.interface", "gtk-theme"])
+            .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
             .output()
         {
             let theme = String::from_utf8_lossy(&output.stdout);
@@ -85,7 +85,7 @@ fn detect_system_theme() -> SystemTheme {
 
         // Check color-scheme preference (newer GNOME)
         if let Ok(output) = std::process::Command::new("gsettings")
-            .args(&["get", "org.gnome.desktop.interface", "color-scheme"])
+            .args(["get", "org.gnome.desktop.interface", "color-scheme"])
             .output()
         {
             let scheme = String::from_utf8_lossy(&output.stdout);

@@ -257,7 +257,7 @@ impl SequenceLearner {
             let sequence_id = format!(
                 "seq_{}_{}",
                 pattern[0].0.to_lowercase(),
-                pattern[0].1.replace('/', "_").replace('{', "").replace('}', "")
+                pattern[0].1.replace('/', "_").replace(['{', '}'], "")
             );
             let sequence_name =
                 format!("{} {} → {} steps", pattern[0].0, pattern[0].1, pattern.len());

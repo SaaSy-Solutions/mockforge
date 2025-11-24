@@ -9,10 +9,9 @@ use axum::{
     response::Json,
 };
 use mockforge_core::security::compliance_dashboard::{
-    AlertType, ComplianceAlert, ComplianceDashboardEngine, ComplianceGap, ComplianceStandard,
-    GapSeverity,
+    AlertType, ComplianceDashboardEngine, ComplianceStandard, GapSeverity,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

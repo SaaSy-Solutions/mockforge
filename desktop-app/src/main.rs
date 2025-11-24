@@ -4,7 +4,7 @@
 use crate::app::AppState;
 use crate::server::MockServerManager;
 use std::sync::Arc;
-use tauri::{Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem};
+use tauri::{Manager, SystemTray, SystemTrayMenu, SystemTrayMenuItem};
 use tokio::sync::RwLock;
 
 mod app;

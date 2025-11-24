@@ -4,10 +4,10 @@
 //! and collect trace data for debugging and observability.
 
 use crate::openapi::response::ResponseGenerator;
-use crate::openapi::OpenApiSpec;
-use crate::{Result};
-use crate::reality_continuum::response_trace::ResponseGenerationTrace;
 use crate::openapi::response_selection::ResponseSelectionMode;
+use crate::openapi::OpenApiSpec;
+use crate::reality_continuum::response_trace::ResponseGenerationTrace;
+use crate::Result;
 use openapiv3::Operation;
 use serde_json::Value;
 use std::time::Instant;
@@ -54,17 +54,11 @@ pub fn generate_response_with_trace(
     }
 
     // Record template expansion setting
-    trace.add_metadata(
-        "expand_tokens".to_string(),
-        serde_json::json!(expand_tokens),
-    );
+    trace.add_metadata("expand_tokens".to_string(), serde_json::json!(expand_tokens));
 
     // Record persona if provided
     if let Some(p) = persona {
-        trace.add_metadata(
-            "persona_name".to_string(),
-            serde_json::json!(p.name),
-        );
+        trace.add_metadata("persona_name".to_string(), serde_json::json!(p.name));
     }
 
     // Generate the response
@@ -85,24 +79,15 @@ pub fn generate_response_with_trace(
 
     // Record generation time
     let generation_time_ms = start_time.elapsed().as_millis() as u64;
-    trace.add_metadata(
-        "generation_time_ms".to_string(),
-        serde_json::json!(generation_time_ms),
-    );
+    trace.add_metadata("generation_time_ms".to_string(), serde_json::json!(generation_time_ms));
 
     // Record operation ID if available
     if let Some(operation_id) = &operation.operation_id {
-        trace.add_metadata(
-            "operation_id".to_string(),
-            serde_json::json!(operation_id),
-        );
+        trace.add_metadata("operation_id".to_string(), serde_json::json!(operation_id));
     }
 
     // Record status code
-    trace.add_metadata(
-        "status_code".to_string(),
-        serde_json::json!(status_code),
-    );
+    trace.add_metadata("status_code".to_string(), serde_json::json!(status_code));
 
     // Try to determine which example was selected
     // This is a simplified version - full implementation would need to
@@ -110,19 +95,13 @@ pub fn generate_response_with_trace(
     if let Some(sel) = selector {
         if actual_mode == ResponseSelectionMode::Sequential {
             let seq_index = sel.get_sequential_index();
-            trace.add_metadata(
-                "sequential_index".to_string(),
-                serde_json::json!(seq_index),
-            );
+            trace.add_metadata("sequential_index".to_string(), serde_json::json!(seq_index));
         }
     }
 
     // Record content type
     if let Some(ct) = content_type {
-        trace.add_metadata(
-            "content_type".to_string(),
-            serde_json::json!(ct),
-        );
+        trace.add_metadata("content_type".to_string(), serde_json::json!(ct));
     }
 
     Ok((response, trace))

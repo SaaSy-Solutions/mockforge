@@ -7,22 +7,20 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use chrono::{DateTime, Utc};
-use mockforge_core::contract_drift::threat_modeling::{
-    ThreatAssessment, ThreatAnalyzer, ThreatModelingConfig,
-};
+use mockforge_core::contract_drift::threat_modeling::{ThreatAnalyzer, ThreatAssessment};
 use mockforge_core::openapi::OpenApiSpec;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
-use uuid::Uuid;
 
 use crate::database::Database;
 
 /// Helper function to map database row to ThreatAssessment
 #[cfg(feature = "database")]
-fn map_row_to_threat_assessment(row: &sqlx::postgres::PgRow) -> Result<ThreatAssessment, sqlx::Error> {
+fn map_row_to_threat_assessment(
+    row: &sqlx::postgres::PgRow,
+) -> Result<ThreatAssessment, sqlx::Error> {
     use mockforge_core::contract_drift::threat_modeling::{
-        AggregationLevel, ThreatCategory, ThreatFinding, ThreatLevel, RemediationSuggestion,
+        AggregationLevel, RemediationSuggestion, ThreatCategory, ThreatFinding, ThreatLevel,
     };
 
     // Parse basic fields
@@ -55,16 +53,15 @@ fn map_row_to_threat_assessment(row: &sqlx::postgres::PgRow) -> Result<ThreatAss
 
     // Parse JSONB columns
     let threat_categories_json: serde_json::Value = row.try_get("threat_categories")?;
-    let threat_categories: Vec<ThreatCategory> = serde_json::from_value(threat_categories_json)
-        .unwrap_or_default();
+    let threat_categories: Vec<ThreatCategory> =
+        serde_json::from_value(threat_categories_json).unwrap_or_default();
 
     let findings_json: serde_json::Value = row.try_get("findings")?;
-    let findings: Vec<ThreatFinding> = serde_json::from_value(findings_json)
-        .unwrap_or_default();
+    let findings: Vec<ThreatFinding> = serde_json::from_value(findings_json).unwrap_or_default();
 
     let remediations_json: serde_json::Value = row.try_get("remediation_suggestions")?;
-    let remediation_suggestions: Vec<RemediationSuggestion> = serde_json::from_value(remediations_json)
-        .unwrap_or_default();
+    let remediation_suggestions: Vec<RemediationSuggestion> =
+        serde_json::from_value(remediations_json).unwrap_or_default();
 
     Ok(ThreatAssessment {
         workspace_id: workspace_id.map(|u| u.to_string()),
@@ -121,15 +118,13 @@ pub async fn get_workspace_threats(
     })?;
 
     match row {
-        Some(row) => {
-            match map_row_to_threat_assessment(&row) {
-                Ok(assessment) => Ok(Json(assessment)),
-                Err(e) => {
-                    tracing::error!("Failed to map threat assessment: {}", e);
-                    Err(StatusCode::INTERNAL_SERVER_ERROR)
-                }
+        Some(row) => match map_row_to_threat_assessment(&row) {
+            Ok(assessment) => Ok(Json(assessment)),
+            Err(e) => {
+                tracing::error!("Failed to map threat assessment: {}", e);
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
             }
-        }
+        },
         None => Err(StatusCode::NOT_FOUND),
     }
 }
@@ -172,15 +167,13 @@ pub async fn get_service_threats(
     })?;
 
     match row {
-        Some(row) => {
-            match map_row_to_threat_assessment(&row) {
-                Ok(assessment) => Ok(Json(assessment)),
-                Err(e) => {
-                    tracing::error!("Failed to map threat assessment: {}", e);
-                    Err(StatusCode::INTERNAL_SERVER_ERROR)
-                }
+        Some(row) => match map_row_to_threat_assessment(&row) {
+            Ok(assessment) => Ok(Json(assessment)),
+            Err(e) => {
+                tracing::error!("Failed to map threat assessment: {}", e);
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
             }
-        }
+        },
         None => Err(StatusCode::NOT_FOUND),
     }
 }
@@ -210,10 +203,7 @@ pub async fn get_endpoint_threats(
         None => return Err(StatusCode::SERVICE_UNAVAILABLE),
     };
 
-    let method = params
-        .get("method")
-        .and_then(|v| v.as_str())
-        .unwrap_or("%");
+    let method = params.get("method").and_then(|v| v.as_str()).unwrap_or("%");
 
     let row = sqlx::query(
         "SELECT * FROM contract_threat_assessments
@@ -230,15 +220,13 @@ pub async fn get_endpoint_threats(
     })?;
 
     match row {
-        Some(row) => {
-            match map_row_to_threat_assessment(&row) {
-                Ok(assessment) => Ok(Json(assessment)),
-                Err(e) => {
-                    tracing::error!("Failed to map threat assessment: {}", e);
-                    Err(StatusCode::INTERNAL_SERVER_ERROR)
-                }
+        Some(row) => match map_row_to_threat_assessment(&row) {
+            Ok(assessment) => Ok(Json(assessment)),
+            Err(e) => {
+                tracing::error!("Failed to map threat assessment: {}", e);
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
             }
-        }
+        },
         None => Err(StatusCode::NOT_FOUND),
     }
 }
@@ -467,8 +455,8 @@ pub async fn list_findings(
             _ => continue, // Skip invalid severity
         };
 
-        let context: HashMap<String, serde_json::Value> = serde_json::from_value(context_json)
-            .unwrap_or_default();
+        let context: HashMap<String, serde_json::Value> =
+            serde_json::from_value(context_json).unwrap_or_default();
 
         findings.push(serde_json::json!({
             "id": finding_id.to_string(),
@@ -608,9 +596,9 @@ pub fn threat_modeling_router(state: ThreatModelingState) -> axum::Router {
     use axum::Router;
 
     Router::new()
-        .route("/api/v1/threats/workspace/:workspace_id", get(get_workspace_threats))
-        .route("/api/v1/threats/service/:service_id", get(get_service_threats))
-        .route("/api/v1/threats/endpoint/:endpoint", get(get_endpoint_threats))
+        .route("/api/v1/threats/workspace/{workspace_id}", get(get_workspace_threats))
+        .route("/api/v1/threats/service/{service_id}", get(get_service_threats))
+        .route("/api/v1/threats/endpoint/{endpoint}", get(get_endpoint_threats))
         .route("/api/v1/threats/assess", post(assess_threats))
         .route("/api/v1/threats/findings", get(list_findings))
         .route("/api/v1/threats/remediations", get(get_remediations))

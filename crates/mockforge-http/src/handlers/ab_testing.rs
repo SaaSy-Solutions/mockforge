@@ -3,7 +3,7 @@
 //! This module provides HTTP handlers for managing A/B tests and mock variants.
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Query, State},
     http::StatusCode,
     response::Json,
 };
@@ -11,7 +11,7 @@ use mockforge_core::ab_testing::analytics::ABTestReport;
 use mockforge_core::ab_testing::{
     ABTestConfig, VariantAnalytics, VariantComparison, VariantManager,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -22,6 +22,12 @@ use tracing::{error, info};
 pub struct ABTestingState {
     /// Variant manager
     pub variant_manager: Arc<VariantManager>,
+}
+
+impl Default for ABTestingState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ABTestingState {

@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Pattern for matching requests during verification
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct VerificationRequest {
     /// HTTP method to match (e.g., "GET", "POST"). Case-insensitive.
     /// If None, matches any method.
@@ -51,18 +51,6 @@ pub struct VerificationRequest {
     /// Request body pattern to match. Supports exact match or regex.
     /// If None, body is not checked.
     pub body_pattern: Option<String>,
-}
-
-impl Default for VerificationRequest {
-    fn default() -> Self {
-        Self {
-            method: None,
-            path: None,
-            query_params: HashMap::new(),
-            headers: HashMap::new(),
-            body_pattern: None,
-        }
-    }
 }
 
 /// Count assertion for verification
@@ -267,10 +255,10 @@ fn match_wildcard_segments(
                 return true;
             }
             // Try matching one or more segments
-            if path_idx < path_parts.len() {
-                if match_wildcard_segments(pattern_parts, path_parts, pattern_idx, path_idx + 1) {
-                    return true;
-                }
+            if path_idx < path_parts.len()
+                && match_wildcard_segments(pattern_parts, path_parts, pattern_idx, path_idx + 1)
+            {
+                return true;
             }
             false
         }

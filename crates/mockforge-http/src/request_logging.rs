@@ -105,9 +105,7 @@ pub async fn log_http_requests(
     if let Some(trace) = response.extensions().get::<ResponseGenerationTrace>() {
         // Serialize trace to JSON string and store in metadata
         if let Ok(trace_json) = serde_json::to_string(trace) {
-            log_entry
-                .metadata
-                .insert("response_generation_trace".to_string(), trace_json);
+            log_entry.metadata.insert("response_generation_trace".to_string(), trace_json);
         }
     }
 

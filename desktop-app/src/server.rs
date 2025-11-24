@@ -3,8 +3,6 @@
 //! This module handles starting and stopping the embedded MockForge server
 
 use mockforge_core::ServerConfig;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 

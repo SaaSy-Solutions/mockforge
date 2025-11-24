@@ -9,7 +9,6 @@ use colored::Colorize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// Wizard configuration collected from user
 #[derive(Debug, Clone)]
@@ -281,7 +280,7 @@ fn generate_config_yaml(config: &WizardConfig) -> String {
         yaml.push_str("  cors_enabled: true\n");
         yaml.push_str("  request_validation: \"enforce\"\n");
         yaml.push_str("  response_template_expand: true\n");
-        yaml.push_str("\n");
+        yaml.push('\n');
     }
 
     // WebSocket Server
@@ -290,7 +289,7 @@ fn generate_config_yaml(config: &WizardConfig) -> String {
         yaml.push_str("websocket:\n");
         yaml.push_str("  port: 3001\n");
         yaml.push_str("  host: \"0.0.0.0\"\n");
-        yaml.push_str("\n");
+        yaml.push('\n');
     }
 
     // gRPC Server
@@ -299,7 +298,7 @@ fn generate_config_yaml(config: &WizardConfig) -> String {
         yaml.push_str("grpc:\n");
         yaml.push_str("  port: 50051\n");
         yaml.push_str("  host: \"0.0.0.0\"\n");
-        yaml.push_str("\n");
+        yaml.push('\n');
     }
 
     // GraphQL Server
@@ -308,7 +307,7 @@ fn generate_config_yaml(config: &WizardConfig) -> String {
         yaml.push_str("graphql:\n");
         yaml.push_str("  port: 4000\n");
         yaml.push_str("  host: \"0.0.0.0\"\n");
-        yaml.push_str("\n");
+        yaml.push('\n');
     }
 
     // Kafka
@@ -317,7 +316,7 @@ fn generate_config_yaml(config: &WizardConfig) -> String {
         yaml.push_str("kafka:\n");
         yaml.push_str("  enabled: true\n");
         yaml.push_str("  port: 9092\n");
-        yaml.push_str("\n");
+        yaml.push('\n');
     }
 
     // MQTT
@@ -326,7 +325,7 @@ fn generate_config_yaml(config: &WizardConfig) -> String {
         yaml.push_str("mqtt:\n");
         yaml.push_str("  enabled: true\n");
         yaml.push_str("  port: 1883\n");
-        yaml.push_str("\n");
+        yaml.push('\n');
     }
 
     // AMQP
@@ -335,7 +334,7 @@ fn generate_config_yaml(config: &WizardConfig) -> String {
         yaml.push_str("amqp:\n");
         yaml.push_str("  enabled: true\n");
         yaml.push_str("  port: 5672\n");
-        yaml.push_str("\n");
+        yaml.push('\n');
     }
 
     // Admin UI
@@ -345,7 +344,7 @@ fn generate_config_yaml(config: &WizardConfig) -> String {
         yaml.push_str("  enabled: true\n");
         yaml.push_str("  port: 9080\n");
         yaml.push_str("  host: \"127.0.0.1\"\n");
-        yaml.push_str("\n");
+        yaml.push('\n');
     }
 
     // Observability
@@ -354,7 +353,7 @@ fn generate_config_yaml(config: &WizardConfig) -> String {
     yaml.push_str("  prometheus:\n");
     yaml.push_str("    enabled: true\n");
     yaml.push_str("    port: 9090\n");
-    yaml.push_str("\n");
+    yaml.push('\n');
 
     // Logging
     yaml.push_str("# Logging\n");

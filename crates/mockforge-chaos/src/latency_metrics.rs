@@ -1,11 +1,10 @@
 //! Latency metrics tracking for real-time visualization
 
-use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 /// Single latency sample
 #[derive(Debug, Clone, Serialize, Deserialize)]

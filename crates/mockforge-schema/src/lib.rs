@@ -5,7 +5,6 @@
 //! validation for `mockforge.yaml`, `mockforge.toml`, persona files, and blueprint files.
 
 use schemars::schema_for;
-use serde_json;
 
 /// Generate JSON Schema for MockForge ServerConfig (main config)
 ///
@@ -36,12 +35,18 @@ pub fn generate_config_schema() -> serde_json::Value {
 
     // Add metadata for better IDE support
     if let Some(obj) = schema_value.as_object_mut() {
-        obj.insert("$schema".to_string(), serde_json::json!("http://json-schema.org/draft-07/schema#"));
+        obj.insert(
+            "$schema".to_string(),
+            serde_json::json!("http://json-schema.org/draft-07/schema#"),
+        );
         obj.insert("title".to_string(), serde_json::json!("MockForge Server Configuration"));
-        obj.insert("description".to_string(), serde_json::json!(
-            "Complete configuration schema for MockForge mock server. \
+        obj.insert(
+            "description".to_string(),
+            serde_json::json!(
+                "Complete configuration schema for MockForge mock server. \
              This schema provides autocomplete and validation for mockforge.yaml files."
-        ));
+            ),
+        );
     }
 
     schema_value
@@ -54,16 +59,23 @@ pub fn generate_config_schema() -> serde_json::Value {
 pub fn generate_reality_schema() -> serde_json::Value {
     let schema = schema_for!(mockforge_core::config::RealitySliderConfig);
 
-    let mut schema_value = serde_json::to_value(schema).expect("Failed to serialize reality schema");
+    let mut schema_value =
+        serde_json::to_value(schema).expect("Failed to serialize reality schema");
 
     // Add metadata for better IDE support
     if let Some(obj) = schema_value.as_object_mut() {
-        obj.insert("$schema".to_string(), serde_json::json!("http://json-schema.org/draft-07/schema#"));
+        obj.insert(
+            "$schema".to_string(),
+            serde_json::json!("http://json-schema.org/draft-07/schema#"),
+        );
         obj.insert("title".to_string(), serde_json::json!("MockForge Reality Configuration"));
-        obj.insert("description".to_string(), serde_json::json!(
-            "Reality slider configuration for controlling mock environment realism. \
+        obj.insert(
+            "description".to_string(),
+            serde_json::json!(
+                "Reality slider configuration for controlling mock environment realism. \
              Maps reality levels (1-5) to specific subsystem settings."
-        ));
+            ),
+        );
     }
 
     schema_value
@@ -77,16 +89,23 @@ pub fn generate_persona_schema() -> serde_json::Value {
     // Generate schema for PersonaRegistryConfig which contains persona definitions
     let schema = schema_for!(mockforge_core::config::PersonaRegistryConfig);
 
-    let mut schema_value = serde_json::to_value(schema).expect("Failed to serialize persona schema");
+    let mut schema_value =
+        serde_json::to_value(schema).expect("Failed to serialize persona schema");
 
     // Add metadata for better IDE support
     if let Some(obj) = schema_value.as_object_mut() {
-        obj.insert("$schema".to_string(), serde_json::json!("http://json-schema.org/draft-07/schema#"));
+        obj.insert(
+            "$schema".to_string(),
+            serde_json::json!("http://json-schema.org/draft-07/schema#"),
+        );
         obj.insert("title".to_string(), serde_json::json!("MockForge Persona Configuration"));
-        obj.insert("description".to_string(), serde_json::json!(
-            "Persona configuration for consistent, personality-driven data generation. \
+        obj.insert(
+            "description".to_string(),
+            serde_json::json!(
+                "Persona configuration for consistent, personality-driven data generation. \
              Defines personas with unique IDs, domains, traits, and deterministic seeds."
-        ));
+            ),
+        );
     }
 
     schema_value
@@ -388,23 +407,22 @@ pub fn validate_config_file(
     schema_type: &str,
     schema: &serde_json::Value,
 ) -> Result<ValidationResult, Box<dyn std::error::Error>> {
-    use std::fs;
     use jsonschema::{Draft, Validator as SchemaValidator};
+    use std::fs;
 
     // Read and parse the config file
     let content = fs::read_to_string(file_path)?;
-    let config_value: serde_json::Value = if file_path.extension()
+    let config_value: serde_json::Value = if file_path
+        .extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| ext.eq_ignore_ascii_case("yaml") || ext.eq_ignore_ascii_case("yml"))
         .unwrap_or(false)
     {
         // Parse YAML
-        serde_yaml::from_str(&content)
-            .map_err(|e| format!("Failed to parse YAML: {}", e))?
+        serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse YAML: {}", e))?
     } else {
         // Parse JSON
-        serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse JSON: {}", e))?
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse JSON: {}", e))?
     };
 
     // Compile the schema
@@ -416,11 +434,7 @@ pub fn validate_config_file(
     // Validate
     let mut errors = Vec::new();
     for error in compiled_schema.iter_errors(&config_value) {
-        errors.push(format!(
-            "{}: {}",
-            error.instance_path.to_string(),
-            error
-        ));
+        errors.push(format!("{}: {}", error.instance_path, error));
     }
 
     if errors.is_empty() {
@@ -446,7 +460,10 @@ pub fn detect_schema_type(file_path: &std::path::Path) -> Option<String> {
     let path_str = file_path.to_string_lossy().to_lowercase();
 
     // Check file name patterns
-    if file_name == "mockforge.yaml" || file_name == "mockforge.yml" || file_name == "mockforge.json" {
+    if file_name == "mockforge.yaml"
+        || file_name == "mockforge.yml"
+        || file_name == "mockforge.json"
+    {
         return Some("mockforge-config".to_string());
     }
 

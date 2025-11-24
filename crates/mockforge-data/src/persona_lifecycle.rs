@@ -155,10 +155,8 @@ impl PersonaLifecycle {
         let field_value = self.metadata.get(field).and_then(|v| {
             if let Some(num) = v.as_u64() {
                 Some(num as i64)
-            } else if let Some(num) = v.as_i64() {
-                Some(num)
             } else {
-                None
+                v.as_i64()
             }
         });
 
@@ -250,8 +248,12 @@ impl PersonaLifecycle {
         match preset {
             LifecyclePreset::Subscription => LifecycleScenarios::subscription_preset(persona_id),
             LifecyclePreset::Loan => LifecycleScenarios::loan_preset(persona_id),
-            LifecyclePreset::OrderFulfillment => LifecycleScenarios::order_fulfillment_preset(persona_id),
-            LifecyclePreset::UserEngagement => LifecycleScenarios::user_engagement_preset(persona_id),
+            LifecyclePreset::OrderFulfillment => {
+                LifecycleScenarios::order_fulfillment_preset(persona_id)
+            }
+            LifecyclePreset::UserEngagement => {
+                LifecycleScenarios::user_engagement_preset(persona_id)
+            }
         }
     }
 }

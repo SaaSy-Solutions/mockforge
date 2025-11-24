@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use mockforge_core::consumer_contracts::{
-    Consumer, ConsumerBreakingChangeDetector, ConsumerIdentifier, ConsumerRegistry, ConsumerType,
+    ConsumerBreakingChangeDetector, ConsumerIdentifier, ConsumerRegistry, ConsumerType,
     ConsumerUsage, ConsumerViolation, UsageRecorder,
 };
 

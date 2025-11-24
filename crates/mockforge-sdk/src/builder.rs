@@ -29,7 +29,8 @@ impl Default for MockServerBuilder {
 
 impl MockServerBuilder {
     /// Create a new mock server builder
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             port: None,
             host: None,
@@ -46,14 +47,16 @@ impl MockServerBuilder {
     }
 
     /// Set the HTTP port
-    pub fn port(mut self, port: u16) -> Self {
+    #[must_use]
+    pub const fn port(mut self, port: u16) -> Self {
         self.port = Some(port);
         self.auto_port = false;
         self
     }
 
     /// Automatically discover an available port
-    pub fn auto_port(mut self) -> Self {
+    #[must_use]
+    pub const fn auto_port(mut self) -> Self {
         self.auto_port = true;
         self.port = None;
         self
@@ -61,7 +64,8 @@ impl MockServerBuilder {
 
     /// Set the port range for automatic port discovery
     /// Default range is 30000-30100
-    pub fn port_range(mut self, start: u16, end: u16) -> Self {
+    #[must_use]
+    pub const fn port_range(mut self, start: u16, end: u16) -> Self {
         self.port_range = Some((start, end));
         self
     }
@@ -78,38 +82,43 @@ impl MockServerBuilder {
         self
     }
 
-    /// Load routes from an OpenAPI specification
+    /// Load routes from an `OpenAPI` specification
     pub fn openapi_spec(mut self, path: impl Into<PathBuf>) -> Self {
         self.openapi_spec = Some(path.into());
         self
     }
 
     /// Set the latency profile for simulating network delays
+    #[must_use]
     pub fn latency(mut self, profile: LatencyProfile) -> Self {
         self.latency_profile = Some(profile);
         self
     }
 
     /// Enable failure injection with configuration
+    #[must_use]
     pub fn failures(mut self, config: FailureConfig) -> Self {
         self.failure_config = Some(config);
         self
     }
 
     /// Enable proxy mode with configuration
+    #[must_use]
     pub fn proxy(mut self, config: ProxyConfig) -> Self {
         self.proxy_config = Some(config);
         self
     }
 
     /// Enable admin API
-    pub fn admin(mut self, enabled: bool) -> Self {
+    #[must_use]
+    pub const fn admin(mut self, enabled: bool) -> Self {
         self.enable_admin = enabled;
         self
     }
 
     /// Set admin API port
-    pub fn admin_port(mut self, port: u16) -> Self {
+    #[must_use]
+    pub const fn admin_port(mut self, port: u16) -> Self {
         self.admin_port = Some(port);
         self
     }
@@ -191,8 +200,7 @@ fn find_available_port(start: u16, end: u16) -> Result<u16> {
     // Validate port range
     if start >= end {
         return Err(Error::InvalidConfig(format!(
-            "Invalid port range: start ({}) must be less than end ({})",
-            start, end
+            "Invalid port range: start ({start}) must be less than end ({end})"
         )));
     }
 
@@ -204,7 +212,6 @@ fn find_available_port(start: u16, end: u16) -> Result<u16> {
     }
 
     Err(Error::PortDiscoveryFailed(format!(
-        "No available ports found in range {}-{}",
-        start, end
+        "No available ports found in range {start}-{end}"
     )))
 }

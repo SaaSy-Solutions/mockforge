@@ -11,9 +11,7 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use mockforge_analytics::{
-    AnalyticsDatabase, AnalyticsFilter, ErrorCategory, Granularity, OverviewMetrics,
-};
+use mockforge_analytics::{AnalyticsDatabase, AnalyticsFilter, Granularity, OverviewMetrics};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, error};

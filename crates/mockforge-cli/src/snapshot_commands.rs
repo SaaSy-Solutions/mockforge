@@ -6,7 +6,7 @@ use clap::Subcommand;
 use mockforge_core::snapshots::{SnapshotComponents, SnapshotManager};
 use mockforge_core::Result;
 use std::path::PathBuf;
-use tracing::{error, info};
+use tracing::info;
 
 /// Snapshot management subcommands
 #[derive(Subcommand, Debug)]
@@ -117,7 +117,16 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
             // TODO: Get consistency engine, workspace persistence, VBR engine, and Recorder from server state when integrated
             // For now, we'll create a placeholder that can be extended
             let manifest = manager
-                .save_snapshot(name.clone(), description, workspace.clone(), components, None, None, None, None)
+                .save_snapshot(
+                    name.clone(),
+                    description,
+                    workspace.clone(),
+                    components,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await?;
 
             println!("✓ Snapshot '{}' saved successfully", name);

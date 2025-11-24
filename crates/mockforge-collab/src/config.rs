@@ -8,7 +8,7 @@ use std::time::Duration;
 pub struct CollabConfig {
     /// JWT secret for authentication
     pub jwt_secret: String,
-    /// Database URL (SQLite or PostgreSQL)
+    /// Database URL (`SQLite` or `PostgreSQL`)
     pub database_url: String,
     /// Server bind address
     pub bind_address: String,
@@ -24,7 +24,7 @@ pub struct CollabConfig {
     pub websocket_ping_interval: Duration,
     /// Maximum message size (bytes)
     pub max_message_size: usize,
-    /// Directory for workspace storage (for CoreBridge)
+    /// Directory for workspace storage (for `CoreBridge`)
     pub workspace_dir: Option<String>,
     /// Directory for backup storage
     pub backup_dir: Option<String>,
@@ -50,6 +50,7 @@ impl Default for CollabConfig {
 
 impl CollabConfig {
     /// Load configuration from environment variables
+    #[must_use]
     pub fn from_env() -> Self {
         Self {
             jwt_secret: std::env::var("MOCKFORGE_JWT_SECRET")

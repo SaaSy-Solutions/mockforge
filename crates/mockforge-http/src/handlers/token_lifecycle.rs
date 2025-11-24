@@ -7,19 +7,15 @@
 //! - Prebuilt test scenarios
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Query, State},
     http::StatusCode,
     response::Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
-use crate::auth::token_lifecycle::{
-    extract_token_id, ClockSkewState, KeyRotationState, RevokedToken, TokenLifecycleManager,
-    TokenRevocationStore,
-};
+use crate::auth::token_lifecycle::{extract_token_id, TokenLifecycleManager};
 
 /// State for token lifecycle handlers
 #[derive(Clone)]

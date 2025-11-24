@@ -17,9 +17,9 @@ pub mod auto_generator;
 pub mod config;
 pub mod detector;
 
+pub use auto_generator::AutoGenerator;
 pub use config::RuntimeDaemonConfig;
 pub use detector::NotFoundDetector;
-pub use auto_generator::AutoGenerator;
 
 /// Runtime daemon for auto-creating mocks from 404s
 pub struct RuntimeDaemon {
@@ -55,4 +55,3 @@ mod tests {
         assert!(!daemon.is_enabled()); // Default should be disabled
     }
 }
-

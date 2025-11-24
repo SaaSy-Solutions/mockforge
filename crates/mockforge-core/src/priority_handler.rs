@@ -1,9 +1,7 @@
 //! Priority-based HTTP request handler implementing the full priority chain:
 //! Custom Fixtures → Replay → Stateful → Route Chaos (per-route fault/latency) → Global Fail → Proxy → Mock → Record
 
-use crate::behavioral_economics::{
-    BehavioralEconomicsEngine, ConditionEvaluator as BehavioralConditionEvaluator,
-};
+use crate::behavioral_economics::BehavioralEconomicsEngine;
 use crate::stateful_handler::StatefulResponseHandler;
 use crate::{
     CustomFixtureLoader, Error, FailureInjector, ProxyHandler, RealityContinuumEngine,
@@ -746,7 +744,7 @@ impl PriorityHttpHandler {
     /// then applies any matching actions to modify the response.
     async fn apply_behavioral_economics(
         &self,
-        mut response: PriorityResponse,
+        response: PriorityResponse,
         method: &Method,
         uri: &Uri,
         latency_ms: Option<u64>,

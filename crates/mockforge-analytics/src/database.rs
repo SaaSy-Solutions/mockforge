@@ -1,7 +1,11 @@
 //! Database layer for analytics storage
 
 use crate::error::{AnalyticsError, Result};
-use crate::models::*;
+use crate::models::{
+    AnalyticsFilter, AnalyticsSnapshot, DayMetricsAggregate, DriftPercentageMetrics,
+    EndpointCoverage, EndpointStats, ErrorEvent, HourMetricsAggregate, MetricsAggregate,
+    PersonaCIHit, RealityLevelStaleness, ScenarioUsageMetrics, TrafficPattern,
+};
 use futures::TryStreamExt;
 use sqlx::{sqlite::SqlitePoolOptions, Executor, Pool, Sqlite, SqlitePool};
 use std::path::Path;
@@ -17,7 +21,7 @@ impl AnalyticsDatabase {
     /// Create a new analytics database connection
     ///
     /// # Arguments
-    /// * `database_path` - Path to the SQLite database file (or ":memory:" for in-memory)
+    /// * `database_path` - Path to the `SQLite` database file (or ":memory:" for in-memory)
     pub async fn new(database_path: &Path) -> Result<Self> {
         let db_url = if database_path.to_str() == Some(":memory:") {
             "sqlite::memory:".to_string()
@@ -50,17 +54,24 @@ impl AnalyticsDatabase {
     pub async fn run_migrations(&self) -> Result<()> {
         info!("Running analytics database migrations");
 
+        // Run initial schema migration
         let migration_sql = include_str!("../migrations/001_analytics_schema.sql");
-
-        // Use execute_many which handles multiple statements
         let mut conn = self.pool.acquire().await?;
-
         let mut stream = conn.execute_many(migration_sql);
 
-        // Consume the stream to execute all statements
         while let Some(_) = stream.try_next().await.map_err(|e| {
             error!("Migration error: {}", e);
-            AnalyticsError::Migration(format!("Failed to execute migration: {}", e))
+            AnalyticsError::Migration(format!("Failed to execute migration: {e}"))
+        })? {}
+
+        // Run coverage metrics migration
+        let coverage_migration_sql = include_str!("../migrations/002_coverage_metrics.sql");
+        let mut conn = self.pool.acquire().await?;
+        let mut stream = conn.execute_many(coverage_migration_sql);
+
+        while let Some(_) = stream.try_next().await.map_err(|e| {
+            error!("Coverage metrics migration error: {}", e);
+            AnalyticsError::Migration(format!("Failed to execute coverage metrics migration: {e}"))
         })? {}
 
         info!("Analytics database migrations completed successfully");
@@ -68,7 +79,8 @@ impl AnalyticsDatabase {
     }
 
     /// Get a reference to the database pool
-    pub fn pool(&self) -> &SqlitePool {
+    #[must_use]
+    pub const fn pool(&self) -> &SqlitePool {
         &self.pool
     }
 
@@ -563,7 +575,7 @@ impl AnalyticsDatabase {
 
     /// Delete old minute aggregates
     pub async fn cleanup_minute_aggregates(&self, days: u32) -> Result<u64> {
-        let cutoff = chrono::Utc::now().timestamp() - (days as i64 * 86400);
+        let cutoff = chrono::Utc::now().timestamp() - (i64::from(days) * 86400);
 
         let result = sqlx::query("DELETE FROM metrics_aggregates_minute WHERE timestamp < ?")
             .bind(cutoff)
@@ -580,7 +592,7 @@ impl AnalyticsDatabase {
 
     /// Delete old hour aggregates
     pub async fn cleanup_hour_aggregates(&self, days: u32) -> Result<u64> {
-        let cutoff = chrono::Utc::now().timestamp() - (days as i64 * 86400);
+        let cutoff = chrono::Utc::now().timestamp() - (i64::from(days) * 86400);
 
         let result = sqlx::query("DELETE FROM metrics_aggregates_hour WHERE timestamp < ?")
             .bind(cutoff)
@@ -593,7 +605,7 @@ impl AnalyticsDatabase {
 
     /// Delete old error events
     pub async fn cleanup_error_events(&self, days: u32) -> Result<u64> {
-        let cutoff = chrono::Utc::now().timestamp() - (days as i64 * 86400);
+        let cutoff = chrono::Utc::now().timestamp() - (i64::from(days) * 86400);
 
         let result = sqlx::query("DELETE FROM error_events WHERE timestamp < ?")
             .bind(cutoff)
@@ -653,5 +665,396 @@ mod tests {
 
         let id = db.insert_minute_aggregate(&agg).await.unwrap();
         assert!(id > 0);
+    }
+}
+
+// ============================================================================
+// Coverage Metrics Operations (MockOps)
+// ============================================================================
+
+impl AnalyticsDatabase {
+    /// Record scenario usage
+    pub async fn record_scenario_usage(
+        &self,
+        scenario_id: &str,
+        workspace_id: Option<&str>,
+        org_id: Option<&str>,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+
+        // SQLite doesn't support ON CONFLICT with multiple columns easily, so use INSERT OR REPLACE
+        // First try to update existing record
+        let rows_affected = sqlx::query(
+            "UPDATE scenario_usage_metrics
+             SET usage_count = usage_count + 1,
+                 last_used_at = ?,
+                 updated_at = ?
+             WHERE scenario_id = ? AND (workspace_id = ? OR (workspace_id IS NULL AND ? IS NULL))
+               AND (org_id = ? OR (org_id IS NULL AND ? IS NULL))",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(scenario_id)
+        .bind(workspace_id)
+        .bind(workspace_id)
+        .bind(org_id)
+        .bind(org_id)
+        .execute(&self.pool)
+        .await?;
+
+        // If no rows were updated, insert a new record
+        if rows_affected.rows_affected() == 0 {
+            sqlx::query(
+                "INSERT INTO scenario_usage_metrics (scenario_id, workspace_id, org_id, usage_count, last_used_at, created_at, updated_at)
+                 VALUES (?, ?, ?, 1, ?, ?, ?)"
+            )
+            .bind(scenario_id)
+            .bind(workspace_id)
+            .bind(org_id)
+            .bind(now)
+            .bind(now)
+            .bind(now)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Record persona CI hit
+    pub async fn record_persona_ci_hit(
+        &self,
+        persona_id: &str,
+        workspace_id: Option<&str>,
+        org_id: Option<&str>,
+        ci_run_id: Option<&str>,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+
+        sqlx::query(
+            "INSERT INTO persona_ci_hits (persona_id, workspace_id, org_id, ci_run_id, hit_count, hit_at)
+             VALUES (?, ?, ?, ?, 1, ?)"
+        )
+        .bind(persona_id)
+        .bind(workspace_id)
+        .bind(org_id)
+        .bind(ci_run_id)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Record endpoint test coverage
+    pub async fn record_endpoint_coverage(
+        &self,
+        endpoint: &str,
+        method: Option<&str>,
+        protocol: &str,
+        workspace_id: Option<&str>,
+        org_id: Option<&str>,
+        coverage_percentage: Option<f64>,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+
+        // Try to update existing record
+        let rows_affected = sqlx::query(
+            "UPDATE endpoint_coverage
+             SET test_count = test_count + 1,
+                 last_tested_at = ?,
+                 coverage_percentage = COALESCE(?, coverage_percentage),
+                 updated_at = ?
+             WHERE endpoint = ? AND (method = ? OR (method IS NULL AND ? IS NULL))
+               AND protocol = ? AND (workspace_id = ? OR (workspace_id IS NULL AND ? IS NULL))
+               AND (org_id = ? OR (org_id IS NULL AND ? IS NULL))",
+        )
+        .bind(now)
+        .bind(coverage_percentage)
+        .bind(now)
+        .bind(endpoint)
+        .bind(method)
+        .bind(method)
+        .bind(protocol)
+        .bind(workspace_id)
+        .bind(workspace_id)
+        .bind(org_id)
+        .bind(org_id)
+        .execute(&self.pool)
+        .await?;
+
+        // If no rows were updated, insert a new record
+        if rows_affected.rows_affected() == 0 {
+            sqlx::query(
+                "INSERT INTO endpoint_coverage (endpoint, method, protocol, workspace_id, org_id, test_count, last_tested_at, coverage_percentage, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)"
+            )
+            .bind(endpoint)
+            .bind(method)
+            .bind(protocol)
+            .bind(workspace_id)
+            .bind(org_id)
+            .bind(now)
+            .bind(coverage_percentage)
+            .bind(now)
+            .bind(now)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Record reality level staleness
+    pub async fn record_reality_level_staleness(
+        &self,
+        workspace_id: &str,
+        org_id: Option<&str>,
+        endpoint: Option<&str>,
+        method: Option<&str>,
+        protocol: Option<&str>,
+        current_reality_level: Option<&str>,
+        staleness_days: Option<i32>,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        let last_updated = if let Some(days) = staleness_days {
+            Some(now - (i64::from(days) * 86400))
+        } else {
+            Some(now)
+        };
+
+        sqlx::query(
+            "INSERT INTO reality_level_staleness (workspace_id, org_id, endpoint, method, protocol, current_reality_level, last_updated_at, staleness_days, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT DO NOTHING"
+        )
+        .bind(workspace_id)
+        .bind(org_id)
+        .bind(endpoint)
+        .bind(method)
+        .bind(protocol)
+        .bind(current_reality_level)
+        .bind(last_updated)
+        .bind(staleness_days)
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Record drift percentage metrics
+    pub async fn record_drift_percentage(
+        &self,
+        workspace_id: &str,
+        org_id: Option<&str>,
+        total_mocks: i64,
+        drifting_mocks: i64,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        let drift_percentage = if total_mocks > 0 {
+            (drifting_mocks as f64 / total_mocks as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        sqlx::query(
+            "INSERT INTO drift_percentage_metrics (workspace_id, org_id, total_mocks, drifting_mocks, drift_percentage, measured_at)
+             VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .bind(workspace_id)
+        .bind(org_id)
+        .bind(total_mocks)
+        .bind(drifting_mocks)
+        .bind(drift_percentage)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get scenario usage metrics
+    pub async fn get_scenario_usage(
+        &self,
+        workspace_id: Option<&str>,
+        org_id: Option<&str>,
+        limit: Option<i64>,
+    ) -> Result<Vec<ScenarioUsageMetrics>> {
+        let limit = limit.unwrap_or(100);
+        let mut query = String::from(
+            "SELECT id, scenario_id, workspace_id, org_id, usage_count, last_used_at, usage_pattern, created_at, updated_at
+             FROM scenario_usage_metrics
+             WHERE 1=1"
+        );
+
+        if workspace_id.is_some() {
+            query.push_str(" AND workspace_id = ?");
+        }
+        if org_id.is_some() {
+            query.push_str(" AND org_id = ?");
+        }
+        query.push_str(" ORDER BY usage_count DESC LIMIT ?");
+
+        let mut q = sqlx::query_as::<_, ScenarioUsageMetrics>(&query);
+        if let Some(ws_id) = workspace_id {
+            q = q.bind(ws_id);
+        }
+        if let Some(o_id) = org_id {
+            q = q.bind(o_id);
+        }
+        q = q.bind(limit);
+
+        let results = q.fetch_all(&self.pool).await?;
+        Ok(results)
+    }
+
+    /// Get persona CI hits
+    pub async fn get_persona_ci_hits(
+        &self,
+        workspace_id: Option<&str>,
+        org_id: Option<&str>,
+        limit: Option<i64>,
+    ) -> Result<Vec<PersonaCIHit>> {
+        let limit = limit.unwrap_or(100);
+        let mut query = String::from(
+            "SELECT id, persona_id, workspace_id, org_id, ci_run_id, hit_count, hit_at, created_at
+             FROM persona_ci_hits
+             WHERE 1=1",
+        );
+
+        if workspace_id.is_some() {
+            query.push_str(" AND workspace_id = ?");
+        }
+        if org_id.is_some() {
+            query.push_str(" AND org_id = ?");
+        }
+        query.push_str(" ORDER BY hit_at DESC LIMIT ?");
+
+        let mut q = sqlx::query_as::<_, PersonaCIHit>(&query);
+        if let Some(ws_id) = workspace_id {
+            q = q.bind(ws_id);
+        }
+        if let Some(o_id) = org_id {
+            q = q.bind(o_id);
+        }
+        q = q.bind(limit);
+
+        let results = q.fetch_all(&self.pool).await?;
+        Ok(results)
+    }
+
+    /// Get endpoint coverage
+    pub async fn get_endpoint_coverage(
+        &self,
+        workspace_id: Option<&str>,
+        org_id: Option<&str>,
+        min_coverage: Option<f64>,
+    ) -> Result<Vec<EndpointCoverage>> {
+        let mut query = String::from(
+            "SELECT id, endpoint, method, protocol, workspace_id, org_id, test_count, last_tested_at, coverage_percentage, created_at, updated_at
+             FROM endpoint_coverage
+             WHERE 1=1"
+        );
+
+        if workspace_id.is_some() {
+            query.push_str(" AND workspace_id = ?");
+        }
+        if org_id.is_some() {
+            query.push_str(" AND org_id = ?");
+        }
+        if min_coverage.is_some() {
+            query.push_str(" AND (coverage_percentage IS NULL OR coverage_percentage < ?)");
+        }
+        query.push_str(" ORDER BY coverage_percentage ASC NULLS LAST, test_count DESC");
+
+        let mut q = sqlx::query_as::<_, EndpointCoverage>(&query);
+        if let Some(ws_id) = workspace_id {
+            q = q.bind(ws_id);
+        }
+        if let Some(o_id) = org_id {
+            q = q.bind(o_id);
+        }
+        if let Some(min_cov) = min_coverage {
+            q = q.bind(min_cov);
+        }
+
+        let results = q.fetch_all(&self.pool).await?;
+        Ok(results)
+    }
+
+    /// Get reality level staleness
+    pub async fn get_reality_level_staleness(
+        &self,
+        workspace_id: Option<&str>,
+        org_id: Option<&str>,
+        max_staleness_days: Option<i32>,
+    ) -> Result<Vec<RealityLevelStaleness>> {
+        let mut query = String::from(
+            "SELECT id, workspace_id, org_id, endpoint, method, protocol, current_reality_level, last_updated_at, staleness_days, created_at, updated_at
+             FROM reality_level_staleness
+             WHERE 1=1"
+        );
+
+        if workspace_id.is_some() {
+            query.push_str(" AND workspace_id = ?");
+        }
+        if org_id.is_some() {
+            query.push_str(" AND org_id = ?");
+        }
+        if max_staleness_days.is_some() {
+            query.push_str(" AND (staleness_days IS NULL OR staleness_days > ?)");
+        }
+        query.push_str(" ORDER BY staleness_days DESC NULLS LAST");
+
+        let mut q = sqlx::query_as::<_, RealityLevelStaleness>(&query);
+        if let Some(ws_id) = workspace_id {
+            q = q.bind(ws_id);
+        }
+        if let Some(o_id) = org_id {
+            q = q.bind(o_id);
+        }
+        if let Some(max_days) = max_staleness_days {
+            q = q.bind(max_days);
+        }
+
+        let results = q.fetch_all(&self.pool).await?;
+        Ok(results)
+    }
+
+    /// Get drift percentage metrics
+    pub async fn get_drift_percentage(
+        &self,
+        workspace_id: Option<&str>,
+        org_id: Option<&str>,
+        limit: Option<i64>,
+    ) -> Result<Vec<DriftPercentageMetrics>> {
+        let limit = limit.unwrap_or(100);
+        let mut query = String::from(
+            "SELECT id, workspace_id, org_id, total_mocks, drifting_mocks, drift_percentage, measured_at, created_at
+             FROM drift_percentage_metrics
+             WHERE 1=1"
+        );
+
+        if workspace_id.is_some() {
+            query.push_str(" AND workspace_id = ?");
+        }
+        if org_id.is_some() {
+            query.push_str(" AND org_id = ?");
+        }
+        query.push_str(" ORDER BY measured_at DESC LIMIT ?");
+
+        let mut q = sqlx::query_as::<_, DriftPercentageMetrics>(&query);
+        if let Some(ws_id) = workspace_id {
+            q = q.bind(ws_id);
+        }
+        if let Some(o_id) = org_id {
+            q = q.bind(o_id);
+        }
+        q = q.bind(limit);
+
+        let results = q.fetch_all(&self.pool).await?;
+        Ok(results)
     }
 }

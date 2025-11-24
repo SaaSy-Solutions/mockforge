@@ -48,7 +48,7 @@ impl PRGenerator {
             "{}-{}-{}",
             "mockforge/contract-update",
             context.method.to_lowercase(),
-            uuid::Uuid::new_v4().to_string()[..8].to_string()
+            &uuid::Uuid::new_v4().to_string()[..8]
         );
 
         let request = PRRequest {

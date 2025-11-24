@@ -54,7 +54,7 @@ impl FieldCountTracker {
             recorded_at: Utc::now(),
         };
 
-        self.records.entry(key).or_insert_with(Vec::new).push(record);
+        self.records.entry(key).or_default().push(record);
     }
 
     /// Get the baseline field count for an endpoint

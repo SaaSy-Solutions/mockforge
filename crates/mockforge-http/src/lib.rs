@@ -285,7 +285,6 @@ async fn load_persona_from_config() -> Option<Arc<Persona>> {
 }
 
 use axum::extract::State;
-use axum::http::StatusCode;
 use axum::middleware::from_fn_with_state;
 use axum::response::Json;
 use axum::Router;
@@ -450,7 +449,7 @@ fn apply_cors_middleware(
                 .allowed_origins
                 .iter()
                 .filter_map(|origin| {
-                    origin.parse::<http::HeaderValue>().ok().map(|hv| AllowOrigin::exact(hv))
+                    origin.parse::<http::HeaderValue>().ok().map(AllowOrigin::exact)
                 })
                 .collect();
 
@@ -836,7 +835,7 @@ pub async fn build_router_with_multi_tenant(
     }
 
     // Add management API endpoints
-    let mut management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
+    let management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
 
     // Create WebSocket state and connect it to management state
     use std::sync::Arc;
@@ -942,7 +941,7 @@ pub async fn build_router_with_multi_tenant(
 
     // Add OAuth2 server endpoints
     {
-        use crate::auth::oidc::{load_oidc_state, OidcState};
+        use crate::auth::oidc::load_oidc_state;
         use crate::auth::token_lifecycle::TokenLifecycleManager;
         use crate::handlers::oauth2_server::{oauth2_server_router, OAuth2ServerState};
         // Load OIDC state from configuration (environment variables or config file)
@@ -959,7 +958,7 @@ pub async fn build_router_with_multi_tenant(
 
     // Add consent screen endpoints
     {
-        use crate::auth::oidc::{load_oidc_state, OidcState};
+        use crate::auth::oidc::load_oidc_state;
         use crate::auth::risk_engine::RiskEngine;
         use crate::auth::token_lifecycle::TokenLifecycleManager;
         use crate::handlers::consent::{consent_router, ConsentState};
@@ -1423,7 +1422,6 @@ pub async fn build_router_with_chains(
     .await
 }
 
-
 // Template expansion is now handled by mockforge_core::template_expansion
 // which is explicitly isolated from the templating module to avoid Send issues
 
@@ -1581,25 +1579,35 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // Register custom routes from config with advanced routing features
     // Create RouteChaosInjector for advanced fault injection and latency
     // Store as trait object to avoid circular dependency (RouteChaosInjectorTrait is in mockforge-core)
-    let route_chaos_injector: Option<std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>> = 
-        if let Some(ref route_configs) = route_configs {
-            if !route_configs.is_empty() {
-                match mockforge_route_chaos::RouteChaosInjector::new(route_configs.clone()) {
-                    Ok(injector) => {
-                        info!("Initialized advanced routing features for {} route(s)", route_configs.len());
-                        Some(std::sync::Arc::new(injector) as std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>)
-                    }
-                    Err(e) => {
-                        warn!("Failed to initialize advanced routing features: {}. Using basic routing.", e);
-                        None
-                    }
+    let route_chaos_injector: Option<
+        std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>,
+    > = if let Some(ref route_configs) = route_configs {
+        if !route_configs.is_empty() {
+            match mockforge_route_chaos::RouteChaosInjector::new(route_configs.clone()) {
+                Ok(injector) => {
+                    info!(
+                        "Initialized advanced routing features for {} route(s)",
+                        route_configs.len()
+                    );
+                    Some(std::sync::Arc::new(injector)
+                        as std::sync::Arc<
+                            dyn mockforge_core::priority_handler::RouteChaosInjectorTrait,
+                        >)
                 }
-            } else {
-                None
+                Err(e) => {
+                    warn!(
+                        "Failed to initialize advanced routing features: {}. Using basic routing.",
+                        e
+                    );
+                    None
+                }
             }
         } else {
             None
-        };
+        }
+    } else {
+        None
+    };
 
     if let Some(route_configs) = route_configs {
         use axum::http::StatusCode;
@@ -1653,7 +1661,13 @@ pub async fn build_router_with_chains_and_multi_tenant(
                         // Apply advanced routing features (fault injection and latency) if available
                         // Use helper function to avoid capturing RouteChaosInjector in closure
                         // Pass the Arc as a reference to the helper function
-                        if let Some(fault_response) = apply_route_chaos(injector_for_chaos.as_deref(), req.method(), req.uri()).await {
+                        if let Some(fault_response) = apply_route_chaos(
+                            injector_for_chaos.as_deref(),
+                            req.method(),
+                            req.uri(),
+                        )
+                        .await
+                        {
                             return fault_response;
                         }
 
@@ -1793,7 +1807,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add management API endpoints
     let spec_path_clone = spec_path.clone();
-    let mut management_state = ManagementState::new(None, spec_path_clone, 3000); // Port will be updated when we know the actual port
+    let management_state = ManagementState::new(None, spec_path_clone, 3000); // Port will be updated when we know the actual port
 
     // Create WebSocket state and connect it to management state
     use std::sync::Arc;
@@ -1928,7 +1942,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add OAuth2 server endpoints
     {
-        use crate::auth::oidc::{load_oidc_state, OidcState};
+        use crate::auth::oidc::load_oidc_state;
         use crate::auth::token_lifecycle::TokenLifecycleManager;
         use crate::handlers::oauth2_server::{oauth2_server_router, OAuth2ServerState};
         // Load OIDC state from configuration (environment variables or config file)
@@ -1945,7 +1959,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add consent screen endpoints
     {
-        use crate::auth::oidc::{load_oidc_state, OidcState};
+        use crate::auth::oidc::load_oidc_state;
         use crate::auth::risk_engine::RiskEngine;
         use crate::auth::token_lifecycle::TokenLifecycleManager;
         use crate::handlers::consent::{consent_router, ConsentState};
@@ -2107,6 +2121,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
         debug!("Drift budget and incident management endpoints mounted at /api/v1/drift");
     }
 
+    // Add pipeline management endpoints (MockOps)
+    #[cfg(feature = "pipelines")]
+    {
+        use crate::handlers::pipelines::{pipeline_router, PipelineState};
+
+        let pipeline_state = PipelineState::new();
+        app = app.merge(pipeline_router(pipeline_state));
+        debug!("Pipeline management endpoints mounted at /api/v1/pipelines");
+    }
+
     // Add governance endpoints (forecasting, semantic drift, threat modeling, contract health)
     {
         use crate::handlers::contract_health::{contract_health_router, ContractHealthState};
@@ -2114,7 +2138,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
         use crate::handlers::semantic_drift::{semantic_drift_router, SemanticDriftState};
         use crate::handlers::threat_modeling::{threat_modeling_router, ThreatModelingState};
         use mockforge_core::contract_drift::forecasting::{Forecaster, ForecastingConfig};
-        use mockforge_core::contract_drift::threat_modeling::{ThreatAnalyzer, ThreatModelingConfig};
+        use mockforge_core::contract_drift::threat_modeling::{
+            ThreatAnalyzer, ThreatModelingConfig,
+        };
         use mockforge_core::incidents::semantic_manager::SemanticIncidentManager;
         use std::sync::Arc;
 
@@ -2139,13 +2165,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
             Ok(analyzer) => Arc::new(analyzer),
             Err(e) => {
                 warn!("Failed to create threat analyzer: {}. Using default.", e);
-                Arc::new(ThreatAnalyzer::new(ThreatModelingConfig::default()).unwrap_or_else(|_| {
-                    // Fallback to a minimal config if default also fails
-                    ThreatAnalyzer::new(ThreatModelingConfig {
-                        enabled: false,
-                        ..Default::default()
-                    }).expect("Failed to create fallback threat analyzer")
-                }))
+                Arc::new(ThreatAnalyzer::new(ThreatModelingConfig::default()).unwrap_or_else(
+                    |_| {
+                        // Fallback to a minimal config if default also fails
+                        ThreatAnalyzer::new(ThreatModelingConfig {
+                            enabled: false,
+                            ..Default::default()
+                        })
+                        .expect("Failed to create fallback threat analyzer")
+                    },
+                ))
             }
         };
         // Load webhook configs from ServerConfig
@@ -2161,11 +2190,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             if let Ok(config) = mockforge_core::config::load_config(path).await {
                 if !config.incidents.webhooks.is_empty() {
                     webhook_configs = config.incidents.webhooks.clone();
-                    info!(
-                        "Loaded {} webhook configs from config: {}",
-                        webhook_configs.len(),
-                        path
-                    );
+                    info!("Loaded {} webhook configs from config: {}", webhook_configs.len(), path);
                     break;
                 }
             }
@@ -2203,10 +2228,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add protocol contracts endpoints with fitness registry initialization
     {
-        use crate::handlers::protocol_contracts::{protocol_contracts_router, ProtocolContractState};
+        use crate::handlers::protocol_contracts::{
+            protocol_contracts_router, ProtocolContractState,
+        };
         use mockforge_core::contract_drift::{
-            ConsumerImpactAnalyzer, ConsumerMappingRegistry, FitnessFunctionRegistry,
-            ProtocolContractRegistry,
+            ConsumerImpactAnalyzer, FitnessFunctionRegistry, ProtocolContractRegistry,
         };
         use std::sync::Arc;
         use tokio::sync::RwLock;
@@ -2229,7 +2255,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
         for path in &config_paths {
             if let Ok(config) = mockforge_core::config::load_config(path).await {
                 if !config.contracts.fitness_rules.is_empty() {
-                    if let Err(e) = fitness_registry.load_from_config(&config.contracts.fitness_rules) {
+                    if let Err(e) =
+                        fitness_registry.load_from_config(&config.contracts.fitness_rules)
+                    {
                         warn!("Failed to load fitness rules from config {}: {}", path, e);
                     } else {
                         info!(
@@ -2253,8 +2281,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
         // Reuse drift engine and incident manager from drift budget section
 
         // Initialize consumer impact analyzer
-        let consumer_mapping_registry = mockforge_core::contract_drift::ConsumerMappingRegistry::new();
-        let consumer_analyzer = Arc::new(RwLock::new(ConsumerImpactAnalyzer::new(consumer_mapping_registry)));
+        let consumer_mapping_registry =
+            mockforge_core::contract_drift::ConsumerMappingRegistry::new();
+        let consumer_analyzer =
+            Arc::new(RwLock::new(ConsumerImpactAnalyzer::new(consumer_mapping_registry)));
 
         let protocol_state = ProtocolContractState {
             registry: contract_registry,
@@ -2390,7 +2420,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
         use crate::handlers::xray::XRayState;
         let xray_state = Arc::new(XRayState {
             engine: consistency_engine.clone(),
-            request_contexts: std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            request_contexts: std::sync::Arc::new(tokio::sync::RwLock::new(
+                std::collections::HashMap::new(),
+            )),
         });
 
         // Create consistency middleware state
@@ -2709,23 +2741,20 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
         // Load runtime daemon config from environment
         let daemon_config = RuntimeDaemonConfig::from_env();
-        
+
         if daemon_config.enabled {
             info!("Runtime daemon enabled - auto-creating mocks from 404s");
-            
+
             // Determine management API URL (default to localhost:3000)
-            let management_api_url = std::env::var("MOCKFORGE_MANAGEMENT_API_URL")
-                .unwrap_or_else(|_| {
-                    let port = std::env::var("MOCKFORGE_HTTP_PORT")
-                        .unwrap_or_else(|_| "3000".to_string());
+            let management_api_url =
+                std::env::var("MOCKFORGE_MANAGEMENT_API_URL").unwrap_or_else(|_| {
+                    let port =
+                        std::env::var("MOCKFORGE_HTTP_PORT").unwrap_or_else(|_| "3000".to_string());
                     format!("http://localhost:{}", port)
                 });
 
             // Create auto-generator
-            let generator = Arc::new(AutoGenerator::new(
-                daemon_config.clone(),
-                management_api_url,
-            ));
+            let generator = Arc::new(AutoGenerator::new(daemon_config.clone(), management_api_url));
 
             // Create detector and set generator
             let detector = NotFoundDetector::new(daemon_config.clone());
@@ -2736,12 +2765,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
             app = app.layer(axum::middleware::from_fn(
                 move |req: axum::extract::Request, next: axum::middleware::Next| {
                     let detector = detector_clone.clone();
-                    async move {
-                        detector.detect_and_auto_create(req, next).await
-                    }
+                    async move { detector.detect_and_auto_create(req, next).await }
                 },
             ));
-            
+
             debug!("Runtime daemon 404 detection middleware added");
         }
     }

@@ -4,22 +4,16 @@
 //! CRUD operations, execution, and import/export functionality.
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
     Json,
 };
 use mockforge_core::intelligent_behavior::{rules::StateMachine, visual_layout::VisualLayout};
-use mockforge_scenarios::{
-    state_machine::{ScenarioStateMachineManager, StateInstance},
-    ScenarioManifest,
-};
+use mockforge_scenarios::ScenarioManifest;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::error;
 
 // Re-export ManagementState for use in handlers
 use crate::management::ManagementState;
@@ -201,7 +195,7 @@ pub async fn create_state_machine(
     State(state): State<ManagementState>,
     Json(request): Json<StateMachineRequest>,
 ) -> Result<Json<StateMachineResponse>, StatusCode> {
-    let mut manager = state.state_machine_manager.write().await;
+    let manager = state.state_machine_manager.write().await;
 
     // Convert types from local version to mockforge-scenarios' dependency version
     // by serializing and deserializing through JSON
@@ -239,7 +233,7 @@ pub async fn create_state_machine(
         serde_json::from_value(manifest_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Validate the first state machine from manifest
-    if let Some(ref sm) = manifest.state_machines.first() {
+    if let Some(sm) = manifest.state_machines.first() {
         if let Err(e) = manager.validate_state_machine(sm) {
             error!("Invalid state machine: {}", e);
             return Err(StatusCode::BAD_REQUEST);
@@ -296,7 +290,7 @@ pub async fn delete_state_machine(
     State(state): State<ManagementState>,
     Path(resource_type): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let mut manager = state.state_machine_manager.write().await;
+    let manager = state.state_machine_manager.write().await;
 
     // Delete the state machine
     let deleted = manager.delete_state_machine(&resource_type).await;
@@ -506,7 +500,7 @@ pub async fn import_state_machines(
     State(state): State<ManagementState>,
     Json(request): Json<ImportExportResponse>,
 ) -> Result<StatusCode, StatusCode> {
-    let mut manager = state.state_machine_manager.write().await;
+    let manager = state.state_machine_manager.write().await;
 
     // Create manifest from JSON to let serde handle type conversion
     // We need to provide all required fields for ScenarioManifest

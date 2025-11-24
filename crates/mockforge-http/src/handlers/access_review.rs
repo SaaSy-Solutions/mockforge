@@ -7,7 +7,7 @@
 //! - Starting reviews
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::Json,
 };
@@ -17,10 +17,9 @@ use mockforge_core::security::{
     emit_security_event, EventActor, EventOutcome, EventTarget, SecurityEvent, SecurityEventType,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::handlers::auth_helpers::{extract_user_id_with_fallback, OptionalAuthClaims};
@@ -303,10 +302,7 @@ pub async fn update_permissions(
         .await
     {
         Ok(()) => {
-            info!(
-                "Permissions updated for user {} in review {}",
-                request.user_id, review_id
-            );
+            info!("Permissions updated for user {} in review {}", request.user_id, review_id);
 
             // Emit security event for permission change
             let event = SecurityEvent::new(SecurityEventType::AuthzPermissionChanged, None, None)
@@ -328,7 +324,10 @@ pub async fn update_permissions(
                 .with_metadata("user_id".to_string(), serde_json::json!(request.user_id))
                 .with_metadata("review_id".to_string(), serde_json::json!(review_id))
                 .with_metadata("new_roles".to_string(), serde_json::json!(request.roles))
-                .with_metadata("new_permissions".to_string(), serde_json::json!(request.permissions));
+                .with_metadata(
+                    "new_permissions".to_string(),
+                    serde_json::json!(request.permissions),
+                );
             emit_security_event(event).await;
 
             Ok(Json(ReviewActionResponse {

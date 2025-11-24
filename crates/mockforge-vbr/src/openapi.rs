@@ -158,7 +158,7 @@ fn convert_schema_to_vbr(
     let base_schema = SchemaDefinition {
         name: schema_name.to_string(),
         fields,
-        description: schema.schema_data.description.as_ref().map(|s| s.clone()),
+        description: schema.schema_data.description.clone(),
         metadata: HashMap::new(),
         relationships: HashMap::new(),
     };
@@ -314,8 +314,8 @@ fn detect_foreign_keys(
 ) {
     for field in &vbr_schema.base.fields {
         // Check if field name suggests a foreign key
-        if is_foreign_key_field(&field.name, &entity_names) {
-            if let Some(target_entity) = extract_target_entity(&field.name, &entity_names) {
+        if is_foreign_key_field(&field.name, entity_names) {
+            if let Some(target_entity) = extract_target_entity(&field.name, entity_names) {
                 // Check if foreign key already exists
                 if !vbr_schema.foreign_keys.iter().any(|fk| fk.field == field.name) {
                     let fk = ForeignKeyDefinition {

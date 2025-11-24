@@ -5,7 +5,6 @@
 
 use crate::ai_studio::budget_manager::{BudgetConfig, BudgetManager};
 use crate::ai_studio::debug_analyzer::DebugRequest;
-use crate::ai_studio::persona_generator::PersonaGenerationRequest;
 use crate::intelligent_behavior::{
     config::IntelligentBehaviorConfig, llm_client::LlmClient, LlmUsage,
 };
@@ -151,7 +150,14 @@ impl ChatOrchestrator {
     ) -> Result<(Option<u64>, Option<f64>)> {
         let cost = self.calculate_cost(usage);
         self.budget_manager
-            .record_usage_with_feature(org_id, workspace_id, user_id, usage.total_tokens, cost, feature)
+            .record_usage_with_feature(
+                org_id,
+                workspace_id,
+                user_id,
+                usage.total_tokens,
+                cost,
+                feature,
+            )
             .await?;
         Ok((Some(usage.total_tokens), Some(cost)))
     }
@@ -175,12 +181,15 @@ impl ChatOrchestrator {
                 use crate::ai_studio::nl_mock_generator::MockGenerator;
                 let generator = MockGenerator::new();
                 // For now, pass None for deterministic_config - it would need to be loaded from workspace config
-                match generator.generate(
-                    &request.message,
-                    request.workspace_id.as_deref(),
-                    None, // ai_mode - could be extracted from request if available
-                    None, // deterministic_config - would be loaded from workspace config
-                ).await {
+                match generator
+                    .generate(
+                        &request.message,
+                        request.workspace_id.as_deref(),
+                        None, // ai_mode - could be extracted from request if available
+                        None, // deterministic_config - would be loaded from workspace config
+                    )
+                    .await
+                {
                     Ok(result) => {
                         // Estimate tokens (MockGenerator uses LLM internally, but doesn't expose usage)
                         // For now, estimate based on message length and response size
@@ -294,7 +303,9 @@ impl ChatOrchestrator {
                                 &request.workspace_id.clone().unwrap_or_default(),
                                 request.user_id.as_deref(),
                                 &usage,
-                                Some(crate::ai_studio::budget_manager::AiFeature::PersonaGeneration),
+                                Some(
+                                    crate::ai_studio::budget_manager::AiFeature::PersonaGeneration,
+                                ),
                             )
                             .await
                             .unwrap_or((None, None));
@@ -325,8 +336,9 @@ impl ChatOrchestrator {
             ChatIntent::ContractDiff => {
                 // Use ContractDiffHandler to process the query
                 use crate::ai_studio::contract_diff_handler::ContractDiffHandler;
-                let handler = ContractDiffHandler::new()
-                    .map_err(|e| crate::Error::generic(format!("Failed to create ContractDiffHandler: {}", e)))?;
+                let handler = ContractDiffHandler::new().map_err(|e| {
+                    crate::Error::generic(format!("Failed to create ContractDiffHandler: {}", e))
+                })?;
 
                 // For now, we don't have direct access to specs/requests in the orchestrator
                 // The handler will provide guidance on how to use contract diff

@@ -6,6 +6,21 @@ import { ErrorBoundary } from './components/error/ErrorBoundary';
 import { ToastProvider } from './components/ui/ToastProvider';
 import { useStartupPrefetch } from './hooks/usePrefetch';
 import { useWorkspaceStore } from './stores/useWorkspaceStore';
+import { VirtualBackendsPage } from './pages/VirtualBackendsPage';
+import { TunnelsPage } from './pages/TunnelsPage';
+import { FederationPage } from './pages/FederationPage';
+import { ConfigPage } from './pages/ConfigPage';
+import { BYOKConfigPage } from './pages/BYOKConfigPage';
+
+// ... existing imports ...
+
+import { StatusPage } from './pages/StatusPage';
+import { OrganizationPage } from './pages/OrganizationPage';
+import { BillingPage } from './pages/BillingPage';
+import { ApiTokensPage } from './pages/ApiTokensPage';
+import { UsageDashboardPage } from './pages/UsageDashboardPage';
+import { TimeTravelPage } from './pages/TimeTravelPage';
+import { ProxyInspectorPage } from './pages/ProxyInspectorPage';
 
 // Lazy load all pages for better code splitting
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
@@ -17,7 +32,7 @@ const ContractDiffPage = lazy(() => import('./pages/ContractDiffPage').then(m =>
 const IncidentDashboardPage = lazy(() => import('./pages/IncidentDashboardPage').then(m => ({ default: m.IncidentDashboardPage })));
 const FitnessFunctionsPage = lazy(() => import('./pages/FitnessFunctionsPage').then(m => ({ default: m.FitnessFunctionsPage })));
 const FixturesPage = lazy(() => import('./pages/FixturesPage').then(m => ({ default: m.FixturesPage })));
-const ConfigPage = lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
+// const ConfigPage = lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
 const TestingPage = lazy(() => import('./pages/TestingPage').then(m => ({ default: m.TestingPage })));
 const ImportPage = lazy(() => import('./pages/ImportPage').then(m => ({ default: m.ImportPage })));
 const WorkspacesPage = lazy(() => import('./pages/WorkspacesPage'));
@@ -29,6 +44,7 @@ const ScenarioStateMachineEditor = lazy(() => import('./pages/ScenarioStateMachi
 const ScenarioStudioPage = lazy(() => import('./pages/ScenarioStudioPage').then(m => ({ default: m.ScenarioStudioPage })));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 const PillarAnalyticsPage = lazy(() => import('./pages/PillarAnalyticsPage').then(m => ({ default: m.PillarAnalyticsPage })));
+const HostedMocksPage = lazy(() => import('./pages/HostedMocksPage').then(m => ({ default: m.HostedMocksPage })));
 
 // Observability & Monitoring
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage').then(m => ({ default: m.ObservabilityPage })));
@@ -46,10 +62,10 @@ const RecorderPage = lazy(() => import('./pages/RecorderPage').then(m => ({ defa
 const BehavioralCloningPage = lazy(() => import('./pages/BehavioralCloningPage').then(m => ({ default: m.BehavioralCloningPage })));
 
 // Time Travel
-const TimeTravelPage = lazy(() => import('./pages/TimeTravelPage').then(m => ({ default: m.TimeTravelPage })));
+// const TimeTravelPage = lazy(() => import('./pages/TimeTravelPage').then(m => ({ default: m.TimeTravelPage })));
 
 // Proxy Inspector
-const ProxyInspectorPage = lazy(() => import('./pages/ProxyInspectorPage').then(m => ({ default: m.ProxyInspectorPage })));
+// const ProxyInspectorPage = lazy(() => import('./pages/ProxyInspectorPage').then(m => ({ default: m.ProxyInspectorPage })));
 
 // Orchestration
 const OrchestrationBuilder = lazy(() => import('./pages/OrchestrationBuilder'));
@@ -107,9 +123,19 @@ function App() {
       }
     };
 
+    // Handle tab navigation events (e.g., from TimeTravelWidget)
+    const handleNavigateTab = (event: CustomEvent<{ tab: string }>) => {
+      const { tab } = event.detail;
+      if (tab) {
+        setActiveTab(tab);
+      }
+    };
+
     window.addEventListener('navigate', handleNavigate as EventListener);
+    window.addEventListener('navigate-tab', handleNavigateTab as EventListener);
     return () => {
       window.removeEventListener('navigate', handleNavigate as EventListener);
+      window.removeEventListener('navigate-tab', handleNavigateTab as EventListener);
     };
   }, []);
 
@@ -166,12 +192,20 @@ function App() {
         return <WorkspacesPage />;
       case 'playground':
         return <PlaygroundPage />;
+      case 'federation':
+        return <FederationPage />;
 
       // Services & Data
       case 'services':
         return <ServicesPage />;
+      case 'virtual-backends':
+        return <VirtualBackendsPage />;
       case 'fixtures':
         return <FixturesPage />;
+      case 'hosted-mocks':
+        return <HostedMocksPage />;
+      case 'tunnels':
+        return <TunnelsPage />;
 
       // Orchestration
       case 'chains':
@@ -193,6 +227,8 @@ function App() {
       // Observability & Monitoring
       case 'observability':
         return <ObservabilityPage />;
+      case 'status':
+        return <StatusPage />;
       case 'logs':
         return <LogsPage />;
       case 'traces':
@@ -274,6 +310,16 @@ function App() {
       // Configuration
       case 'config':
         return <ConfigPage />;
+      case 'organization':
+        return <OrganizationPage />;
+      case 'billing':
+        return <BillingPage />;
+      case 'api-tokens':
+        return <ApiTokensPage />;
+      case 'byok':
+        return <BYOKConfigPage />;
+      case 'usage':
+        return <UsageDashboardPage />;
 
       // Time Travel
       case 'time-travel':

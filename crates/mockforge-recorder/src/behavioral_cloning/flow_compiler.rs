@@ -7,7 +7,7 @@ use super::{
     scenario_types::{BehavioralScenario, BehavioralScenarioStep, StateVariable},
 };
 use crate::database::RecorderDatabase;
-use crate::models::{RecordedRequest, RecordedResponse};
+use crate::models::RecordedResponse;
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::HashMap;

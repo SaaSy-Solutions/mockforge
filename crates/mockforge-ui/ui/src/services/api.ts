@@ -2746,7 +2746,7 @@ export const realityApi = new RealityApiService();
 export const consistencyApi = new ConsistencyApiService();
 export const verificationApi = new VerificationApiService();
 export const contractDiffApi = new ContractDiffApiService();
-export { proxyApi, type ProxyRule, type ProxyRuleRequest, type ProxyRulesResponse, type ProxyInspectResponse };
+export type { ProxyRule, ProxyRuleRequest, ProxyRulesResponse, ProxyInspectResponse };
 
 // Debug: Log to verify services are created
 logger.info('API Services initialized', {

@@ -302,7 +302,11 @@ impl OrgControls {
     }
 
     /// Merge DB config with YAML defaults (DB values take precedence)
-    fn merge_configs(&self, yaml: OrgAiControlsConfig, db: OrgAiControlsConfig) -> OrgAiControlsConfig {
+    fn merge_configs(
+        &self,
+        yaml: OrgAiControlsConfig,
+        db: OrgAiControlsConfig,
+    ) -> OrgAiControlsConfig {
         // Merge feature toggles (DB overrides YAML)
         let mut merged_toggles = yaml.feature_toggles.clone();
         for (key, value) in db.feature_toggles {
@@ -310,7 +314,7 @@ impl OrgControls {
         }
 
         OrgAiControlsConfig {
-            budgets: db.budgets, // DB budget config takes precedence
+            budgets: db.budgets,         // DB budget config takes precedence
             rate_limits: db.rate_limits, // DB rate limit config takes precedence
             feature_toggles: merged_toggles,
         }

@@ -7,7 +7,7 @@ use super::types::{
     CapturedRequest, ContractDiffResult, DiffMetadata, Mismatch, MismatchSeverity, MismatchType,
 };
 use crate::openapi::OpenApiSpec;
-use crate::schema_diff::{validation_diff, ValidationError as SchemaValidationError};
+use crate::schema_diff::validation_diff;
 use crate::Result;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -41,7 +41,7 @@ impl DiffAnalyzer {
                 mismatch_type: MismatchType::EndpointNotFound,
                 path: request.path.clone(),
                 method: Some(request.method.clone()),
-                expected: Some(format!("Endpoint defined in OpenAPI spec")),
+                expected: Some("Endpoint defined in OpenAPI spec".to_string()),
                 actual: Some("Endpoint not found in spec".to_string()),
                 description: format!(
                     "Endpoint {} {} not found in contract specification",

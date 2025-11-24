@@ -5,12 +5,11 @@
 
 use crate::ai_contract_diff::{ContractDiffResult, Mismatch, MismatchSeverity, MismatchType};
 use crate::contract_drift::protocol_contracts::{
-    compare_contracts, ContractError, ContractOperation, ContractRequest, OperationType,
-    ProtocolContract, ValidationError, ValidationResult,
+    ContractError, ContractOperation, ContractRequest, OperationType, ProtocolContract,
+    ValidationError, ValidationResult,
 };
 use crate::protocol_abstraction::Protocol;
-use prost_reflect::{DescriptorPool, FieldDescriptor, MessageDescriptor, MethodDescriptor, ServiceDescriptor, Value};
-use serde::{Deserialize, Serialize};
+use prost_reflect::{DescriptorPool, MessageDescriptor, MethodDescriptor, ServiceDescriptor};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -104,9 +103,7 @@ impl GrpcContract {
         // 2. Load the descriptor set
         // 3. Create a DescriptorPool from it
         // 4. Call Self::new()
-        Err(ContractError::Other(format!(
-            "Loading from proto file not yet implemented. Use GrpcContract::from_descriptor_set() instead"
-        )))
+        Err(ContractError::Other("Loading from proto file not yet implemented. Use GrpcContract::from_descriptor_set() instead".to_string()))
     }
 
     /// Create a gRPC contract from a compiled descriptor set (FileDescriptorSet bytes)
@@ -126,7 +123,7 @@ impl GrpcContract {
     /// Compare two gRPC contracts and detect differences
     fn diff_services(&self, other: &GrpcContract) -> Result<ContractDiffResult, ContractError> {
         let mut mismatches = Vec::new();
-        let mut all_services: std::collections::HashSet<String> =
+        let all_services: std::collections::HashSet<String> =
             self.services.keys().chain(other.services.keys()).cloned().collect();
 
         // Check for removed services (breaking change)
@@ -220,9 +217,9 @@ impl GrpcContract {
     fn classify_proto_change(mismatch: &Mismatch) -> (bool, bool) {
         match mismatch.mismatch_type {
             // Breaking changes
-            MismatchType::EndpointNotFound => (false, true),  // Method/service removed
-            MismatchType::TypeMismatch => (false, true),      // Type changed
-            MismatchType::SchemaMismatch => (false, true),    // Signature changed
+            MismatchType::EndpointNotFound => (false, true), // Method/service removed
+            MismatchType::TypeMismatch => (false, true),     // Type changed
+            MismatchType::SchemaMismatch => (false, true),   // Signature changed
             MismatchType::MissingRequiredField => (false, true), // Required field added
 
             // Additive changes
@@ -378,8 +375,10 @@ impl GrpcContract {
             context.insert("change_category".to_string(), serde_json::json!("input_type_changed"));
             context.insert("service".to_string(), serde_json::json!(service_name));
             context.insert("method".to_string(), serde_json::json!(method_name));
-            context.insert("old_type".to_string(), serde_json::json!(old_method.input().full_name()));
-            context.insert("new_type".to_string(), serde_json::json!(new_method.input().full_name()));
+            context
+                .insert("old_type".to_string(), serde_json::json!(old_method.input().full_name()));
+            context
+                .insert("new_type".to_string(), serde_json::json!(new_method.input().full_name()));
 
             mismatches.push(Mismatch {
                 mismatch_type: MismatchType::TypeMismatch,
@@ -406,8 +405,10 @@ impl GrpcContract {
             context.insert("change_category".to_string(), serde_json::json!("output_type_changed"));
             context.insert("service".to_string(), serde_json::json!(service_name));
             context.insert("method".to_string(), serde_json::json!(method_name));
-            context.insert("old_type".to_string(), serde_json::json!(old_method.output().full_name()));
-            context.insert("new_type".to_string(), serde_json::json!(new_method.output().full_name()));
+            context
+                .insert("old_type".to_string(), serde_json::json!(old_method.output().full_name()));
+            context
+                .insert("new_type".to_string(), serde_json::json!(new_method.output().full_name()));
 
             mismatches.push(Mismatch {
                 mismatch_type: MismatchType::TypeMismatch,
@@ -431,12 +432,21 @@ impl GrpcContract {
             let mut context = HashMap::new();
             context.insert("is_additive".to_string(), serde_json::json!(false));
             context.insert("is_breaking".to_string(), serde_json::json!(true));
-            context.insert("change_category".to_string(), serde_json::json!("streaming_config_changed"));
+            context.insert(
+                "change_category".to_string(),
+                serde_json::json!("streaming_config_changed"),
+            );
             context.insert("service".to_string(), serde_json::json!(service_name));
             context.insert("method".to_string(), serde_json::json!(method_name));
             context.insert("streaming_type".to_string(), serde_json::json!("client"));
-            context.insert("old_value".to_string(), serde_json::json!(old_method.is_client_streaming()));
-            context.insert("new_value".to_string(), serde_json::json!(new_method.is_client_streaming()));
+            context.insert(
+                "old_value".to_string(),
+                serde_json::json!(old_method.is_client_streaming()),
+            );
+            context.insert(
+                "new_value".to_string(),
+                serde_json::json!(new_method.is_client_streaming()),
+            );
 
             mismatches.push(Mismatch {
                 mismatch_type: MismatchType::SchemaMismatch,
@@ -458,12 +468,21 @@ impl GrpcContract {
             let mut context = HashMap::new();
             context.insert("is_additive".to_string(), serde_json::json!(false));
             context.insert("is_breaking".to_string(), serde_json::json!(true));
-            context.insert("change_category".to_string(), serde_json::json!("streaming_config_changed"));
+            context.insert(
+                "change_category".to_string(),
+                serde_json::json!("streaming_config_changed"),
+            );
             context.insert("service".to_string(), serde_json::json!(service_name));
             context.insert("method".to_string(), serde_json::json!(method_name));
             context.insert("streaming_type".to_string(), serde_json::json!("server"));
-            context.insert("old_value".to_string(), serde_json::json!(old_method.is_server_streaming()));
-            context.insert("new_value".to_string(), serde_json::json!(new_method.is_server_streaming()));
+            context.insert(
+                "old_value".to_string(),
+                serde_json::json!(old_method.is_server_streaming()),
+            );
+            context.insert(
+                "new_value".to_string(),
+                serde_json::json!(new_method.is_server_streaming()),
+            );
 
             mismatches.push(Mismatch {
                 mismatch_type: MismatchType::SchemaMismatch,
@@ -501,14 +520,10 @@ impl GrpcContract {
         let mut mismatches = Vec::new();
 
         // Collect field information
-        let old_fields: std::collections::HashMap<u32, prost_reflect::FieldDescriptor> = old_message
-            .fields()
-            .map(|f| (f.number(), f))
-            .collect();
-        let new_fields: std::collections::HashMap<u32, prost_reflect::FieldDescriptor> = new_message
-            .fields()
-            .map(|f| (f.number(), f))
-            .collect();
+        let old_fields: std::collections::HashMap<u32, prost_reflect::FieldDescriptor> =
+            old_message.fields().map(|f| (f.number(), f)).collect();
+        let new_fields: std::collections::HashMap<u32, prost_reflect::FieldDescriptor> =
+            new_message.fields().map(|f| (f.number(), f)).collect();
 
         // Check for removed fields (breaking change)
         for (field_number, old_field) in &old_fields {
@@ -524,13 +539,20 @@ impl GrpcContract {
                 }
                 context.insert("field_number".to_string(), serde_json::json!(*field_number));
                 context.insert("field_name".to_string(), serde_json::json!(old_field.name()));
-                context.insert("field_type".to_string(), serde_json::json!(format!("{:?}", old_field.kind())));
+                context.insert(
+                    "field_type".to_string(),
+                    serde_json::json!(format!("{:?}", old_field.kind())),
+                );
 
                 mismatches.push(Mismatch {
                     mismatch_type: MismatchType::EndpointNotFound,
                     path: field_path.clone(),
                     method: method_name.map(|s| s.to_string()),
-                    expected: Some(format!("Field {} ({}) should exist", old_field.name(), field_number)),
+                    expected: Some(format!(
+                        "Field {} ({}) should exist",
+                        old_field.name(),
+                        field_number
+                    )),
                     actual: Some("Field removed".to_string()),
                     description: format!(
                         "Field {} (number {}) was removed from message {}",
@@ -555,30 +577,56 @@ impl GrpcContract {
                 let is_required = new_field.cardinality() == prost_reflect::Cardinality::Required;
                 context.insert("is_additive".to_string(), serde_json::json!(!is_required));
                 context.insert("is_breaking".to_string(), serde_json::json!(is_required));
-                context.insert("change_category".to_string(), serde_json::json!(if is_required { "required_field_added" } else { "field_added" }));
+                context.insert(
+                    "change_category".to_string(),
+                    serde_json::json!(if is_required {
+                        "required_field_added"
+                    } else {
+                        "field_added"
+                    }),
+                );
                 context.insert("service".to_string(), serde_json::json!(service_name));
                 if let Some(method) = method_name {
                     context.insert("method".to_string(), serde_json::json!(method));
                 }
                 context.insert("field_number".to_string(), serde_json::json!(*field_number));
                 context.insert("field_name".to_string(), serde_json::json!(new_field.name()));
-                context.insert("field_type".to_string(), serde_json::json!(format!("{:?}", new_field.kind())));
+                context.insert(
+                    "field_type".to_string(),
+                    serde_json::json!(format!("{:?}", new_field.kind())),
+                );
                 context.insert("is_required".to_string(), serde_json::json!(is_required));
 
                 mismatches.push(Mismatch {
-                    mismatch_type: if is_required { MismatchType::MissingRequiredField } else { MismatchType::UnexpectedField },
+                    mismatch_type: if is_required {
+                        MismatchType::MissingRequiredField
+                    } else {
+                        MismatchType::UnexpectedField
+                    },
                     path: field_path.clone(),
                     method: method_name.map(|s| s.to_string()),
                     expected: None,
-                    actual: Some(format!("New field {} (number {})", new_field.name(), field_number)),
+                    actual: Some(format!(
+                        "New field {} (number {})",
+                        new_field.name(),
+                        field_number
+                    )),
                     description: format!(
                         "New field {} (number {}) was added to message {} ({})",
                         new_field.name(),
                         field_number,
                         new_message.full_name(),
-                        if is_required { "required - breaking" } else { "optional - additive" }
+                        if is_required {
+                            "required - breaking"
+                        } else {
+                            "optional - additive"
+                        }
                     ),
-                    severity: if is_required { MismatchSeverity::High } else { MismatchSeverity::Low },
+                    severity: if is_required {
+                        MismatchSeverity::High
+                    } else {
+                        MismatchSeverity::Low
+                    },
                     confidence: 1.0,
                     context,
                 });
@@ -594,7 +642,10 @@ impl GrpcContract {
                     let mut context = HashMap::new();
                     context.insert("is_additive".to_string(), serde_json::json!(false));
                     context.insert("is_breaking".to_string(), serde_json::json!(true));
-                    context.insert("change_category".to_string(), serde_json::json!("field_name_changed"));
+                    context.insert(
+                        "change_category".to_string(),
+                        serde_json::json!("field_name_changed"),
+                    );
                     context.insert("service".to_string(), serde_json::json!(service_name));
                     if let Some(method) = method_name {
                         context.insert("method".to_string(), serde_json::json!(method));
@@ -627,15 +678,24 @@ impl GrpcContract {
                     let mut context = HashMap::new();
                     context.insert("is_additive".to_string(), serde_json::json!(false));
                     context.insert("is_breaking".to_string(), serde_json::json!(true));
-                    context.insert("change_category".to_string(), serde_json::json!("field_type_changed"));
+                    context.insert(
+                        "change_category".to_string(),
+                        serde_json::json!("field_type_changed"),
+                    );
                     context.insert("service".to_string(), serde_json::json!(service_name));
                     if let Some(method) = method_name {
                         context.insert("method".to_string(), serde_json::json!(method));
                     }
                     context.insert("field_number".to_string(), serde_json::json!(*field_number));
                     context.insert("field_name".to_string(), serde_json::json!(old_field.name()));
-                    context.insert("old_type".to_string(), serde_json::json!(format!("{:?}", old_field.kind())));
-                    context.insert("new_type".to_string(), serde_json::json!(format!("{:?}", new_field.kind())));
+                    context.insert(
+                        "old_type".to_string(),
+                        serde_json::json!(format!("{:?}", old_field.kind())),
+                    );
+                    context.insert(
+                        "new_type".to_string(),
+                        serde_json::json!(format!("{:?}", new_field.kind())),
+                    );
 
                     mismatches.push(Mismatch {
                         mismatch_type: MismatchType::TypeMismatch,
@@ -661,26 +721,44 @@ impl GrpcContract {
                     let new_cardinality = new_field.cardinality();
                     let is_breaking = matches!(
                         (old_cardinality, new_cardinality),
-                        (prost_reflect::Cardinality::Optional, prost_reflect::Cardinality::Required)
-                            | (prost_reflect::Cardinality::Repeated, prost_reflect::Cardinality::Required)
+                        (
+                            prost_reflect::Cardinality::Optional,
+                            prost_reflect::Cardinality::Required
+                        ) | (
+                            prost_reflect::Cardinality::Repeated,
+                            prost_reflect::Cardinality::Required
+                        )
                     );
 
                     let field_path = format!("{}.field_{}", path_prefix, field_number);
                     let mut context = HashMap::new();
                     context.insert("is_additive".to_string(), serde_json::json!(!is_breaking));
                     context.insert("is_breaking".to_string(), serde_json::json!(is_breaking));
-                    context.insert("change_category".to_string(), serde_json::json!("field_cardinality_changed"));
+                    context.insert(
+                        "change_category".to_string(),
+                        serde_json::json!("field_cardinality_changed"),
+                    );
                     context.insert("service".to_string(), serde_json::json!(service_name));
                     if let Some(method) = method_name {
                         context.insert("method".to_string(), serde_json::json!(method));
                     }
                     context.insert("field_number".to_string(), serde_json::json!(*field_number));
                     context.insert("field_name".to_string(), serde_json::json!(old_field.name()));
-                    context.insert("old_cardinality".to_string(), serde_json::json!(format!("{:?}", old_cardinality)));
-                    context.insert("new_cardinality".to_string(), serde_json::json!(format!("{:?}", new_cardinality)));
+                    context.insert(
+                        "old_cardinality".to_string(),
+                        serde_json::json!(format!("{:?}", old_cardinality)),
+                    );
+                    context.insert(
+                        "new_cardinality".to_string(),
+                        serde_json::json!(format!("{:?}", new_cardinality)),
+                    );
 
                     mismatches.push(Mismatch {
-                        mismatch_type: if is_breaking { MismatchType::MissingRequiredField } else { MismatchType::SchemaMismatch },
+                        mismatch_type: if is_breaking {
+                            MismatchType::MissingRequiredField
+                        } else {
+                            MismatchType::SchemaMismatch
+                        },
                         path: field_path.clone(),
                         method: method_name.map(|s| s.to_string()),
                         expected: Some(format!("Cardinality: {:?}", old_cardinality)),
@@ -690,9 +768,17 @@ impl GrpcContract {
                             old_field.name(),
                             old_cardinality,
                             new_cardinality,
-                            if is_breaking { "breaking" } else { "non-breaking" }
+                            if is_breaking {
+                                "breaking"
+                            } else {
+                                "non-breaking"
+                            }
                         ),
-                        severity: if is_breaking { MismatchSeverity::High } else { MismatchSeverity::Medium },
+                        severity: if is_breaking {
+                            MismatchSeverity::High
+                        } else {
+                            MismatchSeverity::Medium
+                        },
                         confidence: 1.0,
                         context,
                     });
@@ -815,8 +901,7 @@ impl ProtocolContract for GrpcContract {
                     errors.push(ValidationError {
                         message: format!(
                             "Failed to deserialize protobuf message: {}. Expected message type: {}",
-                            e,
-                            message_name
+                            e, message_name
                         ),
                         path: Some(operation_id.to_string()),
                         code: Some("DESERIALIZATION_ERROR".to_string()),

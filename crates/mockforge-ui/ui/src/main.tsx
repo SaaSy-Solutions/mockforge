@@ -5,19 +5,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.tsx'
 import { useThemePaletteStore } from './stores/useThemePaletteStore'
-import { registerServiceWorker } from './utils/serviceWorker'
+import { registerServiceWorker, unregisterServiceWorker } from './utils/serviceWorker'
 
 // Lazy load React Query DevTools only in development
 const ReactQueryDevtools = import.meta.env.DEV
   ? lazy(() =>
-      import('@tanstack/react-query-devtools').then((m) => ({
-        default: m.ReactQueryDevtools,
-      }))
-    )
+    import('@tanstack/react-query-devtools').then((m) => ({
+      default: m.ReactQueryDevtools,
+    }))
+  )
   : null;
 
 // Initialize theme store
 useThemePaletteStore.getState().init();
+
+// Always unregister service workers in dev to prevent stale cache issues
+if (import.meta.env.DEV) {
+  unregisterServiceWorker();
+}
 
 // Register service worker for PWA functionality
 if (import.meta.env.PROD) {

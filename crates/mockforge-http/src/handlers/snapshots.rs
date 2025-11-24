@@ -8,9 +8,9 @@ use axum::{
     response::Json,
 };
 use mockforge_core::consistency::ConsistencyEngine;
-use mockforge_core::snapshots::{SnapshotComponents, SnapshotManager, SnapshotMetadata};
+use mockforge_core::snapshots::{SnapshotComponents, SnapshotManager};
 use mockforge_core::workspace_persistence::WorkspacePersistence;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -224,7 +224,7 @@ pub async fn validate_snapshot(
 
 /// Create snapshot router
 pub fn snapshot_router(state: SnapshotState) -> axum::Router {
-    use axum::routing::{delete, get, post};
+    use axum::routing::{get, post};
 
     axum::Router::new()
         .route("/api/v1/snapshots", get(list_snapshots).post(save_snapshot))

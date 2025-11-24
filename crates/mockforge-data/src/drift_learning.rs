@@ -10,14 +10,13 @@
 //! - Opt-in per persona/endpoint learning
 
 use crate::drift::{DataDriftConfig, DataDriftEngine};
-use crate::{Error, Result};
+use crate::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
 
 /// Learning configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,24 +160,17 @@ pub enum PatternType {
 
 impl DriftLearningEngine {
     /// Create a new drift learning engine
-    pub fn new(
-        drift_config: DataDriftConfig,
-        learning_config: LearningConfig,
-    ) -> Result<Self> {
+    pub fn new(drift_config: DataDriftConfig, learning_config: LearningConfig) -> Result<Self> {
         let drift_engine = DataDriftEngine::new(drift_config)?;
 
         let traffic_learner = if learning_config.traffic_mirroring {
-            Some(Arc::new(RwLock::new(TrafficPatternLearner::new(
-                learning_config.clone(),
-            )?)))
+            Some(Arc::new(RwLock::new(TrafficPatternLearner::new(learning_config.clone())?)))
         } else {
             None
         };
 
         let persona_learner = if learning_config.persona_adaptation {
-            Some(Arc::new(RwLock::new(PersonaBehaviorLearner::new(
-                learning_config.clone(),
-            )?)))
+            Some(Arc::new(RwLock::new(PersonaBehaviorLearner::new(learning_config.clone())?)))
         } else {
             None
         };
@@ -248,7 +240,8 @@ impl DriftLearningEngine {
                         for (key, value) in &pattern.parameters {
                             if let Some(existing) = obj.get(key) {
                                 // Blend learned value with existing value
-                                let blended = self.blend_values(existing, value, pattern.confidence)?;
+                                let blended =
+                                    self.blend_values(existing, value, pattern.confidence)?;
                                 obj.insert(key.clone(), blended);
                             }
                         }
@@ -438,12 +431,12 @@ impl TrafficPatternLearner {
         &self,
         _requests: &[serde_json::Value],
     ) -> Result<Vec<LearnedPattern>> {
-        use std::collections::HashMap;
         use chrono::Utc;
+        use std::collections::HashMap;
 
         // Disabled to break circular dependency
         let _requests = _requests;
-        let mut endpoint_errors: HashMap<String, (usize, usize)> = HashMap::new(); // (total, errors)
+        let endpoint_errors: HashMap<String, (usize, usize)> = HashMap::new(); // (total, errors)
 
         // Disabled - would iterate over requests here
         /*
@@ -483,7 +476,7 @@ impl TrafficPatternLearner {
                 let confidence = ((total as f64 / 100.0).min(1.0) * error_rate * 10.0).min(1.0);
 
                 patterns.push(LearnedPattern {
-                    pattern_id: format!("error_rate_{}", endpoint_key.replace('/', "_").replace(' ', "_")),
+                    pattern_id: format!("error_rate_{}", endpoint_key.replace(['/', ' '], "_")),
                     pattern_type: PatternType::ErrorRate,
                     parameters,
                     confidence,
@@ -503,8 +496,8 @@ impl TrafficPatternLearner {
         &self,
         _requests: &[serde_json::Value],
     ) -> Result<Vec<LearnedPattern>> {
-        use std::collections::HashMap;
         use chrono::Utc;
+        use std::collections::HashMap;
 
         // Disabled to break circular dependency
         let _requests = _requests;
@@ -514,7 +507,7 @@ impl TrafficPatternLearner {
         }
 
         // Disabled - would process requests here
-        let mut trace_sequences: HashMap<Option<String>, Vec<String>> = HashMap::new();
+        let trace_sequences: HashMap<Option<String>, Vec<String>> = HashMap::new();
 
         /*
         for request in requests {
@@ -552,7 +545,10 @@ impl TrafficPatternLearner {
                 let confidence = (count as f64 / 20.0).min(1.0);
 
                 patterns.push(LearnedPattern {
-                    pattern_id: format!("sequence_{}", sequence_str.replace('/', "_").replace(' ', "_").replace("->", "_")),
+                    pattern_id: format!(
+                        "sequence_{}",
+                        sequence_str.replace(['/', ' '], "_").replace("->", "_")
+                    ),
                     pattern_type: PatternType::RequestSequence,
                     parameters,
                     confidence,
@@ -656,7 +652,7 @@ impl PersonaBehaviorLearner {
             }
         }
 
-        let events = self.behavior_history.entry(persona_id).or_insert_with(Vec::new);
+        let events = self.behavior_history.entry(persona_id).or_default();
         events.push(event);
 
         // Keep only recent events (last 1000)
@@ -702,10 +698,7 @@ impl PersonaBehaviorLearner {
         if total_failures > 0 && checkout_after_failure_count as f64 / total_failures as f64 > 0.5 {
             // Pattern detected: persona requests /checkout after failure > 50% of the time
             let mut parameters = HashMap::new();
-            parameters.insert(
-                "retry_checkout_after_failure".to_string(),
-                Value::from(true),
-            );
+            parameters.insert("retry_checkout_after_failure".to_string(), Value::from(true));
             parameters.insert(
                 "retry_probability".to_string(),
                 Value::from(checkout_after_failure_count as f64 / total_failures as f64),

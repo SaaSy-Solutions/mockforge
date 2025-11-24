@@ -201,7 +201,10 @@ pub async fn execute_dev_setup(args: DevSetupArgs) -> anyhow::Result<()> {
     println!("  1. Copy .env.mockforge.example to .env.mockforge");
     println!("  2. Review generated files in {}", output_dir.display());
     println!("  3. Import and use the generated hooks/composables in your app");
-    println!("  4. Check out the example component: {}", output_dir.join("UserList.example.tsx").display());
+    println!(
+        "  4. Check out the example component: {}",
+        output_dir.join("UserList.example.tsx").display()
+    );
     println!("  5. Start MockForge server: mockforge serve");
 
     Ok(())
@@ -279,14 +282,8 @@ fn load_config_values(config_path: &Path) -> anyhow::Result<(Option<String>, Opt
 
     // Extract base URL from http.port (construct URL)
     let base_url = if let Some(http) = config.get("http") {
-        let port = http
-            .get("port")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(3000);
-        let host = http
-            .get("host")
-            .and_then(|v| v.as_str())
-            .unwrap_or("localhost");
+        let port = http.get("port").and_then(|v| v.as_u64()).unwrap_or(3000);
+        let host = http.get("host").and_then(|v| v.as_str()).unwrap_or("localhost");
 
         // Convert 0.0.0.0 to localhost for client usage
         let host_str = if host == "0.0.0.0" { "localhost" } else { host };
@@ -391,10 +388,8 @@ fn extract_spec_from_config(
     let config: Value = serde_yaml::from_str(&content)?;
 
     // Check http.openapi_spec
-    if let Some(spec_path_str) = config
-        .get("http")
-        .and_then(|h| h.get("openapi_spec"))
-        .and_then(|v| v.as_str())
+    if let Some(spec_path_str) =
+        config.get("http").and_then(|h| h.get("openapi_spec")).and_then(|v| v.as_str())
     {
         let spec_path = if spec_path_str.starts_with('/') {
             PathBuf::from(spec_path_str)
@@ -948,12 +943,11 @@ export function useCreateUserSWR() {{
     fs::write(output_dir.join("hooks-swr.ts"), swr_hooks)?;
 
     // Generate example component
-    let example_component = format!(
-        r#"// Example React component using MockForge hooks
+    let example_component = r#"// Example React component using MockForge hooks
 // This demonstrates how to use the generated hooks in a real component
 
 import React from 'react';
-import {{ useUsers, useCreateUser, formatApiError }} from './hooks';
+import { useUsers, useCreateUser, formatApiError } from './hooks';
 
 /**
  * Example UserList component
@@ -964,180 +958,178 @@ import {{ useUsers, useCreateUser, formatApiError }} from './hooks';
  * - Error handling and loading states
  * - TypeScript type safety
  */
-export function UserList() {{
-  const {{ data: users, isLoading, error, refetch }} = useUsers();
+export function UserList() {
+  const { data: users, isLoading, error, refetch } = useUsers();
   const createUser = useCreateUser();
 
-  const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {{
+  const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
-    try {{
-      await createUser.mutateAsync({{
+    try {
+      await createUser.mutateAsync({
         name: formData.get('name') as string,
         email: formData.get('email') as string,
-      }});
+      });
       // Form will be reset by the form's reset() method
       e.currentTarget.reset();
-    }} catch (error) {{
+    } catch (error) {
       // Error is already handled by the mutation's onError
       console.error('Failed to create user:', error);
-    }}
-  }};
+    }
+  };
 
-  if (isLoading) {{
+  if (isLoading) {
     return (
-      <div style={{ padding: '20px' }}>
+      <div style={ padding: '20px' }>
         <div>Loading users...</div>
       </div>
     );
-  }}
+  }
 
-  if (error) {{
+  if (error) {
     return (
-      <div style={{ padding: '20px', color: 'red' }}>
+      <div style={ padding: '20px', color: 'red' }>
         <h2>Error loading users</h2>
-        <p>{{formatApiError(error)}}</p>
-        <button onClick={{() => refetch()}}>Retry</button>
+        <p>{formatApiError(error)}</p>
+        <button onClick={() => refetch()}>Retry</button>
       </div>
     );
-  }}
+  }
 
   return (
-    <div style={{ padding: '20px' }}>
+    <div style={ padding: '20px' }>
       <h1>Users</h1>
 
-      <form onSubmit={{handleCreateUser}} style={{ marginBottom: '20px', padding: '10px', border: '1px solid #ccc' }}>
+      <form onSubmit={handleCreateUser} style={ marginBottom: '20px', padding: '10px', border: '1px solid #ccc' }>
         <h3>Create New User</h3>
-        <div style={{ marginBottom: '10px' }}>
+        <div style={ marginBottom: '10px' }>
           <input
             name="name"
             placeholder="Name"
             required
-            style={{ padding: '8px', width: '200px', marginRight: '10px' }}
+            style={ padding: '8px', width: '200px', marginRight: '10px' }
           />
           <input
             name="email"
             type="email"
             placeholder="Email"
             required
-            style={{ padding: '8px', width: '200px', marginRight: '10px' }}
+            style={ padding: '8px', width: '200px', marginRight: '10px' }
           />
           <button
             type="submit"
-            disabled={{createUser.isPending}}
-            style={{ padding: '8px 16px' }}
+            disabled={createUser.isPending}
+            style={ padding: '8px 16px' }
           >
-            {{createUser.isPending ? 'Creating...' : 'Create User'}}
+            {createUser.isPending ? 'Creating...' : 'Create User'}
           </button>
         </div>
-        {{createUser.error && (
-          <div style={{ color: 'red', fontSize: '14px' }}>
-            Error: {{formatApiError(createUser.error)}}
+        {createUser.error && (
+          <div style={ color: 'red', fontSize: '14px' }>
+            Error: {formatApiError(createUser.error)}
           </div>
-        )}}
+        )}
       </form>
 
       <div>
         <h3>User List</h3>
-        {{users && users.length > 0 ? (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {{{{users.map((user) => (
+        {users && users.length > 0 ? (
+          <ul style={ listStyle: 'none', padding: 0 }>
+            {{users.map((user) => (
               <li
-                key={{{{user.id}}}}
-                style={{{{ padding: '10px', marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px' }}}}
+                key={{user.id}}
+                style={{ padding: '10px', marginBottom: '10px', border: '1px solid #ddd', borderRadius: '4px' }}
               >
-                <strong>{{{{user.name}}}}</strong> - {{{{user.email}}}}
-                {{{{user.createdAt && (
-                  <span style={{{{ color: '#666', fontSize: '12px', marginLeft: '10px' }}}}>
-                    (Created: {{{{new Date(user.createdAt).toLocaleDateString()}}}})
+                <strong>{{user.name}}</strong> - {{user.email}}
+                {{user.createdAt && (
+                  <span style={{ color: '#666', fontSize: '12px', marginLeft: '10px' }}>
+                    (Created: {{new Date(user.createdAt).toLocaleDateString()}})
                   </span>
-                )}}}}
+                )}}
               </li>
-            )}}}}
+            )}}
           </ul>
         ) : (
           <p>No users found. Create one above!</p>
-        )}}
+        )}
       </div>
     </div>
   );
-}}
+}
 
 export default UserList;
-"#
-    );
+"#.to_string();
 
     fs::write(output_dir.join("UserList.example.tsx"), example_component)?;
 
     // Generate TypeScript types file (basic structure)
-    let types_file = format!(
-        r#"// TypeScript type definitions for MockForge API
+    let types_file = r#"// TypeScript type definitions for MockForge API
 // These types are generated from your OpenAPI specification
 // Update this file if your API schema changes
 
 /**
  * Base API error response
  */
-export interface ApiError {{
+export interface ApiError {
   status: number;
   statusText: string;
   body?: any;
   message?: string;
-}}
+}
 
 /**
  * User entity
  */
-export interface User {{
+export interface User {
   id: string;
   name: string;
   email: string;
   createdAt?: string;
   updatedAt?: string;
-}}
+}
 
 /**
  * Request to create a new user
  */
-export interface CreateUserRequest {{
+export interface CreateUserRequest {
   name: string;
   email: string;
-}}
+}
 
 /**
  * Request to update an existing user
  */
-export interface UpdateUserRequest {{
+export interface UpdateUserRequest {
   name?: string;
   email?: string;
-}}
+}
 
 /**
  * API response wrapper (if your API uses this format)
  */
-export interface ApiResponse<T> {{
+export interface ApiResponse<T> {
   success: boolean;
   data?: T;
-  error?: {{
+  error?: {
     code: string;
     message: string;
     details?: any;
-  }};
-}}
+  };
+}
 
 /**
  * Paginated response (if your API supports pagination)
  */
-export interface PaginatedResponse<T> {{
+export interface PaginatedResponse<T> {
   data: T[];
   total: number;
   page: number;
   pageSize: number;
   totalPages: number;
-}}
+}
 "#
-    );
+    .to_string();
 
     fs::write(output_dir.join("types.ts"), types_file)?;
 
@@ -1583,9 +1575,7 @@ fn verify_typescript_compilation(tsconfig_path: &Path) -> anyhow::Result<()> {
     use std::process::Command;
 
     // Check if tsc is available
-    let tsc_check = Command::new("tsc")
-        .arg("--version")
-        .output();
+    let tsc_check = Command::new("tsc").arg("--version").output();
 
     if tsc_check.is_err() {
         return Err(anyhow::anyhow!("tsc not found"));

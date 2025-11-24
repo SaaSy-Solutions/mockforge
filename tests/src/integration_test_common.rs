@@ -54,10 +54,7 @@ pub async fn wait_for_server(addr: SocketAddr, timeout: Duration) -> Result<(), 
 
 /// Check if a port is available for binding
 pub async fn is_port_available(port: u16) -> bool {
-    match TcpListener::bind(format!("127.0.0.1:{}", port)).await {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    (TcpListener::bind(format!("127.0.0.1:{}", port)).await).is_ok()
 }
 
 /// Find an available port starting from a base port
@@ -85,7 +82,7 @@ impl TestHttpClient {
     }
 
     pub async fn get(&self, path: &str) -> Result<reqwest::Response, reqwest::Error> {
-        self.client.get(&format!("{}{}", self.base_url, path)).send().await
+        self.client.get(format!("{}{}", self.base_url, path)).send().await
     }
 
     pub async fn post(
@@ -93,7 +90,7 @@ impl TestHttpClient {
         path: &str,
         body: &serde_json::Value,
     ) -> Result<reqwest::Response, reqwest::Error> {
-        self.client.post(&format!("{}{}", self.base_url, path)).json(body).send().await
+        self.client.post(format!("{}{}", self.base_url, path)).json(body).send().await
     }
 
     pub async fn put(
@@ -101,11 +98,11 @@ impl TestHttpClient {
         path: &str,
         body: &serde_json::Value,
     ) -> Result<reqwest::Response, reqwest::Error> {
-        self.client.put(&format!("{}{}", self.base_url, path)).json(body).send().await
+        self.client.put(format!("{}{}", self.base_url, path)).json(body).send().await
     }
 
     pub async fn delete(&self, path: &str) -> Result<reqwest::Response, reqwest::Error> {
-        self.client.delete(&format!("{}{}", self.base_url, path)).send().await
+        self.client.delete(format!("{}{}", self.base_url, path)).send().await
     }
 }
 

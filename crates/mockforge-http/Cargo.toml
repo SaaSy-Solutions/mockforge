@@ -54,6 +54,8 @@ oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
 mockforge-core = { version = "0.3.2", path = "../mockforge-core" }
+mockforge-pipelines = { version = "0.3.2", path = "../mockforge-pipelines", optional = true }
+dashmap = "6.1"
 mockforge-data = { version = "0.3.2", path = "../mockforge-data" }
 mockforge-template-expansion = { version = "0.3.2", path = "../mockforge-template-expansion" }
 mockforge-route-chaos = { version = "0.3.2", path = "../mockforge-route-chaos" }
@@ -83,6 +85,8 @@ database = ["sqlx"]
 behavioral-cloning = ["dep:mockforge-recorder"]
 # Enable runtime daemon for zero-config auto-mock generation
 runtime-daemon = ["dep:mockforge-runtime-daemon"]
+# Enable pipeline event emission for drift detection and schema changes
+pipelines = ["dep:mockforge-pipelines"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

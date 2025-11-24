@@ -5,8 +5,7 @@
 //! automatic generation of related data.
 
 use crate::{OpenApiSpec, Result};
-use openapiv3::{PathItem, ReferenceOr, Schema};
-use std::collections::HashMap;
+use openapiv3::{ReferenceOr, Schema};
 
 /// Represents a relationship between two entities
 #[derive(Debug, Clone)]

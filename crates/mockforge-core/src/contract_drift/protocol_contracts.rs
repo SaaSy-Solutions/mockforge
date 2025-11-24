@@ -304,28 +304,21 @@ pub struct ChangeClassification {
 /// Uses the context field to determine if a change is additive, breaking, or both
 pub fn classify_change(mismatch: &Mismatch) -> ChangeClassification {
     // Check if classification is already in context (from gRPC diff)
-    let is_additive = mismatch
-        .context
-        .get("is_additive")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let is_additive =
+        mismatch.context.get("is_additive").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    let is_breaking = mismatch
-        .context
-        .get("is_breaking")
-        .and_then(|v| v.as_bool())
-        .unwrap_or_else(|| {
-            // Fallback: infer from severity and type
-            matches!(mismatch.severity, MismatchSeverity::Critical | MismatchSeverity::High)
-                && matches!(
-                    mismatch.mismatch_type,
-                    crate::ai_contract_diff::MismatchType::MissingRequiredField
-                        | crate::ai_contract_diff::MismatchType::TypeMismatch
-                        | crate::ai_contract_diff::MismatchType::EndpointNotFound
-                        | crate::ai_contract_diff::MismatchType::MethodNotAllowed
-                        | crate::ai_contract_diff::MismatchType::SchemaMismatch
-                )
-        });
+    let is_breaking = mismatch.context.get("is_breaking").and_then(|v| v.as_bool()).unwrap_or({
+        // Fallback: infer from severity and type
+        matches!(mismatch.severity, MismatchSeverity::Critical | MismatchSeverity::High)
+            && matches!(
+                mismatch.mismatch_type,
+                crate::ai_contract_diff::MismatchType::MissingRequiredField
+                    | crate::ai_contract_diff::MismatchType::TypeMismatch
+                    | crate::ai_contract_diff::MismatchType::EndpointNotFound
+                    | crate::ai_contract_diff::MismatchType::MethodNotAllowed
+                    | crate::ai_contract_diff::MismatchType::SchemaMismatch
+            )
+    });
 
     let change_category = mismatch
         .context
@@ -376,9 +369,9 @@ pub fn generate_grpc_drift_report(diff: &ContractDiffResult) -> serde_json::Valu
 
         service_reports
             .entry(service)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .entry(method)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(mismatch);
     }
 

@@ -4,12 +4,10 @@
 //! from the database, allowing the review system to work with real user information.
 
 use crate::security::access_review::{
-    AccessReviewEngine, ApiTokenInfo, PrivilegedAccessInfo, ReviewFrequency, ReviewType,
-    UserAccessInfo,
+    AccessReviewEngine, ApiTokenInfo, PrivilegedAccessInfo, ReviewFrequency, UserAccessInfo,
 };
 use crate::Error;
 use chrono::{DateTime, Duration, Utc};
-use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Trait for user data providers

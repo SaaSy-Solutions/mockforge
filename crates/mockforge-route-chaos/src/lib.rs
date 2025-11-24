@@ -5,19 +5,20 @@
 //! fault types and various latency distributions.
 //!
 //! This crate is isolated from mockforge-core to avoid Send issues. It only uses
-//! thread_rng() (which is Send-safe) and does not import rng() from rand.
+//! `thread_rng()` (which is Send-safe) and does not import `rng()` from rand.
 
+use async_trait::async_trait;
+use axum::http::{Method, Uri};
 use mockforge_core::config::{
-    LatencyDistribution, RouteConfig, RouteFaultInjectionConfig, RouteFaultType, RouteLatencyConfig,
+    LatencyDistribution, RouteConfig, RouteFaultType, RouteLatencyConfig,
+};
+use mockforge_core::priority_handler::{
+    RouteChaosInjectorTrait, RouteFaultResponse as CoreRouteFaultResponse,
 };
 use mockforge_core::{Error, Result};
-use mockforge_core::priority_handler::{RouteChaosInjectorTrait, RouteFaultResponse as CoreRouteFaultResponse};
-use axum::http::{Method, Uri};
-use async_trait::async_trait;
 use rand::thread_rng;
 use rand::Rng;
 use regex::Regex;
-use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::debug;
@@ -70,7 +71,7 @@ impl RouteMatcher {
 
         for compiled_route in &self.routes {
             // Check method match
-            if &compiled_route.method != method {
+            if compiled_route.method != method {
                 continue;
             }
 
@@ -101,9 +102,8 @@ impl RouteMatcher {
                                           // Replace with regex group
                             regex_pattern.push_str("([^/]+)");
                             break;
-                        } else {
-                            param_name.push(chars.next().unwrap());
                         }
+                        param_name.push(chars.next().unwrap());
                     }
                 }
                 '*' => {
@@ -122,9 +122,9 @@ impl RouteMatcher {
         }
 
         // Anchor to start and end
-        let full_pattern = format!("^{}$", regex_pattern);
+        let full_pattern = format!("^{regex_pattern}$");
         Regex::new(&full_pattern)
-            .map_err(|e| Error::generic(format!("Invalid route pattern '{}': {}", pattern, e)))
+            .map_err(|e| Error::generic(format!("Invalid route pattern '{pattern}': {e}")))
     }
 }
 
@@ -290,7 +290,7 @@ impl RouteChaosInjector {
                 status_code: *status_code,
                 error_message: message
                     .clone()
-                    .unwrap_or_else(|| format!("Injected HTTP error {}", status_code)),
+                    .unwrap_or_else(|| format!("Injected HTTP error {status_code}")),
                 fault_type: "http_error".to_string(),
             }),
             RouteFaultType::ConnectionError { message } => Some(RouteFaultResponse {
@@ -305,17 +305,17 @@ impl RouteChaosInjector {
                 status_code: 504,
                 error_message: message
                     .clone()
-                    .unwrap_or_else(|| format!("Request timeout after {}ms", duration_ms)),
+                    .unwrap_or_else(|| format!("Request timeout after {duration_ms}ms")),
                 fault_type: "timeout".to_string(),
             }),
             RouteFaultType::PartialResponse { truncate_percent } => Some(RouteFaultResponse {
                 status_code: 200,
-                error_message: format!("Partial response (truncated at {}%)", truncate_percent),
+                error_message: format!("Partial response (truncated at {truncate_percent}%)"),
                 fault_type: "partial_response".to_string(),
             }),
             RouteFaultType::PayloadCorruption { corruption_type } => Some(RouteFaultResponse {
                 status_code: 200,
-                error_message: format!("Payload corruption ({})", corruption_type),
+                error_message: format!("Payload corruption ({corruption_type})"),
                 fault_type: "payload_corruption".to_string(),
             }),
         }
@@ -344,6 +344,7 @@ pub struct RouteFaultResponse {
 mod tests {
     use super::*;
     use mockforge_core::config::{RouteConfig, RouteResponseConfig};
+    use std::collections::HashMap;
 
     fn create_test_route(path: &str, method: &str) -> RouteConfig {
         RouteConfig {

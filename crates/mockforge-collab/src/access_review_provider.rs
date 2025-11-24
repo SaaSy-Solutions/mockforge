@@ -1,6 +1,6 @@
 //! Access review data provider for collaboration system
 //!
-//! This module provides a UserDataProvider implementation that integrates
+//! This module provides a `UserDataProvider` implementation that integrates
 //! the access review system with the collaboration database.
 
 use chrono::{DateTime, Utc};
@@ -25,6 +25,7 @@ pub struct CollabUserDataProvider {
 
 impl CollabUserDataProvider {
     /// Create a new user data provider
+    #[must_use]
     pub fn new(
         db: Pool<Sqlite>,
         user_service: Arc<crate::user::UserService>,
@@ -41,6 +42,7 @@ impl CollabUserDataProvider {
     }
 
     /// Create with optional storage backends
+    #[must_use]
     pub fn with_storage(
         db: Pool<Sqlite>,
         user_service: Arc<crate::user::UserService>,
@@ -78,7 +80,7 @@ impl UserDataProvider for CollabUserDataProvider {
         )
         .fetch_all(&self.db)
         .await
-        .map_err(|e| Error::Generic(format!("Failed to fetch users: {}", e)))?;
+        .map_err(|e| Error::Generic(format!("Failed to fetch users: {e}")))?;
 
         // For each user, get their workspace memberships and roles
         let mut user_access_list = Vec::new();
@@ -103,7 +105,7 @@ impl UserDataProvider for CollabUserDataProvider {
             )
             .fetch_all(&self.db)
             .await
-            .map_err(|e| Error::Generic(format!("Failed to fetch memberships: {}", e)))?;
+            .map_err(|e| Error::Generic(format!("Failed to fetch memberships: {e}")))?;
 
             // Collect roles and permissions
             let roles: Vec<String> = memberships.iter().map(|m| format!("{:?}", m.role)).collect();
@@ -181,7 +183,7 @@ impl UserDataProvider for CollabUserDataProvider {
         )
         .fetch_all(&self.db)
         .await
-        .map_err(|e| Error::Generic(format!("Failed to fetch privileged users: {}", e)))?;
+        .map_err(|e| Error::Generic(format!("Failed to fetch privileged users: {e}")))?;
 
         // Group by user_id and collect roles
         use std::collections::HashMap;
@@ -189,14 +191,8 @@ impl UserDataProvider for CollabUserDataProvider {
         let mut user_activities: HashMap<Uuid, Vec<DateTime<Utc>>> = HashMap::new();
 
         for member in &admin_members {
-            user_roles
-                .entry(member.user_id)
-                .or_insert_with(Vec::new)
-                .push(format!("{:?}", member.role));
-            user_activities
-                .entry(member.user_id)
-                .or_insert_with(Vec::new)
-                .push(member.last_activity);
+            user_roles.entry(member.user_id).or_default().push(format!("{:?}", member.role));
+            user_activities.entry(member.user_id).or_default().push(member.last_activity);
         }
 
         // Get user details
@@ -204,10 +200,11 @@ impl UserDataProvider for CollabUserDataProvider {
 
         for (user_id, roles) in user_roles {
             // Get user details
-            let user =
-                self.user_service.get_user(user_id).await.map_err(|e| {
-                    Error::Generic(format!("Failed to get user {}: {}", user_id, e))
-                })?;
+            let user = self
+                .user_service
+                .get_user(user_id)
+                .await
+                .map_err(|e| Error::Generic(format!("Failed to get user {user_id}: {e}")))?;
 
             let activities = user_activities.get(&user_id).cloned().unwrap_or_default();
             let last_activity = activities.iter().max().copied();
@@ -219,8 +216,7 @@ impl UserDataProvider for CollabUserDataProvider {
                     .await
                     .ok()
                     .flatten()
-                    .map(|s| s.enabled)
-                    .unwrap_or(false)
+                    .is_some_and(|s| s.enabled)
             } else {
                 false
             };
@@ -233,8 +229,7 @@ impl UserDataProvider for CollabUserDataProvider {
                         .await
                         .ok()
                         .flatten()
-                        .map(|j| (Some(j.justification), j.expires_at))
-                        .unwrap_or((None, None))
+                        .map_or((None, None), |j| (Some(j.justification), j.expires_at))
                 } else {
                     (None, None)
                 };
@@ -287,7 +282,7 @@ impl UserDataProvider for CollabUserDataProvider {
         )
         .fetch_all(&self.db)
         .await
-        .map_err(|e| Error::Generic(format!("Failed to fetch memberships: {}", e)))?;
+        .map_err(|e| Error::Generic(format!("Failed to fetch memberships: {e}")))?;
 
         let roles: Vec<String> = memberships.iter().map(|m| format!("{:?}", m.role)).collect();
 
@@ -350,7 +345,7 @@ impl UserDataProvider for CollabUserDataProvider {
         )
         .fetch_optional(&self.db)
         .await
-        .map_err(|e| Error::Generic(format!("Failed to get last login: {}", e)))?;
+        .map_err(|e| Error::Generic(format!("Failed to get last login: {e}")))?;
 
         Ok(result.and_then(|r| r.last_activity))
     }
@@ -360,7 +355,7 @@ impl UserDataProvider for CollabUserDataProvider {
         self.user_service
             .deactivate_user(user_id)
             .await
-            .map_err(|e| Error::Generic(format!("Failed to revoke access: {}", e)))?;
+            .map_err(|e| Error::Generic(format!("Failed to revoke access: {e}")))?;
 
         tracing::info!("Revoked access for user {}: {}", user_id, reason);
 

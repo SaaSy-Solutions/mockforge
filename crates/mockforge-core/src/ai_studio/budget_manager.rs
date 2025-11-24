@@ -151,9 +151,8 @@ impl BudgetManager {
     ) -> Result<bool> {
         // Check org-level budget first (if available)
         if let (Some(org_id), Some(ref org_controls)) = (org_id, &self.org_controls) {
-            let budget_result = org_controls
-                .check_budget(org_id, Some(workspace_id), estimated_tokens)
-                .await?;
+            let budget_result =
+                org_controls.check_budget(org_id, Some(workspace_id), estimated_tokens).await?;
             if !budget_result.allowed {
                 return Ok(false);
             }
@@ -165,10 +164,10 @@ impl BudgetManager {
 
         // Check token budget
         if let Some(usage) = usage {
-            if self.config.max_tokens_per_workspace > 0 {
-                if usage.tokens_used + estimated_tokens > self.config.max_tokens_per_workspace {
-                    return Ok(false);
-                }
+            if self.config.max_tokens_per_workspace > 0
+                && usage.tokens_used + estimated_tokens > self.config.max_tokens_per_workspace
+            {
+                return Ok(false);
             }
         }
 
@@ -187,16 +186,11 @@ impl BudgetManager {
     }
 
     /// Check rate limit (org-level first, then workspace-level)
-    pub async fn check_rate_limit(
-        &self,
-        org_id: Option<&str>,
-        workspace_id: &str,
-    ) -> Result<bool> {
+    pub async fn check_rate_limit(&self, org_id: Option<&str>, workspace_id: &str) -> Result<bool> {
         // Check org-level rate limit first (if available)
         if let (Some(org_id), Some(ref org_controls)) = (org_id, &self.org_controls) {
-            let rate_limit_result = org_controls
-                .check_rate_limit(org_id, Some(workspace_id))
-                .await?;
+            let rate_limit_result =
+                org_controls.check_rate_limit(org_id, Some(workspace_id)).await?;
             if !rate_limit_result.allowed {
                 return Ok(false);
             }
@@ -216,9 +210,7 @@ impl BudgetManager {
     ) -> Result<bool> {
         // Check org-level feature toggle first (if available)
         if let (Some(org_id), Some(ref org_controls)) = (org_id, &self.org_controls) {
-            return org_controls
-                .is_feature_enabled(org_id, Some(workspace_id), feature)
-                .await;
+            return org_controls.is_feature_enabled(org_id, Some(workspace_id), feature).await;
         }
 
         // Default to enabled if no org controls
@@ -293,7 +285,8 @@ impl BudgetManager {
 
         // Track per-feature usage
         if let Some(feature) = feature {
-            let feature_usage = usage.feature_usage.entry(feature).or_insert_with(FeatureUsage::default);
+            let feature_usage =
+                usage.feature_usage.entry(feature).or_insert_with(FeatureUsage::default);
             feature_usage.tokens_used += tokens;
             feature_usage.cost_usd += cost_usd;
             feature_usage.calls_made += 1;

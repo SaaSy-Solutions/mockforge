@@ -8,12 +8,10 @@ use colored::Colorize;
 use mockforge_data::{FieldDefinition, SchemaDefinition};
 use mockforge_vbr::{
     config::{StorageBackend, VbrConfig},
-    entities::{Entity, EntityRegistry},
-    migration::MigrationManager,
+    entities::Entity,
     schema::VbrSchemaDefinition,
     VbrEngine,
 };
-use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -555,7 +553,7 @@ async fn execute_seed_command(
 
     // Create VBR engine
     let config = create_config_from_storage(&storage, db_path)?;
-    let mut engine = VbrEngine::new(config).await?;
+    let engine = VbrEngine::new(config).await?;
 
     // Seed data
     let results = if let Some(entity_name) = entity {
@@ -598,7 +596,7 @@ async fn execute_snapshot_command(
 
             // Create VBR engine
             let config = create_config_from_storage(&storage, db_path)?;
-            let mut engine = VbrEngine::new(config).await?;
+            let engine = VbrEngine::new(config).await?;
 
             // Create snapshot
             let metadata = engine.create_snapshot(&name, description, &snapshots_dir).await?;
@@ -646,7 +644,7 @@ async fn execute_snapshot_command(
 
             // Create VBR engine
             let config = create_config_from_storage(&storage, db_path)?;
-            let mut engine = VbrEngine::new(config).await?;
+            let engine = VbrEngine::new(config).await?;
 
             // Restore snapshot
             engine.restore_snapshot(&name, &snapshots_dir).await?;
@@ -679,7 +677,7 @@ async fn execute_reset_command(
 
     // Create VBR engine
     let config = create_config_from_storage(&storage, db_path)?;
-    let mut engine = VbrEngine::new(config).await?;
+    let engine = VbrEngine::new(config).await?;
 
     if let Some(entity_name) = entity {
         println!("  Resetting entity: {}", entity_name.bright_cyan());

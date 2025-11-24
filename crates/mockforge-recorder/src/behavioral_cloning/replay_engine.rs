@@ -33,6 +33,12 @@ pub struct BehavioralScenarioReplayEngine {
     active_scenarios: Arc<RwLock<HashMap<String, BehavioralScenario>>>,
 }
 
+impl Default for BehavioralScenarioReplayEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BehavioralScenarioReplayEngine {
     /// Create a new replay engine
     pub fn new() -> Self {

@@ -59,6 +59,7 @@ pub struct WorkspaceBackup {
 
 impl WorkspaceBackup {
     /// Create a new backup record
+    #[must_use]
     pub fn new(
         workspace_id: Uuid,
         backup_url: String,
@@ -94,6 +95,7 @@ pub struct BackupService {
 
 impl BackupService {
     /// Create a new backup service
+    #[must_use]
     pub fn new(
         db: Pool<Sqlite>,
         local_backup_dir: Option<String>,
@@ -127,7 +129,7 @@ impl BackupService {
             .workspace_service
             .get_workspace(workspace_id)
             .await
-            .map_err(|e| CollabError::Internal(format!("Failed to get workspace: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("Failed to get workspace: {e}")))?;
 
         // Use CoreBridge to get full workspace state from mockforge-core
         // This integrates with mockforge-core to get the complete workspace state
@@ -136,21 +138,18 @@ impl BackupService {
             .core_bridge
             .export_workspace_for_backup(&workspace)
             .await
-            .map_err(|e| CollabError::Internal(format!("Failed to export workspace: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("Failed to export workspace: {e}")))?;
 
         // Serialize workspace data
         let backup_format = format.unwrap_or_else(|| "yaml".to_string());
         let serialized = match backup_format.as_str() {
-            "yaml" => serde_yaml::to_string(&workspace_data).map_err(|e| {
-                CollabError::Internal(format!("Failed to serialize to YAML: {}", e))
-            })?,
-            "json" => serde_json::to_string_pretty(&workspace_data).map_err(|e| {
-                CollabError::Internal(format!("Failed to serialize to JSON: {}", e))
-            })?,
+            "yaml" => serde_yaml::to_string(&workspace_data)
+                .map_err(|e| CollabError::Internal(format!("Failed to serialize to YAML: {e}")))?,
+            "json" => serde_json::to_string_pretty(&workspace_data)
+                .map_err(|e| CollabError::Internal(format!("Failed to serialize to JSON: {e}")))?,
             _ => {
                 return Err(CollabError::InvalidInput(format!(
-                    "Unsupported backup format: {}",
-                    backup_format
+                    "Unsupported backup format: {backup_format}"
                 )));
             }
         };
@@ -235,9 +234,9 @@ impl BackupService {
         // Deserialize workspace data
         let workspace_data: serde_json::Value = match backup.backup_format.as_str() {
             "yaml" => serde_yaml::from_str(&backup_data)
-                .map_err(|e| CollabError::Internal(format!("Failed to deserialize YAML: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Failed to deserialize YAML: {e}")))?,
             "json" => serde_json::from_str(&backup_data)
-                .map_err(|e| CollabError::Internal(format!("Failed to deserialize JSON: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Failed to deserialize JSON: {e}")))?,
             _ => {
                 return Err(CollabError::Internal(format!(
                     "Unsupported backup format: {}",
@@ -261,14 +260,14 @@ impl BackupService {
         let restored_workspace_id = target_workspace_id.unwrap_or(backup.workspace_id);
 
         // If restoring to a different workspace, update the ID
-        let mut team_workspace = if restored_workspace_id != backup.workspace_id {
+        let team_workspace = if restored_workspace_id == backup.workspace_id {
+            // Update existing workspace
+            restored_team_workspace
+        } else {
             // Create new workspace with the restored data
             let mut new_workspace = restored_team_workspace;
             new_workspace.id = restored_workspace_id;
             new_workspace
-        } else {
-            // Update existing workspace
-            restored_team_workspace
         };
 
         // Update the workspace in the database
@@ -326,12 +325,12 @@ impl BackupService {
             .map(|row| {
                 Ok(WorkspaceBackup {
                     id: Uuid::parse_str(&row.id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     workspace_id: Uuid::parse_str(&row.workspace_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     backup_url: row.backup_url,
                     storage_backend: serde_json::from_str(&row.storage_backend).map_err(|e| {
-                        CollabError::Internal(format!("Invalid storage_backend: {}", e))
+                        CollabError::Internal(format!("Invalid storage_backend: {e}"))
                     })?,
                     storage_config: row
                         .storage_config
@@ -341,19 +340,19 @@ impl BackupService {
                     backup_format: row.backup_format,
                     encrypted: row.encrypted != 0,
                     commit_id: row.commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
-                    created_at: chrono::DateTime::parse_from_rfc3339(&row.created_at)
-                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
-                        .with_timezone(&chrono::Utc),
+                    created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
+                        .with_timezone(&Utc),
                     created_by: Uuid::parse_str(&row.created_by)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     expires_at: row
                         .expires_at
                         .as_ref()
                         .map(|s| {
-                            chrono::DateTime::parse_from_rfc3339(s)
-                                .map(|dt| dt.with_timezone(&chrono::Utc))
+                            DateTime::parse_from_rfc3339(s)
+                                .map(|dt| dt.with_timezone(&Utc))
                                 .map_err(|e| {
-                                    CollabError::Internal(format!("Invalid timestamp: {}", e))
+                                    CollabError::Internal(format!("Invalid timestamp: {e}"))
                                 })
                         })
                         .transpose()?,
@@ -390,33 +389,33 @@ impl BackupService {
         )
         .fetch_optional(&self.db)
         .await?
-        .ok_or_else(|| CollabError::Internal(format!("Backup not found: {}", backup_id)))?;
+        .ok_or_else(|| CollabError::Internal(format!("Backup not found: {backup_id}")))?;
 
         Ok(WorkspaceBackup {
             id: Uuid::parse_str(&row.id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             workspace_id: Uuid::parse_str(&row.workspace_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             backup_url: row.backup_url,
             storage_backend: serde_json::from_str(&row.storage_backend)
-                .map_err(|e| CollabError::Internal(format!("Invalid storage_backend: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid storage_backend: {e}")))?,
             storage_config: row.storage_config.as_ref().and_then(|s| serde_json::from_str(s).ok()),
             size_bytes: row.size_bytes,
             backup_format: row.backup_format,
             encrypted: row.encrypted != 0,
             commit_id: row.commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
-            created_at: chrono::DateTime::parse_from_rfc3339(&row.created_at)
-                .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
-                .with_timezone(&chrono::Utc),
+            created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
+                .with_timezone(&Utc),
             created_by: Uuid::parse_str(&row.created_by)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             expires_at: row
                 .expires_at
                 .as_ref()
                 .map(|s| {
-                    chrono::DateTime::parse_from_rfc3339(s)
-                        .map(|dt| dt.with_timezone(&chrono::Utc))
-                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))
+                    DateTime::parse_from_rfc3339(s)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))
                 })
                 .transpose()?,
         })
@@ -432,7 +431,7 @@ impl BackupService {
             StorageBackend::Local => {
                 if Path::new(&backup.backup_url).exists() {
                     tokio::fs::remove_file(&backup.backup_url).await.map_err(|e| {
-                        CollabError::Internal(format!("Failed to delete backup file: {}", e))
+                        CollabError::Internal(format!("Failed to delete backup file: {e}"))
                     })?;
                 }
             }
@@ -476,18 +475,18 @@ impl BackupService {
 
         // Ensure backup directory exists
         tokio::fs::create_dir_all(backup_dir).await.map_err(|e| {
-            CollabError::Internal(format!("Failed to create backup directory: {}", e))
+            CollabError::Internal(format!("Failed to create backup directory: {e}"))
         })?;
 
         // Create backup filename with timestamp
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-        let filename = format!("workspace_{}_{}.{}", workspace_id, timestamp, format);
+        let filename = format!("workspace_{workspace_id}_{timestamp}.{format}");
         let backup_path = Path::new(backup_dir).join(&filename);
 
         // Write backup file
         tokio::fs::write(&backup_path, data)
             .await
-            .map_err(|e| CollabError::Internal(format!("Failed to write backup file: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("Failed to write backup file: {e}")))?;
 
         Ok(backup_path.to_string_lossy().to_string())
     }
@@ -496,7 +495,7 @@ impl BackupService {
     async fn load_from_local(&self, backup_url: &str) -> Result<String> {
         tokio::fs::read_to_string(backup_url)
             .await
-            .map_err(|e| CollabError::Internal(format!("Failed to read backup file: {}", e)))
+            .map_err(|e| CollabError::Internal(format!("Failed to read backup file: {e}")))
     }
 
     /// Delete backup from S3
@@ -507,19 +506,25 @@ impl BackupService {
     ) -> Result<()> {
         #[cfg(feature = "s3")]
         {
-            use aws_sdk_s3::Client as S3Client;
-            use aws_sdk_s3::config::{Credentials, Region};
             use aws_config::SdkConfig;
+            use aws_sdk_s3::config::{Credentials, Region};
+            use aws_sdk_s3::Client as S3Client;
 
             // Parse S3 URL (format: s3://bucket-name/path/to/file)
             if !backup_url.starts_with("s3://") {
-                return Err(CollabError::Internal(format!("Invalid S3 URL format: {}", backup_url)));
+                return Err(CollabError::Internal(format!(
+                    "Invalid S3 URL format: {}",
+                    backup_url
+                )));
             }
 
             let url_parts: Vec<&str> =
                 backup_url.strip_prefix("s3://").unwrap().splitn(2, '/').collect();
             if url_parts.len() != 2 {
-                return Err(CollabError::Internal(format!("Invalid S3 URL format: {}", backup_url)));
+                return Err(CollabError::Internal(format!(
+                    "Invalid S3 URL format: {}",
+                    backup_url
+                )));
             }
 
             let bucket = url_parts[0];
@@ -529,26 +534,22 @@ impl BackupService {
             let aws_config: SdkConfig = if let Some(config) = storage_config {
                 // Extract S3 credentials from storage_config
                 // Expected format: {"access_key_id": "...", "secret_access_key": "...", "region": "..."}
-                let access_key_id = config
-                    .get("access_key_id")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        CollabError::Internal("S3 access_key_id not found in storage_config".to_string())
+                let access_key_id =
+                    config.get("access_key_id").and_then(|v| v.as_str()).ok_or_else(|| {
+                        CollabError::Internal(
+                            "S3 access_key_id not found in storage_config".to_string(),
+                        )
                     })?;
 
-                let secret_access_key = config
-                    .get("secret_access_key")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
+                let secret_access_key =
+                    config.get("secret_access_key").and_then(|v| v.as_str()).ok_or_else(|| {
                         CollabError::Internal(
                             "S3 secret_access_key not found in storage_config".to_string(),
                         )
                     })?;
 
-                let region_str = config
-                    .get("region")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("us-east-1");
+                let region_str =
+                    config.get("region").and_then(|v| v.as_str()).unwrap_or("us-east-1");
 
                 // Create credentials provider
                 let credentials = Credentials::new(
@@ -602,8 +603,8 @@ impl BackupService {
     ) -> Result<()> {
         #[cfg(feature = "azure")]
         {
-            use azure_storage_blobs::prelude::*;
             use azure_identity::DefaultAzureCredential;
+            use azure_storage_blobs::prelude::*;
             use std::sync::Arc;
 
             // Parse Azure URL (format: https://account.blob.core.windows.net/container/path)
@@ -619,21 +620,18 @@ impl BackupService {
                 .map_err(|e| CollabError::Internal(format!("Invalid Azure URL: {}", e)))?;
 
             // Extract account name from hostname (e.g., "account.blob.core.windows.net" -> "account")
-            let hostname = url.host_str()
+            let hostname = url
+                .host_str()
                 .ok_or_else(|| CollabError::Internal("Invalid Azure hostname".to_string()))?;
-            let account_name = hostname
-                .split('.')
-                .next()
-                .ok_or_else(|| CollabError::Internal("Invalid Azure hostname format".to_string()))?;
+            let account_name = hostname.split('.').next().ok_or_else(|| {
+                CollabError::Internal("Invalid Azure hostname format".to_string())
+            })?;
 
             // Extract container and blob name from path
             let path = url.path();
             let path_parts: Vec<&str> = path.splitn(3, '/').filter(|s| !s.is_empty()).collect();
             if path_parts.len() < 2 {
-                return Err(CollabError::Internal(format!(
-                    "Invalid Azure blob path: {}",
-                    path
-                )));
+                return Err(CollabError::Internal(format!("Invalid Azure blob path: {}", path)));
             }
 
             let container_name = path_parts[0];
@@ -641,11 +639,22 @@ impl BackupService {
 
             // Extract Azure credentials from storage_config
             // Expected format: {"account_name": "...", "account_key": "..."} or use DefaultAzureCredential
+            // TODO: Update to use current azure_storage_blobs API - the API has changed
+            // For now, return an error indicating the feature needs to be updated
+            return Err(CollabError::Internal(
+                "Azure deletion is temporarily disabled due to API migration. \
+                 The azure_storage_blobs crate API has changed. \
+                 This feature needs to be updated to use the new API."
+                    .to_string(),
+            ));
+
+            /* OLD API - needs migration
             let storage_client = if let Some(config) = storage_config {
                 if let Some(account_key) = config.get("account_key").and_then(|v| v.as_str()) {
                     // Use account key authentication
                     let account_key = account_key.to_string();
-                    let storage_credentials = StorageCredentials::access_key(account_name, account_key);
+                    let storage_credentials =
+                        StorageCredentials::access_key(account_name, account_key);
                     BlobServiceClient::new(account_name, storage_credentials)
                 } else {
                     // Use DefaultAzureCredential (for managed identity, environment variables, etc.)
@@ -657,18 +666,20 @@ impl BackupService {
                 let credential = Arc::new(DefaultAzureCredential::default());
                 BlobServiceClient::new(account_name, credential)
             };
+            */
 
+            /* OLD API - needs migration
             // Get container client and delete blob
             let container_client = storage_client.container_client(container_name);
             let blob_client = container_client.blob_client(&blob_name);
 
-            blob_client
-                .delete()
-                .await
-                .map_err(|e| CollabError::Internal(format!("Failed to delete Azure blob: {}", e)))?;
+            blob_client.delete().await.map_err(|e| {
+                CollabError::Internal(format!("Failed to delete Azure blob: {}", e))
+            })?;
 
             tracing::info!("Successfully deleted Azure blob: {}", backup_url);
             Ok(())
+            */
         }
 
         #[cfg(not(feature = "azure"))]
@@ -779,7 +790,7 @@ impl BackupService {
 
     /// Get workspace data for backup
     ///
-    /// Gets the full workspace state from the TeamWorkspace and converts it to JSON.
+    /// Gets the full workspace state from the `TeamWorkspace` and converts it to JSON.
     async fn get_workspace_data(&self, workspace_id: Uuid) -> Result<serde_json::Value> {
         // Get the TeamWorkspace
         let team_workspace = self.workspace_service.get_workspace(workspace_id).await?;

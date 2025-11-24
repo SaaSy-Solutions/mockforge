@@ -3,8 +3,7 @@
 //! This module provides OIDC-compliant endpoints for simulating identity providers,
 //! including discovery documents and JSON Web Key Set (JWKS) endpoints.
 
-use axum::{extract::State, http::StatusCode, response::Json};
-use chrono::{Duration, Utc};
+use axum::response::Json;
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -12,7 +11,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::auth::state::AuthState;
 use mockforge_core::Error;
 
 /// OIDC configuration

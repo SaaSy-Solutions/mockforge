@@ -202,9 +202,11 @@ impl ArtifactFreezer {
         let mut latest_match: Option<FrozenArtifact> = None;
         let mut latest_time = chrono::DateTime::<Utc>::MIN_UTC;
 
-        while let Some(entry) = entries.next_entry().await.map_err(|e| {
-            crate::Error::generic(format!("Failed to read directory entry: {}", e))
-        })? {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| crate::Error::generic(format!("Failed to read directory entry: {}", e)))?
+        {
             let path = entry.path();
             if path.is_file() {
                 let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -222,7 +224,8 @@ impl ArtifactFreezer {
                         crate::Error::generic(format!("Failed to read frozen artifact: {}", e))
                     })?;
 
-                    let content_value: Value = if path.extension().and_then(|e| e.to_str()) == Some("yaml")
+                    let content_value: Value = if path.extension().and_then(|e| e.to_str())
+                        == Some("yaml")
                         || path.extension().and_then(|e| e.to_str()) == Some("yml")
                     {
                         serde_yaml::from_str(&content).map_err(|e| {

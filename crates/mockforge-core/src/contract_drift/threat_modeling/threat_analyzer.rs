@@ -15,7 +15,6 @@ use super::types::{
 use crate::openapi::OpenApiSpec;
 use crate::Result;
 use chrono::Utc;
-use std::collections::HashMap;
 
 /// Main threat analyzer
 pub struct ThreatAnalyzer {
@@ -81,7 +80,8 @@ impl ThreatAnalyzer {
                 service_name,
                 endpoint: endpoint.clone(),
                 method: method.clone(),
-                aggregation_level: self.determine_aggregation_level(endpoint.as_ref(), method.as_ref()),
+                aggregation_level: self
+                    .determine_aggregation_level(endpoint.as_ref(), method.as_ref()),
                 threat_level: ThreatLevel::Low,
                 threat_score: 0.0,
                 threat_categories: Vec::new(),
@@ -179,9 +179,7 @@ impl ThreatAnalyzer {
     /// Determine threat level from score and findings
     fn determine_threat_level(&self, score: f64, findings: &[ThreatFinding]) -> ThreatLevel {
         // Check for critical findings
-        let has_critical = findings
-            .iter()
-            .any(|f| matches!(f.severity, ThreatLevel::Critical));
+        let has_critical = findings.iter().any(|f| matches!(f.severity, ThreatLevel::Critical));
 
         if has_critical {
             return ThreatLevel::Critical;

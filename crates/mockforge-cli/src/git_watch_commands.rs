@@ -69,6 +69,40 @@ pub async fn handle_git_watch(
                 info!("  - {}", spec.display());
             }
 
+            // Emit pipeline event for schema changes
+            #[cfg(feature = "pipelines")]
+            {
+                use mockforge_pipelines::{publish_event, PipelineEvent};
+                use uuid::Uuid;
+
+                // Determine schema type from file extension
+                let schema_type = spec_files
+                    .first()
+                    .and_then(|path| {
+                        path.extension().and_then(|ext| ext.to_str()).map(|ext| {
+                            if ext == "proto" || ext == "protobuf" {
+                                "protobuf"
+                            } else {
+                                "openapi"
+                            }
+                        })
+                    })
+                    .unwrap_or("openapi");
+
+                // Create schema changed event
+                // Note: workspace_id is not available in CLI context, so we use a placeholder
+                // In a full implementation, this would come from workspace configuration
+                let event = PipelineEvent::schema_changed(
+                    Uuid::new_v4(), // Placeholder - in real implementation, get from workspace config
+                    schema_type.to_string(),
+                    std::collections::HashMap::new(),
+                );
+
+                if let Err(e) = publish_event(event) {
+                    warn!("Failed to publish schema changed event: {}", e);
+                }
+            }
+
             // Execute reload command if provided
             if let Some(ref cmd) = reload_command {
                 info!("Executing reload command: {}", cmd);
@@ -102,7 +136,7 @@ async fn execute_reload_command(command: &str, spec_files: &[PathBuf]) -> Result
     }
 
     let program = parts[0];
-    let args: Vec<&str> = parts[1..].iter().copied().collect();
+    let args: Vec<&str> = parts[1..].to_vec();
 
     // Add spec file paths as additional arguments
     let mut all_args = args;

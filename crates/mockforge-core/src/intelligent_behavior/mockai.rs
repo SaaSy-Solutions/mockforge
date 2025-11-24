@@ -237,10 +237,8 @@ impl MockAI {
         // CRITICAL FIX: GET, HEAD, and OPTIONS requests should NEVER be analyzed as mutations
         // These are idempotent methods that don't mutate state. Only POST, PUT, PATCH, DELETE are mutations.
         let method_upper = request.method.to_uppercase();
-        let is_mutation_method = matches!(
-            method_upper.as_str(),
-            "POST" | "PUT" | "PATCH" | "DELETE"
-        );
+        let is_mutation_method =
+            matches!(method_upper.as_str(), "POST" | "PUT" | "PATCH" | "DELETE");
 
         // Get previous request from session history
         let history = session_context.get_history().await;

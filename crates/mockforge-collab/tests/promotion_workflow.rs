@@ -6,13 +6,13 @@
 //! - GitOps integration
 //! - Promotion history tracking
 
-use mockforge_collab::promotion::{PromotionService, PromotionGitOpsConfig};
+use mockforge_collab::promotion::{PromotionGitOpsConfig, PromotionService};
 use mockforge_core::workspace::{
+    mock_environment::MockEnvironmentName,
     scenario_promotion::{
         ApprovalRules, PromotionEntityType, PromotionRequest, PromotionStatus,
         ScenarioPromotionWorkflow,
     },
-    mock_environment::MockEnvironmentName,
 };
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
 use std::collections::HashMap;
@@ -51,6 +51,7 @@ async fn test_create_promotion() {
         from_environment: MockEnvironmentName::Dev,
         to_environment: MockEnvironmentName::Test,
         requires_approval: true,
+        approval_required_reason: None,
         comments: Some("Ready for QA testing".to_string()),
         metadata: HashMap::new(),
     };
@@ -91,6 +92,7 @@ async fn test_approve_promotion() {
         from_environment: MockEnvironmentName::Test,
         to_environment: MockEnvironmentName::Prod,
         requires_approval: true,
+        approval_required_reason: None,
         comments: Some("Ready for production".to_string()),
         metadata: HashMap::new(),
     };
@@ -135,6 +137,7 @@ async fn test_list_workspace_promotions() {
             from_environment: MockEnvironmentName::Dev,
             to_environment: MockEnvironmentName::Test,
             requires_approval: true,
+            approval_required_reason: None,
             comments: None,
             metadata: HashMap::new(),
         };
@@ -173,6 +176,7 @@ async fn test_list_pending_promotions() {
             from_environment: MockEnvironmentName::Dev,
             to_environment: MockEnvironmentName::Test,
             requires_approval: true,
+            approval_required_reason: None,
             comments: None,
             metadata: HashMap::new(),
         };
@@ -192,6 +196,7 @@ async fn test_list_pending_promotions() {
         from_environment: MockEnvironmentName::Dev,
         to_environment: MockEnvironmentName::Test,
         requires_approval: true,
+        approval_required_reason: None,
         comments: None,
         metadata: HashMap::new(),
     };
@@ -241,6 +246,7 @@ async fn test_promotion_history_for_entity() {
             from_environment: from,
             to_environment: to,
             requires_approval: true,
+            approval_required_reason: None,
             comments: None,
             metadata: HashMap::new(),
         };
@@ -282,6 +288,7 @@ async fn test_promotion_with_metadata() {
         from_environment: MockEnvironmentName::Dev,
         to_environment: MockEnvironmentName::Test,
         requires_approval: false,
+        approval_required_reason: None,
         comments: None,
         metadata: metadata.clone(),
     };
@@ -298,7 +305,10 @@ async fn test_promotion_with_metadata() {
         .expect("Failed to get promotion history");
 
     assert_eq!(history.promotions.len(), 1);
-    assert_eq!(history.promotions[0].metadata.get("test_key"), Some(&serde_json::json!("test_value")));
+    assert_eq!(
+        history.promotions[0].metadata.get("test_key"),
+        Some(&serde_json::json!("test_value"))
+    );
     assert_eq!(history.promotions[0].metadata.get("number"), Some(&serde_json::json!(42)));
 }
 
@@ -310,31 +320,22 @@ async fn test_pillar_tag_approval_detection() {
 
     // Test [Cloud][Contracts][Reality] combination requires approval
     let tags = vec!["[Cloud][Contracts][Reality]".to_string()];
-    let (requires, reason) = ScenarioPromotionWorkflow::requires_approval(
-        &tags,
-        MockEnvironmentName::Test,
-        &rules,
-    );
+    let (requires, reason) =
+        ScenarioPromotionWorkflow::requires_approval(&tags, MockEnvironmentName::Test, &rules);
     assert!(requires, "Should require approval for Cloud+Contracts+Reality combination");
     assert!(reason.is_some());
     assert!(reason.unwrap().contains("pillar tag combination"));
 
     // Test single pillar tag doesn't require approval by default
     let tags2 = vec!["[Cloud]".to_string()];
-    let (requires2, _) = ScenarioPromotionWorkflow::requires_approval(
-        &tags2,
-        MockEnvironmentName::Test,
-        &rules,
-    );
+    let (requires2, _) =
+        ScenarioPromotionWorkflow::requires_approval(&tags2, MockEnvironmentName::Test, &rules);
     assert!(!requires2, "Single pillar tag should not require approval by default");
 
     // Test partial combination doesn't match pattern
     let tags3 = vec!["[Cloud][Contracts]".to_string()];
-    let (requires3, _) = ScenarioPromotionWorkflow::requires_approval(
-        &tags3,
-        MockEnvironmentName::Test,
-        &rules,
-    );
+    let (requires3, _) =
+        ScenarioPromotionWorkflow::requires_approval(&tags3, MockEnvironmentName::Test, &rules);
     assert!(!requires3, "Partial pillar combination should not require approval");
 }
 
@@ -360,7 +361,10 @@ async fn test_pillar_tags_preserved_in_promotion() {
         from_environment: MockEnvironmentName::Dev,
         to_environment: MockEnvironmentName::Test,
         requires_approval: true,
-        approval_required_reason: Some("High-impact pillar tag combination [Cloud][Contracts][Reality] requires approval".to_string()),
+        approval_required_reason: Some(
+            "High-impact pillar tag combination [Cloud][Contracts][Reality] requires approval"
+                .to_string(),
+        ),
         comments: None,
         metadata: metadata.clone(),
     };
@@ -398,22 +402,16 @@ async fn test_prod_promotion_with_pillar_tags() {
 
     // Test that prod promotions always require approval, even without pillar tags
     let tags = vec!["normal".to_string()];
-    let (requires, reason) = ScenarioPromotionWorkflow::requires_approval(
-        &tags,
-        MockEnvironmentName::Prod,
-        &rules,
-    );
+    let (requires, reason) =
+        ScenarioPromotionWorkflow::requires_approval(&tags, MockEnvironmentName::Prod, &rules);
     assert!(requires, "Prod promotions should always require approval");
     assert!(reason.is_some());
     assert!(reason.unwrap().contains("Production promotions require approval"));
 
     // Test that pillar tags add additional context to prod approval
     let tags2 = vec!["[Cloud][Contracts][Reality]".to_string()];
-    let (requires2, reason2) = ScenarioPromotionWorkflow::requires_approval(
-        &tags2,
-        MockEnvironmentName::Prod,
-        &rules,
-    );
+    let (requires2, reason2) =
+        ScenarioPromotionWorkflow::requires_approval(&tags2, MockEnvironmentName::Prod, &rules);
     assert!(requires2, "Prod promotions with pillar tags should require approval");
     assert!(reason2.is_some());
     // Should mention production (prod always requires approval)

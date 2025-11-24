@@ -176,8 +176,8 @@ async fn create_snapshot(
     State(state): State<ManagementState>,
     Json(request): Json<CreateSnapshotRequest>,
 ) -> Result<Json<MockSnapshot>, StatusCode> {
-        // Get current mocks from the state
-        let mocks = state.mocks.read().await.clone();
+    // Get current mocks from the state
+    let mocks = state.mocks.read().await.clone();
 
     // Convert mocks to snapshot items
     let snapshot_items: Vec<MockSnapshotItem> = mocks
@@ -303,17 +303,11 @@ fn compare_snapshot_objects(left: &MockSnapshot, right: &MockSnapshot) -> Snapsh
     let mut differences = Vec::new();
 
     // Create maps for quick lookup
-    let left_map: HashMap<String, &MockSnapshotItem> = left
-        .mocks
-        .iter()
-        .map(|m| (format!("{}:{}", m.method, m.path), m))
-        .collect();
+    let left_map: HashMap<String, &MockSnapshotItem> =
+        left.mocks.iter().map(|m| (format!("{}:{}", m.method, m.path), m)).collect();
 
-    let right_map: HashMap<String, &MockSnapshotItem> = right
-        .mocks
-        .iter()
-        .map(|m| (format!("{}:{}", m.method, m.path), m))
-        .collect();
+    let right_map: HashMap<String, &MockSnapshotItem> =
+        right.mocks.iter().map(|m| (format!("{}:{}", m.method, m.path), m)).collect();
 
     // Find mocks only in left
     for (key, left_mock) in &left_map {
@@ -323,7 +317,10 @@ fn compare_snapshot_objects(left: &MockSnapshot, right: &MockSnapshot) -> Snapsh
                 mock_id: Some(left_mock.id.clone()),
                 path: left_mock.path.clone(),
                 method: left_mock.method.clone(),
-                description: format!("Mock {} {} exists in left but not in right", left_mock.method, left_mock.path),
+                description: format!(
+                    "Mock {} {} exists in left but not in right",
+                    left_mock.method, left_mock.path
+                ),
                 left_value: Some(serde_json::to_value(left_mock).unwrap_or_default()),
                 right_value: None,
                 field_path: None,
@@ -339,7 +336,10 @@ fn compare_snapshot_objects(left: &MockSnapshot, right: &MockSnapshot) -> Snapsh
                 mock_id: Some(right_mock.id.clone()),
                 path: right_mock.path.clone(),
                 method: right_mock.method.clone(),
-                description: format!("Mock {} {} exists in right but not in left", right_mock.method, right_mock.path),
+                description: format!(
+                    "Mock {} {} exists in right but not in left",
+                    right_mock.method, right_mock.path
+                ),
                 left_value: None,
                 right_value: Some(serde_json::to_value(right_mock).unwrap_or_default()),
                 field_path: None,
@@ -374,7 +374,10 @@ fn compare_snapshot_objects(left: &MockSnapshot, right: &MockSnapshot) -> Snapsh
                     mock_id: Some(left_mock.id.clone()),
                     path: left_mock.path.clone(),
                     method: left_mock.method.clone(),
-                    description: format!("Response body differs for {} {}", left_mock.method, left_mock.path),
+                    description: format!(
+                        "Response body differs for {} {}",
+                        left_mock.method, left_mock.path
+                    ),
                     left_value: Some(left_mock.response_body.clone()),
                     right_value: Some(right_mock.response_body.clone()),
                     field_path: Some("response_body".to_string()),
@@ -388,9 +391,18 @@ fn compare_snapshot_objects(left: &MockSnapshot, right: &MockSnapshot) -> Snapsh
                     mock_id: Some(left_mock.id.clone()),
                     path: left_mock.path.clone(),
                     method: left_mock.method.clone(),
-                    description: format!("Response headers differ for {} {}", left_mock.method, left_mock.path),
-                    left_value: left_mock.response_headers.as_ref().map(|h| serde_json::to_value(h).unwrap_or_default()),
-                    right_value: right_mock.response_headers.as_ref().map(|h| serde_json::to_value(h).unwrap_or_default()),
+                    description: format!(
+                        "Response headers differ for {} {}",
+                        left_mock.method, left_mock.path
+                    ),
+                    left_value: left_mock
+                        .response_headers
+                        .as_ref()
+                        .map(|h| serde_json::to_value(h).unwrap_or_default()),
+                    right_value: right_mock
+                        .response_headers
+                        .as_ref()
+                        .map(|h| serde_json::to_value(h).unwrap_or_default()),
                     field_path: Some("response_headers".to_string()),
                 });
             }
@@ -398,12 +410,16 @@ fn compare_snapshot_objects(left: &MockSnapshot, right: &MockSnapshot) -> Snapsh
     }
 
     // Calculate summary
-    let only_in_left = differences.iter().filter(|d| matches!(d.diff_type, DifferenceType::MissingInRight)).count();
-    let only_in_right = differences.iter().filter(|d| matches!(d.diff_type, DifferenceType::MissingInLeft)).count();
-    let mocks_with_differences: std::collections::HashSet<String> = differences
+    let only_in_left = differences
         .iter()
-        .filter_map(|d| d.mock_id.clone())
-        .collect();
+        .filter(|d| matches!(d.diff_type, DifferenceType::MissingInRight))
+        .count();
+    let only_in_right = differences
+        .iter()
+        .filter(|d| matches!(d.diff_type, DifferenceType::MissingInLeft))
+        .count();
+    let mocks_with_differences: std::collections::HashSet<String> =
+        differences.iter().filter_map(|d| d.mock_id.clone()).collect();
 
     let summary = DiffSummary {
         left_total: left.mocks.len(),
@@ -427,8 +443,7 @@ pub fn snapshot_diff_router(state: ManagementState) -> Router<ManagementState> {
     Router::new()
         .route("/snapshots", post(create_snapshot))
         .route("/snapshots", get(list_snapshots))
-        .route("/snapshots/:id", get(get_snapshot))
+        .route("/snapshots/{id}", get(get_snapshot))
         .route("/snapshots/compare", post(compare_snapshots))
         .with_state(state)
 }
-

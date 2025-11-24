@@ -8,8 +8,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use mockforge_core::{
-    MultiTenantWorkspaceRegistry, TenantWorkspace, Workspace, WorkspaceStats,
-    workspace::{MockEnvironment, MockEnvironmentName, MockEnvironmentManager},
+    workspace::MockEnvironmentName, MultiTenantWorkspaceRegistry, Workspace, WorkspaceStats,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -357,9 +356,18 @@ pub async fn list_mock_environments(
                     name: env.name.as_str().to_string(),
                     id: env.id.clone(),
                     workspace_id: env.workspace_id.clone(),
-                    reality_config: env.reality_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
-                    chaos_config: env.chaos_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
-                    drift_budget_config: env.drift_budget_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                    reality_config: env
+                        .reality_config
+                        .as_ref()
+                        .map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                    chaos_config: env
+                        .chaos_config
+                        .as_ref()
+                        .map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                    drift_budget_config: env
+                        .drift_budget_config
+                        .as_ref()
+                        .map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
                 })
                 .collect();
 
@@ -465,7 +473,9 @@ pub async fn set_active_mock_environment(
             match tenant_ws.workspace.set_active_mock_environment(env_name) {
                 Ok(_) => {
                     // Save the updated workspace
-                    if let Err(e) = registry.update_workspace(&workspace_id, tenant_ws.workspace.clone()) {
+                    if let Err(e) =
+                        registry.update_workspace(&workspace_id, tenant_ws.workspace.clone())
+                    {
                         tracing::error!("Failed to save workspace: {}", e);
                         return Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
@@ -474,16 +484,17 @@ pub async fn set_active_mock_environment(
                             .into_response());
                     }
 
-                    tracing::info!("Set active environment to '{}' for workspace '{}'", request.environment, workspace_id);
+                    tracing::info!(
+                        "Set active environment to '{}' for workspace '{}'",
+                        request.environment,
+                        workspace_id
+                    );
                     Ok(Json(ApiResponse::success(format!(
                         "Active environment set to '{}'",
                         request.environment
                     ))))
                 }
-                Err(e) => Err((
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": e.to_string()})),
-                )
+                Err(e) => Err((StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()})))
                     .into_response()),
             }
         }
@@ -529,15 +540,11 @@ pub async fn update_mock_environment(
     match registry.get_workspace(&workspace_id) {
         Ok(mut tenant_ws) => {
             // Parse the configs from JSON
-            let reality_config = request.reality_config.and_then(|v| {
-                serde_json::from_value(v).ok()
-            });
-            let chaos_config = request.chaos_config.and_then(|v| {
-                serde_json::from_value(v).ok()
-            });
-            let drift_budget_config = request.drift_budget_config.and_then(|v| {
-                serde_json::from_value(v).ok()
-            });
+            let reality_config =
+                request.reality_config.and_then(|v| serde_json::from_value(v).ok());
+            let chaos_config = request.chaos_config.and_then(|v| serde_json::from_value(v).ok());
+            let drift_budget_config =
+                request.drift_budget_config.and_then(|v| serde_json::from_value(v).ok());
 
             // Update the environment config
             match tenant_ws.workspace.set_mock_environment_config(
@@ -548,7 +555,9 @@ pub async fn update_mock_environment(
             ) {
                 Ok(_) => {
                     // Save the updated workspace
-                    if let Err(e) = registry.update_workspace(&workspace_id, tenant_ws.workspace.clone()) {
+                    if let Err(e) =
+                        registry.update_workspace(&workspace_id, tenant_ws.workspace.clone())
+                    {
                         tracing::error!("Failed to save workspace: {}", e);
                         return Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
@@ -564,11 +573,21 @@ pub async fn update_mock_environment(
                                 name: env.name.as_str().to_string(),
                                 id: env.id.clone(),
                                 workspace_id: env.workspace_id.clone(),
-                                reality_config: env.reality_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
-                                chaos_config: env.chaos_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
-                                drift_budget_config: env.drift_budget_config.as_ref().map(|c| serde_json::to_value(c).unwrap_or(serde_json::json!({}))),
+                                reality_config: env.reality_config.as_ref().map(|c| {
+                                    serde_json::to_value(c).unwrap_or(serde_json::json!({}))
+                                }),
+                                chaos_config: env.chaos_config.as_ref().map(|c| {
+                                    serde_json::to_value(c).unwrap_or(serde_json::json!({}))
+                                }),
+                                drift_budget_config: env.drift_budget_config.as_ref().map(|c| {
+                                    serde_json::to_value(c).unwrap_or(serde_json::json!({}))
+                                }),
                             };
-                            tracing::info!("Updated environment '{}' for workspace '{}'", env_name, workspace_id);
+                            tracing::info!(
+                                "Updated environment '{}' for workspace '{}'",
+                                env_name,
+                                workspace_id
+                            );
                             Ok(Json(ApiResponse::success(response)))
                         }
                         None => Err((
@@ -578,10 +597,7 @@ pub async fn update_mock_environment(
                             .into_response()),
                     }
                 }
-                Err(e) => Err((
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": e.to_string()})),
-                )
+                Err(e) => Err((StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()})))
                     .into_response()),
             }
         }

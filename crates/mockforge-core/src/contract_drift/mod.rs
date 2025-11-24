@@ -30,14 +30,9 @@ pub use fitness::{
     FitnessTestResult,
 };
 pub use forecasting::{
-    ForecastAggregationLevel, ChangeForecast, ForecastPattern,
-    ForecastStatistics, ForecastingConfig, Forecaster, PatternAnalysis, PatternAnalyzer,
-    PatternSignature, PatternType, SeasonalPattern, StatisticalModel,
-};
-pub use threat_modeling::{
-    AggregationLevel, DosAnalyzer, ErrorAnalyzer, PiiDetector, RemediationGenerator,
-    SchemaAnalyzer, ThreatAnalyzer, ThreatAssessment, ThreatCategory, ThreatFinding,
-    ThreatLevel, ThreatModelingConfig, RemediationSuggestion,
+    ChangeForecast, ForecastAggregationLevel, ForecastPattern, ForecastStatistics, Forecaster,
+    ForecastingConfig, PatternAnalysis, PatternAnalyzer, PatternSignature, PatternType,
+    SeasonalPattern, StatisticalModel,
 };
 pub use grpc_contract::{diff_grpc_contracts, GrpcContract};
 pub use mqtt_kafka_contracts::{
@@ -48,6 +43,11 @@ pub use protocol_contracts::{
     classify_change, compare_contracts, extract_breaking_changes, generate_grpc_drift_report,
     ChangeClassification, ContractError, ContractMetadata, ContractOperation, ContractRequest,
     OperationType, ProtocolContract, ProtocolContractRegistry, ValidationError, ValidationResult,
+};
+pub use threat_modeling::{
+    AggregationLevel, DosAnalyzer, ErrorAnalyzer, PiiDetector, RemediationGenerator,
+    RemediationSuggestion, SchemaAnalyzer, ThreatAnalyzer, ThreatAssessment, ThreatCategory,
+    ThreatFinding, ThreatLevel, ThreatModelingConfig,
 };
 pub use types::{
     BreakingChangeRule, BreakingChangeRuleConfig, BreakingChangeRuleType, DriftBudget,

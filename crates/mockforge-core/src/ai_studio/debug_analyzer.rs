@@ -15,7 +15,6 @@ use crate::intelligent_behavior::types::LlmGenerationRequest;
 use crate::intelligent_behavior::IntelligentBehaviorConfig;
 use crate::Result;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 /// Debug analyzer for test failure analysis
 pub struct DebugAnalyzer {
@@ -147,7 +146,7 @@ impl DebugAnalyzer {
             // Look for 3-digit status codes (400-599 for errors)
             for word in line.split_whitespace() {
                 if let Ok(status) = word.parse::<u16>() {
-                    if status >= 400 && status < 600 {
+                    if (400..600).contains(&status) {
                         info.status_code = Some(status);
                         break;
                     }
@@ -235,26 +234,14 @@ Unified Subsystem Context:
 - Active Persona: {}
 - Chaos Rules: {} active
 "#,
-                uc.reality
-                    .level_name
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown"),
+                uc.reality.level_name.as_deref().unwrap_or("unknown"),
                 uc.reality.chaos_enabled,
                 uc.reality.latency_base_ms,
                 uc.reality.mockai_enabled,
                 uc.contract.validation_enabled,
                 uc.contract.enforcement_mode,
-                uc.scenario
-                    .active_scenario
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or("none"),
-                uc.persona
-                    .active_persona_id
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or("none"),
+                uc.scenario.active_scenario.as_deref().unwrap_or("none"),
+                uc.persona.active_persona_id.as_deref().unwrap_or("none"),
                 uc.chaos.active_rules.len()
             )
         } else {
@@ -389,7 +376,11 @@ Provide 3-5 specific suggestions for fixing this test failure. Include linked ar
                     if let Some(ref level_name) = uc.reality.level_name {
                         suggestion.linked_artifacts.push(LinkedArtifact {
                             artifact_type: "reality".to_string(),
-                            artifact_id: uc.reality.level.map(|l| l.value().to_string()).unwrap_or_default(),
+                            artifact_id: uc
+                                .reality
+                                .level
+                                .map(|l| l.value().to_string())
+                                .unwrap_or_default(),
                             artifact_name: Some(level_name.clone()),
                         });
                     }
@@ -506,7 +497,8 @@ Provide 3-5 specific suggestions for fixing this test failure. Include linked ar
                     "type": "string"
                 }))
             }
-        } else if suggestion.title.contains("persona") || suggestion.description.contains("persona") {
+        } else if suggestion.title.contains("persona") || suggestion.description.contains("persona")
+        {
             // Persona configuration
             Some(serde_json::json!({
                 "traits": {},
@@ -569,10 +561,8 @@ Provide 3-5 specific suggestions for fixing this test failure. Include linked ar
                 ));
             }
             if !uc.contract.active_contracts.is_empty() {
-                configs.push(format!(
-                    "Active Contracts: {}",
-                    uc.contract.active_contracts.join(", ")
-                ));
+                configs
+                    .push(format!("Active Contracts: {}", uc.contract.active_contracts.join(", ")));
             }
         }
 

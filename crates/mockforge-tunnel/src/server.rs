@@ -32,6 +32,7 @@ pub trait TunnelStoreTrait: Send + Sync {
     async fn get_tunnel_by_subdomain(&self, subdomain: &str) -> crate::Result<TunnelStatus>;
     async fn get_tunnel_by_id(&self, tunnel_id: &str) -> crate::Result<TunnelStatus>;
     async fn record_request(&self, tunnel_id: &str, bytes: u64);
+    async fn cleanup_expired(&self) -> crate::Result<u64>;
 }
 
 /// Wrapper type for tunnel store trait objects
@@ -226,11 +227,16 @@ impl TunnelStoreTrait for TunnelStore {
     async fn record_request(&self, tunnel_id: &str, bytes: u64) {
         self.record_request(tunnel_id, bytes).await
     }
+
+    async fn cleanup_expired(&self) -> crate::Result<u64> {
+        // In-memory store doesn't need cleanup
+        Ok(0)
+    }
 }
 
 /// Create tunnel API handler
 async fn create_tunnel_handler(
-    State(store): State<TunnelStore>,
+    State(store): State<TunnelStoreWrapper>,
     Json(payload): Json<serde_json::Value>,
 ) -> Result<Json<TunnelStatus>, (StatusCode, String)> {
     let local_url = payload["local_url"]

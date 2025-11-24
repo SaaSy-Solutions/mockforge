@@ -317,7 +317,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
           <Button
             size="small"
             disabled={page === 0}
-            onClick={() => setPage((p) => Math.max(0, p - 1)))}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
           >
             Previous
           </Button>

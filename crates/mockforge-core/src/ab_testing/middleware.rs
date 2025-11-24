@@ -10,9 +10,8 @@ use axum::body::Body;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use rand::Rng;
-use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, trace, warn};
+use tracing::warn;
 
 /// State for A/B testing middleware
 #[derive(Clone)]

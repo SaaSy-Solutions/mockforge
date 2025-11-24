@@ -15,7 +15,6 @@ pub mod compliance_dashboard;
 pub mod compliance_dashboard_global;
 pub mod email;
 pub mod emitter;
-pub mod slack;
 pub mod events;
 pub mod justification_storage;
 pub mod mfa_tracking;
@@ -24,6 +23,7 @@ pub mod privileged_access_global;
 pub mod risk_assessment;
 pub mod risk_assessment_global;
 pub mod siem;
+pub mod slack;
 
 pub use access_review::{
     AccessReview, AccessReviewConfig, AccessReviewEngine, ApiTokenInfo, PrivilegedAccessInfo,
@@ -59,7 +59,6 @@ pub use emitter::{
     emit_security_event, emit_security_event_async, init_global_siem_emitter,
     is_siem_emitter_initialized,
 };
-pub use slack::{SlackConfig, SlackMessage, SlackMethod, SlackService};
 pub use events::{
     EventActor, EventOutcome, EventTarget, SecurityEvent, SecurityEventSeverity, SecurityEventType,
 };
@@ -84,3 +83,4 @@ pub use risk_assessment_global::{
     is_risk_assessment_engine_initialized,
 };
 pub use siem::{SiemConfig, SiemDestination, SiemEmitter};
+pub use slack::{SlackConfig, SlackMessage, SlackMethod, SlackService};

@@ -9,15 +9,14 @@ use axum::{
 };
 // ChaosScenario is now serde_json::Value to avoid circular dependency
 use mockforge_core::consistency::{
-    enrich_order_response, enrich_response_via_graph, enrich_user_response,
-    get_user_orders_via_graph, ConsistencyEngine, EntityState, UnifiedState,
+    enrich_order_response, enrich_user_response, get_user_orders_via_graph, ConsistencyEngine,
+    EntityState, UnifiedState,
 };
 use mockforge_core::reality::RealityLevel;
 use mockforge_data::{LifecyclePreset, LifecycleState, PersonaLifecycle, PersonaProfile};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{error, info};
 
@@ -456,7 +455,7 @@ pub async fn get_user_with_graph(
     Query(params): Query<WorkspaceQuery>,
 ) -> Result<Json<Value>, StatusCode> {
     // Get user entity
-    let mut user_entity = state
+    let user_entity = state
         .engine
         .get_entity(&params.workspace, "user", &user_id)
         .await
@@ -514,7 +513,7 @@ pub async fn get_order_with_graph(
     Query(params): Query<WorkspaceQuery>,
 ) -> Result<Json<Value>, StatusCode> {
     // Get order entity
-    let mut order_entity = state
+    let order_entity = state
         .engine
         .get_entity(&params.workspace, "order", &order_id)
         .await
@@ -739,10 +738,7 @@ pub async fn apply_lifecycle_preset(
         })));
     }
 
-    error!(
-        "No active persona found in workspace: {}",
-        params.workspace
-    );
+    error!("No active persona found in workspace: {}", params.workspace);
     Err(StatusCode::NOT_FOUND)
 }
 

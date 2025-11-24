@@ -7,20 +7,19 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use chrono::{DateTime, Utc};
-use mockforge_core::ai_contract_diff::semantic_analyzer::SemanticDriftResult;
 use mockforge_core::ai_contract_diff::{ContractDiffAnalyzer, ContractDiffConfig};
 use mockforge_core::incidents::semantic_manager::{SemanticIncident, SemanticIncidentManager};
 use mockforge_core::openapi::OpenApiSpec;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use uuid::Uuid;
 
 use crate::database::Database;
 
 /// Helper function to map database row to SemanticIncident
 #[cfg(feature = "database")]
-fn map_row_to_semantic_incident(row: &sqlx::postgres::PgRow) -> Result<SemanticIncident, sqlx::Error> {
+fn map_row_to_semantic_incident(
+    row: &sqlx::postgres::PgRow,
+) -> Result<SemanticIncident, sqlx::Error> {
     use mockforge_core::ai_contract_diff::semantic_analyzer::SemanticChangeType;
     use mockforge_core::incidents::types::{IncidentSeverity, IncidentStatus};
 
@@ -34,10 +33,13 @@ fn map_row_to_semantic_incident(row: &sqlx::postgres::PgRow) -> Result<SemanticI
     let semantic_confidence: f64 = row.try_get("semantic_confidence")?;
     let soft_breaking_score: f64 = row.try_get("soft_breaking_score")?;
     let llm_analysis: serde_json::Value = row.try_get("llm_analysis").unwrap_or_default();
-    let before_semantic_state: serde_json::Value = row.try_get("before_semantic_state").unwrap_or_default();
-    let after_semantic_state: serde_json::Value = row.try_get("after_semantic_state").unwrap_or_default();
+    let before_semantic_state: serde_json::Value =
+        row.try_get("before_semantic_state").unwrap_or_default();
+    let after_semantic_state: serde_json::Value =
+        row.try_get("after_semantic_state").unwrap_or_default();
     let details_json: serde_json::Value = row.try_get("details").unwrap_or_default();
-    let related_drift_incident_id: Option<uuid::Uuid> = row.try_get("related_drift_incident_id").ok();
+    let related_drift_incident_id: Option<uuid::Uuid> =
+        row.try_get("related_drift_incident_id").ok();
     let contract_diff_id: Option<String> = row.try_get("contract_diff_id").ok();
     let external_ticket_id: Option<String> = row.try_get("external_ticket_id").ok();
     let external_ticket_url: Option<String> = row.try_get("external_ticket_url").ok();
@@ -181,13 +183,10 @@ pub async fn list_semantic_incidents(
         query.push_str(&format!(" ORDER BY detected_at DESC LIMIT {}", limit));
 
         // Execute query - use fetch_all for SELECT queries
-        let rows = sqlx::query(&query)
-            .fetch_all(pool)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to query semantic incidents: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+        let rows = sqlx::query(&query).fetch_all(pool).await.map_err(|e| {
+            tracing::error!("Failed to query semantic incidents: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
         // Map rows to SemanticIncident
         let mut incidents = Vec::new();
@@ -210,14 +209,12 @@ pub async fn list_semantic_incidents(
     }
 
     // Fallback to in-memory manager
-    let status = params.status.as_deref().and_then(|s| {
-        match s {
-            "open" => Some(mockforge_core::incidents::types::IncidentStatus::Open),
-            "acknowledged" => Some(mockforge_core::incidents::types::IncidentStatus::Acknowledged),
-            "resolved" => Some(mockforge_core::incidents::types::IncidentStatus::Resolved),
-            "closed" => Some(mockforge_core::incidents::types::IncidentStatus::Closed),
-            _ => None,
-        }
+    let status = params.status.as_deref().and_then(|s| match s {
+        "open" => Some(mockforge_core::incidents::types::IncidentStatus::Open),
+        "acknowledged" => Some(mockforge_core::incidents::types::IncidentStatus::Acknowledged),
+        "resolved" => Some(mockforge_core::incidents::types::IncidentStatus::Resolved),
+        "closed" => Some(mockforge_core::incidents::types::IncidentStatus::Closed),
+        _ => None,
     });
 
     let incidents = state
@@ -247,16 +244,14 @@ pub async fn get_semantic_incident(
     // Try database first
     #[cfg(feature = "database")]
     if let Some(pool) = state.database.as_ref().and_then(|db| db.pool()) {
-        let row = sqlx::query(
-            "SELECT * FROM semantic_drift_incidents WHERE id = $1",
-        )
-        .bind(&id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to query semantic incident: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        let row = sqlx::query("SELECT * FROM semantic_drift_incidents WHERE id = $1")
+            .bind(&id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to query semantic incident: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
         if let Some(row) = row {
             match map_row_to_semantic_incident(&row) {
@@ -301,13 +296,13 @@ pub async fn analyze_semantic_drift(
     // Parse specs
     let before_spec = OpenApiSpec::from_string(&request.before_spec, None)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
-    let after_spec = OpenApiSpec::from_string(&request.after_spec, None)
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let after_spec =
+        OpenApiSpec::from_string(&request.after_spec, None).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Create analyzer
     let config = ContractDiffConfig::default();
-    let analyzer = ContractDiffAnalyzer::new(config)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let analyzer =
+        ContractDiffAnalyzer::new(config).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Run semantic analysis
     let semantic_result = analyzer
@@ -364,7 +359,10 @@ async fn store_semantic_incident(
 ) -> Result<(), sqlx::Error> {
     let id = Uuid::parse_str(&incident.id).unwrap_or_else(|_| Uuid::new_v4());
     let workspace_uuid = incident.workspace_id.as_ref().and_then(|id| Uuid::parse_str(id).ok());
-    let related_uuid = incident.related_drift_incident_id.as_ref().and_then(|id| Uuid::parse_str(id).ok());
+    let related_uuid = incident
+        .related_drift_incident_id
+        .as_ref()
+        .and_then(|id| Uuid::parse_str(id).ok());
 
     sqlx::query(
         r#"
@@ -417,7 +415,7 @@ pub fn semantic_drift_router(state: SemanticDriftState) -> axum::Router {
 
     Router::new()
         .route("/api/v1/semantic-drift/incidents", get(list_semantic_incidents))
-        .route("/api/v1/semantic-drift/incidents/:id", get(get_semantic_incident))
+        .route("/api/v1/semantic-drift/incidents/{id}", get(get_semantic_incident))
         .route("/api/v1/semantic-drift/analyze", post(analyze_semantic_drift))
         .with_state(state)
 }

@@ -62,25 +62,21 @@ impl Forecaster {
             let window_start = now - Duration::days(window_days as i64);
             let window_end = now;
 
-            let analysis = self
-                .pattern_analyzer
-                .analyze_patterns(incidents, window_start, window_end);
+            let analysis =
+                self.pattern_analyzer.analyze_patterns(incidents, window_start, window_end);
             analyses.push((window_days, analysis));
         }
 
         // Use the longest window analysis for forecasting
-        let (_, analysis) = analyses
-            .iter()
-            .max_by_key(|(days, _)| *days)
-            .or_else(|| analyses.first())?;
+        let (_, analysis) =
+            analyses.iter().max_by_key(|(days, _)| *days).or_else(|| analyses.first())?;
 
         // Generate predictions
         let change_probability = self
             .statistical_model
             .predict_change_probability(analysis, forecast_window_days);
-        let break_probability = self
-            .statistical_model
-            .predict_break_probability(analysis, forecast_window_days);
+        let break_probability =
+            self.statistical_model.predict_break_probability(analysis, forecast_window_days);
         let next_change_date = self.statistical_model.predict_next_change_date(analysis);
         let next_break_date = self.statistical_model.predict_next_break_date(analysis);
         let confidence = self
@@ -109,8 +105,7 @@ impl Forecaster {
             .collect();
 
         // Calculate expiration (default 12 hours)
-        let expires_at = Utc::now()
-            + Duration::hours(self.config.default_expiration_hours as i64);
+        let expires_at = Utc::now() + Duration::hours(self.config.default_expiration_hours as i64);
 
         Some(ChangeForecast {
             service_id,
@@ -137,8 +132,7 @@ impl Forecaster {
         window_start: DateTime<Utc>,
         window_end: DateTime<Utc>,
     ) -> PatternAnalysis {
-        self.pattern_analyzer
-            .analyze_patterns(incidents, window_start, window_end)
+        self.pattern_analyzer.analyze_patterns(incidents, window_start, window_end)
     }
 }
 

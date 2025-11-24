@@ -10,7 +10,6 @@ use chrono::{DateTime, Utc};
 // When used, it should be deserialized from JSON
 type ChaosScenario = serde_json::Value;
 #[cfg(feature = "data")]
-#[cfg(feature = "persona-graph")]
 pub use mockforge_data::PersonaGraph;
 #[cfg(feature = "data")]
 pub use mockforge_data::PersonaProfile;
@@ -67,10 +66,10 @@ pub struct UnifiedState {
     /// Maintains relationships between personas across different entity types
     /// (user → orders → payments → webhooks → TCP messages), enabling
     /// coherent data generation across endpoints.
-    #[cfg(feature = "persona-graph")]
+    #[cfg(feature = "data")]
     #[serde(skip)]
     pub persona_graph: Option<PersonaGraph>,
-    #[cfg(not(feature = "persona-graph"))]
+    #[cfg(not(feature = "data"))]
     #[serde(skip)]
     #[allow(dead_code)]
     persona_graph: Option<()>,
@@ -95,9 +94,9 @@ impl UnifiedState {
             active_chaos_rules: Vec::new(),
             entity_state: HashMap::new(),
             protocol_states: HashMap::new(),
-            #[cfg(feature = "persona-graph")]
+            #[cfg(feature = "data")]
             persona_graph: Some(PersonaGraph::new()),
-            #[cfg(not(feature = "persona-graph"))]
+            #[cfg(not(feature = "data"))]
             persona_graph: None,
             last_updated: Utc::now(),
             version: 1,
@@ -105,7 +104,7 @@ impl UnifiedState {
     }
 
     /// Get or create the persona graph for this workspace
-    #[cfg(feature = "persona-graph")]
+    #[cfg(feature = "data")]
     pub fn get_or_create_persona_graph(&mut self) -> &mut PersonaGraph {
         if self.persona_graph.is_none() {
             self.persona_graph = Some(PersonaGraph::new());
@@ -114,13 +113,13 @@ impl UnifiedState {
     }
 
     /// Get the persona graph (read-only)
-    #[cfg(feature = "persona-graph")]
+    #[cfg(feature = "data")]
     pub fn persona_graph(&self) -> Option<&PersonaGraph> {
         self.persona_graph.as_ref()
     }
 
     /// Get or create the persona graph for this workspace (stub when feature disabled)
-    #[cfg(not(feature = "persona-graph"))]
+    #[cfg(not(feature = "data"))]
     pub fn get_or_create_persona_graph(&mut self) -> &mut () {
         if self.persona_graph.is_none() {
             self.persona_graph = Some(());
@@ -129,7 +128,7 @@ impl UnifiedState {
     }
 
     /// Get the persona graph (read-only, stub when feature disabled)
-    #[cfg(not(feature = "persona-graph"))]
+    #[cfg(not(feature = "data"))]
     pub fn persona_graph(&self) -> Option<&()> {
         self.persona_graph.as_ref()
     }

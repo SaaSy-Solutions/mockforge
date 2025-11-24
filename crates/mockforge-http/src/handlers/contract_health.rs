@@ -11,9 +11,6 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use chrono::{DateTime, Utc};
-use mockforge_core::incidents::types::{DriftIncident, IncidentStatus};
-use mockforge_core::incidents::semantic_manager::SemanticIncident;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -265,7 +262,7 @@ pub async fn get_timeline(
              confidence, predicted_at
              FROM api_change_forecasts
              WHERE workspace_id = $1 OR workspace_id IS NULL
-             ORDER BY predicted_at DESC LIMIT 50"
+             ORDER BY predicted_at DESC LIMIT 50",
         )
         .bind(params.workspace_id.as_deref())
         .fetch_all(pool)
@@ -288,15 +285,18 @@ pub async fn get_timeline(
                     Ok(d) => d,
                     Err(_) => continue,
                 };
-                let predicted_change_probability: f64 = match row.try_get("predicted_change_probability") {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
-                let predicted_break_probability: f64 = match row.try_get("predicted_break_probability") {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
-                let next_expected_change_date: Option<DateTime<Utc>> = row.try_get("next_expected_change_date").ok();
+                let predicted_change_probability: f64 =
+                    match row.try_get("predicted_change_probability") {
+                        Ok(p) => p,
+                        Err(_) => continue,
+                    };
+                let predicted_break_probability: f64 =
+                    match row.try_get("predicted_break_probability") {
+                        Ok(p) => p,
+                        Err(_) => continue,
+                    };
+                let next_expected_change_date: Option<DateTime<Utc>> =
+                    row.try_get("next_expected_change_date").ok();
                 let predicted_at: DateTime<Utc> = match row.try_get("predicted_at") {
                     Ok(dt) => dt,
                     Err(_) => continue,

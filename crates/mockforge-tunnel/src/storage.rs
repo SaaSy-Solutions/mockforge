@@ -10,9 +10,9 @@ use std::path::Path;
 use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "server")]
-use async_trait::async_trait;
-#[cfg(feature = "server")]
 use crate::server::TunnelStoreTrait;
+#[cfg(feature = "server")]
+use async_trait::async_trait;
 
 /// Persistent tunnel storage using SQLite
 #[derive(Clone)]

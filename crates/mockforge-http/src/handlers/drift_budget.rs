@@ -12,9 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono;
-use mockforge_core::contract_drift::{
-    DriftBudget, DriftBudgetConfig, DriftBudgetEngine, DriftResult,
-};
+use mockforge_core::contract_drift::{DriftBudget, DriftBudgetEngine};
 use mockforge_core::incidents::types::DriftIncident;
 use mockforge_core::incidents::{
     IncidentManager, IncidentQuery, IncidentSeverity, IncidentStatus, IncidentType,
@@ -352,10 +350,53 @@ pub async fn generate_gitops_pr(
             all_incidents.into_iter().filter(|inc| incident_ids.contains(&inc.id)).collect();
 
         match handler.generate_pr_from_incidents(&incidents).await {
-            Ok(Some(pr_result)) => Ok(Json(serde_json::json!({
-                "success": true,
-                "pr": pr_result,
-            }))),
+            Ok(Some(pr_result)) => {
+                // Emit pipeline event for drift threshold exceeded
+                #[cfg(feature = "pipelines")]
+                {
+                    use mockforge_pipelines::{publish_event, PipelineEvent};
+                    use uuid::Uuid;
+
+                    // Extract workspace_id from incidents (use first incident's workspace if available)
+                    let workspace_id = incidents
+                        .first()
+                        .and_then(|inc| inc.workspace_id.as_ref())
+                        .and_then(|ws_id| Uuid::parse_str(ws_id).ok());
+
+                    // Count threshold-exceeded incidents
+                    let threshold_exceeded_count = incidents
+                        .iter()
+                        .filter(|inc| matches!(inc.incident_type, IncidentType::ThresholdExceeded))
+                        .count();
+
+                    if threshold_exceeded_count > 0 {
+                        // Get a representative endpoint for the event
+                        let endpoint = incidents
+                            .first()
+                            .map(|inc| format!("{} {}", inc.method, inc.endpoint))
+                            .unwrap_or_else(|| "unknown".to_string());
+
+                        let event = PipelineEvent::drift_threshold_exceeded(
+                            workspace_id.unwrap_or_else(Uuid::new_v4),
+                            endpoint,
+                            threshold_exceeded_count as i32,
+                            incidents.len() as i32,
+                        );
+
+                        if let Err(e) = publish_event(event) {
+                            tracing::warn!(
+                                "Failed to publish drift threshold exceeded event: {}",
+                                e
+                            );
+                        }
+                    }
+                }
+
+                Ok(Json(serde_json::json!({
+                    "success": true,
+                    "pr": pr_result,
+                })))
+            }
             Ok(None) => Ok(Json(serde_json::json!({
                 "success": false,
                 "message": "No PR generated (no file changes or incidents)",
@@ -364,6 +405,8 @@ pub async fn generate_gitops_pr(
         }
     } else {
         // Filter by workspace and/or status
+        // Clone workspace_id before moving it to query
+        let workspace_id_str = request.workspace_id.clone();
         query.workspace_id = request.workspace_id;
         if let Some(status_str) = &request.status {
             query.status = match status_str.as_str() {
@@ -376,11 +419,60 @@ pub async fn generate_gitops_pr(
         let incidents = state.incident_manager.query_incidents(query).await;
 
         match handler.generate_pr_from_incidents(&incidents).await {
-            Ok(Some(pr_result)) => Ok(Json(serde_json::json!({
-                "success": true,
-                "pr": pr_result,
-                "incidents_included": incidents.len(),
-            }))),
+            Ok(Some(pr_result)) => {
+                // Emit pipeline event for drift threshold exceeded
+                #[cfg(feature = "pipelines")]
+                {
+                    use mockforge_pipelines::{publish_event, PipelineEvent};
+                    use uuid::Uuid;
+
+                    // Extract workspace_id from cloned string or incidents
+                    let workspace_id = workspace_id_str
+                        .as_ref()
+                        .and_then(|ws_id| Uuid::parse_str(ws_id).ok())
+                        .or_else(|| {
+                            incidents
+                                .first()
+                                .and_then(|inc| inc.workspace_id.as_ref())
+                                .and_then(|ws_id| Uuid::parse_str(ws_id).ok())
+                        })
+                        .unwrap_or_else(Uuid::new_v4);
+
+                    // Count threshold-exceeded incidents
+                    let threshold_exceeded_count = incidents
+                        .iter()
+                        .filter(|inc| matches!(inc.incident_type, IncidentType::ThresholdExceeded))
+                        .count();
+
+                    if threshold_exceeded_count > 0 {
+                        // Get a representative endpoint for the event
+                        let endpoint = incidents
+                            .first()
+                            .map(|inc| format!("{} {}", inc.method, inc.endpoint))
+                            .unwrap_or_else(|| "unknown".to_string());
+
+                        let event = PipelineEvent::drift_threshold_exceeded(
+                            workspace_id,
+                            endpoint,
+                            threshold_exceeded_count as i32,
+                            incidents.len() as i32,
+                        );
+
+                        if let Err(e) = publish_event(event) {
+                            tracing::warn!(
+                                "Failed to publish drift threshold exceeded event: {}",
+                                e
+                            );
+                        }
+                    }
+                }
+
+                Ok(Json(serde_json::json!({
+                    "success": true,
+                    "pr": pr_result,
+                    "incidents_included": incidents.len(),
+                })))
+            }
             Ok(None) => Ok(Json(serde_json::json!({
                 "success": false,
                 "message": "No PR generated (no file changes or incidents)",

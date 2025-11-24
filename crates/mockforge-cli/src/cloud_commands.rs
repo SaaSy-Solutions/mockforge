@@ -9,7 +9,7 @@ use mockforge_core::workspace::sync::{SyncConfig, SyncDirection, SyncProvider};
 use mockforge_core::SyncService;
 use serde_json::json;
 use std::path::PathBuf;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Cloud command subcommands
 #[derive(clap::Subcommand)]
@@ -387,7 +387,7 @@ async fn handle_login(
         // Validate token by making a test API call
         let client = reqwest::Client::new();
         let response = client
-            .get(&format!("{}/api/v1/auth/verify", service_url))
+            .get(format!("{}/api/v1/auth/verify", service_url))
             .header("Authorization", format!("Bearer {}", token))
             .send()
             .await
@@ -455,7 +455,7 @@ async fn handle_whoami(service_url: String) -> Result<()> {
     // Verify token and get user info
     let client = reqwest::Client::new();
     let response = client
-        .get(&format!("{}/api/v1/auth/me", service_url))
+        .get(format!("{}/api/v1/auth/me", service_url))
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
@@ -595,20 +595,15 @@ async fn handle_sync_start(
     let mut sync_manager = mockforge_core::workspace::sync::WorkspaceSyncManager::new(sync_config);
 
     // Create workspace persistence to load workspaces
-    let persistence = mockforge_core::workspace_persistence::WorkspacePersistence::new(
-        &local_workspace_dir.to_string_lossy(),
-    )
-    .await
-    .context("Failed to create workspace persistence")?;
+    let persistence =
+        mockforge_core::workspace_persistence::WorkspacePersistence::new(&local_workspace_dir);
 
     if all {
         println!("{}", "🔄 Syncing all workspaces...".cyan());
 
         // Get all workspace IDs
-        let workspace_ids = persistence
-            .list_workspace_ids()
-            .await
-            .context("Failed to list workspace IDs")?;
+        let workspace_ids =
+            persistence.list_workspace_ids().await.context("Failed to list workspace IDs")?;
 
         if workspace_ids.is_empty() {
             println!("{}", "ℹ️  No workspaces found to sync".yellow());
@@ -636,13 +631,19 @@ async fn handle_sync_start(
                                 // Save workspace if it was modified
                                 if result.changes_count > 0 {
                                     if let Err(e) = persistence.save_workspace(&workspace).await {
-                                        eprintln!("   Warning: Failed to save workspace after sync: {}", e);
+                                        eprintln!(
+                                            "   Warning: Failed to save workspace after sync: {}",
+                                            e
+                                        );
                                     }
                                 }
 
                                 // Report conflicts if any
                                 if !result.conflicts.is_empty() {
-                                    println!("     {} conflict(s) detected", result.conflicts.len());
+                                    println!(
+                                        "     {} conflict(s) detected",
+                                        result.conflicts.len()
+                                    );
                                 }
                             } else {
                                 failed += 1;
@@ -865,7 +866,7 @@ async fn handle_cloud_workspace_list(service_url: String) -> Result<()> {
     let client = reqwest::Client::new();
 
     let response = client
-        .get(&format!("{}/api/v1/workspaces", service_url))
+        .get(format!("{}/api/v1/workspaces", service_url))
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
@@ -899,7 +900,7 @@ async fn handle_cloud_workspace_create(
     });
 
     let response = client
-        .post(&format!("{}/api/v1/workspaces", service_url))
+        .post(format!("{}/api/v1/workspaces", service_url))
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .json(&payload)
@@ -951,8 +952,8 @@ async fn handle_cloud_workspace_unlink(local_workspace: PathBuf) -> Result<()> {
             .await
             .context("Failed to read sync config")?;
 
-        let mut sync_config: SyncConfig = serde_yaml::from_str(&config_content)
-            .context("Failed to parse sync config")?;
+        let mut sync_config: SyncConfig =
+            serde_yaml::from_str(&config_content).context("Failed to parse sync config")?;
 
         // Disable sync or remove cloud provider
         match &mut sync_config.provider {
@@ -997,7 +998,7 @@ async fn handle_cloud_workspace_info(workspace_id: String, service_url: String) 
     let client = reqwest::Client::new();
 
     let response = client
-        .get(&format!("{}/api/v1/workspaces/{}", service_url, workspace_id))
+        .get(format!("{}/api/v1/workspaces/{}", service_url, workspace_id))
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
@@ -1041,7 +1042,7 @@ async fn handle_team_members(workspace: String, service_url: String) -> Result<(
     let client = reqwest::Client::new();
 
     let response = client
-        .get(&format!("{}/api/v1/workspaces/{}/members", service_url, workspace))
+        .get(format!("{}/api/v1/workspaces/{}/members", service_url, workspace))
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
@@ -1074,7 +1075,7 @@ async fn handle_team_invite(
     });
 
     let response = client
-        .post(&format!("{}/api/v1/workspaces/{}/members", service_url, workspace))
+        .post(format!("{}/api/v1/workspaces/{}/members", service_url, workspace))
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .json(&payload)
@@ -1098,7 +1099,7 @@ async fn handle_team_remove(email: String, workspace: String, service_url: Strin
     let client = reqwest::Client::new();
 
     let response = client
-        .delete(&format!("{}/api/v1/workspaces/{}/members/{}", service_url, workspace, email))
+        .delete(format!("{}/api/v1/workspaces/{}/members/{}", service_url, workspace, email))
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await

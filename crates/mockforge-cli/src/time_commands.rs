@@ -193,7 +193,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
         TimeCommands::Status => {
             let client = reqwest::Client::new();
             let response = client
-                .get(&format!("{}/status", base_url))
+                .get(format!("{}/status", base_url))
                 .send()
                 .await
                 .context("Failed to connect to MockForge server. Is it running?")?;
@@ -225,7 +225,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
             }
 
             let response = client
-                .post(&format!("{}/enable", base_url))
+                .post(format!("{}/enable", base_url))
                 .json(&body)
                 .send()
                 .await
@@ -248,7 +248,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
         TimeCommands::Disable => {
             let client = reqwest::Client::new();
             let response = client
-                .post(&format!("{}/disable", base_url))
+                .post(format!("{}/disable", base_url))
                 .send()
                 .await
                 .context("Failed to connect to MockForge server. Is it running?")?;
@@ -265,7 +265,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
             let body = json!({ "duration": duration });
 
             let response = client
-                .post(&format!("{}/advance", base_url))
+                .post(format!("{}/advance", base_url))
                 .json(&body)
                 .send()
                 .await
@@ -287,7 +287,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
             let body = json!({ "time": time });
 
             let response = client
-                .post(&format!("{}/enable", base_url))
+                .post(format!("{}/enable", base_url))
                 .json(&body)
                 .send()
                 .await
@@ -312,7 +312,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
             let body = json!({ "scale": factor });
 
             let response = client
-                .post(&format!("{}/scale", base_url))
+                .post(format!("{}/scale", base_url))
                 .json(&body)
                 .send()
                 .await
@@ -328,7 +328,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
         TimeCommands::Reset => {
             let client = reqwest::Client::new();
             let response = client
-                .post(&format!("{}/reset", base_url))
+                .post(format!("{}/reset", base_url))
                 .send()
                 .await
                 .context("Failed to connect to MockForge server. Is it running?")?;
@@ -352,7 +352,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
             });
 
             let response = client
-                .post(&format!("{}/scenario/save", base_url))
+                .post(format!("{}/scenario/save", base_url))
                 .json(&body)
                 .send()
                 .await
@@ -405,7 +405,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
 
             let client = reqwest::Client::new();
             let response = client
-                .post(&format!("{}/scenario/load", base_url))
+                .post(format!("{}/scenario/load", base_url))
                 .json(&json!({ "name": scenario["name"] }))
                 .send()
                 .await
@@ -418,7 +418,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                         if let Some(time_str) = scenario["current_time"].as_str() {
                             let set_body = json!({ "time": time_str });
                             let _ = client
-                                .post(&format!("{}/enable", base_url))
+                                .post(format!("{}/enable", base_url))
                                 .json(&set_body)
                                 .send()
                                 .await;
@@ -426,13 +426,13 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                         if let Some(scale) = scenario["scale_factor"].as_f64() {
                             let scale_body = json!({ "scale": scale });
                             let _ = client
-                                .post(&format!("{}/scale", base_url))
+                                .post(format!("{}/scale", base_url))
                                 .json(&scale_body)
                                 .send()
                                 .await;
                         }
                     } else {
-                        let _ = client.post(&format!("{}/disable", base_url)).send().await;
+                        let _ = client.post(format!("{}/disable", base_url)).send().await;
                     }
                 }
 
@@ -587,7 +587,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                 CronCommands::Get { id } => {
                     let client = reqwest::Client::new();
                     let response = client
-                        .get(&format!("{}/{}", cron_url, id))
+                        .get(format!("{}/{}", cron_url, id))
                         .send()
                         .await
                         .context("Failed to connect to MockForge server. Is it running?")?;
@@ -618,7 +618,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                 CronCommands::Delete { id } => {
                     let client = reqwest::Client::new();
                     let response = client
-                        .delete(&format!("{}/{}", cron_url, id))
+                        .delete(format!("{}/{}", cron_url, id))
                         .send()
                         .await
                         .context("Failed to connect to MockForge server. Is it running?")?;
@@ -635,7 +635,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                     let body = json!({ "enabled": true });
 
                     let response = client
-                        .post(&format!("{}/{}/enable", cron_url, id))
+                        .post(format!("{}/{}/enable", cron_url, id))
                         .json(&body)
                         .send()
                         .await
@@ -653,7 +653,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                     let body = json!({ "enabled": false });
 
                     let response = client
-                        .post(&format!("{}/{}/enable", cron_url, id))
+                        .post(format!("{}/{}/enable", cron_url, id))
                         .json(&body)
                         .send()
                         .await
@@ -845,7 +845,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                 MutationCommands::Get { id } => {
                     let client = reqwest::Client::new();
                     let response = client
-                        .get(&format!("{}/{}", mutation_url, id))
+                        .get(format!("{}/{}", mutation_url, id))
                         .send()
                         .await
                         .context("Failed to connect to MockForge server. Is it running?")?;
@@ -874,11 +874,12 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                 }
                 MutationCommands::Delete { id } => {
                     let client = reqwest::Client::new();
-                    let response = client
-                        .delete(&format!("{}/{}", mutation_url, id))
-                        .send()
-                        .await
-                        .context("Failed to connect to MockForge server. Is it running?")?;
+                    let response =
+                        client
+                            .delete(format!("{}/{}", mutation_url, id))
+                            .send()
+                            .await
+                            .context("Failed to connect to MockForge server. Is it running?")?;
 
                     if response.status().is_success() {
                         println!("✅ Mutation rule '{}' deleted", id);
@@ -892,7 +893,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                     let body = json!({ "enabled": true });
 
                     let response = client
-                        .post(&format!("{}/{}/enable", mutation_url, id))
+                        .post(format!("{}/{}/enable", mutation_url, id))
                         .json(&body)
                         .send()
                         .await
@@ -910,7 +911,7 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                     let body = json!({ "enabled": false });
 
                     let response = client
-                        .post(&format!("{}/{}/enable", mutation_url, id))
+                        .post(format!("{}/{}/enable", mutation_url, id))
                         .json(&body)
                         .send()
                         .await

@@ -178,7 +178,7 @@ impl AuditLogStore {
 
         // Filter by user ID
         if let Some(user_id) = user_id {
-            filtered.retain(|log| log.user_id.as_ref().map(|s| s.as_str()) == Some(user_id));
+            filtered.retain(|log| log.user_id.as_deref() == Some(user_id));
         }
 
         // Sort by timestamp (newest first)

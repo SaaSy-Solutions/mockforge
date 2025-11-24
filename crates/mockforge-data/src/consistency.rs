@@ -7,7 +7,7 @@
 
 use crate::domains::Domain;
 use crate::persona::{PersonaGenerator, PersonaProfile, PersonaRegistry};
-use crate::persona_graph::{PersonaGraph, PersonaNode};
+use crate::persona_graph::PersonaGraph;
 use crate::Result;
 use serde_json::Value;
 use std::collections::HashMap;

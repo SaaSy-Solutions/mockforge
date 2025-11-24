@@ -1,6 +1,6 @@
 //! Template expansion utilities for request context variables
 //!
-//! This crate provides Send-safe template expansion that does NOT use rng().
+//! This crate provides Send-safe template expansion that does NOT use `rng()`.
 //! It is completely isolated from the templating module in mockforge-core
 //! to avoid Send issues in async contexts.
 //!
@@ -40,6 +40,7 @@ pub struct RequestContext {
 
 impl RequestContext {
     /// Create a new request context
+    #[must_use]
     pub fn new(method: String, path: String) -> Self {
         Self {
             method,
@@ -49,36 +50,42 @@ impl RequestContext {
     }
 
     /// Set path parameters
+    #[must_use]
     pub fn with_path_params(mut self, params: HashMap<String, Value>) -> Self {
         self.path_params = params;
         self
     }
 
     /// Set query parameters
+    #[must_use]
     pub fn with_query_params(mut self, params: HashMap<String, Value>) -> Self {
         self.query_params = params;
         self
     }
 
     /// Set headers
+    #[must_use]
     pub fn with_headers(mut self, headers: HashMap<String, Value>) -> Self {
         self.headers = headers;
         self
     }
 
     /// Set body
+    #[must_use]
     pub fn with_body(mut self, body: Value) -> Self {
         self.body = Some(body);
         self
     }
 
     /// Set multipart form fields
+    #[must_use]
     pub fn with_multipart_fields(mut self, fields: HashMap<String, Value>) -> Self {
         self.multipart_fields = fields;
         self
     }
 
     /// Set multipart file uploads
+    #[must_use]
     pub fn with_multipart_files(mut self, files: HashMap<String, String>) -> Self {
         self.multipart_files = files;
         self
@@ -87,7 +94,7 @@ impl RequestContext {
 
 /// Expand template variables in a prompt string using request context
 ///
-/// This function is Send-safe and does not use rng() or any non-Send types.
+/// This function is Send-safe and does not use `rng()` or any non-Send types.
 /// It only performs simple string replacements based on the request context.
 ///
 /// # Arguments
@@ -113,6 +120,7 @@ impl RequestContext {
 /// let expanded = expand_prompt_template(template, &context);
 /// assert_eq!(expanded, "Search for term on path /api/search");
 /// ```
+#[must_use]
 pub fn expand_prompt_template(template: &str, context: &RequestContext) -> String {
     let mut result = template.to_string();
 
@@ -152,7 +160,7 @@ fn expand_json_variables(template: &str, prefix: &str, value: &Value) -> String 
     // Handle object fields
     if let Some(obj) = value.as_object() {
         for (key, val) in obj {
-            let placeholder = format!("{{{{{}.{}}}}}", prefix, key);
+            let placeholder = format!("{{{{{prefix}.{key}}}}}");
             let replacement = match val {
                 Value::String(s) => s.clone(),
                 Value::Number(n) => n.to_string(),
@@ -167,15 +175,15 @@ fn expand_json_variables(template: &str, prefix: &str, value: &Value) -> String 
     result
 }
 
-/// Expand template variables from a HashMap
+/// Expand template variables from a `HashMap`
 ///
-/// This helper function extracts values from a HashMap and replaces
+/// This helper function extracts values from a `HashMap` and replaces
 /// template placeholders like `{{query.name}}` with the actual value.
-fn expand_map_variables(template: &str, prefix: &str, map: &std::collections::HashMap<String, Value>) -> String {
+fn expand_map_variables(template: &str, prefix: &str, map: &HashMap<String, Value>) -> String {
     let mut result = template.to_string();
 
     for (key, val) in map {
-        let placeholder = format!("{{{{{}.{}}}}}", prefix, key);
+        let placeholder = format!("{{{{{prefix}.{key}}}}}");
         let replacement = match val {
             Value::String(s) => s.clone(),
             Value::Number(n) => n.to_string(),
@@ -191,8 +199,8 @@ fn expand_map_variables(template: &str, prefix: &str, map: &std::collections::Ha
 
 /// Expand template variables in a JSON value recursively using request context
 ///
-/// This function is Send-safe and does not use rng() or any non-Send types.
-/// It only uses expand_prompt_template which performs simple string replacements.
+/// This function is Send-safe and does not use `rng()` or any non-Send types.
+/// It only uses `expand_prompt_template` which performs simple string replacements.
 ///
 /// # Arguments
 /// * `value` - JSON value to process
@@ -216,10 +224,8 @@ fn expand_map_variables(template: &str, prefix: &str, map: &std::collections::Ha
 /// assert_eq!(expanded["message"], "Request to /api/users");
 /// assert_eq!(expanded["method"], "GET");
 /// ```
-pub fn expand_templates_in_json(
-    value: Value,
-    context: &RequestContext,
-) -> Value {
+#[must_use]
+pub fn expand_templates_in_json(value: Value, context: &RequestContext) -> Value {
     match value {
         Value::String(s) => {
             // Normalize {{request.query.name}} to {{query.name}} format for compatibility
@@ -233,11 +239,9 @@ pub fn expand_templates_in_json(
             // Use expand_prompt_template which is Send-safe and doesn't use rng()
             Value::String(expand_prompt_template(&normalized, context))
         }
-        Value::Array(arr) => Value::Array(
-            arr.into_iter()
-                .map(|v| expand_templates_in_json(v, context))
-                .collect(),
-        ),
+        Value::Array(arr) => {
+            Value::Array(arr.into_iter().map(|v| expand_templates_in_json(v, context)).collect())
+        }
         Value::Object(obj) => Value::Object(
             obj.into_iter()
                 .map(|(k, v)| (k, expand_templates_in_json(v, context)))

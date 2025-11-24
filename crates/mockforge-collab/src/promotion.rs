@@ -1,25 +1,27 @@
 //! Promotion workflow management
 //!
 //! Handles promotion of scenarios, personas, and configs between environments
-//! with history tracking and GitOps integration.
+//! with history tracking and `GitOps` integration.
 
 use crate::error::{CollabError, Result};
 use chrono::{DateTime, Utc};
-use mockforge_core::workspace::scenario_promotion::{
-    PromotionEntityType, PromotionHistory, PromotionHistoryEntry, PromotionRequest,
-    PromotionStatus,
+use mockforge_core::pr_generation::{
+    PRFileChange, PRFileChangeType, PRGenerator, PRProvider, PRRequest,
 };
 use mockforge_core::workspace::mock_environment::MockEnvironmentName;
-use mockforge_core::pr_generation::{PRGenerator, PRProvider, PRRequest, PRFileChange, PRFileChangeType};
+use mockforge_core::workspace::scenario_promotion::{
+    PromotionEntityType, PromotionHistory, PromotionHistoryEntry, PromotionRequest, PromotionStatus,
+};
+use mockforge_core::PromotionService as PromotionServiceTrait;
 use serde_json;
 use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// GitOps configuration for promotions
+/// `GitOps` configuration for promotions
 #[derive(Debug, Clone)]
 pub struct PromotionGitOpsConfig {
-    /// Whether GitOps is enabled
+    /// Whether `GitOps` is enabled
     pub enabled: bool,
     /// PR generator (if enabled)
     pub pr_generator: Option<PRGenerator>,
@@ -28,7 +30,8 @@ pub struct PromotionGitOpsConfig {
 }
 
 impl PromotionGitOpsConfig {
-    /// Create a new GitOps config
+    /// Create a new `GitOps` config
+    #[must_use]
     pub fn new(
         enabled: bool,
         provider: PRProvider,
@@ -40,8 +43,12 @@ impl PromotionGitOpsConfig {
     ) -> Self {
         let pr_generator = if enabled && token.is_some() {
             Some(match provider {
-                PRProvider::GitHub => PRGenerator::new_github(owner, repo, token.unwrap(), base_branch),
-                PRProvider::GitLab => PRGenerator::new_gitlab(owner, repo, token.unwrap(), base_branch),
+                PRProvider::GitHub => {
+                    PRGenerator::new_github(owner, repo, token.unwrap(), base_branch)
+                }
+                PRProvider::GitLab => {
+                    PRGenerator::new_gitlab(owner, repo, token.unwrap(), base_branch)
+                }
             })
         } else {
             None
@@ -54,8 +61,9 @@ impl PromotionGitOpsConfig {
         }
     }
 
-    /// Create disabled GitOps config
-    pub fn disabled() -> Self {
+    /// Create disabled `GitOps` config
+    #[must_use]
+    pub const fn disabled() -> Self {
         Self {
             enabled: false,
             pr_generator: None,
@@ -72,6 +80,7 @@ pub struct PromotionService {
 
 impl PromotionService {
     /// Create a new promotion service
+    #[must_use]
     pub fn new(db: Pool<Sqlite>) -> Self {
         Self {
             db,
@@ -79,7 +88,8 @@ impl PromotionService {
         }
     }
 
-    /// Create a new promotion service with GitOps support
+    /// Create a new promotion service with `GitOps` support
+    #[must_use]
     pub fn with_gitops(db: Pool<Sqlite>, gitops: PromotionGitOpsConfig) -> Self {
         Self {
             db,
@@ -89,7 +99,7 @@ impl PromotionService {
 
     /// Run database migrations for promotion tables
     ///
-    /// This ensures the promotion_history and environment_permission_policies tables exist.
+    /// This ensures the `promotion_history` and `environment_permission_policies` tables exist.
     /// Should be called during service initialization.
     pub async fn run_migrations(&self) -> Result<()> {
         // Migrations are handled by the collab server's migration system
@@ -97,7 +107,7 @@ impl PromotionService {
         Ok(())
     }
 
-    /// Record a promotion in the history and optionally create a GitOps PR
+    /// Record a promotion in the history and optionally create a `GitOps` PR
     pub async fn record_promotion(
         &self,
         request: &PromotionRequest,
@@ -150,11 +160,14 @@ impl PromotionService {
         )
         .execute(&self.db)
         .await
-        .map_err(|e| CollabError::DatabaseError(format!("Failed to record promotion: {}", e)))?;
+        .map_err(|e| CollabError::DatabaseError(format!("Failed to record promotion: {e}")))?;
 
         // Create GitOps PR if enabled and workspace config is provided
         if self.gitops.enabled && workspace_config.is_some() {
-            if let Err(e) = self.create_promotion_pr(&promotion_id, request, workspace_config.unwrap()).await {
+            if let Err(e) = self
+                .create_promotion_pr(&promotion_id, request, workspace_config.unwrap())
+                .await
+            {
                 tracing::warn!("Failed to create GitOps PR for promotion {}: {}", promotion_id, e);
                 // Don't fail the promotion if PR creation fails
             }
@@ -163,14 +176,17 @@ impl PromotionService {
         Ok(promotion_id)
     }
 
-    /// Create a GitOps PR for a promotion
+    /// Create a `GitOps` PR for a promotion
     async fn create_promotion_pr(
         &self,
         promotion_id: &Uuid,
         request: &PromotionRequest,
         workspace_config: serde_json::Value,
     ) -> Result<()> {
-        let pr_generator = self.gitops.pr_generator.as_ref()
+        let pr_generator = self
+            .gitops
+            .pr_generator
+            .as_ref()
             .ok_or_else(|| CollabError::Internal("PR generator not configured".to_string()))?;
 
         // Generate PR title and body
@@ -190,28 +206,27 @@ impl PromotionService {
         body.push_str(&format!("**Entity Type:** {}\n", request.entity_type));
         body.push_str(&format!("**Entity ID:** {}\n", request.entity_id));
         if let Some(version) = &request.entity_version {
-            body.push_str(&format!("**Version:** {}\n", version));
+            body.push_str(&format!("**Version:** {version}\n"));
         }
         if let Some(comments) = &request.comments {
-            body.push_str(&format!("\n**Comments:**\n{}\n", comments));
+            body.push_str(&format!("\n**Comments:**\n{comments}\n"));
         }
         body.push_str("\n---\n\n");
         body.push_str("*This PR was automatically generated by MockForge promotion workflow.*");
 
         // Determine config file path
         let default_path = format!("workspaces/{}/config.yaml", request.workspace_id);
-        let config_path = self.gitops.config_path.as_deref()
-            .unwrap_or(&default_path);
+        let config_path = self.gitops.config_path.as_deref().unwrap_or(&default_path);
 
         // Serialize workspace config to JSON (YAML can be converted later if needed)
         let config_json = serde_json::to_string_pretty(&workspace_config)
-            .map_err(|e| CollabError::Internal(format!("Failed to serialize config: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("Failed to serialize config: {e}")))?;
 
         // Create file change (use .json extension or keep .yaml if path specifies it)
         let file_path = if config_path.ends_with(".yaml") || config_path.ends_with(".yml") {
             config_path.to_string()
         } else {
-            format!("{}.json", config_path)
+            format!("{config_path}.json")
         };
 
         let file_change = PRFileChange {
@@ -228,7 +243,7 @@ impl PromotionService {
                 "mockforge/promotion-{}-{}-{}",
                 request.entity_type,
                 request.entity_id,
-                promotion_id.to_string()[..8].to_string()
+                &promotion_id.to_string()[..8]
             ),
             files: vec![file_change],
             labels: vec![
@@ -244,12 +259,16 @@ impl PromotionService {
             Ok(pr_result) => {
                 // Update promotion with PR URL
                 self.update_promotion_pr_url(*promotion_id, pr_result.url.clone()).await?;
-                tracing::info!("Created GitOps PR {} for promotion {}", pr_result.url, promotion_id);
+                tracing::info!(
+                    "Created GitOps PR {} for promotion {}",
+                    pr_result.url,
+                    promotion_id
+                );
                 Ok(())
             }
             Err(e) => {
                 tracing::error!("Failed to create PR for promotion {}: {}", promotion_id, e);
-                Err(CollabError::Internal(format!("Failed to create PR: {}", e)))
+                Err(CollabError::Internal(format!("Failed to create PR: {e}")))
             }
         }
     }
@@ -280,12 +299,56 @@ impl PromotionService {
         )
         .execute(&self.db)
         .await
-        .map_err(|e| CollabError::DatabaseError(format!("Failed to update promotion status: {}", e)))?;
+        .map_err(|e| {
+            CollabError::DatabaseError(format!("Failed to update promotion status: {e}"))
+        })?;
+
+        // Emit pipeline event when promotion is completed
+        if status == PromotionStatus::Completed {
+            #[cfg(feature = "pipelines")]
+            {
+                use mockforge_pipelines::events::{publish_event, PipelineEvent};
+                use sqlx::Row;
+
+                // Get workspace_id from database
+                let workspace_id_row =
+                    sqlx::query("SELECT workspace_id FROM promotion_history WHERE id = ?")
+                        .bind(&promotion_id_str)
+                        .fetch_optional(&self.db)
+                        .await
+                        .ok()
+                        .flatten();
+
+                if let Some(row) = workspace_id_row {
+                    if let Ok(workspace_id_str) = row.try_get::<String, _>("workspace_id") {
+                        if let Ok(ws_id) = Uuid::parse_str(&workspace_id_str) {
+                            // Get promotion details for event
+                            if let Some(promotion) = self.get_promotion_by_id(promotion_id).await? {
+                                let event = PipelineEvent::promotion_completed(
+                                    ws_id,
+                                    promotion_id,
+                                    promotion.entity_type.to_string(),
+                                    promotion.from_environment.as_str().to_string(),
+                                    promotion.to_environment.as_str().to_string(),
+                                );
+
+                                if let Err(e) = publish_event(event) {
+                                    tracing::warn!(
+                                        "Failed to publish promotion completed event: {}",
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(())
     }
 
-    /// Update promotion with GitOps PR URL
+    /// Update promotion with `GitOps` PR URL
     pub async fn update_promotion_pr_url(&self, promotion_id: Uuid, pr_url: String) -> Result<()> {
         let now = Utc::now();
         let updated_at_str = now.to_rfc3339();
@@ -303,7 +366,9 @@ impl PromotionService {
         )
         .execute(&self.db)
         .await
-        .map_err(|e| CollabError::DatabaseError(format!("Failed to update promotion PR URL: {}", e)))?;
+        .map_err(|e| {
+            CollabError::DatabaseError(format!("Failed to update promotion PR URL: {e}"))
+        })?;
 
         Ok(())
     }
@@ -317,25 +382,26 @@ impl PromotionService {
 
         use sqlx::Row;
         let row = sqlx::query(
-            r#"
+            r"
             SELECT
-                id, entity_type, entity_id, entity_version,
+                id, entity_type, entity_id, entity_version, workspace_id,
                 from_environment, to_environment, promoted_by, approved_by,
                 status, comments, pr_url, metadata, created_at, updated_at
             FROM promotion_history
             WHERE id = ?
-            "#,
+            ",
         )
         .bind(&promotion_id_str)
         .fetch_optional(&self.db)
         .await
-        .map_err(|e| CollabError::DatabaseError(format!("Failed to get promotion: {}", e)))?;
+        .map_err(|e| CollabError::DatabaseError(format!("Failed to get promotion: {e}")))?;
 
         if let Some(row) = row {
             let id: String = row.get("id");
             let entity_type_str: String = row.get("entity_type");
             let entity_id: String = row.get("entity_id");
             let entity_version: Option<String> = row.get("entity_version");
+            let workspace_id: String = row.get("workspace_id");
             let from_environment: String = row.get("from_environment");
             let to_environment: String = row.get("to_environment");
             let promoted_by: String = row.get("promoted_by");
@@ -346,23 +412,29 @@ impl PromotionService {
             let metadata: Option<String> = row.get("metadata");
             let created_at: String = row.get("created_at");
 
-            let from_env = MockEnvironmentName::from_str(&from_environment)
-                .ok_or_else(|| CollabError::Internal(format!("Invalid from_environment: {}", from_environment)))?;
-            let to_env = MockEnvironmentName::from_str(&to_environment)
-                .ok_or_else(|| CollabError::Internal(format!("Invalid to_environment: {}", to_environment)))?;
+            let from_env = MockEnvironmentName::from_str(&from_environment).ok_or_else(|| {
+                CollabError::Internal(format!("Invalid from_environment: {from_environment}"))
+            })?;
+            let to_env = MockEnvironmentName::from_str(&to_environment).ok_or_else(|| {
+                CollabError::Internal(format!("Invalid to_environment: {to_environment}"))
+            })?;
             let status = match status_str.as_str() {
                 "pending" => PromotionStatus::Pending,
                 "approved" => PromotionStatus::Approved,
                 "rejected" => PromotionStatus::Rejected,
                 "completed" => PromotionStatus::Completed,
                 "failed" => PromotionStatus::Failed,
-                _ => return Err(CollabError::Internal(format!("Invalid status: {}", status_str))),
+                _ => return Err(CollabError::Internal(format!("Invalid status: {status_str}"))),
             };
             let entity_type = match entity_type_str.as_str() {
                 "scenario" => PromotionEntityType::Scenario,
                 "persona" => PromotionEntityType::Persona,
                 "config" => PromotionEntityType::Config,
-                _ => return Err(CollabError::Internal(format!("Invalid entity_type: {}", entity_type_str))),
+                _ => {
+                    return Err(CollabError::Internal(format!(
+                        "Invalid entity_type: {entity_type_str}"
+                    )))
+                }
             };
 
             let metadata_map = if let Some(meta_str) = metadata {
@@ -372,7 +444,7 @@ impl PromotionService {
             };
 
             let timestamp = DateTime::parse_from_rfc3339(&created_at)
-                .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
+                .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
                 .with_timezone(&Utc);
 
             Ok(Some(PromotionHistoryEntry {
@@ -419,28 +491,48 @@ impl PromotionService {
         )
         .fetch_all(&self.db)
         .await
-        .map_err(|e| CollabError::DatabaseError(format!("Failed to get promotion history: {}", e)))?;
+        .map_err(|e| CollabError::DatabaseError(format!("Failed to get promotion history: {e}")))?;
 
         let promotions: Result<Vec<PromotionHistoryEntry>> = rows
             .into_iter()
             .map(|row| {
-                let from_env = MockEnvironmentName::from_str(&row.from_environment)
-                    .ok_or_else(|| CollabError::Internal(format!("Invalid from_environment: {}", row.from_environment)))?;
-                let to_env = MockEnvironmentName::from_str(&row.to_environment)
-                    .ok_or_else(|| CollabError::Internal(format!("Invalid to_environment: {}", row.to_environment)))?;
+                let from_env =
+                    MockEnvironmentName::from_str(&row.from_environment).ok_or_else(|| {
+                        CollabError::Internal(format!(
+                            "Invalid from_environment: {}",
+                            row.from_environment
+                        ))
+                    })?;
+                let to_env =
+                    MockEnvironmentName::from_str(&row.to_environment).ok_or_else(|| {
+                        CollabError::Internal(format!(
+                            "Invalid to_environment: {}",
+                            row.to_environment
+                        ))
+                    })?;
                 let status = match row.status.as_str() {
                     "pending" => PromotionStatus::Pending,
                     "approved" => PromotionStatus::Approved,
                     "rejected" => PromotionStatus::Rejected,
                     "completed" => PromotionStatus::Completed,
                     "failed" => PromotionStatus::Failed,
-                    _ => return Err(CollabError::Internal(format!("Invalid status: {}", row.status))),
+                    _ => {
+                        return Err(CollabError::Internal(format!(
+                            "Invalid status: {}",
+                            row.status
+                        )))
+                    }
                 };
                 let entity_type = match row.entity_type.as_str() {
                     "scenario" => PromotionEntityType::Scenario,
                     "persona" => PromotionEntityType::Persona,
                     "config" => PromotionEntityType::Config,
-                    _ => return Err(CollabError::Internal(format!("Invalid entity_type: {}", row.entity_type))),
+                    _ => {
+                        return Err(CollabError::Internal(format!(
+                            "Invalid entity_type: {}",
+                            row.entity_type
+                        )))
+                    }
                 };
 
                 let metadata = if let Some(meta_str) = row.metadata {
@@ -450,7 +542,7 @@ impl PromotionService {
                 };
 
                 let timestamp = DateTime::parse_from_rfc3339(&row.created_at)
-                    .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
+                    .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
                     .with_timezone(&Utc);
 
                 Ok(PromotionHistoryEntry {
@@ -503,28 +595,50 @@ impl PromotionService {
         )
         .fetch_all(&self.db)
         .await
-        .map_err(|e| CollabError::DatabaseError(format!("Failed to get workspace promotions: {}", e)))?;
+        .map_err(|e| {
+            CollabError::DatabaseError(format!("Failed to get workspace promotions: {e}"))
+        })?;
 
         let promotions: Result<Vec<PromotionHistoryEntry>> = rows
             .into_iter()
             .map(|row| {
-                let from_env = MockEnvironmentName::from_str(&row.from_environment)
-                    .ok_or_else(|| CollabError::Internal(format!("Invalid from_environment: {}", row.from_environment)))?;
-                let to_env = MockEnvironmentName::from_str(&row.to_environment)
-                    .ok_or_else(|| CollabError::Internal(format!("Invalid to_environment: {}", row.to_environment)))?;
+                let from_env =
+                    MockEnvironmentName::from_str(&row.from_environment).ok_or_else(|| {
+                        CollabError::Internal(format!(
+                            "Invalid from_environment: {}",
+                            row.from_environment
+                        ))
+                    })?;
+                let to_env =
+                    MockEnvironmentName::from_str(&row.to_environment).ok_or_else(|| {
+                        CollabError::Internal(format!(
+                            "Invalid to_environment: {}",
+                            row.to_environment
+                        ))
+                    })?;
                 let status = match row.status.as_str() {
                     "pending" => PromotionStatus::Pending,
                     "approved" => PromotionStatus::Approved,
                     "rejected" => PromotionStatus::Rejected,
                     "completed" => PromotionStatus::Completed,
                     "failed" => PromotionStatus::Failed,
-                    _ => return Err(CollabError::Internal(format!("Invalid status: {}", row.status))),
+                    _ => {
+                        return Err(CollabError::Internal(format!(
+                            "Invalid status: {}",
+                            row.status
+                        )))
+                    }
                 };
                 let entity_type = match row.entity_type.as_str() {
                     "scenario" => PromotionEntityType::Scenario,
                     "persona" => PromotionEntityType::Persona,
                     "config" => PromotionEntityType::Config,
-                    _ => return Err(CollabError::Internal(format!("Invalid entity_type: {}", row.entity_type))),
+                    _ => {
+                        return Err(CollabError::Internal(format!(
+                            "Invalid entity_type: {}",
+                            row.entity_type
+                        )))
+                    }
                 };
 
                 let metadata = if let Some(meta_str) = row.metadata {
@@ -534,7 +648,7 @@ impl PromotionService {
                 };
 
                 let timestamp = DateTime::parse_from_rfc3339(&row.created_at)
-                    .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
+                    .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
                     .with_timezone(&Utc);
 
                 Ok(PromotionHistoryEntry {
@@ -566,7 +680,7 @@ impl PromotionService {
         // Use runtime query to handle conditional workspace_id
         let rows = if let Some(ws_id) = workspace_id {
             sqlx::query(
-                r#"
+                r"
                 SELECT
                     id, entity_type, entity_id, entity_version,
                     from_environment, to_environment, promoted_by, approved_by,
@@ -574,15 +688,17 @@ impl PromotionService {
                 FROM promotion_history
                 WHERE workspace_id = ? AND status = 'pending'
                 ORDER BY created_at ASC
-                "#
+                ",
             )
             .bind(ws_id)
             .fetch_all(&self.db)
             .await
-            .map_err(|e| CollabError::DatabaseError(format!("Failed to get pending promotions: {}", e)))?
+            .map_err(|e| {
+                CollabError::DatabaseError(format!("Failed to get pending promotions: {e}"))
+            })?
         } else {
             sqlx::query(
-                r#"
+                r"
                 SELECT
                     id, entity_type, entity_id, entity_version,
                     from_environment, to_environment, promoted_by, approved_by,
@@ -590,11 +706,13 @@ impl PromotionService {
                 FROM promotion_history
                 WHERE status = 'pending'
                 ORDER BY created_at ASC
-                "#
+                ",
             )
             .fetch_all(&self.db)
             .await
-            .map_err(|e| CollabError::DatabaseError(format!("Failed to get pending promotions: {}", e)))?
+            .map_err(|e| {
+                CollabError::DatabaseError(format!("Failed to get pending promotions: {e}"))
+            })?
         };
 
         use sqlx::Row;
@@ -614,16 +732,25 @@ impl PromotionService {
                 let metadata: Option<String> = row.get("metadata");
                 let created_at: String = row.get("created_at");
 
-                let from_env = MockEnvironmentName::from_str(&from_environment)
-                    .ok_or_else(|| CollabError::Internal(format!("Invalid from_environment: {}", from_environment)))?;
-                let to_env = MockEnvironmentName::from_str(&to_environment)
-                    .ok_or_else(|| CollabError::Internal(format!("Invalid to_environment: {}", to_environment)))?;
+                let from_env =
+                    MockEnvironmentName::from_str(&from_environment).ok_or_else(|| {
+                        CollabError::Internal(format!(
+                            "Invalid from_environment: {from_environment}"
+                        ))
+                    })?;
+                let to_env = MockEnvironmentName::from_str(&to_environment).ok_or_else(|| {
+                    CollabError::Internal(format!("Invalid to_environment: {to_environment}"))
+                })?;
                 let status = PromotionStatus::Pending;
                 let entity_type = match entity_type_str.as_str() {
                     "scenario" => PromotionEntityType::Scenario,
                     "persona" => PromotionEntityType::Persona,
                     "config" => PromotionEntityType::Config,
-                    _ => return Err(CollabError::Internal(format!("Invalid entity_type: {}", entity_type_str))),
+                    _ => {
+                        return Err(CollabError::Internal(format!(
+                            "Invalid entity_type: {entity_type_str}"
+                        )))
+                    }
                 };
 
                 let metadata_map = if let Some(meta_str) = metadata {
@@ -633,7 +760,7 @@ impl PromotionService {
                 };
 
                 let timestamp = DateTime::parse_from_rfc3339(&created_at)
-                    .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
+                    .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
                     .with_timezone(&Utc);
 
                 Ok(PromotionHistoryEntry {
@@ -655,5 +782,39 @@ impl PromotionService {
             .collect();
 
         promotions
+    }
+}
+
+// Implement PromotionService trait for PromotionService
+#[async_trait::async_trait]
+impl PromotionServiceTrait for PromotionService {
+    async fn promote_entity(
+        &self,
+        workspace_id: Uuid,
+        entity_type: PromotionEntityType,
+        entity_id: String,
+        entity_version: Option<String>,
+        from_environment: MockEnvironmentName,
+        to_environment: MockEnvironmentName,
+        promoted_by: Uuid,
+        comments: Option<String>,
+    ) -> mockforge_core::Result<Uuid> {
+        let request = PromotionRequest {
+            entity_type,
+            entity_id: entity_id.clone(),
+            entity_version,
+            workspace_id: workspace_id.to_string(),
+            from_environment,
+            to_environment,
+            requires_approval: false, // Auto-promotions don't require approval
+            approval_required_reason: None,
+            comments,
+            metadata: std::collections::HashMap::new(),
+        };
+
+        // Auto-complete the promotion (no approval needed for auto-promotions)
+        self.record_promotion(&request, promoted_by, PromotionStatus::Completed, None)
+            .await
+            .map_err(|e| mockforge_core::Error::generic(format!("Promotion failed: {e}")))
     }
 }

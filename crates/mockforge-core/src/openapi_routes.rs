@@ -573,9 +573,7 @@ impl OpenApiRouteRegistry {
                         openapiv3::StatusCode::Code(code) if *code == selected_status => {
                             resp.as_item().map(|r| ((*code), r))
                         }
-                        openapiv3::StatusCode::Range(range)
-                            if *range >= 200 && *range < 300 =>
-                        {
+                        openapiv3::StatusCode::Range(range) if *range >= 200 && *range < 300 => {
                             resp.as_item().map(|r| (200, r))
                         }
                         _ => None,
@@ -610,10 +608,8 @@ impl OpenApiRouteRegistry {
                                 // Use serde_json::to_value as a starting point
                                 if let Ok(schema_json) = serde_json::to_value(schema) {
                                     // Run validation diff
-                                    let validation_errors = validation_diff(
-                                        &schema_json,
-                                        &final_response,
-                                    );
+                                    let validation_errors =
+                                        validation_diff(&schema_json, &final_response);
                                     trace.set_schema_validation_diff(validation_errors);
                                 }
                             }
@@ -1363,8 +1359,8 @@ impl OpenApiRouteRegistry {
         &self,
         mockai: Option<std::sync::Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
     ) -> Router {
-        use crate::intelligent_behavior::{Request as MockAIRequest, Response as MockAIResponse};
-        use axum::extract::Query;
+        use crate::intelligent_behavior::Request as MockAIRequest;
+
         use axum::routing::{delete, get, patch, post, put};
 
         let mut router = Router::new();
@@ -1400,10 +1396,8 @@ impl OpenApiRouteRegistry {
                     // These are read-only operations and should use OpenAPI response generation
                     // MockAI's mutation analysis incorrectly treats GET requests as "Create" mutations
                     let method_upper = route.method.to_uppercase();
-                    let should_use_mockai = matches!(
-                        method_upper.as_str(),
-                        "POST" | "PUT" | "PATCH" | "DELETE"
-                    );
+                    let should_use_mockai =
+                        matches!(method_upper.as_str(), "POST" | "PUT" | "PATCH" | "DELETE");
 
                     if should_use_mockai {
                         if let Some(mockai_arc) = mockai {
@@ -1429,7 +1423,9 @@ impl OpenApiRouteRegistry {
                                 Ok(mockai_response) => {
                                     // Check if MockAI returned an empty object (signals to use OpenAPI generation)
                                     let is_empty = mockai_response.body.is_object()
-                                        && mockai_response.body.as_object()
+                                        && mockai_response
+                                            .body
+                                            .as_object()
                                             .map(|obj| obj.is_empty())
                                             .unwrap_or(false);
 
@@ -1446,8 +1442,10 @@ impl OpenApiRouteRegistry {
                                             mockai_response.status_code
                                         );
                                         return (
-                                            axum::http::StatusCode::from_u16(mockai_response.status_code)
-                                                .unwrap_or(axum::http::StatusCode::OK),
+                                            axum::http::StatusCode::from_u16(
+                                                mockai_response.status_code,
+                                            )
+                                            .unwrap_or(axum::http::StatusCode::OK),
                                             axum::response::Json(mockai_response.body),
                                         );
                                     }

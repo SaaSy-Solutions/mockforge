@@ -27,11 +27,15 @@ pub trait RealityAccessor: Send + Sync {
 #[async_trait]
 pub trait ContractAccessor: Send + Sync {
     /// Get contract validation results
-    async fn get_validation_result(&self, workspace_id: Option<&str>) -> Result<Option<ContractValidationResult>>;
+    async fn get_validation_result(
+        &self,
+        workspace_id: Option<&str>,
+    ) -> Result<Option<ContractValidationResult>>;
     /// Get contract enforcement mode
     async fn get_enforcement_mode(&self, workspace_id: Option<&str>) -> Result<String>;
     /// Get drift history
-    async fn get_drift_history(&self, workspace_id: Option<&str>) -> Result<Vec<DriftHistoryEntry>>;
+    async fn get_drift_history(&self, workspace_id: Option<&str>)
+        -> Result<Vec<DriftHistoryEntry>>;
     /// Get active contract paths
     async fn get_active_contracts(&self, workspace_id: Option<&str>) -> Result<Vec<String>>;
 }
@@ -42,11 +46,23 @@ pub trait ScenarioAccessor: Send + Sync {
     /// Get active scenario ID
     async fn get_active_scenario(&self, workspace_id: Option<&str>) -> Result<Option<String>>;
     /// Get current state machine state
-    async fn get_current_state(&self, workspace_id: Option<&str>, scenario_id: Option<&str>) -> Result<Option<String>>;
+    async fn get_current_state(
+        &self,
+        workspace_id: Option<&str>,
+        scenario_id: Option<&str>,
+    ) -> Result<Option<String>>;
     /// Get available state transitions
-    async fn get_available_transitions(&self, workspace_id: Option<&str>, scenario_id: Option<&str>) -> Result<Vec<String>>;
+    async fn get_available_transitions(
+        &self,
+        workspace_id: Option<&str>,
+        scenario_id: Option<&str>,
+    ) -> Result<Vec<String>>;
     /// Get scenario configuration
-    async fn get_scenario_config(&self, workspace_id: Option<&str>, scenario_id: Option<&str>) -> Result<Option<Value>>;
+    async fn get_scenario_config(
+        &self,
+        workspace_id: Option<&str>,
+        scenario_id: Option<&str>,
+    ) -> Result<Option<Value>>;
 }
 
 /// Trait for accessing persona subsystem
@@ -55,7 +71,11 @@ pub trait PersonaAccessor: Send + Sync {
     /// Get active persona ID
     async fn get_active_persona_id(&self, workspace_id: Option<&str>) -> Result<Option<String>>;
     /// Get persona details
-    async fn get_persona_details(&self, workspace_id: Option<&str>, persona_id: Option<&str>) -> Result<Option<PersonaDetails>>;
+    async fn get_persona_details(
+        &self,
+        workspace_id: Option<&str>,
+        persona_id: Option<&str>,
+    ) -> Result<Option<PersonaDetails>>;
 }
 
 /// Persona details for debug context
@@ -161,7 +181,10 @@ impl DebugContextIntegrator {
     ///
     /// This method queries all available subsystems and combines their contexts
     /// into a single DebugContext structure.
-    pub async fn collect_unified_context(&self, workspace_id: Option<&str>) -> Result<DebugContext> {
+    pub async fn collect_unified_context(
+        &self,
+        workspace_id: Option<&str>,
+    ) -> Result<DebugContext> {
         let reality = self.collect_reality_context().await?;
         let contract = self.collect_contract_context(workspace_id).await?;
         let scenario = self.collect_scenario_context(workspace_id).await?;
@@ -202,7 +225,10 @@ impl DebugContextIntegrator {
     }
 
     /// Collect contract subsystem context
-    async fn collect_contract_context(&self, workspace_id: Option<&str>) -> Result<ContractContext> {
+    async fn collect_contract_context(
+        &self,
+        workspace_id: Option<&str>,
+    ) -> Result<ContractContext> {
         if let Some(accessor) = &self.contract_accessor {
             let validation_result = accessor.get_validation_result(workspace_id).await?;
             let enforcement_mode = accessor.get_enforcement_mode(workspace_id).await?;
@@ -210,10 +236,8 @@ impl DebugContextIntegrator {
             let active_contracts = accessor.get_active_contracts(workspace_id).await?;
 
             let validation_enabled = validation_result.is_some();
-            let validation_errors = validation_result
-                .as_ref()
-                .map(|r| r.errors.clone())
-                .unwrap_or_default();
+            let validation_errors =
+                validation_result.as_ref().map(|r| r.errors.clone()).unwrap_or_default();
 
             Ok(ContractContext {
                 validation_enabled,
@@ -229,7 +253,10 @@ impl DebugContextIntegrator {
     }
 
     /// Collect scenario subsystem context
-    async fn collect_scenario_context(&self, workspace_id: Option<&str>) -> Result<ScenarioContext> {
+    async fn collect_scenario_context(
+        &self,
+        workspace_id: Option<&str>,
+    ) -> Result<ScenarioContext> {
         if let Some(accessor) = &self.scenario_accessor {
             let active_scenario = accessor.get_active_scenario(workspace_id).await?;
             let current_state = if let Some(ref scenario_id) = active_scenario {

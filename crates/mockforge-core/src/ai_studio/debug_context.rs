@@ -5,7 +5,6 @@
 //! provide comprehensive debugging context.
 
 use crate::reality::{RealityConfig, RealityLevel};
-use crate::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -165,7 +164,7 @@ pub struct DriftHistoryEntry {
 }
 
 /// Scenario subsystem context
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ScenarioContext {
     /// Active scenario name/ID (if any)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -180,19 +179,8 @@ pub struct ScenarioContext {
     pub scenario_config: Option<Value>,
 }
 
-impl Default for ScenarioContext {
-    fn default() -> Self {
-        Self {
-            active_scenario: None,
-            current_state: None,
-            available_transitions: Vec::new(),
-            scenario_config: None,
-        }
-    }
-}
-
 /// Persona subsystem context
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PersonaContext {
     /// Active persona ID (if any)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -215,22 +203,8 @@ pub struct PersonaContext {
     pub lifecycle_state: Option<String>,
 }
 
-impl Default for PersonaContext {
-    fn default() -> Self {
-        Self {
-            active_persona_id: None,
-            active_persona_name: None,
-            traits: HashMap::new(),
-            domain: None,
-            backstory: None,
-            relationships: HashMap::new(),
-            lifecycle_state: None,
-        }
-    }
-}
-
 /// Chaos subsystem context
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChaosContext {
     /// Whether chaos is enabled
     pub enabled: bool,
@@ -241,17 +215,6 @@ pub struct ChaosContext {
     pub failure_injection: Option<FailureInjectionConfig>,
     /// Chaos tags/patterns
     pub tags: Vec<String>,
-}
-
-impl Default for ChaosContext {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            active_rules: Vec::new(),
-            failure_injection: None,
-            tags: Vec::new(),
-        }
-    }
 }
 
 /// Chaos rule information

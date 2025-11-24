@@ -257,10 +257,10 @@ pub mod openapi_routes;
 pub mod output_control;
 pub mod overrides;
 pub mod performance;
-/// Pillar metadata system for compile-time pillar tagging
-pub mod pillars;
 /// Pillar usage tracking utilities
 pub mod pillar_tracking;
+/// Pillar metadata system for compile-time pillar tagging
+pub mod pillars;
 pub mod pr_generation;
 pub mod priority_handler;
 pub mod protocol_abstraction;
@@ -276,6 +276,7 @@ pub mod request_scripting;
 // Route chaos has been moved to mockforge-route-chaos crate to avoid Send issues
 // Import directly from mockforge-route-chaos crate instead of re-exporting here
 // to avoid circular dependency (mockforge-route-chaos depends on mockforge-core for config types)
+pub mod persona_lifecycle_time;
 pub mod routing;
 /// Runtime validation for SDKs (request/response validation at runtime)
 pub mod runtime_validation;
@@ -290,14 +291,13 @@ pub mod snapshots;
 pub mod spec_parser;
 pub mod stateful_handler;
 pub mod sync_watcher;
-/// Template library system for shared templates, versioning, and marketplace
-pub mod template_library;
 /// Template expansion utilities (Send-safe, isolated from templating module)
 pub mod template_expansion;
+/// Template library system for shared templates, versioning, and marketplace
+pub mod template_library;
 pub mod templating;
 pub mod time_travel;
 pub mod time_travel_handler;
-pub mod persona_lifecycle_time;
 pub mod traffic_shaping;
 pub mod validation;
 pub mod verification;
@@ -457,6 +457,7 @@ pub use voice::{
     HookTranspiler, ParsedCommand, ParsedWorkspaceScenario, VoiceCommandParser, VoiceSpecGenerator,
     WorkspaceConfigSummary, WorkspaceScenarioGenerator,
 };
+pub use workspace::promotion_trait::PromotionService;
 pub use workspace::{EntityId, Folder, MockRequest, Workspace, WorkspaceConfig, WorkspaceRegistry};
 pub use workspace_import::{
     create_workspace_from_curl, create_workspace_from_har, create_workspace_from_insomnia,

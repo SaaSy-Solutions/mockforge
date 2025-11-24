@@ -47,7 +47,9 @@ impl DosAnalyzer {
                 ];
 
                 for (method, operation_opt) in methods {
-                    let Some(operation) = operation_opt else { continue };
+                    let Some(operation) = operation_opt else {
+                        continue;
+                    };
                     let base_path = format!("{}.{}", method, path);
 
                     // Analyze request body
@@ -57,8 +59,14 @@ impl DosAnalyzer {
                                 if let Some(schema) = &media_type.schema {
                                     // Convert ReferenceOr<Schema> to ReferenceOr<Box<Schema>>
                                     let boxed_schema_ref = match schema {
-                                        ReferenceOr::Item(s) => ReferenceOr::Item(Box::new(s.clone())),
-                                        ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference: reference.clone() },
+                                        ReferenceOr::Item(s) => {
+                                            ReferenceOr::Item(Box::new(s.clone()))
+                                        }
+                                        ReferenceOr::Reference { reference } => {
+                                            ReferenceOr::Reference {
+                                                reference: reference.clone(),
+                                            }
+                                        }
                                     };
                                     findings.extend(self.analyze_schema_for_dos(
                                         &boxed_schema_ref,
@@ -78,8 +86,14 @@ impl DosAnalyzer {
                                 if let Some(schema) = &media_type.schema {
                                     // Convert ReferenceOr<Schema> to ReferenceOr<Box<Schema>>
                                     let boxed_schema_ref = match schema {
-                                        ReferenceOr::Item(s) => ReferenceOr::Item(Box::new(s.clone())),
-                                        ReferenceOr::Reference { reference } => ReferenceOr::Reference { reference: reference.clone() },
+                                        ReferenceOr::Item(s) => {
+                                            ReferenceOr::Item(Box::new(s.clone()))
+                                        }
+                                        ReferenceOr::Reference { reference } => {
+                                            ReferenceOr::Reference {
+                                                reference: reference.clone(),
+                                            }
+                                        }
                                     };
                                     findings.extend(self.analyze_schema_for_dos(
                                         &boxed_schema_ref,
@@ -125,10 +139,12 @@ impl DosAnalyzer {
 
         if let ReferenceOr::Item(schema) = schema_ref {
             // Check for unbounded arrays
-            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) = &schema.as_ref().schema_kind {
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) =
+                &schema.as_ref().schema_kind
+            {
                 // max_items might be in extensions
-                let max_items = schema.as_ref().schema_data.extensions.get("maxItems")
-                    .and_then(|v| v.as_u64());
+                let max_items =
+                    schema.as_ref().schema_data.extensions.get("maxItems").and_then(|v| v.as_u64());
 
                 if max_items.is_none() && self.max_array_size_threshold.is_none() {
                     findings.push(ThreatFinding {
@@ -172,7 +188,9 @@ impl DosAnalyzer {
             }
 
             // Check properties recursively
-            if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj_type)) = &schema.as_ref().schema_kind {
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj_type)) =
+                &schema.as_ref().schema_kind
+            {
                 for (prop_name, prop_schema) in &obj_type.properties {
                     findings.extend(self.analyze_schema_for_dos(
                         prop_schema,

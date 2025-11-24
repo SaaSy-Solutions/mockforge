@@ -11,38 +11,30 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TransitionMode {
     /// Time-based progression using virtual clock
     TimeBased,
     /// Manual configuration (blend ratio set explicitly)
+    #[default]
     Manual,
     /// Scheduled progression with fixed timeline
     Scheduled,
-}
-
-impl Default for TransitionMode {
-    fn default() -> Self {
-        TransitionMode::Manual
-    }
 }
 
 /// Merge strategy for blending responses
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum MergeStrategy {
     /// Field-level intelligent merge (deep merge objects, combine arrays)
+    #[default]
     FieldLevel,
     /// Weighted selection (return mock with X% probability, real with (100-X)%)
     Weighted,
     /// Response body blending (merge arrays, average numeric fields)
     BodyBlend,
-}
-
-impl Default for MergeStrategy {
-    fn default() -> Self {
-        MergeStrategy::FieldLevel
-    }
 }
 
 /// Configuration for Reality Continuum

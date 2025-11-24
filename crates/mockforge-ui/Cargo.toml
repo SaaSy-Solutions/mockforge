@@ -45,7 +45,7 @@ mockforge-grpc = "0.3.0"
 mockforge-vbr = { version = "0.3.2", path = "../mockforge-vbr" }
 mockforge-plugin-core = { version = "0.3.2", path = "../mockforge-plugin-core" }
 mockforge-plugin-loader = "0.3.0"
-mockforge-analytics = "0.3.0"
+mockforge-analytics = { version = "0.3.2", path = "../mockforge-analytics" }
 mockforge-chaos = { version = "0.3.2", path = "../mockforge-chaos" }
 mockforge-collab = { version = "0.3.2", path = "../mockforge-collab" }
 mockforge-recorder = { version = "0.3.2", path = "../mockforge-recorder" }

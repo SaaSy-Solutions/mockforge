@@ -43,7 +43,9 @@ impl SchemaAnalyzer {
                 ];
 
                 for (method, operation_opt) in methods {
-                    let Some(operation) = operation_opt else { continue };
+                    let Some(operation) = operation_opt else {
+                        continue;
+                    };
                     let base_path = format!("{}.{}", method, path);
 
                     // Analyze request body
@@ -51,11 +53,9 @@ impl SchemaAnalyzer {
                         if let Some(ref_or_item) = request_body.as_item() {
                             for media_type in ref_or_item.content.values() {
                                 if let Some(schema) = &media_type.schema {
-                                    findings.extend(self.analyze_schema_design(
-                                        schema,
-                                        &base_path,
-                                        "request",
-                                    ));
+                                    findings.extend(
+                                        self.analyze_schema_design(schema, &base_path, "request"),
+                                    );
                                 }
                             }
                         }
@@ -92,7 +92,9 @@ impl SchemaAnalyzer {
         let mut findings = Vec::new();
 
         if let ReferenceOr::Item(schema) = schema_ref {
-            if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj_type)) = &schema.schema_kind {
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj_type)) =
+                &schema.schema_kind
+            {
                 let required = obj_type.required.len();
                 let total_fields = obj_type.properties.len();
                 let optional_fields = total_fields.saturating_sub(required);
@@ -116,9 +118,14 @@ impl SchemaAnalyzer {
                 for (prop_name, prop_schema) in &obj_type.properties {
                     if let ReferenceOr::Item(prop_schema_item) = prop_schema {
                         // Check if it's a string type and has validation constraints
-                        if let openapiv3::SchemaKind::Type(openapiv3::Type::String(string_type)) = &prop_schema_item.as_ref().schema_kind {
+                        if let openapiv3::SchemaKind::Type(openapiv3::Type::String(string_type)) =
+                            &prop_schema_item.as_ref().schema_kind
+                        {
                             // Check if string has format, pattern, or maxLength
-                            let has_format = !matches!(string_type.format, openapiv3::VariantOrUnknownOrEmpty::Empty);
+                            let has_format = !matches!(
+                                string_type.format,
+                                openapiv3::VariantOrUnknownOrEmpty::Empty
+                            );
                             let has_pattern = string_type.pattern.is_some();
                             let has_max_length = string_type.max_length.is_some();
 

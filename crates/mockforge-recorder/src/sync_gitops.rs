@@ -107,7 +107,7 @@ impl GitOpsSyncHandler {
         let branch = format!(
             "{}/sync-{}",
             self.config.base_branch,
-            sync_cycle_id.split('_').last().unwrap_or(sync_cycle_id)
+            sync_cycle_id.split('_').next_back().unwrap_or(sync_cycle_id)
         );
 
         let title =

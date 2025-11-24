@@ -2,7 +2,7 @@
 //!
 //! This module provides formatting for Jira issue creation when drift incidents are detected.
 
-use crate::incidents::types::{DriftIncident, IncidentSeverity, IncidentType};
+use crate::incidents::types::{DriftIncident, IncidentSeverity};
 use serde_json::{json, Value};
 
 /// Format a drift incident as a Jira issue creation payload

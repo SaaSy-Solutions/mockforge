@@ -11,6 +11,7 @@
 pub mod core;
 pub mod environment;
 pub mod mock_environment;
+pub mod promotion_trait;
 pub mod rbac;
 pub mod registry;
 pub mod request;
@@ -341,34 +342,50 @@ impl Workspace {
     pub fn initialize_default_mock_environments(&mut self) {
         // Only initialize if mock_environments is empty or has no workspace_id set
         if self.config.mock_environments.workspace_id.is_empty()
-            || self.config.mock_environments.environments.is_empty() {
-
+            || self.config.mock_environments.environments.is_empty()
+        {
             // Update workspace_id if needed
             if self.config.mock_environments.workspace_id.is_empty() {
                 self.config.mock_environments.workspace_id = self.id.clone();
             }
 
             // Create default dev environment if it doesn't exist
-            if !self.config.mock_environments.environments.contains_key(&MockEnvironmentName::Dev) {
+            if !self
+                .config
+                .mock_environments
+                .environments
+                .contains_key(&MockEnvironmentName::Dev)
+            {
                 let dev_env = MockEnvironment::new(self.id.clone(), MockEnvironmentName::Dev);
                 self.config.mock_environments.add_environment(dev_env);
             }
 
             // Create default test environment if it doesn't exist
-            if !self.config.mock_environments.environments.contains_key(&MockEnvironmentName::Test) {
+            if !self
+                .config
+                .mock_environments
+                .environments
+                .contains_key(&MockEnvironmentName::Test)
+            {
                 let test_env = MockEnvironment::new(self.id.clone(), MockEnvironmentName::Test);
                 self.config.mock_environments.add_environment(test_env);
             }
 
             // Create default prod environment if it doesn't exist
-            if !self.config.mock_environments.environments.contains_key(&MockEnvironmentName::Prod) {
+            if !self
+                .config
+                .mock_environments
+                .environments
+                .contains_key(&MockEnvironmentName::Prod)
+            {
                 let prod_env = MockEnvironment::new(self.id.clone(), MockEnvironmentName::Prod);
                 self.config.mock_environments.add_environment(prod_env);
             }
 
             // Set dev as the default active environment if none is set
             if self.config.mock_environments.active_environment.is_none() {
-                let _ = self.config.mock_environments.set_active_environment(MockEnvironmentName::Dev);
+                let _ =
+                    self.config.mock_environments.set_active_environment(MockEnvironmentName::Dev);
             }
         }
     }

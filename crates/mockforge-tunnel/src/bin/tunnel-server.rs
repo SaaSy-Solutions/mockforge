@@ -8,11 +8,12 @@
 
 use mockforge_tunnel::audit::AuditLogger;
 use mockforge_tunnel::rate_limit::{rate_limit_middleware, RateLimitConfig, TunnelRateLimiter};
-use mockforge_tunnel::server::{create_tunnel_server_router, TunnelStore, TunnelStoreWrapper};
+use mockforge_tunnel::server::{
+    create_tunnel_server_router, TunnelStore, TunnelStoreTrait, TunnelStoreWrapper,
+};
 use mockforge_tunnel::server_config::ServerConfig;
 #[cfg(feature = "sqlx")]
 use mockforge_tunnel::storage::PersistentTunnelStore;
-use std::sync::Arc;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -121,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600)); // Run every hour
             loop {
                 interval.tick().await;
-                match store_for_cleanup.cleanup_expired().await {
+                match TunnelStoreTrait::cleanup_expired(&store_for_cleanup).await {
                     Ok(count) => {
                         if count > 0 {
                             info!("Cleaned up {} expired tunnels", count);

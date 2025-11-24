@@ -44,7 +44,6 @@ impl MockGenerator {
         }
     }
 
-
     /// Generate a mock from natural language description
     ///
     /// This method parses the natural language description and generates a complete

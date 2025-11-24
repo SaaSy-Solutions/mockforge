@@ -1,6 +1,6 @@
 //! Failure Designer API handlers
 
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::response::Json;
 use mockforge_chaos::failure_designer::{FailureDesignRule, FailureDesigner};
 use mockforge_chaos::ChaosScenario;

@@ -30,8 +30,6 @@ type Condition = serde_json::Value;
 type HookAction = serde_json::Value;
 type HookType = serde_json::Value;
 type LogLevel = serde_json::Value;
-use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
 
 /// Transpiler that converts natural language hook descriptions to Hook structs
 pub struct HookTranspiler {

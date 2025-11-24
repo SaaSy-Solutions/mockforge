@@ -84,7 +84,7 @@ impl TrafficAnalyzer {
 
                 // Update last used time if this is more recent
                 if let Some(rt) = request_time {
-                    if stats.last_used_at.map_or(true, |last| rt > last) {
+                    if stats.last_used_at.is_none_or(|last| rt > last) {
                         stats.last_used_at = Some(rt);
                     }
                 }
@@ -105,7 +105,7 @@ impl TrafficAnalyzer {
         let lookback_duration = Duration::days(self.config.lookback_days as i64);
         let cutoff_time = now - lookback_duration;
 
-        for (_key, stats) in usage_stats {
+        for stats in usage_stats.values() {
             // Skip if last used before lookback window
             if let Some(last_used) = stats.last_used_at {
                 if last_used < cutoff_time {

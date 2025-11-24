@@ -3,7 +3,7 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::{Request, StatusCode};
 use axum::middleware::Next;
-use axum::response::{Json, Response};
+use axum::response::Response;
 use serde_json::Value;
 
 use crate::latency_profiles::LatencyProfiles;

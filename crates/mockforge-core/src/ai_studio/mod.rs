@@ -49,18 +49,16 @@ pub mod org_controls;
 pub mod org_controls_db;
 pub mod persona_generator;
 
-pub use artifact_freezer::{
-    ArtifactFreezer, FreezeMetadata, FreezeRequest, FrozenArtifact,
-};
+pub use artifact_freezer::{ArtifactFreezer, FreezeMetadata, FreezeRequest, FrozenArtifact};
 pub use budget_manager::{AiFeature, BudgetConfig, BudgetManager, FeatureUsage, UsageStats};
 pub use chat_orchestrator::{
     ChatContext, ChatIntent, ChatMessage, ChatOrchestrator, ChatRequest, ChatResponse,
 };
+pub use config::{AiStudioConfig, FreezeMode};
 pub use contract_diff_handler::{
     BreakingChange, ContractDiffFilters, ContractDiffHandler, ContractDiffIntent,
     ContractDiffQueryResult,
 };
-pub use config::{AiStudioConfig, FreezeMode};
 pub use conversation_store::{
     get_conversation_store, initialize_conversation_store, ConversationStore,
 };

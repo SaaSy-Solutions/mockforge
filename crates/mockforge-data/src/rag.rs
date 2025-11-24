@@ -24,8 +24,8 @@ pub use engine::StorageStats as EngineStorageStats;
 pub use storage::StorageStats as StorageStorageStats;
 
 // Legacy imports for compatibility
-use crate::{schema::SchemaDefinition, DataConfig};
 use crate::Result;
+use crate::{schema::SchemaDefinition, DataConfig};
 use reqwest::{Client, ClientBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -447,16 +447,11 @@ impl RagEngine {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| {
-                crate::Error::generic(format!("Embedding API request failed: {}", e))
-            })?;
+            .map_err(|e| crate::Error::generic(format!("Embedding API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!(
-                "Embedding API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Embedding API error: {}", error_text)));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
@@ -502,16 +497,14 @@ impl RagEngine {
             request = request.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response = request.send().await.map_err(|e| {
-            crate::Error::generic(format!("Embedding API request failed: {}", e))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| crate::Error::generic(format!("Embedding API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!(
-                "Embedding API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Embedding API error: {}", error_text)));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
@@ -647,16 +640,11 @@ impl RagEngine {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| {
-                crate::Error::generic(format!("OpenAI API request failed: {}", e))
-            })?;
+            .map_err(|e| crate::Error::generic(format!("OpenAI API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!(
-                "OpenAI API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", error_text)));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
@@ -678,10 +666,11 @@ impl RagEngine {
 
     /// Call Anthropic API
     async fn call_anthropic(&self, prompt: &str) -> Result<String> {
-        let api_key =
-            self.config.api_key.as_ref().ok_or_else(|| {
-                crate::Error::generic("Anthropic API key not configured")
-            })?;
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
+            .ok_or_else(|| crate::Error::generic("Anthropic API key not configured"))?;
 
         let request_body = serde_json::json!({
             "model": self.config.model,
@@ -706,16 +695,11 @@ impl RagEngine {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| {
-                crate::Error::generic(format!("Anthropic API request failed: {}", e))
-            })?;
+            .map_err(|e| crate::Error::generic(format!("Anthropic API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!(
-                "Anthropic API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Anthropic API error: {}", error_text)));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
@@ -774,10 +758,7 @@ impl RagEngine {
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
-            crate::Error::generic(format!(
-                "Failed to parse OpenAI-compatible response: {}",
-                e
-            ))
+            crate::Error::generic(format!("Failed to parse OpenAI-compatible response: {}", e))
         })?;
 
         if let Some(choices) = response_json.get("choices").and_then(|c| c.as_array()) {
@@ -810,16 +791,11 @@ impl RagEngine {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| {
-                crate::Error::generic(format!("Ollama API request failed: {}", e))
-            })?;
+            .map_err(|e| crate::Error::generic(format!("Ollama API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!(
-                "Ollama API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Ollama API error: {}", error_text)));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {

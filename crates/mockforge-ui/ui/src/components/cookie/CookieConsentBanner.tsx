@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { X, Cookie, Settings } from 'lucide-react';
 
 const COOKIE_CONSENT_KEY = 'mockforge-cookie-consent';

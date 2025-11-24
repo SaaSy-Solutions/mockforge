@@ -366,12 +366,10 @@ impl ResponseBlender {
                 if let (Some(mock_f64), Some(real_f64)) = (mock_num.as_f64(), real_num.as_f64()) {
                     let blended = mock_f64 * (1.0 - ratio) + real_f64 * ratio;
                     Value::Number(serde_json::Number::from_f64(blended).unwrap_or(mock_num.clone()))
+                } else if ratio < 0.5 {
+                    Value::Number(mock_num.clone())
                 } else {
-                    if ratio < 0.5 {
-                        Value::Number(mock_num.clone())
-                    } else {
-                        Value::Number(real_num.clone())
-                    }
+                    Value::Number(real_num.clone())
                 }
             }
             _ => {

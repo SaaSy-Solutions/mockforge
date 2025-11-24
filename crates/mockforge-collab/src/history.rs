@@ -1,7 +1,7 @@
 //! Version control and history tracking
 
 use crate::error::{CollabError, Result};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
@@ -26,11 +26,12 @@ pub struct Commit {
     /// Changes made in this commit (diff)
     pub changes: serde_json::Value,
     /// Timestamp
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: chrono::DateTime<Utc>,
 }
 
 impl Commit {
     /// Create a new commit
+    #[must_use]
     pub fn new(
         workspace_id: Uuid,
         author_id: Uuid,
@@ -70,11 +71,12 @@ pub struct Snapshot {
     /// Created by
     pub created_by: Uuid,
     /// Created timestamp
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: chrono::DateTime<Utc>,
 }
 
 impl Snapshot {
     /// Create a new snapshot
+    #[must_use]
     pub fn new(
         workspace_id: Uuid,
         name: String,
@@ -101,7 +103,8 @@ pub struct VersionControl {
 
 impl VersionControl {
     /// Create a new version control system
-    pub fn new(db: Pool<Sqlite>) -> Self {
+    #[must_use]
+    pub const fn new(db: Pool<Sqlite>) -> Self {
         Self { db }
     }
 
@@ -162,7 +165,7 @@ impl VersionControl {
         )
         .fetch_optional(&self.db)
         .await?
-        .ok_or_else(|| CollabError::Internal(format!("Commit not found: {}", commit_id)))
+        .ok_or_else(|| CollabError::Internal(format!("Commit not found: {commit_id}")))
     }
 
     /// Get commit history for a workspace
@@ -278,7 +281,7 @@ impl VersionControl {
         )
         .fetch_optional(&self.db)
         .await?
-        .ok_or_else(|| CollabError::Internal(format!("Snapshot not found: {}", name)))
+        .ok_or_else(|| CollabError::Internal(format!("Snapshot not found: {name}")))
     }
 
     /// List all snapshots for a workspace
@@ -347,7 +350,8 @@ pub struct History {
 
 impl History {
     /// Create a new history tracker
-    pub fn new(db: Pool<Sqlite>) -> Self {
+    #[must_use]
+    pub const fn new(db: Pool<Sqlite>) -> Self {
         Self {
             version_control: VersionControl::new(db),
             auto_commit: true,
@@ -355,7 +359,7 @@ impl History {
     }
 
     /// Enable/disable auto-commit
-    pub fn set_auto_commit(&mut self, enabled: bool) {
+    pub const fn set_auto_commit(&mut self, enabled: bool) {
         self.auto_commit = enabled;
     }
 
@@ -374,7 +378,7 @@ impl History {
 
         let latest = self.version_control.get_latest_commit(workspace_id).await?;
         let parent_id = latest.as_ref().map(|c| c.id);
-        let version = latest.map(|c| c.version + 1).unwrap_or(1);
+        let version = latest.map_or(1, |c| c.version + 1);
 
         let commit = self
             .version_control

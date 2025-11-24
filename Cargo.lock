@@ -6853,27 +6853,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-analytics"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7d98593df24d808cb325afdc8c5a0e0561dda9361786a6f7d707051b5674448"
-dependencies = [
- "anyhow",
- "chrono",
- "futures",
- "prometheus",
- "reqwest 0.12.24",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "urlencoding",
- "woothee",
-]
-
-[[package]]
 name = "mockforge-bench"
 version = "0.3.2"
 dependencies = [
@@ -7040,6 +7019,7 @@ dependencies = [
  "mockforge-kafka",
  "mockforge-mqtt 0.3.2",
  "mockforge-observability 0.3.2",
+ "mockforge-pipelines",
  "mockforge-plugin-core 0.3.2",
  "mockforge-plugin-loader 0.3.2",
  "mockforge-recorder 0.3.2",
@@ -7097,6 +7077,7 @@ dependencies = [
  "hyper 1.8.1",
  "jsonwebtoken 9.3.1",
  "mockforge-core 0.3.2",
+ "mockforge-pipelines",
  "parking_lot",
  "serde",
  "serde_json",
@@ -7435,6 +7416,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-federation"
+version = "0.3.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures",
+ "mockforge-core 0.3.2",
+ "parking_lot",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "mockforge-ftp"
 version = "0.3.2"
 dependencies = [
@@ -7611,6 +7615,7 @@ dependencies = [
  "axum 0.8.7",
  "base64 0.22.1",
  "chrono",
+ "dashmap 6.1.0",
  "futures",
  "futures-util",
  "glob",
@@ -7629,6 +7634,7 @@ dependencies = [
  "mockforge-data 0.3.2",
  "mockforge-mqtt 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mockforge-observability 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-pipelines",
  "mockforge-plugin-core 0.3.2",
  "mockforge-recorder 0.3.2",
  "mockforge-route-chaos",
@@ -7848,6 +7854,31 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "mockforge-pipelines"
+version = "0.3.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures",
+ "handlebars 5.1.2",
+ "mockforge-core 0.3.2",
+ "once_cell",
+ "parking_lot",
+ "reqwest 0.12.24",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -8586,7 +8617,7 @@ dependencies = [
  "jsonptr 0.7.1",
  "jsonwebtoken 9.3.1",
  "mime_guess",
- "mockforge-analytics 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-analytics",
  "mockforge-chaos 0.3.2",
  "mockforge-collab",
  "mockforge-core 0.3.2",

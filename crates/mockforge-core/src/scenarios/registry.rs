@@ -1,7 +1,7 @@
 //! Scenario registry for storing and retrieving scenario definitions
 
 use crate::scenarios::types::ScenarioDefinition;
-use crate::{Error, Result};
+use crate::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

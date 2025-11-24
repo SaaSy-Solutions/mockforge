@@ -139,7 +139,9 @@ impl EncryptionKey {
         salt: Option<&[u8]>,
         algorithm: EncryptionAlgorithm,
     ) -> Result<Self> {
-        let salt = salt.map(|s| s.to_vec()).unwrap_or_else(|| thread_rng().random::<[u8; 32]>().to_vec());
+        let salt = salt
+            .map(|s| s.to_vec())
+            .unwrap_or_else(|| thread_rng().random::<[u8; 32]>().to_vec());
 
         let mut key = vec![0u8; 32];
         pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, 100_000, &mut key);

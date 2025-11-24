@@ -80,7 +80,7 @@ impl PRTemplate {
             for file in &context.affected_files {
                 body.push_str(&format!("- `{}`\n", file));
             }
-            body.push_str("\n");
+            body.push('\n');
         }
 
         // Testing instructions

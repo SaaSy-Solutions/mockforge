@@ -16,7 +16,6 @@
 //! - `/api/v1/hives/{hiveId}` matches `/api/v1/hives/hive_001`
 
 use crate::{Error, RequestFingerprint, Result};
-use axum::http::Method;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -130,7 +129,7 @@ impl CustomFixtureLoader {
 
         // Store fixture by method and path pattern
         let method = fixture.method.to_uppercase();
-        let fixtures_by_method = self.fixtures.entry(method).or_insert_with(HashMap::new);
+        let fixtures_by_method = self.fixtures.entry(method).or_default();
         fixtures_by_method.insert(fixture.path.clone(), fixture);
 
         Ok(())
@@ -211,7 +210,7 @@ impl CustomFixtureLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderMap, Uri};
+    use axum::http::{HeaderMap, Method, Uri};
     use tempfile::TempDir;
 
     fn create_test_fingerprint(method: &str, path: &str) -> RequestFingerprint {

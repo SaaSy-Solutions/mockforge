@@ -3,7 +3,6 @@
 //! Middleware that routes a percentage of team traffic to deceptive deploys.
 
 use axum::extract::Request;
-use axum::http::{HeaderMap, Uri};
 use axum::middleware::Next;
 use axum::response::Response;
 use mockforge_core::deceptive_canary::DeceptiveCanaryRouter;

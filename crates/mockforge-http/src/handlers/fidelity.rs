@@ -1,6 +1,6 @@
 //! Fidelity score API handlers
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::Json;
 use mockforge_core::fidelity::{FidelityCalculator, FidelityScore};
@@ -160,7 +160,7 @@ pub async fn get_fidelity(
 
 /// Create fidelity router
 pub fn fidelity_router(state: FidelityState) -> axum::Router {
-    use axum::routing::{get, post};
+    use axum::routing::get;
 
     axum::Router::new()
         .route(

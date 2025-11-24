@@ -3,13 +3,12 @@
 //! This module provides progress bars, spinners, and structured logging
 //! for long-running operations in the MockForge CLI.
 
-use console::{style, Style, Term};
+use console::style;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
 
 /// Exit codes for CLI operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,9 +185,7 @@ pub fn parse_address(addr_str: &str, context: &str) -> Result<SocketAddr, CliErr
             format!("Invalid {} address '{}': {}", context, addr_str, e),
             ExitCode::ConfigurationError,
         )
-        .with_suggestion(format!(
-            "Ensure the address is in the correct format (e.g., '127.0.0.1:8080' or '0.0.0.0:3000')"
-        ))
+        .with_suggestion("Ensure the address is in the correct format (e.g., '127.0.0.1:8080' or '0.0.0.0:3000')".to_string())
     })
 }
 
@@ -234,9 +231,8 @@ pub fn get_file_name(path: &PathBuf) -> Result<String, CliError> {
 /// Utility functions for common CLI operations
 pub mod utils {
     use super::*;
-    use std::net::SocketAddr;
+
     use std::path::Path;
-    use std::path::PathBuf;
 
     /// Validate that a file exists and is readable
     pub fn validate_file_path(path: &Path) -> Result<(), CliError> {

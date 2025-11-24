@@ -13,8 +13,6 @@ use crate::error::{Result, ScenarioError};
 use mockforge_data::domains::Domain;
 use mockforge_data::PersonaProfile;
 use serde_json::Value;
-use std::collections::HashMap;
-use std::path::Path;
 use tracing::{info, warn};
 
 /// Studio pack installer
@@ -158,7 +156,7 @@ impl StudioPackInstaller {
     /// Configure a persona from a studio pack
     async fn configure_persona(&self, studio_persona: &StudioPersona) -> Result<()> {
         // Parse domain
-        let domain = parse_domain(&studio_persona.domain).map_err(|e| ScenarioError::Generic(e))?;
+        let domain = parse_domain(&studio_persona.domain).map_err(ScenarioError::Generic)?;
 
         // Create persona profile
         let mut persona = PersonaProfile::new(studio_persona.id.clone(), domain);
@@ -198,7 +196,7 @@ impl StudioPackInstaller {
         // TODO: Deserialize into ChaosConfig and apply to workspace
         // This would require access to a ChaosEngine or workspace configuration
         serde_json::from_value::<Value>(chaos_rule.chaos_config.clone())
-            .map_err(|e| ScenarioError::Serde(e))?;
+            .map_err(ScenarioError::Serde)?;
 
         Ok(())
     }
@@ -212,7 +210,7 @@ impl StudioPackInstaller {
         // Validate drift budget JSON
         // TODO: Deserialize into DriftBudgetConfig and apply to workspace
         serde_json::from_value::<Value>(contract_diff.drift_budget.clone())
-            .map_err(|e| ScenarioError::Serde(e))?;
+            .map_err(ScenarioError::Serde)?;
 
         Ok(())
     }
@@ -226,7 +224,7 @@ impl StudioPackInstaller {
         // Validate continuum config JSON
         // TODO: Deserialize into ContinuumConfig and apply to workspace
         serde_json::from_value::<Value>(reality_blend.continuum_config.clone())
-            .map_err(|e| ScenarioError::Serde(e))?;
+            .map_err(ScenarioError::Serde)?;
 
         Ok(())
     }

@@ -157,7 +157,7 @@ impl PersonaProfile {
     pub fn add_relationship(&mut self, relationship_type: String, related_persona_id: String) {
         self.relationships
             .entry(relationship_type)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(related_persona_id);
     }
 
@@ -381,10 +381,7 @@ impl PersonaRegistry {
             }
             Ok(related_personas)
         } else {
-            Err(crate::Error::generic(format!(
-                "Persona with ID '{}' not found",
-                persona_id
-            )))
+            Err(crate::Error::generic(format!("Persona with ID '{}' not found", persona_id)))
         }
     }
 

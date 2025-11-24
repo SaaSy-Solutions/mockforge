@@ -70,7 +70,7 @@ impl VueClientGenerator {
                         handlebars::RenderError::new("json helper requires a parameter")
                     })?;
                     let json_str = serde_json::to_string(&value.value()).map_err(|e| {
-                        handlebars::RenderError::new(&format!("Failed to serialize to JSON: {}", e))
+                        handlebars::RenderError::new(format!("Failed to serialize to JSON: {}", e))
                     })?;
                     out.write(&json_str)?;
                     Ok(())
@@ -2317,7 +2317,7 @@ export const use{{api_title}}Store = defineStore('{{api_title}}', () => {
                 let has_json_request_body = normalized_op
                     .request_body
                     .as_ref()
-                    .map_or(false, |rb| rb.content.contains_key("application/json"));
+                    .is_some_and(|rb| rb.content.contains_key("application/json"));
 
                 // Add request body parameter if present (for POST, PUT, PATCH, DELETE, etc.)
                 if has_json_request_body && normalized_op.method != "GET" {
@@ -3174,7 +3174,7 @@ For issues, questions, or contributions, please refer to the MockForge documenta
                 let summary = operation
                     .summary
                     .as_ref()
-                    .unwrap_or(&operation.operation_id.as_ref().unwrap_or(&fallback_summary));
+                    .unwrap_or(operation.operation_id.as_ref().unwrap_or(&fallback_summary));
 
                 operations.push(format!("- **{} {}** - {}", method.to_uppercase(), path, summary));
             }

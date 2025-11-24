@@ -7,12 +7,9 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use chrono::{DateTime, Utc};
-use mockforge_core::contract_drift::forecasting::{ChangeForecast, ForecastingConfig, Forecaster};
-use mockforge_core::incidents::types::DriftIncident;
+use mockforge_core::contract_drift::forecasting::{ChangeForecast, Forecaster};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use uuid::Uuid;
 
 use crate::database::Database;
 
@@ -28,11 +25,14 @@ fn map_row_to_change_forecast(row: &sqlx::postgres::PgRow) -> Result<ChangeForec
     let forecast_window_days: i32 = row.try_get("forecast_window_days")?;
     let predicted_change_probability: f64 = row.try_get("predicted_change_probability")?;
     let predicted_break_probability: f64 = row.try_get("predicted_break_probability")?;
-    let next_expected_change_date: Option<DateTime<Utc>> = row.try_get("next_expected_change_date")?;
-    let next_expected_break_date: Option<DateTime<Utc>> = row.try_get("next_expected_break_date")?;
+    let next_expected_change_date: Option<DateTime<Utc>> =
+        row.try_get("next_expected_change_date")?;
+    let next_expected_break_date: Option<DateTime<Utc>> =
+        row.try_get("next_expected_break_date")?;
     let volatility_score: f64 = row.try_get("volatility_score")?;
     let confidence: f64 = row.try_get("confidence")?;
-    let seasonal_patterns_json: serde_json::Value = row.try_get("seasonal_patterns").unwrap_or_default();
+    let seasonal_patterns_json: serde_json::Value =
+        row.try_get("seasonal_patterns").unwrap_or_default();
     let predicted_at: DateTime<Utc> = row.try_get("predicted_at")?;
     let expires_at: DateTime<Utc> = row.try_get("expires_at")?;
 
@@ -175,13 +175,10 @@ pub async fn list_forecasts(
     }
 
     // Execute query
-    let rows = query_builder
-        .fetch_all(pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to query forecasts: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let rows = query_builder.fetch_all(pool).await.map_err(|e| {
+        tracing::error!("Failed to query forecasts: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Map rows to ChangeForecast
     let mut forecasts = Vec::new();
@@ -369,16 +366,13 @@ pub async fn refresh_forecasts(
     }
 
     // Execute query to get incidents
-    let rows = sqlx::query(&incident_query)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to query drift incidents: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let rows = sqlx::query(&incident_query).fetch_all(pool).await.map_err(|e| {
+        tracing::error!("Failed to query drift incidents: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Map rows to DriftIncident and generate forecasts
-    use mockforge_core::incidents::types::{IncidentType, IncidentSeverity, IncidentStatus};
+    use mockforge_core::incidents::types::{IncidentSeverity, IncidentStatus, IncidentType};
     let mut incidents = Vec::new();
     for row in rows {
         let id: uuid::Uuid = row.try_get("id")?;
@@ -552,8 +546,8 @@ pub fn forecasting_router(state: ForecastingState) -> axum::Router {
 
     Router::new()
         .route("/api/v1/forecasts", get(list_forecasts))
-        .route("/api/v1/forecasts/service/:service_id", get(get_service_forecasts))
-        .route("/api/v1/forecasts/endpoint/:endpoint", get(get_endpoint_forecasts))
+        .route("/api/v1/forecasts/service/{service_id}", get(get_service_forecasts))
+        .route("/api/v1/forecasts/endpoint/{endpoint}", get(get_endpoint_forecasts))
         .route("/api/v1/forecasts/refresh", post(refresh_forecasts))
         .with_state(state)
 }

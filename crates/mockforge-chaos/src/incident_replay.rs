@@ -170,7 +170,7 @@ impl IncidentReplayGenerator {
         for event in &timeline.events {
             // Calculate which window this event belongs to
             let event_offset = (event.timestamp - timeline.start_time).num_seconds();
-            let window_index = (event_offset / window_size_seconds) as i64;
+            let window_index = event_offset / window_size_seconds;
             let window_start =
                 timeline.start_time + Duration::seconds(window_index * window_size_seconds);
 
@@ -195,7 +195,7 @@ impl IncidentReplayGenerator {
     }
 
     /// Create chaos config for a set of events
-    fn create_chaos_config_for_events<'a>(&self, events: &[&'a IncidentEvent]) -> ChaosConfig {
+    fn create_chaos_config_for_events(&self, events: &[&IncidentEvent]) -> ChaosConfig {
         let mut error_rate = 0.0_f64;
         let mut delay_rate = 0.0_f64;
         let mut min_delay_ms = 0_u64;
@@ -393,7 +393,7 @@ impl IncidentFormatAdapter {
             .and_then(|ts| ts.as_str())
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
             .map(|dt| dt.with_timezone(&Utc))
-            .unwrap_or_else(|| Utc::now());
+            .unwrap_or_else(Utc::now);
 
         // Extract events from PagerDuty log entries or metrics
         let events = Self::extract_pagerduty_events(pagerduty_data)?;
@@ -461,7 +461,7 @@ impl IncidentFormatAdapter {
             .get("resolved")
             .and_then(|ts| ts.as_i64())
             .map(|ts| DateTime::from_timestamp(ts / 1000, 0).unwrap_or_else(Utc::now))
-            .unwrap_or_else(|| Utc::now());
+            .unwrap_or_else(Utc::now);
 
         // Extract events from Datadog metrics or logs
         let events = Self::extract_datadog_events(datadog_data)?;
@@ -486,10 +486,10 @@ impl IncidentFormatAdapter {
                     for point in points {
                         if let Some((timestamp, value)) = point
                             .as_array()
-                            .and_then(|arr| Some((arr.get(0)?.as_i64()?, arr.get(1)?.as_f64()?)))
+                            .and_then(|arr| Some((arr.first()?.as_i64()?, arr.get(1)?.as_f64()?)))
                         {
-                            let timestamp = DateTime::from_timestamp(timestamp, 0)
-                                .unwrap_or_else(|| Utc::now());
+                            let timestamp =
+                                DateTime::from_timestamp(timestamp, 0).unwrap_or_else(Utc::now);
 
                             // Check metric name to determine event type
                             if let Some(metric_name) = metric.get("metric").and_then(|m| m.as_str())

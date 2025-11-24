@@ -9,7 +9,7 @@
 use anyhow::{Context, Result};
 use serde::Serialize;
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// Email provider type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,8 +52,7 @@ pub struct EmailConfig {
 impl EmailConfig {
     /// Create email config from environment variables
     pub fn from_env() -> Self {
-        let provider = std::env::var("EMAIL_PROVIDER")
-            .unwrap_or_else(|_| "disabled".to_string());
+        let provider = std::env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "disabled".to_string());
 
         Self {
             provider: EmailProvider::from_str(&provider),
@@ -108,10 +107,7 @@ impl EmailService {
             EmailProvider::Brevo => self.send_via_brevo(message).await,
             EmailProvider::SendGrid => self.send_via_sendgrid(message).await,
             EmailProvider::Disabled => {
-                info!(
-                    "Email disabled, would send: '{}' to {}",
-                    message.subject, message.to
-                );
+                info!("Email disabled, would send: '{}' to {}", message.subject, message.to);
                 debug!("Email body (text): {}", message.text_body);
                 Ok(())
             }
@@ -119,7 +115,11 @@ impl EmailService {
     }
 
     /// Send email to multiple recipients
-    pub async fn send_to_multiple(&self, message: EmailMessage, recipients: &[String]) -> Result<()> {
+    pub async fn send_to_multiple(
+        &self,
+        message: EmailMessage,
+        recipients: &[String],
+    ) -> Result<()> {
         let mut errors = Vec::new();
 
         for recipient in recipients {
@@ -147,7 +147,10 @@ impl EmailService {
 
     /// Send email via Postmark API
     async fn send_via_postmark(&self, message: EmailMessage) -> Result<()> {
-        let api_key = self.config.api_key.as_ref()
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
             .context("Postmark requires EMAIL_API_KEY environment variable")?;
 
         #[derive(Serialize)]
@@ -167,7 +170,8 @@ impl EmailService {
             HtmlBody: message.html_body,
             TextBody: message.text_body,
         };
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.postmarkapp.com/email")
             .header("X-Postmark-Server-Token", api_key)
             .header("Content-Type", "application/json")
@@ -188,7 +192,10 @@ impl EmailService {
 
     /// Send email via Brevo API
     async fn send_via_brevo(&self, message: EmailMessage) -> Result<()> {
-        let api_key = self.config.api_key.as_ref()
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
             .context("Brevo requires EMAIL_API_KEY environment variable")?;
 
         #[derive(Serialize)]
@@ -222,7 +229,8 @@ impl EmailService {
             htmlContent: message.html_body,
             textContent: message.text_body,
         };
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.brevo.com/v3/smtp/email")
             .header("api-key", api_key)
             .header("Content-Type", "application/json")
@@ -243,7 +251,10 @@ impl EmailService {
 
     /// Send email via SendGrid API
     async fn send_via_sendgrid(&self, message: EmailMessage) -> Result<()> {
-        let api_key = self.config.api_key.as_ref()
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
             .context("SendGrid requires EMAIL_API_KEY environment variable")?;
 
         #[derive(Serialize)]
@@ -299,7 +310,8 @@ impl EmailService {
         };
 
         let to_email = message.to.clone();
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.sendgrid.com/v3/mail/send")
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")

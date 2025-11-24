@@ -1,6 +1,6 @@
 //! Pillar usage tracking
 //!
-//! Tracks usage of MockForge pillars (Reality, Contracts, DevX, Cloud, AI)
+//! Tracks usage of `MockForge` pillars (Reality, Contracts, `DevX`, Cloud, AI)
 //! to help users understand platform adoption and identify under-utilized features.
 
 use crate::database::AnalyticsDatabase;
@@ -8,7 +8,6 @@ use crate::error::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
 
 /// Pillar name
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -18,7 +17,7 @@ pub enum Pillar {
     Reality,
     /// Contracts pillar - schema, drift, validation, and safety nets
     Contracts,
-    /// DevX pillar - SDKs, generators, playgrounds, ergonomics
+    /// `DevX` pillar - SDKs, generators, playgrounds, ergonomics
     DevX,
     /// Cloud pillar - registry, orgs, governance, monetization, marketplace
     Cloud,
@@ -28,24 +27,26 @@ pub enum Pillar {
 
 impl Pillar {
     /// Convert to string
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            Pillar::Reality => "reality",
-            Pillar::Contracts => "contracts",
-            Pillar::DevX => "devx",
-            Pillar::Cloud => "cloud",
-            Pillar::Ai => "ai",
+            Self::Reality => "reality",
+            Self::Contracts => "contracts",
+            Self::DevX => "devx",
+            Self::Cloud => "cloud",
+            Self::Ai => "ai",
         }
     }
 
     /// Parse from string
+    #[must_use]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "reality" => Some(Pillar::Reality),
-            "contracts" => Some(Pillar::Contracts),
-            "devx" => Some(Pillar::DevX),
-            "cloud" => Some(Pillar::Cloud),
-            "ai" => Some(Pillar::Ai),
+            "reality" => Some(Self::Reality),
+            "contracts" => Some(Self::Contracts),
+            "devx" => Some(Self::DevX),
+            "cloud" => Some(Self::Cloud),
+            "ai" => Some(Self::Ai),
             _ => None,
         }
     }
@@ -66,7 +67,7 @@ pub struct PillarUsageEvent {
     pub org_id: Option<String>,
     /// Pillar name
     pub pillar: Pillar,
-    /// Metric name (e.g., "blended_reality_ratio", "smart_personas_usage", "validation_mode")
+    /// Metric name (e.g., "`blended_reality_ratio`", "`smart_personas_usage`", "`validation_mode`")
     pub metric_name: String,
     /// Metric value (JSON)
     pub metric_value: Value,
@@ -87,7 +88,7 @@ pub struct PillarUsageMetrics {
     pub reality: Option<RealityPillarMetrics>,
     /// Contracts pillar metrics
     pub contracts: Option<ContractsPillarMetrics>,
-    /// DevX pillar metrics
+    /// `DevX` pillar metrics
     pub devx: Option<DevXPillarMetrics>,
     /// Cloud pillar metrics
     pub cloud: Option<CloudPillarMetrics>,
@@ -129,7 +130,7 @@ pub struct ContractsPillarMetrics {
     pub contract_sync_cycles: u64,
 }
 
-/// DevX pillar metrics
+/// `DevX` pillar metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DevXPillarMetrics {
     /// Number of SDK installations
@@ -175,12 +176,12 @@ impl AnalyticsDatabase {
         let metric_value_json = serde_json::to_string(&event.metric_value)?;
 
         sqlx::query(
-            r#"
+            r"
             INSERT INTO pillar_usage_events (
                 workspace_id, org_id, pillar, metric_name, metric_value, timestamp
             )
             VALUES ($1, $2, $3, $4, $5, $6)
-            "#,
+            ",
         )
         .bind(event.workspace_id.as_deref())
         .bind(event.org_id.as_deref())
@@ -231,7 +232,7 @@ impl AnalyticsDatabase {
         Ok(PillarUsageMetrics {
             workspace_id: Some(workspace_id.to_string()),
             org_id: None,
-            time_range: format!("{}s", duration_seconds),
+            time_range: format!("{duration_seconds}s"),
             reality: Some(reality),
             contracts: Some(contracts),
             devx: Some(devx),
@@ -271,7 +272,7 @@ impl AnalyticsDatabase {
         Ok(PillarUsageMetrics {
             workspace_id: None,
             org_id: Some(org_id.to_string()),
-            time_range: format!("{}s", duration_seconds),
+            time_range: format!("{duration_seconds}s"),
             reality: Some(reality),
             contracts: Some(contracts),
             devx: Some(devx),
@@ -291,28 +292,28 @@ impl AnalyticsDatabase {
         // Query blended reality usage
         let blended_reality_query = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, f64>(
-                r#"
+                r"
                 SELECT AVG(CAST(json_extract(metric_value, '$.ratio') AS REAL)) * 100.0
                 FROM pillar_usage_events
                 WHERE pillar = 'reality'
                 AND metric_name = 'blended_reality_ratio'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
             .bind(end_time)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, f64>(
-                r#"
+                r"
                 SELECT AVG(CAST(json_extract(metric_value, '$.ratio') AS REAL)) * 100.0
                 FROM pillar_usage_events
                 WHERE pillar = 'reality'
                 AND metric_name = 'blended_reality_ratio'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -329,28 +330,28 @@ impl AnalyticsDatabase {
         // Query Smart Personas vs static fixtures
         let smart_personas_query = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*) FROM pillar_usage_events
                 WHERE pillar = 'reality'
                 AND metric_name = 'persona_usage'
                 AND json_extract(metric_value, '$.type') = 'smart'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
             .bind(end_time)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*) FROM pillar_usage_events
                 WHERE pillar = 'reality'
                 AND metric_name = 'persona_usage'
                 AND json_extract(metric_value, '$.type') = 'smart'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -365,28 +366,28 @@ impl AnalyticsDatabase {
 
         let static_fixtures_query = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*) FROM pillar_usage_events
                 WHERE pillar = 'reality'
                 AND metric_name = 'persona_usage'
                 AND json_extract(metric_value, '$.type') = 'static'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
             .bind(end_time)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*) FROM pillar_usage_events
                 WHERE pillar = 'reality'
                 AND metric_name = 'persona_usage'
                 AND json_extract(metric_value, '$.type') = 'static'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -414,14 +415,14 @@ impl AnalyticsDatabase {
         // Query average reality level
         let avg_reality_level = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, f64>(
-                r#"
+                r"
                 SELECT AVG(CAST(json_extract(metric_value, '$.level') AS REAL))
                 FROM pillar_usage_events
                 WHERE pillar = 'reality'
                 AND metric_name = 'reality_level'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -431,14 +432,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0.0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, f64>(
-                r#"
+                r"
                 SELECT AVG(CAST(json_extract(metric_value, '$.level') AS REAL))
                 FROM pillar_usage_events
                 WHERE pillar = 'reality'
                 AND metric_name = 'reality_level'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -453,7 +454,7 @@ impl AnalyticsDatabase {
         // Query chaos enabled count
         let chaos_enabled_count = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.scenario_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'reality'
@@ -461,7 +462,7 @@ impl AnalyticsDatabase {
                 AND json_extract(metric_value, '$.enabled') = 1
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -471,7 +472,7 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.scenario_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'reality'
@@ -479,7 +480,7 @@ impl AnalyticsDatabase {
                 AND json_extract(metric_value, '$.enabled') = 1
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -512,28 +513,28 @@ impl AnalyticsDatabase {
         // Query validation mode usage
         let validation_disabled_query = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*) FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'validation_mode'
                 AND json_extract(metric_value, '$.mode') = 'disabled'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
             .bind(end_time)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*) FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'validation_mode'
                 AND json_extract(metric_value, '$.mode') = 'disabled'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -549,28 +550,28 @@ impl AnalyticsDatabase {
 
         let validation_warn_query = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*) FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'validation_mode'
                 AND json_extract(metric_value, '$.mode') = 'warn'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
             .bind(end_time)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*) FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'validation_mode'
                 AND json_extract(metric_value, '$.mode') = 'warn'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -585,28 +586,28 @@ impl AnalyticsDatabase {
 
         let validation_enforce_query = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*) FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'validation_mode'
                 AND json_extract(metric_value, '$.mode') = 'enforce'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
             .bind(end_time)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*) FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'validation_mode'
                 AND json_extract(metric_value, '$.mode') = 'enforce'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -641,14 +642,14 @@ impl AnalyticsDatabase {
         // Query drift budget configured count
         let drift_budget_configured_count = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.endpoint'))
                 FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'drift_budget_configured'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -658,14 +659,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.endpoint'))
                 FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'drift_budget_configured'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -680,7 +681,7 @@ impl AnalyticsDatabase {
         // Query drift incidents count
         let drift_incidents_count = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'contracts'
@@ -688,7 +689,7 @@ impl AnalyticsDatabase {
                 AND json_extract(metric_value, '$.incident') = 1
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -698,7 +699,7 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'contracts'
@@ -706,7 +707,7 @@ impl AnalyticsDatabase {
                 AND json_extract(metric_value, '$.incident') = 1
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -721,14 +722,14 @@ impl AnalyticsDatabase {
         // Query contract sync cycles
         let contract_sync_cycles = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.sync_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'contract_sync'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -738,14 +739,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.sync_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'contract_sync'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -767,7 +768,7 @@ impl AnalyticsDatabase {
         })
     }
 
-    /// Get DevX pillar metrics
+    /// Get `DevX` pillar metrics
     async fn get_devx_pillar_metrics(
         &self,
         workspace_id: Option<&str>,
@@ -778,14 +779,14 @@ impl AnalyticsDatabase {
         // Query SDK installations
         let sdk_installations = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.sdk_type'))
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'sdk_installation'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -795,14 +796,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.sdk_type'))
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'sdk_installation'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -817,14 +818,14 @@ impl AnalyticsDatabase {
         // Query client generations
         let client_generations = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'client_generation'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -834,14 +835,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'client_generation'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -856,14 +857,14 @@ impl AnalyticsDatabase {
         // Query playground sessions
         let playground_sessions = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.session_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'playground_session'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -873,14 +874,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.session_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'playground_session'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -895,14 +896,14 @@ impl AnalyticsDatabase {
         // Query CLI commands
         let cli_commands = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'cli_command'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -912,14 +913,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'cli_command'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -950,14 +951,14 @@ impl AnalyticsDatabase {
         // Query shared scenarios count
         let shared_scenarios_count = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.scenario_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'scenario_shared'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -967,14 +968,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.scenario_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'scenario_shared'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -989,14 +990,14 @@ impl AnalyticsDatabase {
         // Query marketplace downloads
         let marketplace_downloads = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'marketplace_download'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -1006,14 +1007,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'marketplace_download'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -1028,14 +1029,14 @@ impl AnalyticsDatabase {
         // Query org templates used
         let org_templates_used = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.template_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'template_use'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -1045,14 +1046,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.template_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'template_use'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -1067,7 +1068,7 @@ impl AnalyticsDatabase {
         // Query collaborative workspaces
         let collaborative_workspaces = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.workspace_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
@@ -1075,7 +1076,7 @@ impl AnalyticsDatabase {
                 AND json_extract(metric_value, '$.collaborative') = 1
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -1085,7 +1086,7 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(DISTINCT json_extract(metadata, '$.workspace_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
@@ -1093,7 +1094,7 @@ impl AnalyticsDatabase {
                 AND json_extract(metric_value, '$.collaborative') = 1
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -1124,7 +1125,7 @@ impl AnalyticsDatabase {
         // Query AI-generated mocks
         let ai_generated_mocks = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'ai'
@@ -1132,7 +1133,7 @@ impl AnalyticsDatabase {
                 AND json_extract(metric_value, '$.type') = 'mock'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -1142,7 +1143,7 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'ai'
@@ -1150,7 +1151,7 @@ impl AnalyticsDatabase {
                 AND json_extract(metric_value, '$.type') = 'mock'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -1165,7 +1166,7 @@ impl AnalyticsDatabase {
         // Query AI contract diffs
         let ai_contract_diffs = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'ai'
@@ -1173,7 +1174,7 @@ impl AnalyticsDatabase {
                 AND json_extract(metric_value, '$.type') = 'contract_diff'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -1183,7 +1184,7 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'ai'
@@ -1191,7 +1192,7 @@ impl AnalyticsDatabase {
                 AND json_extract(metric_value, '$.type') = 'contract_diff'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -1206,14 +1207,14 @@ impl AnalyticsDatabase {
         // Query AI refinements
         let ai_refinements = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'ai'
                 AND metric_name = 'ai_refinement'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -1223,14 +1224,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'ai'
                 AND metric_name = 'ai_refinement'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)
@@ -1245,14 +1246,14 @@ impl AnalyticsDatabase {
         // Query voice commands
         let voice_commands = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'ai'
                 AND metric_name = 'voice_command'
                 AND workspace_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(ws_id)
             .bind(start_time)
@@ -1262,14 +1263,14 @@ impl AnalyticsDatabase {
             .unwrap_or(0)
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
-                r#"
+                r"
                 SELECT COUNT(*)
                 FROM pillar_usage_events
                 WHERE pillar = 'ai'
                 AND metric_name = 'voice_command'
                 AND org_id = $1
                 AND timestamp >= $2 AND timestamp <= $3
-                "#,
+                ",
             )
             .bind(org)
             .bind(start_time)

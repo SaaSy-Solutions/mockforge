@@ -4,8 +4,7 @@
 
 use crate::security::access_review::ApiTokenInfo;
 use crate::Error;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

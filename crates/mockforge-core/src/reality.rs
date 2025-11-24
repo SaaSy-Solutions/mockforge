@@ -20,12 +20,14 @@ use tokio::sync::RwLock;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum RealityLevel {
     /// Level 1: Static Stubs - Simple, instant responses with no chaos
     StaticStubs = 1,
     /// Level 2: Light Simulation - Minimal latency, basic intelligence
     LightSimulation = 2,
     /// Level 3: Moderate Realism - Some chaos, moderate latency, full intelligence
+    #[default]
     ModerateRealism = 3,
     /// Level 4: High Realism - Increased chaos, realistic latency, session state
     HighRealism = 4,
@@ -84,12 +86,6 @@ impl RealityLevel {
             RealityLevel::HighRealism,
             RealityLevel::ProductionChaos,
         ]
-    }
-}
-
-impl Default for RealityLevel {
-    fn default() -> Self {
-        RealityLevel::ModerateRealism
     }
 }
 

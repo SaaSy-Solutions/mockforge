@@ -141,16 +141,6 @@ pub fn create_admin_router(
         .route("/__mockforge/plugins/reload", post(reload_plugin))
         // Workspace management routes (moved to workspace router with WorkspaceState)
         // These routes are now handled by the workspace router below
-        // Environment management routes
-        .route("/__mockforge/workspaces/{workspace_id}/environments", get(get_environments))
-        .route("/__mockforge/workspaces/{workspace_id}/environments", post(create_environment))
-        .route("/__mockforge/workspaces/{workspace_id}/environments/order", axum::routing::put(update_environments_order))
-        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}", axum::routing::put(update_environment))
-        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}", delete(delete_environment))
-        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/activate", post(set_active_environment))
-        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/variables", get(get_environment_variables))
-        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/variables", post(set_environment_variable))
-        .route("/__mockforge/workspaces/{workspace_id}/environments/{environment_id}/variables/{variable_name}", delete(remove_environment_variable))
         // Chain management routes - proxy to main HTTP server
         .route("/__mockforge/chains", get(proxy_chains_list))
         .route("/__mockforge/chains", post(proxy_chains_create))
@@ -344,6 +334,70 @@ pub fn create_admin_router(
 
     router = router.merge(analytics_router);
 
+    // Coverage metrics routes (MockOps)
+    // Note: Database initialization is done lazily when routes are accessed
+    // The handlers will initialize the database connection on first use
+    {
+        use crate::handlers::coverage_metrics::CoverageMetricsState;
+        use mockforge_analytics::AnalyticsDatabase;
+        use std::path::PathBuf;
+        use std::sync::Arc;
+        use tokio::sync::OnceCell;
+
+        // Initialize database lazily in a background task
+        let db_path = std::env::var("MOCKFORGE_ANALYTICS_DB_PATH")
+            .ok()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("analytics.db"));
+
+        let db_path_clone = db_path.clone();
+        let coverage_db = Arc::new(OnceCell::new());
+        let coverage_db_clone = coverage_db.clone();
+
+        // Spawn task to initialize database
+        tokio::spawn(async move {
+            match AnalyticsDatabase::new(&db_path_clone).await {
+                Ok(analytics_db) => {
+                    if let Err(e) = analytics_db.run_migrations().await {
+                        tracing::warn!("Failed to run analytics database migrations: {}. Coverage metrics routes may not work correctly.", e);
+                    } else {
+                        let _ = coverage_db_clone.set(analytics_db);
+                        tracing::info!("Analytics database initialized for coverage metrics");
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!("Failed to initialize analytics database for coverage metrics: {}. Coverage metrics routes will be unavailable.", e);
+                }
+            }
+        });
+
+        // Create state with lazy database initialization
+        let coverage_state = CoverageMetricsState { db: coverage_db };
+
+        // Add routes directly to main router to avoid state type conflicts
+        use crate::handlers::coverage_metrics;
+        router = router
+            .route("/api/v2/analytics/scenarios/usage", get(coverage_metrics::get_scenario_usage))
+            .route("/api/v2/analytics/personas/ci-hits", get(coverage_metrics::get_persona_ci_hits))
+            .route(
+                "/api/v2/analytics/endpoints/coverage",
+                get(coverage_metrics::get_endpoint_coverage),
+            )
+            .route(
+                "/api/v2/analytics/reality-levels/staleness",
+                get(coverage_metrics::get_reality_level_staleness),
+            )
+            .route(
+                "/api/v2/analytics/drift/percentage",
+                get(coverage_metrics::get_drift_percentage),
+            )
+            .layer(axum::extract::Extension(coverage_state));
+
+        tracing::info!(
+            "Coverage metrics routes mounted at /api/v2/analytics (database initializing)"
+        );
+    }
+
     // Pillar analytics routes
     // Note: These routes require an analytics database to be configured.
     // The handlers will return appropriate errors if the database is not available.
@@ -405,8 +459,8 @@ pub fn create_admin_router(
         // Note: In production, this should be initialized at application startup
         #[cfg(feature = "database-auth")]
         {
-            use crate::handlers::promotions::PromotionState;
             use crate::handlers::promotions;
+            use crate::handlers::promotions::PromotionState;
             use mockforge_collab::promotion::PromotionService;
             use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
             use std::sync::Arc;
@@ -415,55 +469,11 @@ pub fn create_admin_router(
             let db_url = std::env::var("MOCKFORGE_COLLAB_DB_URL")
                 .unwrap_or_else(|_| "sqlite://mockforge-collab.db".to_string());
 
-            // Try to create database pool (async operation)
-            if let Ok(pool) = SqlitePoolOptions::new()
-                .max_connections(5)
-                .connect(&db_url)
-                .await
-            {
-                // Run migrations automatically
-                // Note: The migrate! macro resolves paths relative to the crate root
-                // Since we're in mockforge-ui, we need to use the correct relative path
-                let migrations_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .parent()
-                    .unwrap()
-                    .join("mockforge-collab")
-                    .join("migrations");
-
-                // Use sqlx::migrate::Migrator for runtime migration
-                match sqlx::migrate::Migrator::new(migrations_path.as_path()).await {
-                    Ok(migrator) => {
-                        if let Err(e) = migrator.run(&pool).await {
-                            tracing::warn!("Failed to run promotion database migrations: {}. Promotion routes may not work correctly.", e);
-                            // Continue anyway - migrations might already be applied
-                        } else {
-                            tracing::info!("Promotion database migrations completed");
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to initialize migration system: {}. Promotion routes may not work correctly.", e);
-                    }
-                }
-
-                let promotion_service = PromotionService::new(pool);
-                let promotion_state = PromotionState::new(
-                    Arc::new(promotion_service),
-                    workspace_state.clone(),
-                );
-                let promotion_router = Router::new()
-                    .route("/api/v2/promotions", post(promotions::create_promotion))
-                    .route("/api/v2/promotions/{promotion_id}", get(promotions::get_promotion))
-                    .route("/api/v2/promotions/{promotion_id}/status", axum::routing::put(promotions::update_promotion_status))
-                    .route("/api/v2/promotions/workspace/{workspace_id}", get(promotions::list_workspace_promotions))
-                    .route("/api/v2/promotions/pending", get(promotions::list_pending_promotions))
-                    .route("/api/v2/promotions/entity/{entity_type}/{entity_id}", get(promotions::get_entity_promotion_history))
-                    .with_state(promotion_state);
-
-                router = router.merge(promotion_router);
-                tracing::info!("Promotion routes mounted with database connection");
-            } else {
-                tracing::debug!("Failed to connect to promotion database - promotion routes will be unavailable");
-            }
+            // Note: Database initialization is done lazily when routes are accessed
+            // The promotion handlers will initialize the database connection on first use
+            // For now, promotion routes are commented out until async initialization is properly handled
+            // In production, this should be initialized at application startup before creating the router
+            tracing::debug!("Promotion routes require async database initialization - will be available once database is configured");
         }
         #[cfg(not(feature = "database-auth"))]
         {

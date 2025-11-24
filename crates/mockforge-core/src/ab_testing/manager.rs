@@ -7,7 +7,7 @@ use crate::error::{Error, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 /// Manages A/B test configurations and variants
 #[derive(Debug, Clone)]
@@ -33,7 +33,7 @@ impl VariantManager {
     /// Register an A/B test configuration
     pub async fn register_test(&self, config: ABTestConfig) -> Result<()> {
         // Validate allocations
-        config.validate_allocations().map_err(|e| Error::validation(e))?;
+        config.validate_allocations().map_err(Error::validation)?;
 
         let key = Self::endpoint_key(&config.method, &config.endpoint_path);
         let mut tests = self.tests.write().await;

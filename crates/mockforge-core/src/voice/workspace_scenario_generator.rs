@@ -3,7 +3,6 @@
 //! Generates complete workspace configurations from parsed scenario descriptions,
 //! including OpenAPI specs, chaos configs, initial data, and workspace structure.
 
-use crate::openapi::OpenApiSpec;
 use crate::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};

@@ -6,15 +6,14 @@
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    response::{Html, Json, Redirect},
+    response::{Html, Json},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 use crate::auth::risk_engine::{RiskAction, RiskEngine};
-use crate::handlers::oauth2_server::{AuthorizationCodeInfo, OAuth2ServerState};
+use crate::handlers::oauth2_server::OAuth2ServerState;
 
 /// Consent request parameters
 #[derive(Debug, Deserialize)]

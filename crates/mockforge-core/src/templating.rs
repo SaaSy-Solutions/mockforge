@@ -697,8 +697,10 @@ fn replace_with_fallback(input: &str) -> String {
         out = out.replace("{{faker.uuid}}", &uuid::Uuid::new_v4().to_string());
     }
     if out.contains("{{faker.email}}") {
-        let user: String = (0..8).map(|_| (b'a' + (thread_rng().random::<u8>() % 26)) as char).collect();
-        let dom: String = (0..6).map(|_| (b'a' + (thread_rng().random::<u8>() % 26)) as char).collect();
+        let user: String =
+            (0..8).map(|_| (b'a' + (thread_rng().random::<u8>() % 26)) as char).collect();
+        let dom: String =
+            (0..6).map(|_| (b'a' + (thread_rng().random::<u8>() % 26)) as char).collect();
         out = out.replace("{{faker.email}}", &format!("{}@{}.example", user, dom));
     }
     if out.contains("{{faker.name}}") {

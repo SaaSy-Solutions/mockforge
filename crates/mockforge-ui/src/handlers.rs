@@ -48,19 +48,20 @@ pub mod ai_studio;
 pub mod analytics;
 pub mod analytics_stream;
 pub mod analytics_v2;
-pub mod pillar_analytics;
-pub mod promotions;
 pub mod assets;
 pub mod behavioral_cloning;
 pub mod chains;
 pub mod community;
 pub mod contract_diff;
+pub mod coverage_metrics;
 pub mod failure_analysis;
 pub mod graph;
 pub mod health;
 pub mod migration;
+pub mod pillar_analytics;
 pub mod playground;
 pub mod plugin;
+pub mod promotions;
 pub mod verification;
 pub mod voice;
 pub mod workspaces;
@@ -1265,7 +1266,7 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
             let endpoint_key = format!("{} {}", log.method, log.path);
             response_times_by_endpoint
                 .entry(endpoint_key)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(log.response_time_ms);
         }
     }
@@ -3882,7 +3883,7 @@ pub async fn set_reality_level(
     };
 
     // Update reality engine
-    let mut engine = state.reality_engine.write().await;
+    let engine = state.reality_engine.write().await;
     engine.set_level(level).await;
     let config = engine.get_config().await;
     drop(engine); // Release lock early
@@ -3892,7 +3893,6 @@ pub async fn set_reality_level(
 
     // Update chaos config if available
     if let Some(ref chaos_api_state) = state.chaos_api_state {
-        use mockforge_chaos::config::ChaosConfig;
         let mut chaos_config = chaos_api_state.config.write().await;
 
         // Convert reality config to chaos config using helper function
@@ -4074,7 +4074,7 @@ pub async fn import_reality_preset(
     match persistence.import_reality_preset(path).await {
         Ok(preset) => {
             // Apply the preset to the reality engine
-            let mut engine = state.reality_engine.write().await;
+            let engine = state.reality_engine.write().await;
             engine.apply_preset(preset.clone()).await;
 
             Json(ApiResponse::success(serde_json::json!({
@@ -4198,11 +4198,11 @@ pub async fn set_continuum_schedule(
 ) -> Json<ApiResponse<serde_json::Value>> {
     let start_time = chrono::DateTime::parse_from_rfc3339(&request.start_time)
         .map_err(|e| format!("Invalid start_time: {}", e))
-        .and_then(|dt| Ok(dt.with_timezone(&chrono::Utc)));
+        .map(|dt| dt.with_timezone(&chrono::Utc));
 
     let end_time = chrono::DateTime::parse_from_rfc3339(&request.end_time)
         .map_err(|e| format!("Invalid end_time: {}", e))
-        .and_then(|dt| Ok(dt.with_timezone(&chrono::Utc)));
+        .map(|dt| dt.with_timezone(&chrono::Utc));
 
     match (start_time, end_time) {
         (Ok(start), Ok(end)) => {

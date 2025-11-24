@@ -46,7 +46,9 @@ impl ErrorAnalyzer {
                 ];
 
                 for (method, operation_opt) in methods {
-                    let Some(operation) = operation_opt else { continue };
+                    let Some(operation) = operation_opt else {
+                        continue;
+                    };
                     let base_path = format!("{}.{}", method, path);
 
                     // Check error responses (4xx, 5xx)
@@ -68,24 +70,23 @@ impl ErrorAnalyzer {
                             if let openapiv3::ReferenceOr::Item(resp) = response {
                                 for (content_type, media_type) in &resp.content {
                                     if let Some(schema) = &media_type.schema {
-                                        findings.extend(self.analyze_error_schema(
-                                            schema,
-                                            &base_path,
-                                            status_num,
-                                        ));
+                                        findings.extend(
+                                            self.analyze_error_schema(
+                                                schema, &base_path, status_num,
+                                            ),
+                                        );
                                     }
 
                                     // Check examples
                                     for example in media_type.examples.values() {
-                                        if let openapiv3::ReferenceOr::Item(example_item) = example {
+                                        if let openapiv3::ReferenceOr::Item(example_item) = example
+                                        {
                                             if let Some(example_value) = &example_item.value {
-                                                findings.extend(
-                                                    self.analyze_error_example(
-                                                        example_value,
-                                                        &base_path,
-                                                        status_num,
-                                                    ),
-                                                );
+                                                findings.extend(self.analyze_error_example(
+                                                    example_value,
+                                                    &base_path,
+                                                    status_num,
+                                                ));
                                             }
                                         }
                                     }
@@ -116,9 +117,9 @@ impl ErrorAnalyzer {
                     findings.push(ThreatFinding {
                         finding_type: ThreatCategory::StackTraceLeakage,
                         severity: ThreatLevel::High,
-                        description: format!(
+                        description:
                             "Error response schema description suggests stack trace exposure"
-                        ),
+                                .to_string(),
                         field_path: Some(format!("{}.error.{}", base_path, status_code)),
                         context: HashMap::new(),
                         confidence: 0.8,
@@ -127,7 +128,9 @@ impl ErrorAnalyzer {
             }
 
             // Check properties for sensitive fields
-            if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj_type)) = &schema.schema_kind {
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj_type)) =
+                &schema.schema_kind
+            {
                 for (prop_name, _) in &obj_type.properties {
                     let prop_lower = prop_name.to_lowercase();
                     if prop_lower.contains("stack")
@@ -142,7 +145,10 @@ impl ErrorAnalyzer {
                                 "Error response contains '{}' field which may leak stack traces",
                                 prop_name
                             ),
-                            field_path: Some(format!("{}.error.{}.{}", base_path, status_code, prop_name)),
+                            field_path: Some(format!(
+                                "{}.error.{}.{}",
+                                base_path, status_code, prop_name
+                            )),
                             context: HashMap::new(),
                             confidence: 0.9,
                         });
@@ -171,24 +177,34 @@ impl ErrorAnalyzer {
                         findings.push(ThreatFinding {
                             finding_type: ThreatCategory::StackTraceLeakage,
                             severity: ThreatLevel::Critical,
-                            description: format!(
+                            description:
                                 "Error example contains stack trace or sensitive error details"
-                            ),
-                            field_path: Some(format!("{}.error.{}.{}", base_path, status_code, key)),
+                                    .to_string(),
+                            field_path: Some(format!(
+                                "{}.error.{}.{}",
+                                base_path, status_code, key
+                            )),
                             context: HashMap::new(),
                             confidence: 1.0,
                         });
                     }
 
                     // Check for file paths
-                    if str_value.contains("/") && (str_value.contains(".py") || str_value.contains(".java") || str_value.contains(".rs")) {
+                    if str_value.contains("/")
+                        && (str_value.contains(".py")
+                            || str_value.contains(".java")
+                            || str_value.contains(".rs"))
+                    {
                         findings.push(ThreatFinding {
                             finding_type: ThreatCategory::ErrorLeakage,
                             severity: ThreatLevel::Medium,
-                            description: format!(
+                            description:
                                 "Error message contains file path which may leak internal structure"
-                            ),
-                            field_path: Some(format!("{}.error.{}.{}", base_path, status_code, key)),
+                                    .to_string(),
+                            field_path: Some(format!(
+                                "{}.error.{}.{}",
+                                base_path, status_code, key
+                            )),
                             context: HashMap::new(),
                             confidence: 0.7,
                         });
@@ -212,8 +228,7 @@ impl ErrorAnalyzer {
     /// Check if text contains stack trace patterns
     fn contains_stack_trace_patterns(&self, text: &str) -> bool {
         // Look for common stack trace patterns
-        text.contains("at ")
-            && (text.contains("(") || text.contains("line"))
+        text.contains("at ") && (text.contains("(") || text.contains("line"))
             || text.contains("Traceback")
             || text.contains("Exception in thread")
     }

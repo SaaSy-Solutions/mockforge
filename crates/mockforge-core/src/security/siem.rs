@@ -45,6 +45,7 @@ pub enum SiemProtocol {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SyslogFacility {
     /// Kernel messages
     Kernel = 0,
@@ -77,6 +78,7 @@ pub enum SyslogFacility {
     /// Log alert
     LogAlert = 14,
     /// Local use 0
+    #[default]
     Local0 = 16,
     /// Local use 1
     Local1 = 17,
@@ -92,12 +94,6 @@ pub enum SyslogFacility {
     Local6 = 22,
     /// Local use 7
     Local7 = 23,
-}
-
-impl Default for SyslogFacility {
-    fn default() -> Self {
-        SyslogFacility::Local0
-    }
 }
 
 /// Syslog severity levels (RFC 5424)
@@ -408,6 +404,7 @@ fn default_datadog_site() -> String {
 /// SIEM configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Default)]
 pub struct SiemConfig {
     /// Whether SIEM integration is enabled
     pub enabled: bool,
@@ -417,17 +414,6 @@ pub struct SiemConfig {
     pub destinations: Vec<SiemDestination>,
     /// Event filters
     pub filters: Option<EventFilter>,
-}
-
-impl Default for SiemConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            protocol: None,
-            destinations: Vec::new(),
-            filters: None,
-        }
-    }
 }
 
 /// Trait for SIEM transport implementations
@@ -593,7 +579,7 @@ impl SiemTransport for HttpTransport {
         let mut last_error = None;
         for attempt in 0..=self.retry.max_attempts {
             match request.try_clone() {
-                Some(mut req) => match req.send().await {
+                Some(req) => match req.send().await {
                     Ok(response) => {
                         if response.status().is_success() {
                             debug!("Sent HTTP event to {}: {}", self.url, event.event_type);

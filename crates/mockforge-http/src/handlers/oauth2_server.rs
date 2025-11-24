@@ -169,8 +169,6 @@ pub async fn token(
     State(state): State<OAuth2ServerState>,
     axum::extract::Form(request): axum::extract::Form<TokenRequest>,
 ) -> Result<Json<TokenResponse>, StatusCode> {
-    use chrono::Utc;
-
     match request.grant_type.as_str() {
         "authorization_code" => handle_authorization_code_grant(state, request).await,
         "client_credentials" => handle_client_credentials_grant(state, request).await,

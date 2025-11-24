@@ -14,7 +14,6 @@ use serde_json::json;
 use std::any::Any;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::net::TcpListener;
 
 #[cfg(feature = "amqp")]
@@ -31,8 +30,8 @@ mod error_helpers;
 mod flow_commands;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
-mod governance_commands;
 mod git_watch_commands;
+mod governance_commands;
 mod import_commands;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
@@ -2476,13 +2475,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Scenario { scenario_command } => {
             scenario_commands::handle_scenario_command(scenario_command).await?;
         }
-        Commands::RealityProfile { reality_profile_command } => {
+        Commands::RealityProfile {
+            reality_profile_command,
+        } => {
             scenario_commands::handle_reality_profile_command(reality_profile_command).await?;
         }
-        Commands::BehaviorRule { behavior_rule_command } => {
+        Commands::BehaviorRule {
+            behavior_rule_command,
+        } => {
             scenario_commands::handle_behavior_rule_command(behavior_rule_command).await?;
         }
-        Commands::DriftLearning { drift_learning_command } => {
+        Commands::DriftLearning {
+            drift_learning_command,
+        } => {
             scenario_commands::handle_drift_learning_command(drift_learning_command).await?;
         }
         Commands::Template { template_command } => {
@@ -3237,21 +3242,15 @@ fn initialize_opentelemetry_tracing(
 
     // Build the subscriber with OpenTelemetry layer
     // We need to reinitialize the subscriber to add the OpenTelemetry layer
-    let registry = tracing_subscriber::registry()
-        .with(env_filter)
-        .with(otel_layer);
+    let registry = tracing_subscriber::registry().with(env_filter).with(otel_layer);
 
     // Add console layer based on config
     if logging_config.json_format {
         use tracing_subscriber::fmt;
-        registry
-            .with(fmt::layer().json())
-            .init();
+        registry.with(fmt::layer().json()).init();
     } else {
         use tracing_subscriber::fmt;
-        registry
-            .with(fmt::layer())
-            .init();
+        registry.with(fmt::layer()).init();
     }
 
     tracing::info!("OpenTelemetry tracing initialized successfully with layer integration");
@@ -3611,7 +3610,7 @@ pub async fn handle_serve(
     // Initialize access review system if enabled
     let access_review_scheduler_handle = if config.security.monitoring.access_review.enabled {
         use mockforge_core::security::{
-            access_review::{AccessReviewConfig, AccessReviewEngine},
+            access_review::AccessReviewEngine,
             access_review_notifications::{AccessReviewNotificationService, NotificationConfig},
             access_review_scheduler::AccessReviewScheduler,
             access_review_service::AccessReviewService,
@@ -3738,9 +3737,8 @@ pub async fn handle_serve(
     // Initialize privileged access manager if enabled
     let privileged_access_manager = if config.security.monitoring.privileged_access.require_mfa {
         use mockforge_core::security::{
-            justification_storage::InMemoryJustificationStorage,
-            mfa_tracking::InMemoryMfaStorage,
-            privileged_access::{PrivilegedAccessConfig, PrivilegedAccessManager},
+            justification_storage::InMemoryJustificationStorage, mfa_tracking::InMemoryMfaStorage,
+            privileged_access::PrivilegedAccessManager,
         };
         use std::sync::Arc;
 
@@ -3785,9 +3783,7 @@ pub async fn handle_serve(
 
     // Initialize change management engine if enabled
     let change_management_engine = if config.security.monitoring.change_management.enabled {
-        use mockforge_core::security::change_management::{
-            ChangeManagementConfig, ChangeManagementEngine,
-        };
+        use mockforge_core::security::change_management::ChangeManagementEngine;
         use std::sync::Arc;
 
         let change_config = config.security.monitoring.change_management.clone();
@@ -3810,9 +3806,7 @@ pub async fn handle_serve(
 
     // Initialize compliance dashboard engine if enabled
     let compliance_dashboard_engine = if config.security.monitoring.compliance_dashboard.enabled {
-        use mockforge_core::security::compliance_dashboard::{
-            ComplianceDashboardConfig, ComplianceDashboardEngine,
-        };
+        use mockforge_core::security::compliance_dashboard::ComplianceDashboardEngine;
         use std::sync::Arc;
 
         let dashboard_config = config.security.monitoring.compliance_dashboard.clone();
@@ -3835,9 +3829,7 @@ pub async fn handle_serve(
 
     // Initialize risk assessment engine if enabled
     let risk_assessment_engine = if config.security.monitoring.risk_assessment.enabled {
-        use mockforge_core::security::risk_assessment::{
-            RiskAssessmentConfig, RiskAssessmentEngine,
-        };
+        use mockforge_core::security::risk_assessment::RiskAssessmentEngine;
         use std::sync::Arc;
 
         let risk_config = config.security.monitoring.risk_assessment.clone();
@@ -4002,7 +3994,7 @@ pub async fn handle_serve(
     // Initialize MockAI in parallel with router building to improve startup time
     // This allows MockAI initialization to happen concurrently with HTTP router setup
     let mockai = if config.mockai.enabled {
-        use mockforge_core::intelligent_behavior::{IntelligentBehaviorConfig, MockAI};
+        use mockforge_core::intelligent_behavior::MockAI;
         use std::sync::Arc;
         use tokio::sync::RwLock;
         use tracing::{info, warn};
@@ -4092,7 +4084,7 @@ pub async fn handle_serve(
     // Convert from ServerConfig's ChaosEngConfig to mockforge-chaos's ChaosConfig
     let chaos_config = if let Some(ref chaos_eng_config) = config.observability.chaos {
         // Convert ChaosEngConfig to ChaosConfig
-        let mut chaos_cfg = ChaosConfig {
+        let chaos_cfg = ChaosConfig {
             enabled: chaos_eng_config.enabled,
             latency: chaos_eng_config.latency.as_ref().map(|l| {
                 mockforge_chaos::config::LatencyConfig {
@@ -4421,7 +4413,7 @@ pub async fn handle_serve(
     // Auto-start tunnel if deceptive deploy is enabled with auto_tunnel
     let tunnel_handle = if config.deceptive_deploy.enabled && config.deceptive_deploy.auto_tunnel {
         use mockforge_tunnel::{TunnelConfig, TunnelManager, TunnelProvider};
-        use std::sync::Arc;
+
         use tokio::time::{sleep, Duration};
 
         let local_url = format!("http://localhost:{}", http_port);
@@ -4662,7 +4654,7 @@ pub async fn handle_serve(
     let _tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Create latency injector if latency is enabled (for hot-reload support)
-    use mockforge_core::latency::{FaultConfig, LatencyInjector, LatencyProfile};
+    use mockforge_core::latency::{FaultConfig, LatencyInjector};
     use tokio::sync::RwLock;
 
     let latency_injector_for_admin = if config.core.latency_enabled {
@@ -5145,7 +5137,14 @@ async fn handle_governance(gov_command: GovernanceCommands) -> mockforge_core::R
                 method,
                 window_days,
             } => {
-                handle_forecast_generate(workspace_id, service_id, endpoint, method, Some(window_days)).await?;
+                handle_forecast_generate(
+                    workspace_id,
+                    service_id,
+                    endpoint,
+                    method,
+                    Some(window_days),
+                )
+                .await?;
             }
         },
         GovernanceCommands::Semantic { semantic_command } => match semantic_command {
@@ -5168,7 +5167,8 @@ async fn handle_governance(gov_command: GovernanceCommands) -> mockforge_core::R
                 method,
                 output,
             } => {
-                handle_threat_assess(spec, workspace_id, service_id, endpoint, method, output).await?;
+                handle_threat_assess(spec, workspace_id, service_id, endpoint, method, output)
+                    .await?;
             }
         },
         GovernanceCommands::Status {
@@ -6125,7 +6125,12 @@ async fn handle_schema(
 
             // Determine what to generate
             let types_to_generate: Vec<&str> = if r#type == "all" {
-                vec!["mockforge-config", "reality-config", "persona-config", "blueprint-config"]
+                vec![
+                    "mockforge-config",
+                    "reality-config",
+                    "persona-config",
+                    "blueprint-config",
+                ]
             } else {
                 vec![&r#type]
             };
@@ -6134,7 +6139,9 @@ async fn handle_schema(
                 let output_path = Path::new(&output_path);
 
                 // Check if output is a directory or file
-                if output_path.is_dir() || !output_path.exists() && output_path.extension().is_none() {
+                if output_path.is_dir()
+                    || !output_path.exists() && output_path.extension().is_none()
+                {
                     // Directory mode: generate all requested schemas
                     fs::create_dir_all(output_path)?;
 
@@ -6148,7 +6155,11 @@ async fn handle_schema(
                         }
                     }
 
-                    println!("\n✅ Generated {} schema(s) in {}", types_to_generate.len(), output_path.display());
+                    println!(
+                        "\n✅ Generated {} schema(s) in {}",
+                        types_to_generate.len(),
+                        output_path.display()
+                    );
                     println!("\nTo use in your IDE:");
                     println!("  1. Install a YAML schema extension (e.g., 'YAML' by Red Hat)");
                     println!("  2. Add schema mapping to your VS Code settings.json:");
@@ -6163,12 +6174,20 @@ async fn handle_schema(
                             "blueprint-config" => "**/blueprint.yaml",
                             _ => "*.yaml",
                         };
-                        println!("       \"{}\": \"{}\",", schema_path.to_string_lossy(), file_pattern);
+                        println!(
+                            "       \"{}\": \"{}\",",
+                            schema_path.to_string_lossy(),
+                            file_pattern
+                        );
                     }
                     println!("     }}");
                 } else {
                     // File mode: generate single schema
-                    let schema_type = if r#type == "all" { "mockforge-config" } else { &r#type };
+                    let schema_type = if r#type == "all" {
+                        "mockforge-config"
+                    } else {
+                        &r#type
+                    };
                     if let Some(schema) = schemas.get(schema_type) {
                         let schema_json = serde_json::to_string_pretty(schema)?;
                         fs::write(output_path, schema_json)?;
@@ -6190,14 +6209,12 @@ async fn handle_schema(
                             println!();
                         }
                     }
+                } else if let Some(schema) = schemas.get(&r#type) {
+                    println!("{}", serde_json::to_string_pretty(schema)?);
                 } else {
-                    if let Some(schema) = schemas.get(&r#type) {
-                        println!("{}", serde_json::to_string_pretty(schema)?);
-                    } else {
-                        eprintln!("❌ Unknown schema type: {}", r#type);
-                        eprintln!("Available types: mockforge-config, reality-config, persona-config, blueprint-config");
-                        return Err("Invalid schema type".into());
-                    }
+                    eprintln!("❌ Unknown schema type: {}", r#type);
+                    eprintln!("Available types: mockforge-config, reality-config, persona-config, blueprint-config");
+                    return Err("Invalid schema type".into());
                 }
             }
         }
@@ -6208,25 +6225,25 @@ async fn handle_schema(
             schema_dir,
             strict,
         } => {
-            use mockforge_schema::{detect_schema_type, generate_all_schemas, validate_config_file};
+            use mockforge_schema::{
+                detect_schema_type, generate_all_schemas, validate_config_file,
+            };
             use std::fs;
-            use std::path::Path;
 
             let schemas = generate_all_schemas();
             let mut validation_results = Vec::new();
             let mut has_errors = false;
 
             // Determine schema directory
-            let schema_dir_path = schema_dir
-                .or_else(|| {
-                    let current_dir = std::env::current_dir().ok()?;
-                    let schemas_dir = current_dir.join("schemas");
-                    if schemas_dir.exists() {
-                        Some(schemas_dir)
-                    } else {
-                        None
-                    }
-                });
+            let schema_dir_path = schema_dir.or_else(|| {
+                let current_dir = std::env::current_dir().ok()?;
+                let schemas_dir = current_dir.join("schemas");
+                if schemas_dir.exists() {
+                    Some(schemas_dir)
+                } else {
+                    None
+                }
+            });
 
             // Collect files to validate
             let files_to_validate: Vec<PathBuf> = if let Some(file_path) = file {
@@ -6265,20 +6282,26 @@ async fn handle_schema(
             for file_path in &files_to_validate {
                 // Determine schema type
                 let file_schema_type = schema_type.clone().unwrap_or_else(|| {
-                    detect_schema_type(file_path)
-                        .unwrap_or_else(|| "mockforge-config".to_string())
+                    detect_schema_type(file_path).unwrap_or_else(|| "mockforge-config".to_string())
                 });
 
                 // Get schema (try from schema_dir first, then use generated)
                 let schema = if let Some(ref schema_dir) = schema_dir_path {
-                    let schema_file = schema_dir.join(format!("{}.schema.json", file_schema_type.replace("-", "_")));
+                    let schema_file = schema_dir
+                        .join(format!("{}.schema.json", file_schema_type.replace("-", "_")));
                     if schema_file.exists() {
-                        match fs::read_to_string(&schema_file)
-                            .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e)))
-                        {
+                        match fs::read_to_string(&schema_file).and_then(|content| {
+                            serde_json::from_str::<serde_json::Value>(&content).map_err(|e| {
+                                std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+                            })
+                        }) {
                             Ok(s) => s,
                             Err(e) => {
-                                eprintln!("⚠️  Failed to load schema from {}: {}", schema_file.display(), e);
+                                eprintln!(
+                                    "⚠️  Failed to load schema from {}: {}",
+                                    schema_file.display(),
+                                    e
+                                );
                                 schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
                                     eprintln!("❌ Schema type '{}' not found", file_schema_type);
                                     has_errors = true;
@@ -6288,7 +6311,10 @@ async fn handle_schema(
                         }
                     } else {
                         schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
-                            eprintln!("⚠️  Schema file not found: {}, using generated schema", schema_file.display());
+                            eprintln!(
+                                "⚠️  Schema file not found: {}, using generated schema",
+                                schema_file.display()
+                            );
                             schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
                                 eprintln!("❌ Schema type '{}' not found", file_schema_type);
                                 has_errors = true;
@@ -6362,9 +6388,8 @@ async fn handle_generate(
     watch_debounce: u64,
     progress: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use mockforge_core::{discover_config_file, load_generate_config_with_fallback};
+    use mockforge_core::discover_config_file;
     use progress::{CliError, ExitCode, LogLevel, ProgressManager};
-    use std::time::Instant;
 
     // Initialize progress manager
     let mut progress_mgr = ProgressManager::new(verbose);
@@ -6830,7 +6855,7 @@ async fn execute_generation(
     tokio::fs::write(&output_file, generated_file.content.clone()).await?;
 
     // Track generated files for barrel generation
-    let mut all_generated_files = vec![generated_file];
+    let all_generated_files = vec![generated_file];
 
     if let Some(ref pb) = progress_bar {
         pb.inc(1u64);
@@ -7456,7 +7481,7 @@ fn format_yaml_error(content: &str, error: serde_yaml::Error) -> String {
             }
         }
 
-        message.push_str("\n");
+        message.push('\n');
     }
 
     // Show the error with field path if extracted
@@ -7549,7 +7574,7 @@ fn format_json_error(content: &str, error: serde_json::Error) -> String {
         }
     }
 
-    message.push_str("\n");
+    message.push('\n');
 
     // Show the error with field path if extracted
     if let Some(path) = &field_path {

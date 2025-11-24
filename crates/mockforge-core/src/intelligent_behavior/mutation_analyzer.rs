@@ -412,10 +412,10 @@ impl MutationAnalyzer {
         }
 
         // If fields removed, likely delete or update
-        if !removed_fields.is_empty() {
-            if removed_fields.len() > added_fields.len() + changed_fields.len() {
-                return MutationType::Delete;
-            }
+        if !removed_fields.is_empty()
+            && removed_fields.len() > added_fields.len() + changed_fields.len()
+        {
+            return MutationType::Delete;
         }
 
         // If only some fields changed, partial update

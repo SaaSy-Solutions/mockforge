@@ -21,7 +21,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
-use uuid::Uuid;
 
 use crate::handlers::auth_helpers::{extract_user_id_with_fallback, OptionalAuthClaims};
 
@@ -111,7 +110,7 @@ pub async fn create_risk(
     let created_by = extract_user_id_with_fallback(&claims);
 
     let engine = state.engine.write().await;
-    let mut risk = engine
+    let risk = engine
         .create_risk(
             request.title,
             request.description,
@@ -368,10 +367,8 @@ pub async fn update_treatment_status(
     // Extract user ID from authentication claims, or use default for mock server
     let _updated_by = extract_user_id_with_fallback(&claims);
 
-    let status_str = request
-        .get("status")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| StatusCode::BAD_REQUEST)?;
+    let status_str =
+        request.get("status").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
 
     let status = match status_str {
         "not_started" => TreatmentStatus::NotStarted,

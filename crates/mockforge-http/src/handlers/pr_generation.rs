@@ -144,5 +144,3 @@ pub fn pr_generation_router(state: PRGenerationState) -> axum::Router {
         .route("/api/v1/pr/generate", post(generate_pr))
         .with_state(state)
 }
-
-use tracing::warn;

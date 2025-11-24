@@ -5,8 +5,8 @@
 //! per environment, similar to application environments.
 
 use crate::chaos_utilities::ChaosConfig;
-use crate::contract_drift::{DriftBudget, DriftBudgetConfig};
-use crate::reality::{RealityConfig, RealityLevel};
+use crate::contract_drift::DriftBudgetConfig;
+use crate::reality::RealityConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -217,7 +217,7 @@ impl Default for MockEnvironmentManager {
 ///
 /// This struct represents the configuration overrides that can be applied
 /// per environment, merging with workspace defaults.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MockEnvironmentConfig {
     /// Environment-specific reality configuration override
     /// If None, uses workspace default
@@ -231,16 +231,6 @@ pub struct MockEnvironmentConfig {
     /// If None, uses workspace default
     #[serde(skip_serializing_if = "Option::is_none")]
     pub drift_budget_config: Option<DriftBudgetConfig>,
-}
-
-impl Default for MockEnvironmentConfig {
-    fn default() -> Self {
-        Self {
-            reality_config: None,
-            chaos_config: None,
-            drift_budget_config: None,
-        }
-    }
 }
 
 /// Environment configuration resolver
@@ -325,7 +315,7 @@ impl EnvironmentConfigResolver {
 ///
 /// These are the default configurations at the workspace level that can be
 /// overridden per environment.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WorkspaceEnvironmentDefaults {
     /// Default reality configuration for the workspace
     pub reality_config: Option<RealityConfig>,
@@ -333,16 +323,6 @@ pub struct WorkspaceEnvironmentDefaults {
     pub chaos_config: Option<ChaosConfig>,
     /// Default drift budget configuration for the workspace
     pub drift_budget_config: Option<DriftBudgetConfig>,
-}
-
-impl Default for WorkspaceEnvironmentDefaults {
-    fn default() -> Self {
-        Self {
-            reality_config: None,
-            chaos_config: None,
-            drift_budget_config: None,
-        }
-    }
 }
 
 /// Resolved environment configuration

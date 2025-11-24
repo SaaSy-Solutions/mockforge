@@ -30,6 +30,8 @@ pub enum EmbeddingProvider {
     OpenAI,
     /// Generic OpenAI-compatible embeddings API
     OpenAICompatible,
+    /// Local Ollama instance
+    Ollama,
 }
 
 /// LLM provider trait
@@ -210,10 +212,7 @@ impl LlmProviderTrait for OpenAiProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "OpenAI API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
@@ -267,10 +266,7 @@ impl LlmProviderTrait for OpenAiProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "OpenAI API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
@@ -290,10 +286,7 @@ impl LlmProviderTrait for OpenAiProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "OpenAI API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
@@ -368,10 +361,7 @@ impl EmbeddingProviderTrait for OpenAiEmbeddingProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "OpenAI API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
@@ -475,10 +465,7 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
@@ -532,10 +519,7 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
@@ -557,9 +541,9 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
         {
             Ok(response) if response.status().is_success() => {
                 let json: Value = response.json().await?;
-                let models = json["data"].as_array().ok_or_else(|| {
-                    crate::Error::generic("Invalid models response format")
-                })?;
+                let models = json["data"]
+                    .as_array()
+                    .ok_or_else(|| crate::Error::generic("Invalid models response format"))?;
                 Ok(models
                     .iter()
                     .filter_map(|model| model["id"].as_str().map(|s| s.to_string()))
@@ -618,10 +602,7 @@ impl EmbeddingProviderTrait for OpenAiCompatibleEmbeddingProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
@@ -678,9 +659,7 @@ impl ProviderFactory {
             }
             LlmProvider::OpenAICompatible => {
                 let base_url = base_url.ok_or_else(|| {
-                    crate::Error::generic(
-                        "Base URL required for OpenAI compatible provider",
-                    )
+                    crate::Error::generic("Base URL required for OpenAI compatible provider")
                 })?;
                 Ok(Box::new(OpenAiCompatibleProvider::new(api_key, base_url, model)))
             }
@@ -709,6 +688,14 @@ impl ProviderFactory {
                     )
                 })?;
                 Ok(Box::new(OpenAiCompatibleEmbeddingProvider::new(api_key, base_url, model)))
+            }
+            EmbeddingProvider::Ollama => {
+                // Ollama embeddings use OpenAI-compatible API
+                let base_url = base_url.ok_or_else(|| {
+                    crate::Error::generic("Base URL required for Ollama embedding provider")
+                })?;
+                // Ollama doesn't require API key, use empty string
+                Ok(Box::new(OpenAiCompatibleEmbeddingProvider::new(String::new(), base_url, model)))
             }
         }
     }

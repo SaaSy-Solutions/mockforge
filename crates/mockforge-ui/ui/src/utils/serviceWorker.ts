@@ -14,33 +14,65 @@ type Config = {
   onUpdate?: (registration: ServiceWorkerRegistration) => void;
 };
 
+const SW_VERSION = 'v3';
+
 export function registerServiceWorker(config?: Config) {
-  if ('serviceWorker' in navigator) {
-    // Service worker is supported
-    const publicUrl = new URL(import.meta.env.BASE_URL || '/', window.location.href);
+  if (!('serviceWorker' in navigator)) return;
 
-    if (publicUrl.origin !== window.location.origin) {
-      // Service worker won't work if PUBLIC_URL is on a different origin
-      return;
-    }
-
-    window.addEventListener('load', () => {
-      const swUrl = `${import.meta.env.BASE_URL || '/'}sw.js`;
-
-      if (isLocalhost) {
-        // Running on localhost - check if service worker exists
-        checkValidServiceWorker(swUrl, config);
-
-        // Log service worker status
-        navigator.serviceWorker.ready.then(() => {
-          console.log('[Service Worker] Ready on localhost');
-        });
-      } else {
-        // Production - register service worker
-        registerValidSW(swUrl, config);
-      }
-    });
+  const publicUrl = new URL(import.meta.env.BASE_URL || '/', window.location.href);
+  if (publicUrl.origin !== window.location.origin) {
+    // Service worker won't work if PUBLIC_URL is on a different origin
+    return;
   }
+
+  // Append a version to the SW URL so caches are busted when we roll a new build
+  const swUrl = `${import.meta.env.BASE_URL || '/'}sw.js?version=${SW_VERSION}`;
+
+  // Proactively clear old registrations/caches when version changes
+  const clearStaleServiceWorkers = async () => {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(
+      registrations.map(async (registration) => {
+        const url = registration.active?.scriptURL || registration.installing?.scriptURL || registration.waiting?.scriptURL;
+        if (url && !url.includes(`version=${SW_VERSION}`)) {
+          try {
+            await registration.unregister();
+          } catch (err) {
+            console.warn('[Service Worker] Failed to unregister stale registration', err);
+          }
+        }
+      })
+    );
+
+    // Also clear all caches if they do not include the current version
+    const cacheNames = await caches.keys();
+    await Promise.all(
+      cacheNames.map((name) => {
+        if (!name.includes(SW_VERSION)) {
+          return caches.delete(name);
+        }
+        return Promise.resolve(false);
+      })
+    );
+  };
+
+  window.addEventListener('load', () => {
+    clearStaleServiceWorkers().catch((err) => {
+      console.warn('[Service Worker] Failed to clear stale registrations', err);
+    });
+
+    if (isLocalhost) {
+      // Running on localhost - check if service worker exists
+      checkValidServiceWorker(swUrl, config);
+
+      navigator.serviceWorker.ready.then(() => {
+        console.log('[Service Worker] Ready on localhost');
+      });
+    } else {
+      // Production - register service worker
+      registerValidSW(swUrl, config);
+    }
+  });
 }
 
 function registerValidSW(swUrl: string, config?: Config) {
@@ -59,6 +91,10 @@ function registerValidSW(swUrl: string, config?: Config) {
               console.log('[Service Worker] New content available; please refresh.');
               if (config && config.onUpdate) {
                 config.onUpdate(registration);
+              } else {
+                // If no custom handler, activate the new worker immediately and reload
+                registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+                window.location.reload();
               }
             } else {
               // Content cached for offline use

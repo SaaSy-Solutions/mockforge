@@ -10,12 +10,11 @@ use clap::Subcommand;
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 use mockforge_core::multi_tenant::{MultiTenantConfig, MultiTenantWorkspaceRegistry};
 use mockforge_core::openapi::OpenApiSpec;
-use mockforge_core::voice::{ParsedWorkspaceCreation, WorkspaceBuilder};
+use mockforge_core::voice::WorkspaceBuilder;
 use mockforge_core::{ConversationManager, HookTranspiler, VoiceCommandParser, VoiceSpecGenerator};
 use speech_to_text::{InteractiveVoiceInput, SpeechToTextManager};
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::PathBuf;
-use uuid::Uuid;
 
 /// Voice CLI commands
 #[derive(Subcommand, Debug)]
@@ -369,7 +368,7 @@ async fn handle_interactive(
         // Get conversation context
         let conversation_state = conversation_manager
             .get_conversation(&conversation_id)
-            .ok_or_else(|| "Conversation not found")?;
+            .ok_or("Conversation not found")?;
 
         // Parse command
         let parsed = if current_spec.is_some() {

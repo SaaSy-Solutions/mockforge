@@ -1,8 +1,8 @@
 //! Pillars: [Cloud]
 //!
-//! # MockForge Collaboration
+//! # `MockForge` Collaboration
 //!
-//! Cloud collaboration features for MockForge including team workspaces,
+//! Cloud collaboration features for `MockForge` including team workspaces,
 //! real-time synchronization, version control, and role-based access control.
 //!
 //! ## Features

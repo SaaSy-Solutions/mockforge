@@ -3,12 +3,11 @@
 //! Provides functionality to apply organization templates to new workspaces,
 //! including environment configurations, security baselines, and blueprints.
 
-use crate::workspace::{MockEnvironment, MockEnvironmentManager, MockEnvironmentName, Workspace, WorkspaceConfig};
-use crate::reality::RealityLevel;
 use crate::chaos_utilities::ChaosConfig;
 use crate::contract_drift::DriftBudgetConfig;
+use crate::reality::RealityLevel;
+use crate::workspace::{MockEnvironmentName, Workspace};
 use serde_json::Value;
-use std::collections::HashMap;
 
 /// Template environment configuration
 ///
@@ -69,22 +68,26 @@ pub fn apply_template_to_workspace(
     }
 
     // Apply default workspace reality level if specified
-    if let Some(reality_level) = blueprint_config.get("default_reality_level")
+    if let Some(reality_level) = blueprint_config
+        .get("default_reality_level")
         .and_then(|v| v.as_str())
-        .and_then(|s| parse_reality_level(s)) {
+        .and_then(parse_reality_level)
+    {
         workspace.config.reality_level = Some(reality_level);
     }
 
     // Apply security baseline configurations
-    if let Some(validation_mode) = security_baseline.get("default_validation_mode")
-        .and_then(|v| v.as_str()) {
+    if let Some(validation_mode) =
+        security_baseline.get("default_validation_mode").and_then(|v| v.as_str())
+    {
         // Store in workspace config metadata for later use
         // This would be applied when processing requests
         result.security_policies_applied += 1;
     }
 
     // Apply RBAC defaults from security baseline
-    if let Some(rbac_defaults) = security_baseline.get("rbac_defaults").and_then(|v| v.as_object()) {
+    if let Some(rbac_defaults) = security_baseline.get("rbac_defaults").and_then(|v| v.as_object())
+    {
         // Store RBAC defaults for workspace
         // These would be used when creating workspace members
         result.security_policies_applied += rbac_defaults.len();
@@ -114,24 +117,24 @@ fn apply_environment_config(
     env_config: &Value,
 ) -> Result<(), String> {
     // Parse reality config if present
-    let reality_config = env_config.get("reality_config")
+    let reality_config = env_config
+        .get("reality_config")
         .and_then(|v| serde_json::from_value(v.clone()).ok());
 
     // Parse chaos config if present
-    let chaos_config = env_config.get("chaos_config")
+    let chaos_config = env_config
+        .get("chaos_config")
         .and_then(|v| serde_json::from_value(v.clone()).ok());
 
     // Parse drift budget config if present
-    let drift_budget_config = env_config.get("drift_budget_config")
+    let drift_budget_config = env_config
+        .get("drift_budget_config")
         .and_then(|v| serde_json::from_value(v.clone()).ok());
 
     // Apply the configuration
-    workspace.set_mock_environment_config(
-        env_name,
-        reality_config,
-        chaos_config,
-        drift_budget_config,
-    ).map_err(|e| format!("Failed to set mock environment config: {}", e))?;
+    workspace
+        .set_mock_environment_config(env_name, reality_config, chaos_config, drift_budget_config)
+        .map_err(|e| format!("Failed to set mock environment config: {}", e))?;
 
     Ok(())
 }

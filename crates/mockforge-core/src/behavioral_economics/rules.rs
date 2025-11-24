@@ -104,14 +104,10 @@ impl BehaviorRule {
 
         if matches!(self.rule_type, RuleType::Scriptable) {
             if self.script.is_none() {
-                return Err(crate::Error::generic(
-                    "Scriptable rules must have a script",
-                ));
+                return Err(crate::Error::generic("Scriptable rules must have a script"));
             }
             if self.script_language.is_none() {
-                return Err(crate::Error::generic(
-                    "Scriptable rules must have a script_language",
-                ));
+                return Err(crate::Error::generic("Scriptable rules must have a script_language"));
             }
         }
 

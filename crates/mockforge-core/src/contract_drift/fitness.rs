@@ -164,7 +164,8 @@ pub trait FitnessEvaluator: Send + Sync {
             function_id: String::new(),
             function_name: "Protocol Contract Evaluation".to_string(),
             passed: true,
-            message: "Protocol contract evaluation not implemented for this fitness function type".to_string(),
+            message: "Protocol contract evaluation not implemented for this fitness function type"
+                .to_string(),
             metrics: std::collections::HashMap::new(),
         })
     }
@@ -333,7 +334,7 @@ impl FitnessEvaluator for RequiredFieldFitnessEvaluator {
             .iter()
             .filter(|m| {
                 m.mismatch_type == MismatchType::MissingRequiredField
-                    && m.method.as_ref().map(|m| m.as_str()) == Some(method)
+                    && m.method.as_deref() == Some(method)
             })
             .count();
 
@@ -387,7 +388,10 @@ impl FitnessEvaluator for RequiredFieldFitnessEvaluator {
                 function_id: String::new(),
                 function_name: "Required Field".to_string(),
                 passed: true,
-                message: format!("Operation {} does not match pattern {}", operation_id, path_pattern),
+                message: format!(
+                    "Operation {} does not match pattern {}",
+                    operation_id, path_pattern
+                ),
                 metrics: HashMap::new(),
             });
         }
@@ -503,9 +507,15 @@ impl FitnessEvaluator for FieldCountFitnessEvaluator {
 
         let passed = field_count <= max_fields as f64;
         let message = if passed {
-            format!("Protocol contract field count ({}) is within allowed limit ({})", field_count as u32, max_fields)
+            format!(
+                "Protocol contract field count ({}) is within allowed limit ({})",
+                field_count as u32, max_fields
+            )
         } else {
-            format!("Protocol contract field count ({}) exceeds allowed limit ({})", field_count as u32, max_fields)
+            format!(
+                "Protocol contract field count ({}) exceeds allowed limit ({})",
+                field_count as u32, max_fields
+            )
         };
 
         let mut metrics = HashMap::new();
@@ -583,9 +593,15 @@ impl FitnessEvaluator for SchemaComplexityFitnessEvaluator {
 
         let passed = depth <= max_depth;
         let message = if passed {
-            format!("Protocol contract schema depth ({}) is within allowed limit ({})", depth, max_depth)
+            format!(
+                "Protocol contract schema depth ({}) is within allowed limit ({})",
+                depth, max_depth
+            )
         } else {
-            format!("Protocol contract schema depth ({}) exceeds allowed limit ({})", depth, max_depth)
+            format!(
+                "Protocol contract schema depth ({}) exceeds allowed limit ({})",
+                depth, max_depth
+            )
         };
 
         let mut metrics = HashMap::new();
@@ -616,6 +632,12 @@ impl std::fmt::Debug for FitnessFunctionRegistry {
             .field("functions", &self.functions)
             .field("evaluators_count", &self.evaluators.len())
             .finish()
+    }
+}
+
+impl Default for FitnessFunctionRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -741,28 +763,37 @@ impl FitnessFunctionRegistry {
         let operation = new_contract.get_operation(operation_id);
         let (endpoint, method) = if let Some(op) = operation {
             match &op.operation_type {
-                crate::contract_drift::protocol_contracts::OperationType::HttpEndpoint { path, method } => {
-                    (path.clone(), method.clone())
-                }
-                crate::contract_drift::protocol_contracts::OperationType::GrpcMethod { service, method } => {
+                crate::contract_drift::protocol_contracts::OperationType::HttpEndpoint {
+                    path,
+                    method,
+                } => (path.clone(), method.clone()),
+                crate::contract_drift::protocol_contracts::OperationType::GrpcMethod {
+                    service,
+                    method,
+                } => {
                     // For gRPC, use service.method as endpoint
                     (format!("{}.{}", service, method), "grpc".to_string())
                 }
-                crate::contract_drift::protocol_contracts::OperationType::WebSocketMessage { message_type, .. } => {
-                    (message_type.clone(), "websocket".to_string())
-                }
-                crate::contract_drift::protocol_contracts::OperationType::MqttTopic { topic, qos: _ } => {
-                    (topic.clone(), "mqtt".to_string())
-                }
-                crate::contract_drift::protocol_contracts::OperationType::KafkaTopic { topic, key_schema: _, value_schema: _ } => {
-                    (topic.clone(), "kafka".to_string())
-                }
+                crate::contract_drift::protocol_contracts::OperationType::WebSocketMessage {
+                    message_type,
+                    ..
+                } => (message_type.clone(), "websocket".to_string()),
+                crate::contract_drift::protocol_contracts::OperationType::MqttTopic {
+                    topic,
+                    qos: _,
+                } => (topic.clone(), "mqtt".to_string()),
+                crate::contract_drift::protocol_contracts::OperationType::KafkaTopic {
+                    topic,
+                    key_schema: _,
+                    value_schema: _,
+                } => (topic.clone(), "kafka".to_string()),
             }
         } else {
             (operation_id.to_string(), "unknown".to_string())
         };
 
-        let functions = self.get_functions_for_scope(&endpoint, &method, workspace_id, service_name);
+        let functions =
+            self.get_functions_for_scope(&endpoint, &method, workspace_id, service_name);
         let mut results = Vec::new();
 
         for function in functions {
@@ -988,12 +1019,17 @@ impl FitnessFunctionRegistry {
 
             // Create config JSON
             let config_json = match &function_type {
-                FitnessFunctionType::ResponseSize { max_increase_percent } => {
+                FitnessFunctionType::ResponseSize {
+                    max_increase_percent,
+                } => {
                     serde_json::json!({
                         "max_increase_percent": max_increase_percent
                     })
                 }
-                FitnessFunctionType::RequiredField { path_pattern, allow_new_required } => {
+                FitnessFunctionType::RequiredField {
+                    path_pattern,
+                    allow_new_required,
+                } => {
                     serde_json::json!({
                         "path_pattern": path_pattern,
                         "allow_new_required": allow_new_required

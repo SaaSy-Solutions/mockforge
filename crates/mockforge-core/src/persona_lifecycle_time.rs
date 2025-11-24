@@ -4,10 +4,10 @@
 //! When virtual time advances, it automatically checks and updates persona lifecycle
 //! states based on transition rules.
 
+use crate::time_travel::{get_global_clock, VirtualClock};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "data")]
-use mockforge_data::persona_lifecycle::{LifecycleState, PersonaLifecycle};
-use crate::time_travel::{get_global_clock, VirtualClock};
+use mockforge_data::persona_lifecycle::PersonaLifecycle;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -52,17 +52,10 @@ impl LifecycleTimeManager {
     pub fn register_with_clock_instance(&self, clock: &VirtualClock) {
         let callback = self.update_callback.clone();
         clock.on_time_change(move |old_time, new_time| {
-            debug!(
-                "Time changed from {} to {}, updating persona lifecycles",
-                old_time, new_time
-            );
+            debug!("Time changed from {} to {}, updating persona lifecycles", old_time, new_time);
             let updated = callback(old_time, new_time);
             if !updated.is_empty() {
-                info!(
-                    "Updated {} persona lifecycle states: {:?}",
-                    updated.len(),
-                    updated
-                );
+                info!("Updated {} persona lifecycle states: {:?}", updated.len(), updated);
             }
         });
         info!("LifecycleTimeManager registered with virtual clock");

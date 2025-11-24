@@ -349,10 +349,9 @@ impl VariablePattern {
             (VariablePattern::Null, Some(_)) => false,
             (VariablePattern::Exact(expected), Some(actual)) => expected == actual,
             (VariablePattern::Exact(_), None) => false,
-            (VariablePattern::Regex(pattern), Some(Value::String(s))) => regex::Regex::new(pattern)
-                .ok()
-                .and_then(|re| Some(re.is_match(s)))
-                .unwrap_or(false),
+            (VariablePattern::Regex(pattern), Some(Value::String(s))) => {
+                regex::Regex::new(pattern).ok().map(|re| re.is_match(s)).unwrap_or(false)
+            }
             (VariablePattern::Regex(_), _) => false,
         }
     }

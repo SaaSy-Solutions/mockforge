@@ -433,7 +433,7 @@ async fn get_deployment_status(config_path: Option<PathBuf>) -> anyhow::Result<(
         {
             use std::process::Command;
             Command::new("kill")
-                .args(&["-0", &pid.to_string()])
+                .args(["-0", &pid.to_string()])
                 .output()
                 .map(|o| o.status.success())
                 .unwrap_or(false)
@@ -496,7 +496,7 @@ async fn stop_deployment(_config_path: Option<PathBuf>) -> anyhow::Result<()> {
             info!("🛑 Stopping process {}...", pid);
 
             // Try graceful shutdown first (SIGTERM)
-            let term_result = Command::new("kill").args(&["-TERM", &pid.to_string()]).output();
+            let term_result = Command::new("kill").args(["-TERM", &pid.to_string()]).output();
 
             match term_result {
                 Ok(output) if output.status.success() => {
@@ -506,14 +506,14 @@ async fn stop_deployment(_config_path: Option<PathBuf>) -> anyhow::Result<()> {
 
                     // Check if process is still running
                     let still_running = Command::new("kill")
-                        .args(&["-0", &pid.to_string()])
+                        .args(["-0", &pid.to_string()])
                         .output()
                         .map(|o| o.status.success())
                         .unwrap_or(false);
 
                     if still_running {
                         warn!("⚠️  Process still running, sending SIGKILL...");
-                        let _ = Command::new("kill").args(&["-KILL", &pid.to_string()]).output();
+                        let _ = Command::new("kill").args(["-KILL", &pid.to_string()]).output();
                     }
                 }
                 Ok(_) => {

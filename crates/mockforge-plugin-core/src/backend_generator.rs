@@ -34,7 +34,7 @@ pub trait BackendGeneratorPlugin: Send + Sync {
     async fn get_metadata(&self) -> PluginMetadata;
 
     /// Validate the plugin configuration
-    async fn validate_config(&self, config: &BackendGeneratorConfig) -> Result<()> {
+    async fn validate_config(&self, _config: &BackendGeneratorConfig) -> Result<()> {
         // Default implementation - plugins can override for custom validation
         Ok(())
     }

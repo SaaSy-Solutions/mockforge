@@ -4,7 +4,6 @@
 //! (e.g., e-commerce, fintech, IoT) that bundle multiple related scenarios together.
 
 use crate::error::{Result, ScenarioError};
-use crate::manifest::ScenarioManifest;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -206,7 +205,7 @@ impl DomainPackManifest {
 
     /// Load pack manifest from file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| ScenarioError::Io(e))?;
+        let content = std::fs::read_to_string(path.as_ref()).map_err(ScenarioError::Io)?;
 
         // Try to parse as YAML first, then JSON
         let manifest: DomainPackManifest = if path
@@ -216,9 +215,9 @@ impl DomainPackManifest {
             .map(|ext| ext == "yaml" || ext == "yml")
             .unwrap_or(true)
         {
-            serde_yaml::from_str(&content).map_err(|e| ScenarioError::Yaml(e))?
+            serde_yaml::from_str(&content).map_err(ScenarioError::Yaml)?
         } else {
-            serde_json::from_str(&content).map_err(|e| ScenarioError::Serde(e))?
+            serde_json::from_str(&content).map_err(ScenarioError::Serde)?
         };
 
         Ok(manifest)
@@ -233,12 +232,12 @@ impl DomainPackManifest {
             .map(|ext| ext == "yaml" || ext == "yml")
             .unwrap_or(true)
         {
-            serde_yaml::to_string(self).map_err(|e| ScenarioError::Yaml(e))?
+            serde_yaml::to_string(self).map_err(ScenarioError::Yaml)?
         } else {
-            serde_json::to_string_pretty(self).map_err(|e| ScenarioError::Serde(e))?
+            serde_json::to_string_pretty(self).map_err(ScenarioError::Serde)?
         };
 
-        std::fs::write(path.as_ref(), content).map_err(|e| ScenarioError::Io(e))?;
+        std::fs::write(path.as_ref(), content).map_err(ScenarioError::Io)?;
 
         Ok(())
     }
@@ -313,8 +312,8 @@ impl DomainPackInstaller {
 
         let mut packs = Vec::new();
 
-        for entry in std::fs::read_dir(&self.packs_dir).map_err(|e| ScenarioError::Io(e))? {
-            let entry = entry.map_err(|e| ScenarioError::Io(e))?;
+        for entry in std::fs::read_dir(&self.packs_dir).map_err(ScenarioError::Io)? {
+            let entry = entry.map_err(ScenarioError::Io)?;
             let pack_path = entry.path();
 
             if pack_path.is_dir() {

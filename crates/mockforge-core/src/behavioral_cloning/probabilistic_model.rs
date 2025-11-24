@@ -6,7 +6,6 @@
 use crate::behavioral_cloning::types::{
     EndpointProbabilityModel, ErrorPattern, LatencyDistribution,
 };
-use crate::Result;
 use std::collections::HashMap;
 
 /// Probabilistic model builder and sampler

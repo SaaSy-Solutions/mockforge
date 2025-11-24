@@ -178,7 +178,7 @@ pub async fn get_plugin_details(
     let registry = state.plugin_registry.read().await;
     // Find plugin ID from registry - must exist in registry to query it
     // The registry uses PluginId from its version of mockforge_plugin_core
-    let plugin_id_core = match registry.list_plugins().iter().find(|id| id.as_str() == &plugin_id) {
+    let plugin_id_core = match registry.list_plugins().iter().find(|id| id.as_str() == plugin_id) {
         Some(id) => id.clone(),
         None => {
             // Plugin not found in registry
@@ -235,7 +235,7 @@ pub async fn delete_plugin(
 ) -> Json<ApiResponse<serde_json::Value>> {
     let mut registry = state.plugin_registry.write().await;
     // Find plugin ID from registry - must exist to remove it
-    let plugin_id_core = match registry.list_plugins().iter().find(|id| id.as_str() == &plugin_id) {
+    let plugin_id_core = match registry.list_plugins().iter().find(|id| id.as_str() == plugin_id) {
         Some(id) => id.clone(),
         None => {
             return Json(ApiResponse::error(format!("Plugin not found: {}", plugin_id)));
@@ -261,7 +261,11 @@ pub async fn reload_plugin(
 ) -> Json<ApiResponse<serde_json::Value>> {
     let registry = state.plugin_registry.read().await;
     // Find plugin ID from registry - must exist to reload it
-    let plugin_id_core = match registry.list_plugins().iter().find(|id| id.as_str() == &payload.plugin_id) {
+    let plugin_id_core = match registry
+        .list_plugins()
+        .iter()
+        .find(|id| id.as_str() == payload.plugin_id)
+    {
         Some(id) => id.clone(),
         None => {
             return Json(ApiResponse::error(format!("Plugin not found: {}", payload.plugin_id)));

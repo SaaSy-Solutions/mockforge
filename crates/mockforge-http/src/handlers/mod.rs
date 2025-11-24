@@ -10,14 +10,16 @@ pub mod compliance_dashboard;
 pub mod consent;
 pub mod consistency;
 pub mod consumer_contracts;
-pub mod deceptive_canary;
 pub mod contract_health;
+pub mod deceptive_canary;
 pub mod drift_budget;
 pub mod failure_designer;
 pub mod fidelity;
 pub mod forecasting;
 pub mod incident_replay;
 pub mod oauth2_server;
+#[cfg(feature = "pipelines")]
+pub mod pipelines;
 pub mod pr_generation;
 pub mod privileged_access;
 pub mod protocol_contracts;
@@ -25,8 +27,8 @@ pub mod risk_assessment;
 pub mod risk_simulation;
 pub mod scenario_studio;
 pub mod semantic_drift;
-pub mod snapshots;
 pub mod snapshot_diff;
+pub mod snapshots;
 pub mod threat_modeling;
 pub mod token_lifecycle;
 pub mod webhook_test;
@@ -59,6 +61,8 @@ pub use forecasting::{forecasting_router, ForecastingState};
 pub use incident_replay::{
     generate_replay, import_and_generate, import_incident, IncidentReplayState,
 };
+#[cfg(feature = "pipelines")]
+pub use pipelines::{pipeline_router, PipelineState};
 pub use pr_generation::{pr_generation_router, PRGenerationState};
 pub use privileged_access::{privileged_access_router, PrivilegedAccessState};
 pub use protocol_contracts::{protocol_contracts_router, ProtocolContractState};

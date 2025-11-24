@@ -8,7 +8,6 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use chrono::Utc;
 use mockforge_analytics::{AnalyticsDatabase, PillarUsageMetrics};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -255,7 +254,8 @@ pub async fn get_pillar_usage_summary(
             // Calculate usage scores for each pillar
             // Reality: blended_reality_percent + smart_personas_percent + chaos_enabled_count
             if let Some(ref reality) = metrics.reality {
-                let usage = (reality.blended_reality_percent + reality.smart_personas_percent) as u64
+                let usage = (reality.blended_reality_percent + reality.smart_personas_percent)
+                    as u64
                     + reality.chaos_enabled_count;
                 rankings.push(PillarRanking {
                     pillar: "Reality".to_string(),
@@ -284,9 +284,8 @@ pub async fn get_pillar_usage_summary(
 
             // DevX: sdk_installations + client_generations + playground_sessions
             if let Some(ref devx) = metrics.devx {
-                let usage = devx.sdk_installations
-                    + devx.client_generations
-                    + devx.playground_sessions;
+                let usage =
+                    devx.sdk_installations + devx.client_generations + devx.playground_sessions;
                 rankings.push(PillarRanking {
                     pillar: "DevX".to_string(),
                     usage,
@@ -314,9 +313,8 @@ pub async fn get_pillar_usage_summary(
 
             // AI: ai_generated_mocks + ai_contract_diffs + llm_assisted_operations
             if let Some(ref ai) = metrics.ai {
-                let usage = ai.ai_generated_mocks
-                    + ai.ai_contract_diffs
-                    + ai.llm_assisted_operations;
+                let usage =
+                    ai.ai_generated_mocks + ai.ai_contract_diffs + ai.llm_assisted_operations;
                 rankings.push(PillarRanking {
                     pillar: "AI".to_string(),
                     usage,

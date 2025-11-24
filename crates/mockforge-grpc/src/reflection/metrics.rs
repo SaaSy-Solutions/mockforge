@@ -222,7 +222,8 @@ fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static
         || service_lower.contains("chaos")
         || method_lower.contains("reality")
         || method_lower.contains("persona")
-        || method_lower.contains("chaos") {
+        || method_lower.contains("chaos")
+    {
         return "reality";
     }
 
@@ -232,7 +233,8 @@ fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static
         || service_lower.contains("drift")
         || method_lower.contains("contract")
         || method_lower.contains("validation")
-        || method_lower.contains("drift") {
+        || method_lower.contains("drift")
+    {
         return "contracts";
     }
 
@@ -240,7 +242,8 @@ fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static
     if service_lower.contains("sdk")
         || service_lower.contains("plugin")
         || method_lower.contains("sdk")
-        || method_lower.contains("plugin") {
+        || method_lower.contains("plugin")
+    {
         return "devx";
     }
 
@@ -249,7 +252,8 @@ fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static
         || service_lower.contains("workspace")
         || service_lower.contains("org")
         || method_lower.contains("registry")
-        || method_lower.contains("workspace") {
+        || method_lower.contains("workspace")
+    {
         return "cloud";
     }
 
@@ -257,7 +261,8 @@ fn determine_pillar_from_grpc(service_name: &str, method_name: &str) -> &'static
     if service_lower.contains("ai")
         || service_lower.contains("mockai")
         || method_lower.contains("ai")
-        || method_lower.contains("llm") {
+        || method_lower.contains("llm")
+    {
         return "ai";
     }
 
