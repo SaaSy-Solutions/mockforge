@@ -1,179 +1,280 @@
+/**
+ * Hook for Performance Mode API
+ *
+ * Provides React hooks for managing performance mode:
+ * - Start/stop performance simulation
+ * - Configure RPS profiles
+ * - Add/remove bottlenecks
+ * - Get performance metrics
+ */
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { authenticatedFetch } from '../utils/apiClient';
 import { logger } from '@/utils/logger';
-import { useEffect, useRef, useState } from 'react';
 
-/**
- * Hook for monitoring component render performance
- */
-export function useRenderPerformance(componentName: string) {
-  const renderCount = useRef(0);
-  const lastRenderTime = useRef(performance.now());
-  const renderTimesRef = useRef<number[]>([]);
-  const [averageTime, setAverageTime] = useState(0);
-
-  useEffect(() => {
-    const now = performance.now();
-    const renderTime = now - lastRenderTime.current;
-    renderCount.current += 1;
-
-    // Update render times array
-    renderTimesRef.current = [...renderTimesRef.current, renderTime].slice(-10);
-
-    // Calculate average
-    const avg = renderTimesRef.current.reduce((a, b) => a + b, 0) / renderTimesRef.current.length;
-    setAverageTime(avg);
-
-    lastRenderTime.current = now;
-
-    // Log performance info in development
-    if (import.meta.env.DEV && renderCount.current > 1) {
-      logger.info(`[${componentName}] Render #${renderCount.current}, Time: ${renderTime.toFixed(2)}ms, Avg: ${avg.toFixed(2)}ms`);
-    }
-  });
-
-  return {
-    renderCount: renderCount.current,
-    lastRenderTime: renderTimesRef.current[renderTimesRef.current.length - 1] || 0,
-    averageRenderTime: averageTime,
-  };
+// Types for performance mode
+export interface RpsStage {
+  duration_secs: number;
+  target_rps: number;
+  name?: string;
 }
 
-/**
- * Hook for monitoring API call performance
- */
-export function useApiPerformance(apiName: string) {
-  const [callTimes, setCallTimes] = useState<number[]>([]);
-  const activeCalls = useRef(0);
-
-  const startCall = () => {
-    activeCalls.current += 1;
-    return performance.now();
-  };
-
-  const endCall = (startTime: number) => {
-    const duration = performance.now() - startTime;
-    activeCalls.current -= 1;
-
-    setCallTimes(prev => {
-      const newTimes = [...prev, duration];
-      // Keep only last 20 call times
-      return newTimes.slice(-20);
-    });
-
-    // Log slow API calls
-    if (duration > 1000 && import.meta.env.DEV) {
-      logger.warn(`[${apiName}] Slow API call: ${duration.toFixed(2)}ms`);
-    }
-
-    return duration;
-  };
-
-  const stats = {
-    totalCalls: callTimes.length,
-    averageCallTime: callTimes.length > 0
-      ? callTimes.reduce((a, b) => a + b, 0) / callTimes.length
-      : 0,
-    slowestCall: Math.max(...callTimes, 0),
-    fastestCall: Math.min(...callTimes, 0),
-    activeCalls: activeCalls.current,
-  };
-
-  return {
-    startCall,
-    endCall,
-    stats,
-  };
+export interface RpsProfile {
+  name: string;
+  stages: RpsStage[];
 }
 
-/**
- * Hook for debouncing values to reduce unnecessary re-renders
- */
-export function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
+export interface BottleneckConfig {
+  bottleneck_type: 'cpu' | 'memory' | 'network' | 'io' | 'database';
+  severity: number; // 0.0-1.0
+  endpoint_pattern?: string;
+  duration_secs?: number;
 }
 
-/**
- * Hook for throttling function calls
- */
-export function useThrottle<T extends (...args: unknown[]) => unknown>(
-  callback: T,
-  delay: number
-): T {
-  const lastRan = useRef(Date.now());
-
-  return ((...args) => {
-    if (Date.now() - lastRan.current >= delay) {
-      callback(...args);
-      lastRan.current = Date.now();
-    }
-  }) as T;
+export interface PerformanceMetrics {
+  total_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+  current_rps: number;
+  target_rps: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  p99_latency_ms: number;
+  error_rate: number;
+  endpoint_metrics: Record<string, EndpointMetrics>;
+  timestamp: string;
 }
 
-/**
- * Hook for memoizing expensive computations
- */
-export function useMemoizedComputation<T>(
-  computeFn: () => T,
-  dependencies: React.DependencyList
-): T {
-  const [result, setResult] = useState<T>(() => computeFn());
-  const computationTime = useRef(0);
-
-  useEffect(() => {
-    const startTime = performance.now();
-    const newResult = computeFn();
-    const endTime = performance.now();
-
-    computationTime.current = endTime - startTime;
-    setResult(newResult);
-
-    // Log slow computations
-    if (computationTime.current > 50 && import.meta.env.DEV) {
-      logger.warn(`Slow computation: ${computationTime.current.toFixed(2)}ms`);
-    }
-  }, dependencies);
-
-  return result;
+export interface EndpointMetrics {
+  request_count: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  p99_latency_ms: number;
+  error_count: number;
+  error_rate: number;
 }
 
+export interface PerformanceSnapshot {
+  id: string;
+  timestamp: string;
+  metrics: PerformanceMetrics;
+  active_bottlenecks: string[];
+}
+
+export interface PerformanceStatus {
+  running: boolean;
+  target_rps: number;
+  current_rps: number;
+  bottlenecks: number;
+  bottleneck_types: string[];
+}
+
+export interface StartPerformanceRequest {
+  initial_rps: number;
+  rps_profile?: RpsProfile;
+  bottlenecks?: BottleneckConfig[];
+}
+
+export interface UpdateRpsRequest {
+  target_rps: number;
+}
+
+export interface AddBottleneckRequest {
+  bottleneck: BottleneckConfig;
+}
+
+// Query keys
+export const performanceQueryKeys = {
+  status: ['performance', 'status'] as const,
+  snapshot: ['performance', 'snapshot'] as const,
+};
+
 /**
- * Hook for virtual scrolling performance
+ * Get performance status
  */
-export function useVirtualScroll<T>(
-  items: T[],
-  itemHeight: number,
-  containerHeight: number,
-  overscan: number = 5
-) {
-  const [scrollTop, setScrollTop] = useState(0);
-
-  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
-  const endIndex = Math.min(
-    items.length - 1,
-    Math.ceil((scrollTop + containerHeight) / itemHeight) + overscan
-  );
-
-  const visibleItems = items.slice(startIndex, endIndex + 1);
-  const totalHeight = items.length * itemHeight;
-  const offsetY = startIndex * itemHeight;
-
-  return {
-    visibleItems,
-    totalHeight,
-    offsetY,
-    onScroll: (event: React.UIEvent<HTMLDivElement>) => {
-      setScrollTop(event.currentTarget.scrollTop);
+export function usePerformanceStatus() {
+  return useQuery<PerformanceStatus>({
+    queryKey: performanceQueryKeys.status,
+    queryFn: async () => {
+      const response = await authenticatedFetch('/api/performance/status');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch performance status: ${response.status}`);
+      }
+      return response.json();
     },
-  };
+    refetchInterval: 2000, // Poll every 2 seconds
+    staleTime: 1000,
+  });
+}
+
+/**
+ * Get performance snapshot
+ */
+export function usePerformanceSnapshot() {
+  return useQuery<PerformanceSnapshot>({
+    queryKey: performanceQueryKeys.snapshot,
+    queryFn: async () => {
+      const response = await authenticatedFetch('/api/performance/snapshot');
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Performance mode not started
+          return null;
+        }
+        throw new Error(`Failed to fetch performance snapshot: ${response.status}`);
+      }
+      return response.json();
+    },
+    refetchInterval: 2000, // Poll every 2 seconds
+    staleTime: 1000,
+  });
+}
+
+/**
+ * Start performance mode
+ */
+export function useStartPerformance() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (request: StartPerformanceRequest) => {
+      const response = await authenticatedFetch('/api/performance/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to start performance mode' }));
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: performanceQueryKeys.status });
+      queryClient.invalidateQueries({ queryKey: performanceQueryKeys.snapshot });
+      logger.info('Performance mode started');
+    },
+    onError: (error) => {
+      logger.error('Failed to start performance mode', error);
+    },
+  });
+}
+
+/**
+ * Stop performance mode
+ */
+export function useStopPerformance() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await authenticatedFetch('/api/performance/stop', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to stop performance mode' }));
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: performanceQueryKeys.status });
+      queryClient.invalidateQueries({ queryKey: performanceQueryKeys.snapshot });
+      logger.info('Performance mode stopped');
+    },
+    onError: (error) => {
+      logger.error('Failed to stop performance mode', error);
+    },
+  });
+}
+
+/**
+ * Update target RPS
+ */
+export function useUpdateRps() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (request: UpdateRpsRequest) => {
+      const response = await authenticatedFetch('/api/performance/rps', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to update RPS' }));
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: performanceQueryKeys.status });
+      queryClient.invalidateQueries({ queryKey: performanceQueryKeys.snapshot });
+    },
+  });
+}
+
+/**
+ * Add bottleneck
+ */
+export function useAddBottleneck() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (request: AddBottleneckRequest) => {
+      const response = await authenticatedFetch('/api/performance/bottlenecks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to add bottleneck' }));
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: performanceQueryKeys.status });
+      queryClient.invalidateQueries({ queryKey: performanceQueryKeys.snapshot });
+    },
+  });
+}
+
+/**
+ * Clear all bottlenecks
+ */
+export function useClearBottlenecks() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await authenticatedFetch('/api/performance/bottlenecks', {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to clear bottlenecks' }));
+        throw new Error(error.message || `HTTP ${response.status}`);
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: performanceQueryKeys.status });
+      queryClient.invalidateQueries({ queryKey: performanceQueryKeys.snapshot });
+    },
+  });
 }

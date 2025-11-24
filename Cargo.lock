@@ -7634,6 +7634,7 @@ dependencies = [
  "mockforge-data 0.3.2",
  "mockforge-mqtt 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mockforge-observability 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-performance",
  "mockforge-pipelines",
  "mockforge-plugin-core 0.3.2",
  "mockforge-recorder 0.3.2",
@@ -7643,6 +7644,7 @@ dependencies = [
  "mockforge-smtp 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mockforge-template-expansion",
  "mockforge-tracing 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mockforge-world-state",
  "mockforge-ws 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "oauth2",
  "once_cell",
@@ -7854,6 +7856,22 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "mockforge-performance"
+version = "0.3.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "mockforge-core 0.3.2",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -8675,6 +8693,23 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "uuid",
+]
+
+[[package]]
+name = "mockforge-world-state"
+version = "0.3.2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "mockforge-core 0.3.2",
+ "mockforge-data 0.3.2",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 

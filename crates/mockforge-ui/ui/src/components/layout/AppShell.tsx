@@ -103,6 +103,8 @@ const navSections = [
     title: 'Observability',
     items: [
       { id: 'observability', label: 'Observability', icon: Eye },
+      { id: 'world-state', label: 'World State', icon: Layers },
+      { id: 'performance', label: 'Performance', icon: Activity },
       { id: 'status', label: 'System Status', icon: Globe },
       { id: 'incidents', label: 'Incidents', icon: AlertTriangle },
       { id: 'logs', label: 'Logs', icon: FileText },

@@ -48,6 +48,7 @@ thiserror = { workspace = true }
 itertools = { workspace = true }
 mime_guess = { workspace = true }
 futures = { workspace = true }
+futures-util = "0.3"
 tokio-stream = "0.1"
 jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
@@ -64,6 +65,8 @@ mockforge-observability = "0.3.0"
 mockforge-recorder = { version = "0.3.2", path = "../mockforge-recorder", optional = true }
 mockforge-scenarios = { version = "0.3.2", path = "../mockforge-scenarios" }
 mockforge-tracing = "0.3.0"
+mockforge-world-state = { version = "0.3.2", path = "../mockforge-world-state" }
+mockforge-performance = { version = "0.3.2", path = "../mockforge-performance" }
 mockforge-mqtt = { version = "0.3.0", optional = true }
 mockforge-runtime-daemon = { version = "0.3.2", path = "../mockforge-runtime-daemon", optional = true }
 opentelemetry = "0.21"

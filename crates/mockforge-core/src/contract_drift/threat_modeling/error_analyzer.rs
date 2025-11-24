@@ -68,7 +68,7 @@ impl ErrorAnalyzer {
                         // Focus on error status codes
                         if status_num >= 400 {
                             if let openapiv3::ReferenceOr::Item(resp) = response {
-                                for (content_type, media_type) in &resp.content {
+                                for (_content_type, media_type) in &resp.content {
                                     if let Some(schema) = &media_type.schema {
                                         findings.extend(
                                             self.analyze_error_schema(

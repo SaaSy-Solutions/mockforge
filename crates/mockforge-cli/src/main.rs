@@ -37,6 +37,7 @@ mod import_commands;
 mod kafka_commands;
 mod logs_commands;
 mod mockai_commands;
+mod mod_commands;
 #[cfg(feature = "mqtt")]
 mod mqtt_commands;
 mod plugin_commands;
@@ -1214,6 +1215,24 @@ enum Commands {
         /// Configuration file path (used to find log file path)
         #[arg(short, long)]
         config: Option<PathBuf>,
+    },
+
+    /// MOD (Mock-Oriented Development) commands
+    ///
+    /// Mock-Oriented Development (MOD) is a methodology that places mocks at the center
+    /// of the development workflow. Use MOD to design APIs, coordinate teams, and build
+    /// with confidence.
+    ///
+    /// Examples:
+    ///   mockforge mod init --template small-team
+    ///   mockforge mod validate --contract contracts/api.yaml --target http://localhost:8080
+    ///   mockforge mod review --contract contracts/api.yaml --mock http://localhost:3000 --implementation http://localhost:8080
+    ///   mockforge mod generate --from-openapi contracts/api.yaml --output mocks/
+    ///   mockforge mod templates
+    #[command(verbatim_doc_comment)]
+    Mod {
+        #[command(subcommand)]
+        mod_command: mod_commands::ModCommands,
     },
 
     /// Chaos engineering profile management
@@ -2560,6 +2579,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .map_err(|e| anyhow::anyhow!("Voice command failed: {}", e))?;
         }
 
+        Commands::Mod { mod_command } => {
+            mod_commands::handle_mod_command(mod_command).await?;
+        }
         Commands::Chaos { chaos_command } => {
             handle_chaos_command(chaos_command).await?;
         }

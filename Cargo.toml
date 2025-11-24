@@ -41,7 +41,9 @@ members = [
     "crates/mockforge-federation",
     "desktop-app",
     "tests",  # Integration tests package
-    "crates/mockforge-template-expansion"]
+    "crates/mockforge-template-expansion",
+    "crates/mockforge-world-state",
+    "crates/mockforge-performance"]
 exclude = [
     "crates/mockforge-registry-server",
 ]

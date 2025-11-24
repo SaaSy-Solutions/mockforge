@@ -19,6 +19,7 @@ pub mod fidelity;
 pub mod forecasting;
 pub mod incident_replay;
 pub mod oauth2_server;
+pub mod performance;
 #[cfg(feature = "pipelines")]
 pub mod pipelines;
 pub mod pr_generation;
@@ -33,6 +34,7 @@ pub mod snapshots;
 pub mod threat_modeling;
 pub mod token_lifecycle;
 pub mod webhook_test;
+pub mod world_state;
 pub mod xray;
 
 pub use ab_testing::{ab_testing_router, ABTestingState};
@@ -63,6 +65,7 @@ pub use forecasting::{forecasting_router, ForecastingState};
 pub use incident_replay::{
     generate_replay, import_and_generate, import_incident, IncidentReplayState,
 };
+pub use performance::{performance_router, PerformanceState};
 #[cfg(feature = "pipelines")]
 pub use pipelines::{pipeline_router, PipelineState};
 pub use pr_generation::{pr_generation_router, PRGenerationState};
@@ -75,4 +78,5 @@ pub use snapshots::{snapshot_router, SnapshotState};
 pub use threat_modeling::{threat_modeling_router, ThreatModelingState};
 pub use token_lifecycle::{token_lifecycle_router, TokenLifecycleState};
 pub use webhook_test::{webhook_test_router, WebhookTestState};
+pub use world_state::{world_state_router, WorldStateState};
 pub use xray::xray_router;

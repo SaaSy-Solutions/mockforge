@@ -2468,6 +2468,29 @@ pub async fn build_router_with_chains_and_multi_tenant(
             debug!("Scenario Studio endpoints mounted at /api/v1/scenario-studio");
         }
 
+        // Add performance mode endpoints
+        {
+            use crate::handlers::performance::{performance_router, PerformanceState};
+            let performance_state = PerformanceState::new();
+            app = app.nest("/api/performance", performance_router(performance_state));
+            debug!("Performance mode endpoints mounted at /api/performance");
+        }
+
+        // Add world state endpoints
+        {
+            use crate::handlers::world_state::{world_state_router, WorldStateState};
+            use mockforge_world_state::WorldStateEngine;
+            use std::sync::Arc;
+            use tokio::sync::RwLock;
+
+            let world_state_engine = Arc::new(RwLock::new(WorldStateEngine::new()));
+            let world_state_state = WorldStateState {
+                engine: world_state_engine,
+            };
+            app = app.nest("/api/world-state", world_state_router().with_state(world_state_state));
+            debug!("World state endpoints mounted at /api/world-state");
+        }
+
         // Add snapshot management endpoints
         {
             use crate::handlers::snapshots::{snapshot_router, SnapshotState};

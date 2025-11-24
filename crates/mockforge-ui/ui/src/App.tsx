@@ -40,6 +40,8 @@ const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage').then(m => ({ 
 const PluginsPage = lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
 const ChainsPage = lazy(() => import('./pages/ChainsPage').then(m => ({ default: m.ChainsPage })));
 const GraphPage = lazy(() => import('./pages/GraphPage').then(m => ({ default: m.GraphPage })));
+const WorldStatePage = lazy(() => import('./pages/WorldStatePage').then(m => ({ default: m.WorldStatePage })));
+const PerformancePage = lazy(() => import('./pages/PerformancePage').then(m => ({ default: m.default })));
 const ScenarioStateMachineEditor = lazy(() => import('./pages/ScenarioStateMachineEditor').then(m => ({ default: m.ScenarioStateMachineEditor })));
 const ScenarioStudioPage = lazy(() => import('./pages/ScenarioStudioPage').then(m => ({ default: m.ScenarioStudioPage })));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
@@ -212,6 +214,10 @@ function App() {
         return <ChainsPage />;
       case 'graph':
         return <GraphPage />;
+              case 'world-state':
+                return <WorldStatePage />;
+              case 'performance':
+                return <PerformancePage />;
       case 'state-machine-editor':
         return <ScenarioStateMachineEditor />;
       case 'scenario-studio':
