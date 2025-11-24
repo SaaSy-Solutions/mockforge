@@ -269,7 +269,7 @@ impl AutoGenerator {
         config.embedding_provider = match config.provider {
             LlmProvider::OpenAI => EmbeddingProvider::OpenAI,
             LlmProvider::Anthropic => EmbeddingProvider::OpenAI, // Anthropic doesn't have embeddings, use OpenAI
-            LlmProvider::Ollama => EmbeddingProvider::Ollama,
+            LlmProvider::Ollama => EmbeddingProvider::OpenAI, // Ollama embedding not yet supported, fallback to OpenAI
         };
 
         Ok(config)

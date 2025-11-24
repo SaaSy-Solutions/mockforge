@@ -34,7 +34,9 @@
 //! # }
 //! ```
 
+pub mod api_critique;
 pub mod artifact_freezer;
+pub mod behavioral_simulator;
 pub mod budget_manager;
 pub mod chat_orchestrator;
 pub mod config;
@@ -48,8 +50,19 @@ pub mod org_controls;
 #[cfg(feature = "database")]
 pub mod org_controls_db;
 pub mod persona_generator;
+pub mod system_generator;
 
+pub use api_critique::{
+    AntiPattern, ApiCritique, ApiCritiqueEngine, ConsolidationOpportunity, CritiqueRequest,
+    HierarchyImprovement, NamingIssue, Redundancy, ResourceModelingSuggestion,
+    RestructuringRecommendations, ToneAnalysis, ToneIssue,
+};
 pub use artifact_freezer::{ArtifactFreezer, FreezeMetadata, FreezeRequest, FrozenArtifact};
+pub use behavioral_simulator::{
+    AppState, BehaviorPolicy, BehavioralSimulator, BehavioralTraits, CartState, CreateAgentRequest,
+    Intention, NarrativeAgent, NextAction, PolicyRule, SimulateBehaviorRequest,
+    SimulateBehaviorResponse,
+};
 pub use budget_manager::{AiFeature, BudgetConfig, BudgetManager, FeatureUsage, UsageStats};
 pub use chat_orchestrator::{
     ChatContext, ChatIntent, ChatMessage, ChatOrchestrator, ChatRequest, ChatResponse,
@@ -80,4 +93,8 @@ pub use org_controls::{
 pub use org_controls_db::DbOrgControls;
 pub use persona_generator::{
     PersonaGenerationRequest, PersonaGenerationResponse, PersonaGenerator,
+};
+pub use system_generator::{
+    AppliedSystem, GeneratedSystem, SystemArtifact, SystemGenerationRequest, SystemGenerator,
+    SystemMetadata,
 };

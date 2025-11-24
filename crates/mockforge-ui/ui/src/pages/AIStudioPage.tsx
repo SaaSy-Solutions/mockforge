@@ -24,6 +24,8 @@ import {
   XCircle,
   Filter,
   Plus,
+  Search,
+  Sparkles,
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/button';
@@ -36,9 +38,12 @@ import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AIStudioNav } from '../components/ai/AIStudioNav';
+import { ApiCritique } from '../components/ai/ApiCritique';
+import { SystemGenerator } from '../components/ai/SystemGenerator';
+import { BehavioralSimulator } from '../components/ai/BehavioralSimulator';
 import { Link } from 'react-router-dom';
 
-type TabType = 'chat' | 'generate' | 'debug' | 'personas' | 'budget' | 'contract-diff';
+type TabType = 'chat' | 'generate' | 'debug' | 'personas' | 'budget' | 'contract-diff' | 'api-critique' | 'system-generator' | 'behavioral-simulation';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -259,9 +264,12 @@ export function AIStudioPage() {
           {[
             { id: 'chat' as TabType, label: 'Chat', icon: MessageSquare },
             { id: 'generate' as TabType, label: 'Generate', icon: Code2 },
+            { id: 'system-generator' as TabType, label: 'System Designer', icon: Sparkles },
+            { id: 'behavioral-simulation' as TabType, label: 'AI User Simulator', icon: Users },
             { id: 'debug' as TabType, label: 'Debug', icon: Bug },
             { id: 'personas' as TabType, label: 'Personas', icon: User },
             { id: 'contract-diff' as TabType, label: 'Contract Diff', icon: GitCompare },
+            { id: 'api-critique' as TabType, label: 'API Critique', icon: Search },
             { id: 'budget' as TabType, label: 'Budget', icon: DollarSign },
           ].map(tab => (
             <button
@@ -1344,6 +1352,18 @@ export function AIStudioPage() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'api-critique' && (
+        <ApiCritique onUsageUpdate={loadUsageStats} />
+      )}
+
+      {activeTab === 'system-generator' && (
+        <SystemGenerator onUsageUpdate={loadUsageStats} />
+      )}
+
+      {activeTab === 'behavioral-simulation' && (
+        <BehavioralSimulator onUsageUpdate={loadUsageStats} />
       )}
 
       {activeTab === 'budget' && (

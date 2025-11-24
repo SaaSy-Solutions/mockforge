@@ -300,8 +300,8 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                           className={cn(
                             'w-full justify-start gap-3 h-9 transition-all duration-200 nav-item-hover focus-ring spring-hover',
                             activeTab === item.id
-                              ? 'bg-brand-500 text-white hover:bg-brand-600 shadow-lg'
-                              : 'text-foreground/80 dark:text-gray-400 hover:text-foreground dark:hover:text-gray-100 hover:bg-muted/50'
+                              ? 'bg-brand-600 text-white shadow-lg ring-1 ring-brand-200/60 dark:ring-brand-600/70 hover:bg-brand-700'
+                              : 'text-foreground/80 dark:text-gray-200 hover:text-foreground dark:hover:text-white hover:bg-muted/50 dark:hover:bg-white/5'
                           )}
                           onClick={() => onTabChange(item.id)}
                         >

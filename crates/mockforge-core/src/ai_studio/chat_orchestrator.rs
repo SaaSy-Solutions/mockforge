@@ -89,6 +89,15 @@ pub enum ChatIntent {
     /// Run contract diff analysis
     ContractDiff,
 
+    /// Critique API architecture
+    ApiCritique,
+
+    /// Generate entire system from description
+    GenerateSystem,
+
+    /// Simulate user behavior
+    SimulateBehavior,
+
     /// General question/chat
     General,
 
@@ -381,11 +390,59 @@ impl ChatOrchestrator {
                     }),
                 }
             }
+            ChatIntent::ApiCritique => {
+                // Guide user to use API Critique feature
+                Ok(ChatResponse {
+                    intent: ChatIntent::ApiCritique,
+                    message: "I can help you critique your API architecture! Please use the 'API Critique' tab in AI Studio, or provide your API schema (OpenAPI, GraphQL, or Protobuf) for analysis.".to_string(),
+                    data: Some(serde_json::json!({
+                        "type": "api_critique_info",
+                        "endpoint": "/api/v1/ai-studio/api-critique",
+                        "description": "Analyzes API schemas for anti-patterns, redundancy, naming issues, tone, and restructuring recommendations"
+                    })),
+                    error: None,
+                    tokens_used: None,
+                    cost_usd: None,
+                })
+            }
+            ChatIntent::GenerateSystem => {
+                // Guide user to use System Generator feature
+                Ok(ChatResponse {
+                    intent: ChatIntent::GenerateSystem,
+                    message: format!("I can generate a complete backend system from your description! Use the 'System Designer' tab in AI Studio, or describe your system here. Example: \"{}\"", request.message),
+                    data: Some(serde_json::json!({
+                        "type": "system_generator_info",
+                        "endpoint": "/api/v1/ai-studio/generate-system",
+                        "description": "Generates complete backend systems including OpenAPI specs, personas, lifecycles, WebSocket topics, chaos profiles, CI templates, and more"
+                    })),
+                    error: None,
+                    tokens_used: None,
+                    cost_usd: None,
+                })
+            }
+            ChatIntent::SimulateBehavior => {
+                // Guide user to use Behavioral Simulator feature
+                Ok(ChatResponse {
+                    intent: ChatIntent::SimulateBehavior,
+                    message: "I can simulate user behavior as narrative agents! Use the 'AI User Simulator' tab in AI Studio to create agents, attach them to personas, and simulate multi-step interactions.".to_string(),
+                    data: Some(serde_json::json!({
+                        "type": "behavioral_simulator_info",
+                        "endpoints": {
+                            "create_agent": "/api/v1/ai-studio/simulate-behavior/create-agent",
+                            "simulate": "/api/v1/ai-studio/simulate-behavior"
+                        },
+                        "description": "Models users as narrative agents that react to app state, form intentions, respond to errors, and trigger multi-step interactions"
+                    })),
+                    error: None,
+                    tokens_used: None,
+                    cost_usd: None,
+                })
+            }
             ChatIntent::General | ChatIntent::Unknown => {
                 // General chat response
                 Ok(ChatResponse {
                     intent: ChatIntent::General,
-                    message: "I'm here to help! You can ask me to generate mocks, debug tests, create personas, or analyze contracts.".to_string(),
+                    message: "I'm here to help! You can ask me to generate mocks, debug tests, create personas, analyze contracts, critique APIs, generate entire systems, or simulate user behavior.".to_string(),
                     data: None,
                     error: None,
                     tokens_used: None,
@@ -432,6 +489,30 @@ impl ChatOrchestrator {
 
         if message_lower.contains("contract") || message_lower.contains("diff") {
             return Ok(ChatIntent::ContractDiff);
+        }
+
+        if message_lower.contains("critique")
+            || message_lower.contains("review api")
+            || (message_lower.contains("analyze") && message_lower.contains("api"))
+        {
+            return Ok(ChatIntent::ApiCritique);
+        }
+
+        if message_lower.contains("generate system")
+            || message_lower.contains("build backend")
+            || message_lower.contains("system design")
+            || message_lower.contains("entire system")
+            || (message_lower.contains("i'm building") && message_lower.contains("app"))
+        {
+            return Ok(ChatIntent::GenerateSystem);
+        }
+
+        if message_lower.contains("simulate")
+            || message_lower.contains("user behavior")
+            || message_lower.contains("behavioral")
+            || message_lower.contains("narrative agent")
+        {
+            return Ok(ChatIntent::SimulateBehavior);
         }
 
         // Default to general for now

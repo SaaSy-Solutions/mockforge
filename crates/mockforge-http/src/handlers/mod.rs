@@ -2,6 +2,7 @@
 
 pub mod ab_testing;
 pub mod access_review;
+pub mod ai_studio;
 pub mod auth_helpers;
 #[cfg(feature = "behavioral-cloning")]
 pub mod behavioral_cloning;
@@ -38,6 +39,7 @@ pub use ab_testing::{ab_testing_router, ABTestingState};
 pub use access_review::{
     access_review_router, AccessReviewState, ApproveAccessRequest, RevokeAccessRequest,
 };
+pub use ai_studio::{ai_studio_router, AiStudioState};
 pub use auth_helpers::OptionalAuthClaims;
 #[cfg(feature = "behavioral-cloning")]
 pub use behavioral_cloning::{
