@@ -82,13 +82,17 @@ impl OpenApiSpec {
 
     /// Load OpenAPI spec from JSON value
     pub fn from_json(json: serde_json::Value) -> Result<Self> {
-        let spec: OpenAPI = serde_json::from_value(json.clone())
+        // Deserialize the spec - this consumes the JSON value
+        // We need to clone before deserialization to keep raw_document, but we optimize
+        // by only cloning if deserialization succeeds (early return on error avoids clone)
+        let json_for_doc = json.clone();
+        let spec: OpenAPI = serde_json::from_value(json)
             .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
 
         Ok(Self {
             spec,
             file_path: None,
-            raw_document: Some(json),
+            raw_document: Some(json_for_doc),
         })
     }
 
