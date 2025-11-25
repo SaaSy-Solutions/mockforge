@@ -639,47 +639,21 @@ impl BackupService {
 
             // Extract Azure credentials from storage_config
             // Expected format: {"account_name": "...", "account_key": "..."} or use DefaultAzureCredential
-            // TODO: Update to use current azure_storage_blobs API - the API has changed
-            // For now, return an error indicating the feature needs to be updated
+            //
+            // NOTE: azure_storage_blobs 0.19 API has changed from previous versions.
+            // The API structure requires review of the 0.19 documentation to properly implement
+            // credential handling and client creation. The previous implementation used a different
+            // API structure that is no longer compatible.
+            //
+            // TODO: Review azure_storage_blobs 0.19 API documentation and update implementation:
+            // - StorageCredentials import path and usage
+            // - BlobServiceClient::new() signature and credential types
+            // - DefaultAzureCredential integration with BlobServiceClient
             return Err(CollabError::Internal(
-                "Azure deletion is temporarily disabled due to API migration. \
-                 The azure_storage_blobs crate API has changed. \
-                 This feature needs to be updated to use the new API."
+                "Azure deletion implementation needs to be updated for azure_storage_blobs 0.19 API. \
+                 The API structure has changed and requires review of the 0.19 documentation."
                     .to_string(),
             ));
-
-            /* OLD API - needs migration
-            let storage_client = if let Some(config) = storage_config {
-                if let Some(account_key) = config.get("account_key").and_then(|v| v.as_str()) {
-                    // Use account key authentication
-                    let account_key = account_key.to_string();
-                    let storage_credentials =
-                        StorageCredentials::access_key(account_name, account_key);
-                    BlobServiceClient::new(account_name, storage_credentials)
-                } else {
-                    // Use DefaultAzureCredential (for managed identity, environment variables, etc.)
-                    let credential = Arc::new(DefaultAzureCredential::default());
-                    BlobServiceClient::new(account_name, credential)
-                }
-            } else {
-                // Use DefaultAzureCredential if no config provided
-                let credential = Arc::new(DefaultAzureCredential::default());
-                BlobServiceClient::new(account_name, credential)
-            };
-            */
-
-            /* OLD API - needs migration
-            // Get container client and delete blob
-            let container_client = storage_client.container_client(container_name);
-            let blob_client = container_client.blob_client(&blob_name);
-
-            blob_client.delete().await.map_err(|e| {
-                CollabError::Internal(format!("Failed to delete Azure blob: {}", e))
-            })?;
-
-            tracing::info!("Successfully deleted Azure blob: {}", backup_url);
-            Ok(())
-            */
         }
 
         #[cfg(not(feature = "azure"))]
@@ -698,30 +672,35 @@ impl BackupService {
     ) -> Result<()> {
         #[cfg(feature = "gcs")]
         {
-            // TODO: Update to google-cloud-storage 1.4.0 API
-            // The API has changed significantly. Need to migrate to new API structure.
-            // Temporarily disabled to fix security vulnerability in ring dependency.
+            // Note: google-cloud-storage 1.4.0 API has changed significantly
+            // The API structure is different from previous versions
+            // This implementation may need adjustment based on actual 1.4.0 API documentation
             return Err(CollabError::Internal(
-                "GCS deletion is temporarily disabled due to API migration. \
-                 The google-cloud-storage crate was updated to 1.4.0 to fix security vulnerabilities. \
-                 This feature needs to be updated to use the new API.".to_string(),
+                "GCS deletion implementation needs to be updated for google-cloud-storage 1.4.0 API. \
+                 The API structure has changed significantly and requires review of the 1.4.0 documentation."
+                    .to_string(),
             ));
 
-            /* OLD API - needs migration
-            use google_cloud_storage::client::{Client, ClientConfig};
+            /* TODO: Update to google-cloud-storage 1.4.0 API
+            // The 1.4.0 API uses a different structure. Example implementation:
+            use google_cloud_storage::client::Client;
             use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
-            use google_cloud_storage::http::objects::Object;
-            use google_cloud_auth::credentials::CredentialsFile;
 
             // Parse GCS URL (format: gs://bucket-name/path/to/file)
             if !backup_url.starts_with("gs://") {
-                return Err(CollabError::Internal(format!("Invalid GCS URL format: {}", backup_url)));
+                return Err(CollabError::Internal(format!(
+                    "Invalid GCS URL format: {}",
+                    backup_url
+                )));
             }
 
             let url_parts: Vec<&str> =
                 backup_url.strip_prefix("gs://").unwrap().splitn(2, '/').collect();
             if url_parts.len() != 2 {
-                return Err(CollabError::Internal(format!("Invalid GCS URL format: {}", backup_url)));
+                return Err(CollabError::Internal(format!(
+                    "Invalid GCS URL format: {}",
+                    backup_url
+                )));
             }
 
             let bucket_name = url_parts[0];
@@ -736,34 +715,16 @@ impl BackupService {
                     CollabError::Internal("GCS project_id not found in storage_config".to_string())
                 })?;
 
-            // Initialize GCS client
-            let config = if let Some(config) = storage_config {
-                if let Some(service_account_key) = config.get("service_account_key").and_then(|v| v.as_str()) {
-                    // Parse service account key JSON
-                    let creds: CredentialsFile = serde_json::from_str(service_account_key)
-                        .map_err(|e| CollabError::Internal(format!("Invalid GCS service account key: {}", e)))?;
-                    ClientConfig::default()
-                        .with_credentials(creds)
-                        .await
-                        .map_err(|e| CollabError::Internal(format!("Failed to initialize GCS client: {}", e)))?
-                } else {
-                    // Use default credentials (from environment or metadata server)
-                    ClientConfig::default()
-                        .with_auth()
-                        .await
-                        .map_err(|e| CollabError::Internal(format!("Failed to initialize GCS client: {}", e)))?
-                }
-            } else {
-                // Use default credentials
-                ClientConfig::default()
-                    .with_auth()
-                    .await
-                    .map_err(|e| CollabError::Internal(format!("Failed to initialize GCS client: {}", e)))?
-            };
+            // Initialize GCS client with google-cloud-storage 1.4.0 API
+            // Note: The 1.4.0 API uses a different structure. For now, we'll use default credentials
+            // and handle service account keys through environment variables or metadata server
+            let client = Client::default()
+                .await
+                .map_err(|e| {
+                    CollabError::Internal(format!("Failed to initialize GCS client: {}", e))
+                })?;
 
-            let client = Client::new(config);
-
-            // Delete object
+            // Delete object using google-cloud-storage 1.4.0 API
             let request = DeleteObjectRequest {
                 bucket: bucket_name.to_string(),
                 object: object_name.to_string(),
@@ -773,7 +734,9 @@ impl BackupService {
             client
                 .delete_object(&request)
                 .await
-                .map_err(|e| CollabError::Internal(format!("Failed to delete GCS object: {}", e)))?;
+                .map_err(|e| {
+                    CollabError::Internal(format!("Failed to delete GCS object: {}", e))
+                })?;
 
             tracing::info!("Successfully deleted GCS object: {}", backup_url);
             Ok(())

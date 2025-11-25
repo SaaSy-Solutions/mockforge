@@ -7,9 +7,12 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
+use chrono::{DateTime, Utc};
 use mockforge_core::contract_drift::forecasting::{ChangeForecast, Forecaster};
+use mockforge_core::contract_drift::forecasting::types::SeasonalPattern;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::database::Database;
 
@@ -192,9 +195,10 @@ pub async fn list_forecasts(
         }
     }
 
+    let total = forecasts.len();
     Ok(Json(ForecastListResponse {
         forecasts,
-        total: forecasts.len(),
+        total,
     }))
 }
 
@@ -373,9 +377,13 @@ pub async fn refresh_forecasts(
 
     // Map rows to DriftIncident and generate forecasts
     use mockforge_core::incidents::types::{IncidentSeverity, IncidentStatus, IncidentType};
+    use sqlx::Row;
     let mut incidents = Vec::new();
     for row in rows {
-        let id: uuid::Uuid = row.try_get("id")?;
+        let id: uuid::Uuid = row.try_get("id").map_err(|e| {
+            tracing::error!("Failed to get id from row: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
         let workspace_id: Option<uuid::Uuid> = row.try_get("workspace_id").ok();
         let endpoint: String = match row.try_get("endpoint") {
             Ok(e) => e,
@@ -459,8 +467,32 @@ pub async fn refresh_forecasts(
         });
     }
 
-    // Generate forecasts from incidents
-    let forecasts_generated = state.forecaster.generate_forecasts(&incidents).len();
+    // Generate forecasts from incidents by grouping by endpoint/method
+    use mockforge_core::incidents::types::DriftIncident;
+    use std::collections::HashMap;
+    let mut forecasts_generated = 0;
+    let mut endpoint_groups: HashMap<(String, String), Vec<DriftIncident>> = HashMap::new();
+
+    for incident in incidents {
+        endpoint_groups
+            .entry((incident.endpoint.clone(), incident.method.clone()))
+            .or_insert_with(Vec::new)
+            .push(incident);
+    }
+
+    for ((endpoint, method), group_incidents) in endpoint_groups {
+        if let Some(_forecast) = state.forecaster.generate_forecast(
+            &group_incidents,
+            request.workspace_id.clone(),
+            None, // service_id
+            None, // service_name
+            endpoint,
+            method,
+            30, // forecast_window_days
+        ) {
+            forecasts_generated += 1;
+        }
+    }
 
     Ok(Json(serde_json::json!({
         "success": true,

@@ -59,6 +59,10 @@ pub struct PipelineDefinition {
     /// Whether pipeline is enabled
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// Pipeline-level defaults for steps (e.g., PR configuration)
+    /// These defaults are merged with step-specific config, with step config taking precedence
+    #[serde(default)]
+    pub step_defaults: HashMap<String, HashMap<String, serde_json::Value>>,
 }
 
 const fn default_enabled() -> bool {
@@ -291,7 +295,7 @@ impl PipelineExecutor {
 
         // Execute steps sequentially
         for step in &pipeline.definition.steps {
-            let step_result = self.execute_step(step, &event, &execution_id).await;
+            let step_result = self.execute_step(step, &event, &execution_id, pipeline).await;
 
             let step_execution = StepExecutionResult {
                 step_name: step.name.clone(),
@@ -369,9 +373,24 @@ impl PipelineExecutor {
         step: &PipelineStep,
         event: &PipelineEvent,
         execution_id: &Uuid,
+        pipeline: &Pipeline,
     ) -> Result<StepResult> {
-        // Render template variables in config
-        let rendered_config = self.render_config(&step.config, event)?;
+        // Get pipeline-level defaults for this step type (if any)
+        let pipeline_defaults = pipeline
+            .definition
+            .step_defaults
+            .get(&step.step_type)
+            .cloned()
+            .unwrap_or_default();
+
+        // Merge pipeline defaults with step config (step config takes precedence)
+        let mut merged_config = pipeline_defaults.clone();
+        for (key, value) in &step.config {
+            merged_config.insert(key.clone(), value.clone());
+        }
+
+        // Render template variables in merged config
+        let rendered_config = self.render_config(&merged_config, event)?;
 
         // Get step executor
         let executor = self
@@ -379,12 +398,15 @@ impl PipelineExecutor {
             .get(&step.step_type)
             .ok_or_else(|| anyhow::anyhow!("Unknown step type: {}", step.step_type))?;
 
-        // Create step context
+        // Create step context with workspace and pipeline IDs
         let context = StepContext {
             execution_id: *execution_id,
             event: event.clone(),
             config: rendered_config,
             step_name: step.name.clone(),
+            workspace_id: pipeline.workspace_id,
+            pipeline_id: Some(pipeline.id),
+            pipeline_defaults: pipeline_defaults,
         };
 
         // Execute with timeout if specified
@@ -490,6 +512,7 @@ mod tests {
             }],
             steps: vec![],
             enabled: true,
+            step_defaults: HashMap::new(),
         };
 
         let workspace_id = Uuid::new_v4();

@@ -469,6 +469,80 @@ impl AnalyticsDatabase {
         Ok(results)
     }
 
+    /// Get hour-level aggregates
+    pub async fn get_hour_aggregates(
+        &self,
+        filter: &AnalyticsFilter,
+    ) -> Result<Vec<HourMetricsAggregate>> {
+        let mut query = String::from("SELECT * FROM metrics_aggregates_hour WHERE 1=1");
+
+        if filter.start_time.is_some() {
+            query.push_str(" AND timestamp >= ?");
+        }
+        if filter.end_time.is_some() {
+            query.push_str(" AND timestamp <= ?");
+        }
+        if filter.protocol.is_some() {
+            query.push_str(" AND protocol = ?");
+        }
+        if filter.endpoint.is_some() {
+            query.push_str(" AND endpoint = ?");
+        }
+        if filter.method.is_some() {
+            query.push_str(" AND method = ?");
+        }
+        if filter.status_code.is_some() {
+            query.push_str(" AND status_code = ?");
+        }
+        if filter.workspace_id.is_some() {
+            query.push_str(" AND workspace_id = ?");
+        }
+        if filter.environment.is_some() {
+            query.push_str(" AND environment = ?");
+        }
+
+        query.push_str(" ORDER BY timestamp DESC");
+
+        if filter.limit.is_some() {
+            query.push_str(" LIMIT ?");
+        }
+
+        // Build the query with bound parameters
+        let mut sql_query = sqlx::query_as::<_, HourMetricsAggregate>(&query);
+
+        if let Some(start) = filter.start_time {
+            sql_query = sql_query.bind(start);
+        }
+        if let Some(end) = filter.end_time {
+            sql_query = sql_query.bind(end);
+        }
+        if let Some(ref protocol) = filter.protocol {
+            sql_query = sql_query.bind(protocol);
+        }
+        if let Some(ref endpoint) = filter.endpoint {
+            sql_query = sql_query.bind(endpoint);
+        }
+        if let Some(ref method) = filter.method {
+            sql_query = sql_query.bind(method);
+        }
+        if let Some(status) = filter.status_code {
+            sql_query = sql_query.bind(status);
+        }
+        if let Some(ref workspace) = filter.workspace_id {
+            sql_query = sql_query.bind(workspace);
+        }
+        if let Some(ref env) = filter.environment {
+            sql_query = sql_query.bind(env);
+        }
+        if let Some(limit) = filter.limit {
+            sql_query = sql_query.bind(limit);
+        }
+
+        let results = sql_query.fetch_all(&self.pool).await?;
+
+        Ok(results)
+    }
+
     /// Get top endpoints by request count
     pub async fn get_top_endpoints(
         &self,

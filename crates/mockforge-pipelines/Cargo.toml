@@ -54,6 +54,10 @@ handlebars = "5.1"
 # HTTP client for notifications
 reqwest = { workspace = true }
 
+# Email sending
+# Use tokio1-native-tls feature when using tokio1 with native-tls
+lettre = { version = "0.11", features = ["smtp-transport", "tokio1-native-tls"] }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tempfile = "3.13"

@@ -12,11 +12,14 @@ use tracing::{debug, error, info};
 /// Create PR step executor
 ///
 /// This step creates a Git pull request with drift violations or schema changes.
-pub struct CreatePRStep {
-    // PR generator (if configured)
-    // TODO: Make this configurable per pipeline/workspace
-    // pr_generator: Option<Arc<PRGenerator>>,
-}
+/// Configuration can be provided at multiple levels:
+/// - Step-level: Direct configuration in the step's `config` field
+/// - Pipeline-level: Defaults in `pipeline.definition.step_defaults.create_pr`
+/// - Workspace-level: (Future) Stored in workspace settings
+///
+/// Step-level config takes precedence over pipeline defaults, which take precedence
+/// over workspace defaults.
+pub struct CreatePRStep {}
 
 impl CreatePRStep {
     /// Create a new create PR step
@@ -45,51 +48,46 @@ impl PipelineStepExecutor for CreatePRStep {
             "Executing create_pr step"
         );
 
-        // Extract configuration
-        let title = context
-            .config
-            .get("title")
-            .and_then(|v| v.as_str())
-            .map(ToString::to_string)
-            .ok_or_else(|| anyhow::anyhow!("Missing 'title' in step config"))?;
+        // Extract configuration with support for pipeline/workspace defaults
+        // Configuration precedence: step config > pipeline defaults > workspace defaults (future)
+        //
+        // First, try to get values from step config, then fall back to pipeline defaults
+        let get_config_value = |key: &str| -> Option<String> {
+            context
+                .config
+                .get(key)
+                .and_then(|v| v.as_str())
+                .map(ToString::to_string)
+                .or_else(|| {
+                    context
+                        .pipeline_defaults
+                        .get(key)
+                        .and_then(|v| v.as_str())
+                        .map(ToString::to_string)
+                })
+        };
 
-        let body = context
-            .config
-            .get("body")
-            .and_then(|v| v.as_str())
-            .map(ToString::to_string)
-            .unwrap_or_default();
+        let title = get_config_value("title")
+            .ok_or_else(|| anyhow::anyhow!("Missing 'title' in step config or pipeline defaults"))?;
 
-        let branch = context
-            .config
-            .get("branch")
-            .and_then(|v| v.as_str())
-            .map(ToString::to_string)
-            .ok_or_else(|| anyhow::anyhow!("Missing 'branch' in step config"))?;
+        let body = get_config_value("body").unwrap_or_default();
 
-        // Get PR provider and credentials from config
-        let provider = context.config.get("provider").and_then(|v| v.as_str()).unwrap_or("github");
+        let branch = get_config_value("branch")
+            .ok_or_else(|| anyhow::anyhow!("Missing 'branch' in step config or pipeline defaults"))?;
 
-        let owner = context
-            .config
-            .get("owner")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing 'owner' in step config"))?;
+        // Get PR provider and credentials from config (with defaults)
+        let provider = get_config_value("provider").unwrap_or_else(|| "github".to_string());
 
-        let repo = context
-            .config
-            .get("repo")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing 'repo' in step config"))?;
+        let owner = get_config_value("owner")
+            .ok_or_else(|| anyhow::anyhow!("Missing 'owner' in step config or pipeline defaults"))?;
 
-        let token = context
-            .config
-            .get("token")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing 'token' in step config"))?;
+        let repo = get_config_value("repo")
+            .ok_or_else(|| anyhow::anyhow!("Missing 'repo' in step config or pipeline defaults"))?;
 
-        let base_branch =
-            context.config.get("base_branch").and_then(|v| v.as_str()).unwrap_or("main");
+        let token = get_config_value("token")
+            .ok_or_else(|| anyhow::anyhow!("Missing 'token' in step config or pipeline defaults"))?;
+
+        let base_branch = get_config_value("base_branch").unwrap_or_else(|| "main".to_string());
 
         debug!(
             execution_id = %context.execution_id,
@@ -101,7 +99,7 @@ impl PipelineStepExecutor for CreatePRStep {
         );
 
         // Create PR generator
-        let pr_generator = match provider {
+        let pr_generator = match provider.as_str() {
             "github" => PRGenerator::new_github(
                 owner.to_string(),
                 repo.to_string(),

@@ -203,6 +203,9 @@ pub struct RequestLogEntry {
     pub user_agent: Option<String>,
     /// Request headers (filtered for security)
     pub headers: HashMap<String, String>,
+    /// Query parameters from the request URL
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub query_params: HashMap<String, String>,
     /// Response size in bytes
     pub response_size_bytes: u64,
     /// Error message (if any)
@@ -394,6 +397,34 @@ pub fn create_http_log_entry(
     response_size_bytes: u64,
     error_message: Option<String>,
 ) -> RequestLogEntry {
+    create_http_log_entry_with_query(
+        method,
+        path,
+        status_code,
+        response_time_ms,
+        client_ip,
+        user_agent,
+        headers,
+        HashMap::new(), // Default empty query params
+        response_size_bytes,
+        error_message,
+    )
+}
+
+/// Helper to create HTTP request log entry with query parameters
+#[allow(clippy::too_many_arguments)]
+pub fn create_http_log_entry_with_query(
+    method: &str,
+    path: &str,
+    status_code: u16,
+    response_time_ms: u64,
+    client_ip: Option<String>,
+    user_agent: Option<String>,
+    headers: HashMap<String, String>,
+    query_params: HashMap<String, String>,
+    response_size_bytes: u64,
+    error_message: Option<String>,
+) -> RequestLogEntry {
     RequestLogEntry {
         id: uuid::Uuid::new_v4().to_string(),
         timestamp: Utc::now(),
@@ -405,6 +436,7 @@ pub fn create_http_log_entry(
         client_ip,
         user_agent,
         headers,
+        query_params,
         response_size_bytes,
         error_message,
         metadata: HashMap::new(),
@@ -435,6 +467,7 @@ pub fn create_websocket_log_entry(
         client_ip,
         user_agent: None,
         headers: HashMap::new(),
+        query_params: HashMap::new(),
         response_size_bytes: message_size_bytes,
         error_message,
         metadata,
@@ -469,6 +502,7 @@ pub fn create_grpc_log_entry(
         client_ip,
         user_agent: None,
         headers: HashMap::new(),
+        query_params: HashMap::new(),
         response_size_bytes,
         error_message,
         metadata,

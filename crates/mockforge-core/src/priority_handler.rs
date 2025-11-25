@@ -92,6 +92,8 @@ pub struct PriorityHttpHandler {
     continuum_engine: Option<Arc<RealityContinuumEngine>>,
     /// Behavioral Economics Engine for reactive mock behavior
     behavioral_economics_engine: Option<Arc<RwLock<BehavioralEconomicsEngine>>>,
+    /// Request tracking for metrics (endpoint -> (request_count, error_count, last_request_time))
+    request_metrics: Arc<RwLock<HashMap<String, (u64, u64, std::time::Instant)>>>,
 }
 
 /// Trait for mock response generation
@@ -138,6 +140,7 @@ impl PriorityHttpHandler {
             openapi_spec: None,
             continuum_engine: None,
             behavioral_economics_engine: None,
+            request_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -161,6 +164,7 @@ impl PriorityHttpHandler {
             openapi_spec,
             continuum_engine: None,
             behavioral_economics_engine: None,
+            request_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -759,7 +763,48 @@ impl PriorityHttpHandler {
                 if let Some(latency) = latency_ms {
                     eval.update_latency(uri.path(), latency);
                 }
-                // TODO: Update other metrics (load, error rates, etc.)
+
+                // Update load and error rates
+                let endpoint = uri.path().to_string();
+                let mut metrics = self.request_metrics.write().await;
+                let now = std::time::Instant::now();
+
+                // Get or create metrics entry for this endpoint
+                let (request_count, error_count, last_request_time) = metrics
+                    .entry(endpoint.clone())
+                    .or_insert_with(|| (0, 0, now));
+
+                // Increment request count
+                *request_count += 1;
+
+                // Check if this is an error response (status >= 400)
+                if response.status_code >= 400 {
+                    *error_count += 1;
+                }
+
+                // Calculate error rate
+                let error_rate = if *request_count > 0 {
+                    *error_count as f64 / *request_count as f64
+                } else {
+                    0.0
+                };
+                eval.update_error_rate(&endpoint, error_rate);
+
+                // Calculate load (requests per second) based on time window
+                let time_elapsed = now.duration_since(*last_request_time).as_secs_f64();
+                if time_elapsed > 0.0 {
+                    let rps = *request_count as f64 / time_elapsed.max(1.0);
+                    eval.update_load(rps);
+                }
+
+                // Reset metrics periodically (every 60 seconds) to avoid unbounded growth
+                if time_elapsed > 60.0 {
+                    *request_count = 1;
+                    *error_count = if response.status_code >= 400 { 1 } else { 0 };
+                    *last_request_time = now;
+                } else {
+                    *last_request_time = now;
+                }
             }
 
             // Evaluate rules and get executed actions

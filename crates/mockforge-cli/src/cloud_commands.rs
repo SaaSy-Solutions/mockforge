@@ -930,14 +930,86 @@ async fn handle_cloud_workspace_link(
     std::fs::create_dir_all(sync_config_path.parent().unwrap())
         .context("Failed to create .mockforge directory")?;
 
-    // TODO: Read existing config and update it
+    // Read cloud config to get service URL and API key
+    let cloud_config_path = dirs::home_dir()
+        .map(|p| p.join(".mockforge").join("cloud.json"))
+        .unwrap_or_else(|| PathBuf::from(".mockforge/cloud.json"));
+
+    if !cloud_config_path.exists() {
+        return Err(anyhow::anyhow!(
+            "Not authenticated with MockForge Cloud. Please run 'mockforge cloud login' first"
+        ));
+    }
+
+    let cloud_config_content =
+        std::fs::read_to_string(&cloud_config_path).context("Failed to read cloud config")?;
+    let cloud_config: serde_json::Value =
+        serde_json::from_str(&cloud_config_content).context("Failed to parse cloud config")?;
+
+    let service_url = cloud_config
+        .get("service_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("https://api.mockforge.dev")
+        .to_string();
+
+    let api_key = cloud_config
+        .get("api_key")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("API key not found in cloud config"))?;
+
+    // Read existing sync config if it exists, or create a new one
+    let mut sync_config = if sync_config_path.exists() {
+        let config_content = tokio::fs::read_to_string(&sync_config_path)
+            .await
+            .context("Failed to read existing sync config")?;
+
+        serde_yaml::from_str::<SyncConfig>(&config_content)
+            .context("Failed to parse existing sync config")?
+    } else {
+        // Create default sync config
+        use mockforge_core::workspace::sync::{
+            ConflictResolutionStrategy, SyncDirectoryStructure, SyncDirection,
+        };
+        SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Cloud {
+                service_url: service_url.clone(),
+                api_key: api_key.to_string(),
+                project_id: cloud_workspace_id.clone(),
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::LastModified,
+            auto_commit: true,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::Bidirectional,
+        }
+    };
+
+    // Update the sync config with cloud provider settings
+    sync_config.enabled = true;
+    sync_config.provider = SyncProvider::Cloud {
+        service_url: service_url.clone(),
+        api_key: api_key.to_string(),
+        project_id: cloud_workspace_id.clone(),
+    };
+
+    // Save updated config
+    let updated_config = serde_yaml::to_string(&sync_config)
+        .context("Failed to serialize sync config")?;
+    tokio::fs::write(&sync_config_path, updated_config)
+        .await
+        .context("Failed to write sync config")?;
+
     println!(
         "{}",
         format!("🔗 Linking local workspace to cloud workspace: {}", cloud_workspace_id).cyan()
     );
     println!("   Local: {}", local_workspace.display());
     println!("   Cloud: {}", cloud_workspace_id);
-    println!("{}", "⚠️  Workspace linking not yet fully implemented".yellow());
+    println!("   Service: {}", service_url);
+    println!("{}", "✅ Workspace linked successfully".green());
+    println!("   Sync config saved to: {}", sync_config_path.display());
 
     Ok(())
 }

@@ -1,0 +1,495 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Multi-Workspace Federation - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/cloud/federation.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="multi-workspace-federation"><a class="header" href="#multi-workspace-federation">Multi-Workspace Federation</a></h1>
+<p><strong>Pillars:</strong> [Cloud]</p>
+<p>Multi-Workspace Federation enables composing multiple mock workspaces into one federated “virtual system” for large organizations with microservices architectures.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Federation allows you to:</p>
+<ul>
+<li><strong>Define Service Boundaries</strong>: Map services to workspaces</li>
+<li><strong>Compose Virtual Systems</strong>: Combine multiple workspaces into one system</li>
+<li><strong>Run System-Wide Scenarios</strong>: Define scenarios that span multiple services</li>
+<li><strong>Control Reality Per Service</strong>: Set reality level independently per service</li>
+</ul>
+<h2 id="key-concepts"><a class="header" href="#key-concepts">Key Concepts</a></h2>
+<h3 id="service-boundaries"><a class="header" href="#service-boundaries">Service Boundaries</a></h3>
+<p>Services represent individual microservices in your architecture:</p>
+<pre><code class="language-yaml">services:
+  - name: auth
+    workspace_id: "workspace-auth-123"
+    base_path: "/auth"
+    reality_level: "real"  # Use real upstream
+</code></pre>
+<h3 id="federation"><a class="header" href="#federation">Federation</a></h3>
+<p>A federation is a collection of services that work together:</p>
+<pre><code class="language-yaml">federation:
+  name: "e-commerce-platform"
+  services:
+    - name: auth
+      workspace_id: "workspace-auth-123"
+      base_path: "/auth"
+      reality_level: "real"
+    - name: payments
+      workspace_id: "workspace-payments-456"
+      base_path: "/payments"
+      reality_level: "mock_v3"
+</code></pre>
+<h3 id="virtual-system"><a class="header" href="#virtual-system">Virtual System</a></h3>
+<p>The federated system appears as a single unified API:</p>
+<pre><code>/api/auth/*          → Auth service (real)
+/api/payments/*      → Payments service (mock v3)
+/api/inventory/*    → Inventory service (blended)
+/api/shipping/*     → Shipping service (chaos-driven)
+</code></pre>
+<h2 id="service-reality-levels"><a class="header" href="#service-reality-levels">Service Reality Levels</a></h2>
+<p>Each service can have its own reality level:</p>
+<h3 id="real"><a class="header" href="#real">Real</a></h3>
+<p>Use real upstream (no mocking):</p>
+<pre><code class="language-yaml">services:
+  - name: auth
+    reality_level: "real"
+</code></pre>
+<p><strong>Use Case:</strong> Critical services that must be real (auth, payment processing).</p>
+<h3 id="mock-v3"><a class="header" href="#mock-v3">Mock V3</a></h3>
+<p>Use mock with reality level 3:</p>
+<pre><code class="language-yaml">services:
+  - name: payments
+    reality_level: "mock_v3"
+</code></pre>
+<p><strong>Use Case:</strong> Services under development or testing.</p>
+<h3 id="blended"><a class="header" href="#blended">Blended</a></h3>
+<p>Mix of mock and real data:</p>
+<pre><code class="language-yaml">services:
+  - name: inventory
+    reality_level: "blended"
+    blend_ratio: 0.5  # 50% real, 50% mock
+</code></pre>
+<p><strong>Use Case:</strong> Gradual migration from mock to real.</p>
+<h3 id="chaos-driven"><a class="header" href="#chaos-driven">Chaos-Driven</a></h3>
+<p>Chaos testing mode:</p>
+<pre><code class="language-yaml">services:
+  - name: shipping
+    reality_level: "chaos_driven"
+</code></pre>
+<p><strong>Use Case:</strong> Resilience testing, chaos engineering.</p>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="define-federation"><a class="header" href="#define-federation">Define Federation</a></h3>
+<pre><code class="language-yaml"># federation.yaml
+federation:
+  name: "e-commerce-platform"
+  description: "Federated e-commerce system"
+  services:
+    - name: auth
+      workspace_id: "workspace-auth-123"
+      base_path: "/auth"
+      reality_level: "real"
+      config:
+        upstream_url: "https://auth.example.com"
+    
+    - name: payments
+      workspace_id: "workspace-payments-456"
+      base_path: "/payments"
+      reality_level: "mock_v3"
+      config:
+        reality_level: 3
+        chaos_enabled: false
+    
+    - name: inventory
+      workspace_id: "workspace-inventory-789"
+      base_path: "/inventory"
+      reality_level: "blended"
+      config:
+        blend_ratio: 0.5
+        reality_continuum:
+          enabled: true
+          default_ratio: 0.5
+    
+    - name: shipping
+      workspace_id: "workspace-shipping-012"
+      base_path: "/shipping"
+      reality_level: "chaos_driven"
+      config:
+        chaos:
+          enabled: true
+          error_rate: 0.1
+          latency_spike_probability: 0.2
+</code></pre>
+<h3 id="service-dependencies"><a class="header" href="#service-dependencies">Service Dependencies</a></h3>
+<p>Define dependencies between services:</p>
+<pre><code class="language-yaml">services:
+  - name: orders
+    workspace_id: "workspace-orders-123"
+    base_path: "/orders"
+    dependencies:
+      - payments
+      - inventory
+      - shipping
+</code></pre>
+<p>Dependencies are used for:</p>
+<ul>
+<li>System-wide scenario ordering</li>
+<li>Service startup coordination</li>
+<li>Dependency graph visualization</li>
+</ul>
+<h2 id="system-wide-scenarios"><a class="header" href="#system-wide-scenarios">System-Wide Scenarios</a></h2>
+<p>Define scenarios that span multiple services:</p>
+<pre><code class="language-yaml">system_scenarios:
+  - name: end-to-end-checkout
+    description: "Complete checkout flow across services"
+    steps:
+      - service: auth
+        endpoint: POST /auth/login
+        extract:
+          token: "body.token"
+      
+      - service: inventory
+        endpoint: GET /inventory/products/{product_id}
+        headers:
+          Authorization: "Bearer {{token}}"
+        extract:
+          product: "body"
+      
+      - service: payments
+        endpoint: POST /payments/charge
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          amount: "{{product.price}}"
+        extract:
+          payment_id: "body.id"
+      
+      - service: orders
+        endpoint: POST /orders
+        headers:
+          Authorization: "Bearer {{token}}"
+        body:
+          product_id: "{{product.id}}"
+          payment_id: "{{payment_id}}"
+</code></pre>
+<h2 id="routing"><a class="header" href="#routing">Routing</a></h2>
+<p>The federation router routes requests to appropriate services:</p>
+<h3 id="path-based-routing"><a class="header" href="#path-based-routing">Path-Based Routing</a></h3>
+<p>Requests are routed based on path prefixes:</p>
+<pre><code>GET /auth/users/123     → Auth service
+GET /payments/charge    → Payments service
+GET /inventory/products → Inventory service
+</code></pre>
+<h3 id="longest-match"><a class="header" href="#longest-match">Longest Match</a></h3>
+<p>The router uses longest match for path matching:</p>
+<pre><code>/api/v1/payments/charge → Payments service (longer match)
+/api/v1/payments         → Payments service
+/api/v1                 → Default service
+</code></pre>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<h3 id="create-federation"><a class="header" href="#create-federation">Create Federation</a></h3>
+<pre><code class="language-bash"># Create federation from YAML
+mockforge federation create federation.yaml
+
+# Or via API
+POST /api/v1/federations
+{
+  "name": "e-commerce-platform",
+  "services": [...]
+}
+</code></pre>
+<h3 id="start-federated-system"><a class="header" href="#start-federated-system">Start Federated System</a></h3>
+<pre><code class="language-bash"># Start all services in federation
+mockforge federation start e-commerce-platform
+
+# Start specific services
+mockforge federation start e-commerce-platform --services auth,payments
+</code></pre>
+<h3 id="run-system-wide-scenario"><a class="header" href="#run-system-wide-scenario">Run System-Wide Scenario</a></h3>
+<pre><code class="language-bash"># Run scenario across all services
+mockforge federation scenario run e-commerce-platform end-to-end-checkout
+</code></pre>
+<h2 id="real-world-example"><a class="header" href="#real-world-example">Real-World Example</a></h2>
+<h3 id="e-commerce-platform"><a class="header" href="#e-commerce-platform">E-Commerce Platform</a></h3>
+<pre><code class="language-yaml">federation:
+  name: "e-commerce-platform"
+  services:
+    # Auth - Always real (critical service)
+    - name: auth
+      workspace_id: "workspace-auth"
+      base_path: "/auth"
+      reality_level: "real"
+    
+    # Payments - Mock v3 (under development)
+    - name: payments
+      workspace_id: "workspace-payments"
+      base_path: "/payments"
+      reality_level: "mock_v3"
+    
+    # Inventory - Blended (gradual migration)
+    - name: inventory
+      workspace_id: "workspace-inventory"
+      base_path: "/inventory"
+      reality_level: "blended"
+      config:
+        blend_ratio: 0.3  # 30% real, 70% mock
+    
+    # Shipping - Chaos-driven (resilience testing)
+    - name: shipping
+      workspace_id: "workspace-shipping"
+      base_path: "/shipping"
+      reality_level: "chaos_driven"
+</code></pre>
+<p><strong>Result:</strong> Single unified API with different reality levels per service.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Start Small</strong>: Begin with 2-3 services</li>
+<li><strong>Define Boundaries</strong>: Clearly define service boundaries</li>
+<li><strong>Use Dependencies</strong>: Document service dependencies</li>
+<li><strong>Test Scenarios</strong>: Create system-wide test scenarios</li>
+<li><strong>Monitor Routing</strong>: Monitor routing performance</li>
+</ol>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="mockops-pipelines.html">MockOps Pipelines</a> - Pipeline automation</li>
+<li><a href="analytics-dashboard.html">Analytics Dashboard</a> - Usage analytics</li>
+<li><a href="cloud-workspaces.html">Cloud Workspaces</a> - Workspace management</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../user-guide/cloud/mockops-pipelines.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../user-guide/cloud/analytics-dashboard.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../user-guide/cloud/mockops-pipelines.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../user-guide/cloud/analytics-dashboard.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../../ace.js"></script>
+        <script src="../../mode-rust.js"></script>
+        <script src="../../editor.js"></script>
+        <script src="../../theme-dawn.js"></script>
+        <script src="../../theme-tomorrow_night.js"></script>
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

@@ -270,6 +270,7 @@ impl AutoGenerator {
             LlmProvider::OpenAI => EmbeddingProvider::OpenAI,
             LlmProvider::Anthropic => EmbeddingProvider::OpenAI, // Anthropic doesn't have embeddings, use OpenAI
             LlmProvider::Ollama => EmbeddingProvider::OpenAI, // Ollama embedding not yet supported, fallback to OpenAI
+            LlmProvider::OpenAICompatible => EmbeddingProvider::OpenAI,
         };
 
         Ok(config)

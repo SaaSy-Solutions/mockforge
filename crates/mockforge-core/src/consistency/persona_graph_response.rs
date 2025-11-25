@@ -7,6 +7,7 @@ use crate::consistency::{ConsistencyEngine, EntityState};
 #[cfg(feature = "persona-graph")]
 use mockforge_data::PersonaGraph;
 use serde_json::Value;
+use tracing::debug;
 #[cfg(not(feature = "persona-graph"))]
 type PersonaGraph = ();
 

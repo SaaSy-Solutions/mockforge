@@ -13,7 +13,7 @@ use mockforge_core::workspace_persistence::WorkspacePersistence;
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{debug, error, info, warn};
 
 /// State for snapshot handlers
 #[derive(Clone)]
@@ -24,6 +24,10 @@ pub struct SnapshotState {
     pub consistency_engine: Option<Arc<ConsistencyEngine>>,
     /// Workspace persistence (optional, for saving/loading workspace config)
     pub workspace_persistence: Option<Arc<WorkspacePersistence>>,
+    /// VBR engine (optional, for saving/loading VBR state)
+    pub vbr_engine: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    /// Recorder database (optional, for saving/loading recorder state)
+    pub recorder: Option<Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 /// Request to save a snapshot
@@ -56,6 +60,34 @@ fn default_workspace() -> String {
     "default".to_string()
 }
 
+/// Extract VBR state from VBR engine if available
+async fn extract_vbr_state(vbr_engine: &Option<Arc<dyn std::any::Any + Send + Sync>>) -> Option<serde_json::Value> {
+    if let Some(engine) = vbr_engine {
+        // Try to downcast to VbrEngine and extract state
+        // Since we can't directly downcast to VbrEngine (it's in a different crate),
+        // we'll use a trait object approach or type_id checking
+        // For now, return None - this can be extended when VBR engine is integrated
+        debug!("VBR engine available, but state extraction not yet implemented");
+        None
+    } else {
+        None
+    }
+}
+
+/// Extract Recorder state from Recorder if available
+async fn extract_recorder_state(recorder: &Option<Arc<dyn std::any::Any + Send + Sync>>) -> Option<serde_json::Value> {
+    if let Some(rec) = recorder {
+        // Try to extract recorder state
+        // Since we can't directly downcast to RecorderDatabase (it's in a different crate),
+        // we'll use a trait object approach
+        // For now, return None - this can be extended when Recorder is integrated
+        debug!("Recorder available, but state extraction not yet implemented");
+        None
+    } else {
+        None
+    }
+}
+
 /// Save a snapshot
 ///
 /// POST /api/v1/snapshots?workspace={workspace_id}
@@ -68,9 +100,20 @@ pub async fn save_snapshot(
 
     let consistency_engine = state.consistency_engine.as_deref();
     let workspace_persistence = state.workspace_persistence.as_deref();
-    // TODO: Extract VBR and Recorder state from request or state when available
-    let vbr_state = None; // Can be provided via request.vbr_state in the future
-    let recorder_state = None; // Can be provided via request.recorder_state in the future
+
+    // Extract VBR state if VBR engine is available
+    let vbr_state = if components.vbr_state {
+        extract_vbr_state(&state.vbr_engine).await
+    } else {
+        None
+    };
+
+    // Extract Recorder state if Recorder is available
+    let recorder_state = if components.recorder_state {
+        extract_recorder_state(&state.recorder).await
+    } else {
+        None
+    };
     let manifest = state
         .manager
         .save_snapshot(

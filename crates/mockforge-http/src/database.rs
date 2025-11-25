@@ -7,6 +7,8 @@
 use anyhow::Result as AnyhowResult;
 #[cfg(feature = "database")]
 use sqlx::{postgres::PgPoolOptions, PgPool};
+#[cfg(feature = "database")]
+use std::sync::Arc;
 
 /// Database connection wrapper
 #[derive(Clone)]

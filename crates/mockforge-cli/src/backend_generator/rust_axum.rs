@@ -269,7 +269,9 @@ pub mod routes;
 /// Application state
 #[derive(Clone)]
 pub struct AppState {{
-    // TODO: Add your application state here
+    /// OpenAPI specification (for validation and documentation)
+    pub openapi_spec: Arc<serde_json::Value>,
+    // Add your application state here
     // Example: database connection pool, cache, configuration, etc.
     // pub db: Arc<Pool<Postgres>>,
     // pub cache: Arc<RedisClient>,
@@ -277,9 +279,31 @@ pub struct AppState {{
 
 impl AppState {{
     pub fn new() -> Self {{
+        // Initialize OpenAPI spec
+        // In a real application, you would embed the OpenAPI spec at compile time
+        // or load it from a file at runtime
+        // Build OpenAPI spec JSON with title and version
+        let mut spec_map = serde_json::Map::new();
+        spec_map.insert("openapi".to_string(), serde_json::Value::String("3.0.0".to_string()));
+        let mut info_map = serde_json::Map::new();
+        info_map.insert("title".to_string(), serde_json::Value::String("{}".to_string()));
+        info_map.insert("version".to_string(), serde_json::Value::String("{}".to_string()));
+        spec_map.insert("info".to_string(), serde_json::Value::Object(info_map));
+        spec_map.insert("paths".to_string(), serde_json::Value::Object(serde_json::Map::new()));
+        let spec_value = serde_json::Value::Object(spec_map);
+
         Self {{
-            // TODO: Initialize your application state
+            openapi_spec: Arc::new(spec_value),
+            // Initialize your application state here
+            // Example:
+            // db: Arc::new(create_db_pool().await?),
+            // cache: Arc::new(RedisClient::connect("redis://localhost").await?),
         }}
+    }}
+
+    /// Get OpenAPI specification as JSON value
+    pub fn get_openapi_spec(&self) -> &serde_json::Value {{
+        &self.openapi_spec
     }}
 }}
 
@@ -322,7 +346,7 @@ async fn health_check() -> impl IntoResponse {{
     (StatusCode::OK, "OK")
 }}
 "#,
-        app_name, spec.spec.info.title, spec.spec.info.version, port, handler_count, addr_str
+        app_name, spec.spec.info.title, spec.spec.info.version, port, handler_count, addr_str, spec.spec.info.title, spec.spec.info.version
     );
 
     todos.push(TodoItem {
@@ -332,12 +356,13 @@ async fn health_check() -> impl IntoResponse {{
         related_operation: None,
         category: TodoCategory::Config,
         definition_of_done: vec![
-            "Add database connection pool to AppState".to_string(),
-            "Initialize database connection".to_string(),
+            "OpenAPI spec is already initialized in AppState".to_string(),
+            "Add database connection pool to AppState if needed".to_string(),
+            "Initialize database connection in AppState::new()".to_string(),
             "Handle connection errors gracefully".to_string(),
             "Add connection health checks".to_string(),
         ],
-        complexity: Complexity::Medium,
+        complexity: Complexity::Low,
         dependencies: Vec::new(),
     });
 

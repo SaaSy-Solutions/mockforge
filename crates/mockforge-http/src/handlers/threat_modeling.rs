@@ -7,10 +7,12 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
+use chrono::{DateTime, Utc};
 use mockforge_core::contract_drift::threat_modeling::{ThreatAnalyzer, ThreatAssessment};
 use mockforge_core::openapi::OpenApiSpec;
 use serde::Deserialize;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::database::Database;
 
@@ -419,15 +421,37 @@ pub async fn list_findings(
     })?;
 
     // Map rows to findings
+    use sqlx::Row;
     let mut findings = Vec::new();
     for row in rows {
-        let finding_id: uuid::Uuid = row.try_get("id")?;
-        let finding_type_str: String = row.try_get("finding_type")?;
-        let severity_str: String = row.try_get("severity")?;
-        let description: String = row.try_get("description")?;
-        let field_path: Option<String> = row.try_get("field_path")?;
-        let context_json: serde_json::Value = row.try_get("context")?;
-        let confidence: f64 = row.try_get("confidence")?;
+        let finding_id: uuid::Uuid = row.try_get("id").map_err(|e| {
+            tracing::error!("Failed to get finding id from row: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let finding_type_str: String = row.try_get("finding_type").map_err(|e| {
+            tracing::error!("Failed to get finding_type from row: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let severity_str: String = row.try_get("severity").map_err(|e| {
+            tracing::error!("Failed to get severity from row: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let description: String = row.try_get("description").map_err(|e| {
+            tracing::error!("Failed to get description from row: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let field_path: Option<String> = row.try_get("field_path").map_err(|e| {
+            tracing::error!("Failed to get field_path from row: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let context_json: serde_json::Value = row.try_get("context").map_err(|e| {
+            tracing::error!("Failed to get context from row: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let confidence: f64 = row.try_get("confidence").map_err(|e| {
+            tracing::error!("Failed to get confidence from row: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
         use mockforge_core::contract_drift::threat_modeling::{ThreatCategory, ThreatLevel};
         use std::collections::HashMap;
@@ -519,9 +543,13 @@ pub async fn get_remediations(
     })?;
 
     // Extract and flatten remediation suggestions
+    use sqlx::Row;
     let mut remediations = Vec::new();
     for row in rows {
-        let remediations_json: serde_json::Value = row.try_get("remediation_suggestions")?;
+        let remediations_json: serde_json::Value = row.try_get("remediation_suggestions").map_err(|e| {
+            tracing::error!("Failed to get remediation_suggestions from row: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
         if let serde_json::Value::Array(remediation_array) = remediations_json {
             for remediation in remediation_array {
                 remediations.push(remediation);

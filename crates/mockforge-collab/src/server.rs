@@ -138,6 +138,7 @@ impl CollabServer {
             auth: self.auth.clone(),
             sync: self.sync.clone(),
             event_bus: self.event_bus.clone(),
+            workspace: self.workspace.clone(),
         };
 
         // Combine routers

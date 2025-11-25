@@ -7,7 +7,7 @@ use axum::{
     response::Response,
 };
 use mockforge_core::{
-    create_http_log_entry, log_request_global,
+    create_http_log_entry_with_query, log_request_global,
     reality_continuum::response_trace::ResponseGenerationTrace,
     request_logger::RealityTraceMetadata,
 };
@@ -77,8 +77,8 @@ pub async fn log_http_requests(
         None
     };
 
-    // Log the request with query parameters in metadata
-    let mut log_entry = create_http_log_entry(
+    // Log the request with query parameters
+    let mut log_entry = create_http_log_entry_with_query(
         &method,
         &path,
         status_code,
@@ -86,17 +86,10 @@ pub async fn log_http_requests(
         Some(addr.ip().to_string()),
         user_agent,
         headers,
+        query_params.clone(),
         response_size_bytes,
         error_message,
     );
-
-    // Add query parameters to metadata (clone to avoid move)
-    let query_params_for_log = query_params.clone();
-    if !query_params_for_log.is_empty() {
-        for (key, value) in query_params_for_log {
-            log_entry.metadata.insert(format!("query.{}", key), value);
-        }
-    }
 
     // Attach reality metadata if available
     log_entry.reality_metadata = reality_metadata;

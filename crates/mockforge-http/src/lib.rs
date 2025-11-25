@@ -2210,6 +2210,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let contract_health_state = ContractHealthState {
             incident_manager: incident_manager.clone(),
             semantic_manager: Arc::new(SemanticIncidentManager::new()),
+            database: database.clone(),
         };
 
         // Register routers
@@ -2504,6 +2505,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 manager: snapshot_manager,
                 consistency_engine: Some(consistency_engine.clone()),
                 workspace_persistence: None, // Can be initialized later if workspace persistence is available
+                vbr_engine: None, // Can be initialized when VBR engine is available in server state
+                recorder: None, // Can be initialized when Recorder is available in server state
             };
 
             app = app.merge(snapshot_router(snapshot_state));

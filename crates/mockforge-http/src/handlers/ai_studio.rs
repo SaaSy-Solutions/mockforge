@@ -23,9 +23,10 @@ use mockforge_core::{
     intelligent_behavior::IntelligentBehaviorConfig,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tracing::{error, info};
+use tokio::sync::{Mutex, RwLock};
+use tracing::{error, info, warn};
 
 /// State for AI Studio handlers
 #[derive(Clone)]
@@ -44,6 +45,8 @@ pub struct AiStudioState {
     pub deterministic_config: Option<DeterministicModeConfig>,
     /// Workspace ID (optional, can be set per request)
     pub workspace_id: Option<String>,
+    /// In-memory storage for generated systems (system_id -> GeneratedSystem)
+    pub system_storage: Arc<RwLock<HashMap<String, mockforge_core::ai_studio::system_generator::GeneratedSystem>>>,
 }
 
 impl AiStudioState {
@@ -61,6 +64,7 @@ impl AiStudioState {
             config,
             deterministic_config: None,
             workspace_id: None,
+            system_storage: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -77,7 +81,7 @@ impl AiStudioState {
 }
 
 /// Request body for API critique endpoint
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ApiCritiqueRequest {
     /// API schema (OpenAPI JSON, GraphQL SDL, or Protobuf)
     pub schema: serde_json::Value,
@@ -262,6 +266,12 @@ pub async fn generate_system_handler(
         }
     };
 
+    // Store the generated system in storage
+    {
+        let mut storage = state.system_storage.write().await;
+        storage.insert(system.system_id.clone(), system.clone());
+    }
+
     info!(
         "System generation completed. System ID: {}, Version: {}, Status: {}, Tokens: {:?}, Cost: ${:.4}",
         system.system_id,
@@ -278,28 +288,125 @@ pub async fn generate_system_handler(
 ///
 /// POST /api/v1/ai-studio/system/{system_id}/apply
 pub async fn apply_system_handler(
-    _state: State<AiStudioState>,
-    Path(_system_id): Path<String>,
-    _request: Json<ApplySystemRequest>,
+    State(state): State<AiStudioState>,
+    Path(system_id): Path<String>,
+    Json(request): Json<ApplySystemRequest>,
 ) -> std::result::Result<Json<ApplySystemResponse>, StatusCode> {
-    // In a full implementation, we'd load the system from storage
-    // For now, we'll return an error indicating the system must be generated first
-    // This is a placeholder - in production, you'd have a system storage layer
-    Err(StatusCode::NOT_IMPLEMENTED)
+    info!("Apply system request received for system: {}", system_id);
+
+    // Load the system from storage
+    let system = {
+        let storage = state.system_storage.read().await;
+        storage.get(&system_id).cloned()
+    };
+
+    let system = match system {
+        Some(s) => s,
+        None => {
+            warn!("System not found: {}", system_id);
+            return Err(StatusCode::NOT_FOUND);
+        }
+    };
+
+    // Apply the system design
+    let applied = match state
+        .system_generator
+        .apply_system_design(
+            &system,
+            state.deterministic_config.as_ref(),
+            request.artifact_ids.clone(),
+        )
+        .await
+    {
+        Ok(a) => a,
+        Err(e) => {
+            error!("Failed to apply system design: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // Update the system status in storage if it was frozen
+    if applied.frozen {
+        let mut storage = state.system_storage.write().await;
+        if let Some(stored_system) = storage.get_mut(&system_id) {
+            stored_system.status = "frozen".to_string();
+        }
+    }
+
+    info!(
+        "System design applied. System ID: {}, Applied artifacts: {}, Frozen: {}",
+        applied.system_id,
+        applied.applied_artifacts.len(),
+        applied.frozen
+    );
+
+    Ok(Json(ApplySystemResponse { applied }))
 }
 
 /// Freeze specific artifacts manually
 ///
 /// POST /api/v1/ai-studio/system/{system_id}/freeze
 pub async fn freeze_artifacts_handler(
-    _state: State<AiStudioState>,
-    Path(_system_id): Path<String>,
-    _request: Json<FreezeArtifactsRequest>,
+    State(state): State<AiStudioState>,
+    Path(system_id): Path<String>,
+    Json(request): Json<FreezeArtifactsRequest>,
 ) -> std::result::Result<Json<FreezeArtifactsResponse>, StatusCode> {
-    // In a full implementation, we'd load the system from storage and freeze the artifacts
-    // For now, we'll return an error indicating the system must be generated first
-    // This is a placeholder - in production, you'd have a system storage layer
-    Err(StatusCode::NOT_IMPLEMENTED)
+    info!(
+        "Freeze artifacts request received for system: {}, artifacts: {:?}",
+        system_id, request.artifact_ids
+    );
+
+    // Load the system from storage
+    let system = {
+        let storage = state.system_storage.read().await;
+        storage.get(&system_id).cloned()
+    };
+
+    let system = match system {
+        Some(s) => s,
+        None => {
+            warn!("System not found: {}", system_id);
+            return Err(StatusCode::NOT_FOUND);
+        }
+    };
+
+    // Freeze the specified artifacts
+    let frozen_paths = match state
+        .system_generator
+        .freeze_artifacts(&system, request.artifact_ids.clone())
+        .await
+    {
+        Ok(paths) => paths,
+        Err(e) => {
+            error!("Failed to freeze artifacts: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // Update the system status in storage if all artifacts are frozen
+    if !frozen_paths.is_empty() {
+        let mut storage = state.system_storage.write().await;
+        if let Some(stored_system) = storage.get_mut(&system_id) {
+            // Check if all artifacts are now frozen
+            let all_frozen = stored_system
+                .artifacts
+                .values()
+                .all(|artifact| request.artifact_ids.contains(&artifact.artifact_id));
+            if all_frozen {
+                stored_system.status = "frozen".to_string();
+            }
+        }
+    }
+
+    info!(
+        "Artifacts frozen. System ID: {}, Frozen paths: {}",
+        system_id,
+        frozen_paths.len()
+    );
+
+    Ok(Json(FreezeArtifactsResponse {
+        frozen_paths,
+    }))
 }
 
 /// Request body for create agent endpoint
@@ -420,9 +527,8 @@ pub fn ai_studio_router(state: AiStudioState) -> Router {
     let mut router = Router::new()
         .route("/api-critique", post(api_critique_handler))
         .route("/generate-system", post(generate_system_handler))
-        // TODO: Implement apply and freeze handlers when system storage is available
-        // .route("/system/{system_id}/apply", post(apply_system_handler))
-        // .route("/system/{system_id}/freeze", post(freeze_artifacts_handler))
+        .route("/system/{system_id}/apply", post(apply_system_handler))
+        .route("/system/{system_id}/freeze", post(freeze_artifacts_handler))
         .route("/simulate-behavior/create-agent", post(create_agent_handler))
         .route("/simulate-behavior", post(simulate_behavior_handler));
     router.with_state(state)
@@ -442,6 +548,7 @@ mod tests {
                 api_key: None,
                 temperature: 0.7,
                 max_tokens: 2000,
+                rules: mockforge_core::intelligent_behavior::types::BehaviorRules::default(),
             },
             ..Default::default()
         };

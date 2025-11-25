@@ -4,6 +4,11 @@
 
 use super::{PipelineStepExecutor, StepContext, StepResult};
 use anyhow::{Context, Result};
+use lettre::{
+    message::{header::ContentType, Mailbox, Message},
+    transport::smtp::authentication::Credentials,
+    AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
+};
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -78,14 +83,14 @@ impl NotifyStep {
             .ok_or_else(|| anyhow::anyhow!("Missing 'smtp.host' in config"))?;
 
         let smtp_port =
-            smtp_config.get("port").and_then(handlebars::JsonValue::as_u64).unwrap_or(587) as u16;
+            smtp_config.get("port").and_then(|v| v.as_u64()).unwrap_or(587) as u16;
 
-        let _smtp_username = smtp_config.get("username").and_then(|v| v.as_str());
-        let _smtp_password = smtp_config.get("password").and_then(|v| v.as_str());
+        let smtp_username = smtp_config.get("username").and_then(|v| v.as_str());
+        let smtp_password = smtp_config.get("password").and_then(|v| v.as_str());
         let from_address = smtp_config
             .get("from")
             .and_then(|v| v.as_str())
-            .unwrap_or("mockforge@example.com");
+            .ok_or_else(|| anyhow::anyhow!("Missing 'smtp.from' in config"))?;
 
         let subject = context
             .config
@@ -93,26 +98,70 @@ impl NotifyStep {
             .and_then(|v| v.as_str())
             .unwrap_or("MockForge Pipeline Notification");
 
-        // For now, we'll use a simple HTTP-based email service or log
-        // Full SMTP implementation would require an SMTP client library
-        // This is a placeholder that can be enhanced with actual SMTP support
-        warn!(
-            "Email notification via SMTP requires additional dependencies. Consider using a service like SendGrid, Mailgun, or AWS SES via webhook instead."
-        );
+        // Parse email addresses
+        let from: Mailbox = from_address.parse().context("Invalid 'from' email address")?;
+        let to_mailboxes: Result<Vec<Mailbox>, _> = to_addresses
+            .iter()
+            .map(|addr| addr.parse().context(format!("Invalid 'to' email address: {addr}")))
+            .collect();
+        let to_mailboxes = to_mailboxes?;
 
-        // For now, we'll simulate success but log the email details
-        debug!(
-            smtp_host = %smtp_host,
-            smtp_port = %smtp_port,
-            from = %from_address,
-            to = ?to_addresses,
-            subject = %subject,
-            "Email notification prepared (SMTP implementation pending)"
-        );
+        // Build email message
+        let mut email_builder = Message::builder()
+            .from(from.clone())
+            .subject(subject);
 
-        // TODO: Implement actual SMTP sending with a library like lettre
-        // For now, return success to allow pipeline to continue
-        Ok(())
+        // Add recipients
+        for to_mailbox in &to_mailboxes {
+            email_builder = email_builder.to(to_mailbox.clone());
+        }
+
+        // Build the message with content type
+        let email = email_builder
+            .header(ContentType::TEXT_PLAIN)
+            .body(message.to_string())
+            .context("Failed to build email message")?;
+
+        // Create SMTP transport
+        let mut smtp_builder = AsyncSmtpTransport::<Tokio1Executor>::relay(smtp_host)
+            .context(format!("Failed to create SMTP relay for {smtp_host}"))?;
+
+        // Set port
+        smtp_builder = smtp_builder.port(smtp_port);
+
+        // Add authentication if provided
+        let mailer = if let (Some(username), Some(password)) = (smtp_username, smtp_password) {
+            let creds = Credentials::new(username.to_string(), password.to_string());
+            smtp_builder.credentials(creds).build()
+        } else {
+            smtp_builder.build()
+        };
+
+        // Send email
+        match mailer.send(email).await {
+            Ok(_) => {
+                info!(
+                    smtp_host = %smtp_host,
+                    smtp_port = %smtp_port,
+                    from = %from_address,
+                    to = ?to_addresses,
+                    subject = %subject,
+                    "Email notification sent successfully"
+                );
+                Ok(())
+            }
+            Err(e) => {
+                error!(
+                    smtp_host = %smtp_host,
+                    smtp_port = %smtp_port,
+                    from = %from_address,
+                    to = ?to_addresses,
+                    error = %e,
+                    "Failed to send email notification"
+                );
+                Err(anyhow::anyhow!("Failed to send email: {e}"))
+            }
+        }
     }
 
     /// Send webhook notification

@@ -1,0 +1,526 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Reality Profiles Marketplace - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/advanced-features/reality-profiles-marketplace.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="reality-profiles-marketplace"><a class="header" href="#reality-profiles-marketplace">Reality Profiles Marketplace</a></h1>
+<p><strong>Pillars:</strong> [Reality]</p>
+<p>The Reality Profiles Marketplace provides pre-tuned “realism packs” that bundle personas, scenarios, chaos rules, latency curves, error distributions, data mutation behaviors, and protocol behaviors into ready-to-use packages. Think of them as MockForge’s “Kubernetes Operators” moment—reusable ops-level behaviors.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Reality profile packs are complete configurations that simulate real-world scenarios for specific domains. Instead of manually configuring latency curves, error distributions, and behavioral patterns, you can install a pack that provides all of this out of the box.</p>
+<h2 id="available-packs"><a class="header" href="#available-packs">Available Packs</a></h2>
+<h3 id="e-commerce-peak-season-pack"><a class="header" href="#e-commerce-peak-season-pack">E-Commerce Peak Season Pack</a></h3>
+<p>Simulates high-load e-commerce scenarios with:</p>
+<ul>
+<li><strong>Increased latency</strong> during peak hours (300ms mean, up to 2000ms)</li>
+<li><strong>Cart abandonment patterns</strong> (cart value decreases over time)</li>
+<li><strong>Inventory depletion behaviors</strong> (quantity decreases under load)</li>
+<li><strong>Seasonal purchase patterns</strong></li>
+</ul>
+<p><strong>Install:</strong></p>
+<pre><code class="language-bash">mockforge reality-profile install ecommerce-peak-season
+</code></pre>
+<p><strong>Use Case:</strong> Testing your frontend’s resilience during Black Friday, Cyber Monday, or other high-traffic events.</p>
+<h3 id="fintech-fraud-pack"><a class="header" href="#fintech-fraud-pack">Fintech Fraud Pack</a></h3>
+<p>Simulates financial services scenarios with:</p>
+<ul>
+<li><strong>Fraud detection triggers</strong> (suspicious transaction patterns)</li>
+<li><strong>Transaction declines</strong> (card declined, insufficient funds)</li>
+<li><strong>Risk scoring</strong> (high-risk vs low-risk customer segments)</li>
+<li><strong>Compliance behaviors</strong> (KYC checks, AML flags)</li>
+</ul>
+<p><strong>Install:</strong></p>
+<pre><code class="language-bash">mockforge reality-profile install fintech-fraud
+</code></pre>
+<p><strong>Use Case:</strong> Testing fraud detection systems, payment flows, and compliance workflows.</p>
+<h3 id="healthcare-hl7insurance-edge-cases-pack"><a class="header" href="#healthcare-hl7insurance-edge-cases-pack">Healthcare HL7/Insurance Edge Cases Pack</a></h3>
+<p>Simulates healthcare scenarios with:</p>
+<ul>
+<li><strong>HL7 message patterns</strong> (ADT, ORU, MDM message types)</li>
+<li><strong>Insurance edge cases</strong> (pre-authorization failures, coverage gaps)</li>
+<li><strong>Patient data patterns</strong> (HIPAA-compliant test data)</li>
+<li><strong>Medical device integration</strong> (device disconnections, data bursts)</li>
+</ul>
+<p><strong>Install:</strong></p>
+<pre><code class="language-bash">mockforge reality-profile install healthcare-hl7
+</code></pre>
+<p><strong>Use Case:</strong> Testing HL7 integrations, insurance workflows, and medical device connectivity.</p>
+<h3 id="iot-device-fleet-chaos-pack"><a class="header" href="#iot-device-fleet-chaos-pack">IoT Device Fleet Chaos Pack</a></h3>
+<p>Simulates IoT scenarios with:</p>
+<ul>
+<li><strong>Device disconnections</strong> (random disconnects, network failures)</li>
+<li><strong>Message bursts</strong> (sudden spikes in telemetry data)</li>
+<li><strong>Protocol behaviors</strong> (MQTT, CoAP, WebSocket patterns)</li>
+<li><strong>Edge computing patterns</strong> (offline mode, sync conflicts)</li>
+</ul>
+<p><strong>Install:</strong></p>
+<pre><code class="language-bash">mockforge reality-profile install iot-fleet-chaos
+</code></pre>
+<p><strong>Use Case:</strong> Testing IoT platforms, device management systems, and edge computing scenarios.</p>
+<h2 id="installing-packs"><a class="header" href="#installing-packs">Installing Packs</a></h2>
+<h3 id="from-pre-built-packs"><a class="header" href="#from-pre-built-packs">From Pre-built Packs</a></h3>
+<pre><code class="language-bash"># List available packs
+mockforge reality-profile list
+
+# Install a pack
+mockforge reality-profile install &lt;pack-name&gt;
+
+# Examples
+mockforge reality-profile install ecommerce-peak-season
+mockforge reality-profile install fintech-fraud
+mockforge reality-profile install healthcare-hl7
+mockforge reality-profile install iot-fleet-chaos
+</code></pre>
+<h3 id="from-custom-paths"><a class="header" href="#from-custom-paths">From Custom Paths</a></h3>
+<p>You can also install packs from local files or URLs:</p>
+<pre><code class="language-bash"># From local file
+mockforge reality-profile install ./my-custom-pack.yaml
+
+# From URL
+mockforge reality-profile install https://example.com/packs/custom-pack.yaml
+</code></pre>
+<h2 id="pack-structure"><a class="header" href="#pack-structure">Pack Structure</a></h2>
+<p>Each reality profile pack includes:</p>
+<h3 id="1-personas"><a class="header" href="#1-personas">1. Personas</a></h3>
+<p>Pre-configured personas with traits matching the domain:</p>
+<ul>
+<li>E-commerce: <code>premium-customer</code>, <code>bargain-hunter</code>, <code>cart-abandoner</code></li>
+<li>Fintech: <code>high-risk-user</code>, <code>vip-customer</code>, <code>fraud-suspect</code></li>
+<li>Healthcare: <code>new-patient</code>, <code>chronic-care-patient</code>, <code>emergency-case</code></li>
+<li>IoT: <code>smart-home-owner</code>, <code>industrial-operator</code>, <code>fleet-manager</code></li>
+</ul>
+<h3 id="2-scenarios"><a class="header" href="#2-scenarios">2. Scenarios</a></h3>
+<p>Ready-to-use scenarios for common workflows:</p>
+<ul>
+<li>E-commerce: <code>peak-season-checkout</code>, <code>cart-abandonment-flow</code>, <code>inventory-depletion</code></li>
+<li>Fintech: <code>fraud-detection-flow</code>, <code>payment-decline-scenario</code>, <code>kyc-verification</code></li>
+<li>Healthcare: <code>patient-admission</code>, <code>insurance-claim-processing</code>, <code>device-alert</code></li>
+<li>IoT: <code>device-onboarding</code>, <code>telemetry-burst</code>, <code>firmware-update-failure</code></li>
+</ul>
+<h3 id="3-chaos-rules"><a class="header" href="#3-chaos-rules">3. Chaos Rules</a></h3>
+<p>Pre-configured chaos engineering rules:</p>
+<ul>
+<li>Latency spikes during peak hours</li>
+<li>Error rate increases under load</li>
+<li>Network partition simulations</li>
+<li>Resource exhaustion patterns</li>
+</ul>
+<h3 id="4-latency-curves"><a class="header" href="#4-latency-curves">4. Latency Curves</a></h3>
+<p>Realistic latency distributions:</p>
+<ul>
+<li>Normal distributions for typical traffic</li>
+<li>Exponential distributions for burst scenarios</li>
+<li>Custom curves for specific endpoints</li>
+</ul>
+<h3 id="5-error-distributions"><a class="header" href="#5-error-distributions">5. Error Distributions</a></h3>
+<p>Realistic error patterns:</p>
+<ul>
+<li>5xx errors under load</li>
+<li>4xx errors for invalid requests</li>
+<li>Rate limiting (429) during peak</li>
+<li>Timeout errors (504) for slow endpoints</li>
+</ul>
+<h3 id="6-data-mutation-behaviors"><a class="header" href="#6-data-mutation-behaviors">6. Data Mutation Behaviors</a></h3>
+<p>Dynamic data changes:</p>
+<ul>
+<li>Inventory depletion over time</li>
+<li>Cart abandonment patterns</li>
+<li>Account balance changes</li>
+<li>Device state transitions</li>
+</ul>
+<h3 id="7-protocol-behaviors"><a class="header" href="#7-protocol-behaviors">7. Protocol Behaviors</a></h3>
+<p>Protocol-specific behaviors:</p>
+<ul>
+<li>REST: HTTP method patterns, status code distributions</li>
+<li>WebSocket: Connection lifecycle, message patterns</li>
+<li>MQTT: Topic subscriptions, QoS levels</li>
+<li>gRPC: Streaming patterns, error codes</li>
+</ul>
+<h2 id="using-packs-in-your-workspace"><a class="header" href="#using-packs-in-your-workspace">Using Packs in Your Workspace</a></h2>
+<p>After installing a pack, it’s available for use in your workspace configuration:</p>
+<pre><code class="language-yaml"># mockforge.yaml
+reality:
+  profiles:
+    - name: ecommerce-peak-season
+      enabled: true
+      # Pack-specific configuration
+      peak_hours:
+        start: "09:00"
+        end: "17:00"
+      load_multiplier: 1.5  # 50% more load during peak
+</code></pre>
+<h2 id="creating-custom-packs"><a class="header" href="#creating-custom-packs">Creating Custom Packs</a></h2>
+<p>You can create your own reality profile packs:</p>
+<h3 id="1-create-pack-manifest"><a class="header" href="#1-create-pack-manifest">1. Create Pack Manifest</a></h3>
+<pre><code class="language-yaml"># my-custom-pack.yaml
+name: my-custom-pack
+version: 1.0.0
+title: My Custom Reality Pack
+description: Custom reality profile for my domain
+domain: custom
+author: My Team
+
+tags:
+  - custom
+  - internal
+
+# Latency curves
+latency_curves:
+  - protocol: rest
+    distribution: normal
+    params:
+      mean: 200.0
+      std_dev: 50.0
+    base_ms: 200
+    endpoint_patterns:
+      - "/api/custom/*"
+    jitter_ms: 25
+    min_ms: 100
+    max_ms: 1000
+
+# Error distributions
+error_distributions:
+  - endpoint_pattern: "/api/custom/*"
+    error_codes: [500, 503]
+    probabilities: [0.05, 0.02]
+    pattern:
+      type: random
+      probability: 0.07
+
+# Data mutation behaviors
+data_mutation_behaviors:
+  - field_pattern: "body.value"
+    mutation_type: increment
+    rate: 0.1
+    params:
+      increment_by: 1
+      max_value: 100
+</code></pre>
+<h3 id="2-install-custom-pack"><a class="header" href="#2-install-custom-pack">2. Install Custom Pack</a></h3>
+<pre><code class="language-bash">mockforge reality-profile install ./my-custom-pack.yaml
+</code></pre>
+<h2 id="pack-configuration"><a class="header" href="#pack-configuration">Pack Configuration</a></h2>
+<p>Packs can be configured per-workspace:</p>
+<pre><code class="language-yaml">reality:
+  profiles:
+    - name: ecommerce-peak-season
+      enabled: true
+      config:
+        # Override pack defaults
+        peak_hours:
+          start: "10:00"
+          end: "18:00"
+        load_multiplier: 2.0
+        error_rate_multiplier: 1.5
+</code></pre>
+<h2 id="integration-with-other-features"><a class="header" href="#integration-with-other-features">Integration with Other Features</a></h2>
+<p>Reality profile packs integrate seamlessly with:</p>
+<ul>
+<li><strong>Smart Personas</strong>: Packs include personas that work with the pack’s scenarios</li>
+<li><strong>Scenarios</strong>: Pre-built scenarios use the pack’s behavioral patterns</li>
+<li><strong>Chaos Lab</strong>: Pack chaos rules integrate with your chaos experiments</li>
+<li><strong>Reality Continuum</strong>: Packs work with blend ratios and reality levels</li>
+<li><strong>Time Travel</strong>: Pack behaviors respect virtual time settings</li>
+</ul>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Start with Pre-built Packs</strong>: Use existing packs before creating custom ones</li>
+<li><strong>Combine Packs</strong>: You can enable multiple packs and combine their behaviors</li>
+<li><strong>Customize Gradually</strong>: Start with defaults, then customize as needed</li>
+<li><strong>Version Control</strong>: Keep pack configurations in version control</li>
+<li><strong>Team Sharing</strong>: Share custom packs via Git or internal registry</li>
+</ol>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="e-commerce-peak-season-testing"><a class="header" href="#e-commerce-peak-season-testing">E-Commerce Peak Season Testing</a></h3>
+<pre><code class="language-bash"># Install pack
+mockforge reality-profile install ecommerce-peak-season
+
+# Configure workspace
+# mockforge.yaml
+reality:
+  profiles:
+    - name: ecommerce-peak-season
+      enabled: true
+      config:
+        peak_hours:
+          start: "00:00"  # Black Friday - all day peak
+          end: "23:59"
+        load_multiplier: 3.0  # 3x normal load
+</code></pre>
+<h3 id="fintech-fraud-testing"><a class="header" href="#fintech-fraud-testing">Fintech Fraud Testing</a></h3>
+<pre><code class="language-bash"># Install pack
+mockforge reality-profile install fintech-fraud
+
+# Use in scenarios
+scenarios:
+  - name: fraud-detection-test
+    persona: high-risk-user
+    reality_profile: fintech-fraud
+    steps:
+      - endpoint: POST /api/transactions
+        expected_fraud_score: "&gt; 0.7"
+</code></pre>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="pack-not-found"><a class="header" href="#pack-not-found">Pack Not Found</a></h3>
+<p>If a pack isn’t found, check:</p>
+<ul>
+<li>Pack name spelling</li>
+<li>Pack is installed: <code>mockforge reality-profile list</code></li>
+<li>Pack version compatibility</li>
+</ul>
+<h3 id="conflicts-between-packs"><a class="header" href="#conflicts-between-packs">Conflicts Between Packs</a></h3>
+<p>If multiple packs conflict:</p>
+<ul>
+<li>Check endpoint pattern overlaps</li>
+<li>Adjust pack priorities</li>
+<li>Disable conflicting packs</li>
+<li>Create custom pack combining needed features</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="smart-personas.html">Smart Personas</a> - Persona system used by packs</li>
+<li><a href="chaos-lab.html">Chaos Lab</a> - Chaos rules in packs</li>
+<li><a href="reality-continuum.html">Reality Continuum</a> - Reality levels and blending</li>
+<li><a href="scenario-state-machines.html">Scenarios</a> - Scenario system</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../user-guide/reality-slider.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../user-guide/advanced-features/behavioral-economics.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../user-guide/reality-slider.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../user-guide/advanced-features/behavioral-economics.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../../ace.js"></script>
+        <script src="../../mode-rust.js"></script>
+        <script src="../../editor.js"></script>
+        <script src="../../theme-dawn.js"></script>
+        <script src="../../theme-tomorrow_night.js"></script>
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

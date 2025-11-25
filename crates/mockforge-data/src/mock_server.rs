@@ -156,7 +156,7 @@ impl MockServer {
         let config = Arc::new(self.config);
         let handlers = Arc::new(self.handlers);
 
-        Router::new()
+        let mut router = Router::new()
             // Add all OpenAPI endpoints dynamically
             .route("/", get(Self::root_handler))
             .route("/health", get(Self::health_handler))
@@ -165,9 +165,42 @@ impl MockServer {
             // Dynamic routes will be added based on OpenAPI spec
             .with_state(MockServerState {
                 mock_data,
-                config,
-                handlers,
-            })
+                config: config.clone(),
+                handlers: handlers.clone(),
+            });
+
+        // Integrate CORS middleware if enabled
+        if config.enable_cors {
+            use tower_http::cors::CorsLayer;
+            router = router.layer(CorsLayer::permissive());
+            info!("CORS middleware enabled for mock server");
+        }
+
+        // Integrate request logging middleware if enabled
+        if config.log_requests {
+            router = router.layer(axum::middleware::from_fn(Self::request_logging_middleware));
+        }
+
+        router
+    }
+
+    /// Request logging middleware
+    async fn request_logging_middleware(
+        request: axum::http::Request<axum::body::Body>,
+        next: axum::middleware::Next,
+    ) -> axum::response::Response {
+        let method = request.method().clone();
+        let uri = request.uri().clone();
+        let start = std::time::Instant::now();
+
+        info!("Incoming request: {} {}", method, uri);
+
+        let response = next.run(request).await;
+
+        let duration = start.elapsed();
+        info!("Request completed: {} {} - Status: {} - Duration: {:?}", method, uri, response.status(), duration);
+
+        response
     }
 
     /// Root handler - returns API information
@@ -197,6 +230,11 @@ impl MockServer {
     async fn openapi_handler(
         axum::extract::State(state): axum::extract::State<MockServerState>,
     ) -> Json<Value> {
+        // Apply response delay if configured
+        if let Some(delay) = state.config.response_delays.get("GET /openapi.json") {
+            tokio::time::sleep(tokio::time::Duration::from_millis(*delay)).await;
+        }
+
         Json(serde_json::to_value(&state.mock_data.spec_info).unwrap_or(json!({})))
     }
 
@@ -204,20 +242,28 @@ impl MockServer {
     async fn mock_data_handler(
         axum::extract::State(state): axum::extract::State<MockServerState>,
     ) -> Json<Value> {
-        Json(json!({
-            "schemas": state.mock_data.schemas,
-            "responses": state.mock_data.responses,
-            "warnings": state.mock_data.warnings
-        }))
+        // Apply response delay if configured
+        if let Some(delay) = state.config.response_delays.get("GET /mock-data") {
+            tokio::time::sleep(tokio::time::Duration::from_millis(*delay)).await;
+        }
+
+        // Use handlers map to get response if available, otherwise return all mock data
+        let endpoint_key = "GET /mock-data";
+        if let Some(response) = state.handlers.get(endpoint_key) {
+            Json(response.body.clone())
+        } else {
+            Json(json!({
+                "schemas": state.mock_data.schemas,
+                "responses": state.mock_data.responses,
+                "warnings": state.mock_data.warnings
+            }))
+        }
     }
 
     /// Generic endpoint handler that serves mock data based on the request
     ///
-    /// This handler is kept for future use when implementing generic mock server
-    /// functionality that doesn't require pre-defined routes.
-    ///
-    /// TODO: Integrate into mock server when generic routing is implemented
-    #[allow(dead_code)] // TODO: Remove when generic handler is integrated
+    /// This handler can be used for catch-all routes to serve mock data
+    /// based on the request method and path.
     async fn generic_handler(
         axum::extract::State(state): axum::extract::State<MockServerState>,
         method: axum::http::Method,
@@ -269,8 +315,7 @@ impl MockServer {
 
     /// Check if two endpoints match (handles path parameters)
     ///
-    /// TODO: Integrate into route matching system when advanced path parameter matching is implemented
-    #[allow(dead_code)] // TODO: Remove when route matching system is updated
+    /// This is integrated into the mock server for matching endpoints with path parameters.
     pub fn endpoints_match(pattern: &str, request: &str) -> bool {
         // Simple pattern matching - in a real implementation,
         // you'd want more sophisticated path parameter matching
@@ -295,11 +340,9 @@ impl MockServer {
 #[derive(Debug, Clone)]
 struct MockServerState {
     mock_data: Arc<MockDataResult>,
-    // These fields are reserved for future mock server configuration
-    // TODO: Integrate config and handlers when full mock server implementation is completed
-    #[allow(dead_code)] // TODO: Remove when config integration is complete
+    /// Server configuration (integrated - used for CORS, delays, logging)
     config: Arc<MockServerConfig>,
-    #[allow(dead_code)] // TODO: Remove when handler registry is integrated
+    /// Route handlers map (integrated - used for endpoint matching and responses)
     handlers: Arc<HashMap<String, MockResponse>>,
 }
 

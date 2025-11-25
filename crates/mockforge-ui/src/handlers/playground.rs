@@ -331,6 +331,7 @@ pub async fn execute_rest_request(
                     client_ip: None,
                     user_agent: Some("MockForge-Playground".to_string()),
                     headers: headers.clone(),
+                    query_params: HashMap::new(), // Query params not available in playground
                     response_size_bytes: serde_json::to_string(&body)
                         .map(|s| s.len() as u64)
                         .unwrap_or(0),
@@ -456,6 +457,7 @@ pub async fn execute_graphql_query(
                     client_ip: None,
                     user_agent: Some("MockForge-Playground".to_string()),
                     headers: HashMap::new(),
+                    query_params: HashMap::new(), // Query params not available in playground
                     response_size_bytes: serde_json::to_string(&body)
                         .map(|s| s.len() as u64)
                         .unwrap_or(0),

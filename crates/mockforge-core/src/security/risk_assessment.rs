@@ -336,6 +336,8 @@ pub struct RiskAssessmentEngine {
     risks: std::sync::Arc<tokio::sync::RwLock<HashMap<String, Risk>>>,
     /// Risk ID counter
     risk_id_counter: std::sync::Arc<tokio::sync::RwLock<u64>>,
+    /// Persistence path (optional)
+    persistence_path: Option<std::path::PathBuf>,
 }
 
 impl RiskAssessmentEngine {
@@ -345,7 +347,91 @@ impl RiskAssessmentEngine {
             config,
             risks: std::sync::Arc::new(tokio::sync::RwLock::new(HashMap::new())),
             risk_id_counter: std::sync::Arc::new(tokio::sync::RwLock::new(0)),
+            persistence_path: None,
         }
+    }
+
+    /// Create a new risk assessment engine with persistence
+    pub async fn with_persistence<P: AsRef<std::path::Path>>(
+        config: RiskAssessmentConfig,
+        persistence_path: P,
+    ) -> Result<Self, Error> {
+        let path = persistence_path.as_ref().to_path_buf();
+        let mut engine = Self {
+            config,
+            risks: std::sync::Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            risk_id_counter: std::sync::Arc::new(tokio::sync::RwLock::new(0)),
+            persistence_path: Some(path.clone()),
+        };
+
+        // Load existing risks
+        engine.load_risks().await?;
+
+        Ok(engine)
+    }
+
+    /// Load risks from persistence file
+    async fn load_risks(&mut self) -> Result<(), Error> {
+        let path = match &self.persistence_path {
+            Some(p) => p,
+            None => return Ok(()), // No persistence configured
+        };
+
+        if !path.exists() {
+            return Ok(()); // No file yet, start fresh
+        }
+
+        let content = tokio::fs::read_to_string(path)
+            .await
+            .map_err(|e| Error::Generic(format!("Failed to read risk register: {}", e)))?;
+
+        let risks: HashMap<String, Risk> = serde_json::from_str(&content)
+            .map_err(|e| Error::Generic(format!("Failed to parse risk register: {}", e)))?;
+
+        // Find max risk ID to set counter
+        let max_id = risks
+            .keys()
+            .filter_map(|id| {
+                id.strip_prefix("RISK-")
+                    .and_then(|num| num.parse::<u64>().ok())
+            })
+            .max()
+            .unwrap_or(0);
+
+        let mut risk_map = self.risks.write().await;
+        *risk_map = risks;
+        drop(risk_map);
+
+        let mut counter = self.risk_id_counter.write().await;
+        *counter = max_id;
+        drop(counter);
+
+        Ok(())
+    }
+
+    /// Save risks to persistence file
+    async fn save_risks(&self) -> Result<(), Error> {
+        let path = match &self.persistence_path {
+            Some(p) => p,
+            None => return Ok(()), // No persistence configured
+        };
+
+        // Ensure parent directory exists
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| Error::Generic(format!("Failed to create directory: {}", e)))?;
+        }
+
+        let risks = self.risks.read().await;
+        let content = serde_json::to_string_pretty(&*risks)
+            .map_err(|e| Error::Generic(format!("Failed to serialize risk register: {}", e)))?;
+
+        tokio::fs::write(path, content)
+            .await
+            .map_err(|e| Error::Generic(format!("Failed to write risk register: {}", e)))?;
+
+        Ok(())
     }
 
     /// Generate next risk ID
@@ -380,6 +466,10 @@ impl RiskAssessmentEngine {
 
         let mut risks = self.risks.write().await;
         risks.insert(risk_id, risk.clone());
+        drop(risks);
+
+        // Persist to disk
+        self.save_risks().await?;
 
         Ok(risk)
     }
@@ -425,6 +515,9 @@ impl RiskAssessmentEngine {
         let mut risks = self.risks.write().await;
         if risks.contains_key(risk_id) {
             risks.insert(risk_id.to_string(), risk);
+            drop(risks);
+            // Persist to disk
+            self.save_risks().await?;
             Ok(())
         } else {
             Err(Error::Generic("Risk not found".to_string()))
@@ -448,6 +541,9 @@ impl RiskAssessmentEngine {
             }
             risk.recalculate();
             risk.updated_at = Utc::now();
+            drop(risks);
+            // Persist to disk
+            self.save_risks().await?;
             Ok(())
         } else {
             Err(Error::Generic("Risk not found".to_string()))
@@ -470,6 +566,9 @@ impl RiskAssessmentEngine {
             risk.treatment_owner = treatment_owner;
             risk.treatment_deadline = treatment_deadline;
             risk.updated_at = Utc::now();
+            drop(risks);
+            // Persist to disk
+            self.save_risks().await?;
             Ok(())
         } else {
             Err(Error::Generic("Risk not found".to_string()))
@@ -486,6 +585,9 @@ impl RiskAssessmentEngine {
         if let Some(risk) = risks.get_mut(risk_id) {
             risk.treatment_status = status;
             risk.updated_at = Utc::now();
+            drop(risks);
+            // Persist to disk
+            self.save_risks().await?;
             Ok(())
         } else {
             Err(Error::Generic("Risk not found".to_string()))
@@ -505,6 +607,9 @@ impl RiskAssessmentEngine {
             risk.residual_impact = Some(residual_impact);
             risk.recalculate();
             risk.updated_at = Utc::now();
+            drop(risks);
+            // Persist to disk
+            self.save_risks().await?;
             Ok(())
         } else {
             Err(Error::Generic("Risk not found".to_string()))
@@ -519,6 +624,9 @@ impl RiskAssessmentEngine {
             risk.calculate_next_review();
             risk.updated_at = Utc::now();
             let _ = reviewed_by; // TODO: Store reviewer
+            drop(risks);
+            // Persist to disk
+            self.save_risks().await?;
             Ok(())
         } else {
             Err(Error::Generic("Risk not found".to_string()))

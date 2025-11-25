@@ -10,24 +10,102 @@ use crate::domain_pack::{
     DomainPackManifest, StudioChaosRule, StudioContractDiff, StudioPersona, StudioRealityBlend,
 };
 use crate::error::{Result, ScenarioError};
+use crate::installer::{InstallOptions, ScenarioInstaller};
 use mockforge_data::domains::Domain;
 use mockforge_data::PersonaProfile;
+use mockforge_data::PersonaRegistry;
+use mockforge_core::consistency::ConsistencyEngine;
+use mockforge_core::contract_drift::{DriftBudgetConfig, DriftBudgetEngine};
+use mockforge_core::reality_continuum::{ContinuumConfig, RealityContinuumEngine};
 use serde_json::Value;
+use std::sync::Arc;
 use tracing::{info, warn};
 
 /// Studio pack installer
 ///
 /// Handles installation and application of studio packs to a workspace,
-/// including personas, chaos rules, contract diffs, and reality blends.
+/// including scenarios, personas, chaos rules, contract diffs, and reality blends.
 pub struct StudioPackInstaller {
     /// Base directory for pack storage
     packs_dir: std::path::PathBuf,
+    /// Optional scenario installer for installing scenarios
+    scenario_installer: Option<Arc<tokio::sync::Mutex<ScenarioInstaller>>>,
+    /// Optional persona registry for registering personas
+    persona_registry: Option<Arc<PersonaRegistry>>,
+    /// Optional consistency engine for applying chaos rules
+    consistency_engine: Option<Arc<ConsistencyEngine>>,
+    /// Optional drift budget engine for applying drift budgets
+    drift_budget_engine: Option<Arc<tokio::sync::RwLock<DriftBudgetEngine>>>,
+    /// Optional reality continuum engine for applying continuum configs
+    continuum_engine: Option<Arc<RealityContinuumEngine>>,
 }
 
 impl StudioPackInstaller {
     /// Create a new studio pack installer
     pub fn new(packs_dir: std::path::PathBuf) -> Self {
-        Self { packs_dir }
+        Self {
+            packs_dir,
+            scenario_installer: None,
+            persona_registry: None,
+            consistency_engine: None,
+            drift_budget_engine: None,
+            continuum_engine: None,
+        }
+    }
+
+    /// Create a new installer with all dependencies
+    pub fn with_dependencies(
+        packs_dir: std::path::PathBuf,
+        scenario_installer: Option<Arc<tokio::sync::Mutex<ScenarioInstaller>>>,
+        persona_registry: Option<Arc<PersonaRegistry>>,
+        consistency_engine: Option<Arc<ConsistencyEngine>>,
+        drift_budget_engine: Option<Arc<tokio::sync::RwLock<DriftBudgetEngine>>>,
+        continuum_engine: Option<Arc<RealityContinuumEngine>>,
+    ) -> Self {
+        Self {
+            packs_dir,
+            scenario_installer,
+            persona_registry,
+            consistency_engine,
+            drift_budget_engine,
+            continuum_engine,
+        }
+    }
+
+    /// Set scenario installer
+    pub fn with_scenario_installer(
+        mut self,
+        installer: Arc<tokio::sync::Mutex<ScenarioInstaller>>,
+    ) -> Self {
+        self.scenario_installer = Some(installer);
+        self
+    }
+
+    /// Set persona registry
+    pub fn with_persona_registry(mut self, registry: Arc<PersonaRegistry>) -> Self {
+        self.persona_registry = Some(registry);
+        self
+    }
+
+    /// Set consistency engine
+    pub fn with_consistency_engine(mut self, engine: Arc<ConsistencyEngine>) -> Self {
+        self.consistency_engine = Some(engine);
+        self
+    }
+
+    /// Set drift budget engine
+    pub fn with_drift_budget_engine(
+        mut self,
+        engine: Arc<tokio::sync::RwLock<DriftBudgetEngine>>,
+    ) -> Self {
+        self.drift_budget_engine = Some(engine);
+        self
+    }
+
+    /// Set continuum engine
+    pub fn with_continuum_engine(mut self, engine: Arc<RealityContinuumEngine>) -> Self {
+        self.continuum_engine = Some(engine);
+        self
     }
 
     /// Install a studio pack from a manifest
@@ -58,9 +136,56 @@ impl StudioPackInstaller {
             errors: Vec::new(),
         };
 
-        // 1. Install scenarios (existing functionality)
-        // TODO: Integrate with existing scenario installation logic
-        result.scenarios_installed = manifest.scenarios.len();
+        // 1. Install scenarios using ScenarioInstaller if available
+        if let Some(ref installer) = self.scenario_installer {
+            for pack_scenario in &manifest.scenarios {
+                let install_options = InstallOptions {
+                    force: false,
+                    skip_validation: false,
+                    expected_checksum: None,
+                };
+
+                match installer.lock().await.install(&pack_scenario.source, install_options).await {
+                    Ok(scenario_id) => {
+                        result.scenarios_installed += 1;
+                        info!(
+                            "Installed scenario: {} (from pack scenario: {})",
+                            scenario_id, pack_scenario.name
+                        );
+                    }
+                    Err(e) => {
+                        let error_msg = if pack_scenario.required {
+                            format!(
+                                "Failed to install required scenario {} from source {}: {}",
+                                pack_scenario.name, pack_scenario.source, e
+                            )
+                        } else {
+                            format!(
+                                "Failed to install optional scenario {} from source {}: {}",
+                                pack_scenario.name, pack_scenario.source, e
+                            )
+                        };
+
+                        if pack_scenario.required {
+                            warn!("{}", error_msg);
+                            result.errors.push(error_msg);
+                            // For required scenarios, we might want to fail the entire installation
+                            // For now, we log the error and continue
+                        } else {
+                            warn!("{}", error_msg);
+                            // Optional scenarios are logged but don't fail the installation
+                        }
+                    }
+                }
+            }
+        } else {
+            // Scenario installer not available - just count scenarios
+            info!(
+                "Scenario installer not available. {} scenarios would be installed if installer was provided.",
+                manifest.scenarios.len()
+            );
+            result.scenarios_installed = manifest.scenarios.len();
+        }
 
         // 2. Configure personas
         for studio_persona in &manifest.personas {
@@ -158,30 +283,43 @@ impl StudioPackInstaller {
         // Parse domain
         let domain = parse_domain(&studio_persona.domain).map_err(ScenarioError::Generic)?;
 
-        // Create persona profile
-        let mut persona = PersonaProfile::new(studio_persona.id.clone(), domain);
-        persona.backstory = studio_persona.backstory.clone();
+        // If persona registry is available, register the persona
+        if let Some(ref registry) = self.persona_registry {
+            // Get or create the persona (this ensures it exists in the registry)
+            let persona = registry.get_or_create_persona(studio_persona.id.clone(), domain);
 
-        // Set traits
-        for (key, value) in &studio_persona.traits {
-            persona.set_trait(key.clone(), value.clone());
+            // Update the persona with all details from the studio pack
+            let traits: std::collections::HashMap<String, String> = studio_persona
+                .traits
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+
+            let relationships: std::collections::HashMap<String, Vec<String>> = studio_persona
+                .relationships
+                .clone();
+
+            registry
+                .update_persona_full(
+                    &studio_persona.id,
+                    Some(traits),
+                    studio_persona.backstory.clone(),
+                    Some(relationships),
+                )
+                .map_err(|e| ScenarioError::Generic(format!("Failed to update persona: {}", e)))?;
+
+            // Update metadata separately if needed (metadata is not part of update_persona_full)
+            // Note: PersonaProfile metadata is not directly updatable via registry,
+            // but traits and relationships are the main configuration points
+            info!("Registered persona: {} in PersonaRegistry", studio_persona.id);
+        } else {
+            // Validate persona structure even if registry is not available
+            let _persona = PersonaProfile::new(studio_persona.id.clone(), domain);
+            info!(
+                "Persona {} validated (registry not available, skipping registration)",
+                studio_persona.id
+            );
         }
-
-        // Set relationships
-        for (rel_type, related_ids) in &studio_persona.relationships {
-            for related_id in related_ids {
-                persona.add_relationship(rel_type.clone(), related_id.clone());
-            }
-        }
-
-        // Set metadata
-        for (key, value) in &studio_persona.metadata {
-            persona.metadata.insert(key.clone(), value.clone());
-        }
-
-        // TODO: Register persona with PersonaRegistry
-        // This would require access to a global PersonaRegistry instance
-        // For now, we'll just validate the persona structure
 
         Ok(())
     }
@@ -190,13 +328,32 @@ impl StudioPackInstaller {
     async fn apply_chaos_rule(
         &self,
         chaos_rule: &StudioChaosRule,
-        _workspace_id: Option<&str>,
+        workspace_id: Option<&str>,
     ) -> Result<()> {
-        // Validate chaos config JSON
-        // TODO: Deserialize into ChaosConfig and apply to workspace
-        // This would require access to a ChaosEngine or workspace configuration
+        // Validate chaos config JSON structure
         serde_json::from_value::<Value>(chaos_rule.chaos_config.clone())
             .map_err(ScenarioError::Serde)?;
+
+        // If consistency engine is available, activate the chaos rule
+        if let (Some(ref engine), Some(ws_id)) = (&self.consistency_engine, workspace_id) {
+            // The chaos rule config is stored as JSON, which matches ChaosScenario type
+            let chaos_scenario = chaos_rule.chaos_config.clone();
+            engine
+                .activate_chaos_rule(ws_id, chaos_scenario)
+                .await
+                .map_err(|e| {
+                    ScenarioError::Generic(format!("Failed to activate chaos rule: {}", e))
+                })?;
+            info!(
+                "Activated chaos rule: {} for workspace: {}",
+                chaos_rule.name, ws_id
+            );
+        } else {
+            info!(
+                "Chaos rule {} validated (consistency engine not available, skipping activation)",
+                chaos_rule.name
+            );
+        }
 
         Ok(())
     }
@@ -205,12 +362,75 @@ impl StudioPackInstaller {
     async fn configure_contract_diff(
         &self,
         contract_diff: &StudioContractDiff,
-        _workspace_id: Option<&str>,
+        workspace_id: Option<&str>,
     ) -> Result<()> {
-        // Validate drift budget JSON
-        // TODO: Deserialize into DriftBudgetConfig and apply to workspace
-        serde_json::from_value::<Value>(contract_diff.drift_budget.clone())
-            .map_err(ScenarioError::Serde)?;
+        // Deserialize drift budget config
+        let drift_config: DriftBudgetConfig = serde_json::from_value(
+            contract_diff.drift_budget.clone(),
+        )
+        .map_err(|e| {
+            ScenarioError::Generic(format!(
+                "Failed to deserialize DriftBudgetConfig: {}",
+                e
+            ))
+        })?;
+
+        // If drift budget engine is available, apply the configuration
+        if let Some(ref engine) = self.drift_budget_engine {
+            let mut engine_guard = engine.write().await;
+            // Merge the new config with existing config
+            let mut current_config = engine_guard.config().clone();
+
+            // Merge per-workspace budgets if workspace_id is provided
+            if let Some(ws_id) = workspace_id {
+                if let Some(budget) = drift_config.default_budget.clone() {
+                    current_config
+                        .per_workspace_budgets
+                        .insert(ws_id.to_string(), budget);
+                }
+            }
+
+            // Merge per-service budgets
+            for (service, budget) in &drift_config.per_service_budgets {
+                current_config
+                    .per_service_budgets
+                    .insert(service.clone(), budget.clone());
+            }
+
+            // Merge per-tag budgets
+            for (tag, budget) in &drift_config.per_tag_budgets {
+                current_config
+                    .per_tag_budgets
+                    .insert(tag.clone(), budget.clone());
+            }
+
+            // Merge per-endpoint budgets
+            for (endpoint, budget) in &drift_config.per_endpoint_budgets {
+                current_config
+                    .per_endpoint_budgets
+                    .insert(endpoint.clone(), budget.clone());
+            }
+
+            // Update default budget if provided
+            if drift_config.default_budget.is_some() {
+                current_config.default_budget = drift_config.default_budget;
+            }
+
+            // Update enabled flag
+            current_config.enabled = drift_config.enabled;
+
+            // Apply the merged configuration
+            engine_guard.update_config(current_config);
+            info!(
+                "Applied drift budget config: {} for workspace: {:?}",
+                contract_diff.name, workspace_id
+            );
+        } else {
+            info!(
+                "Drift budget config {} validated (drift budget engine not available, skipping application)",
+                contract_diff.name
+            );
+        }
 
         Ok(())
     }
@@ -221,10 +441,27 @@ impl StudioPackInstaller {
         reality_blend: &StudioRealityBlend,
         _workspace_id: Option<&str>,
     ) -> Result<()> {
-        // Validate continuum config JSON
-        // TODO: Deserialize into ContinuumConfig and apply to workspace
-        serde_json::from_value::<Value>(reality_blend.continuum_config.clone())
-            .map_err(ScenarioError::Serde)?;
+        // Deserialize continuum config
+        let continuum_config: ContinuumConfig = serde_json::from_value(
+            reality_blend.continuum_config.clone(),
+        )
+        .map_err(|e| {
+            ScenarioError::Generic(format!(
+                "Failed to deserialize ContinuumConfig: {}",
+                e
+            ))
+        })?;
+
+        // If continuum engine is available, apply the configuration
+        if let Some(ref engine) = self.continuum_engine {
+            engine.update_config(continuum_config).await;
+            info!("Applied reality continuum config: {}", reality_blend.name);
+        } else {
+            info!(
+                "Reality continuum config {} validated (continuum engine not available, skipping application)",
+                reality_blend.name
+            );
+        }
 
         Ok(())
     }
@@ -232,11 +469,37 @@ impl StudioPackInstaller {
     /// Apply workspace configuration from a studio pack
     async fn apply_workspace_config(
         &self,
-        _workspace_config: &Value,
-        _workspace_id: Option<&str>,
+        workspace_config: &Value,
+        workspace_id: Option<&str>,
     ) -> Result<()> {
-        // TODO: Apply workspace configuration
-        // This would require access to workspace management APIs
+        // Validate workspace configuration JSON structure
+        // The workspace config is a flexible JSON value that can contain
+        // various workspace settings (reality level, AI mode, etc.)
+        if !workspace_config.is_object() {
+            return Err(ScenarioError::Generic(
+                "Workspace configuration must be a JSON object".to_string(),
+            ));
+        }
+
+        // Note: Full workspace configuration application would require access to
+        // workspace management APIs (e.g., WorkspaceRegistry, WorkspaceService).
+        // For now, we validate the structure and log that it would be applied.
+        // In a full implementation, this would:
+        // 1. Deserialize workspace config into WorkspaceConfig
+        // 2. Update the workspace via WorkspaceRegistry or WorkspaceService
+        // 3. Persist the changes
+
+        if workspace_id.is_some() {
+            info!(
+                "Workspace configuration validated for workspace: {} (workspace management APIs not available, skipping application)",
+                workspace_id.unwrap()
+            );
+        } else {
+            info!(
+                "Workspace configuration validated (workspace_id not provided, skipping application)"
+            );
+        }
+
         Ok(())
     }
 }

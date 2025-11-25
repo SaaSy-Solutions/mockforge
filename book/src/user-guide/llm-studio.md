@@ -2,6 +2,8 @@
 
 LLM Studio enables you to create complete MockForge workspaces from natural language descriptions. Simply describe your system, and MockForge builds a realistic mock backend with personas, behavioral scenarios, reality continuum configuration, and drift budget settings.
 
+**Note:** For complete system generation (20-30 endpoints, personas, lifecycles, WebSocket topics, CI templates), see [System Generation](../ai/system-generation.md).
+
 ## Overview
 
 LLM Studio provides:

@@ -226,12 +226,138 @@ pub async fn add_alert(
     })))
 }
 
+/// Get compliance status
+///
+/// GET /api/v1/compliance/status
+pub async fn get_compliance_status(
+    State(state): State<ComplianceDashboardState>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let engine = state.engine.read().await;
+    let dashboard = engine.get_dashboard_data().await.map_err(|e| {
+        error!("Failed to get dashboard data: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Extract control effectiveness by area
+    let mut by_area = serde_json::Map::new();
+    for (category, effectiveness) in &dashboard.control_effectiveness {
+        let category_name = match category {
+            mockforge_core::security::compliance_dashboard::ControlCategory::AccessControl => "access_control",
+            mockforge_core::security::compliance_dashboard::ControlCategory::Encryption => "encryption",
+            mockforge_core::security::compliance_dashboard::ControlCategory::Monitoring => "monitoring",
+            mockforge_core::security::compliance_dashboard::ControlCategory::ChangeManagement => "change_management",
+            mockforge_core::security::compliance_dashboard::ControlCategory::IncidentResponse => "incident_response",
+        };
+        by_area.insert(category_name.to_string(), serde_json::Value::Number(effectiveness.effectiveness.into()));
+    }
+
+    Ok(Json(serde_json::json!({
+        "overall_compliance": dashboard.overall_compliance,
+        "soc2_compliance": dashboard.soc2_compliance,
+        "iso27001_compliance": dashboard.iso27001_compliance,
+        "by_area": by_area,
+        "gaps": dashboard.gaps.total,
+        "remediation_in_progress": dashboard.remediation.in_progress
+    })))
+}
+
+/// Get compliance report
+///
+/// GET /api/v1/compliance/reports/{period}
+pub async fn get_compliance_report(
+    State(state): State<ComplianceDashboardState>,
+    Path(period): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let engine = state.engine.read().await;
+    let dashboard = engine.get_dashboard_data().await.map_err(|e| {
+        error!("Failed to get dashboard data: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Extract report period from query or use provided period
+    let report_period = params.get("month")
+        .or_else(|| params.get("period"))
+        .cloned()
+        .unwrap_or_else(|| {
+            // Default to current month
+            let now = chrono::Utc::now();
+            now.format("%Y-%m").to_string()
+        });
+
+    // Get all gaps for recommendations
+    let all_gaps = engine.get_all_gaps().await.map_err(|e| {
+        error!("Failed to get gaps: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Generate recommendations based on gaps
+    let mut recommendations = Vec::new();
+    for gap in &all_gaps {
+        match gap.severity {
+            mockforge_core::security::compliance_dashboard::GapSeverity::Critical => {
+                recommendations.push(format!("Urgent: {}", gap.description));
+            }
+            mockforge_core::security::compliance_dashboard::GapSeverity::High => {
+                recommendations.push(format!("High priority: {}", gap.description));
+            }
+            _ => {}
+        }
+    }
+
+    // Add generic recommendations if no gaps
+    if recommendations.is_empty() {
+        if dashboard.control_effectiveness.get(&mockforge_core::security::compliance_dashboard::ControlCategory::ChangeManagement)
+            .map(|e| e.effectiveness < 95)
+            .unwrap_or(false) {
+            recommendations.push("Enhance change management procedures".to_string());
+        }
+        if dashboard.control_effectiveness.get(&mockforge_core::security::compliance_dashboard::ControlCategory::IncidentResponse)
+            .map(|e| e.effectiveness < 95)
+            .unwrap_or(false) {
+            recommendations.push("Improve incident response time".to_string());
+        }
+    }
+
+    // Format gaps for report
+    let gaps_summary: Vec<serde_json::Value> = all_gaps.iter().take(10).map(|gap| {
+        serde_json::json!({
+            "id": gap.gap_id,
+            "severity": format!("{:?}", gap.severity).to_lowercase(),
+            "remediation_status": format!("{:?}", gap.status).to_lowercase()
+        })
+    }).collect();
+
+    // Format control effectiveness
+    let mut control_effectiveness = serde_json::Map::new();
+    for (category, effectiveness) in &dashboard.control_effectiveness {
+        let category_name = match category {
+            mockforge_core::security::compliance_dashboard::ControlCategory::AccessControl => "access_control",
+            mockforge_core::security::compliance_dashboard::ControlCategory::Encryption => "encryption",
+            mockforge_core::security::compliance_dashboard::ControlCategory::Monitoring => "monitoring",
+            mockforge_core::security::compliance_dashboard::ControlCategory::ChangeManagement => "change_management",
+            mockforge_core::security::compliance_dashboard::ControlCategory::IncidentResponse => "incident_response",
+        };
+        control_effectiveness.insert(category_name.to_string(), serde_json::Value::Number(effectiveness.effectiveness.into()));
+    }
+
+    Ok(Json(serde_json::json!({
+        "report_period": report_period,
+        "overall_compliance": dashboard.overall_compliance,
+        "control_effectiveness": control_effectiveness,
+        "gaps": gaps_summary,
+        "recommendations": recommendations
+    })))
+}
+
 /// Create compliance dashboard router
 pub fn compliance_dashboard_router(state: ComplianceDashboardState) -> axum::Router {
     use axum::routing::{get, patch, post};
 
     axum::Router::new()
         .route("/dashboard", get(get_dashboard))
+        .route("/status", get(get_compliance_status))
+        .route("/reports/:period", get(get_compliance_report))
         .route("/gaps", get(get_gaps))
         .route("/gaps", post(add_gap))
         .route("/gaps/{gap_id}/status", patch(update_gap_status))

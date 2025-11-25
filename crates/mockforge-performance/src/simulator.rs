@@ -264,7 +264,7 @@ mod tests {
         simulator.process_request("/api/users", "GET").await.unwrap();
 
         let snapshot = simulator.get_snapshot().await;
-        assert!(snapshot.metrics.total_requests >= 0);
+        // total_requests is u64, so >= 0 is always true - removed redundant assertion
 
         simulator.stop().await;
         assert!(!simulator.is_running().await);

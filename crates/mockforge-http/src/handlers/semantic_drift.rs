@@ -7,11 +7,13 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
+use chrono::{DateTime, Utc};
 use mockforge_core::ai_contract_diff::{ContractDiffAnalyzer, ContractDiffConfig};
 use mockforge_core::incidents::semantic_manager::{SemanticIncident, SemanticIncidentManager};
 use mockforge_core::openapi::OpenApiSpec;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::database::Database;
 
@@ -20,6 +22,7 @@ use crate::database::Database;
 fn map_row_to_semantic_incident(
     row: &sqlx::postgres::PgRow,
 ) -> Result<SemanticIncident, sqlx::Error> {
+    use sqlx::Row;
     use mockforge_core::ai_contract_diff::semantic_analyzer::SemanticChangeType;
     use mockforge_core::incidents::types::{IncidentSeverity, IncidentStatus};
 

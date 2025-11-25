@@ -8,7 +8,7 @@
 use crate::config::AnalyticsConfig;
 use crate::database::AnalyticsDatabase;
 use crate::error::Result;
-use crate::models::{AnalyticsFilter, EndpointStats, HourMetricsAggregate, MetricsAggregate};
+use crate::models::{AnalyticsFilter, DayMetricsAggregate, EndpointStats, HourMetricsAggregate, MetricsAggregate};
 use chrono::{Timelike, Utc};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -402,12 +402,136 @@ impl MetricsAggregator {
             .with_nanosecond(0)
             .unwrap()
             - chrono::Duration::days(1);
-        let _day_end = day_start + chrono::Duration::days(1);
+        let day_end = day_start + chrono::Duration::days(1);
 
         info!("Rolling up metrics to day: {}", day_start.format("%Y-%m-%d"));
 
-        // TODO: Query hour aggregates and roll up to day
+        let filter = AnalyticsFilter {
+            start_time: Some(day_start.timestamp()),
+            end_time: Some(day_end.timestamp()),
+            ..Default::default()
+        };
 
+        let hour_data = self.db.get_hour_aggregates(&filter).await?;
+
+        if hour_data.is_empty() {
+            debug!("No hour data to roll up");
+            return Ok(());
+        }
+
+        // Group by protocol, method, endpoint, status_code
+        let mut groups: HashMap<
+            (String, Option<String>, Option<String>, Option<i32>),
+            Vec<&HourMetricsAggregate>,
+        > = HashMap::new();
+
+        for agg in &hour_data {
+            let key =
+                (agg.protocol.clone(), agg.method.clone(), agg.endpoint.clone(), agg.status_code);
+            groups.entry(key).or_default().push(agg);
+        }
+
+        // Find peak hour (hour with max request count)
+        let mut peak_hour: Option<i32> = None;
+        let mut max_requests = 0i64;
+        for agg in &hour_data {
+            if agg.request_count > max_requests {
+                max_requests = agg.request_count;
+                // Extract hour from timestamp
+                if let Some(dt) = chrono::DateTime::from_timestamp(agg.timestamp, 0) {
+                    peak_hour = Some(dt.hour() as i32);
+                }
+            }
+        }
+
+        for ((protocol, method, endpoint, status_code), group) in groups {
+            let request_count: i64 = group.iter().map(|a| a.request_count).sum();
+            let error_count: i64 = group.iter().map(|a| a.error_count).sum();
+            let latency_sum: f64 = group.iter().map(|a| a.latency_sum).sum();
+            let latency_min =
+                group.iter().filter_map(|a| a.latency_min).fold(f64::INFINITY, f64::min);
+            let latency_max =
+                group.iter().filter_map(|a| a.latency_max).fold(f64::NEG_INFINITY, f64::max);
+
+            // Calculate percentiles from hour aggregates (average of hour percentiles)
+            let latency_p50_avg: Option<f64> = {
+                let p50_values: Vec<f64> = group.iter().filter_map(|a| a.latency_p50).collect();
+                if !p50_values.is_empty() {
+                    Some(p50_values.iter().sum::<f64>() / p50_values.len() as f64)
+                } else {
+                    None
+                }
+            };
+            let latency_p95_avg: Option<f64> = {
+                let p95_values: Vec<f64> = group.iter().filter_map(|a| a.latency_p95).collect();
+                if !p95_values.is_empty() {
+                    Some(p95_values.iter().sum::<f64>() / p95_values.len() as f64)
+                } else {
+                    None
+                }
+            };
+            let latency_p99_avg: Option<f64> = {
+                let p99_values: Vec<f64> = group.iter().filter_map(|a| a.latency_p99).collect();
+                if !p99_values.is_empty() {
+                    Some(p99_values.iter().sum::<f64>() / p99_values.len() as f64)
+                } else {
+                    None
+                }
+            };
+
+            // Average active connections
+            let active_connections_avg: Option<f64> = {
+                let avg_values: Vec<f64> =
+                    group.iter().filter_map(|a| a.active_connections_avg).collect();
+                if !avg_values.is_empty() {
+                    Some(avg_values.iter().sum::<f64>() / avg_values.len() as f64)
+                } else {
+                    None
+                }
+            };
+
+            // Max active connections
+            let active_connections_max = group.iter().filter_map(|a| a.active_connections_max).max();
+
+            let day_agg = DayMetricsAggregate {
+                id: None,
+                date: day_start.format("%Y-%m-%d").to_string(),
+                timestamp: day_start.timestamp(),
+                protocol,
+                method,
+                endpoint,
+                status_code,
+                workspace_id: group.first().and_then(|a| a.workspace_id.clone()),
+                environment: group.first().and_then(|a| a.environment.clone()),
+                request_count,
+                error_count,
+                latency_sum,
+                latency_min: if latency_min.is_finite() {
+                    Some(latency_min)
+                } else {
+                    None
+                },
+                latency_max: if latency_max.is_finite() {
+                    Some(latency_max)
+                } else {
+                    None
+                },
+                latency_p50: latency_p50_avg,
+                latency_p95: latency_p95_avg,
+                latency_p99: latency_p99_avg,
+                bytes_sent: group.iter().map(|a| a.bytes_sent).sum(),
+                bytes_received: group.iter().map(|a| a.bytes_received).sum(),
+                active_connections_avg,
+                active_connections_max,
+                unique_clients: None, // Would need to track unique clients separately
+                peak_hour,
+                created_at: None,
+            };
+
+            self.db.insert_day_aggregate(&day_agg).await?;
+        }
+
+        info!("Rolled up {} hour aggregates into day aggregates", hour_data.len());
         Ok(())
     }
 }

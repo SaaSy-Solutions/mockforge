@@ -137,16 +137,14 @@ pub fn matches_verification_pattern(
     }
 
     // Check query parameters
-    // Note: RequestLogEntry doesn't store query params directly, so we'd need to
-    // extract them from the path or store them separately. For now, we'll check
-    // if the path contains the query string if query_params are specified.
-    // This is a limitation we should address by enhancing RequestLogEntry.
+    // Check query parameters
     if !pattern.query_params.is_empty() {
-        // If query params are specified but we can't check them, we could either:
-        // 1. Return false (strict matching)
-        // 2. Skip query param checking for now
-        // For now, we'll skip since RequestLogEntry doesn't have query params
-        // TODO: Enhance RequestLogEntry to include query parameters
+        for (key, expected_value) in &pattern.query_params {
+            let found_value = entry.query_params.get(key);
+            if found_value != Some(expected_value) {
+                return false;
+            }
+        }
     }
 
     // Check headers (case-insensitive header names)

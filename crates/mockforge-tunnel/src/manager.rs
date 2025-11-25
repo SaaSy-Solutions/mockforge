@@ -125,6 +125,22 @@ impl TunnelManager {
         Ok(())
     }
 
+    /// Stop and delete a tunnel by ID
+    pub async fn stop_tunnel_by_id(&self, tunnel_id: &str) -> Result<()> {
+        // Delete tunnel via provider
+        self.provider.delete_tunnel(tunnel_id).await?;
+
+        // Clear active tunnel if it matches
+        {
+            let mut tunnel = self.active_tunnel.write().await;
+            if tunnel.as_ref().map(|t| t.tunnel_id.as_str()) == Some(tunnel_id) {
+                *tunnel = None;
+            }
+        }
+
+        Ok(())
+    }
+
     /// List all tunnels
     pub async fn list_tunnels(&self) -> Result<Vec<TunnelStatus>> {
         self.provider.list_tunnels().await

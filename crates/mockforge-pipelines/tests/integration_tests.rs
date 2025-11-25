@@ -41,6 +41,7 @@ async fn test_pipeline_creation_and_execution() {
             continue_on_error: false,
             timeout: None,
         }],
+        step_defaults: HashMap::new(),
     };
 
     let pipeline = Pipeline::new("test-pipeline".to_string(), definition, None, None);
@@ -64,6 +65,7 @@ async fn test_pipeline_event_matching() {
             filters: HashMap::new(),
         }],
         steps: vec![],
+        step_defaults: HashMap::new(),
     };
 
     let pipeline = Pipeline::new("schema-pipeline".to_string(), definition, None, None);
@@ -117,6 +119,7 @@ async fn test_pipeline_execution_notify_step() {
             continue_on_error: false,
             timeout: None,
         }],
+        step_defaults: HashMap::new(),
     };
 
     let pipeline = Pipeline::new("notify-pipeline".to_string(), definition, None, None);
@@ -194,6 +197,7 @@ paths:
             continue_on_error: false,
             timeout: None,
         }],
+        step_defaults: HashMap::new(),
     };
 
     let pipeline = Pipeline::new("sdk-pipeline".to_string(), definition, None, None);
@@ -296,6 +300,7 @@ async fn test_pipeline_multiple_steps() {
                 timeout: None,
             },
         ],
+        step_defaults: HashMap::new(),
     };
 
     let pipeline = Pipeline::new("multi-step-pipeline".to_string(), definition, None, None);
@@ -334,6 +339,7 @@ async fn test_disabled_pipeline() {
             filters: HashMap::new(),
         }],
         steps: vec![],
+        step_defaults: HashMap::new(),
     };
 
     let pipeline = Pipeline::new("disabled-pipeline".to_string(), definition, None, None);

@@ -6294,11 +6294,13 @@ version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e13e10e8818f8b2a60f52cb127041d388b89f3a96a62be9ceaffa22262fef7f"
 dependencies = [
+ "async-trait",
  "base64 0.22.1",
  "chumsky",
  "email-encoding",
  "email_address",
  "fastrand 2.3.0",
+ "futures-io",
  "futures-util",
  "hostname",
  "httpdate",
@@ -6310,6 +6312,7 @@ dependencies = [
  "quoted_printable",
  "socket2 0.6.1",
  "tokio",
+ "tokio-native-tls",
  "url",
 ]
 
@@ -7632,6 +7635,7 @@ dependencies = [
  "mockforge-chaos 0.3.2",
  "mockforge-core 0.3.2",
  "mockforge-data 0.3.2",
+ "mockforge-kafka",
  "mockforge-mqtt 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mockforge-observability 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mockforge-performance",
@@ -7883,6 +7887,7 @@ dependencies = [
  "chrono",
  "futures",
  "handlebars 5.1.2",
+ "lettre",
  "mockforge-core 0.3.2",
  "once_cell",
  "parking_lot",

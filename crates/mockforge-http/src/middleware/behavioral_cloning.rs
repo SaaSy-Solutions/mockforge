@@ -11,6 +11,7 @@ use axum::{
 };
 use mockforge_core::behavioral_cloning::{ProbabilisticModel, SequenceLearner};
 use mockforge_recorder::database::RecorderDatabase;
+use rand::Rng;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -140,27 +141,60 @@ pub async fn behavioral_cloning_middleware(req: Request<Body>, next: Next) -> Re
         // Sample error pattern
         let error_pattern = ProbabilisticModel::sample_error_pattern(&model, None);
 
-        // If we sampled an error status code, we need to modify the response
-        // However, we can't easily modify the response status in middleware
-        // without intercepting it. For now, we'll just apply latency.
-        // Full error injection would require response interception middleware.
-
-        if let Some(pattern) = error_pattern {
-            debug!(
-                "Sampled error pattern: {} (probability: {})",
-                pattern.error_type, pattern.probability
-            );
-            // TODO: Apply error pattern to response
-            // This would require response interception middleware
-        }
-
-        // Continue with request (status code modification would need response interception)
+        // Continue with request
         let mut response = next.run(req).await;
 
-        // Modify response status if we sampled a different status code
-        if sampled_status != response.status().as_u16() {
-            *response.status_mut() =
-                StatusCode::from_u16(sampled_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        // Apply error pattern if sampled
+        if let Some(pattern) = &error_pattern {
+            debug!(
+                "Applying error pattern: {} (probability: {})",
+                pattern.error_type, pattern.probability
+            );
+
+            // Update status code if pattern has one
+            if let Some(pattern_status) = pattern.status_code {
+                *response.status_mut() = StatusCode::from_u16(pattern_status)
+                    .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            } else if sampled_status != response.status().as_u16() {
+                // Use sampled status if pattern doesn't specify one
+                *response.status_mut() = StatusCode::from_u16(sampled_status)
+                    .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+
+            // Apply error pattern body if sample responses are available
+            if !pattern.sample_responses.is_empty() {
+                use axum::body::HttpBody;
+                use axum::body::Body;
+
+                // Pick a random sample response (or first one)
+                let sample_idx = if pattern.sample_responses.len() > 1 {
+                    rand::thread_rng().gen_range(0..pattern.sample_responses.len())
+                } else {
+                    0
+                };
+
+                if let Some(sample_body) = pattern.sample_responses.get(sample_idx) {
+                    // Serialize the sample response to JSON
+                    if let Ok(json_string) = serde_json::to_string(sample_body) {
+                        // Replace response body
+                        *response.body_mut() = Body::from(json_string);
+
+                        // Set content-type header
+                        response.headers_mut().insert(
+                            axum::http::header::CONTENT_TYPE,
+                            axum::http::HeaderValue::from_static("application/json"),
+                        );
+
+                        debug!("Applied error pattern body from sample response");
+                    }
+                }
+            }
+        } else {
+            // No error pattern, but still apply sampled status code if different
+            if sampled_status != response.status().as_u16() {
+                *response.status_mut() = StatusCode::from_u16(sampled_status)
+                    .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            }
         }
 
         response

@@ -29,6 +29,12 @@ pub struct StepContext {
     pub config: HashMap<String, Value>,
     /// Step name
     pub step_name: String,
+    /// Workspace ID (for workspace-level configuration lookups)
+    pub workspace_id: Option<Uuid>,
+    /// Pipeline ID (for pipeline-level configuration lookups)
+    pub pipeline_id: Option<Uuid>,
+    /// Pipeline-level defaults (merged from pipeline definition)
+    pub pipeline_defaults: HashMap<String, Value>,
 }
 
 /// Step execution result

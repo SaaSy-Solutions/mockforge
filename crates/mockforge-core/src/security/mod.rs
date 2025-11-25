@@ -22,6 +22,7 @@ pub mod privileged_access;
 pub mod privileged_access_global;
 pub mod risk_assessment;
 pub mod risk_assessment_global;
+pub mod risk_review_scheduler;
 pub mod siem;
 pub mod slack;
 
@@ -82,5 +83,6 @@ pub use risk_assessment_global::{
     get_global_risk_assessment_engine, init_global_risk_assessment_engine,
     is_risk_assessment_engine_initialized,
 };
+pub use risk_review_scheduler::RiskReviewScheduler;
 pub use siem::{SiemConfig, SiemDestination, SiemEmitter};
 pub use slack::{SlackConfig, SlackMessage, SlackMethod, SlackService};

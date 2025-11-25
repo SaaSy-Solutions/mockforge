@@ -11,6 +11,7 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -21,6 +22,8 @@ pub struct ContractHealthState {
     pub incident_manager: Arc<mockforge_core::incidents::IncidentManager>,
     /// Semantic incident manager
     pub semantic_manager: Arc<mockforge_core::incidents::SemanticIncidentManager>,
+    /// Database connection (optional)
+    pub database: Option<crate::database::Database>,
 }
 
 /// Query parameters for timeline
@@ -123,6 +126,10 @@ pub enum TimelineEvent {
         change_probability: f64,
         /// Break probability (0.0-1.0)
         break_probability: f64,
+        /// Next expected change timestamp (optional)
+        next_expected_change: Option<i64>,
+        /// Confidence score (0.0-1.0)
+        confidence: f64,
         /// Prediction timestamp
         predicted_at: i64,
     },
@@ -202,7 +209,9 @@ pub async fn get_timeline(
 
     // Add threat assessments and forecasts from database
     #[cfg(feature = "database")]
-    if let Some(pool) = state.database.as_ref().and_then(|db| db.pool()) {
+    {
+        use sqlx::Row;
+        if let Some(pool) = state.database.as_ref().and_then(|db| db.pool()) {
         // Query threat assessments
         if let Ok(ta_rows) = sqlx::query(
             "SELECT id, workspace_id, service_id, service_name, endpoint, method, aggregation_level,
@@ -244,13 +253,20 @@ pub async fn get_timeline(
                     _ => continue,
                 };
 
+                // Count findings from the findings JSON field
+                let findings_count = row.try_get::<serde_json::Value, _>("findings")
+                    .ok()
+                    .and_then(|v| v.as_array().map(|arr| arr.len()))
+                    .unwrap_or(0);
+
                 events.push(TimelineEvent::ThreatAssessment {
                     id: id.to_string(),
-                    endpoint: endpoint.unwrap_or_default(),
-                    method: method.unwrap_or_default(),
+                    endpoint,
+                    method,
                     threat_level: format!("{:?}", threat_level),
                     threat_score,
                     assessed_at: assessed_at.timestamp(),
+                    findings_count,
                 });
             }
         }
@@ -268,6 +284,7 @@ pub async fn get_timeline(
         .fetch_all(pool)
         .await
         {
+            use sqlx::Row;
             for row in forecast_rows {
                 let id: uuid::Uuid = match row.try_get("id") {
                     Ok(id) => id,
@@ -318,6 +335,7 @@ pub async fn get_timeline(
                     predicted_at: predicted_at.timestamp(),
                 });
             }
+        }
         }
     }
 
