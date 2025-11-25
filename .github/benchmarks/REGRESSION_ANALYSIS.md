@@ -20,12 +20,12 @@ From commit `ab52b5106274553131039797f26a91f4208df9e3`, the following benchmarks
 
 **Problem**: The `validate_json_schema()` function in `crates/mockforge-core/src/validation.rs` was compiling JSON schemas on every validation call. Schema compilation is expensive and was dominating the benchmark execution time.
 
-**Root Cause**: 
+**Root Cause**:
 - `validate_json_schema()` creates a new `Validator::from_json_schema()` on every call
 - `Validator::from_json_schema()` compiles the schema using `jsonschema::options().build()`
 - This compilation overhead was being measured in the benchmark, masking the actual validation performance
 
-**Evidence**: 
+**Evidence**:
 - Benchmark was calling `validate_json_schema()` which internally calls `Validator::from_json_schema()`
 - Schema compilation can take microseconds, while validation itself is nanoseconds
 - The benchmark was measuring compilation + validation, not just validation
@@ -80,7 +80,7 @@ group.bench_function("simple", |b| {
 });
 ```
 
-**Impact**: 
+**Impact**:
 - `json_validation/simple`: **97% improvement** (3,489 ns → 112 ns)
 - `json_validation/complex`: **93% improvement** (9,873 ns → 701 ns)
 
@@ -209,4 +209,3 @@ The regressions were primarily due to measuring setup overhead (schema compilati
   - 1 benchmark optimized for consistency (reduced variance from allocation patterns)
 
 The optimizations maintain API compatibility and improve both benchmark accuracy and production performance insights.
-

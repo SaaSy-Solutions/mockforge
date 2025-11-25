@@ -124,4 +124,3 @@ cargo bench --bench core_benchmarks
 - **Validation overhead**: Excessive validation in hot paths
 - **Memory allocations**: Frequent allocations in tight loops
 - **Cache misses**: Poor data locality or missing caches
-
