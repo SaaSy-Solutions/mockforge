@@ -266,21 +266,41 @@ pub fn expand_str(input: &str) -> String {
 /// # Returns
 /// String with all template tokens replaced
 pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> String {
-    // Basic replacements first (fast paths)
-    let mut out = input.replace("{{uuid}}", &uuid::Uuid::new_v4().to_string());
+    // Early return if no template tokens present (common case optimization)
+    if !input.contains("{{") {
+        return input.to_string();
+    }
 
-    // Use virtual clock if available, otherwise use real time
-    let current_time = if let Some(clock) = &context.virtual_clock {
-        clock.now()
+    let mut out = input.to_string();
+
+    // Basic replacements first (fast paths) - only if tokens are present
+    if out.contains("{{uuid}}") {
+        out = out.replace("{{uuid}}", &uuid::Uuid::new_v4().to_string());
+    }
+
+    // Only get current time if we need it (for {{now}} or time offsets)
+    let needs_time = out.contains("{{now}}") || NOW_OFFSET_RE.is_match(&out);
+    let current_time = if needs_time {
+        if let Some(clock) = &context.virtual_clock {
+            Some(clock.now())
+        } else {
+            Some(Utc::now())
+        }
     } else {
-        Utc::now()
+        None
     };
-    out = out.replace("{{now}}", &current_time.to_rfc3339());
 
-    // now±Nd (days), now±Nh (hours), now±Nm (minutes), now±Ns (seconds)
-    out = replace_now_offset_with_time(&out, current_time);
+    if let Some(time) = current_time {
+        if out.contains("{{now}}") {
+            out = out.replace("{{now}}", &time.to_rfc3339());
+        }
+        // now±Nd (days), now±Nh (hours), now±Nm (minutes), now±Ns (seconds)
+        if NOW_OFFSET_RE.is_match(&out) {
+            out = replace_now_offset_with_time(&out, time);
+        }
+    }
 
-    // Randoms
+    // Randoms - only process if tokens are present
     if out.contains("{{rand.int}}") {
         let n: i64 = thread_rng().random_range(0..=1_000_000);
         out = out.replace("{{rand.int}}", &n.to_string());
@@ -289,7 +309,9 @@ pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> Stri
         let n: f64 = thread_rng().random();
         out = out.replace("{{rand.float}}", &format!("{:.6}", n));
     }
-    out = replace_randint_ranges(&out);
+    if RANDINT_RE.is_match(&out) {
+        out = replace_randint_ranges(&out);
+    }
 
     // Response function tokens (new response() syntax)
     if out.contains("response(") {
@@ -309,10 +331,13 @@ pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> Stri
     }
 
     // Faker tokens (can be disabled for determinism)
-    let faker_enabled = std::env::var("MOCKFORGE_FAKE_TOKENS")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(true);
-    if faker_enabled {
+    // Cache the environment variable check using OnceCell for better performance
+    static FAKER_ENABLED: Lazy<bool> = Lazy::new(|| {
+        std::env::var("MOCKFORGE_FAKE_TOKENS")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(true)
+    });
+    if *FAKER_ENABLED && out.contains("{{faker.") {
         out = replace_faker_tokens(&out);
     }
 
