@@ -179,7 +179,7 @@ jobs:
 
       - name: Upload contract diff results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: contract-diff-results
           path: contract-diff-results/

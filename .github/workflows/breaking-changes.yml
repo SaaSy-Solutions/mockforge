@@ -55,7 +55,7 @@ jobs:
 
       - name: Upload breaking changes report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: breaking-changes-report
           path: pr-branch/breaking-changes.md

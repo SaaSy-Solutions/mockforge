@@ -56,7 +56,7 @@ jobs:
           k6 run --out json=load-test-results.json standard_load.js
 
       - name: Upload load test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: load-test-results-standard
@@ -104,7 +104,7 @@ jobs:
           k6 run --out json=load-test-results-extended.json extended_load.js
 
       - name: Upload load test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: load-test-results-extended
@@ -152,7 +152,7 @@ jobs:
           cargo bench --bench core_benchmarks -- --output-format json | tee benchmark-results.json
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: benchmark-results
@@ -197,7 +197,7 @@ jobs:
           cargo test --package mockforge-integration-tests --test grpc_e2e_tests --release
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: failure()
         with:
           name: e2e-test-results
