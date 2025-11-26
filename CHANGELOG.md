@@ -18,7 +18,11 @@
 
 ### Fixed
 
-- Nothing yet.
+- **[DevX] k6 script generation with operation IDs containing dots/hyphens** (#79)
+  - Fixed "Unexpected token ." error when OpenAPI operation IDs contain dots (e.g., `plans.create`) or hyphens (e.g., `plans.update-pricing-schemes`)
+  - Added JavaScript identifier sanitization to replace invalid characters with underscores
+  - All operations are now properly included in generated k6 scripts with valid JavaScript identifiers
+  - Added comprehensive tests including integration test with full billing subscriptions spec
 
 ### Security
 
