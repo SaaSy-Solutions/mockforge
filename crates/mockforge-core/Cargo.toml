@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-core"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -75,7 +75,7 @@ cron = "0.15"
 schemars = { version = "0.8", features = ["derive"], optional = true }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"], optional = true }
 
-mockforge-data = { version = "0.3.2", path = "../mockforge-data", optional = true }
+mockforge-data = { version = "0.3.3", path = "../mockforge-data", optional = true }
 
 [dev-dependencies]
 tempfile = "3.10"

@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-graphql"
-version = "0.3.2"
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -37,7 +37,7 @@ notify = "7.0"
 parking_lot = { workspace = true }
 
 # MockForge core
-mockforge-core = { version = "0.3.2", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
 mockforge-observability = "0.3.0"
 mockforge-tracing = "0.3.0"
 opentelemetry = "0.21"
