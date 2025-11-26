@@ -1,5 +1,5 @@
 //! Integration test using the actual billing_subscriptions_v1.json spec from issue #79
-//! 
+//!
 //! This test verifies that k6 script generation works correctly with operation IDs
 //! that contain dots (e.g., "plans.create", "subscriptions.create"), which was
 //! the root cause of the "Unexpected token ." error.
@@ -40,7 +40,7 @@ async fn test_billing_subscriptions_spec_generation() {
         .iter()
         .filter(|op| op.operation_id.as_ref().map(|id| id.contains('.')).unwrap_or(false))
         .collect();
-    
+
     assert!(
         !operations_with_dots.is_empty(),
         "Spec should contain operations with dots in operation IDs (e.g., 'plans.create')"
@@ -153,7 +153,7 @@ async fn test_billing_subscriptions_spec_generation() {
                 .replace("__", "_") // Remove consecutive underscores
                 .trim_matches('_')
                 .to_string();
-            
+
             // ALL operations should appear in the script with sanitized variable names
             assert!(
                 script.contains(&format!("const {}_latency", sanitized))
@@ -182,11 +182,11 @@ async fn test_billing_subscriptions_spec_generation() {
     // "Unexpected token ." error when k6 tries to parse the JavaScript.
     // Note: String literals can contain dots (e.g., 'plans.create_latency'), but
     // variable identifiers cannot.
-    
+
     // Check for invalid variable declarations (const/let with dots in identifier)
     let lines: Vec<&str> = script.lines().collect();
     let mut invalid_declarations = Vec::new();
-    
+
     for (line_num, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
         // Look for const/let declarations
@@ -201,15 +201,15 @@ async fn test_billing_subscriptions_spec_generation() {
                 }
             }
         }
-        
+
         // Also check for variable usage with dots (e.g., "plans.create_latency.add")
         if trimmed.contains(".add(") || trimmed.contains(".add ") {
             // Extract the part before .add
             if let Some(add_pos) = trimmed.find(".add") {
                 let var_usage = &trimmed[..add_pos];
                 // Check if it's a variable name with dots (not a string)
-                if var_usage.contains('.') 
-                    && !var_usage.contains("'") 
+                if var_usage.contains('.')
+                    && !var_usage.contains("'")
                     && !var_usage.contains("\"")
                     && !var_usage.trim().starts_with("//") {
                     invalid_declarations.push((line_num + 1, line.to_string()));
@@ -217,7 +217,7 @@ async fn test_billing_subscriptions_spec_generation() {
             }
         }
     }
-    
+
     if !invalid_declarations.is_empty() {
         panic!(
             "Found {} invalid variable declarations/usage with dots in identifiers:\n{}\n\nThis would cause 'Unexpected token .' error in k6.\n\nGenerated script:\n{}",
@@ -244,4 +244,3 @@ async fn test_billing_subscriptions_spec_generation() {
     println!("  - Script length: {} characters", script.len());
     println!("  - All variable names are properly sanitized (no dots in identifiers)");
 }
-

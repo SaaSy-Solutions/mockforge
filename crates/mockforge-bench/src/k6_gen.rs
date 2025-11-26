@@ -196,37 +196,37 @@ mod tests {
             K6ScriptGenerator::sanitize_js_identifier("billing.subscriptions.v1"),
             "billing_subscriptions_v1"
         );
-        
+
         // Test other invalid characters
         assert_eq!(
             K6ScriptGenerator::sanitize_js_identifier("get user"),
             "get_user"
         );
-        
+
         // Test names starting with numbers
         assert_eq!(
             K6ScriptGenerator::sanitize_js_identifier("123invalid"),
             "_123invalid"
         );
-        
+
         // Test already valid identifiers
         assert_eq!(
             K6ScriptGenerator::sanitize_js_identifier("getUsers"),
             "getUsers"
         );
-        
+
         // Test with multiple consecutive invalid chars
         assert_eq!(
             K6ScriptGenerator::sanitize_js_identifier("test...name"),
             "test_name"
         );
-        
+
         // Test empty string (should return default)
         assert_eq!(
             K6ScriptGenerator::sanitize_js_identifier(""),
             "operation"
         );
-        
+
         // Test with special characters
         assert_eq!(
             K6ScriptGenerator::sanitize_js_identifier("test@name#value"),
@@ -279,14 +279,14 @@ mod tests {
             script.contains("const billing_subscriptions_v1_errors"),
             "Script should contain sanitized variable name for errors"
         );
-        
+
         // Verify variable names do NOT contain dots (check the actual variable identifier, not string literals)
         // The pattern "const billing.subscriptions" would indicate a variable name with dots
         assert!(
             !script.contains("const billing.subscriptions"),
             "Script should not contain variable names with dots - this would cause 'Unexpected token .' error"
         );
-        
+
         // Verify metric name strings CAN contain dots (they're just strings, not identifiers)
         assert!(
             script.contains("'billing.subscriptions.v1_latency'"),
@@ -298,7 +298,7 @@ mod tests {
             script.contains("billing.subscriptions.v1"),
             "Script should contain original name in comments/strings"
         );
-        
+
         // Most importantly: verify the variable usage doesn't have dots
         assert!(
             script.contains("billing_subscriptions_v1_latency.add"),

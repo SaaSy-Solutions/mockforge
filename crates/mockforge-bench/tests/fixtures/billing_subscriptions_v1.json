@@ -4435,7 +4435,7 @@
           },
           {
             "value": "I",
-            "description": "Informational only; 3DS requestor challenge preference acknowledged."
+            "description": "Informational only; 3DS requester challenge preference acknowledged."
           }
         ],
         "enum": ["Y", "N", "U", "A", "C", "R", "D", "I"]

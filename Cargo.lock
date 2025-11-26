@@ -6857,7 +6857,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "colored 2.2.0",
@@ -7393,7 +7393,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-desktop"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "axum 0.8.7",
@@ -8284,7 +8284,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-route-chaos"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "async-trait",
  "axum 0.8.7",
@@ -8494,7 +8494,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-template-expansion"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "serde_json",
 ]
