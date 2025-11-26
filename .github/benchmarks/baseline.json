@@ -1,229 +1,145 @@
 {
-  "data_generation/generate_single_record/change": {
-    "change": {
-      "mean": 0.8507858207073873,
-      "stddev": 0,
-      "unit": "ns"
-    }
-  },
   "data_generation/generate_single_record": {
     "current": {
-      "mean": 0.6221302876127968,
-      "stddev": 0.002950698789183964,
+      "mean": 0.6228078057141648,
+      "stddev": 0.004275953318241335,
       "unit": "ns"
     },
     "new": {
-      "mean": 0.6221302876127968,
-      "stddev": 0.002950698789183964,
-      "unit": "ns"
-    }
-  },
-  "encryption/placeholder/change": {
-    "change": {
-      "mean": 0.4291864533389109,
-      "stddev": 0,
+      "mean": 0.6228078057141648,
+      "stddev": 0.004275953318241335,
       "unit": "ns"
     }
   },
   "encryption/placeholder": {
     "current": {
-      "mean": 1.2440435361171702,
-      "stddev": 0.008204236213085641,
+      "mean": 1.2438297710805633,
+      "stddev": 0.008460066029157635,
       "unit": "ns"
     },
     "new": {
-      "mean": 1.2440435361171702,
-      "stddev": 0.008204236213085641,
-      "unit": "ns"
-    }
-  },
-  "json_validation/complex/change": {
-    "change": {
-      "mean": -0.9380166993739688,
-      "stddev": 0,
+      "mean": 1.2438297710805633,
+      "stddev": 0.008460066029157635,
       "unit": "ns"
     }
   },
   "json_validation/complex": {
     "current": {
-      "mean": 611.986797971418,
-      "stddev": 26.99703330637653,
+      "mean": 571.0576576481914,
+      "stddev": 7.123246696547496,
       "unit": "ns"
     },
     "new": {
-      "mean": 611.986797971418,
-      "stddev": 26.99703330637653,
-      "unit": "ns"
-    }
-  },
-  "json_validation/simple/change": {
-    "change": {
-      "mean": -0.9712432252560226,
-      "stddev": 0,
+      "mean": 571.0576576481914,
+      "stddev": 7.123246696547496,
       "unit": "ns"
     }
   },
   "json_validation/simple": {
     "current": {
-      "mean": 100.3574785810803,
-      "stddev": 1.1062765246462836,
+      "mean": 98.45505244341658,
+      "stddev": 0.6970095199403029,
       "unit": "ns"
     },
     "new": {
-      "mean": 100.3574785810803,
-      "stddev": 1.1062765246462836,
-      "unit": "ns"
-    }
-  },
-  "memory/deep_template_rendering/change": {
-    "change": {
-      "mean": -0.49018748763682385,
-      "stddev": 0,
+      "mean": 98.45505244341658,
+      "stddev": 0.6970095199403029,
       "unit": "ns"
     }
   },
   "memory/deep_template_rendering": {
     "current": {
-      "mean": 1484.3923723866797,
-      "stddev": 1.290788653933526,
+      "mean": 1525.8503249834794,
+      "stddev": 1.9384575875768442,
       "unit": "ns"
     },
     "new": {
-      "mean": 1484.3923723866797,
-      "stddev": 1.290788653933526,
-      "unit": "ns"
-    }
-  },
-  "memory/large_data_validation/change": {
-    "change": {
-      "mean": 0.08206609125205233,
-      "stddev": 0,
+      "mean": 1525.8503249834794,
+      "stddev": 1.9384575875768442,
       "unit": "ns"
     }
   },
   "memory/large_data_validation": {
     "current": {
-      "mean": 108766.75434595262,
-      "stddev": 209.8995277170162,
+      "mean": 104671.98498445314,
+      "stddev": 332.47260466929845,
       "unit": "ns"
     },
     "new": {
-      "mean": 108766.75434595262,
-      "stddev": 209.8995277170162,
-      "unit": "ns"
-    }
-  },
-  "memory/large_spec_parsing/change": {
-    "change": {
-      "mean": -0.0957201008864077,
-      "stddev": 0,
+      "mean": 104671.98498445314,
+      "stddev": 332.47260466929845,
       "unit": "ns"
     }
   },
   "memory/large_spec_parsing": {
     "current": {
-      "mean": 7018275.043412698,
-      "stddev": 19716.1683146491,
+      "mean": 7187665.388896105,
+      "stddev": 98831.64442691517,
       "unit": "ns"
     },
     "new": {
-      "mean": 7018275.043412698,
-      "stddev": 19716.1683146491,
-      "unit": "ns"
-    }
-  },
-  "openapi_parsing/medium_spec_10_paths/change": {
-    "change": {
-      "mean": -0.1024859089073551,
-      "stddev": 0,
+      "mean": 7187665.388896105,
+      "stddev": 98831.64442691517,
       "unit": "ns"
     }
   },
   "openapi_parsing/medium_spec_10_paths": {
     "current": {
-      "mean": 171817.31836089838,
-      "stddev": 1818.7751219066417,
+      "mean": 171136.07462638762,
+      "stddev": 2531.813142552051,
       "unit": "ns"
     },
     "new": {
-      "mean": 171817.31836089838,
-      "stddev": 1818.7751219066417,
-      "unit": "ns"
-    }
-  },
-  "openapi_parsing/small_spec/change": {
-    "change": {
-      "mean": -0.08012250849994262,
-      "stddev": 0,
+      "mean": 171136.07462638762,
+      "stddev": 2531.813142552051,
       "unit": "ns"
     }
   },
   "openapi_parsing/small_spec": {
     "current": {
-      "mean": 24346.97420869379,
-      "stddev": 353.0510334151174,
+      "mean": 24314.805804481908,
+      "stddev": 227.03962978848415,
       "unit": "ns"
     },
     "new": {
-      "mean": 24346.97420869379,
-      "stddev": 353.0510334151174,
-      "unit": "ns"
-    }
-  },
-  "template_rendering/arrays/change": {
-    "change": {
-      "mean": -0.7715653456823852,
-      "stddev": 0,
+      "mean": 24314.805804481908,
+      "stddev": 227.03962978848415,
       "unit": "ns"
     }
   },
   "template_rendering/arrays": {
     "current": {
-      "mean": 313.07881154758064,
-      "stddev": 2.0250357319115246,
+      "mean": 318.0987897289813,
+      "stddev": 1.5987705370899665,
       "unit": "ns"
     },
     "new": {
-      "mean": 313.07881154758064,
-      "stddev": 2.0250357319115246,
-      "unit": "ns"
-    }
-  },
-  "template_rendering/complex/change": {
-    "change": {
-      "mean": -0.7467719008699483,
-      "stddev": 0,
+      "mean": 318.0987897289813,
+      "stddev": 1.5987705370899665,
       "unit": "ns"
     }
   },
   "template_rendering/complex": {
     "current": {
-      "mean": 379.32378462293804,
-      "stddev": 7.183978413891713,
+      "mean": 382.91910990075803,
+      "stddev": 7.184757544874085,
       "unit": "ns"
     },
     "new": {
-      "mean": 379.32378462293804,
-      "stddev": 7.183978413891713,
-      "unit": "ns"
-    }
-  },
-  "template_rendering/simple/change": {
-    "change": {
-      "mean": -0.6460160459167716,
-      "stddev": 0,
+      "mean": 382.91910990075803,
+      "stddev": 7.184757544874085,
       "unit": "ns"
     }
   },
   "template_rendering/simple": {
     "current": {
-      "mean": 443.9334806368325,
-      "stddev": 7.995528507961388,
+      "mean": 423.3313375799701,
+      "stddev": 2.181596747923161,
       "unit": "ns"
     },
     "new": {
-      "mean": 443.9334806368325,
-      "stddev": 7.995528507961388,
+      "mean": 423.3313375799701,
+      "stddev": 2.181596747923161,
       "unit": "ns"
     }
   }
