@@ -1,3 +1,5 @@
+//! Pillars: [Reality][AI]
+//!
 //! Generative Schema Mode - Complete API ecosystem generation from JSON examples
 //!
 //! This module provides functionality to generate entire API ecosystems from a few

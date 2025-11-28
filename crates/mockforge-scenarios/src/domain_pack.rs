@@ -4,8 +4,8 @@
 //! (e.g., e-commerce, fintech, IoT) that bundle multiple related scenarios together.
 
 use crate::error::{Result, ScenarioError};
-use crate::manifest::ScenarioManifest;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -45,6 +45,27 @@ pub struct DomainPackManifest {
     /// Optional metadata
     #[serde(default)]
     pub metadata: HashMap<String, String>,
+
+    // Studio pack extensions (optional - for full studio packs)
+    /// Pre-configured personas for this studio pack
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub personas: Vec<StudioPersona>,
+
+    /// Chaos rules for this studio pack
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chaos_rules: Vec<StudioChaosRule>,
+
+    /// Contract drift configurations for this studio pack
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contract_diffs: Vec<StudioContractDiff>,
+
+    /// Reality blend configurations for this studio pack
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reality_blends: Vec<StudioRealityBlend>,
+
+    /// Complete workspace configuration (optional)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_config: Option<Value>,
 }
 
 /// Scenario reference in a pack
@@ -71,6 +92,83 @@ fn default_true() -> bool {
     true
 }
 
+/// Persona configuration for a studio pack
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StudioPersona {
+    /// Persona ID
+    pub id: String,
+    /// Persona name
+    pub name: String,
+    /// Domain (e.g., "finance", "ecommerce", "healthcare")
+    pub domain: String,
+    /// Persona traits
+    #[serde(default)]
+    pub traits: HashMap<String, String>,
+    /// Optional backstory
+    pub backstory: Option<String>,
+    /// Relationships to other personas
+    #[serde(default)]
+    pub relationships: HashMap<String, Vec<String>>,
+    /// Additional metadata
+    #[serde(default)]
+    pub metadata: HashMap<String, Value>,
+}
+
+/// Chaos rule configuration for a studio pack
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StudioChaosRule {
+    /// Rule name
+    pub name: String,
+    /// Rule description
+    pub description: Option<String>,
+    /// Chaos configuration (JSON representation of ChaosConfig)
+    pub chaos_config: Value,
+    /// Duration in seconds (0 = infinite)
+    pub duration_seconds: u64,
+    /// Tags
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+/// Contract drift configuration for a studio pack
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StudioContractDiff {
+    /// Configuration name
+    pub name: String,
+    /// Description
+    pub description: Option<String>,
+    /// Drift budget configuration (JSON representation of DriftBudgetConfig)
+    pub drift_budget: Value,
+    /// Endpoint patterns this applies to (empty = all endpoints)
+    #[serde(default)]
+    pub endpoint_patterns: Vec<String>,
+}
+
+/// Reality blend configuration for a studio pack
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StudioRealityBlend {
+    /// Blend name
+    pub name: String,
+    /// Description
+    pub description: Option<String>,
+    /// Reality continuum ratio (0.0 = pure mock, 1.0 = pure real)
+    pub reality_ratio: f64,
+    /// Continuum configuration (JSON representation of ContinuumConfig)
+    pub continuum_config: Value,
+    /// Field-level reality mixing rules
+    #[serde(default)]
+    pub field_rules: Vec<FieldRealityRule>,
+}
+
+/// Field-level reality mixing rule
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FieldRealityRule {
+    /// JSON path pattern to match fields (e.g., "body.email", "body.user.id")
+    pub field_pattern: String,
+    /// Reality source for this field ("mock" or "real")
+    pub reality_source: String,
+}
+
 impl DomainPackManifest {
     /// Create a new domain pack manifest
     pub fn new(
@@ -92,6 +190,11 @@ impl DomainPackManifest {
             scenarios: Vec::new(),
             tags: Vec::new(),
             metadata: HashMap::new(),
+            personas: Vec::new(),
+            chaos_rules: Vec::new(),
+            contract_diffs: Vec::new(),
+            reality_blends: Vec::new(),
+            workspace_config: None,
         }
     }
 
@@ -102,7 +205,7 @@ impl DomainPackManifest {
 
     /// Load pack manifest from file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| ScenarioError::Io(e))?;
+        let content = std::fs::read_to_string(path.as_ref()).map_err(ScenarioError::Io)?;
 
         // Try to parse as YAML first, then JSON
         let manifest: DomainPackManifest = if path
@@ -112,9 +215,9 @@ impl DomainPackManifest {
             .map(|ext| ext == "yaml" || ext == "yml")
             .unwrap_or(true)
         {
-            serde_yaml::from_str(&content).map_err(|e| ScenarioError::Yaml(e))?
+            serde_yaml::from_str(&content).map_err(ScenarioError::Yaml)?
         } else {
-            serde_json::from_str(&content).map_err(|e| ScenarioError::Serde(e))?
+            serde_json::from_str(&content).map_err(ScenarioError::Serde)?
         };
 
         Ok(manifest)
@@ -129,12 +232,12 @@ impl DomainPackManifest {
             .map(|ext| ext == "yaml" || ext == "yml")
             .unwrap_or(true)
         {
-            serde_yaml::to_string(self).map_err(|e| ScenarioError::Yaml(e))?
+            serde_yaml::to_string(self).map_err(ScenarioError::Yaml)?
         } else {
-            serde_json::to_string_pretty(self).map_err(|e| ScenarioError::Serde(e))?
+            serde_json::to_string_pretty(self).map_err(ScenarioError::Serde)?
         };
 
-        std::fs::write(path.as_ref(), content).map_err(|e| ScenarioError::Io(e))?;
+        std::fs::write(path.as_ref(), content).map_err(ScenarioError::Io)?;
 
         Ok(())
     }
@@ -209,8 +312,8 @@ impl DomainPackInstaller {
 
         let mut packs = Vec::new();
 
-        for entry in std::fs::read_dir(&self.packs_dir).map_err(|e| ScenarioError::Io(e))? {
-            let entry = entry.map_err(|e| ScenarioError::Io(e))?;
+        for entry in std::fs::read_dir(&self.packs_dir).map_err(ScenarioError::Io)? {
+            let entry = entry.map_err(ScenarioError::Io)?;
             let pack_path = entry.path();
 
             if pack_path.is_dir() {

@@ -18,14 +18,20 @@ async fn test_list_playground_endpoints() {
         None,
         None,
         None,
+        None,
+        None,
     );
 
     // Note: This test requires a running HTTP server, so it's more of an integration test
     // In a real scenario, we'd mock the HTTP client or use a test server
-    let response = list_playground_endpoints(axum::extract::State(state)).await;
+    let response = list_playground_endpoints(
+        axum::extract::State(state),
+        axum::extract::Query(std::collections::HashMap::new()),
+    )
+    .await;
 
     // Verify response structure
-    let response_value = serde_json::to_value(&response).unwrap();
+    let response_value = serde_json::to_value(&*response).unwrap();
     assert!(response_value.get("success").is_some() || response_value.get("data").is_some());
 }
 
@@ -38,6 +44,8 @@ async fn test_code_snippet_generation_rest() {
         None,
         true,
         8080,
+        None,
+        None,
         None,
         None,
         None,
@@ -61,7 +69,7 @@ async fn test_code_snippet_generation_rest() {
     let response =
         generate_code_snippet(axum::extract::State(state), axum::extract::Json(request)).await;
 
-    let response_value = serde_json::to_value(&response).unwrap();
+    let response_value = serde_json::to_value(&*response).unwrap();
     let data = response_value.get("data").and_then(|d| d.get("snippets"));
 
     assert!(data.is_some());
@@ -95,6 +103,8 @@ async fn test_code_snippet_generation_graphql() {
         None,
         None,
         None,
+        None,
+        None,
     );
 
     let request = CodeSnippetRequest {
@@ -111,7 +121,7 @@ async fn test_code_snippet_generation_graphql() {
     let response =
         generate_code_snippet(axum::extract::State(state), axum::extract::Json(request)).await;
 
-    let response_value = serde_json::to_value(&response).unwrap();
+    let response_value = serde_json::to_value(&*response).unwrap();
     let data = response_value.get("data").and_then(|d| d.get("snippets"));
 
     assert!(data.is_some());

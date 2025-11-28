@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-collab"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -11,14 +11,15 @@ readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 description = "Cloud collaboration features for MockForge - team workspaces, real-time sync, and version control"
-include = ["src/**/*", "migrations/**/*", ".sqlx/**/*", ".cargo/**/*", "Cargo.toml", "README.md", "LICENSE-*"]
+include = ["src/**/*", "migrations/**/*", ".sqlx/**/*", ".cargo/**/*", "build.rs", "Cargo.toml", "README.md", "LICENSE-*"]
 
 [lints]
 workspace = true
 
 [dependencies]
 # Core dependencies
-mockforge-core = "0.2.8"
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-pipelines = { version = "0.3.3", path = "../mockforge-pipelines", optional = true }
 
 # Serialization
 serde = { workspace = true }
@@ -68,15 +69,31 @@ similar = "2.6"
 # Hashing for state snapshots
 sha2 = "0.10"
 
+# Azure Storage support (optional)
+azure_storage_blobs = { version = "0.19", optional = true }
+azure_identity = { version = "0.20", optional = true }
+
+# Google Cloud Storage support (optional)
+# Updated to 1.4.0 to address security vulnerabilities in transitive dependencies
+google-cloud-storage = { version = "1.4", optional = true }
+
+# AWS S3 support (optional)
+aws-sdk-s3 = { version = "1", optional = true }
+aws-config = { version = "1", optional = true }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tempfile = "3.13"
 tower = { workspace = true, features = ["util"] }
 hyper = { workspace = true, features = ["client", "http1"] }
-axum-test = "15.3"
+axum-test = "16.0"
 
 [features]
 default = ["sqlite"]
 sqlite = []
 postgres = []
 cloud = []
+azure = ["azure_storage_blobs", "azure_identity"]
+gcs = ["google-cloud-storage"]
+s3 = ["aws-sdk-s3", "aws-config"]
+pipelines = ["mockforge-pipelines"]

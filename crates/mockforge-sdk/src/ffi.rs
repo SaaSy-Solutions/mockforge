@@ -1,4 +1,4 @@
-//! FFI bindings for using MockForge from other languages (Python, Node.js, Go)
+//! FFI bindings for using `MockForge` from other languages (Python, Node.js, Go)
 //!
 //! This module provides C-compatible functions that can be called from other languages.
 
@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::Mutex;
 
-/// Opaque handle to a MockServer
+/// Opaque handle to a `MockServer`
 pub struct MockServerHandle {
     server: Arc<Mutex<MockServer>>,
     runtime: Runtime,
@@ -111,7 +111,7 @@ pub unsafe extern "C" fn mockforge_server_stub(
     });
 
     match result {
-        Ok(_) => 0,
+        Ok(()) => 0,
         Err(_) => -1,
     }
 }
@@ -120,7 +120,7 @@ pub unsafe extern "C" fn mockforge_server_stub(
 ///
 /// # Safety
 /// - handle must be valid
-/// - Returns a C string that must be freed with mockforge_free_string
+/// - Returns a C string that must be freed with `mockforge_free_string`
 #[no_mangle]
 pub unsafe extern "C" fn mockforge_server_url(handle: *const MockServerHandle) -> *mut c_char {
     if handle.is_null() {
@@ -141,10 +141,10 @@ pub unsafe extern "C" fn mockforge_server_url(handle: *const MockServerHandle) -
     }
 }
 
-/// Free a string returned by MockForge
+/// Free a string returned by `MockForge`
 ///
 /// # Safety
-/// The string must have been allocated by MockForge
+/// The string must have been allocated by `MockForge`
 #[no_mangle]
 pub unsafe extern "C" fn mockforge_free_string(s: *mut c_char) {
     if !s.is_null() {
@@ -155,9 +155,9 @@ pub unsafe extern "C" fn mockforge_free_string(s: *mut c_char) {
 /// Get the last error message
 ///
 /// # Safety
-/// Returns a C string that must be freed with mockforge_free_string
+/// Returns a C string that must be freed with `mockforge_free_string`
 #[no_mangle]
-pub unsafe extern "C" fn mockforge_last_error() -> *mut c_char {
+pub const unsafe extern "C" fn mockforge_last_error() -> *mut c_char {
     // Thread-local error storage could be implemented here
     ptr::null_mut()
 }

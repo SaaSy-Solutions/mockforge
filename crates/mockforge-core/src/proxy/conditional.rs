@@ -2,7 +2,7 @@
 
 use crate::conditions::{evaluate_condition, ConditionContext};
 use crate::proxy::config::ProxyRule;
-use crate::{Error, Result};
+use crate::Result;
 use axum::http::{HeaderMap, Method, Uri};
 use serde_json::Value;
 use std::collections::HashMap;

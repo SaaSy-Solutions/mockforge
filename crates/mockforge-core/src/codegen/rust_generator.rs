@@ -262,8 +262,8 @@ fn generate_server_impl(routes: &[RouteInfo], config: &CodegenConfig) -> Result<
 
     code.push_str("impl GeneratedMockServer {\n");
     code.push_str("    /// Create a new mock server instance\n");
-    code.push_str(&format!("    pub fn new() -> Self {{\n"));
-    code.push_str(&format!("        Self {{\n"));
+    code.push_str("    pub fn new() -> Self {\n");
+    code.push_str("        Self {\n");
     code.push_str(&format!("            port: {},\n", config.port.unwrap_or(3000)));
     code.push_str("        }\n");
     code.push_str("    }\n\n");
@@ -321,7 +321,7 @@ fn generate_handlers(
 
     for route in routes {
         code.push_str(&generate_handler(route, config)?);
-        code.push_str("\n");
+        code.push('\n');
     }
 
     Ok(code)
@@ -344,13 +344,13 @@ fn generate_handler(route: &RouteInfo, config: &CodegenConfig) -> Result<String>
             code.push_str(&format!("    Path({}): Path<String>,\n", param_name));
         } else {
             // Multiple path parameters - use HashMap for now
-            code.push_str(&format!("    Path(params): Path<HashMap<String, String>>,\n"));
+            code.push_str("    Path(params): Path<HashMap<String, String>>,\n");
         }
     }
 
     // Add query parameters
     if !route.query_params.is_empty() {
-        code.push_str(&format!("    Query(query): Query<HashMap<String, String>>,\n"));
+        code.push_str("    Query(query): Query<HashMap<String, String>>,\n");
     }
 
     // Add request body for POST/PUT/PATCH
@@ -648,11 +648,10 @@ fn generate_number_from_schema(number_type: &openapiv3::NumberType) -> String {
 fn generate_handler_name(route: &RouteInfo) -> String {
     if let Some(ref op_id) = route.operation_id {
         // Sanitize operation ID (remove special chars, convert to snake_case)
-        op_id.replace('-', "_").replace('.', "_").to_lowercase()
+        op_id.replace(['-', '.'], "_").to_lowercase()
     } else {
         // Generate name from method + path
-        let path_part =
-            route.path.replace('/', "_").replace('{', "").replace('}', "").replace('-', "_");
+        let path_part = route.path.replace('/', "_").replace(['{', '}'], "").replace('-', "_");
         format!("{}_{}", route.method.to_lowercase(), path_part)
             .trim_matches('_')
             .to_string()
@@ -678,13 +677,12 @@ fn format_axum_path(path: &str, path_params: &[String]) -> String {
 }
 
 fn generate_main_function(_config: &CodegenConfig) -> String {
-    format!(
-        r#"
+    r#"
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {{
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let server = GeneratedMockServer::new();
     server.start().await
-}}
+}
 "#
-    )
+    .to_string()
 }

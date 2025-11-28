@@ -4,7 +4,6 @@
 //! It supports event filtering, retry logic, and webhook signing.
 
 use super::types::{ContractEvent, RetryConfig, WebhookConfig, WebhookPayload, WebhookResult};
-use crate::Result;
 use chrono::Utc;
 use reqwest::Client;
 use serde_json::json;
@@ -83,7 +82,7 @@ impl WebhookDispatcher {
 
     /// Build webhook payload from event
     fn build_payload(&self, event: &ContractEvent, webhook: &WebhookConfig) -> WebhookPayload {
-        let mut data = match event {
+        let data = match event {
             ContractEvent::MismatchDetected {
                 endpoint,
                 method,
@@ -131,6 +130,54 @@ impl WebhookDispatcher {
                 "endpoint": endpoint,
                 "correction_count": correction_count,
                 "patch_file": patch_file,
+            }),
+            ContractEvent::ForecastPredictionUpdated {
+                endpoint,
+                method,
+                window_days,
+                change_probability,
+                break_probability,
+            } => json!({
+                "endpoint": endpoint,
+                "method": method,
+                "window_days": window_days,
+                "change_probability": change_probability,
+                "break_probability": break_probability,
+            }),
+            ContractEvent::SemanticDriftDetected {
+                endpoint,
+                method,
+                change_type,
+                semantic_confidence,
+                soft_breaking_score,
+            } => json!({
+                "endpoint": endpoint,
+                "method": method,
+                "change_type": change_type,
+                "semantic_confidence": semantic_confidence,
+                "soft_breaking_score": soft_breaking_score,
+            }),
+            ContractEvent::ThreatAssessmentCompleted {
+                endpoint,
+                method,
+                threat_level,
+                threat_score,
+                findings_count,
+            } => json!({
+                "endpoint": endpoint,
+                "method": method,
+                "threat_level": threat_level,
+                "threat_score": threat_score,
+                "findings_count": findings_count,
+            }),
+            ContractEvent::ThreatRemediationSuggested {
+                finding_id,
+                finding_type,
+                suggestion,
+            } => json!({
+                "finding_id": finding_id,
+                "finding_type": finding_type,
+                "suggestion": suggestion,
             }),
         };
 

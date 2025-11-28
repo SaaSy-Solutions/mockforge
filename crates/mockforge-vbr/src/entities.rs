@@ -90,15 +90,13 @@ impl Entity {
         // Default to "status" if not specified, or use resource_type-based naming
         let field_name = if let Some(name) = state_field_name {
             name
+        } else if let Some(ref sm) = self.state_machine {
+            // Use resource_type to derive field name (e.g., "Order" -> "order_status")
+            // We'll use a static string for now - in production, this would need to be
+            // stored or passed differently
+            "status"
         } else {
-            if let Some(ref sm) = self.state_machine {
-                // Use resource_type to derive field name (e.g., "Order" -> "order_status")
-                // We'll use a static string for now - in production, this would need to be
-                // stored or passed differently
-                "status"
-            } else {
-                "status"
-            }
+            "status"
         };
 
         // Check if the field exists in the schema

@@ -4,7 +4,7 @@
 //! between endpoints, services, and chains.
 
 use crate::graph::{EdgeType, GraphEdge};
-use crate::request_chaining::{ChainDefinition, ChainLink};
+use crate::request_chaining::ChainDefinition;
 use std::collections::HashMap;
 
 /// Discover relationships from chain definitions
@@ -111,10 +111,7 @@ pub fn group_endpoints_by_service(
         // Simple heuristic: extract service name from URL
         // In production, this would be more sophisticated
         let service_name = extract_service_name_from_url(url);
-        service_groups
-            .entry(service_name)
-            .or_insert_with(Vec::new)
-            .push(endpoint_id.clone());
+        service_groups.entry(service_name).or_default().push(endpoint_id.clone());
     }
 
     service_groups

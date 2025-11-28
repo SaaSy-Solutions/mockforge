@@ -104,6 +104,18 @@ using (var server = await MockServer.StartAsync(new MockServerConfig
 }
 ```
 
+### Using MockServerBuilder
+
+```csharp
+// Fluent builder for creating and starting servers
+var server = await new MockServerBuilder()
+    .Port(3000)
+    .Host("127.0.0.1")
+    .ConfigFile("./mockforge.yaml")
+    .OpenApiSpec("./api-spec.json")
+    .StartAsync();
+```
+
 ### Stubbing with Options
 
 ```csharp
@@ -120,6 +132,46 @@ await server.StubResponseAsync(
     headers: headers,
     latencyMs: 500 // 500ms latency
 );
+```
+
+### Using StubBuilder (Fluent API)
+
+```csharp
+// Create a stub using the fluent builder pattern
+var stub = new StubBuilder("GET", "/api/users/{id}")
+    .Status(200)
+    .Header("Content-Type", "application/json")
+    .Header("X-Custom-Header", "value")
+    .Body(new
+    {
+        id = "{{uuid}}",
+        name = "{{faker.name}}",
+        email = "{{faker.email}}"
+    })
+    .Latency(100)
+    .Build();
+
+// Register the stub
+await server.StubResponseAsync(stub);
+```
+
+You can also chain multiple stubs:
+
+```csharp
+await server.StubResponseAsync(new StubBuilder("GET", "/api/users")
+    .Status(200)
+    .Body(new[]
+    {
+        new { id = 1, name = "Alice" },
+        new { id = 2, name = "Bob" }
+    })
+    .Build());
+
+await server.StubResponseAsync(new StubBuilder("POST", "/api/users")
+    .Status(201)
+    .Header("Location", "/api/users/123")
+    .Body(new { id = 123, status = "created" })
+    .Build());
 ```
 
 ### Using with xUnit
@@ -189,6 +241,48 @@ public class ApiIntegrationTests
 
 ## API Reference
 
+### `MockServerBuilder`
+
+Fluent builder for creating and starting mock servers.
+
+**Methods:**
+- `Port(int port)` - Set the HTTP port (0 for random)
+- `Host(string host)` - Set the host address
+- `ConfigFile(string path)` - Load configuration from YAML file
+- `OpenApiSpec(string path)` - Load routes from OpenAPI spec
+- `StartAsync()` - Build and start the MockServer asynchronously
+- `Build()` - Build MockServerConfig without starting
+
+**Example:**
+```csharp
+var server = await new MockServerBuilder()
+    .Port(3000)
+    .OpenApiSpec("./api.json")
+    .StartAsync();
+```
+
+### `StubBuilder`
+
+Fluent builder for creating response stubs.
+
+**Methods:**
+- `Status(int code)` - Set HTTP status code (default: 200)
+- `Header(string key, string value)` - Add a response header
+- `Headers(Dictionary<string, string> headers)` - Set multiple headers
+- `Body(object body)` - Set response body (required)
+- `Latency(int ms)` - Set response latency in milliseconds
+- `Build()` - Build the ResponseStub
+
+**Example:**
+```csharp
+var stub = new StubBuilder("GET", "/api/users/{id}")
+    .Status(200)
+    .Header("Content-Type", "application/json")
+    .Body(new { id = 123, name = "John" })
+    .Latency(100)
+    .Build();
+```
+
 ### `MockServer.StartAsync(config)`
 
 Starts a mock server with the given configuration asynchronously.
@@ -220,6 +314,12 @@ Add a response stub with custom options.
 - `status` - `int` - HTTP status code (default: 200)
 - `headers` - `Dictionary<string, string>?` - Response headers
 - `latencyMs` - `int?` - Latency in milliseconds (null for no delay)
+
+#### `StubResponseAsync(ResponseStub stub)`
+Add a response stub using a ResponseStub object (created with StubBuilder).
+
+**Parameters:**
+- `stub` - `ResponseStub` - Response stub instance
 
 #### `ClearStubsAsync()`
 Remove all stubs asynchronously.

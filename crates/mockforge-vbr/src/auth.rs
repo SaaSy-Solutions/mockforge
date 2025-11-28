@@ -4,7 +4,7 @@
 //! and session-based authentication for the VBR engine.
 
 use crate::{Error, Result};
-use chrono::{Duration, Utc};
+use chrono::Duration;
 use mockforge_core::time_travel_now;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

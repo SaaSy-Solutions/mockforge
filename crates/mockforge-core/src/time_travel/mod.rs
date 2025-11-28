@@ -14,8 +14,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, RwLock};
 use tracing::{debug, info, warn};
 
+/// Callback function type for time change events
+pub type TimeChangeCallback = Arc<dyn Fn(DateTime<Utc>, DateTime<Utc>) + Send + Sync>;
+
 /// Virtual clock that can be manipulated for testing time-dependent behavior
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct VirtualClock {
     /// The current virtual time (None means use real time)
     current_time: Arc<RwLock<Option<DateTime<Utc>>>>,
@@ -25,6 +28,21 @@ pub struct VirtualClock {
     scale_factor: Arc<RwLock<f64>>,
     /// Baseline real time when virtual time was set (for scaled time)
     baseline_real_time: Arc<RwLock<Option<DateTime<Utc>>>>,
+    /// Callbacks to invoke when time changes
+    #[cfg_attr(not(test), allow(dead_code))]
+    time_change_callbacks: Arc<RwLock<Vec<TimeChangeCallback>>>,
+}
+
+impl std::fmt::Debug for VirtualClock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VirtualClock")
+            .field("current_time", &self.current_time.read().unwrap())
+            .field("enabled", &self.enabled.read().unwrap())
+            .field("scale_factor", &self.scale_factor.read().unwrap())
+            .field("baseline_real_time", &self.baseline_real_time.read().unwrap())
+            .field("callback_count", &self.time_change_callbacks.read().unwrap().len())
+            .finish()
+    }
 }
 
 impl Default for VirtualClock {
@@ -41,6 +59,26 @@ impl VirtualClock {
             enabled: Arc::new(RwLock::new(false)),
             scale_factor: Arc::new(RwLock::new(1.0)),
             baseline_real_time: Arc::new(RwLock::new(None)),
+            time_change_callbacks: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    /// Register a callback to be invoked when time changes
+    ///
+    /// The callback receives (old_time, new_time) as arguments.
+    pub fn on_time_change<F>(&self, callback: F)
+    where
+        F: Fn(DateTime<Utc>, DateTime<Utc>) + Send + Sync + 'static,
+    {
+        let mut callbacks = self.time_change_callbacks.write().unwrap();
+        callbacks.push(Arc::new(callback));
+    }
+
+    /// Invoke all registered time change callbacks
+    fn invoke_time_change_callbacks(&self, old_time: DateTime<Utc>, new_time: DateTime<Utc>) {
+        let callbacks = self.time_change_callbacks.read().unwrap();
+        for callback in callbacks.iter() {
+            callback(old_time, new_time);
         }
     }
 
@@ -126,12 +164,18 @@ impl VirtualClock {
 
         let mut current = self.current_time.write().unwrap();
         if let Some(time) = *current {
+            let old_time = time;
             let new_time = time + duration;
             *current = Some(new_time);
 
             // Update baseline to current real time
             let mut baseline = self.baseline_real_time.write().unwrap();
             *baseline = Some(Utc::now());
+
+            // Invoke callbacks
+            drop(current);
+            drop(baseline);
+            self.invoke_time_change_callbacks(old_time, new_time);
 
             info!("Time advanced by {} to {}", duration, new_time);
         }
@@ -174,11 +218,19 @@ impl VirtualClock {
         }
 
         let mut current = self.current_time.write().unwrap();
+        let old_time = *current;
         *current = Some(time);
 
         // Update baseline to current real time
         let mut baseline = self.baseline_real_time.write().unwrap();
         *baseline = Some(Utc::now());
+
+        // Invoke callbacks if time actually changed
+        if let Some(old) = old_time {
+            drop(current);
+            drop(baseline);
+            self.invoke_time_change_callbacks(old, time);
+        }
 
         info!("Virtual time set to {}", time);
     }
@@ -212,12 +264,14 @@ pub struct TimeTravelStatus {
 }
 
 /// Configuration for time travel features
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeTravelConfig {
     /// Whether time travel is enabled by default
     #[serde(default)]
     pub enabled: bool,
     /// Initial virtual time (if enabled)
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
     pub initial_time: Option<DateTime<Utc>>,
     /// Initial time scale factor
     #[serde(default = "default_scale")]
@@ -558,7 +612,10 @@ impl TimeTravelManager {
         }
 
         let scheduler = Arc::new(ResponseScheduler::new(clock.clone()));
-        let cron_scheduler = Arc::new(cron::CronScheduler::new(clock.clone()));
+        let cron_scheduler = Arc::new(
+            cron::CronScheduler::new(clock.clone())
+                .with_response_scheduler(scheduler.clone())
+        );
 
         Self {
             clock,

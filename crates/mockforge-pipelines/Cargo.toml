@@ -1,0 +1,63 @@
+[package]
+name = "mockforge-pipelines"
+version = "0.3.3"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
+description = "Event-driven pipeline orchestration for MockForge - automate mock lifecycle management"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Core dependencies
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Utility libraries
+uuid = { workspace = true, features = ["v4", "serde"] }
+chrono = { workspace = true, features = ["serde"] }
+url = { workspace = true }
+
+# Database for persistence
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "postgres", "chrono", "uuid", "json", "migrate"] }
+
+# Concurrency
+parking_lot = { workspace = true }
+once_cell = { workspace = true }
+
+# Template engine for variable substitution
+handlebars = "5.1"
+
+# HTTP client for notifications
+reqwest = { workspace = true }
+
+# Email sending
+# Use tokio1-native-tls feature when using tokio1 with native-tls
+lettre = { version = "0.11", features = ["smtp-transport", "tokio1-native-tls"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tempfile = "3.13"

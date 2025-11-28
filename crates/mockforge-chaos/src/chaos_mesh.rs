@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Chaos Mesh Integration
 //!
 //! Integrates MockForge with Chaos Mesh for Kubernetes-native chaos engineering.

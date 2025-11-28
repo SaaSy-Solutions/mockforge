@@ -12,7 +12,6 @@ use axum::Extension;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
-use uuid::Uuid;
 
 /// Generic handler context
 ///
@@ -173,7 +172,7 @@ pub async fn list_handler(
     let (entity, table_name) = get_entity_info(&context.registry, &entity_name)?;
 
     // Build query
-    let (where_clause, mut bind_values) = build_where_clause(&params, entity);
+    let (where_clause, bind_values) = build_where_clause(&params, entity);
     let order_by = build_order_by(&params, entity);
     let (limit, offset) = get_pagination(&params);
 
@@ -247,10 +246,7 @@ pub async fn get_handler(
     // Return first result or 404
     if let Some(result) = results.into_iter().next() {
         Ok(Json(Value::Object(
-            result
-                .into_iter()
-                .map(|(k, v)| (k, v))
-                .collect::<serde_json::Map<String, Value>>(),
+            result.into_iter().collect::<serde_json::Map<String, Value>>(),
         )))
     } else {
         Err((
@@ -340,10 +336,7 @@ pub async fn create_handler(
 
         if let Some(result) = select_results.into_iter().next() {
             Ok(Json(Value::Object(
-                result
-                    .into_iter()
-                    .map(|(k, v)| (k, v))
-                    .collect::<serde_json::Map<String, Value>>(),
+                result.into_iter().collect::<serde_json::Map<String, Value>>(),
             )))
         } else {
             Err((
@@ -466,10 +459,7 @@ pub async fn update_handler(
 
         if let Some(result) = select_results.into_iter().next() {
             Ok(Json(Value::Object(
-                result
-                    .into_iter()
-                    .map(|(k, v)| (k, v))
-                    .collect::<serde_json::Map<String, Value>>(),
+                result.into_iter().collect::<serde_json::Map<String, Value>>(),
             )))
         } else {
             Err((
@@ -743,10 +733,7 @@ pub async fn get_relationship_handler(
 
             if let Some(target_record) = target_results.into_iter().next() {
                 return Ok(Json(Value::Object(
-                    target_record
-                        .into_iter()
-                        .map(|(k, v)| (k, v))
-                        .collect::<serde_json::Map<String, Value>>(),
+                    target_record.into_iter().collect::<serde_json::Map<String, Value>>(),
                 )));
             } else {
                 return Err((

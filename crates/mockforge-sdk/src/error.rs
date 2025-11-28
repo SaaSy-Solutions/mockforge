@@ -1,4 +1,4 @@
-//! Error types for the MockForge SDK
+//! Error types for the `MockForge` SDK
 
 use thiserror::Error;
 
@@ -55,7 +55,7 @@ pub enum Error {
     #[error("JSON serialization error: {0}\nEnsure your request/response body is valid JSON.")]
     Json(#[from] serde_json::Error),
 
-    /// MockForge core error
+    /// `MockForge` core error
     #[error("MockForge core error: {0}")]
     Core(#[from] mockforge_core::Error),
 
@@ -76,7 +76,7 @@ pub enum Error {
     /// Admin API error
     #[error("Admin API error ({operation}): {message}\nEndpoint: {endpoint}")]
     AdminApiError {
-        /// The operation that failed (e.g., "create_mock", "list_mocks")
+        /// The operation that failed (e.g., "`create_mock`", "`list_mocks`")
         operation: String,
         /// The error message from the server or client
         message: String,
@@ -108,7 +108,7 @@ impl Error {
         message: impl Into<String>,
         endpoint: impl Into<String>,
     ) -> Self {
-        Error::AdminApiError {
+        Self::AdminApiError {
             operation: operation.into(),
             message: message.into(),
             endpoint: endpoint.into(),
@@ -133,7 +133,7 @@ impl Error {
         path: impl Into<String>,
         available: Vec<String>,
     ) -> Self {
-        Error::StubNotFound {
+        Self::StubNotFound {
             method: method.into(),
             path: path.into(),
             available: if available.is_empty() {
@@ -157,7 +157,8 @@ impl Error {
     /// let log_msg = err.to_log_string();
     /// // Use in logging: log::error!("{}", log_msg);
     /// ```
+    #[must_use]
     pub fn to_log_string(&self) -> String {
-        format!("{}", self).replace('\n', " | ")
+        format!("{self}").replace('\n', " | ")
     }
 }

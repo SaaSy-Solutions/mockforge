@@ -1,7 +1,9 @@
-/// Contract validation for CI/CD pipelines
-///
-/// Validates that mock configurations match live API responses
-/// and detects breaking changes in API contracts
+//! Pillars: [Contracts]
+//!
+//! Contract validation for CI/CD pipelines
+//!
+//! Validates that mock configurations match live API responses
+//! and detects breaking changes in API contracts
 use serde::{Deserialize, Serialize};
 
 /// Result of contract validation with detailed breakdown
@@ -103,6 +105,12 @@ pub struct ValidationError {
     pub expected: Option<String>,
     /// Actual value found (if applicable)
     pub actual: Option<String>,
+    /// Link to contract diff entry (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contract_diff_id: Option<String>,
+    /// Whether this is a breaking change
+    #[serde(default)]
+    pub is_breaking_change: bool,
 }
 
 /// Breaking change detected between contract versions
@@ -230,6 +238,8 @@ impl ContractValidator {
                     message: format!("Unsupported HTTP method: {}", method),
                     expected: None,
                     actual: None,
+                    contract_diff_id: None,
+                    is_breaking_change: false,
                 });
                 return;
             }
@@ -271,6 +281,8 @@ impl ContractValidator {
                         message: format!("Failed to reach endpoint: {}", e),
                         expected: Some("2xx response".to_string()),
                         actual: Some("connection error".to_string()),
+                        contract_diff_id: None,
+                        is_breaking_change: false,
                     });
                 } else {
                     result.add_warning(ValidationWarning {
@@ -400,6 +412,8 @@ mod tests {
             message: "Test error".to_string(),
             expected: None,
             actual: None,
+            contract_diff_id: None,
+            is_breaking_change: false,
         });
 
         assert!(!result.passed);
@@ -446,6 +460,8 @@ mod tests {
             message: "Test failed".to_string(),
             expected: Some("200".to_string()),
             actual: Some("404".to_string()),
+            contract_diff_id: None,
+            is_breaking_change: false,
         });
 
         let validator = ContractValidator::new();

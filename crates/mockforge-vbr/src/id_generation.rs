@@ -8,7 +8,6 @@ use crate::{Error, Result};
 use rand::Rng;
 use regex::Regex;
 use serde_json::Value;
-use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Generate an ID based on an auto-generation rule

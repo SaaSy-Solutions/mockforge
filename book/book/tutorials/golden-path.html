@@ -1,0 +1,617 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>The Golden Path: Blueprint → Dev-Setup → Integration - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/tutorials/golden-path.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="the-golden-path-blueprint--dev-setup--integration"><a class="header" href="#the-golden-path-blueprint--dev-setup--integration">The Golden Path: Blueprint → Dev-Setup → Integration</a></h1>
+<p>This guide walks you through the <strong>Golden Path</strong> - the fastest way to get from zero to a fully integrated mock API in your frontend application. This path is designed to take less than 10 minutes and provide a magical first experience.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The Golden Path consists of three steps:</p>
+<ol>
+<li><strong>Blueprint</strong>: Start with a pre-configured app archetype</li>
+<li><strong>Dev-Setup</strong>: One-command frontend integration</li>
+<li><strong>Integration</strong>: Use generated code in your app</li>
+</ol>
+<h2 id="step-1-choose-and-create-from-a-blueprint"><a class="header" href="#step-1-choose-and-create-from-a-blueprint">Step 1: Choose and Create from a Blueprint</a></h2>
+<p>Blueprints are pre-configured application archetypes that include:</p>
+<ul>
+<li><strong>Personas</strong>: Realistic user profiles with consistent data</li>
+<li><strong>Reality defaults</strong>: Optimized realism levels for your use case</li>
+<li><strong>Sample flows</strong>: Common workflows (signup, checkout, etc.)</li>
+<li><strong>Scenarios</strong>: Happy paths, known failures, and slow paths</li>
+<li><strong>Contracts</strong>: JSON Schema validation for endpoints</li>
+<li><strong>Playground collections</strong>: Pre-configured test scenarios</li>
+</ul>
+<h3 id="available-blueprints"><a class="header" href="#available-blueprints">Available Blueprints</a></h3>
+<p>List available blueprints:</p>
+<pre><code class="language-bash">mockforge blueprint list
+</code></pre>
+<p>You’ll see blueprints like:</p>
+<ul>
+<li><strong>b2c-saas</strong>: B2C SaaS with authentication, subscriptions, and billing</li>
+<li><strong>ecommerce</strong>: E-commerce with products, cart, and checkout</li>
+<li><strong>banking-lite</strong>: Banking app with accounts, transactions, and transfers</li>
+</ul>
+<h3 id="create-your-project"><a class="header" href="#create-your-project">Create Your Project</a></h3>
+<p>Choose a blueprint and create your project:</p>
+<pre><code class="language-bash"># For a B2C SaaS app
+mockforge init my-saas-app --blueprint b2c-saas
+
+# For an e-commerce app
+mockforge init my-store --blueprint ecommerce
+
+# For a banking app
+mockforge init my-bank --blueprint banking-lite
+</code></pre>
+<p>This command:</p>
+<ul>
+<li>Creates a new project directory</li>
+<li>Copies all blueprint files (config, personas, flows, scenarios, contracts)</li>
+<li>Sets up the <code>mockforge.yaml</code> configuration</li>
+<li>Creates a README with API documentation</li>
+</ul>
+<h3 id="explore-what-you-got"><a class="header" href="#explore-what-you-got">Explore What You Got</a></h3>
+<pre><code class="language-bash">cd my-saas-app
+ls -la
+</code></pre>
+<p>You’ll see:</p>
+<ul>
+<li><code>mockforge.yaml</code> - Main configuration</li>
+<li><code>personas/</code> - User personas with consistent data</li>
+<li><code>scenarios/</code> - Multi-step API workflows</li>
+<li><code>contracts/</code> - JSON Schema validation</li>
+<li><code>README.md</code> - API documentation</li>
+</ul>
+<h3 id="start-the-mock-server"><a class="header" href="#start-the-mock-server">Start the Mock Server</a></h3>
+<pre><code class="language-bash">mockforge serve
+</code></pre>
+<p>Your mock API is now running! Visit <code>http://localhost:3000</code> to see it in action.</p>
+<p><strong>Try it out:</strong></p>
+<pre><code class="language-bash"># Test the signup endpoint
+curl -X POST http://localhost:3000/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "password123"}'
+</code></pre>
+<h2 id="step-2-one-command-frontend-integration"><a class="header" href="#step-2-one-command-frontend-integration">Step 2: One-Command Frontend Integration</a></h2>
+<p>Now that your mock API is running, integrate it into your frontend application with a single command.</p>
+<h3 id="supported-frameworks"><a class="header" href="#supported-frameworks">Supported Frameworks</a></h3>
+<p>The <code>dev-setup</code> command supports:</p>
+<ul>
+<li><strong>React</strong> / <strong>Next.js</strong></li>
+<li><strong>Vue</strong> / <strong>Nuxt</strong></li>
+<li><strong>Angular</strong></li>
+<li><strong>Svelte</strong></li>
+</ul>
+<h3 id="run-dev-setup"><a class="header" href="#run-dev-setup">Run Dev-Setup</a></h3>
+<p>Navigate to your frontend project and run:</p>
+<pre><code class="language-bash"># For React
+mockforge dev-setup react
+
+# For Vue
+mockforge dev-setup vue
+
+# For Angular
+mockforge dev-setup angular
+
+# For Svelte
+mockforge dev-setup svelte
+</code></pre>
+<h3 id="what-dev-setup-does"><a class="header" href="#what-dev-setup-does">What Dev-Setup Does</a></h3>
+<p>The command automatically:</p>
+<ol>
+<li><strong>Detects your project structure</strong> - Finds your frontend framework and configuration</li>
+<li><strong>Detects existing MockForge workspace</strong> - If you’re in a blueprint project, it auto-detects the config</li>
+<li><strong>Auto-detects OpenAPI spec</strong> - Finds <code>openapi.yaml</code>, <code>openapi.json</code>, or spec in <code>mockforge.yaml</code></li>
+<li><strong>Generates typed client</strong> - Creates a fully-typed API client from your OpenAPI spec</li>
+<li><strong>Creates framework examples</strong> - Generates example hooks/composables/services</li>
+<li><strong>Sets up environment variables</strong> - Creates <code>.env.mockforge.example</code> with configuration</li>
+<li><strong>Installs dependencies</strong> - Adds required packages to your <code>package.json</code></li>
+</ol>
+<h3 id="example-output"><a class="header" href="#example-output">Example Output</a></h3>
+<pre><code>🚀 Setting up MockForge for react...
+
+  ✓ Detected project root: /path/to/my-frontend
+  ✓ Detected existing MockForge workspace configuration
+    Base URL: http://localhost:3000
+    Reality level: moderate
+  ✓ Found OpenAPI spec: openapi.yaml
+  ✓ Generated typed client: src/mockforge/client.ts
+  ✓ Created React Query hooks: src/mockforge/hooks.ts
+  ✓ Created example component: src/components/MockForgeExample.tsx
+  ✓ Created environment template: .env.mockforge.example
+
+✅ Setup complete!
+
+Next steps:
+  1. Copy .env.mockforge.example to .env.local
+  2. Check out src/components/MockForgeExample.tsx
+  3. Start using the generated hooks in your components
+</code></pre>
+<h2 id="step-3-integrate-into-your-app"><a class="header" href="#step-3-integrate-into-your-app">Step 3: Integrate into Your App</a></h2>
+<p>Now use the generated code in your application.</p>
+<h3 id="react--nextjs-example"><a class="header" href="#react--nextjs-example">React / Next.js Example</a></h3>
+<pre><code class="language-tsx">import { useGetUsers, useCreateUser } from '@/mockforge/hooks';
+
+function UsersList() {
+  const { data: users, isLoading, error } = useGetUsers();
+  const createUser = useCreateUser();
+
+  const handleCreate = async () =&gt; {
+    await createUser.mutateAsync({
+      email: 'newuser@example.com',
+      name: 'New User',
+    });
+  };
+
+  if (isLoading) return &lt;div&gt;Loading...&lt;/div&gt;;
+  if (error) return &lt;div&gt;Error: {error.message}&lt;/div&gt;;
+
+  return (
+    &lt;div&gt;
+      &lt;button onClick={handleCreate}&gt;Create User&lt;/button&gt;
+      &lt;ul&gt;
+        {users?.map(user =&gt; (
+          &lt;li key={user.id}&gt;{user.name} - {user.email}&lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<h3 id="vue--nuxt-example"><a class="header" href="#vue--nuxt-example">Vue / Nuxt Example</a></h3>
+<pre><code class="language-vue">&lt;template&gt;
+  &lt;div&gt;
+    &lt;button @click="createUser"&gt;Create User&lt;/button&gt;
+    &lt;ul v-if="users"&gt;
+      &lt;li v-for="user in users" :key="user.id"&gt;
+        {{ user.name }} - {{ user.email }}
+      &lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script setup&gt;
+import { useGetUsers, useCreateUser } from '@/mockforge/composables';
+
+const { data: users, isLoading, error } = useGetUsers();
+const { mutate: createUser } = useCreateUser();
+
+const handleCreate = () =&gt; {
+  createUser({
+    email: 'newuser@example.com',
+    name: 'New User',
+  });
+};
+&lt;/script&gt;
+</code></pre>
+<h3 id="angular-example"><a class="header" href="#angular-example">Angular Example</a></h3>
+<pre><code class="language-typescript">import { Component } from '@angular/core';
+import { UserService } from '@/mockforge/services/user.service';
+
+@Component({
+  selector: 'app-users',
+  template: `
+    &lt;button (click)="createUser()"&gt;Create User&lt;/button&gt;
+    &lt;ul&gt;
+      &lt;li *ngFor="let user of users$ | async"&gt;
+        {{ user.name }} - {{ user.email }}
+      &lt;/li&gt;
+    &lt;/ul&gt;
+  `,
+})
+export class UsersComponent {
+  users$ = this.userService.getUsers();
+
+  constructor(private userService: UserService) {}
+
+  createUser() {
+    this.userService.createUser({
+      email: 'newuser@example.com',
+      name: 'New User',
+    }).subscribe();
+  }
+}
+</code></pre>
+<h3 id="svelte-example"><a class="header" href="#svelte-example">Svelte Example</a></h3>
+<pre><code class="language-svelte">&lt;script&gt;
+  import { getUsers, createUser } from '@/mockforge/stores';
+
+  let users = $state([]);
+
+  $effect(() =&gt; {
+    getUsers().then(data =&gt; users = data);
+  });
+
+  async function handleCreate() {
+    await createUser({
+      email: 'newuser@example.com',
+      name: 'New User',
+    });
+    // Refresh users
+    users = await getUsers();
+  }
+&lt;/script&gt;
+
+&lt;button on:click={handleCreate}&gt;Create User&lt;/button&gt;
+&lt;ul&gt;
+  {#each users as user}
+    &lt;li&gt;{user.name} - {user.email}&lt;/li&gt;
+  {/each}
+&lt;/ul&gt;
+</code></pre>
+<h2 id="complete-workflow-example"><a class="header" href="#complete-workflow-example">Complete Workflow Example</a></h2>
+<p>Let’s walk through a complete example from start to finish:</p>
+<h3 id="1-create-project-from-blueprint"><a class="header" href="#1-create-project-from-blueprint">1. Create Project from Blueprint</a></h3>
+<pre><code class="language-bash">mockforge init my-saas-app --blueprint b2c-saas
+cd my-saas-app
+</code></pre>
+<h3 id="2-start-mock-server"><a class="header" href="#2-start-mock-server">2. Start Mock Server</a></h3>
+<pre><code class="language-bash">mockforge serve
+</code></pre>
+<p>The server starts on <code>http://localhost:3000</code> with:</p>
+<ul>
+<li>Authentication endpoints (<code>/api/auth/*</code>)</li>
+<li>User management (<code>/api/users/*</code>)</li>
+<li>Subscription management (<code>/api/subscriptions/*</code>)</li>
+<li>Billing endpoints (<code>/api/billing/*</code>)</li>
+</ul>
+<h3 id="3-set-up-frontend"><a class="header" href="#3-set-up-frontend">3. Set Up Frontend</a></h3>
+<p>In a separate terminal, navigate to your React app:</p>
+<pre><code class="language-bash">cd ../my-react-app
+mockforge dev-setup react
+</code></pre>
+<p>This generates:</p>
+<ul>
+<li><code>src/mockforge/client.ts</code> - Typed API client</li>
+<li><code>src/mockforge/hooks.ts</code> - React Query hooks</li>
+<li><code>src/components/MockForgeExample.tsx</code> - Example component</li>
+</ul>
+<h3 id="4-configure-environment"><a class="header" href="#4-configure-environment">4. Configure Environment</a></h3>
+<pre><code class="language-bash">cp .env.mockforge.example .env.local
+</code></pre>
+<p>Edit <code>.env.local</code>:</p>
+<pre><code class="language-env">NEXT_PUBLIC_MOCKFORGE_URL=http://localhost:3000
+MOCKFORGE_REALITY_LEVEL=moderate
+</code></pre>
+<h3 id="5-use-in-your-app"><a class="header" href="#5-use-in-your-app">5. Use in Your App</a></h3>
+<pre><code class="language-tsx">// app/users/page.tsx
+import { useGetUsers } from '@/mockforge/hooks';
+
+export default function UsersPage() {
+  const { data: users, isLoading } = useGetUsers();
+
+  if (isLoading) return &lt;div&gt;Loading...&lt;/div&gt;;
+
+  return (
+    &lt;div&gt;
+      &lt;h1&gt;Users&lt;/h1&gt;
+      &lt;ul&gt;
+        {users?.map(user =&gt; (
+          &lt;li key={user.id}&gt;
+            {user.name} ({user.email})
+          &lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<h3 id="6-test-the-integration"><a class="header" href="#6-test-the-integration">6. Test the Integration</a></h3>
+<pre><code class="language-bash"># Start your frontend app
+npm run dev
+
+# Visit http://localhost:3001 (or your app's port)
+# You should see users loaded from the mock API!
+</code></pre>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="using-personas"><a class="header" href="#using-personas">Using Personas</a></h3>
+<p>Blueprints include personas for consistent data. Use them in your tests:</p>
+<pre><code class="language-typescript">// In your test or component
+import { usePersona } from '@/mockforge/hooks';
+
+// Use a specific persona
+const { data: user } = useGetUser({ persona: 'premium-user' });
+</code></pre>
+<h3 id="using-scenarios"><a class="header" href="#using-scenarios">Using Scenarios</a></h3>
+<p>Test different scenarios (happy path, failures, slow paths):</p>
+<pre><code class="language-typescript">// Activate a scenario
+await activateScenario('happy-path-signup');
+
+// Make API calls - they'll follow the scenario
+const response = await signup({ email: 'test@example.com' });
+</code></pre>
+<h3 id="config-validation"><a class="header" href="#config-validation">Config Validation</a></h3>
+<p>The VS Code extension provides real-time validation:</p>
+<ol>
+<li>Open <code>mockforge.yaml</code> in VS Code</li>
+<li>See inline errors for invalid configuration</li>
+<li>Get autocomplete for all options</li>
+</ol>
+<h3 id="playground-integration"><a class="header" href="#playground-integration">Playground Integration</a></h3>
+<p>Test endpoints interactively:</p>
+<ol>
+<li>Hover over an endpoint reference in your code</li>
+<li>Click “Open in Playground”</li>
+<li>Test the endpoint with different parameters</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="dev-setup-cant-find-openapi-spec"><a class="header" href="#dev-setup-cant-find-openapi-spec">Dev-Setup Can’t Find OpenAPI Spec</a></h3>
+<p>If dev-setup can’t auto-detect your OpenAPI spec:</p>
+<pre><code class="language-bash"># Specify it explicitly
+mockforge dev-setup react --spec ./openapi.yaml
+</code></pre>
+<h3 id="mock-server-not-running"><a class="header" href="#mock-server-not-running">Mock Server Not Running</a></h3>
+<p>Make sure the mock server is running:</p>
+<pre><code class="language-bash"># In your blueprint project
+mockforge serve
+</code></pre>
+<h3 id="type-errors-in-generated-client"><a class="header" href="#type-errors-in-generated-client">Type Errors in Generated Client</a></h3>
+<p>Regenerate the client:</p>
+<pre><code class="language-bash">mockforge dev-setup react --force
+</code></pre>
+<h3 id="port-conflicts"><a class="header" href="#port-conflicts">Port Conflicts</a></h3>
+<p>If port 3000 is in use:</p>
+<pre><code class="language-bash"># Change the port in mockforge.yaml
+base_url: http://localhost:3001
+
+# Or use environment variable
+MOCKFORGE_PORT=3001 mockforge serve
+</code></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<p>Now that you’ve completed the Golden Path:</p>
+<ol>
+<li><strong>Explore Personas</strong>: Use different personas for varied test data</li>
+<li><strong>Customize Reality</strong>: Adjust the reality slider for different test scenarios</li>
+<li><strong>Add Scenarios</strong>: Create custom scenarios for your workflows</li>
+<li><strong>Extend Contracts</strong>: Add more JSON Schema contracts for validation</li>
+<li><strong>Create Custom Blueprints</strong>: Build your own blueprints for your team</li>
+</ol>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="../user-guide/blueprints.html">Blueprints Guide</a> - Learn more about blueprints</li>
+<li><a href="../api/cli.html#dev-setup">Dev-Setup Reference</a> - Complete CLI reference</li>
+<li><a href="./react-workflow.html">React Workflow Tutorial</a> - Detailed React integration</li>
+<li><a href="./vue-workflow.html">Vue Workflow Tutorial</a> - Detailed Vue integration</li>
+<li><a href="../user-guide/ide-integration.html">IDE Integration</a> - VS Code extension features</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../tutorials/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../tutorials/mock-openapi-spec.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../tutorials/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../tutorials/mock-openapi-spec.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

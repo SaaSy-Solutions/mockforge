@@ -143,13 +143,13 @@ impl ScenarioManifest {
 
     /// Load manifest from file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| ScenarioError::Io(e))?;
+        let content = std::fs::read_to_string(path.as_ref()).map_err(ScenarioError::Io)?;
         Self::from_str(&content)
     }
 
     /// Load manifest from string
     pub fn from_str(content: &str) -> Result<Self> {
-        let manifest: Self = serde_yaml::from_str(content).map_err(|e| ScenarioError::Yaml(e))?;
+        let manifest: Self = serde_yaml::from_str(content).map_err(ScenarioError::Yaml)?;
         manifest.validate()?;
         Ok(manifest)
     }

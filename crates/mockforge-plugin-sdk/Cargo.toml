@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-plugin-sdk"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -21,7 +21,7 @@ crate-type = ["lib"]
 
 [dependencies]
 # Re-export core plugin functionality
-mockforge-plugin-core = "0.1.6"
+mockforge-plugin-core = "0.2.9"
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }

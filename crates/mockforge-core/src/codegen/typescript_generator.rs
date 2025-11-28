@@ -261,7 +261,7 @@ fn generate_types(spec: &OpenApiSpec, routes: &[RouteInfo]) -> Result<String> {
             if let ReferenceOr::Item(schema) = schema_ref {
                 let interface_name = sanitize_type_name(schema_name);
                 code.push_str(&generate_interface_from_schema(&interface_name, schema, spec)?);
-                code.push_str("\n");
+                code.push('\n');
             }
         }
     }
@@ -500,7 +500,7 @@ fn generate_server_class(routes: &[RouteInfo], config: &CodegenConfig) -> Result
     // Generate start method
     code.push_str("    public async start(): Promise<void> {\n");
     code.push_str("        return new Promise((resolve) => {\n");
-    code.push_str(&format!("            this.app.listen(this.port, () => {{\n"));
+    code.push_str("            this.app.listen(this.port, () => {\n");
     code.push_str(
         "                console.log(`🚀 Mock server started on http://localhost:${this.port}`);\n",
     );
@@ -525,7 +525,7 @@ fn generate_handlers(routes: &[RouteInfo], config: &CodegenConfig) -> Result<Str
 
     for route in routes {
         code.push_str(&generate_handler(route, config)?);
-        code.push_str("\n");
+        code.push('\n');
     }
 
     Ok(code)
@@ -669,8 +669,7 @@ fn generate_handler_name(route: &RouteInfo) -> String {
         result
     } else {
         // Generate name from method + path
-        let path_part =
-            route.path.replace('/', "_").replace('{', "").replace('}', "").replace('-', "_");
+        let path_part = route.path.replace('/', "_").replace(['{', '}'], "").replace('-', "_");
         format!("{}_{}", route.method.to_lowercase(), path_part)
             .trim_matches('_')
             .to_string()

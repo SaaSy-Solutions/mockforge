@@ -43,6 +43,11 @@ impl ConfidenceScorer {
             super::types::MismatchType::MethodNotAllowed => 0.9,
             super::types::MismatchType::HeaderMismatch => 0.7,
             super::types::MismatchType::QueryParamMismatch => 0.65,
+            // Semantic drift types - lower confidence as they're softer
+            super::types::MismatchType::SemanticDescriptionChange => 0.6,
+            super::types::MismatchType::SemanticEnumNarrowing => 0.65,
+            super::types::MismatchType::SemanticNullabilityChange => 0.7,
+            super::types::MismatchType::SemanticErrorCodeRemoved => 0.75,
         };
         score = (score + type_factor) / 2.0;
 

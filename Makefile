@@ -1,5 +1,5 @@
 # MockForge Development Makefile
-.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc
+.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc load-test-marketplace
 
 # Default target
 help: ## Show this help message
@@ -136,6 +136,9 @@ load-test-websocket: ## Run WebSocket load test only
 load-test-grpc: ## Run gRPC load test only
 	./tests/load/run_grpc_load.sh
 
+load-test-marketplace: ## Run marketplace load test only
+	./tests/load/run_marketplace_load.sh
+
 security-scan: ## Run comprehensive security scan (RustSec, licenses, static analysis)
 	./scripts/security-scan.sh
 
@@ -256,6 +259,19 @@ sync-selective: ## Sync specific workspaces to a directory
 sync-dry-run: ## Preview what would be synced without actually doing it
 	@echo "Dry run - preview sync..."
 	@cargo run -p mockforge-cli -- workspace sync --target-dir ./preview-sync --dry-run
+
+# SQLx query cache management
+sqlx-prepare: ## Regenerate SQLx query cache for mockforge-collab
+	@echo "Setting up temporary database for SQLx query preparation..."
+	@cd crates/mockforge-collab && \
+		rm -f /tmp/mockforge-sqlx-prepare.db && \
+		sqlx database create --database-url "sqlite:/tmp/mockforge-sqlx-prepare.db" && \
+		sqlx migrate run --database-url "sqlite:/tmp/mockforge-sqlx-prepare.db" && \
+		cd ../.. && \
+		cd crates/mockforge-collab && \
+		cargo sqlx prepare --database-url "sqlite:/tmp/mockforge-sqlx-prepare.db" && \
+		rm /tmp/mockforge-sqlx-prepare.db && \
+		echo "✅ SQLx query cache regenerated successfully"
 
 # Pre-commit checks (run before committing)
 pre-commit: fmt clippy test audit spellcheck ## Run all pre-commit checks

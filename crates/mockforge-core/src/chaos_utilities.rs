@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Chaos testing utilities with orchestration and randomness
 //!
 //! This module provides high-level chaos testing utilities that randomly inject
@@ -13,6 +15,7 @@ use tokio::sync::RwLock;
 
 /// Chaos mode configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ChaosConfig {
     /// Enable chaos mode
     pub enabled: bool,
@@ -183,7 +186,7 @@ impl ChaosEngine {
             return ChaosResult::Success;
         }
 
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         // First, randomly decide if we should inject an error
         if rng.random_bool(config.error_rate) {
@@ -225,7 +228,7 @@ impl ChaosEngine {
             return Ok(());
         }
 
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         // Only inject latency based on delay_rate
         if rng.random_bool(config.delay_rate) {
@@ -256,7 +259,7 @@ impl ChaosEngine {
             return None;
         }
 
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let status_code = if config.status_codes.is_empty() {
             500
         } else {

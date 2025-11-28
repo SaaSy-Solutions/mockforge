@@ -89,85 +89,86 @@ export function ConditionBuilder({ condition, onUpdate, onCancel }: ConditionBui
         {codeMode ? (
           <div className="space-y-2 mt-2">
             <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-            Enter a JavaScript/TypeScript expression (e.g., "count > 10 && status == 'active'")
-          </div>
-          <Input
-            value={codeValue}
-            onChange={(e) => setCodeValue(e.target.value)}
-            placeholder="count > 10 && status == 'active'"
-            className="font-mono text-sm"
-          />
-          <div className="flex gap-2">
-            <Button onClick={handleCodeUpdate} size="sm" variant="default">
-              Apply
-            </Button>
-            <Button onClick={onCancel} size="sm" variant="outline">
-              Cancel
-            </Button>
+              Enter a JavaScript/TypeScript expression (e.g., &quot;count &gt; 10 &amp;&amp; status == &apos;active&apos;&quot;)
+            </div>
+            <Input
+              value={codeValue}
+              onChange={(e) => setCodeValue(e.target.value)}
+              placeholder="count > 10 && status == 'active'"
+              className="font-mono text-sm"
+            />
+            <div className="flex gap-2">
+              <Button onClick={handleCodeUpdate} size="sm" variant="default">
+                Apply
+              </Button>
+              <Button onClick={onCancel} size="sm" variant="outline">
+                Cancel
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-2 mt-2">
             <div className="space-y-2">
-            {visualConditions.map((cond, index) => (
-              <div key={index} className="flex items-center gap-2 p-2 border rounded">
-                {index > 0 && (
+              {visualConditions.map((cond, index) => (
+                <div key={index} className="flex items-center gap-2 p-2 border rounded">
+                  {index > 0 && (
+                    <select
+                      value={cond.logicalOp || 'and'}
+                      onChange={(e) =>
+                        updateVisualCondition(index, 'logicalOp', e.target.value)
+                      }
+                      className="text-xs border rounded px-2 py-1"
+                    >
+                      <option value="and">AND</option>
+                      <option value="or">OR</option>
+                    </select>
+                  )}
+                  <Input
+                    value={cond.variable}
+                    onChange={(e) => updateVisualCondition(index, 'variable', e.target.value)}
+                    placeholder="variable"
+                    className="text-xs flex-1"
+                  />
                   <select
-                    value={cond.logicalOp || 'and'}
-                    onChange={(e) =>
-                      updateVisualCondition(index, 'logicalOp', e.target.value)
-                    }
+                    value={cond.operator}
+                    onChange={(e) => updateVisualCondition(index, 'operator', e.target.value)}
                     className="text-xs border rounded px-2 py-1"
                   >
-                    <option value="and">AND</option>
-                    <option value="or">OR</option>
+                    <option value="==">==</option>
+                    <option value="!=">!=</option>
+                    <option value=">">&gt;</option>
+                    <option value="<">&lt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<=">&lt;=</option>
                   </select>
-                )}
-                <Input
-                  value={cond.variable}
-                  onChange={(e) => updateVisualCondition(index, 'variable', e.target.value)}
-                  placeholder="variable"
-                  className="text-xs flex-1"
-                />
-                <select
-                  value={cond.operator}
-                  onChange={(e) => updateVisualCondition(index, 'operator', e.target.value)}
-                  className="text-xs border rounded px-2 py-1"
-                >
-                  <option value="==">==</option>
-                  <option value="!=">!=</option>
-                  <option value=">">&gt;</option>
-                  <option value="<">&lt;</option>
-                  <option value=">=">&gt;=</option>
-                  <option value="<=">&lt;=</option>
-                </select>
-                <Input
-                  value={cond.value}
-                  onChange={(e) => updateVisualCondition(index, 'value', e.target.value)}
-                  placeholder="value"
-                  className="text-xs flex-1"
-                />
-                <Button
-                  onClick={() => removeVisualCondition(index)}
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 w-6 p-0"
-                >
-                  ×
-                </Button>
-              </div>
-            ))}
-          </div>
-          <Button onClick={addVisualCondition} size="sm" variant="outline" className="w-full">
-            Add Condition
-          </Button>
-          <div className="flex gap-2">
-            <Button onClick={handleVisualUpdate} size="sm" variant="default">
-              Apply
+                  <Input
+                    value={cond.value}
+                    onChange={(e) => updateVisualCondition(index, 'value', e.target.value)}
+                    placeholder="value"
+                    className="text-xs flex-1"
+                  />
+                  <Button
+                    onClick={() => removeVisualCondition(index)}
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0"
+                  >
+                    ×
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button onClick={addVisualCondition} size="sm" variant="outline" className="w-full">
+              Add Condition
             </Button>
-            <Button onClick={onCancel} size="sm" variant="outline">
-              Cancel
-            </Button>
-          </div>
+            <div className="flex gap-2">
+              <Button onClick={handleVisualUpdate} size="sm" variant="default">
+                Apply
+              </Button>
+              <Button onClick={onCancel} size="sm" variant="outline">
+                Cancel
+              </Button>
+            </div>
           </div>
         )}
       </Tabs>

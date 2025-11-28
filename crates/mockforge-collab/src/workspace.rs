@@ -2,10 +2,7 @@
 
 use crate::core_bridge::CoreBridge;
 use crate::error::{CollabError, Result};
-use crate::models::{
-    MergeConflict, MergeStatus, TeamWorkspace, UserRole, WorkspaceFork, WorkspaceMember,
-    WorkspaceMerge,
-};
+use crate::models::{TeamWorkspace, UserRole, WorkspaceFork, WorkspaceMember};
 use crate::permissions::{Permission, PermissionChecker};
 use chrono::Utc;
 use parking_lot::RwLock;
@@ -23,6 +20,7 @@ pub struct WorkspaceService {
 
 impl WorkspaceService {
     /// Create a new workspace service
+    #[must_use]
     pub fn new(db: Pool<Sqlite>) -> Self {
         Self {
             db,
@@ -31,12 +29,24 @@ impl WorkspaceService {
         }
     }
 
-    /// Create a new workspace service with CoreBridge integration
+    /// Create a new workspace service with `CoreBridge` integration
+    #[must_use]
     pub fn with_core_bridge(db: Pool<Sqlite>, core_bridge: Arc<CoreBridge>) -> Self {
         Self {
             db,
             cache: Arc::new(RwLock::new(HashMap::new())),
             core_bridge: Some(core_bridge),
+        }
+    }
+
+    /// Check database health by running a simple query
+    pub async fn check_database_health(&self) -> bool {
+        match sqlx::query("SELECT 1").execute(&self.db).await {
+            Ok(_) => true,
+            Err(e) => {
+                tracing::error!("Database health check failed: {}", e);
+                false
+            }
         }
     }
 
@@ -564,7 +574,7 @@ impl WorkspaceService {
 
     /// Regenerate entity IDs in a core workspace to ensure fork independence
     fn regenerate_entity_ids(core_workspace: &mut mockforge_core::workspace::Workspace) {
-        use mockforge_core::workspace::{Folder, MockRequest};
+        use mockforge_core::workspace::Folder;
         use uuid::Uuid;
 
         // Regenerate workspace ID
@@ -600,7 +610,8 @@ pub struct WorkspaceManager {
 
 impl WorkspaceManager {
     /// Create a new workspace manager
-    pub fn new(service: Arc<WorkspaceService>) -> Self {
+    #[must_use]
+    pub const fn new(service: Arc<WorkspaceService>) -> Self {
         Self { service }
     }
 

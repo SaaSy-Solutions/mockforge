@@ -17,6 +17,7 @@ const GLOBAL_BUCKET_KEY: &str = "__global__";
 
 /// Bandwidth throttling configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BandwidthConfig {
     /// Enable bandwidth throttling
     pub enabled: bool,
@@ -68,6 +69,7 @@ impl BandwidthConfig {
 
 /// Burst loss configuration for simulating intermittent connectivity issues
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BurstLossConfig {
     /// Enable burst loss simulation
     pub enabled: bool,
@@ -85,6 +87,7 @@ pub struct BurstLossConfig {
 
 /// Tag-specific burst loss configuration override
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BurstLossOverride {
     /// Probability of entering a loss burst (0.0 to 1.0)
     pub burst_probability: f64,
@@ -246,7 +249,7 @@ impl BurstLossState {
                     false // Don't drop this packet
                 } else {
                     // Still in burst - apply loss rate
-                    let mut rng = rand::rng();
+                    let mut rng = rand::thread_rng();
                     rng.random_bool(config.loss_rate_during_burst)
                 }
             }
@@ -262,7 +265,7 @@ impl BurstLossState {
                     // End recovery
                     self.recovery_start = None;
                     // Check if we should start a new burst
-                    let mut rng = rand::rng();
+                    let mut rng = rand::thread_rng();
                     if rng.random_bool(config.burst_probability) {
                         self.in_burst = true;
                         self.burst_start = Some(now);
@@ -277,7 +280,7 @@ impl BurstLossState {
             }
             (false, _, None) => {
                 // Not in burst or recovery - check if we should start a burst
-                let mut rng = rand::rng();
+                let mut rng = rand::thread_rng();
                 if rng.random_bool(config.burst_probability) {
                     self.in_burst = true;
                     self.burst_start = Some(now);
@@ -292,6 +295,7 @@ impl BurstLossState {
 
 /// Traffic shaping configuration combining all features
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TrafficShapingConfig {
     /// Bandwidth throttling configuration
     pub bandwidth: BandwidthConfig,

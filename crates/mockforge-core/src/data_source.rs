@@ -11,7 +11,7 @@ use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, warn};
 
 /// Data source type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -444,12 +444,12 @@ impl DataSource for HttpDataSource {
             let cached_guard = self.cached_content.lock().unwrap();
             let last_fetch_guard = self.last_fetch.lock().unwrap();
 
-            if let (Some(ref cached), Some(ref last_fetch), Some(refresh_interval)) =
+            if let (Some(cached), Some(last_fetch), Some(refresh_interval)) =
                 (cached_guard.as_ref(), last_fetch_guard.as_ref(), self.refresh_interval)
             {
                 if last_fetch.elapsed().as_secs() < refresh_interval {
                     debug!("Using cached HTTP data");
-                    return Ok((*cached).clone());
+                    return Ok(cached.clone());
                 }
             }
         }
@@ -469,7 +469,7 @@ impl DataSource for HttpDataSource {
     async fn check_updated(&self) -> Result<bool> {
         // For HTTP sources, we check if cache is expired
         let last_fetch = self.last_fetch.lock().unwrap();
-        if let (Some(ref last_fetch), Some(refresh_interval)) =
+        if let (Some(last_fetch), Some(refresh_interval)) =
             (last_fetch.as_ref(), self.refresh_interval)
         {
             Ok(last_fetch.elapsed().as_secs() >= refresh_interval)

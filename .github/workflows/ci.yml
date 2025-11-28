@@ -89,6 +89,31 @@ jobs:
       run: cargo doc --workspace --no-deps
       if: matrix.rust == 'stable'
 
+  changelog-validation:
+    name: Validate Changelog Pillar Tags
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+
+    - name: Validate pillar tags in changelog
+      run: |
+        # Check if CHANGELOG.md exists
+        if [ ! -f CHANGELOG.md ]; then
+          echo "ERROR: CHANGELOG.md not found"
+          exit 1
+        fi
+
+        # Use the check-changelog.sh script for consistent validation
+        chmod +x scripts/check-changelog.sh
+        if scripts/check-changelog.sh; then
+          echo "✅ Changelog validation passed: pillar tags found in all sections."
+        else
+          echo "::error::Changelog validation failed. Ensure all sections have pillar tags."
+          echo "::error::See docs/PILLARS.md for pillar definitions: [Reality], [Contracts], [DevX], [Cloud], [AI]"
+          exit 1
+        fi
+
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -202,6 +227,34 @@ jobs:
     - name: Check typos
       uses: crate-ci/typos@master
 
+  changelog-validation:
+    name: Changelog Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Validate changelog pillar tags
+      run: |
+        # Check if CHANGELOG.md was modified in this PR
+        if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "CHANGELOG.md"; then
+          echo "CHANGELOG.md modified, validating pillar tags..."
+          # Make script executable
+          chmod +x scripts/check-changelog.sh
+          # Run validation (will check for pillar tags in [Unreleased] and version sections)
+          scripts/check-changelog.sh || {
+            echo "::error::Changelog validation failed. Ensure all sections ([Unreleased] and version sections) have pillar tags."
+            echo "::error::See docs/PILLARS.md for pillar definitions: [Reality], [Contracts], [DevX], [Cloud], [AI]"
+            echo "::error::See docs/contributing/PILLAR_TAGGING.md for tagging guidelines."
+            exit 1
+          }
+        else
+          echo "CHANGELOG.md not modified in this PR, skipping validation."
+        fi
+
   build-binaries:
     name: Build Release Binaries
     runs-on: ${{ matrix.os }}
@@ -312,7 +365,7 @@ jobs:
         mv bom.xml dist/${{ matrix.name }}-sbom.xml
 
     - name: Upload binary artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: mockforge-${{ matrix.name }}
         path: |

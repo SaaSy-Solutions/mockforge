@@ -1,5 +1,9 @@
 # Chaos Lab - Interactive Network Condition Simulation
 
+**Pillars:** [Reality]
+
+[Reality] - Makes mocks feel like real backends through network condition simulation and chaos engineering
+
 Chaos Lab is an interactive module in MockForge that enables developers to simulate various real-world network conditions and errors directly from the UI. This feature helps test application resilience, debug network-related issues, and validate error handling logic.
 
 ## Overview

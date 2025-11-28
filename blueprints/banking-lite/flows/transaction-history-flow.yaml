@@ -1,0 +1,67 @@
+id: transaction-history-flow
+name: Transaction History Flow
+description: View account transactions and generate statement
+steps:
+  - name: Get Account Transactions
+    method: GET
+    path: /api/accounts/{{account_id}}/transactions
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    query:
+      limit: 20
+      offset: 0
+    extract:
+      transactions: body.transactions
+      total_count: body.total
+
+  - name: Get Transaction Details
+    method: GET
+    path: /api/transactions/{{transactions[0].id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      transaction_amount: body.transaction.amount
+      transaction_type: body.transaction.type
+
+  - name: Filter Transactions by Type
+    method: GET
+    path: /api/accounts/{{account_id}}/transactions
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    query:
+      type: "debit"
+      limit: 10
+    extract:
+      debit_transactions: body.transactions
+
+  - name: Filter Transactions by Date Range
+    method: GET
+    path: /api/accounts/{{account_id}}/transactions
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    query:
+      start_date: "2024-01-01"
+      end_date: "2024-01-31"
+    extract:
+      monthly_transactions: body.transactions
+
+  - name: Generate Statement
+    method: POST
+    path: /api/accounts/{{account_id}}/statements
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      start_date: "2024-01-01"
+      end_date: "2024-01-31"
+      format: "pdf"
+    extract:
+      statement_id: body.statement.id
+      statement_url: body.statement.download_url
+
+  - name: Get Statement
+    method: GET
+    path: /api/statements/{{statement_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      statement_balance: body.statement.closing_balance

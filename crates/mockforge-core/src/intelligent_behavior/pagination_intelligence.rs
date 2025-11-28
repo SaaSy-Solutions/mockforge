@@ -136,7 +136,7 @@ impl PaginationIntelligence {
         let total = self.generate_realistic_total(context, request).await?;
 
         // Calculate derived values
-        let total_pages = (total + page_size - 1) / page_size; // Ceiling division
+        let total_pages = total.div_ceil(page_size); // Ceiling division
         let current_page = page.unwrap_or(1);
         let has_next = current_page < total_pages;
         let has_prev = current_page > 1;
@@ -380,9 +380,8 @@ impl PaginationIntelligence {
         // Generate number between 50 and 500 based on hash
         let base = 50;
         let range = 450;
-        let total = base + (hash % range as u64) as usize;
 
-        total
+        base + (hash % range as u64) as usize
     }
 
     /// Generate cursor for cursor-based pagination

@@ -350,7 +350,7 @@ async fn handle_enable(
                     current_dir.join("mockforge.yml"),
                     current_dir.join(".mockforge.yaml"),
                 ];
-                possible_paths.into_iter().find(|p| p.exists()).ok_or_else(|| {
+                possible_paths.into_iter().find(|p| p.exists()).ok_or({
                     "No configuration file found. Specify --config or create mockforge.yaml"
                 })?
             }
@@ -402,7 +402,7 @@ async fn handle_disable(
                     current_dir.join("mockforge.yml"),
                     current_dir.join(".mockforge.yaml"),
                 ];
-                possible_paths.into_iter().find(|p| p.exists()).ok_or_else(|| {
+                possible_paths.into_iter().find(|p| p.exists()).ok_or({
                     "No configuration file found. Specify --config or create mockforge.yaml"
                 })?
             }
@@ -452,7 +452,7 @@ async fn handle_status(
                     current_dir.join("mockforge.yml"),
                     current_dir.join(".mockforge.yaml"),
                 ];
-                possible_paths.into_iter().find(|p| p.exists()).ok_or_else(|| {
+                possible_paths.into_iter().find(|p| p.exists()).ok_or({
                     "No configuration file found. Specify --config or create mockforge.yaml"
                 })?
             }

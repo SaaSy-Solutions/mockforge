@@ -1,0 +1,27 @@
+id: premium-user
+name: Premium User
+domain: saas
+traits:
+  subscription_tier: premium
+  subscription_status: active
+  payment_method: credit_card
+  billing_cycle: monthly
+  plan_price: "29.99"
+  currency: USD
+  signup_date: "2024-01-01"
+  last_payment_date: "2024-01-15"
+  next_billing_date: "2024-02-15"
+  total_spent: "89.97"
+  usage_quota: 1000
+  usage_current: 450
+  feature_flags:
+    - advanced_analytics
+    - priority_support
+    - api_access
+lifecycle:
+  preset: subscription
+  initial_state: active
+backstory: |
+  Premium user who signed up 3 months ago and has been consistently paying.
+  High engagement with the product, uses advanced features regularly.
+  Likely to upgrade to enterprise tier if offered.

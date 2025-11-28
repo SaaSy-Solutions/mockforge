@@ -1,3 +1,5 @@
+//! Pillars: [Contracts][AI]
+//!
 //! AI-powered contract diff analysis
 //!
 //! This module provides intelligent contract diff analysis that compares front-end requests
@@ -67,6 +69,7 @@ pub mod confidence_scorer;
 pub mod correction_proposer;
 pub mod diff_analyzer;
 pub mod recommendation_engine;
+pub mod semantic_analyzer;
 pub mod types;
 
 // Re-export main types
@@ -74,6 +77,7 @@ pub use confidence_scorer::{ConfidenceScorer, ScoringContext};
 pub use correction_proposer::CorrectionProposer;
 pub use diff_analyzer::DiffAnalyzer;
 pub use recommendation_engine::{RecommendationEngine, RequestContext};
+pub use semantic_analyzer::{SemanticAnalyzer, SemanticChangeType, SemanticDriftResult};
 pub use types::ConfidenceLevel;
 pub use types::{
     CapturedRequest, ContractDiffConfig, ContractDiffResult, CorrectionProposal, DiffMetadata,
@@ -88,6 +92,9 @@ pub struct ContractDiffAnalyzer {
     /// Recommendation engine for AI-powered suggestions
     recommendation_engine: RecommendationEngine,
 
+    /// Semantic analyzer for Layer 2 semantic drift detection
+    semantic_analyzer: SemanticAnalyzer,
+
     /// Correction proposer for generating patches
     correction_proposer: CorrectionProposer,
 
@@ -100,11 +107,13 @@ impl ContractDiffAnalyzer {
     pub fn new(config: ContractDiffConfig) -> crate::Result<Self> {
         let diff_analyzer = DiffAnalyzer::new(config.clone());
         let recommendation_engine = RecommendationEngine::new(config.clone())?;
+        let semantic_analyzer = SemanticAnalyzer::new(config.clone())?;
         let correction_proposer = CorrectionProposer;
 
         Ok(Self {
             diff_analyzer,
             recommendation_engine,
+            semantic_analyzer,
             correction_proposer,
             config,
         })
@@ -156,6 +165,35 @@ impl ContractDiffAnalyzer {
         result.confidence = ConfidenceScorer::calculate_overall_confidence(&result.mismatches);
 
         Ok(result)
+    }
+
+    /// Compare two contract specifications and detect semantic drift
+    ///
+    /// This method performs Layer 1 (structural) and Layer 2 (semantic) analysis
+    /// to detect both structural and meaning changes between contract versions.
+    pub async fn compare_specs(
+        &self,
+        before_spec: &crate::openapi::OpenApiSpec,
+        after_spec: &crate::openapi::OpenApiSpec,
+        endpoint_path: &str,
+        method: &str,
+    ) -> crate::Result<Option<SemanticDriftResult>> {
+        // Layer 2: Semantic analysis
+        if self.config.semantic_analysis_enabled {
+            let semantic_result = self
+                .semantic_analyzer
+                .analyze_semantic_drift(before_spec, after_spec, endpoint_path, method)
+                .await?;
+
+            // Filter by semantic confidence threshold
+            if let Some(ref result) = semantic_result {
+                if result.semantic_confidence >= self.config.semantic_confidence_threshold {
+                    return Ok(semantic_result);
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     /// Generate a JSON Patch file from correction proposals

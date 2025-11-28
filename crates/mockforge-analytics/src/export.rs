@@ -2,7 +2,7 @@
 
 use crate::database::AnalyticsDatabase;
 use crate::error::Result;
-use crate::models::*;
+use crate::models::AnalyticsFilter;
 use std::io::Write;
 
 impl AnalyticsDatabase {

@@ -108,7 +108,14 @@ crate_dir_exists() {
 # Function to check if crate is in workspace
 crate_in_workspace() {
     local crate_name=$1
-    if cargo metadata --format-version 1 2>/dev/null | grep -q "\"name\":\"$crate_name\""; then
+    # Check if we can locate the crate using cargo locate-project
+    # This is more reliable than grepping metadata
+    if cargo locate-project --manifest-path "crates/$crate_name/Cargo.toml" &>/dev/null; then
+        return 0
+    fi
+    # Fallback: check if crate exists in workspace metadata
+    if cargo metadata --format-version 1 --no-deps 2>/dev/null | \
+       python3 -c "import sys, json; data = json.load(sys.stdin); packages = [p['name'] for p in data.get('packages', [])]; sys.exit(0 if '$crate_name' in packages else 1)" 2>/dev/null; then
         return 0
     fi
     return 1
@@ -151,8 +158,15 @@ publish_crate() {
         publish_env="CARGO_REGISTRY_TOKEN=$CARGO_REGISTRY_TOKEN"
     fi
 
+    # Use --no-verify to skip verification, which can fail when workspace crates
+    # depend on unpublished versions of other workspace crates
+    local no_verify_flag="--no-verify"
+    if [ "$DRY_RUN" = "true" ]; then
+        no_verify_flag=""  # Don't use --no-verify for dry runs, we want to see verification errors
+    fi
+
     if [ -n "$publish_env" ]; then
-        if env $publish_env cargo publish -p "$crate_name" $dry_run_flag --allow-dirty; then
+        if env $publish_env cargo publish -p "$crate_name" $dry_run_flag $no_verify_flag --allow-dirty; then
             print_success "Successfully published $crate_name"
         else
             # Check if it's a "package not found" error
@@ -164,7 +178,7 @@ publish_crate() {
             fi
         fi
     else
-        if cargo publish -p "$crate_name" $dry_run_flag --allow-dirty; then
+        if cargo publish -p "$crate_name" $dry_run_flag $no_verify_flag --allow-dirty; then
             print_success "Successfully published $crate_name"
         else
             # Check if it's a "package not found" error
@@ -176,6 +190,16 @@ publish_crate() {
             fi
         fi
     fi
+}
+
+# Function to check if a crate version is already published on crates.io
+crate_version_published() {
+    local crate_name=$1
+    local version=$2
+    if cargo search "$crate_name" --limit 1 2>/dev/null | grep -q "^$crate_name = \"$version\""; then
+        return 0
+    fi
+    return 1
 }
 
 # Function to convert dependencies for a specific crate
@@ -197,13 +221,44 @@ convert_crate_dependencies() {
 
     if [ -f "$cargo_toml" ]; then
         print_status "Converting dependencies for $crate_name..."
-        python3 - "$cargo_toml" "$WORKSPACE_VERSION" <<'PY'
+        # Build list of crates that will be published in this batch
+        # For Phase 1, include all Phase 1 crates; for Phase 2, include all Phase 1 + Phase 2 crates
+        local published_crates=""
+        local phase1_crates="mockforge-core mockforge-data mockforge-plugin-core mockforge-observability mockforge-tracing mockforge-plugin-sdk mockforge-recorder mockforge-plugin-registry mockforge-chaos mockforge-reporting mockforge-analytics mockforge-collab"
+        local phase2_crates="mockforge-plugin-loader mockforge-schema mockforge-mqtt mockforge-scenarios mockforge-smtp mockforge-ws mockforge-http mockforge-grpc mockforge-graphql mockforge-amqp mockforge-kafka mockforge-ftp mockforge-tcp mockforge-sdk mockforge-bench mockforge-test mockforge-vbr mockforge-tunnel mockforge-ui mockforge-cli"
+
+        # Check which phase we're in based on the crate being published
+        local all_crates="$phase1_crates $phase2_crates"
+        local current_phase=""
+        if [[ " $phase1_crates " =~ " $crate_name " ]]; then
+            current_phase="phase1"
+        elif [[ " $phase2_crates " =~ " $crate_name " ]]; then
+            current_phase="phase2"
+        fi
+
+        for dep_crate in $all_crates; do
+            # Include if already published
+            if crate_version_published "$dep_crate" "$WORKSPACE_VERSION"; then
+                published_crates="$published_crates $dep_crate"
+            elif [[ "$current_phase" == "phase1" ]] && [[ " $phase1_crates " =~ " $dep_crate " ]]; then
+                # Phase 1 crates can reference each other even if not yet published
+                published_crates="$published_crates $dep_crate"
+            elif [[ "$current_phase" == "phase2" ]]; then
+                # Phase 2 crates can reference Phase 1 crates (already published) and other Phase 2 crates
+                if [[ " $phase1_crates " =~ " $dep_crate " ]] || [[ " $phase2_crates " =~ " $dep_crate " ]]; then
+                    published_crates="$published_crates $dep_crate"
+                fi
+            fi
+        done
+
+        python3 - "$cargo_toml" "$WORKSPACE_VERSION" "$published_crates" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
 version = sys.argv[2]
+published = set(sys.argv[3].split()) if len(sys.argv) > 3 and sys.argv[3] else set()
 text = path.read_text()
 changed = False
 
@@ -235,27 +290,48 @@ targets = [
     ("mockforge-sdk", "../mockforge-sdk"),
     ("mockforge-bench", "../mockforge-bench"),
     ("mockforge-test", "../mockforge-test"),
+    ("mockforge-vbr", "../mockforge-vbr"),
     ("mockforge-tunnel", "../mockforge-tunnel"),
     ("mockforge-ui", "../mockforge-ui"),
     ("mockforge-cli", "../mockforge-cli"),
     ("mockforge-scenarios", "../mockforge-scenarios"),
+    ("mockforge-schema", "../mockforge-schema"),
 ]
 
 for name, rel in targets:
-    # Pattern 1: { path = "../..." }
-    pattern1 = rf'{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}"\s*\}}'
-    # Pattern 2: { version = "...", path = "../..." }
-    pattern2 = rf'{name}\s*=\s*\{{\s*version\s*=\s*"[^"]*",\s*path\s*=\s*"{re.escape(rel)}"\s*\}}'
-    # Pattern 3: { path = "../...", version = "..." }
-    pattern3 = rf'{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}",\s*version\s*=\s*"[^"]*"\s*\}}'
+    # Only convert if this crate has been published
+    if name not in published:
+        continue
 
-    replacement = f'{name} = "{version}"'
+    # Match dependency block with path - extract features and optional flags
+    # Pattern matches: { path = "...", features = [...], optional = true } or variations
+    pattern = rf'{name}\s*=\s*\{{([^}}]*path\s*=\s*"{re.escape(rel)}"[^}}]*)\}}'
 
-    for pattern in [pattern1, pattern2, pattern3]:
-        new_text, count = re.subn(pattern, replacement, text)
-        if count:
-            text = new_text
-            changed = True
+    def replace_dep(match):
+        dep_content = match.group(1)
+        # Extract features using regex (handles simple arrays)
+        features_match = re.search(r'features\s*=\s*(\[[^\]]*\])', dep_content)
+        features = features_match.group(0) if features_match else None  # Get "features = [...]"
+
+        # Check if optional
+        is_optional = re.search(r'optional\s*=\s*true', dep_content) is not None
+
+        # Build replacement - preserve features and optional flag
+        parts = [f'version = "{version}"']
+        if is_optional:
+            parts.append('optional = true')
+        if features:
+            parts.append(features)
+
+        if len(parts) > 1:
+            return f'{name} = {{ {", ".join(parts)} }}'
+        else:
+            return f'{name} = "{version}"'
+
+    new_text = re.sub(pattern, replace_dep, text)
+    if new_text != text:
+        text = new_text
+        changed = True
 
 publish_pattern = re.compile(r'(publish\s*=\s*)false(\s*#.*)?')
 new_text, count = publish_pattern.subn(lambda m: f"{m.group(1)}true{m.group(2) or ''}", text)
@@ -303,6 +379,7 @@ convert_dependencies() {
         "mockforge-ui"
         "mockforge-tunnel"
         "mockforge-cli"
+        "mockforge-schema"
     )
 
     for crate in "${crates_to_convert[@]}"; do
@@ -345,6 +422,7 @@ restore_dependencies() {
         "mockforge-ui"
         "mockforge-tunnel"
         "mockforge-cli"
+        "mockforge-schema"
     )
 
     for crate in "${crates_to_restore[@]}"; do
@@ -486,13 +564,14 @@ main() {
     # Phase 1: Publish base crates (no internal dependencies)
     print_status "Phase 1: Publishing base crates..."
 
-    convert_crate_dependencies "mockforge-core"
-    publish_crate "mockforge-core"
-    wait_for_processing
-
-    # Convert dependencies for mockforge-data and publish it
+    # Publish mockforge-data first (it depends on mockforge-core 0.1.3, already published)
     convert_crate_dependencies "mockforge-data"
     publish_crate "mockforge-data"
+    wait_for_processing
+
+    # Convert dependencies for mockforge-core (can now reference mockforge-data 0.3.0)
+    convert_crate_dependencies "mockforge-core"
+    publish_crate "mockforge-core"
     wait_for_processing
 
     # Convert dependencies for mockforge-plugin-core and publish it
@@ -500,18 +579,21 @@ main() {
     publish_crate "mockforge-plugin-core"
     wait_for_processing
 
-    # Convert dependencies for mockforge-plugin-sdk and publish it
-    convert_crate_dependencies "mockforge-plugin-sdk"
-    publish_crate "mockforge-plugin-sdk"
+    # Publish shared internal crates required by downstream crates
+    # These must be published before crates that depend on them (like mockforge-http, mockforge-plugin-sdk)
+    # mockforge-tracing must be published before mockforge-observability (observability depends on tracing)
+    convert_crate_dependencies "mockforge-tracing"
+    publish_crate "mockforge-tracing"
     wait_for_processing
 
-    # Publish shared internal crates required by downstream crates
     convert_crate_dependencies "mockforge-observability"
     publish_crate "mockforge-observability"
     wait_for_processing
 
-    convert_crate_dependencies "mockforge-tracing"
-    publish_crate "mockforge-tracing"
+    # Convert dependencies for mockforge-plugin-sdk and publish it
+    # (Now that observability and tracing are published)
+    convert_crate_dependencies "mockforge-plugin-sdk"
+    publish_crate "mockforge-plugin-sdk"
     wait_for_processing
 
     convert_crate_dependencies "mockforge-recorder"
@@ -546,7 +628,29 @@ main() {
     publish_crate "mockforge-plugin-loader"
     wait_for_processing
 
+    # Publish schema crate (needed by mockforge-cli)
+    convert_crate_dependencies "mockforge-schema"
+    publish_crate "mockforge-schema"
+    wait_for_processing
+
     # Publish protocol crates
+    # Publish dependencies of mockforge-http first (mqtt, scenarios, smtp, ws)
+    convert_crate_dependencies "mockforge-mqtt"
+    publish_crate "mockforge-mqtt"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-scenarios"
+    publish_crate "mockforge-scenarios"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-smtp"
+    publish_crate "mockforge-smtp"
+    wait_for_processing
+
+    convert_crate_dependencies "mockforge-ws"
+    publish_crate "mockforge-ws"
+    wait_for_processing
+
     convert_crate_dependencies "mockforge-http"
     publish_crate "mockforge-http"
     wait_for_processing
@@ -555,20 +659,8 @@ main() {
     publish_crate "mockforge-grpc"
     wait_for_processing
 
-    convert_crate_dependencies "mockforge-ws"
-    publish_crate "mockforge-ws"
-    wait_for_processing
-
     convert_crate_dependencies "mockforge-graphql"
     publish_crate "mockforge-graphql"
-    wait_for_processing
-
-    convert_crate_dependencies "mockforge-mqtt"
-    publish_crate "mockforge-mqtt"
-    wait_for_processing
-
-    convert_crate_dependencies "mockforge-smtp"
-    publish_crate "mockforge-smtp"
     wait_for_processing
 
     convert_crate_dependencies "mockforge-amqp"
@@ -607,6 +699,11 @@ main() {
 
     convert_crate_dependencies "mockforge-registry-server"
     publish_crate "mockforge-registry-server"
+    wait_for_processing
+
+    # VBR (needs to be published before mockforge-ui)
+    convert_crate_dependencies "mockforge-vbr"
+    publish_crate "mockforge-vbr"
     wait_for_processing
 
     # CLI binary (needs mockforge-ui and mockforge-tunnel published first)

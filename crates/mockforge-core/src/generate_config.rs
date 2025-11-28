@@ -67,21 +67,13 @@ impl Default for GenerateConfig {
 /// Input specification configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub struct InputConfig {
     /// Path to OpenAPI specification file (JSON or YAML)
     pub spec: Option<PathBuf>,
     /// Additional input files
     #[serde(default)]
     pub additional: Vec<PathBuf>,
-}
-
-impl Default for InputConfig {
-    fn default() -> Self {
-        Self {
-            spec: None,
-            additional: Vec::new(),
-        }
-    }
 }
 
 /// Barrel file type for organizing exports

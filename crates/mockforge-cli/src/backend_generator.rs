@@ -7,13 +7,10 @@ pub mod rust_axum;
 
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
-use mockforge_core::codegen::backend_generator::{extract_routes, extract_schemas};
 use mockforge_core::openapi::spec::OpenApiSpec;
 use mockforge_plugin_core::backend_generator::{
-    BackendGenerationMetadata, BackendGenerationResult, BackendGeneratorConfig,
-    BackendGeneratorPlugin, Complexity, TodoCategory, TodoItem,
+    BackendGenerationResult, BackendGeneratorConfig, BackendGeneratorPlugin,
 };
-use mockforge_plugin_core::GeneratedFile;
 use std::collections::HashMap;
 use std::path::PathBuf;
 

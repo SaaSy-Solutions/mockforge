@@ -6,7 +6,6 @@
 use crate::entities::{Entity, EntityRegistry};
 use crate::schema::{CascadeAction, ManyToManyDefinition, VbrSchemaDefinition};
 use crate::{Error, Result};
-use std::collections::HashMap;
 
 /// Migration manager for database schema evolution
 pub struct MigrationManager {
@@ -30,7 +29,7 @@ impl MigrationManager {
 
         // Add columns from schema fields
         for field in &schema.base.fields {
-            let column_def = self.field_to_column_definition(field, &schema)?;
+            let column_def = self.field_to_column_definition(field, schema)?;
             columns.push(column_def);
         }
 

@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                id as \"id: Uuid\",\n                workspace_id as \"workspace_id: Uuid\",\n                user_id as \"user_id: Uuid\",\n                role as \"role: crate::models::UserRole\",\n                joined_at as \"joined_at: chrono::DateTime<chrono::Utc>\",\n                last_activity as \"last_activity: chrono::DateTime<chrono::Utc>\"\n            FROM workspace_members\n            WHERE role = 'admin'\n            ORDER BY last_activity DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "workspace_id: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "user_id: Uuid",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "role: crate::models::UserRole",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "joined_at: chrono::DateTime<chrono::Utc>",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "last_activity: chrono::DateTime<chrono::Utc>",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "89d628ce3fabcdad7ee179d3365e4a952bcbbd96812e62f082ae43a5ba4cb998"
+}

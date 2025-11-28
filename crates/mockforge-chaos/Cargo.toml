@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-chaos"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ description = "Chaos engineering features for MockForge - fault injection and re
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = true  # Internal chaos testing component
+publish = false  # Internal chaos testing component
 
 [dependencies]
 # Async runtime
@@ -58,13 +58,13 @@ bincode = "1.3"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], optional = true }
 
 # Tracing
-mockforge-tracing = "0.2.8"
+mockforge-tracing = "0.3.0"
 
 # Recorder
-mockforge-recorder = "0.2.8"
+mockforge-recorder = { version = "0.3.3", path = "../mockforge-recorder" }
 
 # Core (for MockAI integration)
-mockforge-core = "0.2.8"
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
 
 # PDF generation
 printpdf = "0.7"

@@ -187,22 +187,24 @@ pub enum ErrorCategory {
 
 impl ErrorCategory {
     /// Get the category from a status code
-    pub fn from_status_code(status_code: u16) -> Self {
+    #[must_use]
+    pub const fn from_status_code(status_code: u16) -> Self {
         match status_code {
-            400..=499 => ErrorCategory::ClientError,
-            500..=599 => ErrorCategory::ServerError,
-            _ => ErrorCategory::Other,
+            400..=499 => Self::ClientError,
+            500..=599 => Self::ServerError,
+            _ => Self::Other,
         }
     }
 
     /// Convert to string representation
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            ErrorCategory::ClientError => "client_error",
-            ErrorCategory::ServerError => "server_error",
-            ErrorCategory::NetworkError => "network_error",
-            ErrorCategory::TimeoutError => "timeout_error",
-            ErrorCategory::Other => "other",
+            Self::ClientError => "client_error",
+            Self::ServerError => "server_error",
+            Self::NetworkError => "network_error",
+            Self::TimeoutError => "timeout_error",
+            Self::Other => "other",
         }
     }
 }
@@ -361,4 +363,80 @@ pub struct ErrorSummary {
 pub enum ExportFormat {
     Csv,
     Json,
+}
+
+// ============================================================================
+// Coverage Metrics Models (MockOps)
+// ============================================================================
+
+/// Scenario usage metrics
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ScenarioUsageMetrics {
+    pub id: Option<i64>,
+    pub scenario_id: String,
+    pub workspace_id: Option<String>,
+    pub org_id: Option<String>,
+    pub usage_count: i64,
+    pub last_used_at: Option<i64>,
+    pub usage_pattern: Option<String>, // JSON string
+    pub created_at: Option<i64>,
+    pub updated_at: Option<i64>,
+}
+
+/// Persona CI hit record
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct PersonaCIHit {
+    pub id: Option<i64>,
+    pub persona_id: String,
+    pub workspace_id: Option<String>,
+    pub org_id: Option<String>,
+    pub ci_run_id: Option<String>,
+    pub hit_count: i64,
+    pub hit_at: i64,
+    pub created_at: Option<i64>,
+}
+
+/// Endpoint coverage metrics
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct EndpointCoverage {
+    pub id: Option<i64>,
+    pub endpoint: String,
+    pub method: Option<String>,
+    pub protocol: String,
+    pub workspace_id: Option<String>,
+    pub org_id: Option<String>,
+    pub test_count: i64,
+    pub last_tested_at: Option<i64>,
+    pub coverage_percentage: Option<f64>,
+    pub created_at: Option<i64>,
+    pub updated_at: Option<i64>,
+}
+
+/// Reality level staleness record
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct RealityLevelStaleness {
+    pub id: Option<i64>,
+    pub workspace_id: String,
+    pub org_id: Option<String>,
+    pub endpoint: Option<String>,
+    pub method: Option<String>,
+    pub protocol: Option<String>,
+    pub current_reality_level: Option<String>,
+    pub last_updated_at: Option<i64>,
+    pub staleness_days: Option<i32>,
+    pub created_at: Option<i64>,
+    pub updated_at: Option<i64>,
+}
+
+/// Drift percentage metrics
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct DriftPercentageMetrics {
+    pub id: Option<i64>,
+    pub workspace_id: String,
+    pub org_id: Option<String>,
+    pub total_mocks: i64,
+    pub drifting_mocks: i64,
+    pub drift_percentage: f64,
+    pub measured_at: i64,
+    pub created_at: Option<i64>,
 }

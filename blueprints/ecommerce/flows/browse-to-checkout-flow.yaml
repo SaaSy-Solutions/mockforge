@@ -1,0 +1,68 @@
+id: browse-to-checkout-flow
+name: Browse to Checkout Flow
+description: Complete shopping journey from browsing to order completion
+steps:
+  - name: Browse Products
+    method: GET
+    path: /api/products?category=electronics&limit=10
+    extract:
+      product_ids: body.products[*].id
+
+  - name: Get Product Details
+    method: GET
+    path: /api/products/{{product_ids[0]}}
+    extract:
+      product_id: body.product.id
+      product_price: body.product.price
+      product_name: body.product.name
+
+  - name: Add to Cart
+    method: POST
+    path: /api/cart/items
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      product_id: "{{product_id}}"
+      quantity: 2
+    extract:
+      cart_item_id: body.item.id
+      cart_id: body.cart.id
+
+  - name: View Cart
+    method: GET
+    path: /api/cart
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      cart_total: body.cart.total
+      cart_items_count: body.cart.items.length
+
+  - name: Proceed to Checkout
+    method: POST
+    path: /api/checkout
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      cart_id: "{{cart_id}}"
+      shipping_address:
+        street: "123 Main St"
+        city: "San Francisco"
+        state: "CA"
+        zip: "94102"
+        country: "US"
+    extract:
+      checkout_id: body.checkout.id
+      shipping_cost: body.checkout.shipping_cost
+      total_amount: body.checkout.total
+
+  - name: Create Order
+    method: POST
+    path: /api/orders
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      checkout_id: "{{checkout_id}}"
+      payment_method_id: "pm_123"
+    extract:
+      order_id: body.order.id
+      order_status: body.order.status

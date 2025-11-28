@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-reporting"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ description = "Report generation and visualization for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = true  # Internal reporting component
+publish = false  # Internal reporting component
 
 [dependencies]
 # Serialization
@@ -32,7 +32,7 @@ thiserror = "1.0"
 anyhow = "1.0"
 
 # Image processing
-image = "0.24"
+image = "0.25"
 
 # HTML templating
 tera = "1.19"
@@ -41,7 +41,7 @@ tera = "1.19"
 tokio = { version = "1", features = ["full"] }
 
 # MockForge dependencies
-mockforge-chaos = "0.2.8"
+mockforge-chaos = "0.2.9"
 
 # UUID generation
 uuid = { version = "1.6", features = ["v4", "serde"] }

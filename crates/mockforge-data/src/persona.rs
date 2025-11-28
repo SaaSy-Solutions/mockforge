@@ -6,7 +6,7 @@
 //! data patterns.
 
 use crate::domains::{Domain, DomainGenerator};
-use mockforge_core::Result;
+use crate::Result;
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -36,6 +36,9 @@ pub struct PersonaProfile {
     /// Additional persona-specific metadata
     #[serde(default)]
     pub metadata: HashMap<String, Value>,
+    /// Optional lifecycle state management
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lifecycle: Option<crate::persona_lifecycle::PersonaLifecycle>,
 }
 
 impl PersonaProfile {
@@ -53,6 +56,7 @@ impl PersonaProfile {
             backstory: None,
             relationships: HashMap::new(),
             metadata: HashMap::new(),
+            lifecycle: None,
         }
     }
 
@@ -61,6 +65,38 @@ impl PersonaProfile {
         let mut persona = Self::new(id, domain);
         persona.traits = traits;
         persona
+    }
+
+    /// Set the persona's lifecycle
+    pub fn set_lifecycle(&mut self, lifecycle: crate::persona_lifecycle::PersonaLifecycle) {
+        self.lifecycle = Some(lifecycle);
+    }
+
+    /// Get the persona's lifecycle
+    pub fn get_lifecycle(&self) -> Option<&crate::persona_lifecycle::PersonaLifecycle> {
+        self.lifecycle.as_ref()
+    }
+
+    /// Get mutable reference to lifecycle
+    pub fn get_lifecycle_mut(&mut self) -> Option<&mut crate::persona_lifecycle::PersonaLifecycle> {
+        self.lifecycle.as_mut()
+    }
+
+    /// Update lifecycle state based on virtual clock time
+    ///
+    /// Checks if any transitions should occur based on elapsed time and conditions.
+    pub fn update_lifecycle_state(&mut self, current_time: chrono::DateTime<chrono::Utc>) {
+        if let Some(ref mut lifecycle) = self.lifecycle {
+            if let Some((new_state, _rule)) = lifecycle.transition_if_elapsed(current_time) {
+                lifecycle.transition_to(new_state, current_time);
+
+                // Apply lifecycle effects to persona traits
+                let effects = lifecycle.apply_lifecycle_effects();
+                for (key, value) in effects {
+                    self.set_trait(key, value);
+                }
+            }
+        }
     }
 
     /// Derive a deterministic seed from persona ID and domain
@@ -121,7 +157,7 @@ impl PersonaProfile {
     pub fn add_relationship(&mut self, relationship_type: String, related_persona_id: String) {
         self.relationships
             .entry(relationship_type)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(related_persona_id);
     }
 
@@ -177,6 +213,8 @@ pub struct PersonaRegistry {
     personas: Arc<RwLock<HashMap<String, PersonaProfile>>>,
     /// Default traits to apply to new personas
     default_traits: HashMap<String, String>,
+    /// Graph structure for relationship management
+    graph: Arc<crate::persona_graph::PersonaGraph>,
 }
 
 impl PersonaRegistry {
@@ -185,6 +223,7 @@ impl PersonaRegistry {
         Self {
             personas: Arc::new(RwLock::new(HashMap::new())),
             default_traits: HashMap::new(),
+            graph: Arc::new(crate::persona_graph::PersonaGraph::new()),
         }
     }
 
@@ -193,7 +232,13 @@ impl PersonaRegistry {
         Self {
             personas: Arc::new(RwLock::new(HashMap::new())),
             default_traits,
+            graph: Arc::new(crate::persona_graph::PersonaGraph::new()),
         }
+    }
+
+    /// Get the persona graph
+    pub fn graph(&self) -> Arc<crate::persona_graph::PersonaGraph> {
+        Arc::clone(&self.graph)
     }
 
     /// Get or create a persona profile
@@ -217,7 +262,13 @@ impl PersonaRegistry {
 
         // Store the new persona
         let mut personas = self.personas.write().unwrap();
-        personas.insert(id, persona.clone());
+        personas.insert(id.clone(), persona.clone());
+
+        // Add to graph
+        let entity_type = persona.domain.as_str().to_string();
+        let graph_node = crate::persona_graph::PersonaNode::new(id.clone(), entity_type);
+        self.graph.add_node(graph_node);
+
         persona
     }
 
@@ -236,7 +287,7 @@ impl PersonaRegistry {
             }
             Ok(())
         } else {
-            Err(mockforge_core::Error::generic(format!("Persona with ID '{}' not found", id)))
+            Err(crate::Error::generic(format!("Persona with ID '{}' not found", id)))
         }
     }
 
@@ -249,7 +300,7 @@ impl PersonaRegistry {
             persona.set_backstory(backstory);
             Ok(())
         } else {
-            Err(mockforge_core::Error::generic(format!("Persona with ID '{}' not found", id)))
+            Err(crate::Error::generic(format!("Persona with ID '{}' not found", id)))
         }
     }
 
@@ -283,7 +334,7 @@ impl PersonaRegistry {
             }
             Ok(())
         } else {
-            Err(mockforge_core::Error::generic(format!("Persona with ID '{}' not found", id)))
+            Err(crate::Error::generic(format!("Persona with ID '{}' not found", id)))
         }
     }
 
@@ -330,10 +381,7 @@ impl PersonaRegistry {
             }
             Ok(related_personas)
         } else {
-            Err(mockforge_core::Error::generic(format!(
-                "Persona with ID '{}' not found",
-                persona_id
-            )))
+            Err(crate::Error::generic(format!("Persona with ID '{}' not found", persona_id)))
         }
     }
 
@@ -370,14 +418,62 @@ impl PersonaRegistry {
     ) -> Result<()> {
         let mut personas = self.personas.write().unwrap();
         if let Some(persona) = personas.get_mut(from_persona_id) {
-            persona.add_relationship(relationship_type, to_persona_id);
+            persona.add_relationship(relationship_type.clone(), to_persona_id.clone());
+
+            // Also add to graph
+            self.graph
+                .add_edge(from_persona_id.to_string(), to_persona_id, relationship_type);
+
             Ok(())
         } else {
-            Err(mockforge_core::Error::generic(format!(
+            Err(crate::Error::generic(format!(
                 "Persona with ID '{}' not found",
                 from_persona_id
             )))
         }
+    }
+
+    /// Switch to a new persona and update all related personas in the graph
+    ///
+    /// This ensures coherent persona switching across related entities.
+    /// When switching to a new root persona, all related personas (orders, payments, etc.)
+    /// are also updated to maintain consistency.
+    ///
+    /// # Arguments
+    /// * `root_persona_id` - The root persona ID to switch to (e.g., user ID)
+    /// * `relationship_types` - Optional filter for relationship types to follow
+    /// * `update_callback` - Optional callback to update each related persona
+    ///
+    /// # Returns
+    /// Vector of persona IDs that were updated
+    pub fn coherent_persona_switch<F>(
+        &self,
+        root_persona_id: &str,
+        relationship_types: Option<&[String]>,
+        update_callback: Option<F>,
+    ) -> Result<Vec<String>>
+    where
+        F: Fn(&str, &mut PersonaProfile),
+    {
+        // Find all related personas using BFS traversal
+        let related_ids = self.graph.find_related_bfs(root_persona_id, relationship_types, None);
+
+        // Start with the root persona
+        let mut updated_ids = vec![root_persona_id.to_string()];
+        updated_ids.extend(related_ids);
+
+        // Update each persona in the graph
+        let mut personas = self.personas.write().unwrap();
+        for persona_id in &updated_ids {
+            if let Some(persona) = personas.get_mut(persona_id) {
+                // Apply update callback if provided
+                if let Some(ref callback) = update_callback {
+                    callback(persona_id, persona);
+                }
+            }
+        }
+
+        Ok(updated_ids)
     }
 }
 
@@ -414,18 +510,136 @@ impl PersonaGenerator {
         persona: &PersonaProfile,
         field_type: &str,
     ) -> Result<Value> {
+        // Generate with default reality ratio (0.0 = fully synthetic)
+        self.generate_for_persona_with_reality(persona, field_type, 0.0, None, None)
+    }
+
+    /// Generate data for a specific field type based on persona with reality awareness
+    ///
+    /// The reality ratio determines how much the generated data blends with recorded/real data:
+    /// - 0.0-0.3: Purely synthetic (persona-generated)
+    /// - 0.3-0.7: Blended with recorded snapshots
+    /// - 0.7-1.0: Blended with upstream/real data
+    ///
+    /// # Arguments
+    /// * `persona` - Persona profile to generate data for
+    /// * `field_type` - Type of field to generate (e.g., "name", "email", "amount")
+    /// * `reality_ratio` - Reality continuum ratio (0.0 = mock, 1.0 = real)
+    /// * `recorded_data` - Optional recorded/snapshot data to blend with
+    /// * `real_data` - Optional real/upstream data to blend with
+    pub fn generate_for_persona_with_reality(
+        &self,
+        persona: &PersonaProfile,
+        field_type: &str,
+        reality_ratio: f64,
+        recorded_data: Option<&Value>,
+        real_data: Option<&Value>,
+    ) -> Result<Value> {
         // Create a deterministic RNG from the persona's seed
         use rand::rngs::StdRng;
         use rand::SeedableRng;
         let mut rng = StdRng::seed_from_u64(persona.seed);
 
-        // Generate base value using domain generator
-        let mut value = self.domain_generator.generate(field_type)?;
+        // Generate base synthetic value using domain generator
+        let mut synthetic_value = self.domain_generator.generate(field_type)?;
 
         // Apply persona traits to influence the generated value
-        value = self.apply_persona_traits(persona, field_type, value, &mut rng)?;
+        synthetic_value =
+            self.apply_persona_traits(persona, field_type, synthetic_value, &mut rng)?;
 
-        Ok(value)
+        // Apply reality continuum blending based on ratio
+        let reality_ratio = reality_ratio.clamp(0.0, 1.0);
+
+        if reality_ratio < 0.3 {
+            // Low reality: Purely synthetic
+            Ok(synthetic_value)
+        } else if reality_ratio < 0.7 {
+            // Medium reality: Blend with recorded snapshots
+            if let Some(recorded) = recorded_data {
+                self.blend_values(&synthetic_value, recorded, reality_ratio)
+            } else {
+                // No recorded data available, use synthetic
+                Ok(synthetic_value)
+            }
+        } else {
+            // High reality: Blend with upstream/real data
+            if let Some(real) = real_data {
+                self.blend_values(&synthetic_value, real, reality_ratio)
+            } else if let Some(recorded) = recorded_data {
+                // Fallback to recorded if real not available
+                self.blend_values(&synthetic_value, recorded, reality_ratio)
+            } else {
+                // No real or recorded data, use synthetic
+                Ok(synthetic_value)
+            }
+        }
+    }
+
+    /// Blend two values based on reality ratio
+    ///
+    /// Simple blending strategy: weighted average for numbers, weighted selection for strings/booleans
+    fn blend_values(&self, synthetic: &Value, other: &Value, ratio: f64) -> Result<Value> {
+        match (synthetic, other) {
+            // Both numbers - weighted average
+            (Value::Number(syn_num), Value::Number(other_num)) => {
+                if let (Some(syn_f64), Some(other_f64)) = (syn_num.as_f64(), other_num.as_f64()) {
+                    // Blend: synthetic * (1 - ratio) + other * ratio
+                    // But adjust ratio for medium reality (0.3-0.7) to favor recorded
+                    let adjusted_ratio = if ratio < 0.7 {
+                        // Medium reality: map 0.3-0.7 to 0.0-1.0 for recorded blending
+                        (ratio - 0.3) / 0.4
+                    } else {
+                        // High reality: map 0.7-1.0 to 0.0-1.0 for real blending
+                        (ratio - 0.7) / 0.3
+                    };
+                    let blended = syn_f64 * (1.0 - adjusted_ratio) + other_f64 * adjusted_ratio;
+                    Ok(Value::Number(
+                        serde_json::Number::from_f64(blended).unwrap_or(syn_num.clone()),
+                    ))
+                } else {
+                    Ok(synthetic.clone())
+                }
+            }
+            // Both strings - weighted selection
+            (Value::String(_), Value::String(other_str)) => {
+                let adjusted_ratio = if ratio < 0.7 {
+                    (ratio - 0.3) / 0.4
+                } else {
+                    (ratio - 0.7) / 0.3
+                };
+                if adjusted_ratio >= 0.5 {
+                    Ok(Value::String(other_str.clone()))
+                } else {
+                    Ok(synthetic.clone())
+                }
+            }
+            // Both booleans - weighted selection
+            (Value::Bool(_), Value::Bool(other_bool)) => {
+                let adjusted_ratio = if ratio < 0.7 {
+                    (ratio - 0.3) / 0.4
+                } else {
+                    (ratio - 0.7) / 0.3
+                };
+                if adjusted_ratio >= 0.5 {
+                    Ok(Value::Bool(*other_bool))
+                } else {
+                    Ok(synthetic.clone())
+                }
+            }
+            // Type mismatch - prefer other if ratio is high enough
+            _ => {
+                let adjusted_ratio = if ratio < 0.7 {
+                    (ratio - 0.3) / 0.4
+                } else {
+                    (ratio - 0.7) / 0.3
+                };
+                if adjusted_ratio >= 0.5 {
+                    Ok(other.clone())
+                } else {
+                    Ok(synthetic.clone())
+                }
+            }
+        }
     }
 
     /// Generate traits from a persona's backstory

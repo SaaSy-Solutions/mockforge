@@ -140,8 +140,25 @@ export function MockAIRulesPage() {
   };
 
   const handleExampleClick = (exampleId: string) => {
-    // TODO: Navigate to example viewer or show example details
-    toast.info(`Viewing example: ${exampleId}`);
+    // Find the explanation that contains this example
+    const explanation = explanations.find(exp =>
+      exp.examples?.some(ex => ex.id === exampleId)
+    );
+
+    if (explanation) {
+      const example = explanation.examples?.find(ex => ex.id === exampleId);
+      if (example) {
+        // Show example details in a modal or expandable section
+        toast.info(
+          `Example: ${example.description || exampleId}\nRequest: ${JSON.stringify(example.request, null, 2)}\nResponse: ${JSON.stringify(example.response, null, 2)}`,
+          { duration: 8000 }
+        );
+      } else {
+        toast.info(`Viewing example: ${exampleId}`);
+      }
+    } else {
+      toast.info(`Viewing example: ${exampleId}`);
+    }
   };
 
   if (loading && explanations.length === 0) {

@@ -1,8 +1,13 @@
+//! Pillars: [DevX]
+//!
 //! # MockForge UI
 //!
 //! Web-based admin interface for managing mock servers.
 
+pub mod audit;
+pub mod auth;
 pub mod handlers;
+pub mod rbac;
 pub mod routes;
 // Templates module removed; static assets in `static/` are the single source of truth
 pub mod models;

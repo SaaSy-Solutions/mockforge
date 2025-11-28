@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Integration tests for Reality Continuum feature
 //!
 //! Tests the full flow of blending mock and real responses with time-based progression.

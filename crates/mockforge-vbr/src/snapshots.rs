@@ -341,7 +341,7 @@ impl SnapshotManager {
                     // Ensure table exists before inserting
                     // For Memory database, this is handled by execute, but we need to make sure
                     // the table structure is preserved after reset
-                    if !database.table_exists(&table_name).await.unwrap_or(false) {
+                    if !database.table_exists(table_name).await.unwrap_or(false) {
                         // Table was removed during reset, we need to recreate it
                         // For Memory database, this happens automatically on first INSERT
                         // But we should ensure the table entry exists

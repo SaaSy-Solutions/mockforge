@@ -107,10 +107,11 @@ impl SpecFormat {
 
         // Default to trying OpenAPI 3.0 if we can't detect
         // This allows the validator to provide better error messages
-        Err(Error::validation(format!(
+        Err(Error::validation(
             "Could not detect specification format. \
             Expected OpenAPI (2.0/3.x), GraphQL schema, or protobuf definition."
-        )))
+                .to_string(),
+        ))
     }
 
     /// Get a human-readable name for the format

@@ -1,11 +1,12 @@
 //! Enhanced failure injection system with per-tag include/exclude filters
 //! and error rate configuration.
 
-use rand::{rng, Rng};
+use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 
 /// Failure injection configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FailureConfig {
     /// Global error rate (0.0 to 1.0)
     pub global_error_rate: f64,
@@ -21,6 +22,7 @@ pub struct FailureConfig {
 
 /// Per-tag failure configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TagFailureConfig {
     /// Error rate for this tag (0.0 to 1.0)
     pub error_rate: f64,
@@ -109,7 +111,7 @@ impl FailureInjector {
             return true;
         }
 
-        let mut rng = rng();
+        let mut rng = thread_rng();
         rng.random_bool(error_rate)
     }
 
@@ -138,7 +140,7 @@ impl FailureInjector {
             .unwrap_or_else(|| "Injected failure".to_string());
 
         // Select a random status code
-        let mut rng = rng();
+        let mut rng = thread_rng();
         let status_code = if status_codes.is_empty() {
             500
         } else {

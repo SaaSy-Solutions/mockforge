@@ -7,10 +7,38 @@ use super::types::{
     CapturedRequest, ContractDiffResult, DiffMetadata, Mismatch, MismatchSeverity, MismatchType,
 };
 use crate::openapi::OpenApiSpec;
-use crate::schema_diff::{validation_diff, ValidationError as SchemaValidationError};
+use crate::schema_diff::validation_diff;
 use crate::Result;
 use serde_json::Value;
 use std::collections::HashMap;
+
+/// Check if a path matches a pattern with path parameters
+///
+/// Examples:
+/// - `/users/{id}` matches `/users/123`
+/// - `/users/{userId}/posts/{postId}` matches `/users/123/posts/456`
+fn path_matches_with_params(pattern: &str, path: &str) -> bool {
+    let pattern_parts: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
+    let path_parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+
+    if pattern_parts.len() != path_parts.len() {
+        return false;
+    }
+
+    for (pattern_part, path_part) in pattern_parts.iter().zip(path_parts.iter()) {
+        // Check for path parameters {param} or {param:type}
+        if pattern_part.starts_with('{') && pattern_part.ends_with('}') {
+            // Matches any value (could add type validation here)
+            continue;
+        }
+
+        if pattern_part != path_part {
+            return false;
+        }
+    }
+
+    true
+}
 
 /// Contract diff analyzer
 pub struct DiffAnalyzer {
@@ -41,7 +69,7 @@ impl DiffAnalyzer {
                 mismatch_type: MismatchType::EndpointNotFound,
                 path: request.path.clone(),
                 method: Some(request.method.clone()),
-                expected: Some(format!("Endpoint defined in OpenAPI spec")),
+                expected: Some("Endpoint defined in OpenAPI spec".to_string()),
                 actual: Some("Endpoint not found in spec".to_string()),
                 description: format!(
                     "Endpoint {} {} not found in contract specification",
@@ -128,7 +156,24 @@ impl DiffAnalyzer {
             }
         }
 
-        // TODO: Add path parameter matching (e.g., /users/{id} matches /users/123)
+        // Path parameter matching (e.g., /users/{id} matches /users/123)
+        for (spec_path, path_item_ref) in &spec.spec.paths.paths {
+            let spec_path_normalized = spec_path.trim_end_matches('/');
+
+            if path_matches_with_params(spec_path_normalized, normalized_path) {
+                if let openapiv3::ReferenceOr::Item(path_item) = path_item_ref {
+                    return match method.to_uppercase().as_str() {
+                        "GET" => path_item.get.clone(),
+                        "POST" => path_item.post.clone(),
+                        "PUT" => path_item.put.clone(),
+                        "DELETE" => path_item.delete.clone(),
+                        "PATCH" => path_item.patch.clone(),
+                        _ => None,
+                    };
+                }
+            }
+        }
+
         None
     }
 

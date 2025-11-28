@@ -9,7 +9,7 @@
 use crate::graph::{
     ClusterType, EdgeType, GraphCluster, GraphData, GraphEdge, GraphNode, NodeType, Protocol,
 };
-use crate::intelligent_behavior::rules::{StateMachine, StateTransition};
+use crate::intelligent_behavior::rules::StateMachine;
 use crate::request_chaining::ChainDefinition;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -53,7 +53,7 @@ impl GraphBuilder {
     }
 
     /// Build the complete graph from all available data sources
-    pub fn build(mut self) -> GraphData {
+    pub fn build(self) -> GraphData {
         self.graph
     }
 

@@ -7,7 +7,6 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use uuid::Uuid;
 
 /// Output format for stub mappings
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -322,13 +321,7 @@ impl StubMappingConverter {
     fn generate_identifier(&self, request: &crate::models::RecordedRequest) -> String {
         // Create a simple identifier from method and path
         let base = format!("{}-{}", request.method.to_lowercase(), request.path);
-        base.replace('/', "-")
-            .replace(':', "")
-            .replace('{', "")
-            .replace('}', "")
-            .chars()
-            .take(50)
-            .collect()
+        base.replace('/', "-").replace([':', '{', '}'], "").chars().take(50).collect()
     }
 
     /// Convert stub mapping to YAML string
@@ -340,7 +333,7 @@ impl StubMappingConverter {
 
     /// Convert stub mapping to JSON string
     pub fn to_json(&self, stub: &StubMapping) -> Result<String> {
-        serde_json::to_string_pretty(stub).map_err(|e| crate::RecorderError::Serialization(e))
+        serde_json::to_string_pretty(stub).map_err(crate::RecorderError::Serialization)
     }
 
     /// Convert stub mapping to string in specified format

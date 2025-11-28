@@ -19,17 +19,20 @@ pub enum UserRole {
 
 impl UserRole {
     /// Check if this role can perform admin actions
-    pub fn is_admin(&self) -> bool {
-        matches!(self, UserRole::Admin)
+    #[must_use]
+    pub const fn is_admin(&self) -> bool {
+        matches!(self, Self::Admin)
     }
 
     /// Check if this role can edit
-    pub fn can_edit(&self) -> bool {
-        matches!(self, UserRole::Admin | UserRole::Editor)
+    #[must_use]
+    pub const fn can_edit(&self) -> bool {
+        matches!(self, Self::Admin | Self::Editor)
     }
 
     /// Check if this role can view
-    pub fn can_view(&self) -> bool {
+    #[must_use]
+    pub const fn can_view(&self) -> bool {
         true // All roles can view
     }
 }
@@ -60,6 +63,7 @@ pub struct User {
 
 impl User {
     /// Create a new user (for insertion)
+    #[must_use]
     pub fn new(username: String, email: String, password_hash: String) -> Self {
         let now = Utc::now();
         Self {
@@ -101,6 +105,7 @@ pub struct TeamWorkspace {
 
 impl TeamWorkspace {
     /// Create a new workspace
+    #[must_use]
     pub fn new(name: String, owner_id: Uuid) -> Self {
         let now = Utc::now();
         Self {
@@ -136,6 +141,7 @@ pub struct WorkspaceMember {
 
 impl WorkspaceMember {
     /// Create a new workspace member
+    #[must_use]
     pub fn new(workspace_id: Uuid, user_id: Uuid, role: UserRole) -> Self {
         let now = Utc::now();
         Self {
@@ -219,6 +225,7 @@ pub struct WorkspaceFork {
 
 impl WorkspaceFork {
     /// Create a new fork record
+    #[must_use]
     pub fn new(
         source_workspace_id: Uuid,
         forked_workspace_id: Uuid,
@@ -284,6 +291,7 @@ pub struct WorkspaceMerge {
 
 impl WorkspaceMerge {
     /// Create a new merge operation
+    #[must_use]
     pub fn new(
         source_workspace_id: Uuid,
         target_workspace_id: Uuid,

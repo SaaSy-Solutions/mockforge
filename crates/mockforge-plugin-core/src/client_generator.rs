@@ -341,7 +341,7 @@ pub mod helpers {
                     // Extract content and convert to camelCase
                     let mut paren_content = String::new();
                     let mut depth = 1;
-                    while let Some(next_ch) = chars.next() {
+                    for next_ch in chars.by_ref() {
                         match next_ch {
                             '(' => {
                                 depth += 1;
@@ -445,10 +445,7 @@ pub mod helpers {
     /// - "api_v1_users" -> "ApiV1Users"
     /// - "simple" -> "Simple"
     fn to_camel_case(s: &str) -> String {
-        s.split(|c: char| c == '-' || c == '_')
-            .filter(|s| !s.is_empty())
-            .map(|w| capitalize_first(w))
-            .collect()
+        s.split(['-', '_']).filter(|s| !s.is_empty()).map(capitalize_first).collect()
     }
 
     /// Generate a camelCase operation ID from method, path, and optional summary
@@ -713,7 +710,7 @@ pub mod helpers {
         while let Some(ch) = chars.next() {
             if ch == '{' {
                 let mut param = String::new();
-                while let Some(ch) = chars.next() {
+                for ch in chars.by_ref() {
                     if ch == '}' {
                         break;
                     }

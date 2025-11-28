@@ -4,6 +4,7 @@
 //! including request matching, response generation, and request execution.
 
 use crate::cache::{Cache, CachedResponse, ResponseCache};
+use crate::failure_analysis::FailureContextCollector;
 use crate::performance::PerformanceMonitor;
 use crate::templating::TemplateEngine;
 use crate::workspace::core::{EntityId, Folder, MockRequest, MockResponse, Workspace};
@@ -30,6 +31,8 @@ pub struct RequestExecutionResult {
     pub success: bool,
     /// Error message if execution failed
     pub error: Option<String>,
+    /// Failure context if execution failed (for root-cause analysis)
+    pub failure_context: Option<crate::failure_analysis::FailureContext>,
 }
 
 /// Request matching criteria
@@ -62,6 +65,8 @@ pub struct RequestProcessor {
     validation_cache: Arc<Cache<String, RequestValidationResult>>,
     /// Enable performance optimizations
     optimizations_enabled: bool,
+    /// Failure context collector for automatic failure analysis
+    failure_collector: Option<Arc<FailureContextCollector>>,
 }
 
 /// Request validation result
@@ -117,6 +122,7 @@ impl RequestProcessor {
             response_cache: Arc::new(ResponseCache::new(1000, Duration::from_secs(300))), // 5 min TTL
             validation_cache: Arc::new(Cache::with_ttl(500, Duration::from_secs(60))), // 1 min TTL
             optimizations_enabled: true,
+            failure_collector: Some(Arc::new(FailureContextCollector::new())),
         }
     }
 
@@ -131,6 +137,7 @@ impl RequestProcessor {
             response_cache: Arc::new(ResponseCache::new(1000, Duration::from_secs(300))),
             validation_cache: Arc::new(Cache::with_ttl(500, Duration::from_secs(60))),
             optimizations_enabled: true,
+            failure_collector: Some(Arc::new(FailureContextCollector::new())),
         }
     }
 
@@ -148,6 +155,7 @@ impl RequestProcessor {
             response_cache: Arc::new(ResponseCache::new(cache_size, cache_ttl)),
             validation_cache: Arc::new(Cache::with_ttl(cache_size / 2, Duration::from_secs(60))),
             optimizations_enabled: enable_optimizations,
+            failure_collector: Some(Arc::new(FailureContextCollector::new())),
         }
     }
 
@@ -367,6 +375,7 @@ impl RequestProcessor {
                     duration_ms: 1, // Cached responses are nearly instant
                     success: true,
                     error: None,
+                    failure_context: None,
                 });
             } else {
                 self.performance_monitor.record_cache_miss();
@@ -374,36 +383,118 @@ impl RequestProcessor {
         }
 
         // Find the request
-        let request = self.find_request_in_workspace(workspace, request_id).ok_or_else(|| {
-            if self.optimizations_enabled {
-                self.performance_monitor.record_error();
+        let request = match self.find_request_in_workspace(workspace, request_id) {
+            Some(req) => req,
+            None => {
+                if self.optimizations_enabled {
+                    self.performance_monitor.record_error();
+                }
+                let error_msg = format!("Request with ID {} not found", request_id);
+
+                // Capture failure context if collector is available
+                // Note: The failure_context is available in RequestExecutionResult for callers to store
+                // if needed. The caller (e.g., API handler) can persist it to a failure store.
+                if let Some(ref collector) = self.failure_collector {
+                    let _failure_context = collector
+                        .collect_context(
+                            "UNKNOWN",
+                            &request_id.to_string(),
+                            None,
+                            Some(error_msg.clone()),
+                        )
+                        .ok();
+                }
+
+                return Err(Error::generic(error_msg));
             }
-            format!("Request with ID {} not found", request_id)
-        })?;
+        };
 
         let start_time = std::time::Instant::now();
+        let method = "GET"; // Default, could be extracted from request if available
+        let path = request_id.to_string(); // Use request ID as path identifier
 
         // Validate request with caching
-        let validation = self.validate_request_cached(request, context).await?;
+        let validation = match self.validate_request_cached(request, context).await {
+            Ok(v) => v,
+            Err(e) => {
+                if self.optimizations_enabled {
+                    self.performance_monitor.record_error();
+                }
+                let error_msg = format!("Request validation error: {}", e);
+
+                // Capture failure context
+                // Note: The failure_context is available in RequestExecutionResult for callers to store
+                // if needed. The caller (e.g., API handler) can persist it to a failure store.
+                if let Some(ref collector) = self.failure_collector {
+                    let _failure_context = collector
+                        .collect_context(method, &path, None, Some(error_msg.clone()))
+                        .ok();
+                }
+
+                return Err(e);
+            }
+        };
+
         if !validation.is_valid {
             if self.optimizations_enabled {
                 self.performance_monitor.record_error();
             }
-            return Err(Error::Validation {
-                message: format!("Request validation failed: {:?}", validation.errors),
-            });
+            let error_msg = format!("Request validation failed: {:?}", validation.errors);
+
+            // Capture failure context
+            // Note: The failure_context is available in RequestExecutionResult for callers to store
+            // if needed. The caller (e.g., API handler) can persist it to a failure store.
+            if let Some(ref collector) = self.failure_collector {
+                let _failure_context =
+                    collector.collect_context(method, &path, None, Some(error_msg.clone())).ok();
+            }
+
+            return Err(Error::Validation { message: error_msg });
         }
 
         // Get active response
-        let response = request.active_response().ok_or_else(|| {
-            if self.optimizations_enabled {
-                self.performance_monitor.record_error();
+        let response = match request.active_response() {
+            Some(resp) => resp,
+            None => {
+                if self.optimizations_enabled {
+                    self.performance_monitor.record_error();
+                }
+                let error_msg = "No active response found for request".to_string();
+
+                // Capture failure context
+                // Note: The failure_context is available in RequestExecutionResult for callers to store
+                // if needed. The caller (e.g., API handler) can persist it to a failure store.
+                if let Some(ref collector) = self.failure_collector {
+                    let _failure_context = collector
+                        .collect_context(method, &path, None, Some(error_msg.clone()))
+                        .ok();
+                }
+
+                return Err(Error::generic(error_msg));
             }
-            Error::generic("No active response found for request")
-        })?;
+        };
 
         // Apply variable substitution
-        let processed_response = self.process_response(response, context).await?;
+        let processed_response = match self.process_response(response, context).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                if self.optimizations_enabled {
+                    self.performance_monitor.record_error();
+                }
+                let error_msg = format!("Failed to process response: {}", e);
+
+                // Capture failure context
+                // Note: The failure_context is available in RequestExecutionResult for callers to store
+                // if needed. The caller (e.g., API handler) can persist it to a failure store.
+                if let Some(ref collector) = self.failure_collector {
+                    let _failure_context = collector
+                        .collect_context(method, &path, None, Some(error_msg.clone()))
+                        .ok();
+                }
+
+                return Err(e);
+            }
+        };
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
 
@@ -427,6 +518,7 @@ impl RequestProcessor {
             duration_ms,
             success: true,
             error: None,
+            failure_context: None,
         })
     }
 

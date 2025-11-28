@@ -1,0 +1,72 @@
+id: cart-to-payment-flow
+name: Cart to Payment Flow
+description: Add items to cart, proceed to checkout, and process payment
+steps:
+  - name: Get Cart
+    method: GET
+    path: /api/cart
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      cart_id: body.cart.id
+      cart_total: body.cart.total
+
+  - name: Add Multiple Items
+    method: POST
+    path: /api/cart/items
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      items:
+        - product_id: "prod_123"
+          quantity: 1
+        - product_id: "prod_456"
+          quantity: 2
+
+  - name: Update Cart Item
+    method: PATCH
+    path: /api/cart/items/{{cart_item_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      quantity: 3
+
+  - name: Remove Cart Item
+    method: DELETE
+    path: /api/cart/items/{{cart_item_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+
+  - name: Apply Discount Code
+    method: POST
+    path: /api/cart/discount
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      code: "SAVE10"
+    extract:
+      discount_amount: body.discount.amount
+
+  - name: Process Payment
+    method: POST
+    path: /api/payments/process
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      cart_id: "{{cart_id}}"
+      payment_method_id: "pm_123"
+      amount: "{{cart_total}}"
+    extract:
+      payment_id: body.payment.id
+      payment_status: body.payment.status
+
+  - name: Complete Order
+    method: POST
+    path: /api/orders
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      cart_id: "{{cart_id}}"
+      payment_id: "{{payment_id}}"
+    extract:
+      order_id: body.order.id

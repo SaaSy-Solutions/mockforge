@@ -201,7 +201,7 @@ export function RequestLog() {
       className={cn(
         'px-3 h-7 text-xs font-medium transition-all duration-150',
         active
-          ? 'bg-brand text-white shadow-sm hover:bg-brand-600'
+          ? 'bg-brand-500 text-white shadow-sm hover:bg-brand-600'
           : 'text-secondary hover:text-primary hover:bg-bg-tertiary'
       )}
       onClick={onClick}

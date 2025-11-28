@@ -187,8 +187,8 @@ pub fn create_chaos_api_router(
         // Scenario endpoints
         .route("/api/chaos/scenarios", get(list_scenarios))
         .route("/api/chaos/scenarios/predefined", get(list_predefined_scenarios))
-        .route("/api/chaos/scenarios/:name", post(start_scenario))
-        .route("/api/chaos/scenarios/:name", delete(stop_scenario))
+        .route("/api/chaos/scenarios/{name}", post(start_scenario))
+        .route("/api/chaos/scenarios/{name}", delete(stop_scenario))
         .route("/api/chaos/scenarios", delete(stop_all_scenarios))
 
         // Status endpoint
@@ -200,11 +200,11 @@ pub fn create_chaos_api_router(
 
         // Profile management endpoints
         .route("/api/chaos/profiles", get(list_profiles))
-        .route("/api/chaos/profiles/:name", get(get_profile))
-        .route("/api/chaos/profiles/:name/apply", post(apply_profile))
+        .route("/api/chaos/profiles/{name}", get(get_profile))
+        .route("/api/chaos/profiles/{name}/apply", post(apply_profile))
         .route("/api/chaos/profiles", post(create_profile))
-        .route("/api/chaos/profiles/:name", delete(delete_profile))
-        .route("/api/chaos/profiles/:name/export", get(export_profile))
+        .route("/api/chaos/profiles/{name}", delete(delete_profile))
+        .route("/api/chaos/profiles/{name}/export", get(export_profile))
         .route("/api/chaos/profiles/import", post(import_profile))
 
         // Scenario recording endpoints
@@ -228,47 +228,47 @@ pub fn create_chaos_api_router(
 
         // Scenario scheduling endpoints
         .route("/api/chaos/schedule", post(add_schedule))
-        .route("/api/chaos/schedule/:id", get(get_schedule))
-        .route("/api/chaos/schedule/:id", delete(remove_schedule))
-        .route("/api/chaos/schedule/:id/enable", post(enable_schedule))
-        .route("/api/chaos/schedule/:id/disable", post(disable_schedule))
+        .route("/api/chaos/schedule/{id}", get(get_schedule))
+        .route("/api/chaos/schedule/{id}", delete(remove_schedule))
+        .route("/api/chaos/schedule/{id}/enable", post(enable_schedule))
+        .route("/api/chaos/schedule/{id}/disable", post(disable_schedule))
         // NOTE: Manual trigger endpoint has a known Rust/Axum type inference issue
         // when combining State + Path extractors with nested async calls.
         // The trigger_schedule_by_path handler is implemented but cannot be registered.
         // Workaround: Use the scheduler's automatic execution or recreate the schedule.
-        // .route("/api/chaos/schedule/:id/trigger", post(trigger_schedule_by_path))
+        // .route("/api/chaos/schedule/{id}/trigger", post(trigger_schedule_by_path))
         .route("/api/chaos/schedules", get(list_schedules))
 
         // AI-powered recommendation endpoints
         .route("/api/chaos/recommendations", get(get_recommendations))
         .route("/api/chaos/recommendations/analyze", post(analyze_and_recommend))
-        .route("/api/chaos/recommendations/category/:category", get(get_recommendations_by_category))
-        .route("/api/chaos/recommendations/severity/:severity", get(get_recommendations_by_severity))
+        .route("/api/chaos/recommendations/category/{category}", get(get_recommendations_by_category))
+        .route("/api/chaos/recommendations/severity/{severity}", get(get_recommendations_by_severity))
         .route("/api/chaos/recommendations", delete(clear_recommendations))
 
         // Auto-remediation endpoints
         .route("/api/chaos/remediation/config", get(get_remediation_config))
         .route("/api/chaos/remediation/config", put(update_remediation_config))
         .route("/api/chaos/remediation/process", post(process_remediation))
-        .route("/api/chaos/remediation/approve/:id", post(approve_remediation))
-        .route("/api/chaos/remediation/reject/:id", post(reject_remediation))
-        .route("/api/chaos/remediation/rollback/:id", post(rollback_remediation))
+        .route("/api/chaos/remediation/approve/{id}", post(approve_remediation))
+        .route("/api/chaos/remediation/reject/{id}", post(reject_remediation))
+        .route("/api/chaos/remediation/rollback/{id}", post(rollback_remediation))
         .route("/api/chaos/remediation/actions", get(get_remediation_actions))
-        .route("/api/chaos/remediation/actions/:id", get(get_remediation_action))
+        .route("/api/chaos/remediation/actions/{id}", get(get_remediation_action))
         .route("/api/chaos/remediation/approvals", get(get_approval_queue))
-        .route("/api/chaos/remediation/effectiveness/:id", get(get_remediation_effectiveness))
+        .route("/api/chaos/remediation/effectiveness/{id}", get(get_remediation_effectiveness))
         .route("/api/chaos/remediation/stats", get(get_remediation_stats))
 
         // A/B testing endpoints
         .route("/api/chaos/ab-tests", post(create_ab_test))
         .route("/api/chaos/ab-tests", get(get_ab_tests))
-        .route("/api/chaos/ab-tests/:id", get(get_ab_test))
-        .route("/api/chaos/ab-tests/:id/start", post(start_ab_test))
-        .route("/api/chaos/ab-tests/:id/stop", post(stop_ab_test))
-        .route("/api/chaos/ab-tests/:id/pause", post(pause_ab_test))
-        .route("/api/chaos/ab-tests/:id/resume", post(resume_ab_test))
-        .route("/api/chaos/ab-tests/:id/record/:variant", post(record_ab_test_result))
-        .route("/api/chaos/ab-tests/:id", delete(delete_ab_test))
+        .route("/api/chaos/ab-tests/{id}", get(get_ab_test))
+        .route("/api/chaos/ab-tests/{id}/start", post(start_ab_test))
+        .route("/api/chaos/ab-tests/{id}/stop", post(stop_ab_test))
+        .route("/api/chaos/ab-tests/{id}/pause", post(pause_ab_test))
+        .route("/api/chaos/ab-tests/{id}/resume", post(resume_ab_test))
+        .route("/api/chaos/ab-tests/{id}/record/{variant}", post(record_ab_test_result))
+        .route("/api/chaos/ab-tests/{id}", delete(delete_ab_test))
         .route("/api/chaos/ab-tests/stats", get(get_ab_test_stats))
 
         .with_state(state.clone());

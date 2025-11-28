@@ -48,12 +48,11 @@ impl CollabServer {
         // Initialize database
         let db = sqlx::SqlitePool::connect(&config.database_url).await?;
 
-        // Run migrations
-        sqlx::migrate!("./migrations").run(&db).await?;
+        // Run migrations automatically
+        Self::run_migrations(&db).await?;
 
         // Create CoreBridge for workspace integration
-        let workspace_dir =
-            config.workspace_dir.as_ref().map(|s| s.as_str()).unwrap_or("./workspaces");
+        let workspace_dir = config.workspace_dir.as_deref().unwrap_or("./workspaces");
         let core_bridge = Arc::new(CoreBridge::new(workspace_dir));
 
         // Create services
@@ -79,7 +78,7 @@ impl CollabServer {
         let backup = Arc::new(BackupService::new(
             db.clone(),
             config.backup_dir.clone(),
-            core_bridge.clone(),
+            core_bridge,
             workspace.clone(),
         ));
 
@@ -95,6 +94,20 @@ impl CollabServer {
             merge,
             backup,
         })
+    }
+
+    /// Run database migrations
+    ///
+    /// This method can be called independently to ensure migrations are up to date.
+    /// It's automatically called during server initialization.
+    pub async fn run_migrations(db: &sqlx::SqlitePool) -> Result<()> {
+        tracing::info!("Running database migrations");
+        sqlx::migrate!("./migrations").run(db).await.map_err(|e| {
+            tracing::error!("Migration failed: {}", e);
+            crate::error::CollabError::DatabaseError(format!("Migration failed: {e}"))
+        })?;
+        tracing::info!("Database migrations completed successfully");
+        Ok(())
     }
 
     /// Start the collaboration server
@@ -125,6 +138,7 @@ impl CollabServer {
             auth: self.auth.clone(),
             sync: self.sync.clone(),
             event_bus: self.event_bus.clone(),
+            workspace: self.workspace.clone(),
         };
 
         // Combine routers
@@ -136,34 +150,38 @@ impl CollabServer {
         // Parse address
         let listener = tokio::net::TcpListener::bind(addr)
             .await
-            .map_err(|e| crate::error::CollabError::Internal(format!("Failed to bind: {}", e)))?;
+            .map_err(|e| crate::error::CollabError::Internal(format!("Failed to bind: {e}")))?;
 
         tracing::info!("Server listening on {}", addr);
 
         // Run server
         axum::serve(listener, app)
             .await
-            .map_err(|e| crate::error::CollabError::Internal(format!("Server error: {}", e)))?;
+            .map_err(|e| crate::error::CollabError::Internal(format!("Server error: {e}")))?;
 
         Ok(())
     }
 
     /// Get authentication service
+    #[must_use]
     pub fn auth(&self) -> Arc<AuthService> {
         self.auth.clone()
     }
 
     /// Get workspace service
+    #[must_use]
     pub fn workspace(&self) -> Arc<WorkspaceService> {
         self.workspace.clone()
     }
 
     /// Get sync engine
+    #[must_use]
     pub fn sync(&self) -> Arc<SyncEngine> {
         self.sync.clone()
     }
 
     /// Get history tracker
+    #[must_use]
     pub fn history(&self) -> Arc<History> {
         self.history.clone()
     }

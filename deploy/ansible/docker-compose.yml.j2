@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  mockforge:
+    image: ghcr.io/saasy-solutions/mockforge:{{ mockforge_version }}
+    container_name: mockforge
+    restart: unless-stopped
+    ports:
+      - "{{ mockforge_http_port }}:3000"
+      - "{{ mockforge_admin_port }}:9080"
+      - "{{ mockforge_ws_port }}:3001"
+      - "{{ mockforge_grpc_port }}:50051"
+    volumes:
+      - {{ config_dir }}/config.yaml:/app/config.yaml:ro
+      - {{ data_dir }}/workspaces:/app/workspaces
+      - {{ data_dir }}/logs:/app/logs
+    environment:
+      - MOCKFORGE_HTTP_PORT=3000
+      - MOCKFORGE_ADMIN_ENABLED=true
+      - MOCKFORGE_ADMIN_PORT=9080
+      - MOCKFORGE_WS_PORT=3001
+      - MOCKFORGE_GRPC_PORT=50051
+      - RUST_LOG={{ log_level | default('info') }}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9080/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

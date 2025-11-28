@@ -5,6 +5,7 @@
  */
 
 import { CapturedRequest } from '../shared/types';
+import './xray-overlay';
 
 // Inject SDK into page context
 const script = document.createElement('script');

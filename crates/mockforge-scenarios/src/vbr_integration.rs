@@ -5,7 +5,6 @@
 
 use crate::error::{Result, ScenarioError};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// VBR entity definition for scenarios
@@ -79,7 +78,7 @@ impl VbrEntityDefinition {
             )));
         }
 
-        let content = std::fs::read_to_string(&seed_path).map_err(|e| ScenarioError::Io(e))?;
+        let content = std::fs::read_to_string(&seed_path).map_err(ScenarioError::Io)?;
 
         // Try to parse as JSON first, then YAML
         let data: Vec<serde_json::Value> = if seed_path
@@ -88,9 +87,9 @@ impl VbrEntityDefinition {
             .map(|ext| ext == "json")
             .unwrap_or(false)
         {
-            serde_json::from_str(&content).map_err(|e| ScenarioError::Serde(e))?
+            serde_json::from_str(&content).map_err(ScenarioError::Serde)?
         } else {
-            serde_yaml::from_str(&content).map_err(|e| ScenarioError::Yaml(e))?
+            serde_yaml::from_str(&content).map_err(ScenarioError::Yaml)?
         };
 
         Ok(data)

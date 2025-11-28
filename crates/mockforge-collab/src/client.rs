@@ -1,6 +1,6 @@
 //! Collaboration client for connecting to servers
 //!
-//! This module provides a client library for connecting to MockForge collaboration servers
+//! This module provides a client library for connecting to `MockForge` collaboration servers
 //! via WebSocket. It handles connection management, automatic reconnection, message queuing,
 //! and provides an event-driven API for workspace updates.
 
@@ -20,7 +20,7 @@ use uuid::Uuid;
 /// Client configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientConfig {
-    /// Server WebSocket URL (e.g., ws://localhost:8080/ws or wss://api.example.com/ws)
+    /// Server WebSocket URL (e.g., <ws://localhost:8080/ws> or <wss://api.example.com/ws>)
     pub server_url: String,
     /// Authentication token (JWT)
     pub auth_token: String,
@@ -215,7 +215,7 @@ impl CollabClient {
         // Connect to WebSocket
         let (ws_stream, _) = connect_async(&url)
             .await
-            .map_err(|e| CollabError::Internal(format!("WebSocket connection failed: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("WebSocket connection failed: {e}")))?;
 
         *state.write().await = ConnectionState::Connected;
         Self::notify_state_change(state_callbacks, ConnectionState::Connected).await;
@@ -223,7 +223,7 @@ impl CollabClient {
         tracing::info!("WebSocket connected successfully");
 
         // Split stream into sender and receiver
-        let (mut write, mut read) = ws_stream.split();
+        let (write, mut read) = ws_stream.split();
 
         // Create message channel for sending messages
         let (tx, mut rx) = mpsc::unbounded_channel();
@@ -280,7 +280,7 @@ impl CollabClient {
                             tracing::error!("WebSocket error: {}", e);
                             *state.write().await = ConnectionState::Disconnected;
                             Self::notify_state_change(state_callbacks, ConnectionState::Disconnected).await;
-                            return Err(CollabError::Internal(format!("WebSocket error: {}", e)));
+                            return Err(CollabError::Internal(format!("WebSocket error: {e}")));
                         }
                         None => {
                             tracing::info!("WebSocket stream ended");
@@ -293,7 +293,7 @@ impl CollabClient {
                 }
 
                 // Periodic stop signal check
-                _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                () = sleep(Duration::from_millis(100)) => {
                     if *stop_signal.read().await {
                         tracing::info!("Stop signal received, closing connection");
                         break;
@@ -423,7 +423,7 @@ impl CollabClient {
     /// Subscribe to a workspace
     pub async fn subscribe_to_workspace(&self, workspace_id: &str) -> Result<()> {
         let workspace_id = Uuid::parse_str(workspace_id)
-            .map_err(|e| CollabError::InvalidInput(format!("Invalid workspace ID: {}", e)))?;
+            .map_err(|e| CollabError::InvalidInput(format!("Invalid workspace ID: {e}")))?;
 
         let message = SyncMessage::Subscribe { workspace_id };
         self.send_message(message).await?;
@@ -434,7 +434,7 @@ impl CollabClient {
     /// Unsubscribe from a workspace
     pub async fn unsubscribe_from_workspace(&self, workspace_id: &str) -> Result<()> {
         let workspace_id = Uuid::parse_str(workspace_id)
-            .map_err(|e| CollabError::InvalidInput(format!("Invalid workspace ID: {}", e)))?;
+            .map_err(|e| CollabError::InvalidInput(format!("Invalid workspace ID: {e}")))?;
 
         let message = SyncMessage::Unsubscribe { workspace_id };
         self.send_message(message).await?;
@@ -445,7 +445,7 @@ impl CollabClient {
     /// Request state for a workspace
     pub async fn request_state(&self, workspace_id: &str, version: i64) -> Result<()> {
         let workspace_id = Uuid::parse_str(workspace_id)
-            .map_err(|e| CollabError::InvalidInput(format!("Invalid workspace ID: {}", e)))?;
+            .map_err(|e| CollabError::InvalidInput(format!("Invalid workspace ID: {e}")))?;
 
         let message = SyncMessage::StateRequest {
             workspace_id,
@@ -501,11 +501,11 @@ impl Drop for CollabClient {
         // Ensure we disconnect when dropped
         let stop_signal = self.stop_signal.clone();
         let state = self.state.clone();
-        tokio::runtime::Handle::try_current().map(|handle| {
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn(async move {
                 *stop_signal.write().await = true;
                 *state.write().await = ConnectionState::Disconnected;
             });
-        });
+        }
     }
 }

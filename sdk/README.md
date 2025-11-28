@@ -335,17 +335,34 @@ testImplementation 'com.mockforge:mockforge-sdk:0.1.0'
 
 ```java
 import com.mockforge.sdk.MockServer;
-import com.mockforge.sdk.MockServerConfig;
+import com.mockforge.sdk.MockServerBuilder;
+import com.mockforge.sdk.StubBuilder;
 import com.mockforge.sdk.MockServerException;
 
 public class UserApiTest {
     @Test
     public void testUserApi() throws MockServerException {
-        MockServer server = MockServer.start(MockServerConfig.builder()
+        // Using MockServerBuilder (recommended)
+        MockServer server = new MockServerBuilder()
             .port(3000)
-            .build());
+            .start();
 
         try {
+            // Using StubBuilder (fluent API)
+            ResponseStub stub = new StubBuilder("GET", "/api/users/{id}")
+                .status(200)
+                .header("Content-Type", "application/json")
+                .body(Map.of(
+                    "id", "{{uuid}}",
+                    "name", "{{faker.name}}",
+                    "email", "{{faker.email}}"
+                ))
+                .latency(100)
+                .build();
+
+            server.stubResponse(stub);
+
+            // Or use the direct method
             server.stubResponse("GET", "/api/users/123", Map.of(
                 "id", 123,
                 "name", "John Doe",
@@ -362,6 +379,28 @@ public class UserApiTest {
 
 ### API Reference
 
+#### `MockServerBuilder`
+Fluent builder for creating and starting mock servers.
+
+**Methods:**
+- `port(int port)` - Set the HTTP port (0 for random)
+- `host(String host)` - Set the host address
+- `configFile(String path)` - Load configuration from YAML file
+- `openApiSpec(String path)` - Load routes from OpenAPI spec
+- `start()` - Build and start the MockServer
+- `build()` - Build MockServerConfig without starting
+
+#### `StubBuilder`
+Fluent builder for creating response stubs.
+
+**Methods:**
+- `status(int code)` - Set HTTP status code (default: 200)
+- `header(String key, String value)` - Add a response header
+- `headers(Map<String, String> headers)` - Set multiple headers
+- `body(Object body)` - Set response body (required)
+- `latency(int ms)` - Set response latency in milliseconds
+- `build()` - Build the ResponseStub
+
 #### `MockServer.start(config)`
 Starts a mock server with the given configuration.
 
@@ -374,6 +413,7 @@ Starts a mock server with the given configuration.
 #### Methods
 - `stubResponse(method, path, body)` - Add a response stub
 - `stubResponse(method, path, body, status, headers, latencyMs)` - Add stub with options
+- `stubResponse(ResponseStub stub)` - Add a stub using StubBuilder
 - `clearStubs()` - Remove all stubs
 - `stop()` - Stop the server
 - `getUrl()` - Get the server URL
@@ -408,13 +448,29 @@ public class UserApiTests
     [Fact]
     public async Task TestUserApi()
     {
-        var server = await MockServer.StartAsync(new MockServerConfig
-        {
-            Port = 3000
-        });
+        // Using MockServerBuilder (recommended)
+        var server = await new MockServerBuilder()
+            .Port(3000)
+            .StartAsync();
 
         try
         {
+            // Using StubBuilder (fluent API)
+            var stub = new StubBuilder("GET", "/api/users/{id}")
+                .Status(200)
+                .Header("Content-Type", "application/json")
+                .Body(new
+                {
+                    id = "{{uuid}}",
+                    name = "{{faker.name}}",
+                    email = "{{faker.email}}"
+                })
+                .Latency(100)
+                .Build();
+
+            await server.StubResponseAsync(stub);
+
+            // Or use the direct method
             await server.StubResponseAsync("GET", "/api/users/123", new
             {
                 id = 123,
@@ -434,6 +490,28 @@ public class UserApiTests
 
 ### API Reference
 
+#### `MockServerBuilder`
+Fluent builder for creating and starting mock servers.
+
+**Methods:**
+- `Port(int port)` - Set the HTTP port (0 for random)
+- `Host(string host)` - Set the host address
+- `ConfigFile(string path)` - Load configuration from YAML file
+- `OpenApiSpec(string path)` - Load routes from OpenAPI spec
+- `StartAsync()` - Build and start the MockServer asynchronously
+- `Build()` - Build MockServerConfig without starting
+
+#### `StubBuilder`
+Fluent builder for creating response stubs.
+
+**Methods:**
+- `Status(int code)` - Set HTTP status code (default: 200)
+- `Header(string key, string value)` - Add a response header
+- `Headers(Dictionary<string, string> headers)` - Set multiple headers
+- `Body(object body)` - Set response body (required)
+- `Latency(int ms)` - Set response latency in milliseconds
+- `Build()` - Build the ResponseStub
+
 #### `MockServer.StartAsync(config)`
 Starts a mock server with the given configuration asynchronously.
 
@@ -446,6 +524,7 @@ Starts a mock server with the given configuration asynchronously.
 #### Methods
 - `StubResponseAsync(method, path, body)` - Add a response stub
 - `StubResponseAsync(method, path, body, status, headers, latencyMs)` - Add stub with options
+- `StubResponseAsync(ResponseStub stub)` - Add a stub using StubBuilder
 - `ClearStubsAsync()` - Remove all stubs
 - `Stop()` - Stop the server
 - `Dispose()` - Stop and cleanup (implements IDisposable)
@@ -505,24 +584,32 @@ server.StubResponse("GET", "/api/users/{id}", map[string]interface{}{
 ```
 
 ```java
-// Java
-server.stubResponse("GET", "/api/users/{id}", Map.of(
-    "id", "{{uuid}}",
-    "name", "{{faker.name}}",
-    "email", "{{faker.email}}",
-    "created_at", "{{now}}"
-));
+// Java - Using StubBuilder
+ResponseStub stub = new StubBuilder("GET", "/api/users/{id}")
+    .status(200)
+    .body(Map.of(
+        "id", "{{uuid}}",
+        "name", "{{faker.name}}",
+        "email", "{{faker.email}}",
+        "created_at", "{{now}}"
+    ))
+    .build();
+server.stubResponse(stub);
 ```
 
 ```csharp
-// C#/.NET
-await server.StubResponseAsync("GET", "/api/users/{id}", new
-{
-    id = "{{uuid}}",
-    name = "{{faker.name}}",
-    email = "{{faker.email}}",
-    created_at = "{{now}}"
-});
+// C#/.NET - Using StubBuilder
+var stub = new StubBuilder("GET", "/api/users/{id}")
+    .Status(200)
+    .Body(new
+    {
+        id = "{{uuid}}",
+        name = "{{faker.name}}",
+        email = "{{faker.email}}",
+        created_at = "{{now}}"
+    })
+    .Build();
+await server.StubResponseAsync(stub);
 ```
 
 ### Response Options
@@ -575,29 +662,25 @@ server.StubResponseWithOptions(
 ```
 
 ```java
-// Java
-Map<String, String> headers = new HashMap<>();
-headers.put("X-Request-ID", "{{uuid}}");
-server.stubResponse("POST", "/api/users",
-    Map.of("status", "created"),
-    201,
-    headers,
-    500
-);
+// Java - Using StubBuilder
+ResponseStub stub = new StubBuilder("POST", "/api/users")
+    .status(201)
+    .header("X-Request-ID", "{{uuid}}")
+    .body(Map.of("status", "created"))
+    .latency(500)
+    .build();
+server.stubResponse(stub);
 ```
 
 ```csharp
-// C#/.NET
-var headers = new Dictionary<string, string>
-{
-    { "X-Request-ID", "{{uuid}}" }
-};
-await server.StubResponseAsync("POST", "/api/users",
-    new { status = "created" },
-    status: 201,
-    headers: headers,
-    latencyMs: 500
-);
+// C#/.NET - Using StubBuilder
+var stub = new StubBuilder("POST", "/api/users")
+    .Status(201)
+    .Header("X-Request-ID", "{{uuid}}")
+    .Body(new { status = "created" })
+    .Latency(500)
+    .Build();
+await server.StubResponseAsync(stub);
 ```
 
 ---

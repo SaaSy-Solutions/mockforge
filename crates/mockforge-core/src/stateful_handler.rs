@@ -490,6 +490,7 @@ impl StatefulResponseHandler {
         resource_type: &str,
         resource_id_extract: &ResourceIdExtract,
         initial_state: &str,
+        transitions: Option<&[TransitionTrigger]>,
     ) -> Result<Option<StateInfo>> {
         // Extract resource ID
         let resource_id = self.extract_resource_id(resource_id_extract, uri, headers, body)?;
@@ -504,13 +505,65 @@ impl StatefulResponseHandler {
             )
             .await?;
 
-        // Check for transition triggers (we need a config for this, but for stub processing
-        // we'll skip transitions for now - they can be handled by the stub's own transition logic)
-        // TODO: Support transitions in stub state processing
+        // Check for transition triggers if provided
+        let new_state = if let Some(transition_list) = transitions {
+            let path = uri.path();
+            // Create a temporary config-like structure for transition checking
+            // We'll check transitions manually since we don't have a full StatefulConfig
+            let mut transitioned_state = None;
+
+            for transition in transition_list {
+                // Check if method and path match
+                if transition.method != *method {
+                    continue;
+                }
+
+                if !self.path_matches(&transition.path_pattern, path) {
+                    continue;
+                }
+
+                // Check if current state matches
+                if state_instance.current_state != transition.from_state {
+                    continue;
+                }
+
+                // Check condition if present
+                if let Some(ref condition) = transition.condition {
+                    if !self.evaluate_condition(condition, headers, body)? {
+                        continue;
+                    }
+                }
+
+                // Transition matches!
+                debug!(
+                    "State transition triggered in stub processing: {} -> {} for resource {}",
+                    transition.from_state, transition.to_state, resource_id
+                );
+
+                transitioned_state = Some(transition.to_state.clone());
+                break; // Use first matching transition
+            }
+
+            transitioned_state
+        } else {
+            None
+        };
+
+        // Update state if transition occurred
+        let final_state = if let Some(ref new_state) = new_state {
+            let mut updated_instance = state_instance.clone();
+            updated_instance.transition_to(new_state.clone());
+            self.state_manager
+                .update_instance(resource_id.clone(), updated_instance)
+                .await?;
+            new_state.clone()
+        } else {
+            state_instance.current_state.clone()
+        };
 
         Ok(Some(StateInfo {
             resource_id: resource_id.clone(),
-            current_state: state_instance.current_state.clone(),
+            current_state: final_state,
             state_data: state_instance.state_data.clone(),
         }))
     }

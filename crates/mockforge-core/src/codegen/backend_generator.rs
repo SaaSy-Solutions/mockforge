@@ -281,7 +281,7 @@ pub fn schema_to_rust_type(schema: &Schema, schema_name: Option<&str>) -> String
             format!("Vec<{}>", item_type)
         }
         openapiv3::SchemaKind::Type(openapiv3::Type::Object(_)) => schema_name
-            .map(|n| to_pascal_case(n))
+            .map(to_pascal_case)
             .unwrap_or_else(|| "serde_json::Value".to_string()),
         _ => "serde_json::Value".to_string(),
     }
@@ -289,7 +289,7 @@ pub fn schema_to_rust_type(schema: &Schema, schema_name: Option<&str>) -> String
 
 /// Convert a string to PascalCase
 pub fn to_pascal_case(s: &str) -> String {
-    s.split(|c: char| c == '-' || c == '_' || c == ' ')
+    s.split(['-', '_', ' '])
         .filter(|s| !s.is_empty())
         .map(|word| {
             let mut chars = word.chars();
@@ -336,8 +336,7 @@ pub fn generate_handler_name(route: &RouteInfo) -> String {
         let path_part = route
             .path
             .replace('/', "_")
-            .replace('{', "")
-            .replace('}', "")
+            .replace(['{', '}'], "")
             .replace('-', "_")
             .trim_matches('_')
             .to_string();

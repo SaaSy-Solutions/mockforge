@@ -58,7 +58,12 @@ pub enum ScenarioError {
 
     /// Checksum verification failed
     #[error("Checksum verification failed: expected {expected}, got {actual}")]
-    ChecksumMismatch { expected: String, actual: String },
+    ChecksumMismatch {
+        /// Expected checksum value
+        expected: String,
+        /// Actual checksum value received
+        actual: String,
+    },
 
     /// Dependency resolution failed
     #[error("Dependency resolution failed: {0}")]

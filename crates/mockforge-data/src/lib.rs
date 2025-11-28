@@ -1,15 +1,20 @@
+//! Pillars: [Reality]
+//!
 //! # MockForge Data
 //!
 //! Synthetic data generation engine with faker primitives and RAG (Retrieval-Augmented Generation).
 
-// Re-export error types from mockforge-core
-pub use mockforge_core::{Error, Result};
+mod error;
+
+// Re-export error types
+pub use error::{Error, Result};
 
 /// Consistency engine for entity ID → persona mappings
 pub mod consistency;
 pub mod dataset;
 pub mod domains;
 pub mod drift;
+pub mod drift_learning;
 pub mod faker;
 pub mod generator;
 pub mod intelligent_mock;
@@ -19,6 +24,12 @@ pub mod mock_server;
 pub mod persona;
 /// Backstory generation for personas
 pub mod persona_backstory;
+/// Persona graph and relationship management
+pub mod persona_graph;
+/// Persona lifecycle and time-aware state management
+pub mod persona_lifecycle;
+/// Lifecycle state response modifiers
+pub mod persona_lifecycle_response;
 /// Domain-specific persona templates
 pub mod persona_templates;
 /// Provider utilities for faker and data generation
@@ -39,6 +50,10 @@ pub use consistency::{ConsistencyStore, EntityIdExtractor, EntityType};
 pub use dataset::{Dataset, DatasetValidationResult};
 pub use domains::{Domain, DomainGenerator, ParseDomainError};
 pub use drift::{DataDriftConfig, DataDriftEngine, DriftStrategy};
+pub use drift_learning::{
+    BehaviorEvent, BehaviorEventType, DriftLearningEngine, LearnedPattern, LearningConfig,
+    LearningMode, PatternType, PersonaBehaviorLearner, TrafficPatternLearner,
+};
 pub use fake::Faker;
 pub use generator::DataGenerator;
 pub use intelligent_mock::{IntelligentMockConfig, IntelligentMockGenerator, ResponseMode};
@@ -49,6 +64,18 @@ pub use mock_server::{
 };
 pub use persona::{PersonaGenerator, PersonaProfile, PersonaRegistry};
 pub use persona_backstory::{BackstoryGenerator, BackstoryTemplate};
+pub use persona_graph::{
+    Edge, GraphStats, GraphVisualization, PersonaGraph, PersonaNode, VisualizationEdge,
+    VisualizationNode,
+};
+pub use persona_lifecycle::{
+    LifecyclePreset, LifecycleScenarios, LifecycleState, PersonaLifecycle, TransitionRule,
+};
+pub use persona_lifecycle_response::{
+    apply_billing_lifecycle_effects, apply_lifecycle_effects, apply_loan_lifecycle_effects,
+    apply_order_fulfillment_lifecycle_effects, apply_support_lifecycle_effects,
+    apply_user_engagement_lifecycle_effects,
+};
 pub use persona_templates::{
     EcommercePersonaTemplate, FinancePersonaTemplate, HealthcarePersonaTemplate, PersonaTemplate,
     PersonaTemplateRegistry,
@@ -130,12 +157,12 @@ impl GenerationResult {
     }
 
     /// Get data as JSON string
-    pub fn to_json_string(&self) -> mockforge_core::Result<String> {
+    pub fn to_json_string(&self) -> crate::Result<String> {
         Ok(serde_json::to_string_pretty(&self.data)?)
     }
 
     /// Get data as JSON Lines string
-    pub fn to_jsonl_string(&self) -> mockforge_core::Result<String> {
+    pub fn to_jsonl_string(&self) -> crate::Result<String> {
         let lines: Vec<String> = self
             .data
             .iter()
@@ -149,7 +176,7 @@ impl GenerationResult {
 pub async fn generate_data(
     schema: SchemaDefinition,
     config: DataConfig,
-) -> mockforge_core::Result<GenerationResult> {
+) -> crate::Result<GenerationResult> {
     let mut generator = DataGenerator::new(schema, config)?;
     generator.generate().await
 }
@@ -158,7 +185,7 @@ pub async fn generate_data(
 pub async fn generate_from_json_schema(
     json_schema: &serde_json::Value,
     rows: usize,
-) -> mockforge_core::Result<GenerationResult> {
+) -> crate::Result<GenerationResult> {
     let schema = SchemaDefinition::from_json_schema(json_schema)?;
     let config = DataConfig {
         rows,
@@ -171,7 +198,7 @@ pub async fn generate_from_json_schema(
 pub async fn generate_from_openapi(
     openapi_spec: &serde_json::Value,
     rows: usize,
-) -> mockforge_core::Result<GenerationResult> {
+) -> crate::Result<GenerationResult> {
     let schema = SchemaDefinition::from_openapi_spec(openapi_spec)?;
     let config = DataConfig {
         rows,

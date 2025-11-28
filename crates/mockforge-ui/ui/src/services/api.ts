@@ -85,10 +85,21 @@ export type { CreateRequestRequest, CreateRequestResponse, ExecuteRequestRequest
 const API_BASE = '/__mockforge/chains';
 const WORKSPACE_API_BASE = '/__mockforge/workspaces';
 
+// Import authenticated fetch
+import { authenticatedFetch } from '../utils/apiClient';
+
 class ApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      // Handle 401/403 errors
+      if (response.status === 401) {
+        // Token expired or invalid - auth store will handle refresh/logout
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -681,8 +692,14 @@ class ApiService {
 
 class ImportApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -762,8 +779,14 @@ class FixturesApiService {
   }
 
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -812,8 +835,14 @@ class FixturesApiService {
   }
 
   async downloadFixture(fixtureId: string): Promise<Blob> {
-    const response = await fetch(`/__mockforge/fixtures/${fixtureId}/download`);
+    const response = await authenticatedFetch(`/__mockforge/fixtures/${fixtureId}/download`);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.blob();
@@ -844,8 +873,14 @@ class FixturesApiService {
 
 class DashboardApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -884,13 +919,20 @@ class DashboardApiService {
 
 class ServerApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
     return json.data || json;
   }
+
 
   async getServerInfo(): Promise<ServerInfo> {
     return this.fetchJson('/__mockforge/server-info') as Promise<ServerInfo>;
@@ -911,8 +953,14 @@ class ServerApiService {
 
 class RoutesApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -931,8 +979,14 @@ class LogsApiService {
   }
 
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -990,8 +1044,14 @@ class MetricsApiService {
   }
 
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1005,8 +1065,14 @@ class MetricsApiService {
 
 class ConfigApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1044,8 +1110,14 @@ class ConfigApiService {
 
 class ValidationApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1067,8 +1139,14 @@ class ValidationApiService {
 
 class EnvApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1090,8 +1168,14 @@ class EnvApiService {
 
 class FilesApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1117,8 +1201,14 @@ class FilesApiService {
 
 class SmokeTestsApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1138,8 +1228,14 @@ class SmokeTestsApiService {
 
 class ChaosApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1326,8 +1422,14 @@ class ChaosApiService {
    * Export a network profile (JSON or YAML)
    */
   async exportNetworkProfile(name: string, format: 'json' | 'yaml' = 'json'): Promise<any> {
-    const response = await fetch(`/api/chaos/profiles/${encodeURIComponent(name)}/export?format=${format}`);
+    const response = await authenticatedFetch(`/api/chaos/profiles/${encodeURIComponent(name)}/export?format=${format}`);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     if (format === 'yaml') {
@@ -1372,8 +1474,14 @@ class ChaosApiService {
  */
 class TimeTravelApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       throw new Error(error.error || `HTTP error! status: ${response.status}`);
     }
@@ -1436,6 +1544,28 @@ class TimeTravelApiService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ duration }),
+    }) as Promise<{
+      success: boolean;
+      status: {
+        enabled: boolean;
+        current_time?: string;
+        scale_factor: number;
+      };
+    }>;
+  }
+
+  async setTime(time: string): Promise<{
+    success: boolean;
+    status: {
+      enabled: boolean;
+      current_time?: string;
+      scale_factor: number;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/time-travel/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time }),
     }) as Promise<{
       success: boolean;
       status: {
@@ -1561,8 +1691,14 @@ class TimeTravelApiService {
  */
 class RealityApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       throw new Error(error.error || `HTTP error! status: ${response.status}`);
     }
@@ -1710,10 +1846,115 @@ class RealityApiService {
   }
 }
 
+class ConsistencyApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await authenticatedFetch(url, options);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  /**
+   * List all available lifecycle presets
+   */
+  async listLifecyclePresets(): Promise<{
+    presets: Array<{
+      name: string;
+      id: string;
+      description: string;
+    }>;
+  }> {
+    return this.fetchJson('/api/v1/consistency/lifecycle-presets') as Promise<{
+      presets: Array<{
+        name: string;
+        id: string;
+        description: string;
+      }>;
+    }>;
+  }
+
+  /**
+   * Get details of a specific lifecycle preset
+   */
+  async getLifecyclePresetDetails(presetName: string): Promise<{
+    preset: {
+      name: string;
+      id: string;
+      description: string;
+    };
+    initial_state: string;
+    states: Array<{
+      from: string;
+      to: string;
+      after_days: number | null;
+      condition: string | null;
+    }>;
+    affected_endpoints: string[];
+  }> {
+    return this.fetchJson(`/api/v1/consistency/lifecycle-presets/${encodeURIComponent(presetName)}`) as Promise<{
+      preset: {
+        name: string;
+        id: string;
+        description: string;
+      };
+      initial_state: string;
+      states: Array<{
+        from: string;
+        to: string;
+        after_days: number | null;
+        condition: string | null;
+      }>;
+      affected_endpoints: string[];
+    }>;
+  }
+
+  /**
+   * Apply a lifecycle preset to a persona
+   */
+  async applyLifecyclePreset(
+    workspace: string,
+    personaId: string,
+    preset: string
+  ): Promise<{
+    success: boolean;
+    workspace: string;
+    persona_id: string;
+    preset: string;
+    lifecycle_state: string;
+  }> {
+    return this.fetchJson(`/api/v1/consistency/lifecycle-presets/apply?workspace=${encodeURIComponent(workspace)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ persona_id: personaId, preset }),
+    }) as Promise<{
+      success: boolean;
+      workspace: string;
+      persona_id: string;
+      preset: string;
+      lifecycle_state: string;
+    }>;
+  }
+}
+
 class PluginsApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -1772,8 +2013,14 @@ class PluginsApiService {
 
 class VerificationApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
     }
@@ -1857,6 +2104,18 @@ export interface Mismatch {
   confidence: number;
   expected?: string;
   actual?: string;
+  context?: {
+    is_additive?: boolean;
+    is_breaking?: boolean;
+    change_category?: string;
+    schema_format?: string;
+    service?: string;
+    method?: string;
+    field_name?: string;
+    old_type?: string;
+    new_type?: string;
+    [key: string]: any;
+  };
 }
 
 export interface Recommendation {
@@ -1893,8 +2152,14 @@ export interface AnalyzeRequestPayload {
 
 class ContractDiffApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       const errorText = await response.text();
       let errorMessage = `HTTP error! status: ${response.status}`;
       try {
@@ -1910,7 +2175,7 @@ class ContractDiffApiService {
   }
 
   async uploadRequest(request: Omit<CapturedRequest, 'id' | 'captured_at' | 'analyzed'>): Promise<{ capture_id: string; message: string }> {
-    const response = await fetch('/__mockforge/contract-diff/upload', {
+    const response = await authenticatedFetch('/__mockforge/contract-diff/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
@@ -2269,6 +2534,193 @@ class ProxyApiService {
       snippets: Record<string, string>;
     }>;
   }
+
+  // ==================== BEHAVIORAL CLONING API METHODS ====================
+
+  /**
+   * List all recorded flows
+   */
+  async getFlows(params?: { limit?: number; db_path?: string }): Promise<{
+    flows: import('../types').Flow[];
+    total: number;
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows?${queryParams.toString()}`
+      : '/__mockforge/flows';
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: { flows: import('../types').Flow[]; total: number } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch flows');
+    }
+    return response.data;
+  }
+
+  /**
+   * Get flow details with timeline
+   */
+  async getFlow(flowId: string, params?: { db_path?: string }): Promise<import('../types').Flow> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows/${flowId}?${queryParams.toString()}`
+      : `/__mockforge/flows/${flowId}`;
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: import('../types').Flow | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch flow');
+    }
+    return response.data;
+  }
+
+  /**
+   * Tag a flow
+   */
+  async tagFlow(
+    flowId: string,
+    request: import('../types').TagFlowRequest,
+    params?: { db_path?: string }
+  ): Promise<{ message: string; flow_id: string }> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows/${flowId}/tag?${queryParams.toString()}`
+      : `/__mockforge/flows/${flowId}/tag`;
+    const response = await this.fetchJson(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as {
+      success: boolean;
+      data: { message: string; flow_id: string } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to tag flow');
+    }
+    return response.data;
+  }
+
+  /**
+   * Compile flow to scenario
+   */
+  async compileFlow(
+    flowId: string,
+    request: import('../types').CompileFlowRequest,
+    params?: { db_path?: string }
+  ): Promise<import('../types').CompileFlowResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows/${flowId}/compile?${queryParams.toString()}`
+      : `/__mockforge/flows/${flowId}/compile`;
+    const response = await this.fetchJson(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as {
+      success: boolean;
+      data: import('../types').CompileFlowResponse | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to compile flow');
+    }
+    return response.data;
+  }
+
+  /**
+   * List all scenarios
+   */
+  async getScenarios(params?: { limit?: number; db_path?: string }): Promise<{
+    scenarios: import('../types').Scenario[];
+    total: number;
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/scenarios?${queryParams.toString()}`
+      : '/__mockforge/scenarios';
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: { scenarios: import('../types').Scenario[]; total: number } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch scenarios');
+    }
+    return response.data;
+  }
+
+  /**
+   * Get scenario details
+   */
+  async getScenario(scenarioId: string, params?: { db_path?: string }): Promise<import('../types').ScenarioDetail> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/scenarios/${scenarioId}?${queryParams.toString()}`
+      : `/__mockforge/scenarios/${scenarioId}`;
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: import('../types').ScenarioDetail | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch scenario');
+    }
+    return response.data;
+  }
+
+  /**
+   * Export scenario
+   */
+  async exportScenario(
+    scenarioId: string,
+    format: 'yaml' | 'json' = 'yaml',
+    params?: { db_path?: string }
+  ): Promise<string> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('format', format);
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = `/__mockforge/scenarios/${scenarioId}/export?${queryParams.toString()}`;
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: { content: string } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to export scenario');
+    }
+    return response.data.content;
+  }
 }
 
 export const apiService = new ApiService();
@@ -2291,9 +2743,10 @@ export const pluginsApi = new PluginsApiService();
 export const chaosApi = new ChaosApiService();
 export const timeTravelApi = new TimeTravelApiService();
 export const realityApi = new RealityApiService();
+export const consistencyApi = new ConsistencyApiService();
 export const verificationApi = new VerificationApiService();
 export const contractDiffApi = new ContractDiffApiService();
-export { proxyApi, type ProxyRule, type ProxyRuleRequest, type ProxyRulesResponse, type ProxyInspectResponse };
+export type { ProxyRule, ProxyRuleRequest, ProxyRulesResponse, ProxyInspectResponse };
 
 // Debug: Log to verify services are created
 logger.info('API Services initialized', {

@@ -15,6 +15,11 @@ mod admin_handlers_tests {
             None, // graphql_server_addr
             true, // api_enabled
             9080, // admin_port
+            None, // chaos_api_state
+            None, // latency_injector
+            None, // mockai
+            None, // continuum_config
+            None, // virtual_clock
         )
     }
 

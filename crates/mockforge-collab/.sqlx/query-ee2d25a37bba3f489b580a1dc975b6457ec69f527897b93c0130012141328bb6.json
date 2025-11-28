@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO workspace_merges (\n                id, source_workspace_id, target_workspace_id,\n                base_commit_id, source_commit_id, target_commit_id,\n                merge_commit_id, status, conflict_data, merged_by, merged_at, created_at\n            )\n            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "ee2d25a37bba3f489b580a1dc975b6457ec69f527897b93c0130012141328bb6"
+}

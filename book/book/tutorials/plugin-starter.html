@@ -1,0 +1,988 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Plugin Starter Guide - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/tutorials/plugin-starter.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="plugin-starter-guide"><a class="header" href="#plugin-starter-guide">Plugin Starter Guide</a></h1>
+<p>This guide walks you through creating your first MockForge plugin from scratch. You’ll learn how to scaffold a plugin project, implement plugin functionality, build it, and use it in MockForge.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>MockForge plugins extend the platform’s capabilities through a WebAssembly-based plugin system. Plugins can:</p>
+<ul>
+<li>Add custom template functions</li>
+<li>Implement custom authentication logic</li>
+<li>Generate dynamic responses</li>
+<li>Connect to external data sources</li>
+<li>Trigger webhooks</li>
+<li>Add chaos engineering patterns</li>
+</ul>
+<h2 id="plugin-types"><a class="header" href="#plugin-types">Plugin Types</a></h2>
+<p>MockForge supports several plugin types:</p>
+<div class="table-wrapper"><table><thead><tr><th>Type</th><th>Description</th><th>Use Case</th></tr></thead><tbody>
+<tr><td><strong>template</strong></td><td>Custom template functions</td><td>Add domain-specific data generation functions</td></tr>
+<tr><td><strong>auth</strong></td><td>Authentication handlers</td><td>Custom authentication logic (JWT, OAuth, etc.)</td></tr>
+<tr><td><strong>response</strong></td><td>Response generators</td><td>Generate dynamic responses based on request data</td></tr>
+<tr><td><strong>datasource</strong></td><td>Data source connectors</td><td>Connect to external data (CSV, databases, APIs)</td></tr>
+<tr><td><strong>webhook</strong></td><td>Webhook triggers</td><td>Send outbound HTTP requests to external services</td></tr>
+<tr><td><strong>chaos</strong></td><td>Chaos patterns</td><td>Add custom failure modes and latency patterns</td></tr>
+</tbody></table>
+</div>
+<h2 id="step-1-scaffold-your-plugin"><a class="header" href="#step-1-scaffold-your-plugin">Step 1: Scaffold Your Plugin</a></h2>
+<p>Use the <code>mockforge plugin init</code> command to create a new plugin project:</p>
+<pre><code class="language-bash">mockforge plugin init my-custom-plugin --plugin-type template
+</code></pre>
+<p><strong>Options:</strong></p>
+<ul>
+<li><code>--plugin-type</code> (default: <code>template</code>): The type of plugin to create</li>
+<li><code>--output</code> (optional): Output directory (defaults to plugin name)</li>
+<li><code>--force</code>: Overwrite existing directory</li>
+</ul>
+<p><strong>Example for different types:</strong></p>
+<pre><code class="language-bash"># Template plugin
+mockforge plugin init my-template-plugin --plugin-type template
+
+# Authentication plugin
+mockforge plugin init my-auth-plugin --plugin-type auth
+
+# Response plugin
+mockforge plugin init my-response-plugin --plugin-type response
+
+# Data source plugin
+mockforge plugin init my-datasource-plugin --plugin-type datasource
+
+# Webhook plugin
+mockforge plugin init my-webhook-plugin --plugin-type webhook
+
+# Chaos plugin
+mockforge plugin init my-chaos-plugin --plugin-type chaos
+</code></pre>
+<h3 id="what-gets-created"><a class="header" href="#what-gets-created">What Gets Created</a></h3>
+<p>The command creates a complete plugin project structure:</p>
+<pre><code>my-custom-plugin/
+├── Cargo.toml          # Rust dependencies and build config
+├── plugin.yaml         # Plugin manifest with metadata
+├── src/
+│   └── lib.rs         # Plugin implementation
+├── README.md          # Plugin documentation template
+└── .gitignore        # Git ignore file
+</code></pre>
+<h2 id="step-2-understand-the-plugin-structure"><a class="header" href="#step-2-understand-the-plugin-structure">Step 2: Understand the Plugin Structure</a></h2>
+<h3 id="cargotoml"><a class="header" href="#cargotoml">Cargo.toml</a></h3>
+<p>The <code>Cargo.toml</code> file defines your plugin’s dependencies:</p>
+<pre><code class="language-toml">[package]
+name = "my-custom-plugin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mockforge-plugin-core = { path = "../../../crates/mockforge-plugin-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-trait = "0.1"
+</code></pre>
+<h3 id="pluginyaml"><a class="header" href="#pluginyaml">plugin.yaml</a></h3>
+<p>The <code>plugin.yaml</code> file is the plugin manifest:</p>
+<pre><code class="language-yaml">id: my-custom-plugin
+name: My Custom Plugin
+version: 0.1.0
+description: Description of what this plugin does
+author: Your Name
+license: MIT OR Apache-2.0
+
+type: template  # template, auth, response, datasource, webhook, chaos
+
+capabilities:
+  network:
+    allow_http: false
+    allowed_hosts: []
+  filesystem:
+    read_paths: []
+    write_paths: []
+  resources:
+    max_memory_bytes: 10485760  # 10MB
+    max_cpu_percent: 50
+    max_execution_time_ms: 1000
+
+config_schema:
+  type: object
+  properties:
+    # Plugin-specific configuration
+</code></pre>
+<h3 id="srclibrs"><a class="header" href="#srclibrs">src/lib.rs</a></h3>
+<p>The <code>src/lib.rs</code> file contains your plugin implementation. The scaffolded code provides a template based on your plugin type.</p>
+<h2 id="step-3-implement-your-plugin"><a class="header" href="#step-3-implement-your-plugin">Step 3: Implement Your Plugin</a></h2>
+<h3 id="template-plugin-example"><a class="header" href="#template-plugin-example">Template Plugin Example</a></h3>
+<p>Template plugins add custom functions to MockForge’s templating system:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_plugin_core::{
+    TemplatePlugin, TemplatePluginConfig, TemplateFunction, 
+    FunctionParameter, PluginContext, PluginResult, Result, Value
+};
+use std::collections::HashMap;
+
+pub struct MyTemplatePlugin {
+    config: TemplatePluginConfig,
+}
+
+#[async_trait::async_trait]
+impl TemplatePlugin for MyTemplatePlugin {
+    fn capabilities(&amp;self) -&gt; PluginCapabilities {
+        PluginCapabilities {
+            network: NetworkPermissions {
+                allow_http: false,
+                allowed_hosts: vec![],
+                max_connections: 10,
+            },
+            filesystem: FilesystemPermissions {
+                read_paths: vec![],
+                write_paths: vec![],
+                allow_temp_files: false,
+            },
+            resources: ResourceLimits {
+                max_memory_bytes: 10 * 1024 * 1024, // 10MB
+                max_cpu_percent: 50,
+                max_execution_time_ms: 1000,
+                max_concurrent_executions: 5,
+            },
+            custom: HashMap::new(),
+        }
+    }
+
+    async fn initialize(&amp;self, _config: &amp;TemplatePluginConfig) -&gt; Result&lt;()&gt; {
+        Ok(())
+    }
+
+    async fn register_functions(
+        &amp;self,
+        _context: &amp;PluginContext,
+        _config: &amp;TemplatePluginConfig,
+    ) -&gt; Result&lt;PluginResult&lt;HashMap&lt;String, TemplateFunction&gt;&gt;&gt; {
+        let mut functions = HashMap::new();
+
+        // Register a custom function
+        functions.insert(
+            "my_custom_function".to_string(),
+            TemplateFunction::new(
+                "my_custom_function",
+                "Does something custom",
+                "string"
+            )
+            .with_parameter(
+                FunctionParameter::required("input", "string", "Input value")
+            )
+            .with_example("{{my_custom_function \"hello\"}}")
+            .with_category("custom"),
+        );
+
+        Ok(PluginResult::success(functions, 0))
+    }
+
+    async fn execute_function(
+        &amp;self,
+        _context: &amp;PluginContext,
+        function_name: &amp;str,
+        args: &amp;[Value],
+        _config: &amp;TemplatePluginConfig,
+    ) -&gt; Result&lt;PluginResult&lt;Value&gt;&gt; {
+        match function_name {
+            "my_custom_function" =&gt; {
+                let input = args.get(0)
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| PluginError::execution("Missing input argument"))?;
+                
+                let result = format!("Processed: {}", input);
+                Ok(PluginResult::success(Value::String(result), 0))
+            }
+            _ =&gt; Ok(PluginResult::failure(
+                format!("Unknown function: {}", function_name),
+                0
+            )),
+        }
+    }
+
+    // ... other required methods
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="response-plugin-example"><a class="header" href="#response-plugin-example">Response Plugin Example</a></h3>
+<p>Response plugins generate custom responses based on request data:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_plugin_core::{
+    ResponsePlugin, ResponsePluginConfig, ResponseRequest,
+    ResponseData, PluginContext, PluginResult, Result
+};
+use std::collections::HashMap;
+
+pub struct MyResponsePlugin {
+    config: ResponsePluginConfig,
+}
+
+#[async_trait::async_trait]
+impl ResponsePlugin for MyResponsePlugin {
+    fn capabilities(&amp;self) -&gt; PluginCapabilities {
+        // Define capabilities
+    }
+
+    async fn initialize(&amp;self, _config: &amp;ResponsePluginConfig) -&gt; Result&lt;()&gt; {
+        Ok(())
+    }
+
+    async fn can_handle(
+        &amp;self,
+        _context: &amp;PluginContext,
+        request: &amp;ResponseRequest,
+        _config: &amp;ResponsePluginConfig,
+    ) -&gt; Result&lt;PluginResult&lt;bool&gt;&gt; {
+        // Determine if this plugin should handle the request
+        let should_handle = request.path.starts_with("/api/custom");
+        Ok(PluginResult::success(should_handle, 0))
+    }
+
+    async fn generate_response(
+        &amp;self,
+        _context: &amp;PluginContext,
+        request: &amp;ResponseRequest,
+        _config: &amp;ResponsePluginConfig,
+    ) -&gt; Result&lt;PluginResult&lt;ResponseData&gt;&gt; {
+        // Generate custom response
+        let body = json!({
+            "message": "Custom response",
+            "path": request.path,
+            "method": request.method.as_str(),
+        });
+
+        let response_data = ResponseData {
+            status_code: 200,
+            headers: HashMap::new(),
+            body: serde_json::to_vec(&amp;body)?,
+            content_type: "application/json".to_string(),
+            metadata: HashMap::new(),
+            cache_control: None,
+            custom: HashMap::new(),
+        };
+
+        Ok(PluginResult::success(response_data, 0))
+    }
+
+    // ... other required methods
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="webhook-plugin-example"><a class="header" href="#webhook-plugin-example">Webhook Plugin Example</a></h3>
+<p>Webhook plugins make outbound HTTP requests:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_plugin_core::{
+    ResponsePlugin, ResponsePluginConfig, ResponseRequest,
+    ResponseData, PluginContext, PluginResult, Result
+};
+
+pub struct MyWebhookPlugin {
+    config: ResponsePluginConfig,
+    webhook_url: String,
+}
+
+#[async_trait::async_trait]
+impl ResponsePlugin for MyWebhookPlugin {
+    fn capabilities(&amp;self) -&gt; PluginCapabilities {
+        PluginCapabilities {
+            network: NetworkPermissions {
+                allow_http: true,  // Enable network access
+                allowed_hosts: vec![
+                    self.webhook_url
+                        .strip_prefix("https://")
+                        .or_else(|| self.webhook_url.strip_prefix("http://"))
+                        .and_then(|url| url.split('/').next())
+                        .unwrap_or("*")
+                        .to_string()
+                ],
+                max_connections: 10,
+            },
+            // ... other capabilities
+        }
+    }
+
+    async fn generate_response(
+        &amp;self,
+        _context: &amp;PluginContext,
+        request: &amp;ResponseRequest,
+        _config: &amp;ResponsePluginConfig,
+    ) -&gt; Result&lt;PluginResult&lt;ResponseData&gt;&gt; {
+        // Generate webhook payload
+        let payload = json!({
+            "event": "mockforge.request",
+            "path": request.path,
+            "method": request.method.as_str(),
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+
+        // In a real implementation, make HTTP request here
+        // For security, this requires network capabilities
+
+        let response_data = ResponseData {
+            status_code: 200,
+            headers: HashMap::new(),
+            body: serde_json::to_vec(&amp;payload)?,
+            content_type: "application/json".to_string(),
+            metadata: HashMap::new(),
+            cache_control: None,
+            custom: HashMap::new(),
+        };
+
+        Ok(PluginResult::success(response_data, 0))
+    }
+
+    // ... other required methods
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="step-4-build-your-plugin"><a class="header" href="#step-4-build-your-plugin">Step 4: Build Your Plugin</a></h2>
+<p>Build your plugin for WebAssembly:</p>
+<pre><code class="language-bash">cd my-custom-plugin
+cargo build --target wasm32-wasi --release
+</code></pre>
+<p>The compiled <code>.wasm</code> file will be in:</p>
+<pre><code>target/wasm32-wasi/release/my_custom_plugin.wasm
+</code></pre>
+<h2 id="step-5-test-your-plugin"><a class="header" href="#step-5-test-your-plugin">Step 5: Test Your Plugin</a></h2>
+<h3 id="unit-tests"><a class="header" href="#unit-tests">Unit Tests</a></h3>
+<p>Add tests to your plugin:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_my_custom_function() {
+        let plugin = MyTemplatePlugin::new();
+        let config = TemplatePluginConfig::default();
+        
+        plugin.initialize(&amp;config).await.unwrap();
+        
+        let functions = plugin.register_functions(
+            &amp;PluginContext::default(),
+            &amp;config
+        ).await.unwrap();
+        
+        assert!(functions.result.contains_key("my_custom_function"));
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Run tests:</p>
+<pre><code class="language-bash">cargo test
+</code></pre>
+<h3 id="integration-testing"><a class="header" href="#integration-testing">Integration Testing</a></h3>
+<p>Test your plugin with MockForge:</p>
+<ol>
+<li>
+<p><strong>Install the plugin:</strong></p>
+<pre><code class="language-bash">mockforge plugin install ./my-custom-plugin
+</code></pre>
+</li>
+<li>
+<p><strong>List installed plugins:</strong></p>
+<pre><code class="language-bash">mockforge plugin list
+</code></pre>
+</li>
+<li>
+<p><strong>Use in mockforge.yaml:</strong></p>
+<pre><code class="language-yaml">plugins:
+  - id: my-custom-plugin
+    type: template
+    config:
+      # Plugin-specific config
+</code></pre>
+</li>
+<li>
+<p><strong>Start MockForge:</strong></p>
+<pre><code class="language-bash">mockforge serve
+</code></pre>
+</li>
+<li>
+<p><strong>Test the plugin:</strong></p>
+<pre><code class="language-bash"># For template plugins, use in templates
+curl http://localhost:3000/api/test
+</code></pre>
+</li>
+</ol>
+<h2 id="step-6-learn-from-examples"><a class="header" href="#step-6-learn-from-examples">Step 6: Learn from Examples</a></h2>
+<p>The MockForge repository includes comprehensive example plugins you can learn from:</p>
+<h3 id="template-plugins"><a class="header" href="#template-plugins">Template Plugins</a></h3>
+<p><strong><code>template-advanced/</code></strong> - Advanced template functions:</p>
+<ul>
+<li>Mathematical operations (sum, average)</li>
+<li>Collection operations (group_by, sort)</li>
+<li>Date/time formatting</li>
+<li>UUID generation</li>
+</ul>
+<p><strong>Inspect:</strong></p>
+<pre><code class="language-bash">cd examples/plugins/template-advanced/
+cat src/lib.rs
+cat README.md
+</code></pre>
+<p><strong><code>template-custom/</code></strong> - Domain-specific functions:</p>
+<ul>
+<li>Business data generation</li>
+<li>Custom formatting</li>
+<li>Domain-specific helpers</li>
+</ul>
+<h3 id="response-plugins"><a class="header" href="#response-plugins">Response Plugins</a></h3>
+<p><strong><code>webhook-example/</code></strong> - Webhook functionality:</p>
+<ul>
+<li>Outbound HTTP requests</li>
+<li>Payload signing</li>
+<li>Event-based triggering</li>
+</ul>
+<p><strong>Inspect:</strong></p>
+<pre><code class="language-bash">cd examples/plugins/webhook-example/
+cat src/lib.rs
+cat plugin.yaml
+</code></pre>
+<h3 id="authentication-plugins"><a class="header" href="#authentication-plugins">Authentication Plugins</a></h3>
+<p><strong><code>auth-basic/</code></strong> - HTTP Basic Authentication:</p>
+<ul>
+<li>Credential validation</li>
+<li>Realm configuration</li>
+<li>Secure password handling</li>
+</ul>
+<p><strong>Inspect:</strong></p>
+<pre><code class="language-bash">cd examples/plugins/auth-basic/
+cat src/lib.rs
+</code></pre>
+<h3 id="data-source-plugins"><a class="header" href="#data-source-plugins">Data Source Plugins</a></h3>
+<p><strong><code>datasource-csv/</code></strong> - CSV data source:</p>
+<ul>
+<li>CSV file parsing</li>
+<li>Data querying</li>
+<li>Type inference</li>
+</ul>
+<p><strong>Inspect:</strong></p>
+<pre><code class="language-bash">cd examples/plugins/datasource-csv/
+cat src/lib.rs
+</code></pre>
+<h2 id="complete-example-creating-a-template-plugin"><a class="header" href="#complete-example-creating-a-template-plugin">Complete Example: Creating a Template Plugin</a></h2>
+<p>Let’s create a complete template plugin step-by-step:</p>
+<h3 id="1-scaffold-the-plugin"><a class="header" href="#1-scaffold-the-plugin">1. Scaffold the Plugin</a></h3>
+<pre><code class="language-bash">mockforge plugin init currency-formatter --plugin-type template
+cd currency-formatter
+</code></pre>
+<h3 id="2-implement-the-plugin"><a class="header" href="#2-implement-the-plugin">2. Implement the Plugin</a></h3>
+<p>Edit <code>src/lib.rs</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_plugin_core::{
+    TemplatePlugin, TemplatePluginConfig, TemplateFunction,
+    FunctionParameter, PluginContext, PluginResult, Result, Value
+};
+use std::collections::HashMap;
+
+pub struct CurrencyFormatterPlugin {
+    config: TemplatePluginConfig,
+}
+
+#[async_trait::async_trait]
+impl TemplatePlugin for CurrencyFormatterPlugin {
+    fn capabilities(&amp;self) -&gt; PluginCapabilities {
+        PluginCapabilities {
+            network: NetworkPermissions {
+                allow_http: false,
+                allowed_hosts: vec![],
+                max_connections: 10,
+            },
+            filesystem: FilesystemPermissions {
+                read_paths: vec![],
+                write_paths: vec![],
+                allow_temp_files: false,
+            },
+            resources: ResourceLimits {
+                max_memory_bytes: 5 * 1024 * 1024, // 5MB
+                max_cpu_percent: 50,
+                max_execution_time_ms: 500,
+                max_concurrent_executions: 5,
+            },
+            custom: HashMap::new(),
+        }
+    }
+
+    async fn initialize(&amp;self, _config: &amp;TemplatePluginConfig) -&gt; Result&lt;()&gt; {
+        Ok(())
+    }
+
+    async fn register_functions(
+        &amp;self,
+        _context: &amp;PluginContext,
+        _config: &amp;TemplatePluginConfig,
+    ) -&gt; Result&lt;PluginResult&lt;HashMap&lt;String, TemplateFunction&gt;&gt;&gt; {
+        let mut functions = HashMap::new();
+
+        functions.insert(
+            "format_currency".to_string(),
+            TemplateFunction::new(
+                "format_currency",
+                "Format a number as currency",
+                "string"
+            )
+            .with_parameter(
+                FunctionParameter::required("amount", "number", "Amount to format")
+            )
+            .with_parameter(
+                FunctionParameter::optional("currency", "string", "Currency code (default: USD)")
+            )
+            .with_example("{{format_currency 1234.56 \"USD\"}}")
+            .with_category("formatting"),
+        );
+
+        Ok(PluginResult::success(functions, 0))
+    }
+
+    async fn execute_function(
+        &amp;self,
+        _context: &amp;PluginContext,
+        function_name: &amp;str,
+        args: &amp;[Value],
+        _config: &amp;TemplatePluginConfig,
+    ) -&gt; Result&lt;PluginResult&lt;Value&gt;&gt; {
+        match function_name {
+            "format_currency" =&gt; {
+                let amount = args.get(0)
+                    .and_then(|v| v.as_f64())
+                    .ok_or_else(|| PluginError::execution("Amount must be a number"))?;
+                
+                let currency = args.get(1)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("USD");
+                
+                let formatted = match currency {
+                    "USD" =&gt; format!("${:.2}", amount),
+                    "EUR" =&gt; format!("€{:.2}", amount),
+                    "GBP" =&gt; format!("£{:.2}", amount),
+                    _ =&gt; format!("{:.2} {}", amount, currency),
+                };
+                
+                Ok(PluginResult::success(Value::String(formatted), 0))
+            }
+            _ =&gt; Ok(PluginResult::failure(
+                format!("Unknown function: {}", function_name),
+                0
+            )),
+        }
+    }
+
+    async fn get_data_source(
+        &amp;self,
+        _context: &amp;PluginContext,
+        _data_source: &amp;str,
+        _config: &amp;TemplatePluginConfig,
+    ) -&gt; Result&lt;PluginResult&lt;Value&gt;&gt; {
+        Ok(PluginResult::failure("No data sources available".to_string(), 0))
+    }
+
+    fn validate_config(&amp;self, _config: &amp;TemplatePluginConfig) -&gt; Result&lt;()&gt; {
+        Ok(())
+    }
+
+    fn available_data_sources(&amp;self) -&gt; Vec&lt;String&gt; {
+        vec![]
+    }
+
+    async fn cleanup(&amp;self) -&gt; Result&lt;()&gt; {
+        Ok(())
+    }
+}
+
+// Export the plugin
+#[no_mangle]
+pub extern "C" fn create_plugin() -&gt; *mut dyn TemplatePlugin {
+    Box::into_raw(Box::new(CurrencyFormatterPlugin {
+        config: TemplatePluginConfig::default(),
+    }))
+}
+
+#[no_mangle]
+pub extern "C" fn destroy_plugin(plugin: *mut dyn TemplatePlugin) {
+    unsafe {
+        drop(Box::from_raw(plugin));
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="3-update-pluginyaml"><a class="header" href="#3-update-pluginyaml">3. Update plugin.yaml</a></h3>
+<pre><code class="language-yaml">id: currency-formatter
+name: Currency Formatter
+version: 0.1.0
+description: Format numbers as currency strings
+author: Your Name
+license: MIT OR Apache-2.0
+
+type: template
+
+capabilities:
+  network:
+    allow_http: false
+  filesystem:
+    read_paths: []
+    write_paths: []
+  resources:
+    max_memory_bytes: 5242880  # 5MB
+    max_cpu_percent: 50
+    max_execution_time_ms: 500
+</code></pre>
+<h3 id="4-build-and-test"><a class="header" href="#4-build-and-test">4. Build and Test</a></h3>
+<pre><code class="language-bash"># Build
+cargo build --target wasm32-wasi --release
+
+# Test
+cargo test
+
+# Install
+mockforge plugin install .
+
+# Use in mockforge.yaml
+</code></pre>
+<h3 id="5-use-in-templates"><a class="header" href="#5-use-in-templates">5. Use in Templates</a></h3>
+<pre><code class="language-yaml"># mockforge.yaml
+responses:
+  - path: /api/products
+    method: GET
+    body: |
+      {
+        "products": [
+          {
+            "name": "Product 1",
+            "price": "{{format_currency 29.99 \"USD\"}}"
+          }
+        ]
+      }
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-error-handling"><a class="header" href="#1-error-handling">1. Error Handling</a></h3>
+<p>Always handle errors gracefully:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn execute_function(
+    &amp;self,
+    _context: &amp;PluginContext,
+    function_name: &amp;str,
+    args: &amp;[Value],
+    _config: &amp;TemplatePluginConfig,
+) -&gt; Result&lt;PluginResult&lt;Value&gt;&gt; {
+    match function_name {
+        "my_function" =&gt; {
+            let input = args.get(0)
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| PluginError::execution("Missing required argument"))?;
+            
+            // Your logic here
+            Ok(PluginResult::success(Value::String(result), 0))
+        }
+        _ =&gt; Ok(PluginResult::failure(
+            format!("Unknown function: {}", function_name),
+            0
+        )),
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="2-resource-limits"><a class="header" href="#2-resource-limits">2. Resource Limits</a></h3>
+<p>Set appropriate resource limits:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>resources: ResourceLimits {
+    max_memory_bytes: 10 * 1024 * 1024,  // 10MB
+    max_cpu_percent: 50,
+    max_execution_time_ms: 1000,  // 1 second
+    max_concurrent_executions: 5,
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="3-security"><a class="header" href="#3-security">3. Security</a></h3>
+<ul>
+<li>Only request necessary capabilities</li>
+<li>Validate all inputs</li>
+<li>Sanitize outputs</li>
+<li>Use allowed_hosts for network access</li>
+</ul>
+<h3 id="4-documentation"><a class="header" href="#4-documentation">4. Documentation</a></h3>
+<ul>
+<li>Document all functions in <code>register_functions</code></li>
+<li>Provide examples in function metadata</li>
+<li>Include usage examples in README.md</li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="plugin-wont-build"><a class="header" href="#plugin-wont-build">Plugin Won’t Build</a></h3>
+<p><strong>Issue:</strong> Compilation errors</p>
+<p><strong>Solution:</strong></p>
+<ul>
+<li>Check that all dependencies are in <code>Cargo.toml</code></li>
+<li>Ensure you’re using the correct Rust edition (2021)</li>
+<li>Verify <code>mockforge-plugin-core</code> path is correct</li>
+</ul>
+<h3 id="plugin-not-loading"><a class="header" href="#plugin-not-loading">Plugin Not Loading</a></h3>
+<p><strong>Issue:</strong> Plugin fails to load in MockForge</p>
+<p><strong>Solution:</strong></p>
+<ul>
+<li>Check <code>plugin.yaml</code> syntax</li>
+<li>Verify plugin type matches implementation</li>
+<li>Check capability requirements</li>
+<li>Review MockForge logs for errors</li>
+</ul>
+<h3 id="function-not-found"><a class="header" href="#function-not-found">Function Not Found</a></h3>
+<p><strong>Issue:</strong> Template function not available</p>
+<p><strong>Solution:</strong></p>
+<ul>
+<li>Ensure function is registered in <code>register_functions</code></li>
+<li>Check function name matches exactly</li>
+<li>Verify plugin is installed and enabled</li>
+<li>Check plugin configuration</li>
+</ul>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ol>
+<li><strong>Explore Example Plugins</strong>: Study the example plugins in <code>examples/plugins/</code></li>
+<li><strong>Read Plugin API Docs</strong>: See <code>crates/mockforge-plugin-core/src/</code> for trait definitions</li>
+<li><strong>Join the Community</strong>: Share your plugins and get feedback</li>
+<li><strong>Contribute</strong>: Submit your plugins to the marketplace</li>
+</ol>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="../user-guide/plugins.html">Plugin Development Guide</a> - Detailed plugin development</li>
+<li><a href="../../crates/mockforge-plugin-core/README.html">Plugin API Reference</a> - Complete API documentation</li>
+<li><a href="../../examples/plugins/README.html">Example Plugins</a> - All available examples</li>
+<li><a href="../../plugin-marketplace/README.html">Plugin Marketplace</a> - Share and discover plugins</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../tutorials/admin-ui-walkthrough.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../tutorials/ide-extension-guide.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../tutorials/admin-ui-walkthrough.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../tutorials/ide-extension-guide.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

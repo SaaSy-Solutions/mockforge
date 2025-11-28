@@ -14,23 +14,30 @@ use serde_json::json;
 use std::any::Any;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::net::TcpListener;
 
 #[cfg(feature = "amqp")]
 mod amqp_commands;
 mod backend_generator;
+mod blueprint_commands;
 mod client_generator;
+mod cloud_commands;
 mod contract_diff_commands;
 mod contract_sync_commands;
 mod deploy_commands;
+mod dev_setup_commands;
+mod error_helpers;
+mod flow_commands;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
 mod git_watch_commands;
+mod governance_commands;
 mod import_commands;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
+mod logs_commands;
 mod mockai_commands;
+mod mod_commands;
 #[cfg(feature = "mqtt")]
 mod mqtt_commands;
 mod plugin_commands;
@@ -39,11 +46,13 @@ mod recorder_commands;
 mod scenario_commands;
 #[cfg(feature = "smtp")]
 mod smtp_commands;
+mod snapshot_commands;
 mod template_commands;
 mod time_commands;
 mod tunnel_commands;
 mod vbr_commands;
 mod voice_commands;
+mod wizard;
 mod workspace_commands;
 
 #[cfg(test)]
@@ -619,6 +628,11 @@ enum Commands {
     },
 
     /// Initialize a new MockForge project
+    ///
+    /// Examples:
+    ///   mockforge init my-project
+    ///   mockforge init . --blueprint ecommerce
+    ///   mockforge init . --blueprint b2c-saas
     Init {
         /// Project name (defaults to current directory name)
         #[arg(default_value = ".")]
@@ -627,7 +641,20 @@ enum Commands {
         /// Skip creating example files
         #[arg(long)]
         no_examples: bool,
+
+        /// Create project from a blueprint (e.g., ecommerce, b2c-saas, banking-lite)
+        #[arg(long)]
+        blueprint: Option<String>,
     },
+
+    /// Interactive getting started wizard
+    ///
+    /// Guides you through setting up your first MockForge project with
+    /// auto-detection and sample mock generation.
+    ///
+    /// Examples:
+    ///   mockforge wizard
+    Wizard,
 
     /// Generate mock servers from OpenAPI specifications
     ///
@@ -668,6 +695,40 @@ enum Commands {
         /// Show progress bar during generation
         #[arg(long)]
         progress: bool,
+    },
+
+    /// Generate JSON Schema for MockForge configuration files
+    ///
+    /// Generates JSON Schemas that can be used by IDEs and editors
+    /// to provide autocomplete, validation, and documentation for
+    /// mockforge.yaml, persona files, reality config, and blueprint files.
+    ///
+    /// Examples:
+    ///   mockforge schema generate
+    ///   mockforge schema generate --output schemas/
+    ///   mockforge schema generate --type config --output mockforge-config.schema.json
+    #[command(verbatim_doc_comment)]
+    Schema {
+        #[command(subcommand)]
+        schema_command: Option<SchemaCommands>,
+    },
+
+    /// One-command frontend integration setup
+    ///
+    /// Sets up MockForge integration for frontend frameworks with:
+    /// - Typed client generation from OpenAPI spec
+    /// - Example hooks/composables/services
+    /// - Environment configuration
+    /// - SDK dependencies
+    ///
+    /// Examples:
+    ///   mockforge dev-setup react
+    ///   mockforge dev-setup vue --spec api.yaml
+    ///   mockforge dev-setup next --base-url http://localhost:3000
+    #[command(verbatim_doc_comment)]
+    DevSetup {
+        #[command(flatten)]
+        args: dev_setup_commands::DevSetupArgs,
     },
 
     /// Configuration management
@@ -784,6 +845,21 @@ enum Commands {
         diff_command: ContractDiffCommands,
     },
 
+    /// API governance and safety features
+    ///
+    /// Manage API change forecasting, semantic drift detection, and threat modeling.
+    ///
+    /// Examples:
+    ///   mockforge governance forecast generate --window-days 90
+    ///   mockforge governance semantic analyze --before old.yaml --after new.yaml --endpoint /api/users --method GET
+    ///   mockforge governance threat assess --spec api.yaml
+    ///   mockforge governance status
+    #[command(verbatim_doc_comment)]
+    Governance {
+        #[command(subcommand)]
+        gov_command: GovernanceCommands,
+    },
+
     /// Import API specifications and generate mocks (OpenAPI, AsyncAPI)
     ///
     /// Examples:
@@ -821,6 +897,20 @@ enum Commands {
         recorder_command: recorder_commands::RecorderCommands,
     },
 
+    /// Flow recording and behavioral cloning
+    ///
+    /// Record multi-step flows, view timelines, and compile behavioral scenarios.
+    ///
+    /// Examples:
+    ///   mockforge flow list
+    ///   mockforge flow view <flow-id>
+    ///   mockforge flow tag <flow-id> --name "checkout_success"
+    ///   mockforge flow compile <flow-id> --scenario-name "checkout"
+    Flow {
+        #[command(subcommand)]
+        flow_command: flow_commands::FlowCommands,
+    },
+
     /// Scenario marketplace management
     ///
     /// Examples:
@@ -832,6 +922,48 @@ enum Commands {
     Scenario {
         #[command(subcommand)]
         scenario_command: scenario_commands::ScenarioCommands,
+    },
+
+    /// Reality Profile Pack management
+    ///
+    /// Manage and apply reality profile packs that configure hyper-realistic mock behaviors.
+    ///
+    /// Examples:
+    ///   mockforge reality-profile install ecommerce-peak-season
+    ///   mockforge reality-profile list
+    ///   mockforge reality-profile apply ecommerce-peak-season --workspace default
+    #[command(verbatim_doc_comment)]
+    RealityProfile {
+        #[command(subcommand)]
+        reality_profile_command: scenario_commands::RealityProfileCommands,
+    },
+
+    /// Behavioral Economics Engine management
+    ///
+    /// Configure behavior rules that make mocks react to pressure, load, pricing, and fraud.
+    ///
+    /// Examples:
+    ///   mockforge behavior-rule add --name "latency-conversion" --condition latency --threshold 400 --action modify-conversion-rate --multiplier 0.8
+    ///   mockforge behavior-rule list
+    ///   mockforge behavior-rule enable
+    #[command(verbatim_doc_comment)]
+    BehaviorRule {
+        #[command(subcommand)]
+        behavior_rule_command: scenario_commands::BehaviorRuleCommands,
+    },
+
+    /// Drift Learning configuration
+    ///
+    /// Configure drift learning that allows mocks to learn from recorded traffic patterns.
+    ///
+    /// Examples:
+    ///   mockforge drift-learning enable --sensitivity 0.2 --min-samples 10
+    ///   mockforge drift-learning status
+    ///   mockforge drift-learning disable
+    #[command(verbatim_doc_comment)]
+    DriftLearning {
+        #[command(subcommand)]
+        drift_learning_command: scenario_commands::DriftLearningCommands,
     },
 
     /// Template library management
@@ -848,6 +980,24 @@ enum Commands {
     Template {
         #[command(subcommand)]
         template_command: template_commands::TemplateCommands,
+    },
+
+    /// Blueprint management - predefined app archetypes
+    ///
+    /// Blueprints provide opinionated "Golden Path" workflows with:
+    /// - Pre-configured personas for different user types
+    /// - Reality defaults optimized for the use case
+    /// - Sample flows demonstrating common workflows
+    /// - Playground collections for testing
+    ///
+    /// Examples:
+    ///   mockforge blueprint list
+    ///   mockforge blueprint create my-app --blueprint b2c-saas
+    ///   mockforge blueprint info ecommerce
+    #[command(verbatim_doc_comment)]
+    Blueprint {
+        #[command(subcommand)]
+        blueprint_command: blueprint_commands::BlueprintCommands,
     },
 
     /// Client code generation for frontend frameworks
@@ -885,6 +1035,19 @@ enum Commands {
     Workspace {
         #[command(subcommand)]
         workspace_command: workspace_commands::WorkspaceCommands,
+    },
+
+    /// Cloud sync and collaboration commands
+    ///
+    /// Examples:
+    ///   mockforge cloud login
+    ///   mockforge cloud sync --workspace my-workspace
+    ///   mockforge cloud workspace list
+    ///   mockforge cloud team members --workspace my-workspace
+    #[command(verbatim_doc_comment)]
+    Cloud {
+        #[command(subcommand)]
+        cloud_command: cloud_commands::CloudCommands,
     },
 
     /// Expose local MockForge server via public URL (tunneling)
@@ -946,6 +1109,23 @@ enum Commands {
         mockai_command: mockai_commands::MockAICommands,
     },
 
+    /// Time travel and snapshot management
+    ///
+    /// Save and restore entire system states (across protocols, personas, and reality level).
+    /// Enables point-in-time recovery and state management.
+    ///
+    /// Examples:
+    ///   mockforge snapshot save "post-checkout-failure" --description "State after checkout failure"
+    ///   mockforge snapshot load "post-checkout-failure"
+    ///   mockforge snapshot list
+    ///   mockforge snapshot info "post-checkout-failure"
+    ///   mockforge snapshot delete "old-snapshot"
+    #[command(verbatim_doc_comment)]
+    Snapshot {
+        #[command(subcommand)]
+        snapshot_command: snapshot_commands::SnapshotCommands,
+    },
+
     /// Voice + LLM Interface for conversational mock creation
     ///
     /// Build mocks conversationally using natural language commands powered by LLM.
@@ -984,6 +1164,75 @@ enum Commands {
         /// Admin UI URL (default: http://localhost:9080)
         #[arg(long)]
         admin_url: Option<String>,
+    },
+
+    /// View logs from MockForge server or log files
+    ///
+    /// View request logs from a running MockForge server (via Admin API) or from log files.
+    /// Supports filtering, following (like tail -f), and JSON output.
+    ///
+    /// Examples:
+    ///   mockforge logs
+    ///   mockforge logs -f
+    ///   mockforge logs --method GET --path /api/users
+    ///   mockforge logs --status 500 --limit 20
+    ///   mockforge logs --file logs/mockforge.log -f
+    ///   mockforge logs --json
+    #[command(verbatim_doc_comment)]
+    Logs {
+        /// Admin UI URL (default: http://localhost:9080)
+        #[arg(long)]
+        admin_url: Option<String>,
+
+        /// Read from log file instead of Admin API
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
+        /// Follow logs in real-time (like tail -f)
+        #[arg(short, long)]
+        follow: bool,
+
+        /// Filter by HTTP method (GET, POST, etc.)
+        #[arg(long)]
+        method: Option<String>,
+
+        /// Filter by path pattern
+        #[arg(long)]
+        path: Option<String>,
+
+        /// Filter by status code
+        #[arg(long)]
+        status: Option<u16>,
+
+        /// Limit number of log entries
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Configuration file path (used to find log file path)
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+    },
+
+    /// MOD (Mock-Oriented Development) commands
+    ///
+    /// Mock-Oriented Development (MOD) is a methodology that places mocks at the center
+    /// of the development workflow. Use MOD to design APIs, coordinate teams, and build
+    /// with confidence.
+    ///
+    /// Examples:
+    ///   mockforge mod init --template small-team
+    ///   mockforge mod validate --contract contracts/api.yaml --target http://localhost:8080
+    ///   mockforge mod review --contract contracts/api.yaml --mock http://localhost:3000 --implementation http://localhost:8080
+    ///   mockforge mod generate --from-openapi contracts/api.yaml --output mocks/
+    ///   mockforge mod templates
+    #[command(verbatim_doc_comment)]
+    Mod {
+        #[command(subcommand)]
+        mod_command: mod_commands::ModCommands,
     },
 
     /// Chaos engineering profile management
@@ -1942,9 +2191,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             ws_port,
             grpc_port,
             smtp_port: _smtp_port,
-            mqtt_port,
-            kafka_port,
-            amqp_port,
+            mqtt_port: _mqtt_port,
+            kafka_port: _kafka_port,
+            amqp_port: _amqp_port,
             tcp_port,
             admin,
             admin_port,
@@ -2134,8 +2383,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Completions { shell } => {
             handle_completions(shell);
         }
-        Commands::Init { name, no_examples } => {
-            handle_init(name, no_examples).await?;
+        Commands::Init {
+            name,
+            no_examples,
+            blueprint,
+        } => {
+            handle_init(name, no_examples, blueprint).await?;
+        }
+        Commands::Wizard => {
+            let config = wizard::run_wizard().await?;
+            wizard::generate_project(&config).await?;
         }
         Commands::Generate {
             config,
@@ -2158,6 +2415,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 progress,
             )
             .await?;
+        }
+        Commands::Schema { schema_command } => {
+            handle_schema(schema_command).await?;
+        }
+        Commands::DevSetup { args } => {
+            dev_setup_commands::execute_dev_setup(args).await?;
         }
         Commands::Config { config_command } => {
             handle_config(config_command).await?;
@@ -2209,6 +2472,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::ContractDiff { diff_command } => {
             handle_contract_diff(diff_command).await?;
         }
+        Commands::Governance { gov_command } => {
+            handle_governance(gov_command).await?;
+        }
         Commands::Import { import_command } => {
             import_commands::handle_import_command(import_command).await?;
         }
@@ -2222,12 +2488,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Recorder { recorder_command } => {
             recorder_commands::handle_recorder_command(recorder_command).await?;
         }
+        Commands::Flow { flow_command } => {
+            flow_commands::handle_flow_command(flow_command).await?;
+        }
         Commands::Scenario { scenario_command } => {
             scenario_commands::handle_scenario_command(scenario_command).await?;
+        }
+        Commands::RealityProfile {
+            reality_profile_command,
+        } => {
+            scenario_commands::handle_reality_profile_command(reality_profile_command).await?;
+        }
+        Commands::BehaviorRule {
+            behavior_rule_command,
+        } => {
+            scenario_commands::handle_behavior_rule_command(behavior_rule_command).await?;
+        }
+        Commands::DriftLearning {
+            drift_learning_command,
+        } => {
+            scenario_commands::handle_drift_learning_command(drift_learning_command).await?;
         }
         Commands::Template { template_command } => {
             template_commands::handle_template_command(template_command).await?;
         }
+        Commands::Blueprint { blueprint_command } => match blueprint_command {
+            blueprint_commands::BlueprintCommands::List { detailed, category } => {
+                blueprint_commands::list_blueprints(detailed, category)?;
+            }
+            blueprint_commands::BlueprintCommands::Create {
+                name,
+                blueprint,
+                output,
+                force,
+            } => {
+                blueprint_commands::create_from_blueprint(name, blueprint, output, force)?;
+            }
+            blueprint_commands::BlueprintCommands::Info { blueprint_id } => {
+                blueprint_commands::show_blueprint_info(blueprint_id)?;
+            }
+        },
         Commands::Client { client_command } => {
             client_generator::execute_client_command(client_command).await?;
         }
@@ -2236,6 +2536,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Workspace { workspace_command } => {
             workspace_commands::handle_workspace_command(workspace_command).await?;
+        }
+
+        Commands::Cloud { cloud_command } => {
+            cloud_commands::handle_cloud_command(cloud_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Cloud command failed: {}", e))?;
         }
 
         Commands::Tunnel { tunnel_command } => {
@@ -2256,6 +2562,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .map_err(|e| anyhow::anyhow!("VBR command failed: {}", e))?;
         }
 
+        Commands::Snapshot { snapshot_command } => {
+            snapshot_commands::handle_snapshot_command(snapshot_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Snapshot command failed: {}", e))?;
+        }
+
         Commands::Mockai { mockai_command } => {
             mockai_commands::handle_mockai_command(mockai_command)
                 .await
@@ -2267,6 +2579,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .map_err(|e| anyhow::anyhow!("Voice command failed: {}", e))?;
         }
 
+        Commands::Mod { mod_command } => {
+            mod_commands::handle_mod_command(mod_command).await?;
+        }
         Commands::Chaos { chaos_command } => {
             handle_chaos_command(chaos_command).await?;
         }
@@ -2277,6 +2592,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             time_commands::execute_time_command(time_command, admin_url)
                 .await
                 .map_err(|e| anyhow::anyhow!("Time command failed: {}", e))?;
+        }
+
+        Commands::Logs {
+            admin_url,
+            file,
+            follow,
+            method,
+            path,
+            status,
+            limit,
+            json,
+            config,
+        } => {
+            logs_commands::execute_logs_command(
+                admin_url, file, follow, method, path, status, limit, json, config,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Logs command failed: {}", e))?;
         }
 
         Commands::Orchestrate {
@@ -2898,6 +3231,10 @@ fn initialize_opentelemetry_tracing(
     logging_config: &mockforge_observability::LoggingConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use mockforge_tracing::{init_tracer, TracingConfig};
+    use tracing_opentelemetry::OpenTelemetryLayer;
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    use tracing_subscriber::EnvFilter;
 
     // Create tracing configuration from OpenTelemetry config
     let tracing_config = if let Some(ref otlp_endpoint) = otel_config.otlp_endpoint {
@@ -2911,17 +3248,34 @@ fn initialize_opentelemetry_tracing(
     .with_sampling_rate(otel_config.sampling_rate)
     .with_environment(otel_config.environment.clone());
 
-    // Initialize the tracer
-    let tracer = init_tracer(tracing_config)?;
+    // Initialize the tracer (this sets up the global tracer provider)
+    // The global tracer provider is what the OpenTelemetry layer will use
+    let _tracer = init_tracer(tracing_config)?;
 
-    // Create OpenTelemetry layer
-    let otel_layer =
-        tracing_opentelemetry::layer::<tracing_subscriber::Registry>().with_tracer(tracer);
+    // Create OpenTelemetry layer that uses the global tracer provider
+    // The layer() function automatically uses the global tracer provider set by init_tracer
+    let otel_layer = OpenTelemetryLayer::default();
 
-    // Initialize logging with OpenTelemetry layer
-    mockforge_observability::init_logging_with_otel(logging_config.clone(), otel_layer)?;
+    // Parse log level
+    let log_level = logging_config.level.clone();
+    let env_filter = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new(&log_level))
+        .unwrap_or_else(|_| EnvFilter::new("info"));
 
-    tracing::info!("OpenTelemetry tracing initialized successfully");
+    // Build the subscriber with OpenTelemetry layer
+    // We need to reinitialize the subscriber to add the OpenTelemetry layer
+    let registry = tracing_subscriber::registry().with(env_filter).with(otel_layer);
+
+    // Add console layer based on config
+    if logging_config.json_format {
+        use tracing_subscriber::fmt;
+        registry.with(fmt::layer().json()).init();
+    } else {
+        use tracing_subscriber::fmt;
+        registry.with(fmt::layer()).init();
+    }
+
+    tracing::info!("OpenTelemetry tracing initialized successfully with layer integration");
     Ok(())
 }
 
@@ -3245,13 +3599,278 @@ pub async fn handle_serve(
         std::env::set_var("MOCKFORGE_RAG_MODEL", model);
     }
 
-    // Initialize key store at startup
+    // Initialize key store at startup (lightweight operation, keep synchronous)
     init_key_store();
 
-    // Initialize request capture manager for contract diff analysis
-    use mockforge_core::request_capture::init_global_capture_manager;
-    init_global_capture_manager(1000); // Keep last 1000 requests
-    tracing::info!("Request capture manager initialized for contract diff analysis");
+    // Initialize request capture manager lazily (defer until first use)
+    // This is lightweight but can be deferred to improve startup time
+    tokio::spawn(async {
+        use mockforge_core::request_capture::init_global_capture_manager;
+        init_global_capture_manager(1000); // Keep last 1000 requests
+        tracing::info!(
+            "Request capture manager initialized for contract diff analysis (lazy-loaded)"
+        );
+    });
+
+    // Initialize SIEM emitter lazily (defer until first use to improve startup time)
+    let siem_config = config.security.monitoring.siem.clone();
+    if siem_config.enabled {
+        use mockforge_core::security::init_global_siem_emitter;
+        // Spawn async task to initialize SIEM emitter in background (non-blocking)
+        tokio::spawn(async move {
+            if let Err(e) = init_global_siem_emitter(siem_config.clone()).await {
+                tracing::warn!("Failed to initialize SIEM emitter: {}", e);
+            } else {
+                tracing::info!(
+                    "SIEM emitter initialized with {} destinations (lazy-loaded)",
+                    siem_config.destinations.len()
+                );
+            }
+        });
+    }
+
+    // Initialize access review system if enabled
+    let access_review_scheduler_handle = if config.security.monitoring.access_review.enabled {
+        use mockforge_core::security::{
+            access_review::AccessReviewEngine,
+            access_review_notifications::{AccessReviewNotificationService, NotificationConfig},
+            access_review_scheduler::AccessReviewScheduler,
+            access_review_service::AccessReviewService,
+            api_tokens::InMemoryApiTokenStorage,
+            justification_storage::InMemoryJustificationStorage,
+            mfa_tracking::InMemoryMfaStorage,
+        };
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        // Create storage backends (in-memory for now, can be replaced with database-backed implementations)
+        let token_storage: Arc<dyn mockforge_core::security::ApiTokenStorage> =
+            Arc::new(InMemoryApiTokenStorage::new());
+        let mfa_storage: Arc<dyn mockforge_core::security::MfaStorage> =
+            Arc::new(InMemoryMfaStorage::new());
+        let justification_storage: Arc<dyn mockforge_core::security::JustificationStorage> =
+            Arc::new(InMemoryJustificationStorage::new());
+
+        // Create a simple user data provider (placeholder - would use CollabUserDataProvider if collab is enabled)
+        // For now, we'll create a minimal implementation that can be extended
+        struct SimpleUserDataProvider;
+        #[async_trait::async_trait]
+        impl mockforge_core::security::UserDataProvider for SimpleUserDataProvider {
+            async fn get_all_users(
+                &self,
+            ) -> Result<Vec<mockforge_core::security::UserAccessInfo>, mockforge_core::Error>
+            {
+                // Return empty list - would be populated from actual user management system
+                Ok(Vec::new())
+            }
+            async fn get_privileged_users(
+                &self,
+            ) -> Result<Vec<mockforge_core::security::PrivilegedAccessInfo>, mockforge_core::Error>
+            {
+                Ok(Vec::new())
+            }
+            async fn get_api_tokens(
+                &self,
+            ) -> Result<Vec<mockforge_core::security::ApiTokenInfo>, mockforge_core::Error>
+            {
+                Ok(Vec::new())
+            }
+            async fn get_user(
+                &self,
+                _user_id: uuid::Uuid,
+            ) -> Result<Option<mockforge_core::security::UserAccessInfo>, mockforge_core::Error>
+            {
+                Ok(None)
+            }
+            async fn get_last_login(
+                &self,
+                _user_id: uuid::Uuid,
+            ) -> Result<Option<chrono::DateTime<chrono::Utc>>, mockforge_core::Error> {
+                Ok(None)
+            }
+            async fn revoke_user_access(
+                &self,
+                _user_id: uuid::Uuid,
+                _reason: String,
+            ) -> Result<(), mockforge_core::Error> {
+                Ok(())
+            }
+            async fn update_user_permissions(
+                &self,
+                _user_id: uuid::Uuid,
+                _roles: Vec<String>,
+                _permissions: Vec<String>,
+            ) -> Result<(), mockforge_core::Error> {
+                Ok(())
+            }
+        }
+
+        let user_provider = SimpleUserDataProvider;
+
+        // Create access review engine and service
+        let review_config = config.security.monitoring.access_review.clone();
+        let review_config_for_scheduler = review_config.clone();
+        let engine = AccessReviewEngine::new(review_config.clone());
+        let review_service = AccessReviewService::new(engine, Box::new(user_provider));
+        let review_service_arc = Arc::new(RwLock::new(review_service));
+
+        // Create notification service
+        let notification_config = NotificationConfig {
+            enabled: review_config.notifications.enabled,
+            channels: review_config
+                .notifications
+                .channels
+                .iter()
+                .map(|c| match c.as_str() {
+                    "email" => mockforge_core::security::access_review_notifications::NotificationChannel::Email,
+                    "slack" => mockforge_core::security::access_review_notifications::NotificationChannel::Slack,
+                    "webhook" => mockforge_core::security::access_review_notifications::NotificationChannel::Webhook,
+                    _ => mockforge_core::security::access_review_notifications::NotificationChannel::InApp,
+                })
+                .collect(),
+            recipients: review_config.notifications.recipients,
+            channel_config: std::collections::HashMap::new(),
+        };
+        let notification_service =
+            Arc::new(AccessReviewNotificationService::new(notification_config));
+
+        // Initialize global access review service for HTTP API
+        use mockforge_core::security::init_global_access_review_service;
+        if let Err(e) = init_global_access_review_service(review_service_arc.clone()).await {
+            tracing::warn!("Failed to initialize global access review service: {}", e);
+        } else {
+            tracing::info!("Global access review service initialized");
+        }
+
+        // Create and start scheduler
+        let scheduler = AccessReviewScheduler::with_notifications(
+            review_service_arc,
+            review_config_for_scheduler,
+            Some(notification_service),
+        );
+        let handle = scheduler.start();
+
+        tracing::info!("Access review scheduler started");
+        Some(handle)
+    } else {
+        None
+    };
+
+    // Initialize privileged access manager if enabled
+    let privileged_access_manager = if config.security.monitoring.privileged_access.require_mfa {
+        use mockforge_core::security::{
+            justification_storage::InMemoryJustificationStorage, mfa_tracking::InMemoryMfaStorage,
+            privileged_access::PrivilegedAccessManager,
+        };
+        use std::sync::Arc;
+
+        let privileged_config = config.security.monitoring.privileged_access.clone();
+        let mfa_storage: Arc<dyn mockforge_core::security::MfaStorage> =
+            Arc::new(InMemoryMfaStorage::new());
+        let justification_storage: Arc<dyn mockforge_core::security::JustificationStorage> =
+            Arc::new(InMemoryJustificationStorage::new());
+
+        let manager = PrivilegedAccessManager::new(
+            privileged_config,
+            Some(mfa_storage),
+            Some(justification_storage),
+        );
+
+        // Start session cleanup task
+        let manager_for_cleanup = Arc::new(RwLock::new(manager));
+        let cleanup_manager = manager_for_cleanup.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // Every 5 minutes
+            loop {
+                interval.tick().await;
+                if let Err(e) = cleanup_manager.write().await.cleanup_expired_sessions().await {
+                    tracing::warn!("Failed to cleanup expired privileged sessions: {}", e);
+                }
+            }
+        });
+
+        // Initialize global privileged access manager for HTTP API
+        use mockforge_core::security::init_global_privileged_access_manager;
+        if let Err(e) = init_global_privileged_access_manager(manager_for_cleanup.clone()).await {
+            tracing::warn!("Failed to initialize global privileged access manager: {}", e);
+        } else {
+            tracing::info!("Global privileged access manager initialized");
+        }
+
+        tracing::info!("Privileged access manager initialized");
+        Some(manager_for_cleanup)
+    } else {
+        None
+    };
+
+    // Initialize change management engine if enabled
+    let change_management_engine = if config.security.monitoring.change_management.enabled {
+        use mockforge_core::security::change_management::ChangeManagementEngine;
+        use std::sync::Arc;
+
+        let change_config = config.security.monitoring.change_management.clone();
+        let engine = ChangeManagementEngine::new(change_config);
+        let engine_arc = Arc::new(RwLock::new(engine));
+
+        // Initialize global change management engine for HTTP API
+        use mockforge_core::security::init_global_change_management_engine;
+        if let Err(e) = init_global_change_management_engine(engine_arc.clone()).await {
+            tracing::warn!("Failed to initialize global change management engine: {}", e);
+        } else {
+            tracing::info!("Global change management engine initialized");
+        }
+
+        tracing::info!("Change management engine initialized");
+        Some(engine_arc)
+    } else {
+        None
+    };
+
+    // Initialize compliance dashboard engine if enabled
+    let compliance_dashboard_engine = if config.security.monitoring.compliance_dashboard.enabled {
+        use mockforge_core::security::compliance_dashboard::ComplianceDashboardEngine;
+        use std::sync::Arc;
+
+        let dashboard_config = config.security.monitoring.compliance_dashboard.clone();
+        let engine = ComplianceDashboardEngine::new(dashboard_config);
+        let engine_arc = Arc::new(RwLock::new(engine));
+
+        // Initialize global compliance dashboard engine for HTTP API
+        use mockforge_core::security::init_global_compliance_dashboard_engine;
+        if let Err(e) = init_global_compliance_dashboard_engine(engine_arc.clone()).await {
+            tracing::warn!("Failed to initialize global compliance dashboard engine: {}", e);
+        } else {
+            tracing::info!("Global compliance dashboard engine initialized");
+        }
+
+        tracing::info!("Compliance dashboard engine initialized");
+        Some(engine_arc)
+    } else {
+        None
+    };
+
+    // Initialize risk assessment engine if enabled
+    let risk_assessment_engine = if config.security.monitoring.risk_assessment.enabled {
+        use mockforge_core::security::risk_assessment::RiskAssessmentEngine;
+        use std::sync::Arc;
+
+        let risk_config = config.security.monitoring.risk_assessment.clone();
+        let engine = RiskAssessmentEngine::new(risk_config);
+        let engine_arc = Arc::new(RwLock::new(engine));
+
+        // Initialize global risk assessment engine for HTTP API
+        use mockforge_core::security::init_global_risk_assessment_engine;
+        if let Err(e) = init_global_risk_assessment_engine(engine_arc.clone()).await {
+            tracing::warn!("Failed to initialize global risk assessment engine: {}", e);
+        } else {
+            tracing::info!("Global risk assessment engine initialized");
+        }
+
+        tracing::info!("Risk assessment engine initialized");
+        Some(engine_arc)
+    } else {
+        None
+    };
 
     // Build HTTP router with OpenAPI spec, chain support, multi-tenant, and traffic shaping if enabled
     let multi_tenant_config = if config.multi_tenant.enabled {
@@ -3394,49 +4013,79 @@ pub async fn handle_serve(
     let mutation_rule_manager = Arc::new(MutationRuleManager::new());
     time_travel_handlers::init_mutation_rule_manager(mutation_rule_manager.clone());
 
-    // Initialize MockAI if enabled
+    // Initialize MockAI in parallel with router building to improve startup time
+    // This allows MockAI initialization to happen concurrently with HTTP router setup
     let mockai = if config.mockai.enabled {
-        use mockforge_core::intelligent_behavior::{IntelligentBehaviorConfig, MockAI};
+        use mockforge_core::intelligent_behavior::MockAI;
         use std::sync::Arc;
         use tokio::sync::RwLock;
         use tracing::{info, warn};
 
-        // Create MockAI from OpenAPI spec if available
-        if let Some(ref spec_path) = config.http.openapi_spec {
-            match mockforge_core::openapi::OpenApiSpec::from_file(spec_path).await {
-                Ok(openapi_spec) => {
-                    let behavior_config = config.mockai.intelligent_behavior.clone();
-                    match MockAI::from_openapi(&openapi_spec, behavior_config).await {
-                        Ok(mockai_instance) => {
-                            info!("✅ MockAI initialized from OpenAPI spec");
-                            Some(Arc::new(RwLock::new(mockai_instance)))
-                        }
-                        Err(e) => {
-                            warn!("Failed to initialize MockAI from OpenAPI spec: {}", e);
-                            None
+        let behavior_config = config.mockai.intelligent_behavior.clone();
+        let spec_path = config.http.openapi_spec.clone();
+
+        // Create MockAI with a default instance first (fast), then upgrade in background
+        // This allows the server to start immediately while MockAI initializes
+        let mockai_arc = Arc::new(RwLock::new(MockAI::new(behavior_config.clone())));
+        let mockai_for_upgrade = mockai_arc.clone();
+        let behavior_config_for_upgrade = behavior_config.clone();
+
+        // Spawn task to upgrade MockAI with OpenAPI spec if available (non-blocking)
+        tokio::spawn(async move {
+            if let Some(ref spec_path) = spec_path {
+                match mockforge_core::openapi::OpenApiSpec::from_file(spec_path).await {
+                    Ok(openapi_spec) => {
+                        match MockAI::from_openapi(&openapi_spec, behavior_config_for_upgrade).await
+                        {
+                            Ok(instance) => {
+                                *mockai_for_upgrade.write().await = instance;
+                                info!("✅ MockAI upgraded with OpenAPI spec (background initialization)");
+                            }
+                            Err(e) => {
+                                warn!("Failed to upgrade MockAI from OpenAPI spec: {}", e);
+                                // Keep default instance
+                            }
                         }
                     }
-                }
-                Err(e) => {
-                    warn!("Failed to load OpenAPI spec for MockAI: {}", e);
-                    None
+                    Err(e) => {
+                        warn!("Failed to load OpenAPI spec for MockAI: {}", e);
+                        // Keep default instance
+                    }
                 }
             }
-        } else {
-            // Create MockAI with default config if no spec
-            let behavior_config = config.mockai.intelligent_behavior.clone();
-            let mockai_instance = MockAI::new(behavior_config);
-            info!("✅ MockAI initialized with default configuration");
-            Some(Arc::new(RwLock::new(mockai_instance)))
-        }
+        });
+
+        Some(mockai_arc)
     } else {
         None
+    };
+
+    // Create ValidationOptions from config for template expansion
+    use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
+    let request_mode = if let Some(ref validation) = config.http.validation {
+        match validation.mode.as_str() {
+            "off" | "disable" | "disabled" => ValidationMode::Disabled,
+            "warn" | "warning" => ValidationMode::Warn,
+            _ => ValidationMode::Enforce,
+        }
+    } else {
+        ValidationMode::Enforce
+    };
+
+    let validation_options = ValidationOptions {
+        request_mode,
+        aggregate_errors: config.http.aggregate_validation_errors,
+        validate_responses: config.http.validate_responses,
+        overrides: std::collections::HashMap::new(),
+        admin_skip_prefixes: vec!["/__mockforge".to_string(), "/health".to_string()],
+        response_template_expand: config.http.response_template_expand,
+        validation_status: config.http.validation_status,
     };
 
     // Use standard router (traffic shaping temporarily disabled)
     let mut http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
         config.http.openapi_spec.clone(),
-        None,
+        Some(validation_options),
         None, // circling_config
         multi_tenant_config,
         Some(config.routes.clone()),
@@ -3457,7 +4106,7 @@ pub async fn handle_serve(
     // Convert from ServerConfig's ChaosEngConfig to mockforge-chaos's ChaosConfig
     let chaos_config = if let Some(ref chaos_eng_config) = config.observability.chaos {
         // Convert ChaosEngConfig to ChaosConfig
-        let mut chaos_cfg = ChaosConfig {
+        let chaos_cfg = ChaosConfig {
             enabled: chaos_eng_config.enabled,
             latency: chaos_eng_config.latency.as_ref().map(|l| {
                 mockforge_chaos::config::LatencyConfig {
@@ -3650,11 +4299,12 @@ pub async fn handle_serve(
 
     // Start WebSocket server
     let ws_port = config.websocket.port;
+    let ws_host = config.websocket.host.clone();
     let ws_shutdown = shutdown_token.clone();
     let ws_handle = tokio::spawn(async move {
-        println!("🔌 WebSocket server listening on ws://localhost:{}", ws_port);
+        println!("🔌 WebSocket server listening on ws://{}:{}", ws_host, ws_port);
         tokio::select! {
-            result = mockforge_ws::start_with_latency(ws_port, None) => {
+            result = mockforge_ws::start_with_latency_and_host(ws_port, &ws_host, None) => {
                 result.map_err(|e| format!("WebSocket server error: {}", e))
             }
             _ = ws_shutdown.cancelled() => {
@@ -3663,20 +4313,31 @@ pub async fn handle_serve(
         }
     });
 
-    // Start gRPC server
+    // Start gRPC server (only if enabled and port is not 0)
     let grpc_port = config.grpc.port;
+    let grpc_enabled = config.grpc.enabled;
     let grpc_shutdown = shutdown_token.clone();
-    let grpc_handle = tokio::spawn(async move {
-        println!("⚡ gRPC server listening on localhost:{}", grpc_port);
-        tokio::select! {
-            result = mockforge_grpc::start(grpc_port) => {
-                result.map_err(|e| format!("gRPC server error: {}", e))
+    let grpc_handle = if grpc_enabled && grpc_port != 0 {
+        tokio::spawn(async move {
+            println!("⚡ gRPC server listening on localhost:{}", grpc_port);
+            tokio::select! {
+                result = mockforge_grpc::start(grpc_port) => {
+                    result.map_err(|e| format!("gRPC server error: {}", e))
+                }
+                _ = grpc_shutdown.cancelled() => {
+                    Ok(())
+                }
             }
-            _ = grpc_shutdown.cancelled() => {
-                Ok(())
-            }
-        }
-    });
+        })
+    } else {
+        // gRPC disabled or port is 0, create a no-op handle
+        tracing::debug!("gRPC server disabled (enabled: {}, port: {})", grpc_enabled, grpc_port);
+        tokio::spawn(async move {
+            // Wait for shutdown signal, then return Ok
+            grpc_shutdown.cancelled().await;
+            Ok(())
+        })
+    };
 
     #[cfg(feature = "smtp")]
     let _smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
@@ -3774,7 +4435,7 @@ pub async fn handle_serve(
     // Auto-start tunnel if deceptive deploy is enabled with auto_tunnel
     let tunnel_handle = if config.deceptive_deploy.enabled && config.deceptive_deploy.auto_tunnel {
         use mockforge_tunnel::{TunnelConfig, TunnelManager, TunnelProvider};
-        use std::sync::Arc;
+
         use tokio::time::{sleep, Duration};
 
         let local_url = format!("http://localhost:{}", http_port);
@@ -4015,7 +4676,7 @@ pub async fn handle_serve(
     let _tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Create latency injector if latency is enabled (for hot-reload support)
-    use mockforge_core::latency::{FaultConfig, LatencyInjector, LatencyProfile};
+    use mockforge_core::latency::{FaultConfig, LatencyInjector};
     use tokio::sync::RwLock;
 
     let latency_injector_for_admin = if config.core.latency_enabled {
@@ -4375,6 +5036,168 @@ async fn handle_contract_diff(
             output,
         } => {
             handle_contract_diff_apply_patch(spec, patch, output).await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Governance commands
+#[derive(Subcommand)]
+enum GovernanceCommands {
+    /// API change forecasting
+    Forecast {
+        #[command(subcommand)]
+        forecast_command: ForecastCommands,
+    },
+    /// Semantic drift analysis
+    Semantic {
+        #[command(subcommand)]
+        semantic_command: SemanticCommands,
+    },
+    /// Threat assessment
+    Threat {
+        #[command(subcommand)]
+        threat_command: ThreatCommands,
+    },
+    /// Governance status
+    Status {
+        /// Workspace ID
+        #[arg(long)]
+        workspace_id: Option<String>,
+        /// Service ID
+        #[arg(long)]
+        service_id: Option<String>,
+    },
+}
+
+/// Forecast commands
+#[derive(Subcommand)]
+enum ForecastCommands {
+    /// Generate API change forecast
+    Generate {
+        /// Workspace ID
+        #[arg(long)]
+        workspace_id: Option<String>,
+        /// Service ID
+        #[arg(long)]
+        service_id: Option<String>,
+        /// Endpoint path
+        #[arg(long)]
+        endpoint: Option<String>,
+        /// HTTP method
+        #[arg(long)]
+        method: Option<String>,
+        /// Forecast window in days (30, 90, or 180)
+        #[arg(long, default_value = "90")]
+        window_days: u32,
+    },
+}
+
+/// Semantic commands
+#[derive(Subcommand)]
+enum SemanticCommands {
+    /// Analyze semantic drift between contract versions
+    Analyze {
+        /// Path to before contract specification
+        #[arg(long)]
+        before: PathBuf,
+        /// Path to after contract specification
+        #[arg(long)]
+        after: PathBuf,
+        /// Endpoint path
+        #[arg(long)]
+        endpoint: String,
+        /// HTTP method
+        #[arg(long)]
+        method: String,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+}
+
+/// Threat commands
+#[derive(Subcommand)]
+enum ThreatCommands {
+    /// Assess contract security threats
+    Assess {
+        /// Path to contract specification
+        #[arg(short, long)]
+        spec: PathBuf,
+        /// Workspace ID
+        #[arg(long)]
+        workspace_id: Option<String>,
+        /// Service ID
+        #[arg(long)]
+        service_id: Option<String>,
+        /// Endpoint path
+        #[arg(long)]
+        endpoint: Option<String>,
+        /// HTTP method
+        #[arg(long)]
+        method: Option<String>,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+}
+
+/// Handle governance commands
+async fn handle_governance(gov_command: GovernanceCommands) -> mockforge_core::Result<()> {
+    use governance_commands::{
+        handle_forecast_generate, handle_governance_status, handle_semantic_analyze,
+        handle_threat_assess,
+    };
+
+    match gov_command {
+        GovernanceCommands::Forecast { forecast_command } => match forecast_command {
+            ForecastCommands::Generate {
+                workspace_id,
+                service_id,
+                endpoint,
+                method,
+                window_days,
+            } => {
+                handle_forecast_generate(
+                    workspace_id,
+                    service_id,
+                    endpoint,
+                    method,
+                    Some(window_days),
+                )
+                .await?;
+            }
+        },
+        GovernanceCommands::Semantic { semantic_command } => match semantic_command {
+            SemanticCommands::Analyze {
+                before,
+                after,
+                endpoint,
+                method,
+                output,
+            } => {
+                handle_semantic_analyze(before, after, endpoint, method, output).await?;
+            }
+        },
+        GovernanceCommands::Threat { threat_command } => match threat_command {
+            ThreatCommands::Assess {
+                spec,
+                workspace_id,
+                service_id,
+                endpoint,
+                method,
+                output,
+            } => {
+                handle_threat_assess(spec, workspace_id, service_id, endpoint, method, output)
+                    .await?;
+            }
+        },
+        GovernanceCommands::Status {
+            workspace_id,
+            service_id,
+        } => {
+            handle_governance_status(workspace_id, service_id).await?;
         }
     }
 
@@ -5242,6 +6065,340 @@ fn handle_completions(shell: Shell) {
     generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
 }
 
+/// Schema generation commands
+#[derive(Subcommand, Debug)]
+enum SchemaCommands {
+    /// Generate all JSON Schemas for MockForge configuration files
+    ///
+    /// Generates schemas for:
+    /// - Main config (mockforge.yaml)
+    /// - Reality configuration
+    /// - Persona configuration
+    /// - Blueprint metadata
+    ///
+    /// Examples:
+    ///   mockforge schema generate
+    ///   mockforge schema generate --output schemas/
+    ///   mockforge schema generate --type config
+    Generate {
+        /// Output directory or file path
+        /// If directory, generates all schemas with standard names
+        /// If file, generates only the specified schema type
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Schema type to generate (config, reality, persona, blueprint, all)
+        /// If not specified and output is a file, defaults to 'config'
+        /// If not specified and output is a directory, generates all schemas
+        #[arg(short, long, default_value = "all")]
+        r#type: String,
+    },
+
+    /// Validate configuration files against JSON Schemas
+    ///
+    /// Validates MockForge configuration files against their corresponding
+    /// JSON Schemas to catch errors early and ensure config correctness.
+    ///
+    /// Examples:
+    ///   mockforge schema validate mockforge.yaml
+    ///   mockforge schema validate --file mockforge.yaml --schema-type config
+    ///   mockforge schema validate --directory . --schema-dir schemas/
+    Validate {
+        /// Config file to validate (mutually exclusive with --directory)
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
+        /// Directory containing config files to validate (mutually exclusive with --file)
+        #[arg(short, long)]
+        directory: Option<PathBuf>,
+
+        /// Schema type to use for validation (config, reality, persona, blueprint)
+        /// If not specified, will attempt to auto-detect from file path
+        #[arg(long)]
+        schema_type: Option<String>,
+
+        /// Directory containing schema files (default: looks for schemas/ in current directory)
+        #[arg(long)]
+        schema_dir: Option<PathBuf>,
+
+        /// Exit with error code if validation fails (useful for CI)
+        #[arg(long)]
+        strict: bool,
+    },
+}
+
+/// Handle JSON Schema generation for MockForge configuration
+async fn handle_schema(
+    schema_command: Option<SchemaCommands>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use mockforge_schema::generate_all_schemas;
+    use std::fs;
+    use std::path::Path;
+
+    // Default to generate all if no subcommand specified
+    let command = schema_command.unwrap_or(SchemaCommands::Generate {
+        output: None,
+        r#type: "all".to_string(),
+    });
+
+    match command {
+        SchemaCommands::Generate { output, r#type } => {
+            let schemas = generate_all_schemas();
+
+            // Determine what to generate
+            let types_to_generate: Vec<&str> = if r#type == "all" {
+                vec![
+                    "mockforge-config",
+                    "reality-config",
+                    "persona-config",
+                    "blueprint-config",
+                ]
+            } else {
+                vec![&r#type]
+            };
+
+            if let Some(output_path) = output {
+                let output_path = Path::new(&output_path);
+
+                // Check if output is a directory or file
+                if output_path.is_dir()
+                    || !output_path.exists() && output_path.extension().is_none()
+                {
+                    // Directory mode: generate all requested schemas
+                    fs::create_dir_all(output_path)?;
+
+                    for schema_type in &types_to_generate {
+                        if let Some(schema) = schemas.get(*schema_type) {
+                            let filename = format!("{}.schema.json", schema_type.replace("-", "_"));
+                            let file_path = output_path.join(&filename);
+                            let schema_json = serde_json::to_string_pretty(schema)?;
+                            fs::write(&file_path, schema_json)?;
+                            println!("  ✓ Generated: {}", file_path.display());
+                        }
+                    }
+
+                    println!(
+                        "\n✅ Generated {} schema(s) in {}",
+                        types_to_generate.len(),
+                        output_path.display()
+                    );
+                    println!("\nTo use in your IDE:");
+                    println!("  1. Install a YAML schema extension (e.g., 'YAML' by Red Hat)");
+                    println!("  2. Add schema mapping to your VS Code settings.json:");
+                    println!("     \"yaml.schemas\": {{");
+                    for schema_type in &types_to_generate {
+                        let filename = format!("{}.schema.json", schema_type.replace("-", "_"));
+                        let schema_path = output_path.join(&filename);
+                        let file_pattern = match *schema_type {
+                            "mockforge-config" => "mockforge.yaml",
+                            "reality-config" => "**/reality*.yaml",
+                            "persona-config" => "**/personas/**/*.yaml",
+                            "blueprint-config" => "**/blueprint.yaml",
+                            _ => "*.yaml",
+                        };
+                        println!(
+                            "       \"{}\": \"{}\",",
+                            schema_path.to_string_lossy(),
+                            file_pattern
+                        );
+                    }
+                    println!("     }}");
+                } else {
+                    // File mode: generate single schema
+                    let schema_type = if r#type == "all" {
+                        "mockforge-config"
+                    } else {
+                        &r#type
+                    };
+                    if let Some(schema) = schemas.get(schema_type) {
+                        let schema_json = serde_json::to_string_pretty(schema)?;
+                        fs::write(output_path, schema_json)?;
+                        println!("✅ JSON Schema generated: {}", output_path.display());
+                    } else {
+                        eprintln!("❌ Unknown schema type: {}", schema_type);
+                        eprintln!("Available types: mockforge-config, reality-config, persona-config, blueprint-config");
+                        return Err("Invalid schema type".into());
+                    }
+                }
+            } else {
+                // No output specified: print to stdout
+                if r#type == "all" {
+                    println!("Generating all schemas...\n");
+                    for schema_type in &types_to_generate {
+                        if let Some(schema) = schemas.get(*schema_type) {
+                            println!("=== {} ===", schema_type);
+                            println!("{}", serde_json::to_string_pretty(schema)?);
+                            println!();
+                        }
+                    }
+                } else if let Some(schema) = schemas.get(&r#type) {
+                    println!("{}", serde_json::to_string_pretty(schema)?);
+                } else {
+                    eprintln!("❌ Unknown schema type: {}", r#type);
+                    eprintln!("Available types: mockforge-config, reality-config, persona-config, blueprint-config");
+                    return Err("Invalid schema type".into());
+                }
+            }
+        }
+        SchemaCommands::Validate {
+            file,
+            directory,
+            schema_type,
+            schema_dir,
+            strict,
+        } => {
+            use mockforge_schema::{
+                detect_schema_type, generate_all_schemas, validate_config_file,
+            };
+            use std::fs;
+
+            let schemas = generate_all_schemas();
+            let mut validation_results = Vec::new();
+            let mut has_errors = false;
+
+            // Determine schema directory
+            let schema_dir_path = schema_dir.or_else(|| {
+                let current_dir = std::env::current_dir().ok()?;
+                let schemas_dir = current_dir.join("schemas");
+                if schemas_dir.exists() {
+                    Some(schemas_dir)
+                } else {
+                    None
+                }
+            });
+
+            // Collect files to validate
+            let files_to_validate: Vec<PathBuf> = if let Some(file_path) = file {
+                vec![file_path]
+            } else if let Some(dir_path) = directory {
+                // Find all YAML/JSON files in directory
+                let mut files = Vec::new();
+                if let Ok(entries) = fs::read_dir(&dir_path) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() {
+                            if let Some(ext) = path.extension() {
+                                let ext_str = ext.to_string_lossy().to_lowercase();
+                                if ext_str == "yaml" || ext_str == "yml" || ext_str == "json" {
+                                    files.push(path);
+                                }
+                            }
+                        }
+                    }
+                }
+                files
+            } else {
+                // Default: validate mockforge.yaml in current directory
+                let current_dir = std::env::current_dir()?;
+                let default_file = current_dir.join("mockforge.yaml");
+                if default_file.exists() {
+                    vec![default_file]
+                } else {
+                    eprintln!("❌ No config file specified and mockforge.yaml not found in current directory");
+                    eprintln!("   Use --file or --directory to specify files to validate");
+                    return Err("No files to validate".into());
+                }
+            };
+
+            // Validate each file
+            for file_path in &files_to_validate {
+                // Determine schema type
+                let file_schema_type = schema_type.clone().unwrap_or_else(|| {
+                    detect_schema_type(file_path).unwrap_or_else(|| "mockforge-config".to_string())
+                });
+
+                // Get schema (try from schema_dir first, then use generated)
+                let schema = if let Some(ref schema_dir) = schema_dir_path {
+                    let schema_file = schema_dir
+                        .join(format!("{}.schema.json", file_schema_type.replace("-", "_")));
+                    if schema_file.exists() {
+                        match fs::read_to_string(&schema_file).and_then(|content| {
+                            serde_json::from_str::<serde_json::Value>(&content).map_err(|e| {
+                                std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+                            })
+                        }) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                eprintln!(
+                                    "⚠️  Failed to load schema from {}: {}",
+                                    schema_file.display(),
+                                    e
+                                );
+                                schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
+                                    eprintln!("❌ Schema type '{}' not found", file_schema_type);
+                                    has_errors = true;
+                                    serde_json::json!({})
+                                })
+                            }
+                        }
+                    } else {
+                        schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
+                            eprintln!(
+                                "⚠️  Schema file not found: {}, using generated schema",
+                                schema_file.display()
+                            );
+                            schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
+                                eprintln!("❌ Schema type '{}' not found", file_schema_type);
+                                has_errors = true;
+                                serde_json::json!({})
+                            })
+                        })
+                    }
+                } else {
+                    schemas.get(&file_schema_type).cloned().unwrap_or_else(|| {
+                        eprintln!("❌ Schema type '{}' not found", file_schema_type);
+                        has_errors = true;
+                        serde_json::json!({})
+                    })
+                };
+
+                // Validate
+                match validate_config_file(file_path, &file_schema_type, &schema) {
+                    Ok(result) => {
+                        validation_results.push(result);
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to validate {}: {}", file_path.display(), e);
+                        has_errors = true;
+                    }
+                }
+            }
+
+            // Print results
+            println!("\n📋 Validation Results:\n");
+            for result in &validation_results {
+                if result.valid {
+                    println!("  ✅ {} (schema: {})", result.file_path, result.schema_type);
+                } else {
+                    println!("  ❌ {} (schema: {})", result.file_path, result.schema_type);
+                    for error in &result.errors {
+                        println!("     • {}", error);
+                    }
+                    has_errors = true;
+                }
+            }
+
+            // Summary
+            let valid_count = validation_results.iter().filter(|r| r.valid).count();
+            let total_count = validation_results.len();
+
+            println!("\n📊 Summary: {} of {} file(s) passed validation", valid_count, total_count);
+
+            if has_errors {
+                if strict {
+                    return Err("Validation failed".into());
+                } else {
+                    eprintln!("\n⚠️  Validation completed with errors (use --strict to exit with error code)");
+                }
+            } else if !validation_results.is_empty() {
+                println!("\n✅ All files passed validation!");
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Handle mock generation from configuration
 async fn handle_generate(
     config_path: Option<PathBuf>,
@@ -5253,9 +6410,8 @@ async fn handle_generate(
     watch_debounce: u64,
     progress: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use mockforge_core::{discover_config_file, load_generate_config_with_fallback};
+    use mockforge_core::discover_config_file;
     use progress::{CliError, ExitCode, LogLevel, ProgressManager};
-    use std::time::Instant;
 
     // Initialize progress manager
     let mut progress_mgr = ProgressManager::new(verbose);
@@ -5721,7 +6877,7 @@ async fn execute_generation(
     tokio::fs::write(&output_file, generated_file.content.clone()).await?;
 
     // Track generated files for barrel generation
-    let mut all_generated_files = vec![generated_file];
+    let all_generated_files = vec![generated_file];
 
     if let Some(ref pb) = progress_bar {
         pb.inc(1u64);
@@ -5835,8 +6991,40 @@ mockforge serve --spec {}
 async fn handle_init(
     name: String,
     no_examples: bool,
+    blueprint: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::fs;
+
+    // If blueprint is provided, use blueprint creation instead
+    if let Some(blueprint_id) = blueprint {
+        println!("🚀 Creating project from blueprint '{}'...", blueprint_id);
+
+        // Determine project directory
+        let project_dir = if name == "." {
+            std::env::current_dir()?
+        } else {
+            PathBuf::from(&name)
+        };
+
+        // Use blueprint creation logic
+        use crate::blueprint_commands;
+        blueprint_commands::create_from_blueprint(
+            if name == "." {
+                project_dir
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("my-project")
+                    .to_string()
+            } else {
+                name
+            },
+            blueprint_id,
+            Some(project_dir),
+            false, // Don't force overwrite by default
+        )?;
+
+        return Ok(());
+    }
 
     println!("🚀 Initializing MockForge project...");
 
@@ -5858,21 +7046,28 @@ async fn handle_init(
     if config_path.exists() {
         println!("⚠️  Configuration file already exists: {}", config_path.display());
     } else {
-        let config_content = r#"# MockForge Configuration
+        // Conditionally include openapi_spec line only if examples are being created
+        let openapi_spec_line = if !no_examples {
+            "  openapi_spec: \"./examples/openapi.json\"\n"
+        } else {
+            ""
+        };
+
+        let config_content = format!(
+            r#"# MockForge Configuration
 # Full configuration reference: https://docs.mockforge.dev/config
 
 # HTTP Server
 http:
   port: 3000
   host: "0.0.0.0"
-  openapi_spec: "./examples/openapi.json"
   cors_enabled: true
   request_timeout_secs: 30
   request_validation: "enforce"
   aggregate_validation_errors: true
   validate_responses: false
   response_template_expand: false
-  validation_overrides: {}
+  validation_overrides: {{}}
   skip_admin_validation: true
 
 # WebSocket Server
@@ -5929,7 +7124,9 @@ logging:
   json_format: false
   max_file_size_mb: 10
   max_files: 5
-"#;
+"#,
+            openapi_spec_line
+        );
         fs::write(&config_path, config_content)?;
         println!("✅ Created mockforge.yaml");
     }
@@ -6306,7 +7503,7 @@ fn format_yaml_error(content: &str, error: serde_yaml::Error) -> String {
             }
         }
 
-        message.push_str("\n");
+        message.push('\n');
     }
 
     // Show the error with field path if extracted
@@ -6399,7 +7596,7 @@ fn format_json_error(content: &str, error: serde_json::Error) -> String {
         }
     }
 
-    message.push_str("\n");
+    message.push('\n');
 
     // Show the error with field path if extracted
     if let Some(path) = &field_path {

@@ -2,12 +2,14 @@
 
 use base64::{engine::general_purpose, Engine as _};
 use clap::Subcommand;
+use mockforge_core::behavioral_economics::BehaviorRule;
 use mockforge_core::config::{load_config, save_config, ServerConfig};
 use mockforge_scenarios::{
     DomainPackInstaller, InstallOptions, ScenarioInstaller, ScenarioRegistry,
     ScenarioReviewSubmission,
 };
 use mockforge_vbr::entities::Entity;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -159,6 +161,40 @@ pub enum PackCommands {
     Info {
         /// Pack name
         name: String,
+    },
+
+    /// Studio pack commands (full studio packs with personas, chaos rules, etc.)
+    Studio {
+        /// Studio pack subcommand
+        #[command(subcommand)]
+        command: StudioPackCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum StudioPackCommands {
+    /// Install a studio pack (applies personas, chaos rules, contract diffs, reality blends)
+    Install {
+        /// Studio pack name (e.g., "fintech-fraud-lab", "ecommerce-peak-day", "healthcare-outage-drill")
+        /// or path to pack manifest file
+        pack_name: String,
+
+        /// Workspace ID to install the pack to (defaults to "default")
+        #[arg(short, long, default_value = "default")]
+        workspace: String,
+    },
+
+    /// List available studio packs
+    List,
+
+    /// Create a new studio pack from the current workspace configuration
+    Create {
+        /// Name for the new studio pack
+        name: String,
+
+        /// Output path for the pack manifest (defaults to ./{name}-pack.yaml)
+        #[arg(short, long)]
+        output: Option<String>,
     },
 }
 
@@ -748,10 +784,277 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                                 println!("       {}", desc);
                             }
                         }
+                        // Show studio pack components if present
+                        if !pack_info.manifest.personas.is_empty() {
+                            println!("   Personas ({}):", pack_info.manifest.personas.len());
+                            for persona in &pack_info.manifest.personas {
+                                println!("     - {} ({})", persona.name, persona.id);
+                            }
+                        }
+                        if !pack_info.manifest.chaos_rules.is_empty() {
+                            println!("   Chaos Rules ({}):", pack_info.manifest.chaos_rules.len());
+                            for rule in &pack_info.manifest.chaos_rules {
+                                println!("     - {}", rule.name);
+                            }
+                        }
+                        if !pack_info.manifest.contract_diffs.is_empty() {
+                            println!(
+                                "   Contract Diffs ({}):",
+                                pack_info.manifest.contract_diffs.len()
+                            );
+                            for diff in &pack_info.manifest.contract_diffs {
+                                println!("     - {}", diff.name);
+                            }
+                        }
+                        if !pack_info.manifest.reality_blends.is_empty() {
+                            println!(
+                                "   Reality Blends ({}):",
+                                pack_info.manifest.reality_blends.len()
+                            );
+                            for blend in &pack_info.manifest.reality_blends {
+                                println!(
+                                    "     - {} ({}% real)",
+                                    blend.name,
+                                    (blend.reality_ratio * 100.0) as u32
+                                );
+                            }
+                        }
                     }
                     None => {
                         eprintln!("❌ Pack '{}' not found", name);
                         std::process::exit(1);
+                    }
+                }
+            }
+
+            PackCommands::Studio { command } => {
+                use mockforge_scenarios::StudioPackInstaller;
+
+                let packs_dir = dirs::data_dir()
+                    .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
+                    .join("mockforge")
+                    .join("packs");
+                let studio_installer = StudioPackInstaller::new(packs_dir);
+
+                match command {
+                    StudioPackCommands::Install {
+                        pack_name,
+                        workspace,
+                    } => {
+                        println!("🎨 Installing studio pack: {}", pack_name);
+
+                        // Check if it's a pre-built pack or a path
+                        let manifest = if pack_name == "fintech-fraud-lab" {
+                            #[cfg(feature = "studio-packs")]
+                            {
+                                Some(mockforge_scenarios::create_fintech_fraud_lab_pack())
+                            }
+                            #[cfg(not(feature = "studio-packs"))]
+                            {
+                                return Err(anyhow::anyhow!("studio-packs feature not enabled"));
+                            }
+                        } else if pack_name == "ecommerce-peak-day" {
+                            #[cfg(feature = "studio-packs")]
+                            {
+                                Some(mockforge_scenarios::create_ecommerce_peak_day_pack())
+                            }
+                            #[cfg(not(feature = "studio-packs"))]
+                            {
+                                return Err(anyhow::anyhow!("studio-packs feature not enabled"));
+                            }
+                        } else if pack_name == "healthcare-outage-drill" {
+                            #[cfg(feature = "studio-packs")]
+                            {
+                                Some(mockforge_scenarios::create_healthcare_outage_drill_pack())
+                            }
+                            #[cfg(not(feature = "studio-packs"))]
+                            {
+                                return Err(anyhow::anyhow!("studio-packs feature not enabled"));
+                            }
+                        } else {
+                            // Try to load from file
+                            let manifest_path = Path::new(&pack_name);
+                            if manifest_path.exists() {
+                                Some(mockforge_scenarios::DomainPackManifest::from_file(
+                                    manifest_path,
+                                )?)
+                            } else {
+                                eprintln!("❌ Studio pack '{}' not found", pack_name);
+                                eprintln!("   Available pre-built packs: fintech-fraud-lab, ecommerce-peak-day, healthcare-outage-drill");
+                                eprintln!("   Or provide a path to a pack manifest file");
+                                std::process::exit(1);
+                            }
+                        };
+
+                        if let Some(manifest) = manifest {
+                            match studio_installer
+                                .install_studio_pack(&manifest, Some(&workspace))
+                                .await
+                            {
+                                Ok(result) => {
+                                    println!("✅ Studio pack installed successfully!");
+                                    println!("   Scenarios: {}", result.scenarios_installed);
+                                    println!("   Personas: {}", result.personas_configured);
+                                    println!("   Chaos Rules: {}", result.chaos_rules_applied);
+                                    println!(
+                                        "   Contract Diffs: {}",
+                                        result.contract_diffs_configured
+                                    );
+                                    println!(
+                                        "   Reality Blends: {}",
+                                        result.reality_blends_configured
+                                    );
+                                    if result.workspace_config_applied {
+                                        println!("   Workspace Config: Applied");
+                                    }
+                                    if !result.errors.is_empty() {
+                                        println!("\n⚠️  Warnings:");
+                                        for error in &result.errors {
+                                            println!("   - {}", error);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("❌ Failed to install studio pack: {}", e);
+                                    std::process::exit(1);
+                                }
+                            }
+                        }
+                    }
+
+                    StudioPackCommands::List => {
+                        println!("🎨 Available studio packs:");
+                        println!("   Pre-built packs:");
+                        println!(
+                            "     - fintech-fraud-lab: Fraud detection and prevention scenarios"
+                        );
+                        println!("     - ecommerce-peak-day: High-traffic e-commerce scenarios");
+                        println!(
+                            "     - healthcare-outage-drill: Healthcare system outage scenarios"
+                        );
+                        println!("\n   To install a pack, use:");
+                        println!("     mockforge scenario pack studio install <pack-name>");
+                    }
+
+                    StudioPackCommands::Create { name, output } => {
+                        println!("🎨 Creating studio pack: {}", name);
+
+                        // Load current workspace configuration
+                        let config_path = std::env::current_dir()
+                            .ok()
+                            .map(|d| d.join("mockforge.yaml"))
+                            .filter(|p| p.exists());
+
+                        let config = if let Some(ref path) = config_path {
+                            match load_config(path).await {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    eprintln!("⚠️  Failed to load config: {}. Using defaults.", e);
+                                    ServerConfig::default()
+                                }
+                            }
+                        } else {
+                            println!("⚠️  No mockforge.yaml found. Creating pack with minimal configuration.");
+                            ServerConfig::default()
+                        };
+
+                        // Extract personas from config (from mockai.intelligent_behavior.personas)
+                        let personas = config
+                            .mockai
+                            .intelligent_behavior
+                            .personas
+                            .personas
+                            .iter()
+                            .map(|persona| mockforge_scenarios::domain_pack::StudioPersona {
+                                id: persona.name.clone(),
+                                name: persona.name.clone(),
+                                domain: "general".to_string(), // Personas don't have domain in this structure
+                                traits: HashMap::new(), // Personas don't have traits in this structure
+                                backstory: None,
+                                relationships: HashMap::new(),
+                                metadata: HashMap::new(),
+                            })
+                            .collect();
+
+                        // Extract chaos rules from config (chaos rules are not directly in ServerConfig)
+                        // For now, create empty list - chaos rules would need to be extracted from a different source
+                        let chaos_rules = Vec::new();
+
+                        // Extract contract diffs from config (fitness rules as contract diffs)
+                        let contract_diffs = config
+                            .contracts
+                            .fitness_rules
+                            .iter()
+                            .map(|rule| {
+                                // Convert fitness rule to contract diff format
+                                let drift_budget = serde_json::json!({
+                                    "rule_type": rule.rule_type,
+                                    "scope": rule.scope,
+                                    "max_percent_increase": rule.max_percent_increase,
+                                    "max_fields": rule.max_fields,
+                                    "max_depth": rule.max_depth,
+                                });
+
+                                mockforge_scenarios::domain_pack::StudioContractDiff {
+                                    name: rule.name.clone(),
+                                    description: None,
+                                    drift_budget,
+                                    endpoint_patterns: vec![rule.scope.clone()],
+                                }
+                            })
+                            .collect();
+
+                        // Extract reality blends from config (reality level is not directly in ServerConfig)
+                        // For now, use default moderate realism
+                        let reality_blends = {
+                            let reality_ratio = 0.5; // Default to moderate realism
+
+                            vec![mockforge_scenarios::domain_pack::StudioRealityBlend {
+                                name: "default".to_string(),
+                                description: Some("Default reality blend from config".to_string()),
+                                reality_ratio,
+                                continuum_config: serde_json::json!({"level": 3}),
+                                field_rules: Vec::new(),
+                            }]
+                        };
+
+                        // Create studio pack manifest
+                        let manifest = mockforge_scenarios::domain_pack::DomainPackManifest {
+                            manifest_version: "1.0".to_string(),
+                            name: name.clone(),
+                            version: "1.0.0".to_string(),
+                            title: format!("Studio Pack: {}", name),
+                            description: format!("Exported studio pack from workspace: {}", name),
+                            domain: "general".to_string(),
+                            author: std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()),
+                            scenarios: Vec::new(), // Scenarios would need to be extracted separately
+                            tags: vec!["exported".to_string(), "workspace".to_string()],
+                            metadata: HashMap::new(),
+                            personas,
+                            chaos_rules,
+                            contract_diffs,
+                            reality_blends,
+                            workspace_config: serde_json::to_value(&config).ok(),
+                        };
+
+                        // Determine output path
+                        let output_path = output
+                            .map(std::path::PathBuf::from)
+                            .unwrap_or_else(|| std::path::PathBuf::from(format!("{}.yaml", name)));
+
+                        // Write manifest to file
+                        let yaml_content = serde_yaml::to_string(&manifest)
+                            .map_err(|e| anyhow::anyhow!("Failed to serialize manifest: {}", e))?;
+
+                        std::fs::write(&output_path, yaml_content)
+                            .map_err(|e| anyhow::anyhow!("Failed to write manifest: {}", e))?;
+
+                        println!("✅ Studio pack created successfully!");
+                        println!("   Output: {}", output_path.display());
+                        println!("   Personas: {}", manifest.personas.len());
+                        println!("   Chaos rules: {}", manifest.chaos_rules.len());
+                        println!("   Contract diffs: {}", manifest.contract_diffs.len());
+                        println!("   Reality blends: {}", manifest.reality_blends.len());
                     }
                 }
             }
@@ -1116,6 +1419,611 @@ async fn merge_mockai_config_from_scenario(
     save_config(&config_path, &config)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to save config.yaml: {}", e))?;
+
+    Ok(())
+}
+
+/// Reality Profile Pack commands
+#[derive(Subcommand)]
+pub enum RealityProfileCommands {
+    /// Install a reality profile pack
+    Install {
+        /// Pack name or path to manifest file
+        pack_name: String,
+    },
+    /// List installed reality profile packs
+    List,
+    /// Apply a reality profile pack to a workspace
+    Apply {
+        /// Pack name
+        pack_name: String,
+        /// Workspace ID (defaults to "default")
+        #[arg(short, long, default_value = "default")]
+        workspace: String,
+    },
+    /// Show information about a reality profile pack
+    Info {
+        /// Pack name
+        pack_name: String,
+    },
+}
+
+/// Behavioral Economics Rule commands
+#[derive(Subcommand)]
+pub enum BehaviorRuleCommands {
+    /// Add a new behavior rule
+    Add {
+        /// Rule name
+        #[arg(short, long)]
+        name: String,
+        /// Rule type (declarative or scriptable)
+        #[arg(long, default_value = "declarative")]
+        rule_type: String,
+        /// Condition type (latency, load, pricing, fraud, segment, error-rate)
+        #[arg(short, long)]
+        condition: String,
+        /// Condition threshold or value
+        #[arg(long)]
+        threshold: Option<String>,
+        /// Endpoint pattern (e.g., "/api/users/*", "*" for all endpoints)
+        #[arg(long, default_value = "*")]
+        endpoint: String,
+        /// Action type (modify-conversion-rate, decline-transaction, increase-churn, change-status, modify-latency, trigger-chaos)
+        #[arg(short, long)]
+        action: String,
+        /// Action parameter (e.g., multiplier for conversion rate, status code for change-status)
+        #[arg(long)]
+        parameter: Option<String>,
+        /// Priority (higher = evaluated first)
+        #[arg(short, long, default_value = "100")]
+        priority: u32,
+        /// Script content (for scriptable rules)
+        #[arg(long)]
+        script: Option<String>,
+        /// Script language (javascript, wasm)
+        #[arg(long)]
+        script_language: Option<String>,
+    },
+    /// List all behavior rules
+    List,
+    /// Remove a behavior rule
+    Remove {
+        /// Rule name
+        name: String,
+    },
+    /// Enable behavioral economics engine
+    Enable,
+    /// Disable behavioral economics engine
+    Disable,
+    /// Show current status
+    Status,
+}
+
+/// Drift Learning commands
+#[derive(Subcommand)]
+pub enum DriftLearningCommands {
+    /// Enable drift learning
+    Enable {
+        /// Learning sensitivity (0.0 to 1.0)
+        #[arg(short, long, default_value = "0.2")]
+        sensitivity: f64,
+        /// Minimum samples before learning starts
+        #[arg(long, default_value = "10")]
+        min_samples: usize,
+        /// Learning mode (behavioral, statistical, hybrid)
+        #[arg(short, long, default_value = "behavioral")]
+        mode: String,
+        /// Enable persona adaptation
+        #[arg(long, default_value = "true")]
+        persona_adaptation: bool,
+        /// Enable traffic pattern mirroring
+        #[arg(long, default_value = "true")]
+        traffic_mirroring: bool,
+    },
+    /// Disable drift learning
+    Disable,
+    /// Show current drift learning status
+    Status,
+    /// Configure per-endpoint learning
+    Endpoint {
+        /// Endpoint pattern
+        endpoint: String,
+        /// Enable or disable learning for this endpoint
+        #[arg(short, long)]
+        enable: bool,
+    },
+    /// Configure per-persona learning
+    Persona {
+        /// Persona ID
+        persona_id: String,
+        /// Enable or disable learning for this persona
+        #[arg(short, long)]
+        enable: bool,
+    },
+}
+
+/// Handle reality profile pack commands
+pub async fn handle_reality_profile_command(command: RealityProfileCommands) -> anyhow::Result<()> {
+    use mockforge_scenarios::RealityProfilePackInstaller;
+
+    let installer = RealityProfilePackInstaller::new()?;
+    installer.init()?;
+
+    match command {
+        RealityProfileCommands::Install { pack_name } => {
+            println!("📦 Installing reality profile pack: {}", pack_name);
+
+            // Check if it's a pre-built pack or a path
+            let manifest = if pack_name == "ecommerce-peak-season" {
+                Some(mockforge_scenarios::create_ecommerce_peak_season_pack())
+            } else if pack_name == "fintech-fraud" {
+                Some(mockforge_scenarios::create_fintech_fraud_pack())
+            } else if pack_name == "healthcare-hl7" {
+                Some(mockforge_scenarios::create_healthcare_hl7_pack())
+            } else if pack_name == "iot-fleet-chaos" {
+                Some(mockforge_scenarios::create_iot_fleet_chaos_pack())
+            } else {
+                // Try as a file path
+                let path = std::path::Path::new(&pack_name);
+                if path.exists() {
+                    Some(mockforge_scenarios::RealityProfilePackManifest::from_file(path)?)
+                } else {
+                    None
+                }
+            };
+
+            if let Some(manifest) = manifest {
+                // Save manifest to temp file and install
+                let temp_dir = std::env::temp_dir();
+                let temp_manifest = temp_dir.join(format!("{}.yaml", manifest.name));
+                manifest.to_file(&temp_manifest)?;
+                installer.install_from_manifest(&temp_manifest)?;
+                println!("✅ Reality profile pack installed: {}", manifest.name);
+            } else {
+                anyhow::bail!("Pack not found: {}", pack_name);
+            }
+        }
+        RealityProfileCommands::List => {
+            let packs = installer.list_installed()?;
+            if packs.is_empty() {
+                println!("No reality profile packs installed");
+            } else {
+                println!("Installed reality profile packs:");
+                for pack in packs {
+                    println!(
+                        "  - {} v{} ({})",
+                        pack.manifest.name, pack.manifest.version, pack.manifest.domain
+                    );
+                }
+            }
+        }
+        RealityProfileCommands::Apply {
+            pack_name,
+            workspace,
+        } => {
+            println!("🎯 Applying reality profile pack: {} to workspace: {}", pack_name, workspace);
+
+            let pack_info = installer.get_pack(&pack_name)?;
+            if let Some(pack_info) = pack_info {
+                let result = installer
+                    .apply_reality_profile_pack(&pack_info.manifest, Some(&workspace))
+                    .await?;
+                println!("✅ Reality profile pack applied successfully!");
+                println!("   Personas: {}", result.personas_configured);
+                println!("   Chaos Rules: {}", result.chaos_rules_applied);
+                println!("   Latency Curves: {}", result.latency_curves_applied);
+                println!("   Error Distributions: {}", result.error_distributions_applied);
+                println!("   Data Mutations: {}", result.data_mutation_behaviors_applied);
+                println!("   Protocol Behaviors: {}", result.protocol_behaviors_applied);
+            } else {
+                anyhow::bail!("Pack not found: {}", pack_name);
+            }
+        }
+        RealityProfileCommands::Info { pack_name } => {
+            let pack_info = installer.get_pack(&pack_name)?;
+            if let Some(pack_info) = pack_info {
+                println!("Reality Profile Pack: {}", pack_info.manifest.name);
+                println!("Version: {}", pack_info.manifest.version);
+                println!("Domain: {}", pack_info.manifest.domain);
+                println!("Description: {}", pack_info.manifest.description);
+                println!("Personas: {}", pack_info.manifest.personas.len());
+                println!("Chaos Rules: {}", pack_info.manifest.chaos_rules.len());
+                println!("Latency Curves: {}", pack_info.manifest.latency_curves.len());
+                println!("Error Distributions: {}", pack_info.manifest.error_distributions.len());
+            } else {
+                anyhow::bail!("Pack not found: {}", pack_name);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Helper function to get config file path
+fn get_config_path() -> std::path::PathBuf {
+    std::env::current_dir()
+        .ok()
+        .map(|d| {
+            let yaml_path = d.join("mockforge.yaml");
+            if yaml_path.exists() {
+                yaml_path
+            } else {
+                let yml_path = d.join("mockforge.yml");
+                if yml_path.exists() {
+                    yml_path
+                } else {
+                    d.join("mockforge.yaml") // Default to .yaml for new files
+                }
+            }
+        })
+        .unwrap_or_else(|| std::path::PathBuf::from("mockforge.yaml"))
+}
+
+/// Helper function to load config with fallback to default
+async fn load_config_with_fallback() -> anyhow::Result<(ServerConfig, std::path::PathBuf)> {
+    let config_path = get_config_path();
+    let config = if config_path.exists() {
+        load_config(&config_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?
+    } else {
+        ServerConfig::default()
+    };
+    Ok((config, config_path))
+}
+
+/// Helper function to save behavior rule to config
+async fn save_behavior_rule_to_config(rule: BehaviorRule) -> anyhow::Result<()> {
+    let (mut config, config_path) = load_config_with_fallback().await?;
+
+    // Check if rule already exists and remove it
+    config.behavioral_economics.rules.retain(|r| r.name != rule.name);
+
+    // Add the new rule
+    config.behavioral_economics.rules.push(rule);
+
+    // Save config
+    save_config(&config_path, &config)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
+
+    Ok(())
+}
+
+/// Helper function to remove behavior rule from config
+async fn remove_behavior_rule_from_config(rule_name: &str) -> anyhow::Result<bool> {
+    let (mut config, config_path) = load_config_with_fallback().await?;
+
+    let initial_len = config.behavioral_economics.rules.len();
+    config.behavioral_economics.rules.retain(|r| r.name != rule_name);
+    let removed = config.behavioral_economics.rules.len() < initial_len;
+
+    if removed {
+        save_config(&config_path, &config)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
+    }
+
+    Ok(removed)
+}
+
+/// Helper function to update behavioral economics engine enabled status
+async fn update_behavioral_economics_enabled(enabled: bool) -> anyhow::Result<()> {
+    let (mut config, config_path) = load_config_with_fallback().await?;
+
+    config.behavioral_economics.enabled = enabled;
+
+    save_config(&config_path, &config)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
+
+    Ok(())
+}
+
+/// Handle behavioral economics rule commands
+pub async fn handle_behavior_rule_command(command: BehaviorRuleCommands) -> anyhow::Result<()> {
+    use mockforge_core::behavioral_economics::{BehaviorAction, BehaviorCondition, BehaviorRule};
+
+    match command {
+        BehaviorRuleCommands::Add {
+            name,
+            rule_type,
+            condition,
+            threshold,
+            endpoint,
+            action,
+            parameter,
+            priority,
+            script,
+            script_language,
+        } => {
+            println!("➕ Adding behavior rule: {}", name);
+            println!("   Endpoint: {}", endpoint);
+
+            // Parse condition
+            let behavior_condition = match condition.as_str() {
+                "latency" => {
+                    let threshold_ms = threshold.and_then(|t| t.parse::<u64>().ok()).unwrap_or(400);
+                    BehaviorCondition::LatencyThreshold {
+                        endpoint: endpoint.clone(),
+                        threshold_ms,
+                    }
+                }
+                "load" => {
+                    let threshold_rps =
+                        threshold.and_then(|t| t.parse::<f64>().ok()).unwrap_or(100.0);
+                    BehaviorCondition::LoadPressure { threshold_rps }
+                }
+                "error-rate" => {
+                    let error_threshold =
+                        threshold.and_then(|t| t.parse::<f64>().ok()).unwrap_or(0.1);
+                    BehaviorCondition::ErrorRate {
+                        endpoint: endpoint.clone(),
+                        threshold: error_threshold,
+                    }
+                }
+                "always" => BehaviorCondition::Always,
+                _ => anyhow::bail!("Unknown condition type: {}", condition),
+            };
+
+            // Parse action
+            let behavior_action = match action.as_str() {
+                "modify-conversion-rate" => {
+                    let multiplier = parameter.and_then(|p| p.parse::<f64>().ok()).unwrap_or(0.8);
+                    BehaviorAction::ModifyConversionRate { multiplier }
+                }
+                "decline-transaction" => {
+                    let reason = parameter.unwrap_or_else(|| "behavioral_rule".to_string());
+                    BehaviorAction::DeclineTransaction { reason }
+                }
+                "increase-churn" => {
+                    let factor = parameter.and_then(|p| p.parse::<f64>().ok()).unwrap_or(1.5);
+                    BehaviorAction::IncreaseChurnProbability { factor }
+                }
+                "change-status" => {
+                    let status = parameter.and_then(|p| p.parse::<u16>().ok()).unwrap_or(500);
+                    BehaviorAction::ChangeResponseStatus { status }
+                }
+                "noop" => BehaviorAction::NoOp,
+                _ => anyhow::bail!("Unknown action type: {}", action),
+            };
+
+            // Create rule
+            let rule = if rule_type == "scriptable" {
+                if script.is_none() || script_language.is_none() {
+                    anyhow::bail!("Scriptable rules require --script and --script-language");
+                }
+                BehaviorRule::scriptable(
+                    name,
+                    behavior_condition,
+                    behavior_action,
+                    priority,
+                    script.unwrap(),
+                    script_language.unwrap(),
+                )
+            } else {
+                BehaviorRule::declarative(name, behavior_condition, behavior_action, priority)
+            };
+
+            // Save to config
+            save_behavior_rule_to_config(rule.clone()).await?;
+
+            println!("✅ Behavior rule added: {}", rule.name);
+            println!("   Type: {:?}", rule.rule_type);
+            println!("   Priority: {}", rule.priority);
+        }
+        BehaviorRuleCommands::List => {
+            println!("Behavior rules:");
+            let (config, _) = load_config_with_fallback().await?;
+
+            if config.behavioral_economics.rules.is_empty() {
+                println!("  No behavior rules configured");
+            } else {
+                for rule in &config.behavioral_economics.rules {
+                    println!(
+                        "  - {} ({:?}, priority: {})",
+                        rule.name, rule.rule_type, rule.priority
+                    );
+                    match &rule.condition {
+                        BehaviorCondition::LatencyThreshold {
+                            endpoint,
+                            threshold_ms,
+                        } => {
+                            println!("    Condition: latency > {}ms on {}", threshold_ms, endpoint);
+                        }
+                        BehaviorCondition::LoadPressure { threshold_rps } => {
+                            println!("    Condition: load > {} req/s", threshold_rps);
+                        }
+                        BehaviorCondition::Always => {
+                            println!("    Condition: always");
+                        }
+                        _ => {
+                            println!("    Condition: {:?}", rule.condition);
+                        }
+                    }
+                    println!("    Action: {:?}", rule.action);
+                }
+            }
+        }
+        BehaviorRuleCommands::Remove { name } => {
+            println!("🗑️  Removing behavior rule: {}", name);
+            match remove_behavior_rule_from_config(&name).await {
+                Ok(true) => {
+                    println!("✅ Rule removed");
+                }
+                Ok(false) => {
+                    println!("⚠️  Rule '{}' not found", name);
+                }
+                Err(e) => {
+                    anyhow::bail!("Failed to remove rule: {}", e);
+                }
+            }
+        }
+        BehaviorRuleCommands::Enable => {
+            println!("✅ Behavioral economics engine enabled");
+            update_behavioral_economics_enabled(true).await?;
+        }
+        BehaviorRuleCommands::Disable => {
+            println!("❌ Behavioral economics engine disabled");
+            update_behavioral_economics_enabled(false).await?;
+        }
+        BehaviorRuleCommands::Status => {
+            println!("Behavioral Economics Engine Status:");
+            let (config, _) = load_config_with_fallback().await?;
+
+            println!("  Enabled: {}", config.behavioral_economics.enabled);
+            println!("  Rules: {}", config.behavioral_economics.rules.len());
+            println!("  Global Sensitivity: {}", config.behavioral_economics.global_sensitivity);
+            println!(
+                "  Evaluation Interval: {}ms",
+                config.behavioral_economics.evaluation_interval_ms
+            );
+
+            if !config.behavioral_economics.rules.is_empty() {
+                println!("\n  Active Rules:");
+                for rule in &config.behavioral_economics.rules {
+                    println!("    - {} (priority: {})", rule.name, rule.priority);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Helper function to convert LearningMode to DriftLearningMode
+fn learning_mode_to_drift_mode(
+    mode: &str,
+) -> anyhow::Result<mockforge_core::config::DriftLearningMode> {
+    match mode {
+        "behavioral" => Ok(mockforge_core::config::DriftLearningMode::Behavioral),
+        "statistical" => Ok(mockforge_core::config::DriftLearningMode::Statistical),
+        "hybrid" => Ok(mockforge_core::config::DriftLearningMode::Hybrid),
+        _ => anyhow::bail!("Unknown learning mode: {}", mode),
+    }
+}
+
+/// Helper function to update drift learning config
+async fn update_drift_learning_config<F>(updater: F) -> anyhow::Result<()>
+where
+    F: FnOnce(&mut mockforge_core::config::DriftLearningConfig),
+{
+    let (mut config, config_path) = load_config_with_fallback().await?;
+
+    updater(&mut config.drift_learning);
+
+    save_config(&config_path, &config)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to save config: {}", e))?;
+
+    Ok(())
+}
+
+/// Handle drift learning commands
+pub async fn handle_drift_learning_command(command: DriftLearningCommands) -> anyhow::Result<()> {
+    match command {
+        DriftLearningCommands::Enable {
+            sensitivity,
+            min_samples,
+            mode,
+            persona_adaptation,
+            traffic_mirroring,
+        } => {
+            println!("🧠 Enabling drift learning");
+            println!("   Sensitivity: {}", sensitivity);
+            println!("   Min Samples: {}", min_samples);
+            println!("   Mode: {}", mode);
+            println!("   Persona Adaptation: {}", persona_adaptation);
+            println!("   Traffic Mirroring: {}", traffic_mirroring);
+
+            let drift_mode = learning_mode_to_drift_mode(&mode)?;
+
+            update_drift_learning_config(|config| {
+                config.enabled = true;
+                config.mode = drift_mode;
+                config.sensitivity = sensitivity;
+                config.min_samples = min_samples as u64;
+                config.persona_adaptation = persona_adaptation;
+                // Note: traffic_mirroring is not in DriftLearningConfig, may need to be added
+            })
+            .await?;
+
+            println!("✅ Drift learning enabled");
+        }
+        DriftLearningCommands::Disable => {
+            println!("❌ Disabling drift learning");
+            update_drift_learning_config(|config| {
+                config.enabled = false;
+            })
+            .await?;
+            println!("✅ Drift learning disabled");
+        }
+        DriftLearningCommands::Status => {
+            println!("Drift Learning Status:");
+            let (config, _) = load_config_with_fallback().await?;
+
+            println!("  Enabled: {}", config.drift_learning.enabled);
+            println!("  Mode: {:?}", config.drift_learning.mode);
+            println!("  Sensitivity: {}", config.drift_learning.sensitivity);
+            println!("  Decay: {}", config.drift_learning.decay);
+            println!("  Min Samples: {}", config.drift_learning.min_samples);
+            println!("  Persona Adaptation: {}", config.drift_learning.persona_adaptation);
+            println!(
+                "  Persona Learning Configs: {}",
+                config.drift_learning.persona_learning.len()
+            );
+            println!(
+                "  Endpoint Learning Configs: {}",
+                config.drift_learning.endpoint_learning.len()
+            );
+
+            if !config.drift_learning.persona_learning.is_empty() {
+                println!("\n  Persona Learning:");
+                for (persona_id, enabled) in &config.drift_learning.persona_learning {
+                    println!(
+                        "    - {}: {}",
+                        persona_id,
+                        if *enabled { "enabled" } else { "disabled" }
+                    );
+                }
+            }
+
+            if !config.drift_learning.endpoint_learning.is_empty() {
+                println!("\n  Endpoint Learning:");
+                for (endpoint, enabled) in &config.drift_learning.endpoint_learning {
+                    println!(
+                        "    - {}: {}",
+                        endpoint,
+                        if *enabled { "enabled" } else { "disabled" }
+                    );
+                }
+            }
+        }
+        DriftLearningCommands::Endpoint { endpoint, enable } => {
+            println!(
+                "{} learning for endpoint: {}",
+                if enable { "Enabling" } else { "Disabling" },
+                endpoint
+            );
+            update_drift_learning_config(|config| {
+                config.endpoint_learning.insert(endpoint, enable);
+            })
+            .await?;
+            println!("✅ Endpoint learning configuration updated");
+        }
+        DriftLearningCommands::Persona { persona_id, enable } => {
+            println!(
+                "{} learning for persona: {}",
+                if enable { "Enabling" } else { "Disabling" },
+                persona_id
+            );
+            update_drift_learning_config(|config| {
+                config.persona_learning.insert(persona_id, enable);
+            })
+            .await?;
+            println!("✅ Persona learning configuration updated");
+        }
+    }
 
     Ok(())
 }

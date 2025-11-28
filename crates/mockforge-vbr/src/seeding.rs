@@ -4,10 +4,9 @@
 //! from JSON/YAML files or programmatically via API.
 
 use crate::entities::{Entity, EntityRegistry};
-use crate::schema::ForeignKeyDefinition;
 use crate::{Error, Result};
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 /// Seed data structure
@@ -51,7 +50,7 @@ pub async fn seed_entity(
         );
 
         // Prepare values in the same order as fields
-        let mut values: Vec<Value> =
+        let values: Vec<Value> =
             fields.iter().map(|f| record.get(f).cloned().unwrap_or(Value::Null)).collect();
 
         database.execute(&query, &values).await?;
@@ -228,10 +227,7 @@ fn topological_sort(registry: &EntityRegistry, seed_data: &SeedData) -> Result<V
             for fk in &entity.schema.foreign_keys {
                 if seed_data.contains_key(&fk.target_entity) {
                     // Add edge from target_entity to entity_name
-                    graph
-                        .entry(fk.target_entity.clone())
-                        .or_insert_with(Vec::new)
-                        .push(entity_name.clone());
+                    graph.entry(fk.target_entity.clone()).or_default().push(entity_name.clone());
                     *in_degree.entry(entity_name.clone()).or_insert(0) += 1;
                 }
             }

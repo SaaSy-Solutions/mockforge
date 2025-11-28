@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-plugin-core"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -40,8 +40,8 @@ uuid.workspace = true
 chrono.workspace = true
 
 # WebAssembly runtime for plugin execution
-wasmtime = "34.0"
-wasmtime-wasi = "34.0"
+wasmtime = "36.0.3"
+wasmtime-wasi = "36.0.3"
 
 # Plugin communication
 wit-bindgen = "0.46"

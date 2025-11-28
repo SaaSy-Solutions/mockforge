@@ -3,32 +3,33 @@
 //! Defines the configuration structures for blending mock and real data sources,
 //! including transition modes, schedules, and merge strategies.
 
+use crate::protocol_abstraction::Protocol;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Transition mode for blend ratio progression
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TransitionMode {
     /// Time-based progression using virtual clock
     TimeBased,
     /// Manual configuration (blend ratio set explicitly)
+    #[default]
     Manual,
     /// Scheduled progression with fixed timeline
     Scheduled,
 }
 
-impl Default for TransitionMode {
-    fn default() -> Self {
-        TransitionMode::Manual
-    }
-}
-
 /// Merge strategy for blending responses
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum MergeStrategy {
     /// Field-level intelligent merge (deep merge objects, combine arrays)
+    #[default]
     FieldLevel,
     /// Weighted selection (return mock with X% probability, real with (100-X)%)
     Weighted,
@@ -36,14 +37,9 @@ pub enum MergeStrategy {
     BodyBlend,
 }
 
-impl Default for MergeStrategy {
-    fn default() -> Self {
-        MergeStrategy::FieldLevel
-    }
-}
-
 /// Configuration for Reality Continuum
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ContinuumConfig {
     /// Whether the continuum feature is enabled
     #[serde(default = "default_false")]
@@ -66,6 +62,12 @@ pub struct ContinuumConfig {
     /// Group-level blend ratio overrides
     #[serde(default)]
     pub groups: HashMap<String, f64>,
+    /// Field-level reality mixing configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_mixing: Option<crate::reality_continuum::FieldRealityConfig>,
+    /// Cross-protocol state sharing configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cross_protocol_state: Option<CrossProtocolStateConfig>,
 }
 
 fn default_false() -> bool {
@@ -86,6 +88,8 @@ impl Default for ContinuumConfig {
             merge_strategy: MergeStrategy::FieldLevel,
             routes: Vec::new(),
             groups: HashMap::new(),
+            field_mixing: None,
+            cross_protocol_state: None,
         }
     }
 }
@@ -137,10 +141,82 @@ impl ContinuumConfig {
         self.groups.insert(group, ratio.clamp(0.0, 1.0));
         self
     }
+
+    /// Set cross-protocol state configuration
+    pub fn with_cross_protocol_state(mut self, config: CrossProtocolStateConfig) -> Self {
+        self.cross_protocol_state = Some(config);
+        self
+    }
+}
+
+/// Cross-protocol state sharing configuration
+///
+/// Ensures that HTTP, WebSocket, gRPC, TCP, and webhooks all use the same
+/// backing persona graph and unified state when configured.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct CrossProtocolStateConfig {
+    /// State model identifier (e.g., "ecommerce_v1", "finance_v1")
+    ///
+    /// This identifies the shared state model that defines how personas
+    /// and entities are related across protocols.
+    pub state_model: String,
+
+    /// List of protocols that should share state
+    ///
+    /// When a protocol is included, it will use the same persona graph
+    /// and unified state as other protocols in this list.
+    #[serde(default)]
+    pub share_state_across: Vec<Protocol>,
+
+    /// Whether cross-protocol state sharing is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for CrossProtocolStateConfig {
+    fn default() -> Self {
+        Self {
+            state_model: "default".to_string(),
+            share_state_across: vec![Protocol::Http, Protocol::WebSocket, Protocol::Grpc],
+            enabled: true,
+        }
+    }
+}
+
+impl CrossProtocolStateConfig {
+    /// Create a new cross-protocol state configuration
+    pub fn new(state_model: String) -> Self {
+        Self {
+            state_model,
+            share_state_across: Vec::new(),
+            enabled: true,
+        }
+    }
+
+    /// Add a protocol to share state across
+    pub fn add_protocol(mut self, protocol: Protocol) -> Self {
+        if !self.share_state_across.contains(&protocol) {
+            self.share_state_across.push(protocol);
+        }
+        self
+    }
+
+    /// Set the list of protocols to share state across
+    pub fn with_protocols(mut self, protocols: Vec<Protocol>) -> Self {
+        self.share_state_across = protocols;
+        self
+    }
+
+    /// Check if a protocol should share state
+    pub fn should_share_state(&self, protocol: &Protocol) -> bool {
+        self.enabled && self.share_state_across.contains(protocol)
+    }
 }
 
 /// Rule for per-route continuum configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ContinuumRule {
     /// Path pattern to match (supports wildcards like "/api/users/*")
     pub pattern: String,

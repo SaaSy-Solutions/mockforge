@@ -181,7 +181,7 @@ impl OpenApiSpecGenerator {
 
         for exchange in exchanges {
             let path = &exchange.path;
-            groups.entry(path.clone()).or_insert_with(Vec::new).push(exchange);
+            groups.entry(path.clone()).or_default().push(exchange);
         }
 
         groups
@@ -198,7 +198,7 @@ impl OpenApiSpecGenerator {
         let mut normalized: HashMap<String, Vec<&HttpExchange>> = HashMap::new();
 
         // Group paths by their base pattern
-        let mut path_segments: Vec<Vec<String>> = path_groups
+        let path_segments: Vec<Vec<String>> = path_groups
             .keys()
             .map(|path| path.split('/').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect())
             .collect();
@@ -211,7 +211,7 @@ impl OpenApiSpecGenerator {
             let mut normalized_path = original_path.clone();
             let mut found_match = false;
 
-            for (other_path, _) in path_groups {
+            for other_path in path_groups.keys() {
                 if other_path == original_path {
                     continue;
                 }
@@ -248,7 +248,7 @@ impl OpenApiSpecGenerator {
                 }
             }
 
-            normalized.entry(normalized_path).or_insert_with(Vec::new).extend(exchanges);
+            normalized.entry(normalized_path).or_default().extend(exchanges);
         }
 
         normalized
@@ -467,10 +467,7 @@ impl OpenApiSpecGenerator {
             // Group by method
             let mut method_groups: HashMap<String, Vec<&HttpExchange>> = HashMap::new();
             for exchange in path_exchanges {
-                method_groups
-                    .entry(exchange.method.clone())
-                    .or_insert_with(Vec::new)
-                    .push(exchange);
+                method_groups.entry(exchange.method.clone()).or_default().push(exchange);
             }
 
             // Add operations for each method

@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-plugin-registry"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ homepage.workspace = true
 documentation.workspace = true
 keywords = ["plugin", "registry", "mockforge", "discovery"]
 categories = ["development-tools"]
-publish = true  # Internal plugin registry component
+publish = false  # Internal plugin registry component
 
 [dependencies]
 # Async runtime

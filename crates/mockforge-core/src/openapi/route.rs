@@ -3,6 +3,7 @@
 //! This module provides functionality for generating Axum routes
 //! from OpenAPI path definitions.
 
+use crate::intelligent_behavior::config::Persona;
 use crate::openapi::response_selection::{ResponseSelectionMode, ResponseSelector};
 use crate::{ai_response::AiResponseConfig, openapi::spec::OpenApiSpec, Result};
 use openapiv3::{Operation, PathItem, ReferenceOr};
@@ -58,11 +59,24 @@ pub struct OpenApiRoute {
     pub response_selection_mode: ResponseSelectionMode,
     /// Response selector for sequential/random modes (shared across requests)
     pub response_selector: Arc<ResponseSelector>,
+    /// Active persona for consistent data generation (optional)
+    pub persona: Option<Arc<Persona>>,
 }
 
 impl OpenApiRoute {
     /// Create a new OpenApiRoute
     pub fn new(method: String, path: String, operation: Operation, spec: Arc<OpenApiSpec>) -> Self {
+        Self::new_with_persona(method, path, operation, spec, None)
+    }
+
+    /// Create a new OpenApiRoute with persona
+    pub fn new_with_persona(
+        method: String,
+        path: String,
+        operation: Operation,
+        spec: Arc<OpenApiSpec>,
+        persona: Option<Arc<Persona>>,
+    ) -> Self {
         let parameters = extract_path_parameters(&path);
 
         // Parse AI configuration from x-mockforge-ai vendor extension
@@ -82,6 +96,7 @@ impl OpenApiRoute {
             ai_config,
             response_selection_mode,
             response_selector,
+            persona,
         }
     }
 
@@ -120,12 +135,10 @@ impl OpenApiRoute {
         let op_id = operation.operation_id.as_deref().unwrap_or("unknown");
 
         // Try operation-specific env var first: MOCKFORGE_RESPONSE_SELECTION_<OPERATION_ID>
-        if let Some(op_env_var) = std::env::var(format!(
+        if let Ok(op_env_var) = std::env::var(format!(
             "MOCKFORGE_RESPONSE_SELECTION_{}",
             op_id.to_uppercase().replace('-', "_")
-        ))
-        .ok()
-        {
+        )) {
             if let Some(mode) = ResponseSelectionMode::from_str(&op_env_var) {
                 tracing::debug!(
                     "Using response selection mode from env var for operation {}: {:?}",
@@ -137,7 +150,7 @@ impl OpenApiRoute {
         }
 
         // Check global env var: MOCKFORGE_RESPONSE_SELECTION_MODE
-        if let Some(global_mode_str) = std::env::var("MOCKFORGE_RESPONSE_SELECTION_MODE").ok() {
+        if let Ok(global_mode_str) = std::env::var("MOCKFORGE_RESPONSE_SELECTION_MODE") {
             if let Some(mode) = ResponseSelectionMode::from_str(&global_mode_str) {
                 tracing::debug!("Using global response selection mode from env var: {:?}", mode);
                 return mode;
@@ -186,7 +199,18 @@ impl OpenApiRoute {
         operation: &Operation,
         spec: Arc<OpenApiSpec>,
     ) -> Self {
-        Self::new(method.to_string(), path, operation.clone(), spec)
+        Self::from_operation_with_persona(method, path, operation, spec, None)
+    }
+
+    /// Create a new OpenApiRoute from an operation with optional persona
+    pub fn from_operation_with_persona(
+        method: &str,
+        path: String,
+        operation: &Operation,
+        spec: Arc<OpenApiSpec>,
+        persona: Option<Arc<Persona>>,
+    ) -> Self {
+        Self::new_with_persona(method.to_string(), path, operation.clone(), spec, persona)
     }
 
     /// Convert OpenAPI path to Axum-compatible path format
@@ -262,7 +286,10 @@ impl OpenApiRoute {
         let mode = Some(self.response_selection_mode);
         let selector = Some(self.response_selector.as_ref());
 
-        match ResponseGenerator::generate_response_with_expansion_and_mode(
+        // Get persona reference for response generation
+        let persona_ref = self.persona.as_deref();
+
+        match ResponseGenerator::generate_response_with_expansion_and_mode_and_persona(
             &self.spec,
             &self.operation,
             status_code,
@@ -270,6 +297,7 @@ impl OpenApiRoute {
             expand_tokens,
             mode,
             selector,
+            persona_ref,
         ) {
             Ok(response_body) => {
                 tracing::debug!(
@@ -321,7 +349,23 @@ impl OpenApiRoute {
         &self,
         scenario: Option<&str>,
     ) -> (u16, serde_json::Value) {
-        use crate::openapi::response::ResponseGenerator;
+        let (status, body, _) = self.mock_response_with_status_and_scenario_and_trace(scenario);
+        (status, body)
+    }
+
+    /// Generate a mock response with status code, scenario selection, and trace collection
+    ///
+    /// Returns a tuple of (status_code, response_body, trace_data)
+    pub fn mock_response_with_status_and_scenario_and_trace(
+        &self,
+        scenario: Option<&str>,
+    ) -> (
+        u16,
+        serde_json::Value,
+        crate::reality_continuum::response_trace::ResponseGenerationTrace,
+    ) {
+        use crate::openapi::response_trace;
+        use crate::reality_continuum::response_trace::ResponseGenerationTrace;
 
         // Find the first available status code from the OpenAPI spec
         let status_code = self.find_first_available_status_code();
@@ -335,7 +379,8 @@ impl OpenApiRoute {
         let mode = Some(self.response_selection_mode);
         let selector = Some(self.response_selector.as_ref());
 
-        match ResponseGenerator::generate_response_with_scenario_and_mode(
+        // Try to generate with trace collection
+        match response_trace::generate_response_with_trace(
             &self.spec,
             &self.operation,
             status_code,
@@ -344,8 +389,9 @@ impl OpenApiRoute {
             scenario,
             mode,
             selector,
+            None, // No persona in basic route
         ) {
-            Ok(response_body) => {
+            Ok((response_body, trace)) => {
                 tracing::debug!(
                     "ResponseGenerator succeeded for {} {} with status {} and scenario {:?}: {:?}",
                     self.method,
@@ -354,7 +400,7 @@ impl OpenApiRoute {
                     scenario,
                     response_body
                 );
-                (status_code, response_body)
+                (status_code, response_body, trace)
             }
             Err(e) => {
                 tracing::debug!(
@@ -369,7 +415,12 @@ impl OpenApiRoute {
                     "operation_id": self.operation.operation_id,
                     "status": status_code
                 });
-                (status_code, response_body)
+                // Create a minimal trace for fallback
+                let mut trace = ResponseGenerationTrace::new();
+                trace.set_final_payload(response_body.clone());
+                trace.add_metadata("fallback".to_string(), serde_json::json!(true));
+                trace.add_metadata("error".to_string(), serde_json::json!(e.to_string()));
+                (status_code, response_body, trace)
             }
         }
     }
@@ -437,72 +488,90 @@ impl RouteGenerator {
         path_item: &ReferenceOr<PathItem>,
         spec: &Arc<OpenApiSpec>,
     ) -> Result<Vec<OpenApiRoute>> {
+        Self::generate_routes_from_path_with_persona(path, path_item, spec, None)
+    }
+
+    /// Generate routes from an OpenAPI path item with optional persona
+    pub fn generate_routes_from_path_with_persona(
+        path: &str,
+        path_item: &ReferenceOr<PathItem>,
+        spec: &Arc<OpenApiSpec>,
+        persona: Option<Arc<Persona>>,
+    ) -> Result<Vec<OpenApiRoute>> {
         let mut routes = Vec::new();
 
         if let Some(item) = path_item.as_item() {
             // Generate route for each HTTP method
             if let Some(op) = &item.get {
-                routes.push(OpenApiRoute::new(
+                routes.push(OpenApiRoute::new_with_persona(
                     "GET".to_string(),
                     path.to_string(),
                     op.clone(),
                     spec.clone(),
+                    persona.clone(),
                 ));
             }
             if let Some(op) = &item.post {
-                routes.push(OpenApiRoute::new(
+                routes.push(OpenApiRoute::new_with_persona(
                     "POST".to_string(),
                     path.to_string(),
                     op.clone(),
                     spec.clone(),
+                    persona.clone(),
                 ));
             }
             if let Some(op) = &item.put {
-                routes.push(OpenApiRoute::new(
+                routes.push(OpenApiRoute::new_with_persona(
                     "PUT".to_string(),
                     path.to_string(),
                     op.clone(),
                     spec.clone(),
+                    persona.clone(),
                 ));
             }
             if let Some(op) = &item.delete {
-                routes.push(OpenApiRoute::new(
+                routes.push(OpenApiRoute::new_with_persona(
                     "DELETE".to_string(),
                     path.to_string(),
                     op.clone(),
                     spec.clone(),
+                    persona.clone(),
                 ));
             }
             if let Some(op) = &item.patch {
-                routes.push(OpenApiRoute::new(
+                routes.push(OpenApiRoute::new_with_persona(
                     "PATCH".to_string(),
                     path.to_string(),
                     op.clone(),
                     spec.clone(),
+                    persona.clone(),
                 ));
             }
             if let Some(op) = &item.head {
-                routes.push(OpenApiRoute::new(
+                routes.push(OpenApiRoute::new_with_persona(
                     "HEAD".to_string(),
                     path.to_string(),
                     op.clone(),
                     spec.clone(),
+                    persona.clone(),
                 ));
             }
             if let Some(op) = &item.options {
-                routes.push(OpenApiRoute::new(
+                routes.push(OpenApiRoute::new_with_persona(
                     "OPTIONS".to_string(),
                     path.to_string(),
                     op.clone(),
                     spec.clone(),
+                    persona.clone(),
                 ));
             }
             if let Some(op) = &item.trace {
-                routes.push(OpenApiRoute::new(
+                routes.push(OpenApiRoute::new_with_persona(
                     "TRACE".to_string(),
                     path.to_string(),
                     op.clone(),
                     spec.clone(),
+                    persona.clone(),
                 ));
             }
         }
