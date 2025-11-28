@@ -1,3 +1,5 @@
+//! Pillars: [AI][DevX]
+//!
 //! Voice + LLM Interface for MockForge
 //!
 //! This module provides voice input capability that allows users to build mocks
@@ -34,8 +36,20 @@
 
 pub mod command_parser;
 pub mod conversation;
+pub mod hook_transpiler;
 pub mod spec_generator;
+pub mod workspace_builder;
+pub mod workspace_scenario_generator;
 
-pub use command_parser::{ApiRequirement, ParsedCommand, VoiceCommandParser};
+pub use command_parser::{
+    ApiRequirement, EntityRequirement, ParsedCommand, ParsedContinuumRule, ParsedDriftBudget,
+    ParsedRealityContinuum, ParsedServiceBudget, ParsedWorkspaceCreation, ParsedWorkspaceScenario,
+    PersonaRequirement, ScenarioRequirement, VoiceCommandParser,
+};
 pub use conversation::{ConversationContext, ConversationManager, ConversationState};
+pub use hook_transpiler::HookTranspiler;
 pub use spec_generator::VoiceSpecGenerator;
+pub use workspace_builder::{BuiltWorkspace, WorkspaceBuilder};
+pub use workspace_scenario_generator::{
+    GeneratedWorkspaceScenario, WorkspaceConfigSummary, WorkspaceScenarioGenerator,
+};

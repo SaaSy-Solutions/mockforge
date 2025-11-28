@@ -1,6 +1,6 @@
 //! Admin API client for runtime mock management
 //!
-//! Provides programmatic access to MockForge's management API for
+//! Provides programmatic access to `MockForge`'s management API for
 //! creating, updating, and managing mocks at runtime.
 
 use crate::{Error, Result};
@@ -54,7 +54,7 @@ pub struct MockConfig {
     pub new_scenario_state: Option<String>,
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
@@ -80,10 +80,10 @@ pub struct RequestMatchCriteria {
     /// Request body pattern (supports exact match or regex)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_pattern: Option<String>,
-    /// JSONPath expression for JSON body matching
+    /// `JSONPath` expression for JSON body matching
     #[serde(skip_serializing_if = "Option::is_none")]
     pub json_path: Option<String>,
-    /// XPath expression for XML body matching
+    /// `XPath` expression for XML body matching
     #[serde(skip_serializing_if = "Option::is_none")]
     pub xpath: Option<String>,
     /// Custom matcher expression (e.g., "headers.content-type == \"application/json\"")
@@ -109,13 +109,13 @@ pub struct ServerStats {
 /// Server configuration info
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
-    /// MockForge version
+    /// `MockForge` version
     pub version: String,
     /// HTTP port the server is running on
     pub port: u16,
-    /// Whether an OpenAPI spec is loaded
+    /// Whether an `OpenAPI` spec is loaded
     pub has_openapi_spec: bool,
-    /// Path to the OpenAPI spec file (if loaded)
+    /// Path to the `OpenAPI` spec file (if loaded)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spec_path: Option<String>,
 }
@@ -134,8 +134,8 @@ pub struct MockList {
 impl AdminClient {
     /// Create a new admin client
     ///
-    /// The base URL should be the root URL of the MockForge server
-    /// (e.g., "http://localhost:3000"). Trailing slashes are automatically removed.
+    /// The base URL should be the root URL of the `MockForge` server
+    /// (e.g., "<http://localhost:3000>"). Trailing slashes are automatically removed.
     ///
     /// # Examples
     ///
@@ -168,7 +168,7 @@ impl AdminClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| Error::General(format!("Failed to list mocks: {}", e)))?;
+            .map_err(|e| Error::General(format!("Failed to list mocks: {e}")))?;
 
         if !response.status().is_success() {
             return Err(Error::General(format!(
@@ -180,7 +180,7 @@ impl AdminClient {
         response
             .json()
             .await
-            .map_err(|e| Error::General(format!("Failed to parse response: {}", e)))
+            .map_err(|e| Error::General(format!("Failed to parse response: {e}")))
     }
 
     /// Get a specific mock by ID
@@ -191,10 +191,10 @@ impl AdminClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| Error::General(format!("Failed to get mock: {}", e)))?;
+            .map_err(|e| Error::General(format!("Failed to get mock: {e}")))?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Err(Error::General(format!("Mock not found: {}", id)));
+            return Err(Error::General(format!("Mock not found: {id}")));
         }
 
         if !response.status().is_success() {
@@ -204,7 +204,7 @@ impl AdminClient {
         response
             .json()
             .await
-            .map_err(|e| Error::General(format!("Failed to parse response: {}", e)))
+            .map_err(|e| Error::General(format!("Failed to parse response: {e}")))
     }
 
     /// Create a new mock
@@ -216,7 +216,7 @@ impl AdminClient {
             .json(&mock)
             .send()
             .await
-            .map_err(|e| Error::General(format!("Failed to create mock: {}", e)))?;
+            .map_err(|e| Error::General(format!("Failed to create mock: {e}")))?;
 
         if response.status() == reqwest::StatusCode::CONFLICT {
             return Err(Error::General(format!("Mock with ID {} already exists", mock.id)));
@@ -232,7 +232,7 @@ impl AdminClient {
         response
             .json()
             .await
-            .map_err(|e| Error::General(format!("Failed to parse response: {}", e)))
+            .map_err(|e| Error::General(format!("Failed to parse response: {e}")))
     }
 
     /// Update an existing mock
@@ -244,10 +244,10 @@ impl AdminClient {
             .json(&mock)
             .send()
             .await
-            .map_err(|e| Error::General(format!("Failed to update mock: {}", e)))?;
+            .map_err(|e| Error::General(format!("Failed to update mock: {e}")))?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Err(Error::General(format!("Mock not found: {}", id)));
+            return Err(Error::General(format!("Mock not found: {id}")));
         }
 
         if !response.status().is_success() {
@@ -260,7 +260,7 @@ impl AdminClient {
         response
             .json()
             .await
-            .map_err(|e| Error::General(format!("Failed to parse response: {}", e)))
+            .map_err(|e| Error::General(format!("Failed to parse response: {e}")))
     }
 
     /// Delete a mock
@@ -271,10 +271,10 @@ impl AdminClient {
             .delete(&url)
             .send()
             .await
-            .map_err(|e| Error::General(format!("Failed to delete mock: {}", e)))?;
+            .map_err(|e| Error::General(format!("Failed to delete mock: {e}")))?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Err(Error::General(format!("Mock not found: {}", id)));
+            return Err(Error::General(format!("Mock not found: {id}")));
         }
 
         if !response.status().is_success() {
@@ -295,7 +295,7 @@ impl AdminClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| Error::General(format!("Failed to get stats: {}", e)))?;
+            .map_err(|e| Error::General(format!("Failed to get stats: {e}")))?;
 
         if !response.status().is_success() {
             return Err(Error::General(format!("Failed to get stats: HTTP {}", response.status())));
@@ -304,7 +304,7 @@ impl AdminClient {
         response
             .json()
             .await
-            .map_err(|e| Error::General(format!("Failed to parse response: {}", e)))
+            .map_err(|e| Error::General(format!("Failed to parse response: {e}")))
     }
 
     /// Get server configuration
@@ -315,7 +315,7 @@ impl AdminClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| Error::General(format!("Failed to get config: {}", e)))?;
+            .map_err(|e| Error::General(format!("Failed to get config: {e}")))?;
 
         if !response.status().is_success() {
             return Err(Error::General(format!(
@@ -327,7 +327,7 @@ impl AdminClient {
         response
             .json()
             .await
-            .map_err(|e| Error::General(format!("Failed to parse response: {}", e)))
+            .map_err(|e| Error::General(format!("Failed to parse response: {e}")))
     }
 
     /// Reset all mocks to initial state
@@ -338,7 +338,7 @@ impl AdminClient {
             .post(&url)
             .send()
             .await
-            .map_err(|e| Error::General(format!("Failed to reset mocks: {}", e)))?;
+            .map_err(|e| Error::General(format!("Failed to reset mocks: {e}")))?;
 
         if !response.status().is_success() {
             return Err(Error::General(format!(
@@ -426,18 +426,21 @@ impl MockConfigBuilder {
     }
 
     /// Set the response body (supports templating with {{variables}})
+    #[must_use]
     pub fn body(mut self, body: serde_json::Value) -> Self {
         self.config.response.body = body;
         self
     }
 
     /// Set the response status code
-    pub fn status(mut self, status: u16) -> Self {
+    #[must_use]
+    pub const fn status(mut self, status: u16) -> Self {
         self.config.status_code = Some(status);
         self
     }
 
     /// Set response headers
+    #[must_use]
     pub fn headers(mut self, headers: HashMap<String, String>) -> Self {
         self.config.response.headers = Some(headers);
         self
@@ -451,13 +454,15 @@ impl MockConfigBuilder {
     }
 
     /// Set the latency in milliseconds
-    pub fn latency_ms(mut self, ms: u64) -> Self {
+    #[must_use]
+    pub const fn latency_ms(mut self, ms: u64) -> Self {
         self.config.latency_ms = Some(ms);
         self
     }
 
     /// Enable or disable the mock
-    pub fn enabled(mut self, enabled: bool) -> Self {
+    #[must_use]
+    pub const fn enabled(mut self, enabled: bool) -> Self {
         self.config.enabled = enabled;
         self
     }
@@ -525,7 +530,7 @@ impl MockConfigBuilder {
         self
     }
 
-    /// Require the request body to match a JSONPath expression
+    /// Require the request body to match a `JSONPath` expression
     ///
     /// # Examples
     /// ```rust
@@ -540,7 +545,7 @@ impl MockConfigBuilder {
         self
     }
 
-    /// Require the request body to match an XPath expression (for XML)
+    /// Require the request body to match an `XPath` expression (for XML)
     ///
     /// # Examples
     /// ```rust
@@ -574,7 +579,8 @@ impl MockConfigBuilder {
     /// Set the priority for this mock (higher priority mocks are matched first)
     ///
     /// Default priority is 0. Higher numbers = higher priority.
-    pub fn priority(mut self, priority: i32) -> Self {
+    #[must_use]
+    pub const fn priority(mut self, priority: i32) -> Self {
         self.config.priority = Some(priority);
         self
     }
@@ -605,6 +611,7 @@ impl MockConfigBuilder {
     }
 
     /// Build the mock configuration
+    #[must_use]
     pub fn build(self) -> MockConfig {
         self.config
     }

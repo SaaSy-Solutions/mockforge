@@ -681,22 +681,22 @@ pub struct ErrorUtils;
 
 impl ErrorUtils {
     /// Create a generic error
-    pub fn generic_error(message: &str) -> mockforge_core::Error {
-        mockforge_core::Error::generic(message.to_string())
+    pub fn generic_error(message: &str) -> crate::Error {
+        crate::Error::generic(message.to_string())
     }
 
     /// Create an error with context
-    pub fn context_error(message: &str, context: &str) -> mockforge_core::Error {
-        mockforge_core::Error::generic(format!("{}: {}", message, context))
+    pub fn context_error(message: &str, context: &str) -> crate::Error {
+        crate::Error::generic(format!("{}: {}", message, context))
     }
 
     /// Wrap an error with additional context
-    pub fn wrap_error<E: std::fmt::Display>(error: E, context: &str) -> mockforge_core::Error {
-        mockforge_core::Error::generic(format!("{}: {}", context, error))
+    pub fn wrap_error<E: std::fmt::Display>(error: E, context: &str) -> crate::Error {
+        crate::Error::generic(format!("{}: {}", context, error))
     }
 
     /// Check if error is retryable
-    pub fn is_retryable_error(error: &mockforge_core::Error) -> bool {
+    pub fn is_retryable_error(error: &crate::Error) -> bool {
         // Simple heuristic - in practice, you might want to categorize errors
         error.to_string().contains("timeout")
             || error.to_string().contains("rate limit")

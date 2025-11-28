@@ -1,0 +1,36 @@
+# Smart Personas & Reality Continuum v2 Demo Configuration
+
+http:
+  port: 3000
+  host: "0.0.0.0"
+  cors_enabled: true
+
+admin:
+  enabled: true
+  port: 3002
+
+logging:
+  level: "info"
+
+# Enable consistency engine with persona graphs
+consistency:
+  enabled: true
+  persona_graph:
+    enabled: true
+    auto_link_entities: true
+  personas:
+    enabled: true
+    default_lifecycle_state: "Active"
+    reality_aware_generation: true
+
+# Enable reality continuum
+reality_continuum:
+  enabled: true
+  default_ratio: 0.3  # Start with 30% reality (medium)
+  transition_mode: "manual"
+  merge_strategy: "field_level"
+
+# Workspace configuration
+workspace:
+  name: "Persona Graph Demo"
+  reality_level: 3  # Medium reality level

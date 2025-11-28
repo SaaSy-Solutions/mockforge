@@ -1,0 +1,21 @@
+id: regular-customer
+name: Regular Customer
+domain: ecommerce
+traits:
+  membership_tier: standard
+  total_orders: 12
+  total_spent: "890.25"
+  average_order_value: "74.19"
+  favorite_categories:
+    - clothing
+    - books
+  shipping_preference: standard
+  loyalty_points: 890
+  discount_percentage: 0
+lifecycle:
+  preset: subscription
+  initial_state: active
+backstory: |
+  Standard customer with moderate shopping frequency, about 1 order per month.
+  Prefers standard shipping and typically buys clothing and books.
+  Good candidate for upselling premium membership.

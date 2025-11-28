@@ -64,7 +64,7 @@ impl ConstraintValidator {
             format!("SELECT COUNT(*) FROM {} WHERE {}", table_name, conditions.join(" AND "));
 
         if let Some(id) = exclude_id {
-            query.push_str(&format!(" AND id != ?"));
+            query.push_str(" AND id != ?");
             params.push(id.clone());
         }
 

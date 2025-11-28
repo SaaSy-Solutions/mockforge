@@ -6,7 +6,6 @@
 
 use mockforge_data::SchemaDefinition;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 
 /// VBR-specific schema metadata that extends SchemaDefinition

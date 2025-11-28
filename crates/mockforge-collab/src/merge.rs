@@ -16,6 +16,7 @@ pub struct MergeService {
 
 impl MergeService {
     /// Create a new merge service
+    #[must_use]
     pub fn new(db: Pool<Sqlite>) -> Self {
         Self {
             db: db.clone(),
@@ -48,8 +49,8 @@ impl MergeService {
         .await?;
 
         if let Some(fork) = fork {
-            if let Some(commit_id_str) = fork.fork_point_commit_id {
-                if let Ok(commit_id) = Uuid::parse_str(&commit_id_str) {
+            if let Some(commit_id_str) = fork.fork_point_commit_id.as_ref() {
+                if let Ok(commit_id) = Uuid::parse_str(commit_id_str) {
                     return Ok(Some(commit_id));
                 }
             }
@@ -71,21 +72,58 @@ impl MergeService {
         .await?;
 
         if let Some(fork) = fork {
-            if let Some(commit_id_str) = fork.fork_point_commit_id {
-                if let Ok(commit_id) = Uuid::parse_str(&commit_id_str) {
+            if let Some(commit_id_str) = fork.fork_point_commit_id.as_ref() {
+                if let Ok(commit_id) = Uuid::parse_str(commit_id_str) {
                     return Ok(Some(commit_id));
                 }
             }
         }
 
-        // TODO: Implement more sophisticated common ancestor finding
-        // For now, return None if no fork relationship exists
+        // Implement sophisticated common ancestor finding by walking commit history
+        // This finds the Lowest Common Ancestor (LCA) by walking both commit histories
+        let source_commits =
+            self.version_control.get_history(source_workspace_id, Some(1000)).await?;
+        let target_commits =
+            self.version_control.get_history(target_workspace_id, Some(1000)).await?;
+
+        // Build commit ID sets for fast lookup
+        let source_commit_ids: std::collections::HashSet<Uuid> =
+            source_commits.iter().map(|c| c.id).collect();
+        let target_commit_ids: std::collections::HashSet<Uuid> =
+            target_commits.iter().map(|c| c.id).collect();
+
+        // Find the first commit that appears in both histories (LCA)
+        // Walk from most recent to oldest in source history
+        for source_commit in &source_commits {
+            if target_commit_ids.contains(&source_commit.id) {
+                return Ok(Some(source_commit.id));
+            }
+        }
+
+        // If no direct match, try walking parent chains
+        // Get the latest commits
+        if let (Some(source_latest), Some(target_latest)) =
+            (source_commits.first(), target_commits.first())
+        {
+            // Build ancestor sets by walking parent chains
+            let source_ancestors = self.build_ancestor_set(source_latest.id).await?;
+            let target_ancestors = self.build_ancestor_set(target_latest.id).await?;
+
+            // Find the first common ancestor
+            for ancestor in &source_ancestors {
+                if target_ancestors.contains(ancestor) {
+                    return Ok(Some(*ancestor));
+                }
+            }
+        }
+
+        // No common ancestor found
         Ok(None)
     }
 
     /// Perform a three-way merge between two workspaces
     ///
-    /// Merges changes from source_workspace into target_workspace.
+    /// Merges changes from `source_workspace` into `target_workspace`.
     /// Returns the merged state and any conflicts.
     pub async fn merge_workspaces(
         &self,
@@ -149,7 +187,7 @@ impl MergeService {
         let merge_commit_id_str = merge.merge_commit_id.map(|id| id.to_string());
         let status_str = serde_json::to_string(&merge.status)?;
         let conflict_data_str =
-            merge.conflict_data.as_ref().map(|v| serde_json::to_string(v)).transpose()?;
+            merge.conflict_data.as_ref().map(serde_json::to_string).transpose()?;
         let merged_by_str = merge.merged_by.map(|id| id.to_string());
         let merged_at_str = merge.merged_at.map(|dt| dt.to_rfc3339());
         let created_at_str = merge.created_at.to_rfc3339();
@@ -261,7 +299,7 @@ impl MergeService {
                         let new_path = if path.is_empty() {
                             key.clone()
                         } else {
-                            format!("{}.{}", path, key)
+                            format!("{path}.{key}")
                         };
 
                         match (base_val, source_val, target_val) {
@@ -330,16 +368,14 @@ impl MergeService {
 
             // Handle arrays - simple approach: use target, mark as conflict if different
             (Value::Array(base_arr), Value::Array(source_arr), Value::Array(target_arr)) => {
-                if base_arr != source_arr || base_arr != target_arr {
-                    if source_arr != target_arr {
-                        conflicts.push(MergeConflict {
-                            path: path.to_string(),
-                            base_value: Some(base.clone()),
-                            source_value: Some(source.clone()),
-                            target_value: Some(target.clone()),
-                            conflict_type: ConflictType::Modified,
-                        });
-                    }
+                if (base_arr != source_arr || base_arr != target_arr) && source_arr != target_arr {
+                    conflicts.push(MergeConflict {
+                        path: path.to_string(),
+                        base_value: Some(base.clone()),
+                        source_value: Some(source.clone()),
+                        target_value: Some(target.clone()),
+                        conflict_type: ConflictType::Modified,
+                    });
                 }
             }
 
@@ -432,37 +468,38 @@ impl MergeService {
         )
         .fetch_optional(&self.db)
         .await?
-        .ok_or_else(|| CollabError::Internal(format!("Merge not found: {}", merge_id)))?;
+        .ok_or_else(|| CollabError::Internal(format!("Merge not found: {merge_id}")))?;
 
         Ok(WorkspaceMerge {
             id: Uuid::parse_str(&row.id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             source_workspace_id: Uuid::parse_str(&row.source_workspace_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             target_workspace_id: Uuid::parse_str(&row.target_workspace_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             base_commit_id: Uuid::parse_str(&row.base_commit_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             source_commit_id: Uuid::parse_str(&row.source_commit_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
             target_commit_id: Uuid::parse_str(&row.target_commit_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
-            merge_commit_id: row.merge_commit_id.and_then(|s| Uuid::parse_str(&s).ok()),
+                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
+            merge_commit_id: row.merge_commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
             status: serde_json::from_str(&row.status)
-                .map_err(|e| CollabError::Internal(format!("Invalid status: {}", e)))?,
-            conflict_data: row.conflict_data.and_then(|s| serde_json::from_str(&s).ok()),
-            merged_by: row.merged_by.and_then(|s| Uuid::parse_str(&s).ok()),
+                .map_err(|e| CollabError::Internal(format!("Invalid status: {e}")))?,
+            conflict_data: row.conflict_data.as_ref().and_then(|s| serde_json::from_str(s).ok()),
+            merged_by: row.merged_by.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
             merged_at: row
                 .merged_at
+                .as_ref()
                 .map(|s| {
-                    chrono::DateTime::parse_from_rfc3339(&s)
-                        .map(|dt| dt.with_timezone(&chrono::Utc))
-                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))
+                    chrono::DateTime::parse_from_rfc3339(s)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))
                 })
                 .transpose()?,
             created_at: chrono::DateTime::parse_from_rfc3339(&row.created_at)
-                .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
-                .with_timezone(&chrono::Utc),
+                .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
+                .with_timezone(&Utc),
         })
     }
 
@@ -499,40 +536,77 @@ impl MergeService {
             .map(|row| {
                 Ok(WorkspaceMerge {
                     id: Uuid::parse_str(&row.id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     source_workspace_id: Uuid::parse_str(&row.source_workspace_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     target_workspace_id: Uuid::parse_str(&row.target_workspace_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     base_commit_id: Uuid::parse_str(&row.base_commit_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     source_commit_id: Uuid::parse_str(&row.source_commit_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
                     target_commit_id: Uuid::parse_str(&row.target_commit_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {}", e)))?,
-                    merge_commit_id: row.merge_commit_id.and_then(|s| Uuid::parse_str(&s).ok()),
+                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
+                    merge_commit_id: row
+                        .merge_commit_id
+                        .as_ref()
+                        .and_then(|s| Uuid::parse_str(s).ok()),
                     status: serde_json::from_str(&row.status)
-                        .map_err(|e| CollabError::Internal(format!("Invalid status: {}", e)))?,
-                    conflict_data: row.conflict_data.and_then(|s| serde_json::from_str(&s).ok()),
-                    merged_by: row.merged_by.and_then(|s| Uuid::parse_str(&s).ok()),
+                        .map_err(|e| CollabError::Internal(format!("Invalid status: {e}")))?,
+                    conflict_data: row
+                        .conflict_data
+                        .as_ref()
+                        .and_then(|s| serde_json::from_str(s).ok()),
+                    merged_by: row.merged_by.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
                     merged_at: row
                         .merged_at
+                        .as_ref()
                         .map(|s| {
-                            chrono::DateTime::parse_from_rfc3339(&s)
-                                .map(|dt| dt.with_timezone(&chrono::Utc))
+                            chrono::DateTime::parse_from_rfc3339(s)
+                                .map(|dt| dt.with_timezone(&Utc))
                                 .map_err(|e| {
-                                    CollabError::Internal(format!("Invalid timestamp: {}", e))
+                                    CollabError::Internal(format!("Invalid timestamp: {e}"))
                                 })
                         })
                         .transpose()?,
                     created_at: chrono::DateTime::parse_from_rfc3339(&row.created_at)
-                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {}", e)))?
-                        .with_timezone(&chrono::Utc),
+                        .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
+                        .with_timezone(&Utc),
                 })
             })
             .collect();
         let merges = merges?;
 
         Ok(merges)
+    }
+
+    /// Build a set of all ancestor commit IDs by walking the parent chain
+    async fn build_ancestor_set(&self, commit_id: Uuid) -> Result<std::collections::HashSet<Uuid>> {
+        let mut ancestors = std::collections::HashSet::new();
+        let mut current_id = Some(commit_id);
+        let mut visited = std::collections::HashSet::new();
+
+        // Walk the parent chain up to a reasonable depth (prevent infinite loops)
+        let max_depth = 1000;
+        let mut depth = 0;
+
+        while let Some(id) = current_id {
+            if visited.contains(&id) || depth > max_depth {
+                break; // Cycle detected or max depth reached
+            }
+            visited.insert(id);
+            ancestors.insert(id);
+
+            // Get the commit and move to parent
+            match self.version_control.get_commit(id).await {
+                Ok(commit) => {
+                    current_id = commit.parent_id;
+                    depth += 1;
+                }
+                Err(_) => break, // Commit not found, stop walking
+            }
+        }
+
+        Ok(ancestors)
     }
 }

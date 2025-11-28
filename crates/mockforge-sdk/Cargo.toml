@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-sdk"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -16,13 +16,13 @@ description = "Developer SDK for embedding MockForge in tests and applications"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-mockforge-core = { path = "../mockforge-core", version = "0.2.8" }
-mockforge-http = { path = "../mockforge-http", version = "0.2.8" }
-mockforge-ws = { version = "0.2.0", path = "../mockforge-ws", optional = true }
-mockforge-grpc = { version = "0.2.0", path = "../mockforge-grpc", optional = true }
-mockforge-graphql = { version = "0.2.0", path = "../mockforge-graphql", optional = true }
-mockforge-observability = { path = "../mockforge-observability", version = "0.2.8" }
-mockforge-data = { path = "../mockforge-data", version = "0.2.8" }
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-http = "0.3.0"
+mockforge-ws = { version = "0.3.0", optional = true }
+mockforge-grpc = { version = "0.3.0", optional = true }
+mockforge-graphql = { version = "0.3.0", optional = true }
+mockforge-observability = "0.3.0"
+mockforge-data = { version = "0.3.3", path = "../mockforge-data" }
 
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true }

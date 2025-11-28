@@ -378,7 +378,7 @@ impl ScenarioRegistry {
         &self,
         publish_request: ScenarioPublishRequest,
     ) -> Result<ScenarioPublishResponse> {
-        let token = self.token.as_ref().ok_or_else(|| ScenarioError::AuthRequired)?;
+        let token = self.token.as_ref().ok_or(ScenarioError::AuthRequired)?;
 
         let url = format!("{}/api/v1/scenarios/publish", self.base_url);
 

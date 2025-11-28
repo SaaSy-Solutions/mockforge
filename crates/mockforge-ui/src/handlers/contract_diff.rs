@@ -7,23 +7,20 @@
 //! - Triggering contract diff analysis
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
 use mockforge_core::{
-    ai_contract_diff::{
-        CapturedRequest, ContractDiffAnalyzer, ContractDiffConfig, ContractDiffResult,
-    },
+    ai_contract_diff::{CapturedRequest, ContractDiffAnalyzer, ContractDiffConfig},
     openapi::OpenApiSpec,
-    request_capture::{get_global_capture_manager, CaptureManager, CaptureQuery},
-    Error, Result,
+    request_capture::{get_global_capture_manager, CaptureQuery},
+    Error,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 /// Helper to convert Error to HTTP response
 fn error_response(error: Error) -> Response {
@@ -157,9 +154,9 @@ pub async fn get_captured_requests(
     };
 
     let query = CaptureQuery {
-        source: params.get("source").map(|s| s.clone()),
-        method: params.get("method").map(|s| s.clone()),
-        path_pattern: params.get("path_pattern").map(|s| s.clone()),
+        source: params.get("source").cloned(),
+        method: params.get("method").cloned(),
+        path_pattern: params.get("path_pattern").cloned(),
         analyzed: params.get("analyzed").and_then(|s| s.parse().ok()),
         limit: params.get("limit").and_then(|s| s.parse().ok()),
         offset: params.get("offset").and_then(|s| s.parse().ok()),

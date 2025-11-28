@@ -1,0 +1,75 @@
+manifest_version: "1.0"
+name: persona-graph-demo
+version: "1.0.0"
+title: Smart Personas & Reality Continuum v2 Demo
+description: |
+  Demonstrates Smart Personas v2 with persona graphs, lifecycle states, and reality continuum integration.
+  This scenario showcases coherent world simulation where personas maintain relationships across entities
+  (users, orders, payments, webhooks) and lifecycle states influence responses across endpoints.
+
+  Features:
+  - Persona graphs linking users, orders, payments, and devices
+  - Lifecycle states (NewSignup, Active, ChurnRisk, Churned) affecting billing and support endpoints
+  - Reality continuum integration for blending synthetic, recorded, and real data
+  - Fidelity score tracking to measure mock-to-real alignment
+author: MockForge Team
+author_email: team@mockforge.dev
+category: other
+tags:
+  - Reality
+  - AI
+  - personas
+  - graphs
+  - lifecycle
+  - fidelity
+  - consistency
+  - ecommerce
+compatibility:
+  min_version: "0.3.0"
+  max_version: null
+  required_features:
+    - consistency
+    - personas
+    - reality-continuum
+  protocols:
+    - http
+files:
+  - scenario.yaml
+  - config.yaml
+  - README.md
+readme: README.md
+example_usage: |
+  # Install the scenario
+  mockforge scenario install ./examples/scenarios/persona-graph-demo
+
+  # Apply to workspace
+  mockforge scenario use persona-graph-demo
+
+  # Start the server
+  mockforge serve --config config.yaml
+
+  # Test persona graph endpoints
+  curl http://localhost:3000/api/v1/consistency/users/123
+  curl http://localhost:3000/api/v1/consistency/users/123/orders
+  curl http://localhost:3000/api/v1/consistency/orders/456
+
+  # Set persona lifecycle state
+  curl -X POST http://localhost:3000/api/v1/consistency/persona/lifecycle \
+    -H "Content-Type: application/json" \
+    -d '{"workspace_id": "default", "persona_id": "user:123", "lifecycle_state": "ChurnRisk"}'
+
+  # Get fidelity score
+  curl http://localhost:3000/api/v1/workspace/default/fidelity
+required_features:
+  - consistency
+  - personas
+  - reality-continuum
+plugin_dependencies: []
+metadata:
+  demo_features:
+    - persona-graphs
+    - lifecycle-states
+    - reality-continuum
+    - fidelity-score
+created_at: "2025-01-27T00:00:00Z"
+updated_at: "2025-01-27T00:00:00Z"

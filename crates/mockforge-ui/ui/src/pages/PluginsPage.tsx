@@ -60,9 +60,15 @@ export function PluginsPage() {
   }, []);
 
   const handleBrowseMarketplace = useCallback(() => {
-    // TODO: Implement marketplace browsing
-    // This could open a dedicated marketplace view or external link
-    window.open('/plugins/marketplace', '_blank');
+    // Open marketplace page (if it exists) or navigate to marketplace section
+    const marketplacePath = '/plugins/marketplace';
+    // Try to navigate within the app first
+    if (window.location.hash) {
+      window.location.hash = 'plugins-marketplace';
+    } else {
+      // Fallback to opening in new tab
+      window.open(marketplacePath, '_blank');
+    }
   }, []);
 
   return (

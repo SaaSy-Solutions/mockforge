@@ -70,10 +70,10 @@ impl ScenarioPackage {
             return Ok(());
         }
 
-        let entries = std::fs::read_dir(current).map_err(|e| ScenarioError::Io(e))?;
+        let entries = std::fs::read_dir(current).map_err(ScenarioError::Io)?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| ScenarioError::Io(e))?;
+            let entry = entry.map_err(ScenarioError::Io)?;
             let path = entry.path();
 
             // Skip hidden files and directories

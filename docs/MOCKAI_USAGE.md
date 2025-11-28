@@ -1,5 +1,9 @@
 # MockAI (Behavioral Mock Intelligence) Usage Guide
 
+**Pillars:** [AI]
+
+[AI] - LLM-powered mock generation and intelligent behavior
+
 MockAI is MockForge's intelligent mock generation system that uses AI to create contextually appropriate, realistic API responses. It automatically learns from OpenAPI specifications and example payloads to generate intelligent behavior.
 
 ## Features

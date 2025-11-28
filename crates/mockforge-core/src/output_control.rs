@@ -132,7 +132,7 @@ impl BarrelGenerator {
 
             dir_exports
                 .entry(parent.to_path_buf())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push((format!("export * from './{}';", import_str), file.path.clone()));
         }
 
@@ -301,8 +301,7 @@ pub fn build_file_naming_context(spec: &OpenApiSpec) -> FileNamingContext {
             // Build name from operation ID, or generate one from method + path
             let name = operation.operation_id.clone().unwrap_or_else(|| {
                 // Generate name from method and path
-                let path_name =
-                    path.trim_matches('/').replace('/', "_").replace('{', "").replace('}', "");
+                let path_name = path.trim_matches('/').replace('/', "_").replace(['{', '}'], "");
                 format!("{}_{}", method.to_lowercase(), path_name)
             });
 
@@ -326,7 +325,7 @@ pub fn build_file_naming_context(spec: &OpenApiSpec) -> FileNamingContext {
             context_map.insert(name.clone(), op_context.clone());
 
             // Also map by simplified name (for cases where filename doesn't match operation ID)
-            let simple_name = name.to_lowercase().replace('-', "_").replace(' ', "_");
+            let simple_name = name.to_lowercase().replace(['-', ' '], "_");
             if simple_name != name {
                 context_map.insert(simple_name, op_context);
             }

@@ -73,7 +73,7 @@ impl MockAIConfigDefinition {
             )));
         }
 
-        let content = std::fs::read_to_string(&rules_path).map_err(|e| ScenarioError::Io(e))?;
+        let content = std::fs::read_to_string(&rules_path).map_err(ScenarioError::Io)?;
 
         // Try to parse as JSON first, then YAML
         let rules: serde_json::Value = if rules_path
@@ -82,9 +82,9 @@ impl MockAIConfigDefinition {
             .map(|ext| ext == "json")
             .unwrap_or(false)
         {
-            serde_json::from_str(&content).map_err(|e| ScenarioError::Serde(e))?
+            serde_json::from_str(&content).map_err(ScenarioError::Serde)?
         } else {
-            serde_yaml::from_str(&content).map_err(|e| ScenarioError::Yaml(e))?
+            serde_yaml::from_str(&content).map_err(ScenarioError::Yaml)?
         };
 
         Ok(Some(rules))
@@ -107,7 +107,7 @@ impl MockAIConfigDefinition {
             )));
         }
 
-        let content = std::fs::read_to_string(&pairs_path).map_err(|e| ScenarioError::Io(e))?;
+        let content = std::fs::read_to_string(&pairs_path).map_err(ScenarioError::Io)?;
 
         // Try to parse as JSON first, then YAML
         let pairs: Vec<serde_json::Value> = if pairs_path
@@ -116,9 +116,9 @@ impl MockAIConfigDefinition {
             .map(|ext| ext == "json")
             .unwrap_or(false)
         {
-            serde_json::from_str(&content).map_err(|e| ScenarioError::Serde(e))?
+            serde_json::from_str(&content).map_err(ScenarioError::Serde)?
         } else {
-            serde_yaml::from_str(&content).map_err(|e| ScenarioError::Yaml(e))?
+            serde_yaml::from_str(&content).map_err(ScenarioError::Yaml)?
         };
 
         Ok(Some(pairs))

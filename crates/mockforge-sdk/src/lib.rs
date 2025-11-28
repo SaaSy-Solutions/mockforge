@@ -1,6 +1,8 @@
-//! # MockForge SDK
+//! Pillars: [`DevX`]
 //!
-//! Developer SDK for embedding MockForge mock servers directly in unit and integration tests.
+//! # `MockForge` SDK
+//!
+//! Developer SDK for embedding `MockForge` mock servers directly in unit and integration tests.
 //!
 //! ## Features
 //!

@@ -1,0 +1,67 @@
+# Blueprint metadata template
+# This file defines the structure for blueprint metadata
+
+manifest_version: "1.0"
+name: blueprint-name
+version: "1.0.0"
+title: Blueprint Title
+description: |
+  Description of what this blueprint provides and what use case it targets.
+
+  Blueprints are predefined app archetypes that set up:
+  - Personas for different user types
+  - Reality defaults optimized for the use case
+  - Sample flows demonstrating common workflows
+  - Playground collection for testing
+
+author: MockForge Team
+author_email: team@mockforge.dev
+category: saas  # saas, ecommerce, banking, fintech, healthcare, etc.
+tags:
+  - tag1
+  - tag2
+
+# What this blueprint sets up
+setup:
+  # Personas that will be created
+  personas:
+    - id: persona-id
+      name: Persona Name
+      description: Description of this persona
+
+  # Reality level defaults
+  reality:
+    level: moderate  # static, light, moderate, high, chaos
+    description: Why this reality level is chosen
+
+  # Sample flows included
+  flows:
+    - id: flow-id
+      name: Flow Name
+      description: What this flow demonstrates
+
+  # Playground collection
+  playground:
+    enabled: true
+    collection_file: playground/collection.json
+
+# Compatibility requirements
+compatibility:
+  min_version: "0.3.0"
+  max_version: null
+  required_features:
+    - personas
+    - consistency
+  protocols:
+    - http
+
+# Files included in this blueprint
+files:
+  - blueprint.yaml
+  - config.yaml
+  - README.md
+  - personas/
+  - flows/
+  - playground/
+
+readme: README.md

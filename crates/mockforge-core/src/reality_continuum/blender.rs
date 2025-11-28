@@ -38,23 +38,127 @@ impl ResponseBlender {
     /// # Returns
     /// Blended response value
     pub fn blend_responses(&self, mock: &Value, real: &Value, ratio: f64) -> Value {
-        let ratio = ratio.clamp(0.0, 1.0);
+        self.blend_responses_with_config(mock, real, ratio, None)
+    }
 
-        // If ratio is 0.0, return mock entirely
-        if ratio == 0.0 {
-            return mock.clone();
+    /// Blend two JSON responses with field-level configuration
+    ///
+    /// # Arguments
+    /// * `mock` - Mock response value
+    /// * `real` - Real response value
+    /// * `global_ratio` - Global blend ratio (0.0 = 100% mock, 1.0 = 100% real)
+    /// * `field_config` - Optional field-level reality configuration
+    ///
+    /// # Returns
+    /// Blended response value
+    pub fn blend_responses_with_config(
+        &self,
+        mock: &Value,
+        real: &Value,
+        global_ratio: f64,
+        field_config: Option<&crate::reality_continuum::FieldRealityConfig>,
+    ) -> Value {
+        let global_ratio = global_ratio.clamp(0.0, 1.0);
+
+        // If no field config, use global ratio
+        if field_config.is_none() {
+            // If ratio is 0.0, return mock entirely
+            if global_ratio == 0.0 {
+                return mock.clone();
+            }
+
+            // If ratio is 1.0, return real entirely
+            if global_ratio == 1.0 {
+                return real.clone();
+            }
+
+            // Apply the selected merge strategy
+            match self.strategy {
+                MergeStrategy::FieldLevel => self.blend_field_level(mock, real, global_ratio),
+                MergeStrategy::Weighted => self.blend_weighted(mock, real, global_ratio),
+                MergeStrategy::BodyBlend => self.blend_body(mock, real, global_ratio),
+            }
+        } else {
+            // Use field-level blending
+            self.blend_with_field_config(mock, real, global_ratio, field_config.unwrap())
         }
+    }
 
-        // If ratio is 1.0, return real entirely
-        if ratio == 1.0 {
-            return real.clone();
-        }
+    /// Blend responses with field-level configuration
+    fn blend_with_field_config(
+        &self,
+        mock: &Value,
+        real: &Value,
+        global_ratio: f64,
+        field_config: &crate::reality_continuum::FieldRealityConfig,
+    ) -> Value {
+        match (mock, real) {
+            (Value::Object(mock_obj), Value::Object(real_obj)) => {
+                let mut result = serde_json::Map::new();
 
-        // Apply the selected merge strategy
-        match self.strategy {
-            MergeStrategy::FieldLevel => self.blend_field_level(mock, real, ratio),
-            MergeStrategy::Weighted => self.blend_weighted(mock, real, ratio),
-            MergeStrategy::BodyBlend => self.blend_body(mock, real, ratio),
+                // Collect all keys from both objects
+                let mut all_keys = std::collections::HashSet::new();
+                for key in mock_obj.keys() {
+                    all_keys.insert(key.clone());
+                }
+                for key in real_obj.keys() {
+                    all_keys.insert(key.clone());
+                }
+
+                // Blend each key with field-specific ratio
+                for key in all_keys {
+                    let json_path = key.clone();
+                    let mock_val = mock_obj.get(&key);
+                    let real_val = real_obj.get(&key);
+
+                    // Get field-specific blend ratio
+                    let field_ratio =
+                        field_config.get_blend_ratio_for_path(&json_path).unwrap_or(global_ratio);
+
+                    match (mock_val, real_val) {
+                        (Some(m), Some(r)) => {
+                            // Both exist - recursively blend with field ratio
+                            result.insert(
+                                key,
+                                self.blend_with_field_config(m, r, field_ratio, field_config),
+                            );
+                        }
+                        (Some(m), None) => {
+                            // Only in mock - include if field ratio < 0.5
+                            if field_ratio < 0.5 {
+                                result.insert(key, m.clone());
+                            }
+                        }
+                        (None, Some(r)) => {
+                            // Only in real - include if field ratio >= 0.5
+                            if field_ratio >= 0.5 {
+                                result.insert(key, r.clone());
+                            }
+                        }
+                        (None, None) => {
+                            // Neither (shouldn't happen)
+                        }
+                    }
+                }
+
+                Value::Object(result)
+            }
+            (Value::Array(mock_arr), Value::Array(real_arr)) => {
+                // For arrays, use global ratio (field-level doesn't apply well to arrays)
+                match self.strategy {
+                    MergeStrategy::FieldLevel => self.blend_field_level(mock, real, global_ratio),
+                    MergeStrategy::Weighted => self.blend_weighted(mock, real, global_ratio),
+                    MergeStrategy::BodyBlend => self.blend_body(mock, real, global_ratio),
+                }
+            }
+            _ => {
+                // For primitives, use global ratio
+                if global_ratio < 0.5 {
+                    mock.clone()
+                } else {
+                    real.clone()
+                }
+            }
         }
     }
 
@@ -262,12 +366,10 @@ impl ResponseBlender {
                 if let (Some(mock_f64), Some(real_f64)) = (mock_num.as_f64(), real_num.as_f64()) {
                     let blended = mock_f64 * (1.0 - ratio) + real_f64 * ratio;
                     Value::Number(serde_json::Number::from_f64(blended).unwrap_or(mock_num.clone()))
+                } else if ratio < 0.5 {
+                    Value::Number(mock_num.clone())
                 } else {
-                    if ratio < 0.5 {
-                        Value::Number(mock_num.clone())
-                    } else {
-                        Value::Number(real_num.clone())
-                    }
+                    Value::Number(real_num.clone())
                 }
             }
             _ => {
@@ -355,6 +457,7 @@ impl Default for ResponseBlender {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn test_blend_objects() {

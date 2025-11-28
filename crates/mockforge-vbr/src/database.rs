@@ -858,11 +858,9 @@ fn parse_update_query(
 
         for part in set_parts {
             let field_eq: Vec<&str> = part.split('=').map(|s| s.trim()).collect();
-            if field_eq.len() == 2 && field_eq[1] == "?" {
-                if param_idx < params.len() {
-                    updates.insert(field_eq[0].to_string(), params[param_idx].clone());
-                    param_idx += 1;
-                }
+            if field_eq.len() == 2 && field_eq[1] == "?" && param_idx < params.len() {
+                updates.insert(field_eq[0].to_string(), params[param_idx].clone());
+                param_idx += 1;
             }
         }
 

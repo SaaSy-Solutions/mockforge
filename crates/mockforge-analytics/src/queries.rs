@@ -2,7 +2,10 @@
 
 use crate::database::AnalyticsDatabase;
 use crate::error::Result;
-use crate::models::*;
+use crate::models::{
+    AnalyticsFilter, EndpointStat, ErrorSummary, Granularity, LatencyTrend, MetricsAggregate,
+    OverviewMetrics, ProtocolStat, TimeSeries, TimeSeriesPoint,
+};
 use chrono::{DateTime, Utc};
 use sqlx::Row;
 
@@ -37,17 +40,17 @@ impl AnalyticsDatabase {
         };
 
         let p95_latencies: Vec<f64> = aggregates.iter().filter_map(|a| a.latency_p95).collect();
-        let p95_latency_ms = if !p95_latencies.is_empty() {
-            p95_latencies.iter().sum::<f64>() / p95_latencies.len() as f64
-        } else {
+        let p95_latency_ms = if p95_latencies.is_empty() {
             0.0
+        } else {
+            p95_latencies.iter().sum::<f64>() / p95_latencies.len() as f64
         };
 
         let p99_latencies: Vec<f64> = aggregates.iter().filter_map(|a| a.latency_p99).collect();
-        let p99_latency_ms = if !p99_latencies.is_empty() {
-            p99_latencies.iter().sum::<f64>() / p99_latencies.len() as f64
-        } else {
+        let p99_latency_ms = if p99_latencies.is_empty() {
             0.0
+        } else {
+            p99_latencies.iter().sum::<f64>() / p99_latencies.len() as f64
         };
 
         let total_bytes_sent: i64 = aggregates.iter().map(|a| a.bytes_sent).sum();
@@ -296,7 +299,7 @@ impl AnalyticsDatabase {
                 error.error_category.clone().unwrap_or_else(|| "other".to_string());
             let endpoint = error.endpoint.clone().unwrap_or_default();
 
-            let entry = error_map.entry(format!("{}:{}", error_category, error_type)).or_insert((
+            let entry = error_map.entry(format!("{error_category}:{error_type}")).or_insert((
                 0,
                 std::collections::HashSet::new(),
                 0,
@@ -312,12 +315,11 @@ impl AnalyticsDatabase {
             .map(|(key, (count, endpoints, last_ts))| {
                 let parts: Vec<&str> = key.split(':').collect();
                 ErrorSummary {
-                    error_type: parts.get(1).unwrap_or(&"unknown").to_string(),
-                    error_category: parts.first().unwrap_or(&"other").to_string(),
+                    error_type: (*parts.get(1).unwrap_or(&"unknown")).to_string(),
+                    error_category: (*parts.first().unwrap_or(&"other")).to_string(),
                     count,
                     endpoints: endpoints.into_iter().collect(),
-                    last_occurrence: DateTime::from_timestamp(last_ts, 0)
-                        .unwrap_or_else(|| Utc::now()),
+                    last_occurrence: DateTime::from_timestamp(last_ts, 0).unwrap_or_else(Utc::now),
                 }
             })
             .collect();

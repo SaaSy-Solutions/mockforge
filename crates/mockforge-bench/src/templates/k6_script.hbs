@@ -4,8 +4,8 @@ import { Rate, Trend, Counter } from 'k6/metrics';
 
 // Custom metrics per operation
 {{#each operations}}
-const {{this.name}}_latency = new Trend('{{this.name}}_latency');
-const {{this.name}}_errors = new Rate('{{this.name}}_errors');
+const {{this.name}}_latency = new Trend('{{this.display_name}}_latency');
+const {{this.name}}_errors = new Rate('{{this.display_name}}_errors');
 {{/each}}
 
 // Test configuration
@@ -32,7 +32,7 @@ const BASE_URL = '{{base_url}}';
 
 export default function () {
   {{#each operations}}
-  // Operation {{@index}}: {{this.name}}
+  // Operation {{@index}}: {{this.display_name}}
   {
     const headers = {{{this.headers}}};
 
@@ -44,8 +44,8 @@ export default function () {
     {{/if}}
 
     const success = check(res, {
-      '{{this.name}}: status is OK': (r) => r.status >= 200 && r.status < 300,
-      '{{this.name}}: has response': (r) => r.body !== null && r.body.length > 0,
+      '{{this.display_name}}: status is OK': (r) => r.status >= 200 && r.status < 300,
+      '{{this.display_name}}: has response': (r) => r.body !== null && r.body.length > 0,
     });
 
     {{this.name}}_latency.add(res.timings.duration);

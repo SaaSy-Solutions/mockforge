@@ -1,0 +1,49 @@
+plugin:
+  id: "template-advanced"
+  version: "0.1.0"
+  name: "Advanced Template Functions Plugin"
+  description: "Advanced template functions for data transformations, aggregations, and complex data generation"
+  types: ["template"]
+  author:
+    name: "MockForge Team"
+    email: "team@mockforge.dev"
+  homepage: "https://github.com/mockforge/mockforge"
+  repository: "https://github.com/mockforge/mockforge/tree/main/examples/plugins/template-advanced"
+  license: "MIT OR Apache-2.0"
+  keywords: ["mockforge", "plugin", "template", "functions", "advanced", "example"]
+
+capabilities:
+  network:
+    allow_http_outbound: false
+    allowed_hosts: []
+  filesystem:
+    allow_read: false
+    allow_write: false
+    allowed_paths: []
+  resources:
+    max_memory_bytes: 15728640  # 15MB
+    max_cpu_time_ms: 200
+
+dependencies: []
+
+configuration:
+  schema:
+    type: object
+    properties:
+      enable_math:
+        type: boolean
+        description: "Enable mathematical functions (sum, average, etc.)"
+        default: true
+      enable_collections:
+        type: boolean
+        description: "Enable collection operations (group_by, sort, etc.)"
+        default: true
+      enable_datetime:
+        type: boolean
+        description: "Enable date/time formatting functions"
+        default: true
+      locale:
+        type: string
+        description: "Locale for formatting (e.g., 'en-US', 'fr-FR')"
+        default: "en-US"
+    required: []

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT MAX(last_activity) as \"last_activity: chrono::DateTime<chrono::Utc>\"\n            FROM workspace_members\n            WHERE user_id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "last_activity: chrono::DateTime<chrono::Utc>",
+        "ordinal": 0,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "400509a31ad90551e9d32f1f76e48422e39220300ff6b78a68e9c02e9ef1e2d3"
+}

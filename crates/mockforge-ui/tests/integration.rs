@@ -17,6 +17,11 @@ async fn test_dashboard_endpoint_integration() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let response = app
@@ -69,6 +74,11 @@ async fn test_logs_endpoint_with_filters() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     // Test with method filter
@@ -102,6 +112,11 @@ async fn test_metrics_endpoint() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let response = app
@@ -134,6 +149,11 @@ async fn test_configuration_endpoints() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     // Test GET config
@@ -168,6 +188,11 @@ async fn test_latency_configuration_update() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let update_payload = json!({
@@ -214,6 +239,11 @@ async fn test_fault_injection_update() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let update_payload = json!({
@@ -256,6 +286,11 @@ async fn test_proxy_configuration_update() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let update_payload = json!({
@@ -298,6 +333,11 @@ async fn test_latency_settings_update() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let update_payload = json!({
@@ -341,6 +381,11 @@ async fn test_fixtures_endpoint() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let response = app
@@ -368,6 +413,11 @@ async fn test_config_endpoint() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let response = app
@@ -396,6 +446,11 @@ async fn test_server_restart_endpoint() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let response = app
@@ -430,6 +485,11 @@ async fn test_logs_clear_endpoint() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let response = app
@@ -463,6 +523,11 @@ async fn test_health_endpoint() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let response = app
@@ -493,6 +558,11 @@ async fn test_error_responses() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     // Test invalid JSON in POST request
@@ -520,6 +590,11 @@ async fn test_error_responses() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
     let response = app2
         .oneshot(Request::builder().uri("/__mockforge/nonexistent").body(Body::empty()).unwrap())
@@ -540,6 +615,11 @@ async fn test_cors_headers() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
+        None,
+        None,
     );
 
     let response = app

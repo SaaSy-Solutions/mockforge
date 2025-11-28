@@ -26,6 +26,7 @@ pub struct Claims {
 
 impl Claims {
     /// Create new claims for a user
+    #[must_use]
     pub fn new(user_id: Uuid, username: String, expires_in: Duration) -> Self {
         let now = Utc::now();
         Self {
@@ -37,6 +38,7 @@ impl Claims {
     }
 
     /// Check if the token is expired
+    #[must_use]
     pub fn is_expired(&self) -> bool {
         Utc::now().timestamp() > self.exp
     }
@@ -83,7 +85,8 @@ pub struct AuthService {
 
 impl AuthService {
     /// Create a new authentication service
-    pub fn new(jwt_secret: String) -> Self {
+    #[must_use]
+    pub const fn new(jwt_secret: String) -> Self {
         Self {
             jwt_secret,
             token_expiration: Duration::hours(24),
@@ -91,7 +94,8 @@ impl AuthService {
     }
 
     /// Set custom token expiration
-    pub fn with_expiration(mut self, expiration: Duration) -> Self {
+    #[must_use]
+    pub const fn with_expiration(mut self, expiration: Duration) -> Self {
         self.token_expiration = expiration;
         self
     }
@@ -103,7 +107,7 @@ impl AuthService {
 
         let password_hash = argon2
             .hash_password(password.as_bytes(), &salt)
-            .map_err(|e| CollabError::Internal(format!("Password hashing failed: {}", e)))?
+            .map_err(|e| CollabError::Internal(format!("Password hashing failed: {e}")))?
             .to_string();
 
         Ok(password_hash)
@@ -112,7 +116,7 @@ impl AuthService {
     /// Verify a password against a hash
     pub fn verify_password(&self, password: &str, hash: &str) -> Result<bool> {
         let parsed_hash = PasswordHash::new(hash)
-            .map_err(|e| CollabError::Internal(format!("Invalid password hash: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("Invalid password hash: {e}")))?;
 
         let argon2 = Argon2::default();
 
@@ -129,7 +133,7 @@ impl AuthService {
             &claims,
             &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
         )
-        .map_err(|e| CollabError::Internal(format!("Token generation failed: {}", e)))?;
+        .map_err(|e| CollabError::Internal(format!("Token generation failed: {e}")))?;
 
         Ok(Token {
             access_token: token,
@@ -145,7 +149,7 @@ impl AuthService {
             &DecodingKey::from_secret(self.jwt_secret.as_bytes()),
             &Validation::default(),
         )
-        .map_err(|e| CollabError::AuthenticationFailed(format!("Invalid token: {}", e)))?;
+        .map_err(|e| CollabError::AuthenticationFailed(format!("Invalid token: {e}")))?;
 
         if token_data.claims.is_expired() {
             return Err(CollabError::AuthenticationFailed("Token expired".to_string()));
@@ -159,7 +163,7 @@ impl AuthService {
         let claims = self.verify_token(token)?;
 
         let user_id = Uuid::parse_str(&claims.sub)
-            .map_err(|e| CollabError::Internal(format!("Invalid user ID in token: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("Invalid user ID in token: {e}")))?;
 
         Ok(Session {
             user_id,
@@ -170,6 +174,7 @@ impl AuthService {
     }
 
     /// Generate a random invitation token
+    #[must_use]
     pub fn generate_invitation_token(&self) -> String {
         use blake3::hash;
         let random_data =

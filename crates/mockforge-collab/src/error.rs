@@ -69,24 +69,24 @@ pub enum CollabError {
 
 impl From<sqlx::Error> for CollabError {
     fn from(err: sqlx::Error) -> Self {
-        CollabError::DatabaseError(err.to_string())
+        Self::DatabaseError(err.to_string())
     }
 }
 
 impl From<serde_json::Error> for CollabError {
     fn from(err: serde_json::Error) -> Self {
-        CollabError::SerializationError(err.to_string())
+        Self::SerializationError(err.to_string())
     }
 }
 
 impl From<tokio::time::error::Elapsed> for CollabError {
     fn from(err: tokio::time::error::Elapsed) -> Self {
-        CollabError::Timeout(err.to_string())
+        Self::Timeout(err.to_string())
     }
 }
 
 impl From<sqlx::migrate::MigrateError> for CollabError {
     fn from(err: sqlx::migrate::MigrateError) -> Self {
-        CollabError::DatabaseError(err.to_string())
+        Self::DatabaseError(err.to_string())
     }
 }

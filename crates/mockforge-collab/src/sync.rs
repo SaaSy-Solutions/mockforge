@@ -47,16 +47,17 @@ pub struct SyncState {
     /// Full state
     pub state: serde_json::Value,
     /// Last updated timestamp
-    pub last_updated: chrono::DateTime<chrono::Utc>,
+    pub last_updated: chrono::DateTime<Utc>,
 }
 
 impl SyncState {
     /// Create a new sync state
+    #[must_use]
     pub fn new(version: i64, state: serde_json::Value) -> Self {
         Self {
             version,
             state,
-            last_updated: chrono::Utc::now(),
+            last_updated: Utc::now(),
         }
     }
 
@@ -64,7 +65,7 @@ impl SyncState {
     pub fn update(&mut self, new_state: serde_json::Value) {
         self.version += 1;
         self.state = new_state;
-        self.last_updated = chrono::Utc::now();
+        self.last_updated = Utc::now();
     }
 }
 
@@ -86,6 +87,7 @@ pub struct SyncEngine {
 
 impl SyncEngine {
     /// Create a new sync engine
+    #[must_use]
     pub fn new(event_bus: Arc<EventBus>) -> Self {
         Self {
             event_bus,
@@ -98,6 +100,7 @@ impl SyncEngine {
     }
 
     /// Create a new sync engine with database support for state snapshots
+    #[must_use]
     pub fn with_db(event_bus: Arc<EventBus>, db: Pool<Sqlite>) -> Self {
         Self {
             event_bus,
@@ -110,6 +113,7 @@ impl SyncEngine {
     }
 
     /// Create a new sync engine with full integration
+    #[must_use]
     pub fn with_integration(
         event_bus: Arc<EventBus>,
         db: Pool<Sqlite>,
@@ -133,7 +137,7 @@ impl SyncEngine {
         client_id: Uuid,
     ) -> Result<broadcast::Receiver<ChangeEvent>> {
         // Add to connections list
-        self.connections.entry(workspace_id).or_insert_with(Vec::new).push(client_id);
+        self.connections.entry(workspace_id).or_default().push(client_id);
 
         // Return event receiver
         Ok(self.event_bus.subscribe())
@@ -153,6 +157,7 @@ impl SyncEngine {
     }
 
     /// Get current state for a workspace
+    #[must_use]
     pub fn get_state(&self, workspace_id: Uuid) -> Option<SyncState> {
         self.states.get(&workspace_id).map(|s| s.clone())
     }
@@ -203,7 +208,7 @@ impl SyncEngine {
             // Spawn async task to save snapshot
             let db = db.clone();
             let workspace_id = workspace_id;
-            let state_data = new_state.clone();
+            let state_data = new_state;
             tokio::spawn(async move {
                 if let Err(e) =
                     Self::save_state_snapshot(&db, workspace_id, version, &state_data).await
@@ -218,7 +223,7 @@ impl SyncEngine {
 
     /// Get full workspace state for a workspace
     ///
-    /// Uses CoreBridge to get the complete workspace state including all mocks.
+    /// Uses `CoreBridge` to get the complete workspace state including all mocks.
     pub async fn get_full_workspace_state(
         &self,
         workspace_id: Uuid,
@@ -305,13 +310,13 @@ impl SyncEngine {
         // Use runtime queries with query_as to avoid type mismatch between different query structures
         let snapshot: Option<(String, i64, String)> = if let Some(version) = version {
             sqlx::query_as(
-                r#"
+                r"
                 SELECT state_data, version, created_at
                 FROM workspace_state_snapshots
                 WHERE workspace_id = ? AND version = ?
                 ORDER BY created_at DESC
                 LIMIT 1
-                "#,
+                ",
             )
             .bind(&workspace_id_str)
             .bind(version)
@@ -319,13 +324,13 @@ impl SyncEngine {
             .await?
         } else {
             sqlx::query_as(
-                r#"
+                r"
                 SELECT state_data, version, created_at
                 FROM workspace_state_snapshots
                 WHERE workspace_id = ?
                 ORDER BY version DESC, created_at DESC
                 LIMIT 1
-                "#,
+                ",
             )
             .bind(&workspace_id_str)
             .fetch_optional(db)
@@ -334,11 +339,11 @@ impl SyncEngine {
 
         if let Some((state_data, snap_version, created_at_str)) = snapshot {
             let state: serde_json::Value = serde_json::from_str(&state_data)
-                .map_err(|e| CollabError::Internal(format!("Failed to parse state: {}", e)))?;
+                .map_err(|e| CollabError::Internal(format!("Failed to parse state: {e}")))?;
             // Parse timestamp (stored as TEXT in SQLite, format: ISO8601)
             // SQLite stores timestamps as TEXT, try parsing as RFC3339 first, then fallback
             let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
-                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .map(|dt| dt.with_timezone(&Utc))
                 .or_else(|_| {
                     // Try parsing as ISO8601 without timezone (SQLite default format)
                     chrono::NaiveDateTime::parse_from_str(&created_at_str, "%Y-%m-%d %H:%M:%S%.f")
@@ -352,8 +357,7 @@ impl SyncEngine {
                 })
                 .map_err(|e| {
                     CollabError::Internal(format!(
-                        "Failed to parse timestamp '{}': {}",
-                        created_at_str, e
+                        "Failed to parse timestamp '{created_at_str}': {e}"
                     ))
                 })?;
 
@@ -431,10 +435,8 @@ impl SyncEngine {
 
         let mut result = Vec::new();
         for change in changes {
-            let data: serde_json::Value =
-                serde_json::from_str(&change.change_data).map_err(|e| {
-                    CollabError::Internal(format!("Failed to parse change data: {}", e))
-                })?;
+            let data: serde_json::Value = serde_json::from_str(&change.change_data)
+                .map_err(|e| CollabError::Internal(format!("Failed to parse change data: {e}")))?;
             result.push(data);
         }
 
@@ -442,18 +444,21 @@ impl SyncEngine {
     }
 
     /// Get connected clients for a workspace
+    #[must_use]
     pub fn get_connections(&self, workspace_id: Uuid) -> Vec<Uuid> {
         self.connections.get(&workspace_id).map(|c| c.clone()).unwrap_or_default()
     }
 
     /// Get total number of connections
+    #[must_use]
     pub fn connection_count(&self) -> usize {
         self.connections.iter().map(|c| c.value().len()).sum()
     }
 
     /// Check if a workspace has any active connections
+    #[must_use]
     pub fn has_connections(&self, workspace_id: Uuid) -> bool {
-        self.connections.get(&workspace_id).map(|c| !c.is_empty()).unwrap_or(false)
+        self.connections.get(&workspace_id).is_some_and(|c| !c.is_empty())
     }
 
     /// Clean up inactive workspaces (no connections)
@@ -489,7 +494,7 @@ pub mod crdt {
 
     impl<T> LwwRegister<T> {
         /// Create a new LWW register
-        pub fn new(value: T, timestamp: u64, client_id: Uuid) -> Self {
+        pub const fn new(value: T, timestamp: u64, client_id: Uuid) -> Self {
             Self {
                 value,
                 timestamp,

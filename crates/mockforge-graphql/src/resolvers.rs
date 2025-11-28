@@ -97,7 +97,7 @@ impl ResolverRegistry {
     pub fn register_resolver(&mut self, type_name: &str, resolver: MockResolver) {
         self.resolvers
             .entry(type_name.to_string())
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(resolver.field_name.clone(), resolver);
     }
 
@@ -144,9 +144,7 @@ impl ResolverRegistry {
             "created_at" | "updated_at" => {
                 Value::String(mockforge_core::templating::expand_str("{{now}}"))
             }
-            _ => Value::String(mockforge_core::templating::expand_str(&format!(
-                "{{{{faker.word}}}}"
-            ))),
+            _ => Value::String(mockforge_core::templating::expand_str("{{faker.word}}")),
         }
     }
 

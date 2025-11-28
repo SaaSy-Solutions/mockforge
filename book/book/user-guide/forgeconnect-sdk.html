@@ -224,6 +224,48 @@ forgeConnect.start();
 <li><strong>DevTools Integration</strong>: Full DevTools panel with React UI</li>
 <li><strong>Auto-Discovery</strong>: Automatically discover MockForge server</li>
 <li><strong>Request Filtering</strong>: Filter requests by URL, method, status</li>
+<li><strong>Live Response Modification</strong>: Modify responses on-the-fly in DevTools</li>
+<li><strong>Persona/Scenario Toggling</strong>: Switch personas and scenarios directly from DevTools</li>
+<li><strong>Reverse Injection</strong>: Automatically inject mocks back into workspace</li>
+<li><strong>Snapshot Diff</strong>: Compare mock behavior between environments</li>
+</ul>
+<h3 id="devtools-panel"><a class="header" href="#devtools-panel">DevTools Panel</a></h3>
+<p>The ForgeConnect extension adds a dedicated “MockForge” tab to your browser’s DevTools with the following features:</p>
+<h4 id="request-capture-tab"><a class="header" href="#request-capture-tab">Request Capture Tab</a></h4>
+<ul>
+<li><strong>Live Request Monitoring</strong>: See all fetch/XHR requests in real-time</li>
+<li><strong>Request Details</strong>: View request method, URL, headers, body, and response</li>
+<li><strong>Filter &amp; Search</strong>: Filter requests by URL pattern, method, or status code</li>
+<li><strong>One-Click Mock Creation</strong>: Click “Mock this endpoint” to create a mock from any request</li>
+</ul>
+<h4 id="mocks-management-tab"><a class="header" href="#mocks-management-tab">Mocks Management Tab</a></h4>
+<ul>
+<li><strong>View All Mocks</strong>: See all mocks in your MockForge workspace</li>
+<li><strong>Edit Mocks</strong>: Modify mock responses directly in DevTools</li>
+<li><strong>Delete Mocks</strong>: Remove mocks with one click</li>
+<li><strong>Toggle Mocks</strong>: Enable/disable mocks without leaving the browser</li>
+</ul>
+<h4 id="mock-preview-tab"><a class="header" href="#mock-preview-tab">Mock Preview Tab</a></h4>
+<ul>
+<li><strong>Create/Edit Mocks</strong>: Visual interface for creating and editing mocks</li>
+<li><strong>Response Editor</strong>: JSON editor with syntax highlighting</li>
+<li><strong>Status Code Selection</strong>: Choose response status codes</li>
+<li><strong>Headers Configuration</strong>: Add/modify response headers</li>
+<li><strong>Save to Workspace</strong>: Automatically reverse-inject mocks into your workspace</li>
+</ul>
+<h4 id="x-ray-tab"><a class="header" href="#x-ray-tab">X-Ray Tab</a></h4>
+<ul>
+<li><strong>Request Analysis</strong>: Deep dive into request/response details</li>
+<li><strong>Timing Information</strong>: View request latency and timing breakdown</li>
+<li><strong>Header Inspection</strong>: Inspect all request and response headers</li>
+<li><strong>Body Analysis</strong>: View and analyze request/response bodies</li>
+</ul>
+<h4 id="snapshot-diff-tab"><a class="header" href="#snapshot-diff-tab">Snapshot Diff Tab</a></h4>
+<ul>
+<li><strong>Environment Comparison</strong>: Compare mock behavior between test and prod</li>
+<li><strong>Persona Comparison</strong>: Compare responses for different personas</li>
+<li><strong>Reality Level Comparison</strong>: Compare behavior at different reality levels</li>
+<li><strong>Side-by-Side Visualization</strong>: See differences highlighted side-by-side</li>
 </ul>
 <h3 id="usage"><a class="header" href="#usage">Usage</a></h3>
 <ol>
@@ -231,8 +273,50 @@ forgeConnect.start();
 <li><strong>Navigate to MockForge Tab</strong>: Click “MockForge” in DevTools</li>
 <li><strong>Connect to Server</strong>: Enter MockForge server URL or use auto-discovery</li>
 <li><strong>Capture Requests</strong>: Requests are automatically captured</li>
-<li><strong>Create Mocks</strong>: Click “Create Mock” on any captured request</li>
+<li><strong>Create Mocks</strong>: Click “Mock this endpoint” on any captured request</li>
 </ol>
+<h3 id="mock-this-endpoint-feature"><a class="header" href="#mock-this-endpoint-feature">“Mock this Endpoint” Feature</a></h3>
+<p>The “Mock this endpoint” button appears on every captured request:</p>
+<ol>
+<li><strong>Click “Mock this endpoint”</strong>: Opens the mock preview panel</li>
+<li><strong>Review Request Details</strong>: See the original request method, path, headers, and body</li>
+<li><strong>Edit Response</strong>: Modify the response status, headers, and body</li>
+<li><strong>Save Mock</strong>: Click “Save” to create the mock in your workspace</li>
+<li><strong>Auto-Injection</strong>: The mock is automatically reverse-injected into your MockForge workspace</li>
+</ol>
+<p><strong>Example Workflow:</strong></p>
+<pre><code>1. Make API call: GET /api/users/123
+2. Request appears in DevTools "Captured Requests" tab
+3. Click "Mock this endpoint" button
+4. Edit response in preview panel
+5. Click "Save" → Mock created in workspace
+6. Future requests to /api/users/123 use the mock
+</code></pre>
+<h3 id="live-response-modification"><a class="header" href="#live-response-modification">Live Response Modification</a></h3>
+<p>Modify responses on-the-fly without leaving the browser:</p>
+<ol>
+<li><strong>Select a Mock</strong>: Click on a mock in the “Mocks” tab</li>
+<li><strong>Edit Response</strong>: Modify the response JSON directly</li>
+<li><strong>Save Changes</strong>: Changes are immediately applied</li>
+<li><strong>Test</strong>: Refresh the page to see the new response</li>
+</ol>
+<h3 id="personascenario-toggling"><a class="header" href="#personascenario-toggling">Persona/Scenario Toggling</a></h3>
+<p>Switch personas and scenarios directly from DevTools:</p>
+<ol>
+<li><strong>Open Mocks Tab</strong>: Navigate to the “Mocks” tab</li>
+<li><strong>Select Mock</strong>: Click on a mock to view details</li>
+<li><strong>Change Persona</strong>: Use the persona dropdown to switch personas</li>
+<li><strong>Change Scenario</strong>: Use the scenario dropdown to switch scenarios</li>
+<li><strong>Apply</strong>: Changes are immediately applied to the mock</li>
+</ol>
+<h3 id="reverse-injection-into-workspace"><a class="header" href="#reverse-injection-into-workspace">Reverse Injection into Workspace</a></h3>
+<p>When you create or modify a mock in DevTools, it’s automatically reverse-injected into your MockForge workspace:</p>
+<ul>
+<li><strong>Automatic Sync</strong>: Changes sync to your workspace immediately</li>
+<li><strong>Workspace Integration</strong>: Mocks appear in your workspace configuration</li>
+<li><strong>Version Control</strong>: Mocks can be committed to version control</li>
+<li><strong>Team Sharing</strong>: Other team members see the mocks in shared workspaces</li>
+</ul>
 <h3 id="auto-mock-generation"><a class="header" href="#auto-mock-generation">Auto-Mock Generation</a></h3>
 <p>When a request fails or returns an error, ForgeConnect can automatically create a mock:</p>
 <pre><code class="language-typescript">const forgeConnect = new ForgeConnect({

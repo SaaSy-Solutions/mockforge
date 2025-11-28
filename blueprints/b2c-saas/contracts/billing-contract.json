@@ -1,0 +1,225 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "B2C SaaS Billing Contract",
+  "description": "Contract schemas for billing and subscription endpoints",
+  "version": "1.0.0",
+  "endpoints": {
+    "/api/subscriptions/trial": {
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["plan"],
+          "properties": {
+            "plan": {
+              "type": "string",
+              "enum": ["trial", "free"],
+              "description": "Subscription plan type"
+            }
+          }
+        },
+        "response": {
+          "201": {
+            "type": "object",
+            "required": ["subscription"],
+            "properties": {
+              "subscription": {
+                "type": "object",
+                "required": ["id", "status", "tier", "trial_ends"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Subscription ID"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["trial", "active", "cancelled"]
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": ["trial", "free", "premium", "enterprise"]
+                  },
+                  "trial_ends": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Trial end date"
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subscriptions/{subscription_id}/upgrade": {
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["plan", "payment_method_id"],
+          "properties": {
+            "plan": {
+              "type": "string",
+              "enum": ["premium", "enterprise"],
+              "description": "Target subscription plan"
+            },
+            "payment_method_id": {
+              "type": "string",
+              "description": "Payment method ID"
+            }
+          }
+        },
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["subscription"],
+            "properties": {
+              "subscription": {
+                "type": "object",
+                "required": ["id", "status", "tier"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["active", "pending"]
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": ["premium", "enterprise"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/process": {
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["subscription_id", "amount", "currency"],
+          "properties": {
+            "subscription_id": {
+              "type": "string",
+              "description": "Subscription ID to charge"
+            },
+            "amount": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Payment amount"
+            },
+            "currency": {
+              "type": "string",
+              "enum": ["USD", "EUR", "GBP"],
+              "default": "USD"
+            }
+          }
+        },
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["payment"],
+            "properties": {
+              "payment": {
+                "type": "object",
+                "required": ["id", "status", "amount"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["succeeded", "pending", "failed"]
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "currency": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+              "error": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": ["PAYMENT_DECLINED", "INSUFFICIENT_FUNDS"]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/invoices": {
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["subscription_id", "period_start", "period_end"],
+          "properties": {
+            "subscription_id": {
+              "type": "string"
+            },
+            "period_start": {
+              "type": "string",
+              "format": "date"
+            },
+            "period_end": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        },
+        "response": {
+          "201": {
+            "type": "object",
+            "required": ["invoice"],
+            "properties": {
+              "invoice": {
+                "type": "object",
+                "required": ["id", "amount", "status"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["draft", "open", "paid", "void"]
+                  },
+                  "period_start": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "period_end": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

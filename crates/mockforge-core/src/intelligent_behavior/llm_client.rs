@@ -103,6 +103,69 @@ impl LlmClient {
         }
     }
 
+    /// Generate a response and return usage information
+    pub async fn generate_with_usage(
+        &self,
+        request: &LlmGenerationRequest,
+    ) -> Result<(serde_json::Value, LlmUsage)> {
+        self.ensure_initialized().await?;
+
+        let engine = self.rag_engine.read().await;
+        let provider = engine
+            .as_ref()
+            .ok_or_else(|| crate::Error::generic("LLM provider not initialized"))?;
+
+        // Build messages
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: request.system_prompt.clone(),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: request.user_prompt.clone(),
+            },
+        ];
+
+        // Generate response with usage tracking
+        let (response_text, usage) = provider
+            .generate_chat_with_usage(messages, request.temperature, request.max_tokens)
+            .await?;
+
+        // Try to parse as JSON
+        let json_value = match serde_json::from_str::<serde_json::Value>(&response_text) {
+            Ok(json) => json,
+            Err(_) => {
+                // Try to extract JSON from response
+                if let Some(start) = response_text.find('{') {
+                    if let Some(end) = response_text.rfind('}') {
+                        let json_str = &response_text[start..=end];
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
+                            json
+                        } else {
+                            serde_json::json!({
+                                "response": response_text,
+                                "note": "Response was not valid JSON, wrapped in object"
+                            })
+                        }
+                    } else {
+                        serde_json::json!({
+                            "response": response_text,
+                            "note": "Response was not valid JSON, wrapped in object"
+                        })
+                    }
+                } else {
+                    serde_json::json!({
+                        "response": response_text,
+                        "note": "Response was not valid JSON, wrapped in object"
+                    })
+                }
+            }
+        };
+
+        Ok((json_value, usage))
+    }
+
     /// Get configuration
     pub fn config(&self) -> &BehaviorModelConfig {
         &self.config
@@ -116,6 +179,28 @@ struct ChatMessage {
     content: String,
 }
 
+/// LLM usage information
+#[derive(Debug, Clone, Default)]
+pub struct LlmUsage {
+    /// Prompt tokens used
+    pub prompt_tokens: u64,
+    /// Completion tokens used
+    pub completion_tokens: u64,
+    /// Total tokens used
+    pub total_tokens: u64,
+}
+
+impl LlmUsage {
+    /// Create new usage info
+    pub fn new(prompt_tokens: u64, completion_tokens: u64) -> Self {
+        Self {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: prompt_tokens + completion_tokens,
+        }
+    }
+}
+
 /// LLM provider trait
 #[async_trait::async_trait]
 trait LlmProvider: Send + Sync {
@@ -126,6 +211,20 @@ trait LlmProvider: Send + Sync {
         temperature: f64,
         max_tokens: usize,
     ) -> Result<String>;
+
+    /// Generate chat completion with usage tracking
+    async fn generate_chat_with_usage(
+        &self,
+        messages: Vec<ChatMessage>,
+        temperature: f64,
+        max_tokens: usize,
+    ) -> Result<(String, LlmUsage)> {
+        // Default implementation: call generate_chat and estimate tokens
+        let response = self.generate_chat(messages, temperature, max_tokens).await?;
+        // Rough estimation: ~4 characters per token
+        let estimated_tokens = (response.len() as f64 / 4.0) as u64;
+        Ok((response, LlmUsage::new(estimated_tokens, estimated_tokens)))
+    }
 }
 
 /// OpenAI provider implementation
@@ -204,6 +303,64 @@ impl LlmProvider for OpenAIProvider {
             .to_string();
 
         Ok(content)
+    }
+
+    async fn generate_chat_with_usage(
+        &self,
+        messages: Vec<ChatMessage>,
+        temperature: f64,
+        max_tokens: usize,
+    ) -> Result<(String, LlmUsage)> {
+        let request_body = serde_json::json!({
+            "model": self.model,
+            "messages": messages.iter().map(|m| {
+                serde_json::json!({
+                    "role": m.role,
+                    "content": m.content
+                })
+            }).collect::<Vec<_>>(),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        });
+
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| crate::Error::generic(format!("OpenAI API request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", error_text)));
+        }
+
+        let response_json: serde_json::Value = response.json().await.map_err(|e| {
+            crate::Error::generic(format!("Failed to parse OpenAI response: {}", e))
+        })?;
+
+        // Extract content from response
+        let content = response_json["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| crate::Error::generic("Invalid OpenAI response format"))?
+            .to_string();
+
+        // Extract usage information
+        let usage = if let Some(usage_obj) = response_json.get("usage") {
+            LlmUsage::new(
+                usage_obj["prompt_tokens"].as_u64().unwrap_or(0),
+                usage_obj["completion_tokens"].as_u64().unwrap_or(0),
+            )
+        } else {
+            // Fallback: estimate tokens
+            let estimated = (content.len() as f64 / 4.0) as u64;
+            LlmUsage::new(estimated, estimated)
+        };
+
+        Ok((content, usage))
     }
 }
 

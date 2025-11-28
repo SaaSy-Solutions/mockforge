@@ -27,7 +27,7 @@ use argon2::{
 use base64::{engine::general_purpose, Engine as _};
 use chacha20poly1305::{ChaCha20Poly1305, Key as ChaChaKey};
 use pbkdf2::pbkdf2_hmac;
-use rand::{rng, Rng};
+use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::fmt;
@@ -139,7 +139,9 @@ impl EncryptionKey {
         salt: Option<&[u8]>,
         algorithm: EncryptionAlgorithm,
     ) -> Result<Self> {
-        let salt = salt.map(|s| s.to_vec()).unwrap_or_else(|| rng().random::<[u8; 32]>().to_vec());
+        let salt = salt
+            .map(|s| s.to_vec())
+            .unwrap_or_else(|| thread_rng().random::<[u8; 32]>().to_vec());
 
         let mut key = vec![0u8; 32];
         pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, 100_000, &mut key);
@@ -159,7 +161,7 @@ impl EncryptionKey {
         } else {
             // Generate a random salt
             let mut salt_bytes = [0u8; 32];
-            rng().fill(&mut salt_bytes);
+            thread_rng().fill(&mut salt_bytes);
             SaltString::encode_b64(&salt_bytes)
                 .map_err(|e| EncryptionError::KeyDerivation(e.to_string()))?
         };
@@ -210,7 +212,7 @@ impl EncryptionKey {
                 EncryptionError::InvalidKey("Key length must be 32 bytes".to_string())
             })?;
         let cipher = Aes256Gcm::new(&key_array.into());
-        let nonce: [u8; 12] = rng().random(); // 96-bit nonce
+        let nonce: [u8; 12] = thread_rng().random(); // 96-bit nonce
         let nonce = Nonce::from(nonce);
 
         let ciphertext = cipher
@@ -283,7 +285,7 @@ impl EncryptionKey {
     ) -> Result<String> {
         let key = ChaChaKey::from_slice(&self.key_data);
         let cipher = ChaCha20Poly1305::new(key);
-        let nonce: [u8; 12] = rng().random(); // 96-bit nonce for ChaCha20-Poly1305
+        let nonce: [u8; 12] = thread_rng().random(); // 96-bit nonce for ChaCha20-Poly1305
         let nonce = chacha20poly1305::Nonce::from_slice(&nonce);
 
         let ciphertext = cipher

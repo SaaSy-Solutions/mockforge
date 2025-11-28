@@ -459,8 +459,8 @@ export function ProxyInspector() {
                                   res.status_code >= 200 && res.status_code < 300
                                     ? 'success'
                                     : res.status_code >= 400 && res.status_code < 500
-                                    ? 'warning'
-                                    : 'danger'
+                                      ? 'warning'
+                                      : 'danger'
                                 }
                               >
                                 {res.status_code}
@@ -627,7 +627,7 @@ function ProxyRuleForm({ rule, onSave, onCancel }: ProxyRuleFormProps) {
                         required
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Supports templates: {`{{uuid}}`, `{{faker.email}}`, etc.
+                        Supports templates: {'{{'}uuid{'}}'}, {'{{'}faker.email{'}}'}, etc.
                       </p>
                     </div>
                     <div>

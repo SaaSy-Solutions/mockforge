@@ -10,7 +10,6 @@
 
 use std::fmt;
 use std::io::{self, Write};
-use std::path::PathBuf;
 
 /// Speech-to-text errors
 #[derive(Debug)]
@@ -471,11 +470,11 @@ impl VoskBackend {
                 .to_str()
                 .ok_or_else(|| SttError::NotAvailable("Invalid model path".to_string()))?,
         )
-        .map_err(|e| SttError::NotAvailable(format!("Failed to load Vosk model: {}", e)))?;
+        .ok_or_else(|| SttError::NotAvailable("Failed to load Vosk model".to_string()))?;
 
         // Create recognizer
         let mut recognizer = Recognizer::new(&model, self.sample_rate)
-            .map_err(|e| SttError::Transcription(format!("Failed to create recognizer: {}", e)))?;
+            .ok_or_else(|| SttError::Transcription("Failed to create recognizer".to_string()))?;
 
         // Read WAV file
         let mut reader = WavReader::open(audio_path)
@@ -494,34 +493,27 @@ impl VoskBackend {
         let samples = samples
             .map_err(|e| SttError::AudioCapture(format!("Failed to read audio samples: {}", e)))?;
 
-        // Convert to bytes (16-bit PCM)
-        let audio_bytes: Vec<u8> = samples.iter().flat_map(|&s| s.to_le_bytes().to_vec()).collect();
+        // Process audio - accept_waveform expects &[i16] and returns Result<DecodingState, AcceptWaveformError>
+        match recognizer.accept_waveform(&samples) {
+            Ok(_) => {
+                // Get final result - CompleteResult is an enum with Single/Multiple variants
+                let result = recognizer.final_result();
+                // Extract text from CompleteResult
+                let text = match result {
+                    vosk::CompleteResult::Single(single) => single.text,
+                    vosk::CompleteResult::Multiple(multiple) => {
+                        // Get text from the first (most likely) alternative
+                        multiple.alternatives.first().map(|alt| alt.text).unwrap_or("")
+                    }
+                };
 
-        // Process audio
-        if recognizer.accept_waveform(&audio_bytes) {
-            // Get final result
-            let result = recognizer
-                .final_result()
-                .map_err(|e| SttError::Transcription(format!("Recognition error: {}", e)))?;
-
-            // Parse JSON result
-            let result_json: serde_json::Value = serde_json::from_str(&result)
-                .map_err(|e| SttError::Transcription(format!("Failed to parse result: {}", e)))?;
-
-            result_json["text"]
-                .as_str()
-                .ok_or_else(|| SttError::Transcription("No text in result".to_string()))
-                .map(|s| s.to_string())
-        } else {
-            // Get partial result
-            let partial = recognizer
-                .partial_result()
-                .map_err(|e| SttError::Transcription(format!("Recognition error: {}", e)))?;
-
-            let partial_json: serde_json::Value = serde_json::from_str(&partial)
-                .map_err(|e| SttError::Transcription(format!("Failed to parse partial: {}", e)))?;
-
-            Ok(partial_json["partial"].as_str().unwrap_or("").to_string())
+                Ok(text.to_string())
+            }
+            Err(_) => {
+                // On error, try to get partial result - PartialResult has a partial field
+                let partial = recognizer.partial_result();
+                Ok(partial.partial.to_string())
+            }
         }
     }
 }

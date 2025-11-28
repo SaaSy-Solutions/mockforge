@@ -219,18 +219,6 @@ export function ChaosPage() {
     }
   };
 
-  const resetChaos = async () => {
-    try {
-      const response = await fetch('/api/chaos/reset', {
-        method: 'POST',
-      });
-      if (!response.ok) throw new Error('Failed to reset chaos');
-      fetchStatus();
-    } catch (err) {
-      alert(`Failed to reset chaos: ${err}`);
-    }
-  };
-
   const predefinedScenarios = [
     {
       name: 'network_degradation',
@@ -328,7 +316,7 @@ export function ChaosPage() {
           message={`Active scenario: ${status.active_scenario || 'Custom configuration'}`}
           actions={
             <button
-              onClick={resetChaos}
+              onClick={() => resetChaos.mutate()}
               className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
             >
               Reset

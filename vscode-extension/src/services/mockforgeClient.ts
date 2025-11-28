@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import * as vscode from 'vscode';
 import { MockEvent } from '../types/events';
 import { Logger } from '../utils/logger';
-import { MockConfig, ServerStats, ServerConfig, ConnectionState } from '../types/mock';
+import { MockConfig, MockResponse, ServerStats, ServerConfig, ConnectionState } from '../types/mock';
 
 // Re-export types for convenience
 export type { MockConfig, ServerStats, ServerConfig, ConnectionState } from '../types/mock';
@@ -325,6 +325,32 @@ export class MockForgeClient {
     async getConfig(): Promise<ServerConfig> {
         const response = await this.http.get('/config');
         return response.data;
+    }
+
+    /**
+     * Get mock response for a specific endpoint
+     * @param method HTTP method (GET, POST, etc.)
+     * @param path Endpoint path
+     * @returns Mock response configuration or null if not found
+     */
+    async getMockResponse(method: string, path: string): Promise<MockResponse | null> {
+        try {
+            // Get all mocks and find matching one
+            const mocks = await this.getMocks();
+            const mock = mocks.find(m =>
+                m.method?.toUpperCase() === method.toUpperCase() &&
+                m.path === path
+            );
+
+            if (mock && mock.response) {
+                return mock.response;
+            }
+
+            return null;
+        } catch (error) {
+            Logger.error('Failed to get mock response:', error);
+            return null;
+        }
     }
 
     async exportMocks(format: string): Promise<string> {

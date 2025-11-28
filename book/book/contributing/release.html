@@ -256,6 +256,8 @@ make benchmark
 </code></pre>
 <h3 id="2-documentation-updates"><a class="header" href="#2-documentation-updates">2. Documentation Updates</a></h3>
 <pre><code class="language-bash"># Update CHANGELOG.md with release notes
+# IMPORTANT: Tag all changelog entries with pillars: [Reality], [Contracts], [DevX], [Cloud], [AI]
+# See docs/PILLARS.md for pillar definitions and examples
 # Update version numbers in documentation
 # Build and test documentation
 make docs
@@ -264,6 +266,22 @@ make docs-serve
 # Test documentation links
 mdbook test
 </code></pre>
+<p><strong>Changelog Pillar Tagging Requirements:</strong></p>
+<p>All changelog entries must be tagged with at least one pillar. The release scripts will validate this automatically.</p>
+<p><strong>Format:</strong></p>
+<pre><code class="language-markdown">- **[Reality] Feature description**
+
+- **[Contracts][DevX] Multi-pillar feature**
+</code></pre>
+<p><strong>Pillars:</strong></p>
+<ul>
+<li><strong>[Reality]</strong> – Everything that makes mocks feel like a real, evolving backend</li>
+<li><strong>[Contracts]</strong> – Schema, drift, validation, and safety nets</li>
+<li><strong>[DevX]</strong> – SDKs, generators, playgrounds, ergonomics</li>
+<li><strong>[Cloud]</strong> – Registry, orgs, governance, monetization, marketplace</li>
+<li><strong>[AI]</strong> – LLM/voice flows, AI diff/assist, generative behaviors</li>
+</ul>
+<p>See <a href="../../../docs/PILLARS.html">docs/PILLARS.md</a> for detailed pillar definitions, feature mappings, and examples.</p>
 <h3 id="3-version-bump"><a class="header" href="#3-version-bump">3. Version Bump</a></h3>
 <pre><code class="language-bash"># Update version in Cargo.toml files
 # Update version in package metadata

@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Integration tests for Reality Slider functionality
 //!
 //! These tests verify that the RealityEngine correctly coordinates

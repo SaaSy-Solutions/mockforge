@@ -3,7 +3,7 @@
 use crate::fixtures::TcpFixture;
 use mockforge_core::Result;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tracing::{debug, info, warn};
 
 /// Registry for TCP fixtures
@@ -102,13 +102,7 @@ impl TcpSpecRegistry {
     /// Find a fixture matching the given data
     pub fn find_matching_fixture(&self, data: &[u8]) -> Option<&TcpFixture> {
         // Try to match against all fixtures
-        for fixture in self.fixtures.values() {
-            if fixture.matches(data) {
-                return Some(fixture);
-            }
-        }
-
-        None
+        self.fixtures.values().find(|&fixture| fixture.matches(data)).map(|v| v as _)
     }
 
     /// Get all fixtures

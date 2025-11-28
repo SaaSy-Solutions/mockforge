@@ -73,7 +73,7 @@ jobs:
 
       - name: Upload crash artifacts
         if: steps.check_crashes.outputs.crashes != '0'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: fuzz-crash-artifacts
           path: crates/mockforge-core/fuzz/artifacts/

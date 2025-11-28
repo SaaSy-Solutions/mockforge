@@ -1,0 +1,276 @@
+# Order Fulfillment Lifecycle with Time Travel Example
+# Demonstrates persona lifecycles that evolve over virtual time
+
+server:
+  http:
+    port: 3000
+    enabled: true
+
+# Workspace configuration
+workspace:
+  id: "order-fulfillment-demo"
+  name: "Order Fulfillment Lifecycle Demo"
+  description: |
+    Demonstrates order fulfillment lifecycle with time travel.
+    Shows how persona states automatically transition as virtual time advances.
+
+# Consistency engine configuration
+consistency:
+  # Enable persona graphs for cross-entity relationships
+  persona_graphs:
+    enabled: true
+
+  # Default persona with order fulfillment lifecycle
+  personas:
+    default_persona:
+      id: "customer:demo-customer-001"
+      name: "Demo Customer"
+      domain: "ecommerce"
+      traits:
+        email: "customer@example.com"
+        name: "Demo Customer"
+        customer_tier: "standard"
+        inventory_available: true
+      lifecycle:
+        preset: "order_fulfillment"
+        initial_state: "pending"
+
+# Reality continuum configuration
+reality_continuum:
+  enabled: true
+  default_ratio: 0.6  # 60% reality (blended)
+  time_based_progression:
+    enabled: true
+    schedule:
+      - time: "00:00"
+        ratio: 0.4  # Start with 40% reality
+      - time: "12:00"
+        ratio: 0.7  # Increase to 70% at noon
+      - time: "18:00"
+        ratio: 0.5  # Back to 50% in evening
+
+# Time travel configuration
+time_travel:
+  enabled: true
+  # Allow time travel to test lifecycle transitions
+  allow_time_manipulation: true
+  # Initial virtual time (optional - defaults to real time)
+  # initial_time: "2024-01-01T00:00:00Z"
+
+# OpenAPI specification for order endpoints
+openapi:
+  spec: |
+    openapi: 3.0.0
+    info:
+      title: Order Fulfillment API
+      version: 1.0.0
+      description: |
+        Order fulfillment API with lifecycle-aware responses.
+        Responses change based on persona lifecycle state.
+    servers:
+      - url: http://localhost:3000
+        description: Local development server
+    paths:
+      /api/orders/{id}:
+        get:
+          summary: Get order status
+          description: |
+            Returns order status that reflects the current persona lifecycle state.
+            Status values: pending, processing, shipped, delivered, completed
+          operationId: getOrder
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+              description: Order ID
+          responses:
+            '200':
+              description: Order status
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      status:
+                        type: string
+                        enum: [pending, processing, shipped, delivered, completed]
+                      created_at:
+                        type: string
+                        format: date-time
+                      estimated_fulfillment_date:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      tracking_number:
+                        type: string
+                        nullable: true
+                      carrier:
+                        type: string
+                        nullable: true
+                      delivered_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      completed_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+      /api/orders/{id}/shipment:
+        get:
+          summary: Get shipment tracking
+          description: |
+            Returns shipment tracking information.
+            Only available when order is in SHIPPED, DELIVERED, or COMPLETED state.
+          operationId: getShipment
+          parameters:
+            - name: id
+              in: path
+              required: true
+              schema:
+                type: string
+              description: Order ID
+          responses:
+            '200':
+              description: Shipment tracking information
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      order_id:
+                        type: string
+                      tracking_number:
+                        type: string
+                      carrier:
+                        type: string
+                      status:
+                        type: string
+                        enum: [in_transit, delivered]
+                      estimated_delivery:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      delivered_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+            '404':
+              description: Shipment not found (order not yet shipped)
+      /api/orders:
+        post:
+          summary: Create new order
+          description: Creates a new order in PENDING state
+          operationId: createOrder
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    customer_id:
+                      type: string
+                    items:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          product_id:
+                            type: string
+                          quantity:
+                            type: integer
+          responses:
+            '201':
+              description: Order created
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      status:
+                        type: string
+                        example: pending
+                      created_at:
+                        type: string
+                        format: date-time
+
+# Response templates with lifecycle-aware logic
+templates:
+  order_status:
+    # Template will be expanded based on lifecycle state
+    # See persona_lifecycle_response.rs for lifecycle effects
+    default: |
+      {
+        "id": "{{order_id}}",
+        "status": "{{lifecycle_state}}",
+        "created_at": "{{timestamp}}",
+        "estimated_fulfillment_date": "{{#if processing}}{{timestamp_plus_2_days}}{{/if}}",
+        "tracking_number": "{{#if shipped}}TRACK{{random_number}}{{/if}}",
+        "carrier": "{{#if shipped}}FedEx{{/if}}",
+        "delivered_at": "{{#if delivered}}{{timestamp}}{{/if}}",
+        "completed_at": "{{#if completed}}{{timestamp}}{{/if}}"
+      }
+
+# Scenarios for different fulfillment paths
+scenarios:
+  - id: fast_fulfillment
+    name: Fast Fulfillment
+    description: Order fulfilled in 3 days
+    steps:
+      - name: create_order
+        endpoint: POST /api/orders
+      - name: advance_1_day
+        action: time_travel
+        duration: 1d
+      - name: check_processing
+        endpoint: GET /api/orders/{id}
+        expected_status: processing
+      - name: advance_1_day
+        action: time_travel
+        duration: 1d
+      - name: check_shipped
+        endpoint: GET /api/orders/{id}
+        expected_status: shipped
+      - name: advance_1_day
+        action: time_travel
+        duration: 1d
+      - name: check_delivered
+        endpoint: GET /api/orders/{id}
+        expected_status: delivered
+
+  - id: standard_fulfillment
+    name: Standard Fulfillment
+    description: Order fulfilled in 11 days (standard timeline)
+    steps:
+      - name: create_order
+        endpoint: POST /api/orders
+      - name: advance_1_day
+        action: time_travel
+        duration: 1d
+      - name: advance_1_day
+        action: time_travel
+        duration: 1d
+      - name: advance_3_days
+        action: time_travel
+        duration: 3d
+      - name: advance_7_days
+        action: time_travel
+        duration: 7d
+      - name: check_completed
+        endpoint: GET /api/orders/{id}
+        expected_status: completed
+
+# Observability configuration
+observability:
+  reality_trace:
+    enabled: true
+    include_response_trace: true
+  request_logging:
+    enabled: true
+    include_trace_metadata: true

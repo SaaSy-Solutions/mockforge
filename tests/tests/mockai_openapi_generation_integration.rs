@@ -174,7 +174,7 @@ async fn test_recorder_to_openapi_conversion() {
     let exchanges = RecordingsToOpenApi::query_http_exchanges(&db, Some(filters)).await.unwrap();
 
     // Should return empty list for empty database
-    assert!(exchanges.is_empty() || exchanges.len() >= 0);
+    assert!(exchanges.is_empty() || !exchanges.is_empty());
 }
 
 #[tokio::test]

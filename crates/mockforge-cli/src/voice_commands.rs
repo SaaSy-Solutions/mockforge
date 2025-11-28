@@ -8,12 +8,13 @@ mod speech_to_text;
 
 use clap::Subcommand;
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
+use mockforge_core::multi_tenant::{MultiTenantConfig, MultiTenantWorkspaceRegistry};
 use mockforge_core::openapi::OpenApiSpec;
-use mockforge_core::{ConversationManager, VoiceCommandParser, VoiceSpecGenerator};
+use mockforge_core::voice::WorkspaceBuilder;
+use mockforge_core::{ConversationManager, HookTranspiler, VoiceCommandParser, VoiceSpecGenerator};
 use speech_to_text::{InteractiveVoiceInput, SpeechToTextManager};
 use std::io::{self, Write};
 use std::path::PathBuf;
-use uuid::Uuid;
 
 /// Voice CLI commands
 #[derive(Subcommand, Debug)]
@@ -59,6 +60,40 @@ pub enum VoiceCommands {
         #[arg(long, default_value = "3000")]
         port: u16,
     },
+
+    /// Transpile a natural language hook description to hook configuration
+    ///
+    /// Examples:
+    ///   mockforge voice transpile-hook --description "For VIP users, webhooks fire instantly"
+    ///   mockforge voice transpile-hook --output hook.yaml
+    TranspileHook {
+        /// Natural language description of the hook logic
+        #[arg(short, long)]
+        description: Option<String>,
+
+        /// Output file for generated hook configuration (YAML format)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Output format: yaml or json (default: yaml)
+        #[arg(long, default_value = "yaml")]
+        format: String,
+    },
+
+    /// Create a complete workspace from natural language description
+    ///
+    /// Examples:
+    ///   mockforge voice create-workspace --command "Create an e-commerce workspace with customers, orders, and payments"
+    ///   mockforge voice create-workspace
+    CreateWorkspace {
+        /// Text command (if not provided, will prompt or use voice input)
+        #[arg(short, long)]
+        command: Option<String>,
+
+        /// Skip confirmation prompt (auto-confirm)
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 /// Handle voice CLI commands
@@ -80,6 +115,16 @@ pub async fn handle_voice_command(
             port,
         } => {
             handle_interactive(output, serve, port).await?;
+        }
+        VoiceCommands::TranspileHook {
+            description,
+            output,
+            format,
+        } => {
+            handle_transpile_hook(description, output, format).await?;
+        }
+        VoiceCommands::CreateWorkspace { command, yes } => {
+            handle_create_workspace(command, yes).await?;
         }
     }
 
@@ -323,7 +368,7 @@ async fn handle_interactive(
         // Get conversation context
         let conversation_state = conversation_manager
             .get_conversation(&conversation_id)
-            .ok_or_else(|| "Conversation not found")?;
+            .ok_or("Conversation not found")?;
 
         // Parse command
         let parsed = if current_spec.is_some() {
@@ -454,6 +499,243 @@ async fn handle_interactive(
     } else {
         println!("ℹ️  No API was created. Exiting.");
     }
+
+    Ok(())
+}
+
+/// Handle transpile-hook command
+async fn handle_transpile_hook(
+    description: Option<String>,
+    output: Option<PathBuf>,
+    format: String,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("🔧 Hook Transpiler - Natural Language to Hook Configuration");
+    println!();
+
+    // Get description text
+    let description_text = if let Some(desc) = description {
+        desc
+    } else {
+        // Prompt for description
+        print!("Enter hook description: ");
+        io::stdout().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        input.trim().to_string()
+    };
+
+    if description_text.is_empty() {
+        return Err("No description provided".into());
+    }
+
+    println!("📝 Description: {}", description_text);
+    println!("🤖 Transpiling hook description with LLM...");
+
+    // Create transpiler with default config
+    let config = IntelligentBehaviorConfig::default();
+    let transpiler = HookTranspiler::new(config);
+
+    // Transpile the description
+    let hook = match transpiler.transpile(&description_text).await {
+        Ok(hook) => hook,
+        Err(e) => {
+            return Err(format!("Failed to transpile hook: {}", e).into());
+        }
+    };
+
+    println!("✅ Hook transpiled successfully");
+    // Note: Hook is now serde_json::Value, so we extract fields from JSON
+    let hook_name = hook.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let hook_type = hook.get("hook_type").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let actions_count =
+        hook.get("actions").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let has_condition = hook.get("condition").is_some();
+    println!("   - Name: {}", hook_name);
+    println!("   - Type: {:?}", hook_type);
+    println!("   - Actions: {}", actions_count);
+    if has_condition {
+        println!("   - Has condition: Yes");
+    }
+
+    // Serialize hook
+    let content = match format.to_lowercase().as_str() {
+        "yaml" | "yml" => serde_yaml::to_string(&hook)
+            .map_err(|e| format!("Failed to serialize hook to YAML: {}", e))?,
+        "json" => serde_json::to_string_pretty(&hook)
+            .map_err(|e| format!("Failed to serialize hook to JSON: {}", e))?,
+        _ => {
+            return Err(format!("Unsupported format: {}. Use 'yaml' or 'json'", format).into());
+        }
+    };
+
+    // Output hook configuration
+    if let Some(output_path) = output {
+        // Write to file
+        tokio::fs::write(&output_path, content).await?;
+        println!("💾 Saved hook configuration to: {}", output_path.display());
+    } else {
+        // Print to stdout
+        println!();
+        println!("📄 Generated Hook Configuration:");
+        println!("{}", "─".repeat(60));
+        println!("{}", content);
+        println!("{}", "─".repeat(60));
+    }
+
+    Ok(())
+}
+
+/// Handle create-workspace command
+async fn handle_create_workspace(
+    command: Option<String>,
+    auto_confirm: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("🏗️  Workspace Creator - Natural Language to Complete Workspace");
+    println!();
+    println!("This will create a complete workspace with:");
+    println!("  • Endpoints and API structure");
+    println!("  • Personas with relationships");
+    println!("  • Behavioral scenarios (happy path, failure, slow path)");
+    println!("  • Reality continuum configuration");
+    println!("  • Drift budget configuration");
+    println!();
+
+    // Get command text
+    let command_text = if let Some(cmd) = command {
+        cmd
+    } else {
+        // Use speech-to-text manager to get input
+        let stt_manager = SpeechToTextManager::new();
+        let available_backends = stt_manager.list_backends();
+
+        if available_backends.len() > 1 {
+            println!("🎤 Available input methods: {}", available_backends.join(", "));
+        }
+
+        println!("🎤 Describe your workspace (or type your command):");
+        stt_manager.transcribe().map_err(|e| format!("Failed to get input: {}", e))?
+    };
+
+    if command_text.is_empty() {
+        return Err("No command provided".into());
+    }
+
+    println!("📝 Command: {}", command_text);
+    println!("🤖 Parsing workspace creation command with LLM...");
+
+    // Create parser with default config
+    let config = IntelligentBehaviorConfig::default();
+    let parser = VoiceCommandParser::new(config);
+
+    // Parse command
+    let parsed = match parser.parse_workspace_creation_command(&command_text).await {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            return Err(format!("Failed to parse command: {}", e).into());
+        }
+    };
+
+    println!("✅ Parsed command successfully");
+    println!();
+
+    // Display preview
+    println!("📋 Workspace Preview:");
+    println!("{}", "═".repeat(60));
+    println!("Name: {}", parsed.workspace_name);
+    println!("Description: {}", parsed.workspace_description);
+    println!();
+    println!("Entities: {}", parsed.entities.len());
+    for entity in &parsed.entities {
+        println!("  • {} ({} endpoints)", entity.name, entity.endpoints.len());
+    }
+    println!();
+    println!("Personas: {}", parsed.personas.len());
+    for persona in &parsed.personas {
+        println!("  • {} ({} relationships)", persona.name, persona.relationships.len());
+    }
+    println!();
+    println!("Scenarios: {}", parsed.scenarios.len());
+    for scenario in &parsed.scenarios {
+        println!("  • {} ({})", scenario.name, scenario.r#type);
+    }
+    if parsed.reality_continuum.is_some() {
+        println!();
+        println!("Reality Continuum: Configured");
+    }
+    if parsed.drift_budget.is_some() {
+        println!("Drift Budget: Configured");
+    }
+    println!("{}", "═".repeat(60));
+    println!();
+
+    // Confirmation
+    if !auto_confirm {
+        print!("Create this workspace? [y/N]: ");
+        io::stdout().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let response = input.trim().to_lowercase();
+        if response != "y" && response != "yes" {
+            println!("❌ Workspace creation cancelled.");
+            return Ok(());
+        }
+    }
+
+    println!("🏗️  Creating workspace...");
+    println!();
+
+    // Create workspace registry (in-memory for CLI)
+    let mt_config = MultiTenantConfig {
+        enabled: true,
+        default_workspace: "default".to_string(),
+        ..Default::default()
+    };
+    let mut registry = MultiTenantWorkspaceRegistry::new(mt_config);
+
+    // Create workspace builder
+    let mut builder = WorkspaceBuilder::new();
+
+    // Build workspace
+    let built = match builder.build_workspace(&mut registry, &parsed).await {
+        Ok(built) => built,
+        Err(e) => {
+            return Err(format!("Failed to create workspace: {}", e).into());
+        }
+    };
+
+    // Display creation log
+    println!("✅ Workspace created successfully!");
+    println!();
+    println!("📊 Creation Summary:");
+    println!("{}", "─".repeat(60));
+    for log_entry in &built.creation_log {
+        println!("  {}", log_entry);
+    }
+    println!("{}", "─".repeat(60));
+    println!();
+
+    println!("📦 Workspace Details:");
+    println!("  ID: {}", built.workspace_id);
+    println!("  Name: {}", built.name);
+    if let Some(ref spec) = built.openapi_spec {
+        println!("  OpenAPI Spec: {} endpoints", spec.all_paths_and_operations().len());
+    }
+    println!("  Personas: {}", built.personas.len());
+    println!("  Scenarios: {}", built.scenarios.len());
+    if built.reality_continuum.is_some() {
+        println!("  Reality Continuum: Enabled");
+    }
+    if built.drift_budget.is_some() {
+        println!("  Drift Budget: Configured");
+    }
+    println!();
+
+    println!("🎉 Workspace '{}' is ready to use!", built.workspace_id);
+    println!();
+    println!("💡 Next steps:");
+    println!("  • Start the MockForge server to use this workspace");
+    println!("  • Access the workspace via: /workspace/{}", built.workspace_id);
+    println!("  • View personas and scenarios in the Admin UI");
 
     Ok(())
 }

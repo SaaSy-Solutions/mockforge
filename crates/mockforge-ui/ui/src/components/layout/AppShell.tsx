@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/button';
@@ -14,6 +13,7 @@ import {
   BarChart3,
   Server,
   Database,
+  FileJson,
   FileText,
   Activity,
   TestTube,
@@ -41,6 +41,24 @@ import {
   Brain,
   GitCompare,
   Mic,
+  History,
+  AlertTriangle,
+  Search,
+  Film,
+  Copy,
+  Users,
+  BookOpen,
+  Star,
+  Layout,
+  HeartPulse,
+  Cloud,
+  Globe,
+  Key,
+  CreditCard,
+  LineChart,
+  Wifi,
+  Share2,
+  Lock as LockIcon,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -50,59 +68,121 @@ interface AppShellProps {
   onRefresh: () => void;
 }
 
-const navItems = [
-  // Core
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-  { id: 'workspaces', label: 'Workspaces', icon: FolderOpen },
-
-  // Services & Data
-  { id: 'services', label: 'Services', icon: Server },
-  { id: 'fixtures', label: 'Fixtures', icon: Database },
-
-  // Orchestration
-  { id: 'chains', label: 'Chains', icon: Link2 },
-  { id: 'graph', label: 'Graph', icon: GraphIcon },
-  { id: 'state-machine-editor', label: 'State Machines', icon: GitBranch },
-  { id: 'orchestration-builder', label: 'Orchestration Builder', icon: GitBranch },
-  { id: 'orchestration-execution', label: 'Orchestration Execution', icon: PlayCircle },
-
-  // Observability & Monitoring
-  { id: 'observability', label: 'Observability', icon: Eye },
-  { id: 'logs', label: 'Logs', icon: FileText },
-  { id: 'traces', label: 'Traces', icon: Network },
-  { id: 'metrics', label: 'Metrics', icon: Activity },
-  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-  { id: 'verification', label: 'Verification', icon: CheckCircle2 },
-  { id: 'contract-diff', label: 'Contract Diff', icon: GitCompare },
-
-  // Testing
-  { id: 'testing', label: 'Testing', icon: TestTube },
-  { id: 'test-generator', label: 'Test Generator', icon: Code2 },
-  { id: 'test-execution', label: 'Test Execution', icon: PlayCircle },
-  { id: 'integration-test-builder', label: 'Integration Tests', icon: Layers },
-
-  // Chaos & Resilience
-  { id: 'chaos', label: 'Chaos Engineering', icon: Zap },
-  { id: 'resilience', label: 'Resilience', icon: Shield },
-  { id: 'recorder', label: 'Recorder', icon: Radio },
-
-  // Import & Templates
-  { id: 'import', label: 'Import', icon: Import },
-  { id: 'template-marketplace', label: 'Template Marketplace', icon: Store },
-
-  // AI & Intelligence
-  { id: 'mockai', label: 'MockAI', icon: Brain },
-  { id: 'mockai-openapi-generator', label: 'MockAI OpenAPI Generator', icon: Code2 },
-  { id: 'mockai-rules', label: 'MockAI Rules', icon: BarChart3 },
-  { id: 'voice', label: 'Voice + LLM', icon: Mic },
-
-  // Plugins
-  { id: 'plugins', label: 'Plugins', icon: Puzzle },
-  { id: 'plugin-registry', label: 'Plugin Registry', icon: Package },
-
-  // Configuration
-  { id: 'config', label: 'Config', icon: Settings },
+const navSections = [
+  {
+    title: 'Core',
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+      { id: 'workspaces', label: 'Workspaces', icon: FolderOpen },
+      { id: 'federation', label: 'Federation', icon: Share2 },
+    ]
+  },
+  {
+    title: 'Services & Data',
+    items: [
+      { id: 'services', label: 'Services', icon: Server },
+      { id: 'virtual-backends', label: 'Virtual Backends', icon: Database },
+      { id: 'fixtures', label: 'Fixtures', icon: FileJson },
+      { id: 'hosted-mocks', label: 'Hosted Mocks', icon: Cloud },
+      { id: 'tunnels', label: 'Tunnels', icon: Wifi },
+      { id: 'proxy-inspector', label: 'Proxy Inspector', icon: Search },
+    ]
+  },
+  {
+    title: 'Orchestration',
+    items: [
+      { id: 'chains', label: 'Chains', icon: Link2 },
+      { id: 'graph', label: 'Graph', icon: GraphIcon },
+      { id: 'state-machine-editor', label: 'State Machines', icon: GitBranch },
+      { id: 'scenario-studio', label: 'Scenario Studio', icon: Film },
+      { id: 'orchestration-builder', label: 'Orchestration Builder', icon: GitBranch },
+      { id: 'orchestration-execution', label: 'Orchestration Execution', icon: PlayCircle },
+    ]
+  },
+  {
+    title: 'Observability',
+    items: [
+      { id: 'observability', label: 'Observability', icon: Eye },
+      { id: 'world-state', label: 'World State', icon: Layers },
+      { id: 'performance', label: 'Performance', icon: Activity },
+      { id: 'status', label: 'System Status', icon: Globe },
+      { id: 'incidents', label: 'Incidents', icon: AlertTriangle },
+      { id: 'logs', label: 'Logs', icon: FileText },
+      { id: 'traces', label: 'Traces', icon: Network },
+      { id: 'metrics', label: 'Metrics', icon: Activity },
+      { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+      { id: 'pillar-analytics', label: 'Pillar Analytics', icon: Layout },
+      { id: 'fitness-functions', label: 'Fitness Functions', icon: HeartPulse },
+      { id: 'verification', label: 'Verification', icon: CheckCircle2 },
+      { id: 'contract-diff', label: 'Contract Diff', icon: GitCompare },
+    ]
+  },
+  {
+    title: 'Testing',
+    items: [
+      { id: 'testing', label: 'Testing', icon: TestTube },
+      { id: 'test-generator', label: 'Test Generator', icon: Code2 },
+      { id: 'test-execution', label: 'Test Execution', icon: PlayCircle },
+      { id: 'integration-test-builder', label: 'Integration Tests', icon: Layers },
+      { id: 'time-travel', label: 'Time Travel', icon: History },
+    ]
+  },
+  {
+    title: 'Chaos & Resilience',
+    items: [
+      { id: 'chaos', label: 'Chaos Engineering', icon: Zap },
+      { id: 'resilience', label: 'Resilience', icon: Shield },
+      { id: 'recorder', label: 'Recorder', icon: Radio },
+      { id: 'behavioral-cloning', label: 'Behavioral Cloning', icon: Copy },
+    ]
+  },
+  {
+    title: 'Import & Templates',
+    items: [
+      { id: 'import', label: 'Import', icon: Import },
+      { id: 'template-marketplace', label: 'Template Marketplace', icon: Store },
+    ]
+  },
+  {
+    title: 'AI & Intelligence',
+    items: [
+      { id: 'ai-studio', label: 'AI Studio', icon: Brain },
+      { id: 'mockai', label: 'MockAI', icon: Brain },
+      { id: 'mockai-openapi-generator', label: 'MockAI OpenAPI Generator', icon: Code2 },
+      { id: 'mockai-rules', label: 'MockAI Rules', icon: BarChart3 },
+      { id: 'voice', label: 'Voice + LLM', icon: Mic },
+    ]
+  },
+  {
+    title: 'Community',
+    items: [
+      { id: 'showcase', label: 'Showcase', icon: Star },
+      { id: 'learning-hub', label: 'Learning Hub', icon: BookOpen },
+    ]
+  },
+  {
+    title: 'Plugins',
+    items: [
+      { id: 'plugins', label: 'Plugins', icon: Puzzle },
+      { id: 'plugin-registry', label: 'Plugin Registry', icon: Package },
+    ]
+  },
+  {
+    title: 'Configuration',
+    items: [
+      { id: 'config', label: 'Config', icon: Settings },
+      { id: 'organization', label: 'Organization', icon: Users },
+      { id: 'billing', label: 'Billing', icon: CreditCard },
+      { id: 'api-tokens', label: 'API Tokens', icon: Key },
+      { id: 'byok', label: 'BYOK Keys', icon: LockIcon },
+      { id: 'usage', label: 'Plan & Usage', icon: LineChart },
+      { id: 'user-management', label: 'User Management', icon: Users },
+    ]
+  }
 ];
+
+// Flattened items for title lookup
+const allNavItems = navSections.flatMap(section => section.items);
 
 export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -159,31 +239,40 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <nav className="p-6 space-y-2 overflow-y-auto">
-              {navItems.map((item, index) => {
-                const Icon = item.icon;
-                return (
-                  <Button
-                    key={item.id}
-                    variant={activeTab === item.id ? 'default' : 'ghost'}
-                    className={cn(
-                      'w-full justify-start gap-4 h-12 text-lg nav-item-hover focus-ring spring-hover',
-                      'animate-slide-in-up',
-                      activeTab === item.id
-                        ? 'bg-brand text-white shadow-md'
-                        : 'text-foreground/80 dark:text-gray-400 hover:text-foreground dark:hover:text-gray-100 hover:bg-muted/50'
-                    )}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                    onClick={() => {
-                      onTabChange(item.id);
-                      setSidebarOpen(false);
-                    }}
-                  >
-                    <Icon className="h-5 w-5" />
-                    {item.label}
-                  </Button>
-                );
-              })}
+            <nav className="p-6 space-y-6 overflow-y-auto h-[calc(100%-88px)]">
+              {navSections.map((section, sectionIndex) => (
+                <div key={section.title} className="space-y-2">
+                  <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {section.title}
+                  </h3>
+                  <div className="space-y-1">
+                    {section.items.map((item, itemIndex) => {
+                      const Icon = item.icon;
+                      return (
+                        <Button
+                          key={item.id}
+                          variant={activeTab === item.id ? 'default' : 'ghost'}
+                          className={cn(
+                            'w-full justify-start gap-4 h-10 text-sm nav-item-hover focus-ring spring-hover',
+                            'animate-slide-in-up',
+                            activeTab === item.id
+                              ? 'bg-brand-500 text-white shadow-md hover:bg-brand-600'
+                              : 'text-foreground/80 dark:text-gray-400 hover:text-foreground dark:hover:text-gray-100 hover:bg-muted/50'
+                          )}
+                          style={{ animationDelay: `${(sectionIndex * 5 + itemIndex) * 20}ms` }}
+                          onClick={() => {
+                            onTabChange(item.id);
+                            setSidebarOpen(false);
+                          }}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {item.label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </nav>
           </aside>
         </div>
@@ -193,30 +282,39 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
         {/* Desktop Sidebar - Always visible on md and larger screens */}
         <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:z-50">
           <div className="flex flex-col flex-grow bg-bg-primary border-r border-border">
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-border flex-shrink-0">
               <Logo variant="icon" size="md" />
               <span className="font-semibold text-gray-900 dark:text-gray-100">MockForge</span>
             </div>
-            <nav id="main-navigation" className="flex-1 px-4 py-4 space-y-2" role="navigation" aria-label="Main navigation">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Button
-                    key={item.id}
-                    variant={activeTab === item.id ? 'default' : 'ghost'}
-                    className={cn(
-                      'w-full justify-start gap-3 h-11 transition-all duration-200 nav-item-hover focus-ring spring-hover',
-                      activeTab === item.id
-                        ? 'bg-brand text-white hover:bg-brand-600 shadow-lg'
-                        : 'text-foreground/80 dark:text-gray-400 hover:text-foreground dark:hover:text-gray-100 hover:bg-muted/50'
-                    )}
-                    onClick={() => onTabChange(item.id)}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </Button>
-                );
-              })}
+            <nav id="main-navigation" className="flex-1 px-4 py-6 space-y-6 overflow-y-auto" role="navigation" aria-label="Main navigation">
+              {navSections.map((section) => (
+                <div key={section.title} className="space-y-2">
+                  <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {section.title}
+                  </h3>
+                  <div className="space-y-1">
+                    {section.items.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Button
+                          key={item.id}
+                          variant={activeTab === item.id ? 'default' : 'ghost'}
+                          className={cn(
+                            'w-full justify-start gap-3 h-9 transition-all duration-200 nav-item-hover focus-ring spring-hover',
+                            activeTab === item.id
+                              ? 'bg-brand-600 text-white shadow-lg ring-1 ring-brand-200/60 dark:ring-brand-600/70 hover:bg-brand-700'
+                              : 'text-foreground/80 dark:text-gray-200 hover:text-foreground dark:hover:text-white hover:bg-muted/50 dark:hover:bg-white/5'
+                          )}
+                          onClick={() => onTabChange(item.id)}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {item.label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </nav>
           </div>
         </aside>
@@ -230,7 +328,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
               <div className="flex items-center gap-3 min-w-0">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Home</span>
                 <span className="text-gray-600 dark:text-gray-400">/</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate capitalize">{navItems.find(n=>n.id===activeTab)?.label ?? activeTab}</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate capitalize">{allNavItems.find(n => n.id === activeTab)?.label ?? activeTab}</span>
               </div>
               <div className="flex flex-1" />
               <div className="hidden sm:flex w-72 relative items-center">
@@ -238,14 +336,14 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                   placeholder="Global search…"
                   id="global-search-input"
                   value={globalQuery}
-                  onChange={(e)=>{
+                  onChange={(e) => {
                     const q = e.target.value;
                     setGlobalQuery(q);
                     // lightweight sync across stores
                     setLogFilter({ path_pattern: q || undefined });
                     setGlobalSearch(q || undefined);
                   }}
-                  onKeyDown={(e)=>{
+                  onKeyDown={(e) => {
                     if (e.key === 'Escape') {
                       setGlobalQuery('');
                       setLogFilter({ path_pattern: undefined });

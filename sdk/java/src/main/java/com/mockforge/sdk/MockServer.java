@@ -110,7 +110,7 @@ public class MockServer {
             process = processBuilder.start();
             waitForServer();
         } catch (IOException e) {
-            throw new MockServerException("Failed to start MockForge process", e);
+            throw MockServerException.serverStartFailed("Failed to start MockForge process", e);
         }
     }
 
@@ -139,7 +139,7 @@ public class MockServer {
                 Thread.sleep(HEALTH_CHECK_INTERVAL_MS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new MockServerException("Interrupted while waiting for server", e);
+                throw MockServerException.serverStartFailed("Interrupted while waiting for server", e);
             }
         }
 
@@ -147,8 +147,9 @@ public class MockServer {
         if (process != null) {
             process.destroyForcibly();
         }
-        throw new MockServerException(
-            String.format("Timeout waiting for server to start on %s:%d", host, port)
+        throw MockServerException.healthCheckTimeout(
+            (int) timeout,
+            port
         );
     }
 
@@ -190,6 +191,32 @@ public class MockServer {
         }
         if (latencyMs != null) {
             stub.setLatencyMs(latencyMs);
+        }
+
+        stubResponse(stub);
+    }
+
+    /**
+     * Stub a response using a ResponseStub object
+     *
+     * <p>This method allows you to use StubBuilder to create stubs:</p>
+     * <pre>{@code
+     * ResponseStub stub = new StubBuilder("GET", "/api/users/{id}")
+     *     .status(200)
+     *     .header("Content-Type", "application/json")
+     *     .body(Map.of("id", 123, "name", "John Doe"))
+     *     .latency(100)
+     *     .build();
+     *
+     * server.stubResponse(stub);
+     * }</pre>
+     *
+     * @param stub ResponseStub instance (can be created with StubBuilder)
+     * @throws MockServerException if the stub cannot be added
+     */
+    public void stubResponse(ResponseStub stub) throws MockServerException {
+        if (stub == null) {
+            throw MockServerException.invalidConfig("ResponseStub cannot be null");
         }
 
         stubs.add(stub);
@@ -323,12 +350,12 @@ public class MockServer {
 
             try (Response response = httpClient.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    throw new MockServerException("Verification request failed: " + response.code());
+                    throw MockServerException.networkError("Verification request failed: " + response.code(), null);
                 }
                 return GSON.fromJson(response.body().string(), VerificationResult.class);
             }
         } catch (IOException e) {
-            throw new MockServerException("Failed to verify requests", e);
+            throw MockServerException.networkError("Failed to verify requests", e);
         }
     }
 
@@ -354,12 +381,12 @@ public class MockServer {
 
             try (Response response = httpClient.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    throw new MockServerException("Verification request failed: " + response.code());
+                    throw MockServerException.networkError("Verification request failed: " + response.code(), null);
                 }
                 return GSON.fromJson(response.body().string(), VerificationResult.class);
             }
         } catch (IOException e) {
-            throw new MockServerException("Failed to verify requests", e);
+            throw MockServerException.networkError("Failed to verify requests", e);
         }
     }
 
@@ -390,12 +417,12 @@ public class MockServer {
 
             try (Response response = httpClient.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    throw new MockServerException("Verification request failed: " + response.code());
+                    throw MockServerException.networkError("Verification request failed: " + response.code(), null);
                 }
                 return GSON.fromJson(response.body().string(), VerificationResult.class);
             }
         } catch (IOException e) {
-            throw new MockServerException("Failed to verify requests", e);
+            throw MockServerException.networkError("Failed to verify requests", e);
         }
     }
 
@@ -429,12 +456,12 @@ public class MockServer {
 
             try (Response response = httpClient.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    throw new MockServerException("Verification request failed: " + response.code());
+                    throw MockServerException.networkError("Verification request failed: " + response.code(), null);
                 }
                 return GSON.fromJson(response.body().string(), VerificationResult.class);
             }
         } catch (IOException e) {
-            throw new MockServerException("Failed to verify requests", e);
+            throw MockServerException.networkError("Failed to verify requests", e);
         }
     }
 

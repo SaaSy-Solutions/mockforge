@@ -1,3 +1,5 @@
+//! Pillars: [Contracts]
+//!
 //! JSON schema diff utilities for 422 responses.
 //!
 //! This module provides comprehensive schema validation diffing capabilities

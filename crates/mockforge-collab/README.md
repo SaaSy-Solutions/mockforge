@@ -29,6 +29,14 @@ Cloud collaboration features for MockForge enabling teams to work together on mo
 - **Simple Configuration**: Environment variables or config files
 - **Docker Support**: Easy deployment with Docker/Kubernetes
 
+### Compilation Notes
+
+The crate uses SQLx with offline mode support. When installing from crates.io, the `.sqlx` query cache is included, so compilation works without a database connection. If you're building from source and encounter SQLx errors, you can either:
+
+1. **Use the included query cache** (default): The published crate includes all cached queries
+2. **Set `SQLX_OFFLINE=false`**: Compile with a database connection
+3. **Prepare queries yourself**: Run `cargo sqlx prepare --database-url <your-database-url>`
+
 ## Quick Start
 
 ### Starting a Collaboration Server

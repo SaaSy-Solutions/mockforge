@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=MockForge
+Comment=API Mocking Framework
+Exec=mockforge-desktop %F
+Icon=mockforge
+Terminal=false
+Type=Application
+Categories=Development;Utility;
+MimeType=application/x-yaml;application/yaml;application/json;text/yaml;text/x-yaml;
+StartupNotify=true

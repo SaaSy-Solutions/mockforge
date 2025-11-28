@@ -1,5 +1,9 @@
 # Reality Continuum
 
+**Pillars:** [Reality]
+
+[Reality] - Makes mocks feel like real backends through dynamic blending of mock and real data
+
 **Priority:** 🔥 Experimental
 **Tags:** `#simulation` `#time` `#AI`
 

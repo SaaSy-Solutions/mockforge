@@ -6,11 +6,11 @@ MockForge includes a comprehensive set of advanced features that enable sophisti
 
 MockForge's advanced features are organized into several categories:
 
-- **Simulation & State Management**: Virtual Backend Reality (VBR), Temporal Simulation, Scenario State Machines
-- **Intelligence & Automation**: MockAI, Generative Schema Mode, AI Contract Diff
-- **Chaos & Realism**: Chaos Lab, Reality Slider
-- **Collaboration & Cloud**: Cloud Workspaces, Data Scenario Marketplace
-- **Developer Experience**: ForgeConnect SDK
+- **Simulation & State Management**: Virtual Backend Reality (VBR), Temporal Simulation, Scenario State Machines, World State Engine
+- **Intelligence & Automation**: MockAI, Generative Schema Mode, AI Contract Diff, API Architecture Critique, System Generation, Behavioral Simulation
+- **Chaos & Realism**: Chaos Lab, Reality Slider, Reality Profiles Marketplace, Behavioral Economics Engine, Performance Mode
+- **Collaboration & Cloud**: Cloud Workspaces, Data Scenario Marketplace, MockOps Pipelines, Federation, Analytics Dashboard
+- **Developer Experience**: ForgeConnect SDK, Zero-Config Mode, Snapshot Diff, Mock-Oriented Development
 - **Experimental Features**: Deceptive Deploys, Voice + LLM Interface, Reality Continuum, Smart Personas
 
 ## Simulation & State Management
@@ -95,6 +95,46 @@ Automatically detect and analyze differences between API contracts and live requ
 
 **Learn More:** [AI Contract Diff Documentation](ai-contract-diff.md)
 
+### API Architecture Critique
+
+LLM-powered analysis of API schemas to detect anti-patterns, redundancies, naming issues, emotional tone problems, and restructuring recommendations.
+
+**Key Features:**
+- Anti-pattern detection
+- Redundancy detection
+- Naming quality assessment
+- Emotional tone analysis
+- Restructuring recommendations
+
+**Learn More:** [API Architecture Critique Documentation](../ai/api-architecture-critique.md)
+
+### System Generation
+
+Generate complete backend systems from natural language descriptions, including endpoints, personas, lifecycles, WebSocket topics, and more.
+
+**Key Features:**
+- 20-30 REST endpoints from description
+- 4-5 personas based on roles
+- 6-10 lifecycle states
+- WebSocket topics
+- Full OpenAPI spec
+- CI pipeline templates
+
+**Learn More:** [System Generation Documentation](../ai/system-generation.md)
+
+### Behavioral Simulation
+
+Model users as narrative agents that react to app state, form intentions, respond to errors, and trigger multi-step interactions.
+
+**Key Features:**
+- Narrative agents
+- React to app state
+- Form intentions (shop, browse, buy, abandon)
+- Respond to errors
+- Multi-step interactions
+
+**Learn More:** [Behavioral Simulation Documentation](../ai/behavioral-simulation.md)
+
 ## Chaos & Realism
 
 ### Chaos Lab
@@ -122,6 +162,68 @@ Unified control mechanism that adjusts mock environment realism from simple stat
 - Keyboard shortcuts for quick changes
 
 **Learn More:** [Reality Slider Documentation](reality-slider.md)
+
+### Reality Profiles Marketplace
+
+Pre-tuned "realism packs" that bundle personas, scenarios, chaos rules, latency curves, error distributions, and protocol behaviors into ready-to-use packages.
+
+**Key Features:**
+- E-Commerce Peak Season Pack
+- Fintech Fraud Pack
+- Healthcare HL7/Insurance Edge Cases Pack
+- IoT Device Fleet Chaos Pack
+- Custom pack creation
+
+**Learn More:** [Reality Profiles Marketplace Documentation](advanced-features/reality-profiles-marketplace.md)
+
+### Behavioral Economics Engine
+
+Makes mocks react to real-world pressures like latency, load, pricing changes, fraud suspicion, and customer segments.
+
+**Key Features:**
+- Cart conversion drops if latency > 400ms
+- Bank declines transactions if prior balance checks failed
+- User churn increases after multiple 500s
+- Declarative and scriptable rules
+
+**Learn More:** [Behavioral Economics Engine Documentation](advanced-features/behavioral-economics.md)
+
+### World State Engine
+
+Unified visualization of all MockForge state systems—like a "miniature game engine for your backend."
+
+**Key Features:**
+- Unified state aggregation from all subsystems
+- Graph visualization
+- Real-time updates
+- Time travel
+- Query interface
+
+**Learn More:** [World State Engine Documentation](advanced-features/world-state-engine.md)
+
+### Performance Mode
+
+Lightweight load simulation for running scenarios at N RPS, simulating bottlenecks, and recording latencies.
+
+**Key Features:**
+- Run scenarios at n RPS
+- Simulate bottlenecks
+- Record latencies
+- Observe response changes under load
+
+**Learn More:** [Performance Mode Documentation](advanced-features/performance-mode.md)
+
+### Drift Learning
+
+Mocks learn from recorded traffic patterns and adapt their behavior over time.
+
+**Key Features:**
+- Traffic pattern learning from recorded requests
+- Persona behavior adaptation
+- Configurable learning modes (behavioral, statistical, hybrid)
+- Opt-in per endpoint/persona learning
+
+**Learn More:** [Drift Learning Documentation](advanced-features/drift-learning.md)
 
 ## Collaboration & Cloud
 
@@ -151,6 +253,43 @@ Marketplace for downloadable mock templates with tags, ratings, versioning, and 
 
 **Learn More:** [Scenario Marketplace Documentation](scenario-marketplace.md)
 
+### MockOps Pipelines
+
+GitHub Actions-like automation for mock lifecycle management with event-driven pipelines.
+
+**Key Features:**
+- Schema change → auto-regenerate SDK
+- Scenario published → auto-promote to test → notify teams
+- Drift threshold exceeded → auto-generate Git PR
+- Event-driven automation
+
+**Learn More:** [MockOps Pipelines Documentation](../cloud/mockops-pipelines.md)
+
+### Multi-Workspace Federation
+
+Compose multiple mock workspaces into one federated "virtual system" for large organizations with microservices.
+
+**Key Features:**
+- Service boundary definition
+- Compose workspaces into virtual systems
+- System-wide scenarios
+- Per-service reality level control
+
+**Learn More:** [Federation Documentation](../cloud/federation.md)
+
+### Analytics Dashboard
+
+Leadership insight into coverage, risk, and usage with heatmaps, CI tracking, and coverage analysis.
+
+**Key Features:**
+- Scenario usage heatmaps
+- Persona CI hit tracking
+- Endpoint coverage analysis
+- Reality level staleness detection
+- Drift percentage tracking
+
+**Learn More:** [Analytics Dashboard Documentation](../cloud/analytics-dashboard.md)
+
 ## Developer Experience
 
 ### ForgeConnect SDK
@@ -165,6 +304,43 @@ Browser extension and SDK for capturing network traffic, auto-generating mocks, 
 - Auth passthrough support for OAuth flows
 
 **Learn More:** [ForgeConnect SDK Documentation](forgeconnect-sdk.md)
+
+### Zero-Config Mode (Runtime Daemon)
+
+The "invisible mock server" experience—automatically creates mocks, generates types, and sets up scenarios when you hit non-existent endpoints.
+
+**Key Features:**
+- Auto-detection of 404 responses
+- Automatic mock creation
+- Type generation
+- Client stub generation
+- OpenAPI schema updates
+
+**Learn More:** [Zero-Config Mode Documentation](../devx/zero-config-mode.md)
+
+### Snapshot Diff
+
+Side-by-side visualization for comparing mock behavior between environments, personas, scenarios, or reality levels.
+
+**Key Features:**
+- Compare test vs prod
+- Compare personas
+- Compare reality levels
+- Side-by-side visualization
+
+**Learn More:** [Snapshot Diff Documentation](../devx/snapshot-diff.md)
+
+### Mock-Oriented Development (MOD)
+
+A software development methodology that places mocks at the center of the development workflow.
+
+**Key Features:**
+- Mock-first design
+- Contract-driven development
+- Reality progression
+- Scenario-driven testing
+
+**Learn More:** [MOD Documentation](../devx/mock-oriented-development.md)
 
 ## Experimental Features
 

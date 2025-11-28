@@ -11,12 +11,7 @@
 //! - Service discovery integration
 //! - Graceful shutdown coordination
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-    routing::{get, Router},
-};
+use axum::{extract::State, http::StatusCode, response::Json, routing::get};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -361,7 +356,8 @@ async fn health_check(
 }
 
 /// Create health check router with all probe endpoints
-pub fn health_router(health_manager: Arc<HealthManager>) -> Router {
+pub fn health_router(health_manager: Arc<HealthManager>) -> axum::Router {
+    use axum::Router;
     Router::new()
         .route("/health", get(health_check))
         .route("/health/live", get(liveness_probe))
@@ -371,7 +367,8 @@ pub fn health_router(health_manager: Arc<HealthManager>) -> Router {
 }
 
 /// Create health check router with custom prefix
-pub fn health_router_with_prefix(health_manager: Arc<HealthManager>, prefix: &str) -> Router {
+pub fn health_router_with_prefix(health_manager: Arc<HealthManager>, prefix: &str) -> axum::Router {
+    use axum::Router;
     Router::new()
         .route(&format!("{}/health", prefix), get(health_check))
         .route(&format!("{}/health/live", prefix), get(liveness_probe))

@@ -1,23 +1,85 @@
 //! Priority-based HTTP request handler implementing the full priority chain:
-//! Replay → Stateful → Route Chaos (per-route fault/latency) → Global Fail → Proxy → Mock → Record
+//! Custom Fixtures → Replay → Stateful → Route Chaos (per-route fault/latency) → Global Fail → Proxy → Mock → Record
 
+use crate::behavioral_economics::BehavioralEconomicsEngine;
 use crate::stateful_handler::StatefulResponseHandler;
 use crate::{
-    Error, FailureInjector, ProxyHandler, RealityContinuumEngine, RecordReplayHandler,
-    RequestFingerprint, ResponsePriority, ResponseSource, Result, RouteChaosInjector,
+    CustomFixtureLoader, Error, FailureInjector, ProxyHandler, RealityContinuumEngine,
+    RecordReplayHandler, RequestFingerprint, ResponsePriority, ResponseSource, Result,
 };
+// RouteChaosInjector moved to mockforge-route-chaos crate to avoid Send issues
+// We define a trait here that RouteChaosInjector can implement to avoid circular dependency
+use async_trait::async_trait;
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
+
+/// Fault injection response (defined in mockforge-core to avoid circular dependency)
+#[derive(Debug, Clone)]
+pub struct RouteFaultResponse {
+    /// HTTP status code
+    pub status_code: u16,
+    /// Error message
+    pub error_message: String,
+    /// Fault type identifier
+    pub fault_type: String,
+}
+
+/// Trait for route chaos injection (fault injection and latency)
+/// This trait is defined in mockforge-core to avoid circular dependency.
+/// The concrete RouteChaosInjector in mockforge-route-chaos implements this trait.
+#[async_trait]
+pub trait RouteChaosInjectorTrait: Send + Sync {
+    /// Inject latency for this request
+    async fn inject_latency(&self, method: &Method, uri: &Uri) -> Result<()>;
+
+    /// Get fault injection response for a request
+    fn get_fault_response(&self, method: &Method, uri: &Uri) -> Option<RouteFaultResponse>;
+}
+
+/// Trait for behavioral scenario replay engines
+#[async_trait]
+pub trait BehavioralScenarioReplay: Send + Sync {
+    /// Try to replay a request against active scenarios
+    async fn try_replay(
+        &self,
+        method: &Method,
+        uri: &Uri,
+        headers: &HeaderMap,
+        body: Option<&[u8]>,
+        session_id: Option<&str>,
+    ) -> Result<Option<BehavioralReplayResponse>>;
+}
+
+/// Response from behavioral scenario replay
+#[derive(Debug, Clone)]
+pub struct BehavioralReplayResponse {
+    /// HTTP status code
+    pub status_code: u16,
+    /// Response headers
+    pub headers: HashMap<String, String>,
+    /// Response body
+    pub body: Vec<u8>,
+    /// Timing delay in milliseconds
+    pub timing_ms: Option<u64>,
+    /// Content type
+    pub content_type: String,
+}
 
 /// Priority-based HTTP request handler
 pub struct PriorityHttpHandler {
+    /// Custom fixture loader (simple format fixtures)
+    custom_fixture_loader: Option<Arc<CustomFixtureLoader>>,
     /// Record/replay handler
     record_replay: RecordReplayHandler,
+    /// Behavioral scenario replay engine (for journey-level simulations)
+    behavioral_scenario_replay: Option<Arc<dyn BehavioralScenarioReplay + Send + Sync>>,
     /// Stateful response handler
     stateful_handler: Option<Arc<StatefulResponseHandler>>,
     /// Per-route chaos injector (fault injection and latency)
-    route_chaos_injector: Option<Arc<RouteChaosInjector>>,
+    /// Uses trait object to avoid circular dependency with mockforge-route-chaos
+    route_chaos_injector: Option<Arc<dyn RouteChaosInjectorTrait>>,
     /// Failure injector (global/tag-based)
     failure_injector: Option<FailureInjector>,
     /// Proxy handler
@@ -28,6 +90,10 @@ pub struct PriorityHttpHandler {
     openapi_spec: Option<crate::openapi::spec::OpenApiSpec>,
     /// Reality Continuum engine for blending mock and real responses
     continuum_engine: Option<Arc<RealityContinuumEngine>>,
+    /// Behavioral Economics Engine for reactive mock behavior
+    behavioral_economics_engine: Option<Arc<RwLock<BehavioralEconomicsEngine>>>,
+    /// Request tracking for metrics (endpoint -> (request_count, error_count, last_request_time))
+    request_metrics: Arc<RwLock<HashMap<String, (u64, u64, std::time::Instant)>>>,
 }
 
 /// Trait for mock response generation
@@ -63,7 +129,9 @@ impl PriorityHttpHandler {
         mock_generator: Option<Box<dyn MockGenerator + Send + Sync>>,
     ) -> Self {
         Self {
+            custom_fixture_loader: None,
             record_replay,
+            behavioral_scenario_replay: None,
             stateful_handler: None,
             route_chaos_injector: None,
             failure_injector,
@@ -71,6 +139,8 @@ impl PriorityHttpHandler {
             mock_generator,
             openapi_spec: None,
             continuum_engine: None,
+            behavioral_economics_engine: None,
+            request_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -83,7 +153,9 @@ impl PriorityHttpHandler {
         openapi_spec: Option<crate::openapi::spec::OpenApiSpec>,
     ) -> Self {
         Self {
+            custom_fixture_loader: None,
             record_replay,
+            behavioral_scenario_replay: None,
             stateful_handler: None,
             route_chaos_injector: None,
             failure_injector,
@@ -91,7 +163,15 @@ impl PriorityHttpHandler {
             mock_generator,
             openapi_spec,
             continuum_engine: None,
+            behavioral_economics_engine: None,
+            request_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Set custom fixture loader
+    pub fn with_custom_fixture_loader(mut self, loader: Arc<CustomFixtureLoader>) -> Self {
+        self.custom_fixture_loader = Some(loader);
+        self
     }
 
     /// Set stateful response handler
@@ -101,7 +181,7 @@ impl PriorityHttpHandler {
     }
 
     /// Set per-route chaos injector
-    pub fn with_route_chaos_injector(mut self, injector: Arc<RouteChaosInjector>) -> Self {
+    pub fn with_route_chaos_injector(mut self, injector: Arc<dyn RouteChaosInjectorTrait>) -> Self {
         self.route_chaos_injector = Some(injector);
         self
     }
@@ -109,6 +189,24 @@ impl PriorityHttpHandler {
     /// Set Reality Continuum engine
     pub fn with_continuum_engine(mut self, engine: Arc<RealityContinuumEngine>) -> Self {
         self.continuum_engine = Some(engine);
+        self
+    }
+
+    /// Set Behavioral Economics Engine
+    pub fn with_behavioral_economics_engine(
+        mut self,
+        engine: Arc<RwLock<BehavioralEconomicsEngine>>,
+    ) -> Self {
+        self.behavioral_economics_engine = Some(engine);
+        self
+    }
+
+    /// Set behavioral scenario replay engine
+    pub fn with_behavioral_scenario_replay(
+        mut self,
+        replay_engine: Arc<dyn BehavioralScenarioReplay + Send + Sync>,
+    ) -> Self {
+        self.behavioral_scenario_replay = Some(replay_engine);
         self
     }
 
@@ -121,6 +219,48 @@ impl PriorityHttpHandler {
         body: Option<&[u8]>,
     ) -> Result<PriorityResponse> {
         let fingerprint = RequestFingerprint::new(method.clone(), uri, headers, body);
+
+        // 0. CUSTOM FIXTURES: Check if we have a custom fixture (highest priority)
+        if let Some(ref custom_loader) = self.custom_fixture_loader {
+            if let Some(custom_fixture) = custom_loader.load_fixture(&fingerprint) {
+                // Apply delay if specified
+                if custom_fixture.delay_ms > 0 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(custom_fixture.delay_ms))
+                        .await;
+                }
+
+                // Convert response to JSON string if it's not already a string
+                let response_body = if custom_fixture.response.is_string() {
+                    custom_fixture.response.as_str().unwrap().to_string()
+                } else {
+                    serde_json::to_string(&custom_fixture.response).map_err(|e| {
+                        Error::generic(format!(
+                            "Failed to serialize custom fixture response: {}",
+                            e
+                        ))
+                    })?
+                };
+
+                // Determine content type
+                let content_type = custom_fixture
+                    .headers
+                    .get("content-type")
+                    .cloned()
+                    .unwrap_or_else(|| "application/json".to_string());
+
+                return Ok(PriorityResponse {
+                    source: ResponseSource::new(
+                        ResponsePriority::Replay,
+                        "custom_fixture".to_string(),
+                    )
+                    .with_metadata("fixture_path".to_string(), custom_fixture.path.clone()),
+                    status_code: custom_fixture.status,
+                    headers: custom_fixture.headers.clone(),
+                    body: response_body.into_bytes(),
+                    content_type,
+                });
+            }
+        }
 
         // 1. REPLAY: Check if we have a recorded fixture
         if let Some(recorded_request) =
@@ -140,6 +280,37 @@ impl PriorityHttpHandler {
                 body: recorded_request.response_body.into_bytes(),
                 content_type,
             });
+        }
+
+        // 1.5. BEHAVIORAL SCENARIO REPLAY: Check for active behavioral scenarios
+        if let Some(ref scenario_replay) = self.behavioral_scenario_replay {
+            // Extract session ID from headers or cookies
+            let session_id = headers
+                .get("x-session-id")
+                .or_else(|| headers.get("session-id"))
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+
+            if let Ok(Some(replay_response)) = scenario_replay
+                .try_replay(method, uri, headers, body, session_id.as_deref())
+                .await
+            {
+                // Apply timing delay if specified
+                if let Some(timing_ms) = replay_response.timing_ms {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(timing_ms)).await;
+                }
+                return Ok(PriorityResponse {
+                    source: ResponseSource::new(
+                        ResponsePriority::Replay,
+                        "behavioral_scenario".to_string(),
+                    )
+                    .with_metadata("replay_type".to_string(), "scenario".to_string()),
+                    status_code: replay_response.status_code,
+                    headers: replay_response.headers,
+                    body: replay_response.body,
+                    content_type: replay_response.content_type,
+                });
+            }
         }
 
         // 2. STATEFUL: Check for stateful response handling
@@ -569,6 +740,89 @@ impl PriorityHttpHandler {
 
         // If we reach here, no handler could process the request
         Err(Error::generic("No handler could process the request".to_string()))
+    }
+
+    /// Apply behavioral economics rules to a response
+    ///
+    /// Updates condition evaluator with current metrics and evaluates rules,
+    /// then applies any matching actions to modify the response.
+    async fn apply_behavioral_economics(
+        &self,
+        response: PriorityResponse,
+        method: &Method,
+        uri: &Uri,
+        latency_ms: Option<u64>,
+    ) -> Result<PriorityResponse> {
+        if let Some(ref engine) = self.behavioral_economics_engine {
+            let engine = engine.read().await;
+            let evaluator = engine.condition_evaluator();
+
+            // Update condition evaluator with current metrics
+            {
+                let mut eval = evaluator.write().await;
+                if let Some(latency) = latency_ms {
+                    eval.update_latency(uri.path(), latency);
+                }
+
+                // Update load and error rates
+                let endpoint = uri.path().to_string();
+                let mut metrics = self.request_metrics.write().await;
+                let now = std::time::Instant::now();
+
+                // Get or create metrics entry for this endpoint
+                let (request_count, error_count, last_request_time) = metrics
+                    .entry(endpoint.clone())
+                    .or_insert_with(|| (0, 0, now));
+
+                // Increment request count
+                *request_count += 1;
+
+                // Check if this is an error response (status >= 400)
+                if response.status_code >= 400 {
+                    *error_count += 1;
+                }
+
+                // Calculate error rate
+                let error_rate = if *request_count > 0 {
+                    *error_count as f64 / *request_count as f64
+                } else {
+                    0.0
+                };
+                eval.update_error_rate(&endpoint, error_rate);
+
+                // Calculate load (requests per second) based on time window
+                let time_elapsed = now.duration_since(*last_request_time).as_secs_f64();
+                if time_elapsed > 0.0 {
+                    let rps = *request_count as f64 / time_elapsed.max(1.0);
+                    eval.update_load(rps);
+                }
+
+                // Reset metrics periodically (every 60 seconds) to avoid unbounded growth
+                if time_elapsed > 60.0 {
+                    *request_count = 1;
+                    *error_count = if response.status_code >= 400 { 1 } else { 0 };
+                    *last_request_time = now;
+                } else {
+                    *last_request_time = now;
+                }
+            }
+
+            // Evaluate rules and get executed actions
+            let executed_actions = engine.evaluate().await?;
+
+            // Apply actions to response if any were executed
+            if !executed_actions.is_empty() {
+                tracing::debug!(
+                    "Behavioral economics engine executed {} actions",
+                    executed_actions.len()
+                );
+                // Actions are executed by the engine, but we may need to modify
+                // the response based on action results. For now, the engine
+                // handles action execution internally.
+            }
+        }
+
+        Ok(response)
     }
 }
 

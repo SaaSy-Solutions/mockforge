@@ -4,14 +4,16 @@ use crate::auth::AuthService;
 use crate::error::{CollabError, Result};
 use crate::events::EventBus;
 use crate::sync::{SyncEngine, SyncMessage};
+use crate::workspace;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        Query, State,
     },
     response::Response,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::select;
 use uuid::Uuid;
@@ -22,20 +24,46 @@ pub struct WsState {
     pub auth: Arc<AuthService>,
     pub sync: Arc<SyncEngine>,
     pub event_bus: Arc<EventBus>,
+    pub workspace: Arc<workspace::WorkspaceService>,
 }
 
 /// Handle WebSocket upgrade
-pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<WsState>) -> Response {
-    ws.on_upgrade(|socket| handle_socket(socket, state))
+pub async fn ws_handler(
+    ws: WebSocketUpgrade,
+    Query(params): Query<HashMap<String, String>>,
+    State(state): State<WsState>,
+) -> Response {
+    // Extract user info from query params (token) or headers
+    let user_id = params
+        .get("token")
+        .and_then(|token| {
+            state
+                .auth
+                .verify_token(token)
+                .ok()
+                .and_then(|claims| Uuid::parse_str(&claims.sub).ok())
+        })
+        .or_else(|| {
+            // Fallback: try to get from user_id param (for development)
+            params
+                .get("user_id")
+                .and_then(|id| Uuid::parse_str(id).ok())
+        });
+
+    ws.on_upgrade(move |socket| handle_socket(socket, state, user_id))
 }
 
 /// Handle WebSocket connection
-async fn handle_socket(socket: WebSocket, state: WsState) {
+async fn handle_socket(socket: WebSocket, state: WsState, user_id: Option<Uuid>) {
     let (mut sender, mut receiver) = socket.split();
 
     // Generate client ID
     let client_id = Uuid::new_v4();
-    tracing::info!("WebSocket client connected: {}", client_id);
+    tracing::info!(
+        "WebSocket client connected: {} (user: {:?})",
+        client_id,
+        user_id
+    );
 
     // Track subscribed workspaces
     let mut subscriptions: Vec<Uuid> = Vec::new();
@@ -49,7 +77,7 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
             msg = receiver.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        if let Err(e) = handle_client_message(&text, client_id, &state, &mut subscriptions, &mut sender).await {
+                        if let Err(e) = handle_client_message(&text, client_id, user_id, &state, &mut subscriptions, &mut sender).await {
                             tracing::error!("Error handling client message: {}", e);
                             let _ = sender.send(Message::Text(
                                 serde_json::to_string(&SyncMessage::Error {
@@ -113,16 +141,38 @@ async fn handle_socket(socket: WebSocket, state: WsState) {
 async fn handle_client_message(
     text: &str,
     client_id: Uuid,
+    user_id: Option<Uuid>,
     state: &WsState,
     subscriptions: &mut Vec<Uuid>,
     sender: &mut futures::stream::SplitSink<WebSocket, Message>,
 ) -> Result<()> {
     let message: SyncMessage = serde_json::from_str(text)
-        .map_err(|e| CollabError::InvalidInput(format!("Invalid JSON: {}", e)))?;
+        .map_err(|e| CollabError::InvalidInput(format!("Invalid JSON: {e}")))?;
 
     match message {
         SyncMessage::Subscribe { workspace_id } => {
-            // TODO: Verify user has access to workspace
+            // Verify user has access to workspace
+            if let Some(uid) = user_id {
+                // Check if user is a member of the workspace
+                if let Err(e) = state.workspace.get_member(workspace_id, uid).await {
+                    tracing::warn!(
+                        "User {} attempted to access workspace {} without permission: {}",
+                        uid,
+                        workspace_id,
+                        e
+                    );
+                    return Err(CollabError::AuthorizationFailed(format!(
+                        "Access denied to workspace {}",
+                        workspace_id
+                    )));
+                }
+            } else {
+                // No user ID provided - deny access in production
+                // In development, this might be allowed, but for security, we require authentication
+                return Err(CollabError::AuthenticationFailed(
+                    "Authentication required for workspace access".to_string(),
+                ));
+            }
 
             // Subscribe to workspace
             state.sync.subscribe(workspace_id, client_id)?;
@@ -141,7 +191,7 @@ async fn handle_client_message(
                 sender
                     .send(Message::Text(json.into()))
                     .await
-                    .map_err(|e| CollabError::Internal(format!("Failed to send: {}", e)))?;
+                    .map_err(|e| CollabError::Internal(format!("Failed to send: {e}")))?;
             }
         }
 
@@ -168,7 +218,7 @@ async fn handle_client_message(
                     sender
                         .send(Message::Text(json.into()))
                         .await
-                        .map_err(|e| CollabError::Internal(format!("Failed to send: {}", e)))?;
+                        .map_err(|e| CollabError::Internal(format!("Failed to send: {e}")))?;
                 }
             }
         }
@@ -179,7 +229,7 @@ async fn handle_client_message(
             sender
                 .send(Message::Text(json.into()))
                 .await
-                .map_err(|e| CollabError::Internal(format!("Failed to send: {}", e)))?;
+                .map_err(|e| CollabError::Internal(format!("Failed to send: {e}")))?;
         }
 
         _ => {

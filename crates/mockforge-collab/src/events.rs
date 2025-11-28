@@ -56,6 +56,7 @@ pub struct ChangeEvent {
 
 impl ChangeEvent {
     /// Create a new change event
+    #[must_use]
     pub fn new(
         workspace_id: Uuid,
         change_type: ChangeType,
@@ -90,6 +91,7 @@ pub struct EventBus {
 
 impl EventBus {
     /// Create a new event bus
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         let (sender, _) = broadcast::channel(capacity);
         Self { sender }
@@ -103,11 +105,13 @@ impl EventBus {
     }
 
     /// Subscribe to events
+    #[must_use]
     pub fn subscribe(&self) -> broadcast::Receiver<ChangeEvent> {
         self.sender.subscribe()
     }
 
     /// Get number of active subscribers
+    #[must_use]
     pub fn subscriber_count(&self) -> usize {
         self.sender.receiver_count()
     }
@@ -123,7 +127,8 @@ pub struct WorkspaceEventBus {
 
 impl WorkspaceEventBus {
     /// Create a new workspace event bus
-    pub fn new(event_bus: Arc<EventBus>, workspace_id: Uuid) -> Self {
+    #[must_use]
+    pub const fn new(event_bus: Arc<EventBus>, workspace_id: Uuid) -> Self {
         Self {
             event_bus,
             workspace_id,
@@ -142,7 +147,8 @@ impl WorkspaceEventBus {
         self.event_bus.publish(event)
     }
 
-    /// Subscribe to events (need to filter by workspace_id)
+    /// Subscribe to events (need to filter by `workspace_id`)
+    #[must_use]
     pub fn subscribe(&self) -> broadcast::Receiver<ChangeEvent> {
         self.event_bus.subscribe()
     }

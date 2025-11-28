@@ -6,17 +6,14 @@
 use crate::error::{Result, ScenarioError};
 use crate::manifest::ScenarioManifest;
 use mockforge_core::intelligent_behavior::{
-    condition_evaluator::{ConditionError, ConditionEvaluator, ConditionResult},
-    history::HistoryManager,
-    rules::{StateMachine, StateTransition},
-    sub_scenario::SubScenario,
-    visual_layout::VisualLayout,
+    condition_evaluator::ConditionEvaluator, history::HistoryManager, rules::StateMachine,
+    sub_scenario::SubScenario, visual_layout::VisualLayout,
 };
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Active state instance for a state machine
@@ -577,7 +574,7 @@ impl ScenarioStateMachineManager {
 
         // Execute sub-scenario state machine until it reaches a final state
         // A final state is one that has no outgoing transitions
-        let mut max_iterations = 100; // Prevent infinite loops
+        let max_iterations = 100; // Prevent infinite loops
         let mut iteration = 0;
 
         loop {

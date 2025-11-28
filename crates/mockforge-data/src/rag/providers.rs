@@ -30,6 +30,8 @@ pub enum EmbeddingProvider {
     OpenAI,
     /// Generic OpenAI-compatible embeddings API
     OpenAICompatible,
+    /// Local Ollama instance
+    Ollama,
 }
 
 /// LLM provider trait
@@ -210,16 +212,13 @@ impl LlmProviderTrait for OpenAiProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!(
-                "OpenAI API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
         let content = json["choices"][0]["text"]
             .as_str()
-            .ok_or_else(|| mockforge_core::Error::generic("Invalid response format"))?;
+            .ok_or_else(|| crate::Error::generic("Invalid response format"))?;
 
         Ok(content.to_string())
     }
@@ -267,16 +266,13 @@ impl LlmProviderTrait for OpenAiProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!(
-                "OpenAI API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
         let content = json["choices"][0]["message"]["content"]
             .as_str()
-            .ok_or_else(|| mockforge_core::Error::generic("Invalid response format"))?;
+            .ok_or_else(|| crate::Error::generic("Invalid response format"))?;
 
         Ok(content.to_string())
     }
@@ -290,16 +286,13 @@ impl LlmProviderTrait for OpenAiProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!(
-                "OpenAI API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
         let models = json["data"]
             .as_array()
-            .ok_or_else(|| mockforge_core::Error::generic("Invalid models response format"))?;
+            .ok_or_else(|| crate::Error::generic("Invalid models response format"))?;
 
         let model_names = models
             .iter()
@@ -368,16 +361,13 @@ impl EmbeddingProviderTrait for OpenAiEmbeddingProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!(
-                "OpenAI API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
         let embedding = json["data"][0]["embedding"]
             .as_array()
-            .ok_or_else(|| mockforge_core::Error::generic("Invalid embedding response format"))?;
+            .ok_or_else(|| crate::Error::generic("Invalid embedding response format"))?;
 
         Ok(embedding.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
     }
@@ -475,16 +465,13 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!(
-                "API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
         let content = json["choices"][0]["text"]
             .as_str()
-            .ok_or_else(|| mockforge_core::Error::generic("Invalid response format"))?;
+            .ok_or_else(|| crate::Error::generic("Invalid response format"))?;
 
         Ok(content.to_string())
     }
@@ -532,16 +519,13 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!(
-                "API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
         let content = json["choices"][0]["message"]["content"]
             .as_str()
-            .ok_or_else(|| mockforge_core::Error::generic("Invalid response format"))?;
+            .ok_or_else(|| crate::Error::generic("Invalid response format"))?;
 
         Ok(content.to_string())
     }
@@ -557,9 +541,9 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
         {
             Ok(response) if response.status().is_success() => {
                 let json: Value = response.json().await?;
-                let models = json["data"].as_array().ok_or_else(|| {
-                    mockforge_core::Error::generic("Invalid models response format")
-                })?;
+                let models = json["data"]
+                    .as_array()
+                    .ok_or_else(|| crate::Error::generic("Invalid models response format"))?;
                 Ok(models
                     .iter()
                     .filter_map(|model| model["id"].as_str().map(|s| s.to_string()))
@@ -618,16 +602,13 @@ impl EmbeddingProviderTrait for OpenAiCompatibleEmbeddingProvider {
             .await?;
 
         if !response.status().is_success() {
-            return Err(mockforge_core::Error::generic(format!(
-                "API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;
         let embedding = json["data"][0]["embedding"]
             .as_array()
-            .ok_or_else(|| mockforge_core::Error::generic("Invalid embedding response format"))?;
+            .ok_or_else(|| crate::Error::generic("Invalid embedding response format"))?;
 
         Ok(embedding.iter().map(|v| v.as_f64().unwrap_or(0.0) as f32).collect())
     }
@@ -678,13 +659,11 @@ impl ProviderFactory {
             }
             LlmProvider::OpenAICompatible => {
                 let base_url = base_url.ok_or_else(|| {
-                    mockforge_core::Error::generic(
-                        "Base URL required for OpenAI compatible provider",
-                    )
+                    crate::Error::generic("Base URL required for OpenAI compatible provider")
                 })?;
                 Ok(Box::new(OpenAiCompatibleProvider::new(api_key, base_url, model)))
             }
-            _ => Err(mockforge_core::Error::generic(format!(
+            _ => Err(crate::Error::generic(format!(
                 "Provider type {:?} not yet implemented",
                 provider_type
             ))),
@@ -704,11 +683,19 @@ impl ProviderFactory {
             }
             EmbeddingProvider::OpenAICompatible => {
                 let base_url = base_url.ok_or_else(|| {
-                    mockforge_core::Error::generic(
+                    crate::Error::generic(
                         "Base URL required for OpenAI compatible embedding provider",
                     )
                 })?;
                 Ok(Box::new(OpenAiCompatibleEmbeddingProvider::new(api_key, base_url, model)))
+            }
+            EmbeddingProvider::Ollama => {
+                // Ollama embeddings use OpenAI-compatible API
+                let base_url = base_url.ok_or_else(|| {
+                    crate::Error::generic("Base URL required for Ollama embedding provider")
+                })?;
+                // Ollama doesn't require API key, use empty string
+                Ok(Box::new(OpenAiCompatibleEmbeddingProvider::new(String::new(), base_url, model)))
             }
         }
     }

@@ -576,7 +576,7 @@ fn add_global_functions_static<'js>(
 
     let random_bytes_func = Function::new(ctx.clone(), |length: usize| -> String {
         use rand::Rng;
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let bytes: Vec<u8> = (0..length).map(|_| rng.random()).collect();
         hex::encode(bytes)
     })?;

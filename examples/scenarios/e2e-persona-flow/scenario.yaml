@@ -1,0 +1,103 @@
+manifest_version: "1.0"
+name: e2e-persona-flow
+version: "1.0.0"
+title: E2E Persona Flow - Cross-Protocol Consistency Demo
+description: |
+  Demonstrates end-to-end persona flow across multiple protocols (HTTP, WebSocket, webhooks).
+  This scenario showcases how a single persona maintains consistent state across:
+  - HTTP REST API (login, browse, purchase)
+  - WebSocket (real-time notifications)
+  - Webhooks (order status updates)
+
+  The persona graph ensures that:
+  - User login (HTTP) creates a persona
+  - Browse actions (HTTP) use the same persona
+  - Purchase (HTTP) creates orders linked to the user
+  - Order notifications (WebSocket) use the same persona
+  - Webhook callbacks (webhooks) reference the same order/user
+
+  Features:
+  - Cross-protocol persona consistency
+  - Shared state model across HTTP, WebSocket, and webhooks
+  - Persona graph linking users, orders, payments, and notifications
+  - Lifecycle-aware responses (order fulfillment lifecycle)
+  - Time-aware persona state (subscription lifecycle)
+author: MockForge Team
+author_email: team@mockforge.dev
+category: ecommerce
+tags:
+  - e2e
+  - cross-protocol
+  - personas
+  - websocket
+  - webhooks
+  - consistency
+  - lifecycle
+compatibility:
+  min_version: "0.3.0"
+  max_version: null
+  required_features:
+    - consistency
+    - personas
+    - persona-graph
+    - websocket
+  protocols:
+    - http
+    - websocket
+    - webhooks
+files:
+  - scenario.yaml
+  - config.yaml
+  - README.md
+  - openapi.yaml
+readme: README.md
+example_usage: |
+  # Install the scenario
+  mockforge scenario install ./examples/scenarios/e2e-persona-flow
+
+  # Apply to workspace
+  mockforge scenario use e2e-persona-flow
+
+  # Start the server
+  mockforge serve --config config.yaml
+
+  # Step 1: Login (HTTP)
+  curl -X POST http://localhost:3000/api/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "user@example.com", "password": "password123"}'
+
+  # Step 2: Browse products (HTTP)
+  curl http://localhost:3000/api/products?category=electronics \
+    -H "X-MockForge-Workspace: default"
+
+  # Step 3: Create order (HTTP)
+  curl -X POST http://localhost:3000/api/orders \
+    -H "Content-Type: application/json" \
+    -H "X-MockForge-Workspace: default" \
+    -d '{"product_id": "prod-123", "quantity": 2}'
+
+  # Step 4: Connect to WebSocket for notifications
+  # (Use a WebSocket client to connect to ws://localhost:3001)
+  # You'll receive order status updates in real-time
+
+  # Step 5: Check order status (HTTP)
+  curl http://localhost:3000/api/orders/ORD-123 \
+    -H "X-MockForge-Workspace: default"
+
+  # The same persona is used across all protocols!
+required_features:
+  - consistency
+  - personas
+  - persona-graph
+  - websocket
+plugin_dependencies: []
+metadata:
+  demo_features:
+    - cross-protocol-consistency
+    - persona-graphs
+    - lifecycle-states
+    - websocket-notifications
+    - webhook-callbacks
+    - shared-state-model
+created_at: "2025-01-27T00:00:00Z"
+updated_at: "2025-01-27T00:00:00Z"

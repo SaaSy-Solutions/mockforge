@@ -10,7 +10,7 @@ use aes_gcm::{
 };
 use base64::{engine::general_purpose, Engine as _};
 use chacha20poly1305::{ChaCha20Poly1305, Key as ChaChaKey};
-use rand::{rng, Rng};
+use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryInto, fmt};
 
@@ -69,7 +69,7 @@ impl EncryptionKey {
         };
 
         let mut key = vec![0u8; key_len];
-        let mut rng = rng();
+        let mut rng = thread_rng();
         rng.fill(&mut key[..]);
 
         Self::new(key, algorithm)
@@ -214,7 +214,7 @@ impl EncryptionEngine {
     ) -> EncryptionResult<EncryptedData> {
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12]; // 96 bits
-        let mut rng = rng();
+        let mut rng = thread_rng();
         rng.fill(&mut nonce_bytes);
 
         let nonce = Nonce::from_slice(&nonce_bytes);
@@ -317,7 +317,7 @@ impl EncryptionEngine {
     ) -> EncryptionResult<EncryptedData> {
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12]; // 96 bits
-        let mut rng = rng();
+        let mut rng = thread_rng();
         rng.fill(&mut nonce_bytes);
 
         let nonce = chacha20poly1305::Nonce::from_slice(&nonce_bytes);
@@ -455,7 +455,7 @@ pub mod utils {
         };
 
         let mut nonce = vec![0u8; nonce_len];
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         rng.fill(&mut nonce[..]);
 
         Ok(nonce)

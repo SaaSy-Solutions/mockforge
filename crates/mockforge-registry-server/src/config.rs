@@ -24,6 +24,9 @@ pub struct Config {
 
     /// Rate limiting
     pub rate_limit_per_minute: u32,
+
+    /// Analytics database path (optional, defaults to "mockforge-analytics.db" in current directory)
+    pub analytics_db_path: Option<String>,
 }
 
 impl Config {
@@ -44,6 +47,7 @@ impl Config {
             rate_limit_per_minute: std::env::var("RATE_LIMIT_PER_MINUTE")
                 .unwrap_or_else(|_| "60".to_string())
                 .parse()?,
+            analytics_db_path: std::env::var("ANALYTICS_DB_PATH").ok(),
         };
 
         Ok(config)

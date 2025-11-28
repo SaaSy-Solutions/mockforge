@@ -1,4 +1,7 @@
 [advisories]
 ignore = [
     { id = "RUSTSEC-2023-0071", reason = "rsa - Marvin Attack: no fixed upgrade available, affects unused MySQL feature in sqlx" },
+    # proc-macro-error is unmaintained but not a security vulnerability
+    # It's a transitive dependency of gtk-rs (desktop app only)
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained but not a security issue, only affects desktop app GUI dependencies" },
 ]

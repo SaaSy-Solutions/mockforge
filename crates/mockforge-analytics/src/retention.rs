@@ -15,7 +15,8 @@ pub struct RetentionService {
 
 impl RetentionService {
     /// Create a new retention service
-    pub fn new(db: AnalyticsDatabase, config: RetentionConfig) -> Self {
+    #[must_use]
+    pub const fn new(db: AnalyticsDatabase, config: RetentionConfig) -> Self {
         Self { db, config }
     }
 
@@ -23,7 +24,7 @@ impl RetentionService {
     pub async fn start(self: Arc<Self>) {
         info!("Starting data retention service");
 
-        let interval_seconds = self.config.cleanup_interval_hours as u64 * 3600;
+        let interval_seconds = u64::from(self.config.cleanup_interval_hours) * 3600;
         let mut interval = interval(Duration::from_secs(interval_seconds));
 
         loop {

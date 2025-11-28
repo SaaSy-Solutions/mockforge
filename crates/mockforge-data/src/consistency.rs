@@ -7,7 +7,8 @@
 
 use crate::domains::Domain;
 use crate::persona::{PersonaGenerator, PersonaProfile, PersonaRegistry};
-use mockforge_core::Result;
+use crate::persona_graph::PersonaGraph;
+use crate::Result;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -56,7 +57,7 @@ impl EntityType {
 /// in-memory caching and optional persistence capabilities.
 /// Supports cross-entity type consistency where the same base ID can have
 /// different personas for different entity types (user, device, organization).
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ConsistencyStore {
     /// Persona registry for managing personas
     persona_registry: Arc<PersonaRegistry>,
@@ -64,6 +65,8 @@ pub struct ConsistencyStore {
     generators: Arc<RwLock<HashMap<Domain, PersonaGenerator>>>,
     /// Default domain to use when domain is not specified
     default_domain: Option<Domain>,
+    /// Persona graph for managing entity relationships
+    persona_graph: Arc<PersonaGraph>,
 }
 
 impl ConsistencyStore {
@@ -73,6 +76,7 @@ impl ConsistencyStore {
             persona_registry: Arc::new(PersonaRegistry::new()),
             generators: Arc::new(RwLock::new(HashMap::new())),
             default_domain: None,
+            persona_graph: Arc::new(PersonaGraph::new()),
         }
     }
 
@@ -82,6 +86,7 @@ impl ConsistencyStore {
             persona_registry: Arc::new(PersonaRegistry::new()),
             generators: Arc::new(RwLock::new(HashMap::new())),
             default_domain: Some(default_domain),
+            persona_graph: Arc::new(PersonaGraph::new()),
         }
     }
 
@@ -94,6 +99,17 @@ impl ConsistencyStore {
             persona_registry,
             generators: Arc::new(RwLock::new(HashMap::new())),
             default_domain,
+            persona_graph: Arc::new(PersonaGraph::new()),
+        }
+    }
+
+    /// Create a consistency store with a persona graph
+    pub fn with_persona_graph(persona_graph: Arc<PersonaGraph>) -> Self {
+        Self {
+            persona_registry: Arc::new(PersonaRegistry::new()),
+            generators: Arc::new(RwLock::new(HashMap::new())),
+            default_domain: None,
+            persona_graph,
         }
     }
 
@@ -113,6 +129,7 @@ impl ConsistencyStore {
     /// (e.g., "user123" as a user vs "user123" as a device owner).
     ///
     /// The persona ID is constructed as "{entity_type}:{entity_id}" to ensure uniqueness.
+    /// Also automatically links personas in the persona graph.
     pub fn get_or_create_persona_by_type(
         &self,
         entity_id: &str,
@@ -123,10 +140,20 @@ impl ConsistencyStore {
         let persona_id = format!("{}:{}", entity_type.as_str(), entity_id);
         let persona = self.persona_registry.get_or_create_persona(persona_id.clone(), domain);
 
+        // Add persona node to graph
+        let entity_type_str = entity_type.as_str();
+        self.persona_graph
+            .get_or_create_node_with_links(&persona_id, entity_type_str, None, None);
+
         // If this is not a generic type, establish relationships with the base entity
         if entity_type != EntityType::Generic {
             // Get or create the base entity persona
             let base_persona = self.get_entity_persona(entity_id, Some(domain));
+            let base_persona_id = base_persona.id.clone();
+
+            // Add base persona to graph if not already present
+            self.persona_graph
+                .get_or_create_node_with_links(&base_persona_id, "base", None, None);
 
             // Link personas based on entity type relationships
             let mut base_persona_mut = base_persona.clone();
@@ -134,15 +161,36 @@ impl ConsistencyStore {
                 EntityType::User => {
                     // User owns devices and belongs to organizations
                     // Relationships will be established when device/org personas are created
+                    // Link in graph: base -> user
+                    self.persona_graph.link_entity_types(
+                        &base_persona_id,
+                        "base",
+                        &persona_id,
+                        entity_type_str,
+                    );
                 }
                 EntityType::Device => {
                     // Device is owned by user - establish reverse relationship
                     base_persona_mut
                         .add_relationship("owns_devices".to_string(), persona_id.clone());
+                    // Link in graph: base -> device
+                    self.persona_graph.link_entity_types(
+                        &base_persona_id,
+                        "base",
+                        &persona_id,
+                        entity_type_str,
+                    );
                 }
                 EntityType::Organization => {
                     // Organization has users - establish relationship
                     base_persona_mut.add_relationship("has_users".to_string(), persona_id.clone());
+                    // Link in graph: base -> organization
+                    self.persona_graph.link_entity_types(
+                        &base_persona_id,
+                        "base",
+                        &persona_id,
+                        entity_type_str,
+                    );
                 }
                 EntityType::Generic => {}
             }
@@ -164,6 +212,48 @@ impl ConsistencyStore {
         }
 
         persona
+    }
+
+    /// Link two personas in the graph based on their entity types
+    ///
+    /// This is a convenience method for establishing relationships between
+    /// personas of different entity types (e.g., user -> order, order -> payment).
+    pub fn link_personas(
+        &self,
+        from_entity_id: &str,
+        from_entity_type: &str,
+        to_entity_id: &str,
+        to_entity_type: &str,
+    ) {
+        let from_persona_id = format!("{}:{}", from_entity_type, from_entity_id);
+        let to_persona_id = format!("{}:{}", to_entity_type, to_entity_id);
+
+        // Ensure both personas exist in the graph
+        self.persona_graph.get_or_create_node_with_links(
+            &from_persona_id,
+            from_entity_type,
+            None,
+            None,
+        );
+        self.persona_graph.get_or_create_node_with_links(
+            &to_persona_id,
+            to_entity_type,
+            None,
+            None,
+        );
+
+        // Link them
+        self.persona_graph.link_entity_types(
+            &from_persona_id,
+            from_entity_type,
+            &to_persona_id,
+            to_entity_type,
+        );
+    }
+
+    /// Get the persona graph
+    pub fn persona_graph(&self) -> &Arc<PersonaGraph> {
+        &self.persona_graph
     }
 
     /// Get all personas for a base entity ID across different types
@@ -206,6 +296,31 @@ impl ConsistencyStore {
         field_type: &str,
         domain: Option<Domain>,
     ) -> Result<Value> {
+        // Generate with default reality ratio (0.0 = fully synthetic)
+        self.generate_consistent_value_with_reality(entity_id, field_type, domain, 0.0, None, None)
+    }
+
+    /// Generate a consistent value for an entity with reality awareness
+    ///
+    /// Uses the entity's persona to generate a value that will be consistent
+    /// across multiple calls, with reality continuum blending applied.
+    ///
+    /// # Arguments
+    /// * `entity_id` - Entity ID
+    /// * `field_type` - Type of field to generate
+    /// * `domain` - Optional domain (uses default if not provided)
+    /// * `reality_ratio` - Reality continuum ratio (0.0 = mock, 1.0 = real)
+    /// * `recorded_data` - Optional recorded/snapshot data to blend with
+    /// * `real_data` - Optional real/upstream data to blend with
+    pub fn generate_consistent_value_with_reality(
+        &self,
+        entity_id: &str,
+        field_type: &str,
+        domain: Option<Domain>,
+        reality_ratio: f64,
+        recorded_data: Option<&Value>,
+        real_data: Option<&Value>,
+    ) -> Result<Value> {
         // Get or create persona for this entity
         let persona = self.get_entity_persona(entity_id, domain);
         let domain = persona.domain;
@@ -227,8 +342,14 @@ impl ConsistencyStore {
             }
         };
 
-        // Generate value using persona
-        generator.generate_for_persona(&persona, field_type)
+        // Generate value using persona with reality awareness
+        generator.generate_for_persona_with_reality(
+            &persona,
+            field_type,
+            reality_ratio,
+            recorded_data,
+            real_data,
+        )
     }
 
     /// Get the persona registry

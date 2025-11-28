@@ -24,21 +24,12 @@ pub enum FaultType {
 }
 
 /// Pattern execution state
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct PatternState {
     /// Burst pattern state: (errors_in_burst, burst_start_time_ms)
     burst_state: Option<(usize, u64)>,
     /// Sequential pattern state: current index in sequence
     sequential_index: usize,
-}
-
-impl Default for PatternState {
-    fn default() -> Self {
-        Self {
-            burst_state: None,
-            sequential_index: 0,
-        }
-    }
 }
 
 /// Fault injector for simulating errors
@@ -213,17 +204,17 @@ impl FaultInjector {
                             errors_in_burst + 1,
                             count
                         );
-                        return Some(FaultType::HttpError(error_code));
+                        Some(FaultType::HttpError(error_code))
                     } else {
                         // Burst quota reached, don't inject
-                        return None;
+                        None
                     }
                 } else {
                     // Burst window expired, start new burst
                     state.burst_state = Some((1, now_ms));
                     let error_code = self.get_next_error_code();
                     debug!("Burst pattern: starting new burst, injecting error {}", error_code);
-                    return Some(FaultType::HttpError(error_code));
+                    Some(FaultType::HttpError(error_code))
                 }
             }
             ErrorPattern::Random { probability } => {
@@ -236,7 +227,7 @@ impl FaultInjector {
                     );
                     return Some(FaultType::HttpError(error_code));
                 }
-                return None;
+                None
             }
             ErrorPattern::Sequential { sequence } => {
                 if sequence.is_empty() {
@@ -248,7 +239,7 @@ impl FaultInjector {
                     "Sequential pattern: injecting error {} (index: {})",
                     error_code, state.sequential_index
                 );
-                return Some(FaultType::HttpError(error_code));
+                Some(FaultType::HttpError(error_code))
             }
         }
     }

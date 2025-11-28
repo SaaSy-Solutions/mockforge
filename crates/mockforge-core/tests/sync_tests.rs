@@ -1,3 +1,5 @@
+//! Pillars: [Contracts]
+//!
 //! Tests for workspace synchronization functionality.
 //!
 //! These tests verify that workspace synchronization correctly detects changes,

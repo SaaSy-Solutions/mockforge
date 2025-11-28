@@ -1,7 +1,7 @@
-import { logger } from '@/utils/logger';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button } from '../ui/button';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { AccountSettings } from './AccountSettings';
 import { ProfileSettings } from './ProfileSettings';
 import { Preferences } from './Preferences';
 import { HelpSupport } from './HelpSupport';
@@ -9,6 +9,7 @@ import { HelpSupport } from './HelpSupport';
 export function UserProfile() {
   const { user, logout } = useAuthStore();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [showHelpSupport, setShowHelpSupport] = useState(false);
@@ -18,11 +19,11 @@ export function UserProfile() {
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'admin':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
       case 'viewer':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
     }
   };
 
@@ -74,7 +75,7 @@ export function UserProfile() {
           />
 
           {/* Dropdown */}
-          <div className="absolute right-0 mt-2 w-64 bg-background border rounded-md shadow-lg z-20">
+          <div className="absolute right-0 mt-2 w-64 bg-card border rounded-md shadow-lg z-20">
             <div className="p-4 border-b">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-gray-900 dark:text-gray-100-foreground font-medium">
@@ -96,8 +97,17 @@ export function UserProfile() {
             <div className="p-2">
               <div className="space-y-1">
                 <div className="px-3 py-2 text-xs text-muted-foreground">
-                  Account Settings
+                  Account
                 </div>
+                <button
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors"
+                  onClick={() => {
+                    setShowDropdown(false);
+                    setShowAccountSettings(true);
+                  }}
+                >
+                  Account Settings
+                </button>
                 <button
                   className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors"
                   onClick={() => {
@@ -125,15 +135,15 @@ export function UserProfile() {
                 <div className="px-3 py-2 text-xs text-muted-foreground">
                   System
                 </div>
-                 <a
-                   href="https://docs.mockforge.dev/api/admin-ui-rest.html"
-                   target="_blank"
-                   rel="noopener noreferrer"
-                   className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors block"
-                   onClick={() => setShowDropdown(false)}
-                 >
-                   API Documentation
-                 </a>
+                <a
+                  href="https://docs.mockforge.dev/api/admin-ui-rest.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors block"
+                  onClick={() => setShowDropdown(false)}
+                >
+                  API Documentation
+                </a>
                 <button
                   className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors"
                   onClick={() => {
@@ -158,6 +168,11 @@ export function UserProfile() {
           </div>
         </>
       )}
+
+      <AccountSettings
+        open={showAccountSettings}
+        onOpenChange={setShowAccountSettings}
+      />
 
       <ProfileSettings
         open={showProfileSettings}

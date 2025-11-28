@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO workspace_forks (id, source_workspace_id, forked_workspace_id, forked_at, forked_by, fork_point_commit_id)\n            VALUES (?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "b6c6f50c6039b95873b8a04a63818e628ddd693a6116bbd63dc1b6f027ed79c8"
+}
