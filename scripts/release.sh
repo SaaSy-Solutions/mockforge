@@ -60,6 +60,11 @@ PY
 
 TARGET_VERSION=$(compute_version)
 
+echo "📝 Updating changelog for version $TARGET_VERSION..."
+echo "⚠️  REMINDER: Tag all changelog entries with pillars: [Reality], [Contracts], [DevX], [Cloud], [AI]"
+echo "   See docs/PILLARS.md for pillar definitions and examples."
+echo ""
+
 scripts/update-changelog.sh "$TARGET_VERSION"
 scripts/update-version-refs.sh "$TARGET_VERSION"
 

@@ -47,14 +47,14 @@ pub struct StateMachineConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "extract_type", rename_all = "snake_case")]
 pub enum ResourceIdExtractConfig {
-    /// Extract from path parameter (e.g., "/orders/{order_id}" -> extract "order_id")
+    /// Extract from path parameter (e.g., "/`orders/{order_id`}" -> extract "`order_id`")
     PathParam {
         /// Path parameter name to extract
         param: String,
     },
-    /// Extract from JSONPath in request body
+    /// Extract from `JSONPath` in request body
     JsonPath {
-        /// JSONPath expression to extract the resource ID
+        /// `JSONPath` expression to extract the resource ID
         path: String,
     },
     /// Extract from header value
@@ -84,7 +84,7 @@ pub struct StateResponseOverride {
 }
 
 /// Fault injection configuration for per-stub error and latency simulation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StubFaultInjectionConfig {
     /// Enable fault injection for this stub
     #[serde(default)]
@@ -92,43 +92,29 @@ pub struct StubFaultInjectionConfig {
     /// HTTP error codes to inject (randomly selected if multiple)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub http_errors: Option<Vec<u16>>,
-    /// Probability of injecting HTTP error (0.0-1.0, default: 1.0 if http_errors set)
+    /// Probability of injecting HTTP error (0.0-1.0, default: 1.0 if `http_errors` set)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub http_error_probability: Option<f64>,
     /// Inject timeout error (returns 504 Gateway Timeout)
     #[serde(default)]
     pub timeout_error: bool,
-    /// Timeout duration in milliseconds (only used if timeout_error is true)
+    /// Timeout duration in milliseconds (only used if `timeout_error` is true)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
-    /// Probability of timeout error (0.0-1.0, default: 1.0 if timeout_error is true)
+    /// Probability of timeout error (0.0-1.0, default: 1.0 if `timeout_error` is true)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_probability: Option<f64>,
     /// Inject connection error (returns 503 Service Unavailable)
     #[serde(default)]
     pub connection_error: bool,
-    /// Probability of connection error (0.0-1.0, default: 1.0 if connection_error is true)
+    /// Probability of connection error (0.0-1.0, default: 1.0 if `connection_error` is true)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub connection_error_probability: Option<f64>,
 }
 
-impl Default for StubFaultInjectionConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            http_errors: None,
-            http_error_probability: None,
-            timeout_error: false,
-            timeout_ms: None,
-            timeout_probability: None,
-            connection_error: false,
-            connection_error_probability: None,
-        }
-    }
-}
-
 impl StubFaultInjectionConfig {
     /// Create a simple HTTP error injection config
+    #[must_use]
     pub fn http_error(codes: Vec<u16>) -> Self {
         Self {
             enabled: true,
@@ -139,6 +125,7 @@ impl StubFaultInjectionConfig {
     }
 
     /// Create a timeout error injection config
+    #[must_use]
     pub fn timeout(ms: u64) -> Self {
         Self {
             enabled: true,
@@ -150,6 +137,7 @@ impl StubFaultInjectionConfig {
     }
 
     /// Create a connection error injection config
+    #[must_use]
     pub fn connection_error() -> Self {
         Self {
             enabled: true,
@@ -165,7 +153,7 @@ impl StubFaultInjectionConfig {
 pub struct ResponseStub {
     /// HTTP method (GET, POST, PUT, DELETE, etc.)
     pub method: String,
-    /// Path pattern (supports {{path_params}})
+    /// Path pattern (supports {{`path_params`}})
     pub path: String,
     /// HTTP status code
     pub status: u16,
@@ -201,7 +189,8 @@ impl ResponseStub {
     }
 
     /// Set the HTTP status code
-    pub fn status(mut self, status: u16) -> Self {
+    #[must_use]
+    pub const fn status(mut self, status: u16) -> Self {
         self.status = status;
         self
     }
@@ -213,24 +202,28 @@ impl ResponseStub {
     }
 
     /// Set response latency in milliseconds
-    pub fn latency(mut self, ms: u64) -> Self {
+    #[must_use]
+    pub const fn latency(mut self, ms: u64) -> Self {
         self.latency_ms = Some(ms);
         self
     }
 
     /// Set state machine configuration for stateful behavior
+    #[must_use]
     pub fn with_state_machine(mut self, config: StateMachineConfig) -> Self {
         self.state_machine = Some(config);
         self
     }
 
     /// Check if this stub has state machine configuration
-    pub fn has_state_machine(&self) -> bool {
+    #[must_use]
+    pub const fn has_state_machine(&self) -> bool {
         self.state_machine.is_some()
     }
 
     /// Get state machine configuration
-    pub fn state_machine(&self) -> Option<&StateMachineConfig> {
+    #[must_use]
+    pub const fn state_machine(&self) -> Option<&StateMachineConfig> {
         self.state_machine.as_ref()
     }
 
@@ -241,12 +234,13 @@ impl ResponseStub {
     ///
     /// Returns a modified stub with state-specific overrides applied, or the original
     /// stub if no state machine config or no override for current state.
-    pub fn apply_state_override(&self, current_state: &str) -> ResponseStub {
+    #[must_use]
+    pub fn apply_state_override(&self, current_state: &str) -> Self {
         let mut stub = self.clone();
 
         if let Some(ref state_machine) = self.state_machine {
             if let Some(ref state_responses) = state_machine.state_responses {
-                if let Some(ref override_config) = state_responses.get(current_state) {
+                if let Some(override_config) = state_responses.get(current_state) {
                     // Apply status override
                     if let Some(status) = override_config.status {
                         stub.status = status;
@@ -271,36 +265,36 @@ impl ResponseStub {
     }
 
     /// Set fault injection configuration
+    #[must_use]
     pub fn with_fault_injection(mut self, config: StubFaultInjectionConfig) -> Self {
         self.fault_injection = Some(config);
         self
     }
 
     /// Check if this stub has fault injection configured
+    #[must_use]
     pub fn has_fault_injection(&self) -> bool {
-        self.fault_injection.as_ref().map(|f| f.enabled).unwrap_or(false)
+        self.fault_injection.as_ref().is_some_and(|f| f.enabled)
     }
 
     /// Get fault injection configuration
-    pub fn fault_injection(&self) -> Option<&StubFaultInjectionConfig> {
+    #[must_use]
+    pub const fn fault_injection(&self) -> Option<&StubFaultInjectionConfig> {
         self.fault_injection.as_ref()
     }
 }
 
 impl ResourceIdExtractConfig {
-    /// Convert to core's ResourceIdExtract enum
+    /// Convert to core's `ResourceIdExtract` enum
+    #[must_use]
     pub fn to_core(&self) -> CoreResourceIdExtract {
         match self {
-            ResourceIdExtractConfig::PathParam { param } => CoreResourceIdExtract::PathParam {
+            Self::PathParam { param } => CoreResourceIdExtract::PathParam {
                 param: param.clone(),
             },
-            ResourceIdExtractConfig::JsonPath { path } => {
-                CoreResourceIdExtract::JsonPath { path: path.clone() }
-            }
-            ResourceIdExtractConfig::Header { name } => {
-                CoreResourceIdExtract::Header { name: name.clone() }
-            }
-            ResourceIdExtractConfig::QueryParam { param } => CoreResourceIdExtract::QueryParam {
+            Self::JsonPath { path } => CoreResourceIdExtract::JsonPath { path: path.clone() },
+            Self::Header { name } => CoreResourceIdExtract::Header { name: name.clone() },
+            Self::QueryParam { param } => CoreResourceIdExtract::QueryParam {
                 param: param.clone(),
             },
         }
@@ -395,12 +389,14 @@ impl DynamicStub {
     }
 
     /// Generate a response for a given request context
+    #[must_use]
     pub fn generate_response(&self, ctx: &RequestContext) -> Value {
         (self.response_fn)(ctx)
     }
 
     /// Set latency
-    pub fn with_latency(mut self, ms: u64) -> Self {
+    #[must_use]
+    pub const fn with_latency(mut self, ms: u64) -> Self {
         self.latency_ms = Some(ms);
         self
     }
@@ -434,7 +430,8 @@ impl StubBuilder {
     }
 
     /// Set the HTTP status code
-    pub fn status(mut self, status: u16) -> Self {
+    #[must_use]
+    pub const fn status(mut self, status: u16) -> Self {
         self.status = status;
         self
     }
@@ -446,30 +443,35 @@ impl StubBuilder {
     }
 
     /// Set the response body
+    #[must_use]
     pub fn body(mut self, body: Value) -> Self {
         self.body = body;
         self
     }
 
     /// Set response latency in milliseconds
-    pub fn latency(mut self, ms: u64) -> Self {
+    #[must_use]
+    pub const fn latency(mut self, ms: u64) -> Self {
         self.latency_ms = Some(ms);
         self
     }
 
     /// Set state machine configuration
+    #[must_use]
     pub fn state_machine(mut self, config: StateMachineConfig) -> Self {
         self.state_machine = Some(config);
         self
     }
 
     /// Set fault injection configuration
+    #[must_use]
     pub fn fault_injection(mut self, config: StubFaultInjectionConfig) -> Self {
         self.fault_injection = Some(config);
         self
     }
 
     /// Build the response stub
+    #[must_use]
     pub fn build(self) -> ResponseStub {
         ResponseStub {
             method: self.method,

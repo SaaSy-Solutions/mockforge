@@ -82,7 +82,19 @@ public class UserApiTest {
 }
 ```
 
-### Using Builder Pattern
+### Using MockServerBuilder
+
+```java
+// Fluent builder for creating and starting servers
+MockServer server = new MockServerBuilder()
+    .port(3000)
+    .host("127.0.0.1")
+    .configFile("./mockforge.yaml")
+    .openApiSpec("./api-spec.json")
+    .start();
+```
+
+### Using MockServerConfig Builder
 
 ```java
 MockServerConfig config = MockServerConfig.builder()
@@ -109,6 +121,44 @@ server.stubResponse(
     headers,                // Headers
     500                     // Latency in milliseconds
 );
+```
+
+### Using StubBuilder (Fluent API)
+
+```java
+// Create a stub using the fluent builder pattern
+ResponseStub stub = new StubBuilder("GET", "/api/users/{id}")
+    .status(200)
+    .header("Content-Type", "application/json")
+    .header("X-Custom-Header", "value")
+    .body(Map.of(
+        "id", "{{uuid}}",
+        "name", "{{faker.name}}",
+        "email", "{{faker.email}}"
+    ))
+    .latency(100)
+    .build();
+
+// Register the stub
+server.stubResponse(stub);
+```
+
+You can also chain multiple stubs:
+
+```java
+server.stubResponse(new StubBuilder("GET", "/api/users")
+    .status(200)
+    .body(List.of(
+        Map.of("id", 1, "name", "Alice"),
+        Map.of("id", 2, "name", "Bob")
+    ))
+    .build());
+
+server.stubResponse(new StubBuilder("POST", "/api/users")
+    .status(201)
+    .header("Location", "/api/users/123")
+    .body(Map.of("id", 123, "status", "created"))
+    .build());
 ```
 
 ### Using with JUnit 5
@@ -143,6 +193,48 @@ public class ApiIntegrationTest {
 
 ## API Reference
 
+### `MockServerBuilder`
+
+Fluent builder for creating and starting mock servers.
+
+**Methods:**
+- `port(int port)` - Set the HTTP port (0 for random)
+- `host(String host)` - Set the host address
+- `configFile(String path)` - Load configuration from YAML file
+- `openApiSpec(String path)` - Load routes from OpenAPI spec
+- `start()` - Build and start the MockServer
+- `build()` - Build MockServerConfig without starting
+
+**Example:**
+```java
+MockServer server = new MockServerBuilder()
+    .port(3000)
+    .openApiSpec("./api.json")
+    .start();
+```
+
+### `StubBuilder`
+
+Fluent builder for creating response stubs.
+
+**Methods:**
+- `status(int code)` - Set HTTP status code (default: 200)
+- `header(String key, String value)` - Add a response header
+- `headers(Map<String, String> headers)` - Set multiple headers
+- `body(Object body)` - Set response body (required)
+- `latency(int ms)` - Set response latency in milliseconds
+- `build()` - Build the ResponseStub
+
+**Example:**
+```java
+ResponseStub stub = new StubBuilder("GET", "/api/users/{id}")
+    .status(200)
+    .header("Content-Type", "application/json")
+    .body(Map.of("id", 123, "name", "John"))
+    .latency(100)
+    .build();
+```
+
 ### `MockServer.start(config)`
 
 Starts a mock server with the given configuration.
@@ -174,6 +266,12 @@ Add a response stub with custom options.
 - `status` - `int` - HTTP status code
 - `headers` - `Map<String, String>` - Response headers
 - `latencyMs` - `Integer` - Latency in milliseconds (null for no delay)
+
+#### `stubResponse(ResponseStub stub)`
+Add a response stub using a ResponseStub object (created with StubBuilder).
+
+**Parameters:**
+- `stub` - `ResponseStub` - Response stub instance
 
 #### `clearStubs()`
 Remove all stubs.

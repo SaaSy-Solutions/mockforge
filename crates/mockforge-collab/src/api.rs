@@ -148,7 +148,7 @@ pub struct PaginationQuery {
     pub offset: i32,
 }
 
-fn default_limit() -> i32 {
+const fn default_limit() -> i32 {
     50
 }
 
@@ -157,13 +157,13 @@ fn default_limit() -> i32 {
 impl IntoResponse for CollabError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
-            CollabError::AuthenticationFailed(msg) => (StatusCode::UNAUTHORIZED, msg),
-            CollabError::AuthorizationFailed(msg) => (StatusCode::FORBIDDEN, msg),
-            CollabError::WorkspaceNotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            CollabError::UserNotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            CollabError::InvalidInput(msg) => (StatusCode::BAD_REQUEST, msg),
-            CollabError::AlreadyExists(msg) => (StatusCode::CONFLICT, msg),
-            CollabError::Timeout(msg) => (StatusCode::REQUEST_TIMEOUT, msg),
+            Self::AuthenticationFailed(msg) => (StatusCode::UNAUTHORIZED, msg),
+            Self::AuthorizationFailed(msg) => (StatusCode::FORBIDDEN, msg),
+            Self::WorkspaceNotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            Self::UserNotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            Self::InvalidInput(msg) => (StatusCode::BAD_REQUEST, msg),
+            Self::AlreadyExists(msg) => (StatusCode::CONFLICT, msg),
+            Self::Timeout(msg) => (StatusCode::REQUEST_TIMEOUT, msg),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
         };
 
@@ -345,13 +345,37 @@ async fn list_members(
 
 /// Health check endpoint
 async fn health_check() -> impl IntoResponse {
-    StatusCode::OK
+    Json(serde_json::json!({
+        "status": "healthy",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    }))
 }
 
-/// Readiness check endpoint
-async fn readiness_check() -> impl IntoResponse {
-    // TODO: Check database connection
-    StatusCode::OK
+/// Readiness check endpoint with database health check
+async fn readiness_check(State(state): State<ApiState>) -> impl IntoResponse {
+    // Check database connection by running a simple query
+    // We need to access the database pool - let's add it to ApiState or use workspace service
+    // For now, we'll use a workspace service method to check DB health
+    let db_healthy = state.workspace.check_database_health().await;
+
+    if db_healthy {
+        Json(serde_json::json!({
+            "status": "ready",
+            "database": "healthy",
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        }))
+        .into_response()
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "status": "not_ready",
+                "database": "unhealthy",
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+            })),
+        )
+            .into_response()
+    }
 }
 
 // ===== Validation Helpers =====
@@ -443,7 +467,7 @@ async fn create_commit(
     // Get parent commit (latest)
     let parent = state.history.get_latest_commit(workspace_id).await?;
     let parent_id = parent.as_ref().map(|c| c.id);
-    let version = parent.as_ref().map(|c| c.version + 1).unwrap_or(1);
+    let version = parent.as_ref().map_or(1, |c| c.version + 1);
 
     // Create snapshot of current state
     let snapshot = serde_json::to_value(&workspace)?;

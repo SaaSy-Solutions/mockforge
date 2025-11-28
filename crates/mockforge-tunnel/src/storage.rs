@@ -9,6 +9,11 @@ use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
 use std::path::Path;
 use tracing::{debug, error, info, warn};
 
+#[cfg(feature = "server")]
+use crate::server::TunnelStoreTrait;
+#[cfg(feature = "server")]
+use async_trait::async_trait;
+
 /// Persistent tunnel storage using SQLite
 #[derive(Clone)]
 pub struct PersistentTunnelStore {
@@ -427,6 +432,11 @@ impl PersistentTunnelStore {
         .ok();
     }
 
+    /// Get tunnel by ID (alias for get_tunnel for trait compatibility)
+    pub async fn get_tunnel_by_id(&self, tunnel_id: &str) -> crate::Result<TunnelStatus> {
+        self.get_tunnel(tunnel_id).await
+    }
+
     /// Clean up expired tunnels
     pub async fn cleanup_expired(&self) -> crate::Result<u64> {
         let now = Utc::now().to_rfc3339();
@@ -449,5 +459,41 @@ impl PersistentTunnelStore {
         }
 
         Ok(rows_affected)
+    }
+}
+
+#[cfg(feature = "server")]
+#[async_trait]
+impl TunnelStoreTrait for PersistentTunnelStore {
+    async fn create_tunnel(&self, config: &TunnelConfig) -> crate::Result<TunnelStatus> {
+        self.create_tunnel(config).await
+    }
+
+    async fn get_tunnel(&self, tunnel_id: &str) -> crate::Result<TunnelStatus> {
+        self.get_tunnel(tunnel_id).await
+    }
+
+    async fn delete_tunnel(&self, tunnel_id: &str) -> crate::Result<()> {
+        self.delete_tunnel(tunnel_id).await
+    }
+
+    async fn list_tunnels(&self) -> Vec<TunnelStatus> {
+        self.list_tunnels().await
+    }
+
+    async fn get_tunnel_by_subdomain(&self, subdomain: &str) -> crate::Result<TunnelStatus> {
+        self.get_tunnel_by_subdomain(subdomain).await
+    }
+
+    async fn get_tunnel_by_id(&self, tunnel_id: &str) -> crate::Result<TunnelStatus> {
+        self.get_tunnel_by_id(tunnel_id).await
+    }
+
+    async fn record_request(&self, tunnel_id: &str, bytes: u64) {
+        self.record_request(tunnel_id, bytes).await
+    }
+
+    async fn cleanup_expired(&self) -> crate::Result<u64> {
+        self.cleanup_expired().await
     }
 }

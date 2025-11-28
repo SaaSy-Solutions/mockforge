@@ -231,6 +231,36 @@ pub async fn set_time_scale(Json(req): Json<SetScaleRequest>) -> impl IntoRespon
     }
 }
 
+/// Request to set virtual time
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SetTimeRequest {
+    /// The time to set (ISO 8601 format)
+    pub time: DateTime<Utc>,
+}
+
+/// Set virtual time to a specific point
+pub async fn set_time(Json(req): Json<SetTimeRequest>) -> impl IntoResponse {
+    match get_time_travel_manager() {
+        Some(manager) => {
+            manager.clock().set_time(req.time);
+            info!("Virtual time set to {}", req.time);
+
+            Json(serde_json::json!({
+                "success": true,
+                "status": manager.clock().status()
+            }))
+            .into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "Time travel not initialized"
+            })),
+        )
+            .into_response(),
+    }
+}
+
 /// Reset time travel
 pub async fn reset_time_travel() -> impl IntoResponse {
     match get_time_travel_manager() {

@@ -3,13 +3,7 @@
 //! Provides REST endpoints for programmatic request verification,
 //! allowing test code to verify that specific requests were made (or not made).
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::{get, post},
-    Json, Router,
-};
+use axum::{http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 use mockforge_core::{
     request_logger::get_global_logger,
     verification::{
@@ -18,7 +12,6 @@ use mockforge_core::{
     },
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 /// Request body for verification endpoint
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,6 +46,12 @@ pub struct SequenceRequest {
 /// Shared state for verification API (currently empty, but kept for future extensibility)
 #[derive(Clone)]
 pub struct VerificationState;
+
+impl Default for VerificationState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl VerificationState {
     /// Create a new verification state

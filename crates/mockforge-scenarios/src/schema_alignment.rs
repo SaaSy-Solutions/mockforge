@@ -5,7 +5,6 @@
 
 use crate::error::{Result, ScenarioError};
 use serde_json::{json, Map, Value};
-use std::path::PathBuf;
 
 /// Merge strategy for schema alignment
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,13 +113,13 @@ pub fn align_openapi_specs(
     let existing_paths: Map<String, Value> = existing_spec
         .get("paths")
         .and_then(|p| p.as_object())
-        .map(|o| o.clone())
+        .cloned()
         .unwrap_or_default();
 
     let scenario_paths: Map<String, Value> = scenario_spec
         .get("paths")
         .and_then(|p| p.as_object())
-        .map(|o| o.clone())
+        .cloned()
         .unwrap_or_default();
 
     // Merge paths based on strategy
@@ -225,14 +224,14 @@ pub fn align_openapi_specs(
         .get("components")
         .and_then(|c| c.get("schemas"))
         .and_then(|s| s.as_object())
-        .map(|o| o.clone())
+        .cloned()
         .unwrap_or_default();
 
     let scenario_components: Map<String, Value> = scenario_spec
         .get("components")
         .and_then(|c| c.get("schemas"))
         .and_then(|s| s.as_object())
-        .map(|o| o.clone())
+        .cloned()
         .unwrap_or_default();
 
     if !scenario_components.is_empty() {

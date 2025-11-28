@@ -66,6 +66,24 @@ export class MockForgeApiClient {
         return await response.json();
     }
 
+    async updateMock(id: string, mock: MockConfig): Promise<MockConfig> {
+        const response = await fetch(`${this.baseUrl}/mocks/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify(mock),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to update mock: ${response.status} - ${errorText}`);
+        }
+
+        return await response.json();
+    }
+
     async deleteMock(id: string): Promise<void> {
         const response = await fetch(`${this.baseUrl}/mocks/${id}`, {
             method: 'DELETE',
@@ -145,5 +163,51 @@ export class MockForgeApiClient {
         }
 
         return variables;
+    }
+
+    async getWorkspaceState(workspaceId?: string): Promise<any> {
+        const wsId = workspaceId || this.getDefaultWorkspaceId();
+        const response = await fetch(`${this.baseUrl}/api/v1/consistency/state?workspace=${wsId}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to get workspace state: ${response.status}`);
+        }
+
+        return await response.json();
+    }
+
+    async setActivePersona(workspaceId: string | undefined, persona: { id: string; name?: string; domain?: string; traits?: Record<string, string> }): Promise<void> {
+        const wsId = workspaceId || this.getDefaultWorkspaceId();
+        const response = await fetch(`${this.baseUrl}/api/v1/consistency/persona?workspace=${wsId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ persona }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to set active persona: ${response.status}`);
+        }
+    }
+
+    async setActiveScenario(workspaceId: string | undefined, scenarioId: string): Promise<void> {
+        const wsId = workspaceId || this.getDefaultWorkspaceId();
+        const response = await fetch(`${this.baseUrl}/api/v1/consistency/scenario?workspace=${wsId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ scenario_id: scenarioId }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to set active scenario: ${response.status}`);
+        }
     }
 }

@@ -185,11 +185,28 @@
                         <h2 id="unreleased"><a class="header" href="#unreleased">[Unreleased]</a></h2>
 <h3 id="added"><a class="header" href="#added">Added</a></h3>
 <ul>
-<li>Nothing yet.</li>
+<li><strong>[Reality] Reality Profiles Marketplace</strong>: Pre-tuned “realism packs” bundling personas, scenarios, chaos rules, latency curves, error distributions, data mutation, and protocol behaviors. Includes E-Commerce Peak Season, Fintech Fraud, Healthcare HL7, and IoT Device Fleet Chaos packs.</li>
+<li><strong>[Reality] Behavioral Economics Engine</strong>: Mocks react to pressure, load, pricing, fraud suspicion, and customer segments. Supports declarative and scriptable rules for cart conversion drops, transaction declines, and user churn simulation.</li>
+<li><strong>[Reality] Synthetic → Recorded Drift Learning</strong>: Mocks learn from traffic patterns and adapt behavior. Supports behavioral, statistical, and hybrid learning modes with configurable sensitivity and decay rates.</li>
+<li><strong>[Reality] World State Engine</strong>: Unified visualization of all MockForge state systems (personas, lifecycle, reality, time, multi-protocol state, behavior trees, generative schemas, recorded data, AI modifiers) with graph visualization and time travel capabilities.</li>
+<li><strong>[Reality] Performance Mode</strong>: Lightweight load simulation for running scenarios at N RPS, simulating bottlenecks, recording latencies, and observing response changes under load.</li>
+<li><strong>[Contracts] API Change Forecasting</strong>: Predicts likely future contract breaks based on historical drift patterns. Includes pattern analysis, statistical modeling, and multi-window forecasting (30/90/180 days).</li>
+<li><strong>[Contracts] Semantic Drift Notifications</strong>: Detects when the meaning of an API changes, not just structure. Includes description changes, enum narrowing, soft-breaking changes, nullable changes, and error code removals with LLM-powered analysis.</li>
+<li><strong>[Contracts] Contract Threat Modeling</strong>: Analyzes APIs for security risks including PII exposure, DoS risk (unbounded arrays), error leakage (stack traces), and schema design issues with AI-powered remediation suggestions.</li>
+<li><strong>[DevX] Zero-Config Mode (Runtime Daemon)</strong>: Automatically creates mocks, generates types, creates client stubs, updates OpenAPI schema, and sets up scenarios when hitting non-existent endpoints (404). Full integration with AI generation.</li>
+<li><strong>[DevX] DevTools Browser Integration</strong>: Enhanced ForgeConnect extension with DevTools panel featuring “Mock this endpoint” functionality, live response modification, persona/scenario toggling, reverse-injection into workspace, and snapshot diff visualization.</li>
+<li><strong>[DevX] Snapshot Diff Between Environments</strong>: Side-by-side visualization for comparing mock behavior between environments, personas, scenarios, or reality levels. Supports test vs prod, persona comparisons, and reality level comparisons.</li>
+<li><strong>[DevX] Mock-Oriented Development (MOD)</strong>: Complete methodology documentation for mock-first design, contract-driven development, reality progression, and scenario-driven testing.</li>
+<li><strong>[Cloud] MockOps Pipelines</strong>: GitHub Actions-like automation for mock lifecycle management. Event-driven pipelines for schema changes → auto-regenerate SDK, scenario promotion, and drift threshold → auto-generate Git PR.</li>
+<li><strong>[Cloud] Multi-Workspace Federation</strong>: Compose multiple mock workspaces into one federated “virtual system” for microservices architectures. Supports service boundaries, system-wide scenarios, and per-service reality level control.</li>
+<li><strong>[Cloud] Analytics Dashboard</strong>: Leadership insight into coverage, risk, and usage. Includes scenario usage heatmaps, persona CI hit tracking, endpoint coverage analysis, reality level staleness detection, and drift percentage tracking.</li>
+<li><strong>[AI] API Architecture Critique</strong>: LLM-powered analysis of API schemas to detect anti-patterns, redundancies, naming issues, emotional tone problems, and provide restructuring recommendations.</li>
+<li><strong>[AI] Natural Language to System Generation</strong>: Generate complete backend systems from natural language descriptions. Creates 20-30 REST endpoints, 4-5 personas, 6-10 lifecycle states, WebSocket topics, payment failure scenarios, surge pricing chaos profiles, full OpenAPI spec, GraphQL schema, typings, and CI pipeline templates.</li>
+<li><strong>[AI] AI Behavioral Simulation Engine</strong>: Models users as narrative agents that react to app state, form intentions (shop, browse, buy, abandon), respond to errors, and trigger multi-step interactions automatically.</li>
 </ul>
 <h3 id="changed"><a class="header" href="#changed">Changed</a></h3>
 <ul>
-<li>Nothing yet.</li>
+<li><strong>[DevX] Enhanced ForgeConnect SDK Documentation</strong>: Added comprehensive DevTools panel features including “Mock this endpoint” functionality, live response modification, persona/scenario toggling, reverse-injection, and snapshot diff visualization.</li>
 </ul>
 <h3 id="deprecated"><a class="header" href="#deprecated">Deprecated</a></h3>
 <ul>
@@ -207,206 +224,101 @@
 <ul>
 <li>Nothing yet.</li>
 </ul>
-<h2 id="020---2025-10-29"><a class="header" href="#020---2025-10-29">[0.2.0] - 2025-10-29</a></h2>
+<h2 id="030---2025-11-17"><a class="header" href="#030---2025-11-17">[0.3.0] - 2025-11-17</a></h2>
 <h3 id="added-1"><a class="header" href="#added-1">Added</a></h3>
 <ul>
-<li>Output control features for MockForge generator with comprehensive configuration options</li>
-<li>Unified spec parser with enhanced validation and error reporting</li>
-<li>Multi-framework client generation with Angular and Svelte support</li>
-<li>Enhanced mock data generation with OpenAPI support</li>
-<li>Configuration file support for mock generation</li>
-<li>Browser mobile proxy mode implementation</li>
-<li>Comprehensive documentation and example workflows</li>
+<li><strong>[DevX] Pillars &amp; Tagged Changelog</strong>: Complete pillar system implementation with documentation and tooling</li>
+<li><strong>[Reality] Smart Personas &amp; Reality Continuum v2</strong>: Complete persona graph and lifecycle system</li>
+<li><strong>[Contracts] Drift Budget &amp; GitOps for API Sync</strong>: Complete drift management system</li>
+<li><strong>[Reality] Behavioral Cloning v1</strong>: Multi-step flow recording and replay</li>
+<li><strong>[AI][DevX] LLM/Voice Interface for Workspace Creation</strong>: Natural language to complete workspace</li>
+</ul>
+<p>See <a href="../../../CHANGELOG.html">CHANGELOG.md</a> for detailed release notes.</p>
+<h2 id="020---2025-10-29"><a class="header" href="#020---2025-10-29">[0.2.0] - 2025-10-29</a></h2>
+<h3 id="added-2"><a class="header" href="#added-2">Added</a></h3>
+<ul>
+<li><strong>[DevX] Output control features</strong> for MockForge generator with comprehensive configuration options</li>
+<li><strong>[DevX] Unified spec parser</strong> with enhanced validation and error reporting</li>
+<li><strong>[DevX] Multi-framework client generation</strong> with Angular and Svelte support</li>
+<li><strong>[Reality] Enhanced mock data generation</strong> with OpenAPI support</li>
+<li><strong>[DevX] Configuration file support</strong> for mock generation</li>
+<li><strong>[DevX] Browser mobile proxy mode</strong> implementation</li>
+<li><strong>[DevX] Comprehensive documentation</strong> and example workflows</li>
 </ul>
 <h3 id="changed-1"><a class="header" href="#changed-1">Changed</a></h3>
 <ul>
-<li>Enhanced CLI with progress indicators, error handling, and code quality improvements</li>
-<li>Comprehensive plugin architecture documentation</li>
+<li><strong>[DevX] Enhanced CLI</strong> with progress indicators, error handling, and code quality improvements</li>
+<li><strong>[DevX] Comprehensive plugin architecture documentation</strong></li>
 </ul>
 <h3 id="fixed-1"><a class="header" href="#fixed-1">Fixed</a></h3>
 <ul>
-<li>Remove tests that access private fields in mock data tests</li>
-<li>Fix compilation issues in mockforge-collab and mockforge-ui</li>
-<li>Update mockforge-plugin-core version to 0.1.6 in plugin-sdk</li>
-<li>Enable SQLx offline mode for mockforge-collab publishing</li>
-<li>Add description field to mockforge-analytics</li>
-<li>Add version requirements to all mockforge path dependencies</li>
-<li>Fix publish order dependencies (mockforge-chaos before mockforge-reporting)</li>
-<li>Update Cargo.lock and format client generator tests</li>
+<li><strong>[DevX] Remove tests that access private fields</strong> in mock data tests</li>
+<li><strong>[DevX] Fix compilation issues</strong> in mockforge-collab and mockforge-ui</li>
+<li><strong>[DevX] Update mockforge-plugin-core version</strong> to 0.1.6 in plugin-sdk</li>
+<li><strong>[DevX] Enable SQLx offline mode</strong> for mockforge-collab publishing</li>
+<li><strong>[DevX] Add description field</strong> to mockforge-analytics</li>
+<li><strong>[DevX] Add version requirements</strong> to all mockforge path dependencies</li>
+<li><strong>[DevX] Fix publish order dependencies</strong> (mockforge-chaos before mockforge-reporting)</li>
+<li><strong>[DevX] Update Cargo.lock</strong> and format client generator tests</li>
 </ul>
 <h2 id="013---2025-10-22"><a class="header" href="#013---2025-10-22">[0.1.3] - 2025-10-22</a></h2>
 <h3 id="changes"><a class="header" href="#changes">Changes</a></h3>
 <ul>
-<li>docs: prepare release 0.1.3</li>
-<li>docs: update CHANGELOG for 0.1.3 release</li>
-<li>docs: add roadmap completion summary</li>
-<li>feat: add Kubernetes-style health endpoint aliases and dashboard shortcut</li>
-<li>feat: add unified config &amp; profiles with multi-format support</li>
-<li>feat: add capture scrubbing and deterministic replay</li>
-<li>feat: add native GraphQL operation handlers with advanced features</li>
-<li>feat: add programmable WebSocket handlers</li>
-<li>feat: add HTTP scenario switching for OpenAPI response examples</li>
-<li>feat: add mockforge-test crate and integration testing examples</li>
-<li>build: enable publishing for mockforge-ui and mockforge-cli</li>
-<li>build: extend publish script for internal crates</li>
-<li>build: parameterize publish script with workspace version</li>
-</ul>
-<h2 id="013---2025-10-22-1"><a class="header" href="#013---2025-10-22-1">[0.1.3] - 2025-10-22</a></h2>
-<h3 id="changes-1"><a class="header" href="#changes-1">Changes</a></h3>
-<ul>
-<li>docs: update CHANGELOG for 0.1.3 release</li>
-<li>docs: add roadmap completion summary</li>
-<li>feat: add Kubernetes-style health endpoint aliases and dashboard shortcut</li>
-<li>feat: add unified config &amp; profiles with multi-format support</li>
-<li>feat: add capture scrubbing and deterministic replay</li>
-<li>feat: add native GraphQL operation handlers with advanced features</li>
-<li>feat: add programmable WebSocket handlers</li>
-<li>feat: add HTTP scenario switching for OpenAPI response examples</li>
-<li>feat: add mockforge-test crate and integration testing examples</li>
-<li>build: enable publishing for mockforge-ui and mockforge-cli</li>
-<li>build: extend publish script for internal crates</li>
-<li>build: parameterize publish script with workspace version</li>
+<li><strong>[DevX] docs: prepare release 0.1.3</strong></li>
+<li><strong>[DevX] docs: update CHANGELOG for 0.1.3 release</strong></li>
+<li><strong>[DevX] docs: add roadmap completion summary</strong></li>
+<li><strong>[DevX] feat: add Kubernetes-style health endpoint aliases and dashboard shortcut</strong></li>
+<li><strong>[DevX] feat: add unified config &amp; profiles with multi-format support</strong></li>
+<li><strong>[Reality] feat: add capture scrubbing and deterministic replay</strong></li>
+<li><strong>[DevX] feat: add native GraphQL operation handlers with advanced features</strong></li>
+<li><strong>[Reality] feat: add programmable WebSocket handlers</strong></li>
+<li><strong>[Reality] feat: add HTTP scenario switching for OpenAPI response examples</strong></li>
+<li><strong>[DevX] feat: add mockforge-test crate and integration testing examples</strong></li>
+<li><strong>[DevX] build: enable publishing for mockforge-ui and mockforge-cli</strong></li>
+<li><strong>[DevX] build: extend publish script for internal crates</strong></li>
+<li><strong>[DevX] build: parameterize publish script with workspace version</strong></li>
 </ul>
 <h2 id="012---2025-10-17"><a class="header" href="#012---2025-10-17">[0.1.2] - 2025-10-17</a></h2>
-<h3 id="changes-2"><a class="header" href="#changes-2">Changes</a></h3>
+<h3 id="changes-1"><a class="header" href="#changes-1">Changes</a></h3>
 <ul>
-<li>build: make version update tolerant</li>
-<li>build: manage version references via wrapper</li>
-<li>build: mark example crates as non-publishable</li>
-<li>build: drop publish-order for cargo-release 0.25</li>
-<li>build: centralize release metadata in release.toml</li>
-<li>build: remove per-crate release metadata</li>
-<li>build: fix release metadata field name</li>
-<li>build: move workspace release metadata into Cargo.toml</li>
-<li>build: require execute flag for release wrapper</li>
-<li>build: automate changelog generation during release</li>
-<li>build: add release wrapper with changelog guard</li>
-<li>build: align release tooling with cargo-release 0.25</li>
-</ul>
-<h2 id="012---2025-10-17-1"><a class="header" href="#012---2025-10-17-1">[0.1.2] - 2025-10-17</a></h2>
-<h3 id="changes-3"><a class="header" href="#changes-3">Changes</a></h3>
-<ul>
-<li>build: mark example crates as non-publishable</li>
-<li>build: drop publish-order for cargo-release 0.25</li>
-<li>build: centralize release metadata in release.toml</li>
-<li>build: remove per-crate release metadata</li>
-<li>build: fix release metadata field name</li>
-<li>build: move workspace release metadata into Cargo.toml</li>
-<li>build: require execute flag for release wrapper</li>
-<li>build: automate changelog generation during release</li>
-<li>build: add release wrapper with changelog guard</li>
-<li>build: align release tooling with cargo-release 0.25</li>
-</ul>
-<h2 id="012---2025-10-17-2"><a class="header" href="#012---2025-10-17-2">[0.1.2] - 2025-10-17</a></h2>
-<h3 id="changes-4"><a class="header" href="#changes-4">Changes</a></h3>
-<ul>
-<li>build: mark example crates as non-publishable</li>
-<li>build: drop publish-order for cargo-release 0.25</li>
-<li>build: centralize release metadata in release.toml</li>
-<li>build: remove per-crate release metadata</li>
-<li>build: fix release metadata field name</li>
-<li>build: move workspace release metadata into Cargo.toml</li>
-<li>build: require execute flag for release wrapper</li>
-<li>build: automate changelog generation during release</li>
-<li>build: add release wrapper with changelog guard</li>
-<li>build: align release tooling with cargo-release 0.25</li>
-</ul>
-<h2 id="012---2025-10-17-3"><a class="header" href="#012---2025-10-17-3">[0.1.2] - 2025-10-17</a></h2>
-<h3 id="changes-5"><a class="header" href="#changes-5">Changes</a></h3>
-<ul>
-<li>build: drop publish-order for cargo-release 0.25</li>
-<li>build: centralize release metadata in release.toml</li>
-<li>build: remove per-crate release metadata</li>
-<li>build: fix release metadata field name</li>
-<li>build: move workspace release metadata into Cargo.toml</li>
-<li>build: require execute flag for release wrapper</li>
-<li>build: automate changelog generation during release</li>
-<li>build: add release wrapper with changelog guard</li>
-<li>build: align release tooling with cargo-release 0.25</li>
-</ul>
-<h2 id="012---2025-10-17-4"><a class="header" href="#012---2025-10-17-4">[0.1.2] - 2025-10-17</a></h2>
-<h3 id="changes-6"><a class="header" href="#changes-6">Changes</a></h3>
-<ul>
-<li>build: centralize release metadata in release.toml</li>
-<li>build: remove per-crate release metadata</li>
-<li>build: fix release metadata field name</li>
-<li>build: move workspace release metadata into Cargo.toml</li>
-<li>build: require execute flag for release wrapper</li>
-<li>build: automate changelog generation during release</li>
-<li>build: add release wrapper with changelog guard</li>
-<li>build: align release tooling with cargo-release 0.25</li>
-</ul>
-<h2 id="012---2025-10-17-5"><a class="header" href="#012---2025-10-17-5">[0.1.2] - 2025-10-17</a></h2>
-<h3 id="changes-7"><a class="header" href="#changes-7">Changes</a></h3>
-<ul>
-<li>build: remove per-crate release metadata</li>
-<li>build: fix release metadata field name</li>
-<li>build: move workspace release metadata into Cargo.toml</li>
-<li>build: require execute flag for release wrapper</li>
-<li>build: automate changelog generation during release</li>
-<li>build: add release wrapper with changelog guard</li>
-<li>build: align release tooling with cargo-release 0.25</li>
-</ul>
-<h2 id="012---2025-10-17-6"><a class="header" href="#012---2025-10-17-6">[0.1.2] - 2025-10-17</a></h2>
-<h3 id="changes-8"><a class="header" href="#changes-8">Changes</a></h3>
-<ul>
-<li>build: fix release metadata field name</li>
-<li>build: move workspace release metadata into Cargo.toml</li>
-<li>build: require execute flag for release wrapper</li>
-<li>build: automate changelog generation during release</li>
-<li>build: add release wrapper with changelog guard</li>
-<li>build: align release tooling with cargo-release 0.25</li>
-</ul>
-<h2 id="012---2025-10-17-7"><a class="header" href="#012---2025-10-17-7">[0.1.2] - 2025-10-17</a></h2>
-<h3 id="changes-9"><a class="header" href="#changes-9">Changes</a></h3>
-<ul>
-<li>build: move workspace release metadata into Cargo.toml</li>
-<li>build: require execute flag for release wrapper</li>
-<li>build: automate changelog generation during release</li>
-<li>build: add release wrapper with changelog guard</li>
-<li>build: align release tooling with cargo-release 0.25</li>
-</ul>
-<h2 id="012---2025-10-17-8"><a class="header" href="#012---2025-10-17-8">[0.1.2] - 2025-10-17</a></h2>
-<h3 id="changes-10"><a class="header" href="#changes-10">Changes</a></h3>
-<ul>
-<li>build: require execute flag for release wrapper</li>
-<li>build: automate changelog generation during release</li>
-<li>build: add release wrapper with changelog guard</li>
-<li>build: align release tooling with cargo-release 0.25</li>
-</ul>
-<h2 id="012---2025-10-17-9"><a class="header" href="#012---2025-10-17-9">[0.1.2] - 2025-10-17</a></h2>
-<h3 id="changes-11"><a class="header" href="#changes-11">Changes</a></h3>
-<ul>
-<li>build: require execute flag for release wrapper</li>
-<li>build: automate changelog generation during release</li>
-<li>build: add release wrapper with changelog guard</li>
-<li>build: align release tooling with cargo-release 0.25</li>
+<li><strong>[DevX] build: make version update tolerant</strong></li>
+<li><strong>[DevX] build: manage version references via wrapper</strong></li>
+<li><strong>[DevX] build: mark example crates as non-publishable</strong></li>
+<li><strong>[DevX] build: drop publish-order for cargo-release 0.25</strong></li>
+<li><strong>[DevX] build: centralize release metadata in release.toml</strong></li>
+<li><strong>[DevX] build: remove per-crate release metadata</strong></li>
+<li><strong>[DevX] build: fix release metadata field name</strong></li>
+<li><strong>[DevX] build: move workspace release metadata into Cargo.toml</strong></li>
+<li><strong>[DevX] build: require execute flag for release wrapper</strong></li>
+<li><strong>[DevX] build: automate changelog generation during release</strong></li>
+<li><strong>[DevX] build: add release wrapper with changelog guard</strong></li>
+<li><strong>[DevX] build: align release tooling with cargo-release 0.25</strong></li>
 </ul>
 <h2 id="011---2025-10-17"><a class="header" href="#011---2025-10-17">[0.1.1] - 2025-10-17</a></h2>
-<h3 id="added-2"><a class="header" href="#added-2">Added</a></h3>
+<h3 id="added-3"><a class="header" href="#added-3">Added</a></h3>
 <ul>
-<li>OpenAPI request validation (path/query/header/cookie/body) with deep $ref resolution and composite schemas (oneOf/anyOf/allOf).</li>
-<li>Validation modes: <code>disabled</code>, <code>warn</code>, <code>enforce</code>, with aggregate error reporting and detailed error objects.</li>
-<li>Runtime Admin UI panel to view/toggle validation mode and per-route overrides; Admin API endpoint <code>/__mockforge/validation</code>.</li>
-<li>CLI flags and config options to control validation (including <code>skip_admin_validation</code> and per-route <code>validation_overrides</code>).</li>
-<li>New e2e tests for 2xx/422 request validation and response example expansion across HTTP routes.</li>
-<li>Templating reference docs and examples; WS templating tests and demo update.</li>
-<li>Initial release of MockForge</li>
-<li>HTTP API mocking with OpenAPI support</li>
-<li>gRPC service mocking with Protocol Buffers</li>
-<li>WebSocket connection mocking with replay functionality</li>
-<li>CLI tool for easy local development</li>
-<li>Admin UI for managing mock servers</li>
-<li>Comprehensive documentation with mdBook</li>
-<li>GitHub Actions CI/CD pipeline</li>
-<li>Security audit integration</li>
-<li>Pre-commit hooks for code quality</li>
+<li><strong>[Contracts] OpenAPI request validation</strong> (path/query/header/cookie/body) with deep $ref resolution and composite schemas (oneOf/anyOf/allOf).</li>
+<li><strong>[Contracts] Validation modes</strong>: <code>disabled</code>, <code>warn</code>, <code>enforce</code>, with aggregate error reporting and detailed error objects.</li>
+<li><strong>[DevX] Runtime Admin UI panel</strong> to view/toggle validation mode and per-route overrides; Admin API endpoint <code>/__mockforge/validation</code>.</li>
+<li><strong>[DevX] CLI flags and config options</strong> to control validation (including <code>skip_admin_validation</code> and per-route <code>validation_overrides</code>).</li>
+<li><strong>[DevX] New e2e tests</strong> for 2xx/422 request validation and response example expansion across HTTP routes.</li>
+<li><strong>[DevX] Templating reference docs</strong> and examples; WS templating tests and demo update.</li>
+<li><strong>[Reality] Initial release of MockForge</strong> - Multi-protocol mocking framework</li>
+<li><strong>[Reality] HTTP API mocking</strong> with OpenAPI support</li>
+<li><strong>[Reality] gRPC service mocking</strong> with Protocol Buffers</li>
+<li><strong>[Reality] WebSocket connection mocking</strong> with replay functionality</li>
+<li><strong>[DevX] CLI tool</strong> for easy local development</li>
+<li><strong>[DevX] Admin UI</strong> for managing mock servers</li>
+<li><strong>[DevX] Comprehensive documentation</strong> with mdBook</li>
+<li><strong>[DevX] GitHub Actions CI/CD pipeline</strong></li>
+<li><strong>[DevX] Security audit integration</strong></li>
+<li><strong>[DevX] Pre-commit hooks</strong> for code quality</li>
 </ul>
 <h3 id="changed-2"><a class="header" href="#changed-2">Changed</a></h3>
 <ul>
-<li>HTTP handlers now perform request validation before routing; invalid requests return 400 with structured details (when <code>enforce</code>).</li>
-<li>Bump <code>jsonschema</code> to 0.33 and adapt validator API; enable draft selection and format checks internally.</li>
-<li>Improve route registry and OpenAPI parameter parsing, including styles/explode and array coercion for query/header/cookie parameters.</li>
+<li><strong>[Contracts] HTTP handlers now perform request validation</strong> before routing; invalid requests return 400 with structured details (when <code>enforce</code>).</li>
+<li><strong>[Contracts] Bump <code>jsonschema</code> to 0.33</strong> and adapt validator API; enable draft selection and format checks internally.</li>
+<li><strong>[Contracts] Improve route registry and OpenAPI parameter parsing</strong>, including styles/explode and array coercion for query/header/cookie parameters.</li>
 </ul>
 <h3 id="deprecated-1"><a class="header" href="#deprecated-1">Deprecated</a></h3>
 <ul>
@@ -418,8 +330,8 @@
 </ul>
 <h3 id="fixed-2"><a class="header" href="#fixed-2">Fixed</a></h3>
 <ul>
-<li>Resolve admin mount prefix from config and exclude admin routes from validation when configured.</li>
-<li>Various small correctness fixes in OpenAPI schema mapping and parameter handling; clearer error messages.</li>
+<li><strong>[DevX] Resolve admin mount prefix</strong> from config and exclude admin routes from validation when configured.</li>
+<li><strong>[Contracts] Various small correctness fixes</strong> in OpenAPI schema mapping and parameter handling; clearer error messages.</li>
 </ul>
 <h3 id="security-1"><a class="header" href="#security-1">Security</a></h3>
 <ul>

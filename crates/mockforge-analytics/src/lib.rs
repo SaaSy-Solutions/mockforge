@@ -1,7 +1,7 @@
-//! MockForge Analytics
+//! `MockForge` Analytics
 //!
 //! Provides comprehensive traffic analytics and metrics dashboard capabilities
-//! for MockForge, including:
+//! for `MockForge`, including:
 //!
 //! - Time-series metrics aggregation (minute/hour/day granularity)
 //! - Endpoint performance tracking
@@ -54,6 +54,7 @@ pub mod database;
 pub mod error;
 pub mod export;
 pub mod models;
+pub mod pillar_usage;
 pub mod queries;
 pub mod retention;
 
@@ -61,6 +62,13 @@ pub use config::{AnalyticsConfig, RetentionConfig};
 pub use database::AnalyticsDatabase;
 pub use error::{AnalyticsError, Result};
 pub use models::*;
+pub use pillar_usage::*;
+
+// Explicitly re-export coverage metrics types for easier importing
+pub use models::{
+    DriftPercentageMetrics, EndpointCoverage, PersonaCIHit, RealityLevelStaleness,
+    ScenarioUsageMetrics,
+};
 
 /// Initialize the analytics system with the given configuration
 pub async fn init(config: AnalyticsConfig) -> Result<AnalyticsDatabase> {

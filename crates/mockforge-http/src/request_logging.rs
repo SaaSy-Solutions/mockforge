@@ -6,7 +6,11 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use mockforge_core::{create_http_log_entry, log_request_global};
+use mockforge_core::{
+    create_http_log_entry_with_query, log_request_global,
+    reality_continuum::response_trace::ResponseGenerationTrace,
+    request_logger::RealityTraceMetadata,
+};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Instant;
@@ -26,6 +30,13 @@ pub async fn log_http_requests(
         .map(|mp| mp.as_str().to_string())
         .unwrap_or_else(|| uri.split('?').next().unwrap_or(&uri).to_string());
 
+    // Extract query parameters from URI
+    let query_params: HashMap<String, String> = req
+        .uri()
+        .query()
+        .map(|q| url::form_urlencoded::parse(q.as_bytes()).into_owned().collect())
+        .unwrap_or_default();
+
     // Extract headers (filter sensitive ones)
     let headers = extract_safe_headers(req.headers());
 
@@ -35,6 +46,10 @@ pub async fn log_http_requests(
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
+
+    // Extract reality metadata from request extensions (set by consistency middleware)
+    // Must be done before calling next.run() which consumes the request
+    let reality_metadata = req.extensions().get::<RealityTraceMetadata>().cloned();
 
     // Call the next middleware/handler
     let response = next.run(req).await;
@@ -62,8 +77,8 @@ pub async fn log_http_requests(
         None
     };
 
-    // Log the request
-    let log_entry = create_http_log_entry(
+    // Log the request with query parameters
+    let mut log_entry = create_http_log_entry_with_query(
         &method,
         &path,
         status_code,
@@ -71,22 +86,47 @@ pub async fn log_http_requests(
         Some(addr.ip().to_string()),
         user_agent,
         headers,
+        query_params.clone(),
         response_size_bytes,
         error_message,
     );
 
+    // Attach reality metadata if available
+    log_entry.reality_metadata = reality_metadata;
+
+    // Extract response generation trace from response extensions (set by handler)
+    if let Some(trace) = response.extensions().get::<ResponseGenerationTrace>() {
+        // Serialize trace to JSON string and store in metadata
+        if let Ok(trace_json) = serde_json::to_string(trace) {
+            log_entry.metadata.insert("response_generation_trace".to_string(), trace_json);
+        }
+    }
+
     // Log to centralized logger
     log_request_global(log_entry).await;
 
-    // Also log to console for debugging
-    info!(
-        method = %method,
-        path = %path,
-        status = status_code,
-        duration_ms = response_time_ms,
-        client_ip = %addr.ip(),
-        "HTTP request processed"
-    );
+    // Also log to console for debugging (include query params if present)
+    if !query_params.is_empty() {
+        let query_params_clone = query_params.clone();
+        info!(
+            method = %method,
+            path = %path,
+            query = ?query_params_clone,
+            status = status_code,
+            duration_ms = response_time_ms,
+            client_ip = %addr.ip(),
+            "HTTP request processed"
+        );
+    } else {
+        info!(
+            method = %method,
+            path = %path,
+            status = status_code,
+            duration_ms = response_time_ms,
+            client_ip = %addr.ip(),
+            "HTTP request processed"
+        );
+    }
 
     response
 }

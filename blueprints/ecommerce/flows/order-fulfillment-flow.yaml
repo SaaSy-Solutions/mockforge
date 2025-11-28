@@ -1,0 +1,71 @@
+id: order-fulfillment-flow
+name: Order Fulfillment Flow
+description: Order processing, shipping, and delivery tracking
+steps:
+  - name: Get Order
+    method: GET
+    path: /api/orders/{{order_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      order_status: body.order.status
+      order_items: body.order.items
+
+  - name: Process Order
+    method: POST
+    path: /api/orders/{{order_id}}/process
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      processing_status: body.order.status
+
+  - name: Check Inventory
+    method: POST
+    path: /api/inventory/check
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      items: "{{order_items}}"
+    extract:
+      inventory_status: body.inventory.status
+
+  - name: Create Shipment
+    method: POST
+    path: /api/shipments
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      order_id: "{{order_id}}"
+      carrier: "ups"
+      service: "ground"
+    extract:
+      shipment_id: body.shipment.id
+      tracking_number: body.shipment.tracking_number
+
+  - name: Update Order Status
+    method: PATCH
+    path: /api/orders/{{order_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      status: "shipped"
+      tracking_number: "{{tracking_number}}"
+
+  - name: Track Shipment
+    method: GET
+    path: /api/shipments/{{shipment_id}}/track
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      shipment_status: body.shipment.status
+      estimated_delivery: body.shipment.estimated_delivery
+
+  - name: Mark as Delivered
+    method: POST
+    path: /api/orders/{{order_id}}/deliver
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      delivered_at: "2024-01-25T10:30:00Z"
+    extract:
+      final_status: body.order.status

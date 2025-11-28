@@ -1,0 +1,117 @@
+{
+  "name": "Banking Lite API",
+  "description": "Banking API with accounts, transactions, and transfers",
+  "version": "1.0.0",
+  "baseUrl": "http://localhost:3000",
+  "requests": [
+    {
+      "name": "List Accounts",
+      "method": "GET",
+      "path": "/api/accounts",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Get Account",
+      "method": "GET",
+      "path": "/api/accounts/{{account_id}}",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Create Account",
+      "method": "POST",
+      "path": "/api/accounts",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "account_type": "checking",
+        "currency": "USD",
+        "initial_deposit": 1000.00
+      }
+    },
+    {
+      "name": "Get Account Balance",
+      "method": "GET",
+      "path": "/api/accounts/{{account_id}}/balance",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Get Transactions",
+      "method": "GET",
+      "path": "/api/accounts/{{account_id}}/transactions",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "query": {
+        "limit": 20,
+        "offset": 0
+      }
+    },
+    {
+      "name": "Get Transaction",
+      "method": "GET",
+      "path": "/api/transactions/{{transaction_id}}",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Create Transfer",
+      "method": "POST",
+      "path": "/api/transfers",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "from_account_id": "{{source_account_id}}",
+        "to_account_id": "{{destination_account_id}}",
+        "amount": 500.00,
+        "currency": "USD",
+        "description": "Transfer between accounts"
+      }
+    },
+    {
+      "name": "Get Transfer",
+      "method": "GET",
+      "path": "/api/transfers/{{transfer_id}}",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "List Transfers",
+      "method": "GET",
+      "path": "/api/transfers",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Generate Statement",
+      "method": "POST",
+      "path": "/api/accounts/{{account_id}}/statements",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "start_date": "2024-01-01",
+        "end_date": "2024-01-31",
+        "format": "pdf"
+      }
+    },
+    {
+      "name": "Get Statement",
+      "method": "GET",
+      "path": "/api/statements/{{statement_id}}",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    }
+  ]
+}

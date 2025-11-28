@@ -12,9 +12,25 @@ export { TrafficHeatmap } from './TrafficHeatmap';
 export { FilterPanel } from './FilterPanel';
 export { ExportButton } from './ExportButton';
 
+// Pillar analytics components
+export { PillarAnalyticsDashboard } from './PillarAnalyticsDashboard';
+export { PillarOverviewCards } from './PillarOverviewCards';
+export { PillarUsageChart } from './PillarUsageChart';
+export { RealityPillarDetails } from './RealityPillarDetails';
+export { ContractsPillarDetails } from './ContractsPillarDetails';
+export { TimeRangeSelector } from './TimeRangeSelector';
+
 // Legacy components (still available)
 export { EndpointsTable } from './EndpointsTable';
 export { RequestRateChart } from './RequestRateChart';
 export { SummaryCards } from './SummaryCards';
 export { SystemMetricsCard } from './SystemMetricsCard';
 export { WebSocketMetricsCard } from './WebSocketMetricsCard';
+
+// Coverage Metrics components (MockOps)
+export { CoverageMetricsDashboard } from './CoverageMetricsDashboard';
+export { ScenarioUsageHeatmap } from './ScenarioUsageHeatmap';
+export { PersonaCIHits } from './PersonaCIHits';
+export { EndpointCoverage } from './EndpointCoverage';
+export { RealityLevelStaleness } from './RealityLevelStaleness';
+export { DriftPercentageDashboard } from './DriftPercentageDashboard';

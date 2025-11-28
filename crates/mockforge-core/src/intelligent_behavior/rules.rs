@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 /// Consistency rule that enforces logical behavior patterns
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ConsistencyRule {
     /// Rule name
     pub name: String,
@@ -26,6 +27,7 @@ pub struct ConsistencyRule {
 
 /// Action to take when a consistency rule matches
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum RuleAction {
     /// Return an error response
@@ -111,6 +113,7 @@ impl ConsistencyRule {
 
 /// State machine for resource lifecycle management
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct StateMachine {
     /// Resource type this state machine applies to
     pub resource_type: String,
@@ -237,6 +240,7 @@ impl StateMachine {
 
 /// State transition definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct StateTransition {
     /// Source state
     #[serde(rename = "from")]

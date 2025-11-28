@@ -4,6 +4,7 @@ import { logger } from '@/utils/logger';
  * Uses React Query for caching, background refetching, and optimistic updates
  */
 
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   apiService,
@@ -22,9 +23,11 @@ import {
   chaosApi,
   timeTravelApi,
   realityApi,
+  consistencyApi,
   proxyApi,
   type ProxyRuleRequest,
 } from '../services/api';
+import { driftApi, type DriftIncident, type ListIncidentsRequest, type CreateDriftBudgetRequest, type UpdateIncidentRequest } from '../services/driftApi';
 import type {
   CreateEnvironmentRequest,
   UpdateEnvironmentRequest,
@@ -61,6 +64,14 @@ export const queryKeys = {
   proxyInspect: ['proxyInspect'] as const,
   realityLevel: ['realityLevel'] as const,
   realityPresets: ['realityPresets'] as const,
+  lifecyclePresets: ['lifecyclePresets'] as const,
+  lifecyclePreset: (name: string) => ['lifecyclePreset', name] as const,
+  // Drift budget and incidents
+  driftBudgets: ['driftBudgets'] as const,
+  driftBudget: (id: string) => ['driftBudget', id] as const,
+  driftIncidents: (params?: ListIncidentsRequest) => ['driftIncidents', params] as const,
+  driftIncident: (id: string) => ['driftIncident', id] as const,
+  driftIncidentStats: ['driftIncidentStats'] as const,
 };
 
 /**
@@ -76,8 +87,9 @@ export function useDashboard() {
       }
       return dashboardApi.getDashboard();
     },
-    refetchInterval: 30000, // Refetch every 30 seconds
-    staleTime: 10000, // Consider data stale after 10 seconds
+    refetchInterval: 5000, // Refetch every 5 seconds for real-time updates
+    refetchIntervalInBackground: true, // Continue refetching even when tab is in background
+    staleTime: 2000, // Consider data stale after 2 seconds
   });
 }
 
@@ -868,6 +880,119 @@ export function useUpdateErrorPattern() {
 }
 
 /**
+ * Drift Budget and Incident Management hooks
+ */
+
+/**
+ * List drift budgets
+ */
+export function useDriftBudgets(params?: {
+  endpoint?: string;
+  method?: string;
+  workspace_id?: string;
+}) {
+  return useQuery({
+    queryKey: queryKeys.driftBudgets,
+    queryFn: () => driftApi.listBudgets(params),
+    staleTime: 30000,
+  });
+}
+
+/**
+ * Get a specific drift budget
+ */
+export function useDriftBudget(id: string) {
+  return useQuery({
+    queryKey: queryKeys.driftBudget(id),
+    queryFn: () => driftApi.getBudget(id),
+    enabled: !!id,
+  });
+}
+
+/**
+ * Create or update a drift budget
+ */
+export function useCreateOrUpdateDriftBudget() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (request: CreateDriftBudgetRequest) => driftApi.createOrUpdateBudget(request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.driftBudgets });
+    },
+  });
+}
+
+/**
+ * List incidents with optional filters
+ */
+export function useDriftIncidents(params?: ListIncidentsRequest, options?: { refetchInterval?: number }) {
+  return useQuery({
+    queryKey: queryKeys.driftIncidents(params),
+    queryFn: () => driftApi.listIncidents(params),
+    refetchInterval: options?.refetchInterval || 5000, // Auto-refresh every 5 seconds by default
+    staleTime: 2000,
+  });
+}
+
+/**
+ * Get a specific incident
+ */
+export function useDriftIncident(id: string) {
+  return useQuery({
+    queryKey: queryKeys.driftIncident(id),
+    queryFn: () => driftApi.getIncident(id),
+    enabled: !!id,
+    refetchInterval: 5000, // Auto-refresh for real-time updates
+  });
+}
+
+/**
+ * Update an incident
+ */
+export function useUpdateDriftIncident() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, request }: { id: string; request: UpdateIncidentRequest }) =>
+      driftApi.updateIncident(id, request),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.driftIncident(variables.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.driftIncidents() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.driftIncidentStats });
+    },
+  });
+}
+
+/**
+ * Resolve an incident
+ */
+export function useResolveDriftIncident() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => driftApi.resolveIncident(id),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.driftIncident(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.driftIncidents() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.driftIncidentStats });
+    },
+  });
+}
+
+/**
+ * Get incident statistics
+ */
+export function useDriftIncidentStatistics() {
+  return useQuery({
+    queryKey: queryKeys.driftIncidentStats,
+    queryFn: () => driftApi.getIncidentStatistics(),
+    refetchInterval: 10000, // Refetch every 10 seconds
+    staleTime: 5000,
+  });
+}
+
+/**
  * Time Travel hooks
  */
 export function useTimeTravelStatus() {
@@ -877,6 +1002,78 @@ export function useTimeTravelStatus() {
     refetchInterval: 2000, // Refetch every 2 seconds for real-time updates
     staleTime: 1000,
   });
+}
+
+/**
+ * Hook to update persona lifecycle states based on virtual time
+ * This should be called when time changes to update lifecycle states
+ */
+export function useUpdatePersonaLifecycles() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (workspace: string = 'default') => {
+      const response = await fetch(`/api/v1/consistency/persona/update-lifecycles?workspace=${workspace}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      // Handle 405 (Method Not Allowed) gracefully - endpoint may not be implemented
+      if (response.status === 405) {
+        console.debug('[TimeTravel] Persona lifecycle update endpoint not available (405)');
+        return null; // Return null instead of throwing to prevent error UI
+      }
+      if (!response.ok) {
+        throw new Error(`Failed to update persona lifecycles: ${response.status}`);
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate relevant queries to refresh responses
+      queryClient.invalidateQueries({ queryKey: ['consistency', 'state'] });
+      queryClient.invalidateQueries({ queryKey: ['consistency', 'persona'] });
+    },
+    onError: (error) => {
+      // Only log errors that aren't 405 (which we handle gracefully)
+      if (!error.message?.includes('405')) {
+        console.warn('[TimeTravel] Failed to update persona lifecycles:', error);
+      }
+    },
+  });
+}
+
+/**
+ * Hook that watches time changes and automatically updates persona lifecycle states
+ * This provides live preview of persona/lifecycle state changes when virtual time is adjusted
+ */
+export function useLivePreviewLifecycleUpdates(workspace: string = 'default', enabled: boolean = true) {
+  const { data: timeStatus } = useTimeTravelStatus();
+  const updateLifecycles = useUpdatePersonaLifecycles();
+  const previousTimeRef = React.useRef<string | undefined>();
+
+  React.useEffect(() => {
+    if (!enabled || !timeStatus?.enabled) {
+      return;
+    }
+
+    const currentTime = timeStatus.current_time;
+
+    // Check if time has changed
+    if (currentTime && currentTime !== previousTimeRef.current) {
+      previousTimeRef.current = currentTime;
+
+      // Update persona lifecycle states based on new virtual time
+      updateLifecycles.mutate(workspace, {
+        onSuccess: () => {
+          // Lifecycle states have been updated, responses will be refreshed automatically
+          // via query invalidation in the mutation
+        },
+        onError: () => {
+          // Silently handle errors (405 is expected if endpoint doesn't exist)
+          // This prevents error UI from showing for missing endpoints
+        },
+      });
+    }
+  }, [timeStatus?.current_time, timeStatus?.enabled, enabled, workspace, updateLifecycles]);
 }
 
 export function useEnableTimeTravel() {
@@ -907,6 +1104,17 @@ export function useAdvanceTime() {
 
   return useMutation({
     mutationFn: (duration: string) => timeTravelApi.advance(duration),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeTravelStatus });
+    },
+  });
+}
+
+export function useSetTime() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (time: string) => timeTravelApi.setTime(time),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.timeTravelStatus });
     },
@@ -1071,6 +1279,40 @@ export function useExportRealityPreset() {
       realityApi.exportPreset(name, description),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.realityPresets });
+    },
+  });
+}
+
+/**
+ * Lifecycle preset hooks
+ */
+export function useLifecyclePresets() {
+  return useQuery({
+    queryKey: queryKeys.lifecyclePresets,
+    queryFn: () => consistencyApi.listLifecyclePresets(),
+    staleTime: 60000, // Presets don't change often
+  });
+}
+
+export function useLifecyclePresetDetails(presetName: string) {
+  return useQuery({
+    queryKey: queryKeys.lifecyclePreset(presetName),
+    queryFn: () => consistencyApi.getLifecyclePresetDetails(presetName),
+    enabled: !!presetName,
+    staleTime: 60000,
+  });
+}
+
+export function useApplyLifecyclePreset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ workspace, personaId, preset }: { workspace: string; personaId: string; preset: string }) =>
+      consistencyApi.applyLifecyclePreset(workspace, personaId, preset),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['consistency', 'state'] });
+      queryClient.invalidateQueries({ queryKey: ['consistency', 'persona'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lifecyclePresets });
     },
   });
 }

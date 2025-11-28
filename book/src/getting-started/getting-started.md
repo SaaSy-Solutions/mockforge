@@ -27,6 +27,77 @@ MockForge is a comprehensive mocking framework that supports multiple protocols:
 - 🔌 **Extensible**: Plugin system for custom authentication, templates, and data sources
 - 📊 **Admin UI**: Visual interface for monitoring and managing mock servers
 
+## The Five Pillars of MockForge
+
+MockForge is built on five foundational pillars that guide every feature we build. Understanding these pillars helps you see how MockForge delivers value across different aspects of API mocking:
+
+### [Reality] – Everything that makes mocks feel like a real, evolving backend
+
+Make mocks indistinguishable from production backends through realistic behavior, state management, and dynamic data generation. Features like Reality Continuum, Smart Personas, Chaos Lab, and Temporal Simulation ensure your mocks behave like real systems.
+
+**Key Features:**
+- Reality Continuum and Reality Slider for configurable realism levels
+- Smart Personas for consistent cross-endpoint data generation
+- Generative Schema Mode for dynamic mock data without seed data
+- Chaos Lab for network condition simulation
+- Multi-protocol support (HTTP, gRPC, WebSocket, Kafka, MQTT, AMQP, SMTP, FTP, TCP)
+
+### [Contracts] – Schema, drift, validation, and safety nets
+
+Ensure API contracts are correct, validated, and stay in sync with real backends. Features like AI Contract Diff, automatic API sync, and comprehensive validation help catch breaking changes before they reach production.
+
+**Key Features:**
+- OpenAPI/GraphQL schema validation
+- AI Contract Diff for contract comparison and visualization
+- Automatic API Sync & Change Detection
+- Request/response validation with detailed error reporting
+- Contract drift detection and monitoring
+
+### [DevX] – SDKs, generators, playgrounds, ergonomics
+
+Make MockForge effortless to use, integrate, and extend for developers. Native SDKs for 6 languages, client code generators, interactive playgrounds, and comprehensive tooling ensure a smooth developer experience.
+
+**Key Features:**
+- Multi-language SDKs (Rust, Node.js, Python, Go, Java, .NET)
+- Client code generators (React, Vue, Angular, Svelte)
+- GraphQL + REST Playground
+- CLI tool and Admin UI
+- Plugin system for extensibility
+
+### [Cloud] – Registry, orgs, governance, monetization, marketplace
+
+Enable team collaboration, sharing, and scaling from solo developers to enterprise organizations. Cloud workspaces, scenario marketplace, registry server, and organization management help teams work together effectively.
+
+**Key Features:**
+- Cloud Workspaces for team collaboration
+- Scenario Marketplace for sharing mock scenarios
+- Registry Server for centralized distribution
+- Organization Management for enterprise teams
+- Security controls and governance
+
+### [AI] – LLM/voice flows, AI diff/assist, generative behaviors
+
+Leverage artificial intelligence to automate mock generation, enhance data realism, and assist developers. AI-powered features like MockAI, voice interface, and intelligent contract analysis make mock creation effortless.
+
+**Key Features:**
+- MockAI for intelligent mock generation from natural language
+- Voice + LLM Interface for voice-driven mock creation
+- AI Contract Diff for intelligent contract analysis
+- AI Event Streams for narrative-driven WebSocket events
+- Generative data behaviors with RAG-powered synthesis
+
+**Learn More:** See the [complete Pillars documentation](../../docs/PILLARS.md) for detailed information about each pillar, feature mappings, and examples.
+
+## Choose Your Path
+
+Depending on your role, team, or use case, you may want to start with a specific pillar:
+
+- **[Reality-First Onboarding](reality-first.md)** - Start here if you care about realism. Perfect for frontend teams needing realistic data that evolves over time.
+- **[Contracts-First Onboarding](contracts-first.md)** - Start here if you're a Platform/API team. Perfect for teams needing contract validation and drift detection.
+- **[AI-First Onboarding](ai-first.md)** - Start here if you want natural-language-driven mocks. Perfect for rapid prototyping and AI-powered mock generation.
+
+See [Journeys by Pillar](../../docs/JOURNEYS_BY_PILLAR.md) for a complete overview of all pillar-first onboarding journeys.
+
 ## Installation
 
 ### Prerequisites

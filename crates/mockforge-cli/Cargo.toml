@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-cli"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ description = "CLI interface for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = true  # Binary crate available via cargo install
+publish = false  # Binary crate available via cargo install
 
 [[bin]]
 name = "mockforge"
@@ -23,29 +23,31 @@ tokio-util = "0.7"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-opentelemetry = "0.22"
-mockforge-core = { path = "../mockforge-core", version = "0.2.8" }
-mockforge-http = { version = "0.2.8", path = "../mockforge-http", optional = true }
-mockforge-ws = { version = "0.2.8", path = "../mockforge-ws", optional = true }
-mockforge-grpc = { version = "0.2.8", path = "../mockforge-grpc", optional = true }
-mockforge-graphql = { version = "0.2.8", path = "../mockforge-graphql", optional = true }
-mockforge-smtp = { version = "0.2.8", path = "../mockforge-smtp", optional = true }
-mockforge-mqtt = { version = "0.2.8", path = "../mockforge-mqtt", optional = true }
-mockforge-data = { path = "../mockforge-data", version = "0.2.8" }
-mockforge-ui = { path = "../mockforge-ui", version = "0.2.8" }
-mockforge-observability = { path = "../mockforge-observability", version = "0.2.8" }
-mockforge-tracing = { path = "../mockforge-tracing", version = "0.2.8" }
-mockforge-recorder = { path = "../mockforge-recorder", version = "0.2.8" }
-mockforge-bench = { path = "../mockforge-bench", version = "0.2.8" }
-mockforge-ftp = { version = "0.2.8", path = "../mockforge-ftp", optional = true }
-mockforge-kafka = { version = "0.2.8", path = "../mockforge-kafka", optional = true }
-mockforge-amqp = { version = "0.2.8", path = "../mockforge-amqp", optional = true }
-mockforge-tcp = { version = "0.2.8", path = "../mockforge-tcp", optional = true }
-mockforge-tunnel = { path = "../mockforge-tunnel", version = "0.2.8" }
-mockforge-vbr = { version = "0.2.8", path = "../mockforge-vbr" }
-mockforge-plugin-core = { path = "../mockforge-plugin-core", version = "0.2.8" }
-mockforge-plugin-loader = { path = "../mockforge-plugin-loader", version = "0.2.8" }
-mockforge-scenarios = { path = "../mockforge-scenarios", version = "0.2.8" }
-mockforge-chaos = { path = "../mockforge-chaos", version = "0.2.8" }
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-http = { version = "0.3.3", path = "../mockforge-http", optional = true }
+mockforge-ws = { version = "0.3.3", path = "../mockforge-ws", optional = true }
+mockforge-grpc = { version = "0.3.3", path = "../mockforge-grpc", optional = true }
+mockforge-graphql = { version = "0.3.3", path = "../mockforge-graphql", optional = true }
+mockforge-smtp = { version = "0.3.3", path = "../mockforge-smtp", optional = true }
+mockforge-mqtt = { version = "0.3.3", path = "../mockforge-mqtt", optional = true }
+mockforge-data = { version = "0.3.3", path = "../mockforge-data" }
+mockforge-ui = { version = "0.3.3", path = "../mockforge-ui" }
+mockforge-observability = { version = "0.3.3", path = "../mockforge-observability" }
+mockforge-tracing = { version = "0.3.3", path = "../mockforge-tracing" }
+mockforge-recorder = { version = "0.3.3", path = "../mockforge-recorder" }
+mockforge-bench = { version = "0.3.3", path = "../mockforge-bench" }
+mockforge-ftp = { version = "0.3.3", path = "../mockforge-ftp", optional = true }
+mockforge-kafka = { version = "0.3.3", path = "../mockforge-kafka", optional = true }
+mockforge-amqp = { version = "0.3.3", path = "../mockforge-amqp", optional = true }
+mockforge-tcp = { version = "0.3.3", path = "../mockforge-tcp", optional = true }
+mockforge-tunnel = { version = "0.3.3", path = "../mockforge-tunnel" }
+mockforge-vbr = { version = "0.3.3", path = "../mockforge-vbr" }
+mockforge-plugin-core = { version = "0.3.3", path = "../mockforge-plugin-core" }
+mockforge-plugin-loader = { version = "0.3.3", path = "../mockforge-plugin-loader" }
+mockforge-scenarios = { version = "0.3.3", path = "../mockforge-scenarios", features = ["studio-packs"] }
+mockforge-chaos = { version = "0.3.3", path = "../mockforge-chaos" }
+mockforge-schema = { version = "0.3.0", path = "../mockforge-schema" }
+mockforge-pipelines = { version = "0.3.3", path = "../mockforge-pipelines", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
@@ -54,9 +56,9 @@ regex = "1.10"
 base64 = { workspace = true }
 axum = { workspace = true }
 hyper = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["multipart"] }
 tempfile = "3.8"
-rumqttc = { version = "0.24", optional = true }
+rumqttc = { version = "0.25", optional = true }
 hex = { workspace = true }
 zip = "2.2"
 ring = "0.17"
@@ -64,10 +66,13 @@ urlencoding = "2.1"
 colored = "2.2"
 indicatif = "0.17"
 console = "0.15"
+dialoguer = "0.11"
+dirs = "5.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { workspace = true }
 openapiv3 = "2.0"
 async-trait = "0.1"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
 lapin = { version = "2.3", optional = true }
 rdkafka = { version = "0.38", optional = true }
 futures-lite = { version = "2.0", optional = true }
@@ -82,6 +87,8 @@ default = ["http", "mqtt", "ws", "grpc", "graphql", "ftp", "amqp", "kafka", "smt
 stt-cloud = []  # Cloud API backends (OpenAI Whisper, Google Speech-to-Text)
 stt-vosk = ["vosk", "cpal", "hound"]  # Offline STT using vosk-rs
 stt-all = ["stt-cloud", "stt-vosk"]
+# Studio packs feature (requires mockforge-scenarios with studio-packs feature)
+studio-packs = ["mockforge-scenarios/studio-packs"]
 http = ["mockforge-http"]
 mqtt = ["mockforge-mqtt", "mockforge-http/mqtt", "rumqttc"]
 ws = ["mockforge-ws"]
@@ -92,6 +99,7 @@ kafka = ["mockforge-kafka", "rdkafka"]
 amqp = ["mockforge-amqp", "lapin", "futures-lite"]
 smtp = ["mockforge-smtp", "mockforge-http/smtp"]
 tcp = ["mockforge-tcp"]
+pipelines = ["dep:mockforge-pipelines"]
 
 [dev-dependencies]
 assert_cmd = "2.0"

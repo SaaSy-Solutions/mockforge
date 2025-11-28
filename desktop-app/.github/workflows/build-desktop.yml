@@ -1,0 +1,68 @@
+name: Build Desktop App
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'desktop-app/**'
+      - 'crates/mockforge-ui/**'
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ created ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
+      - name: Install frontend dependencies
+        run: |
+          cd crates/mockforge-ui/ui
+          pnpm install
+
+      - name: Build desktop app
+        run: |
+          cd desktop-app
+          cargo tauri build
+        env:
+          # Add signing credentials if available
+          # WINDOWS_CERT_THUMBPRINT: ${{ secrets.WINDOWS_CERT_THUMBPRINT }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-app-${{ matrix.os }}
+          path: |
+            desktop-app/target/release/bundle/**/*.msi
+            desktop-app/target/release/bundle/**/*.app
+            desktop-app/target/release/bundle/**/*.AppImage
+            desktop-app/target/release/bundle/**/*.deb
+          if-no-files-found: warn

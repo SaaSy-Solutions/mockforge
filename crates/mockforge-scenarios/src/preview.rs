@@ -106,8 +106,7 @@ impl ScenarioPreview {
         let mut endpoints = Vec::new();
 
         if let Some(openapi_path) = package.openapi_path() {
-            let content =
-                std::fs::read_to_string(&openapi_path).map_err(|e| ScenarioError::Io(e))?;
+            let content = std::fs::read_to_string(&openapi_path).map_err(ScenarioError::Io)?;
 
             // Try to parse as JSON first, then YAML
             let spec: serde_json::Value = if openapi_path
@@ -116,9 +115,9 @@ impl ScenarioPreview {
                 .map(|ext| ext == "json")
                 .unwrap_or(false)
             {
-                serde_json::from_str(&content).map_err(|e| ScenarioError::Serde(e))?
+                serde_json::from_str(&content).map_err(ScenarioError::Serde)?
             } else {
-                serde_yaml::from_str(&content).map_err(|e| ScenarioError::Yaml(e))?
+                serde_yaml::from_str(&content).map_err(ScenarioError::Yaml)?
             };
 
             // Extract paths and operations
@@ -274,14 +273,14 @@ impl ScenarioPreview {
         }
         output.push_str(&format!("   Category: {:?}\n", self.manifest.category));
         output.push_str(&format!("   Tags: {}\n", self.manifest.tags.join(", ")));
-        output.push_str("\n");
+        output.push('\n');
 
         // Description
         output.push_str("Description:\n");
         for line in self.manifest.description.lines() {
             output.push_str(&format!("   {}\n", line));
         }
-        output.push_str("\n");
+        output.push('\n');
 
         // Compatibility
         output.push_str("Compatibility:\n");
@@ -298,14 +297,14 @@ impl ScenarioPreview {
         if let Some(max) = &self.compatibility.max_version {
             output.push_str(&format!("   Max Version: {}\n", max));
         }
-        output.push_str("\n");
+        output.push('\n');
 
         // File structure
         output.push_str("File Structure:\n");
         for line in &self.file_tree {
             output.push_str(&format!("   {}\n", line));
         }
-        output.push_str("\n");
+        output.push('\n');
 
         // OpenAPI endpoints
         if !self.openapi_endpoints.is_empty() {
@@ -320,7 +319,7 @@ impl ScenarioPreview {
                     output.push_str(&format!("   {} {}\n", endpoint.method, endpoint.path));
                 }
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         // Config preview
@@ -329,7 +328,7 @@ impl ScenarioPreview {
             for line in config.lines().take(50) {
                 output.push_str(&format!("   {}\n", line));
             }
-            output.push_str("\n");
+            output.push('\n');
         }
 
         // Size estimate

@@ -3,7 +3,7 @@
 //! This module provides specialized data generators for various domains
 //! including finance, IoT, healthcare, and more.
 
-use mockforge_core::Result;
+use crate::Result;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

@@ -1,0 +1,468 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>API Architecture Critique - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/ai/api-architecture-critique.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="api-architecture-critique"><a class="header" href="#api-architecture-critique">API Architecture Critique</a></h1>
+<p><strong>Pillars:</strong> [AI]</p>
+<p>API Architecture Critique feeds entire API schemas into an LLM and produces comprehensive analysis including anti-pattern detection, redundancy detection, poor naming, emotional tone assessment, and recommended restructuring. This positions MockForge as an <strong>API Architect AI</strong>.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Beyond structural validation, API Architecture Critique provides:</p>
+<ul>
+<li><strong>Anti-Pattern Detection</strong>: REST violations, inconsistent naming, poor resource modeling</li>
+<li><strong>Redundancy Detection</strong>: Duplicate endpoints, overlapping functionality</li>
+<li><strong>Naming Quality Assessment</strong>: Inconsistent conventions, unclear names, abbreviations</li>
+<li><strong>Emotional Tone Analysis</strong>: Error messages that are too vague, technical, or unfriendly</li>
+<li><strong>Restructuring Recommendations</strong>: Better resource hierarchy, consolidation opportunities</li>
+</ul>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<h3 id="cli-commands"><a class="header" href="#cli-commands">CLI Commands</a></h3>
+<pre><code class="language-bash"># Critique API schema
+mockforge ai critique --spec openapi.json
+
+# Critique with focus areas
+mockforge ai critique --spec openapi.json --focus anti-patterns,naming
+
+# Critique specific endpoint
+mockforge ai critique --spec openapi.json --endpoint /api/users/{id}
+</code></pre>
+<h3 id="api-usage"><a class="header" href="#api-usage">API Usage</a></h3>
+<pre><code class="language-bash"># Critique API
+POST /api/v1/ai-studio/critique
+{
+  "schema": {...},
+  "schema_type": "openapi",
+  "focus_areas": ["anti-patterns", "naming", "tone"]
+}
+</code></pre>
+<h3 id="ui-usage"><a class="header" href="#ui-usage">UI Usage</a></h3>
+<p>Access via AI Studio page:</p>
+<ol>
+<li>Navigate to AI Studio</li>
+<li>Select “API Critique”</li>
+<li>Upload OpenAPI/GraphQL/Protobuf schema</li>
+<li>Select focus areas</li>
+<li>Review critique results</li>
+</ol>
+<h2 id="critique-results"><a class="header" href="#critique-results">Critique Results</a></h2>
+<h3 id="example-critique"><a class="header" href="#example-critique">Example Critique</a></h3>
+<pre><code class="language-json">{
+  "anti_patterns": [
+    {
+      "pattern_type": "rest_violation",
+      "severity": "high",
+      "location": "/api/users/{id}/delete",
+      "description": "DELETE endpoint should use DELETE method, not POST",
+      "suggestion": "Change to DELETE /api/users/{id}",
+      "example": "POST /api/users/{id}/delete → DELETE /api/users/{id}"
+    }
+  ],
+  "redundancies": [
+    {
+      "redundancy_type": "duplicate_endpoint",
+      "severity": "medium",
+      "affected_items": [
+        "/api/users/list",
+        "/api/users"
+      ],
+      "description": "Both endpoints return user lists",
+      "suggestion": "Consolidate to /api/users"
+    }
+  ],
+  "naming_issues": [
+    {
+      "issue_type": "inconsistent_convention",
+      "severity": "low",
+      "location": "user_id",
+      "current_name": "user_id",
+      "description": "Inconsistent: some fields use 'id', others use 'Id'",
+      "suggestion": "Standardize to 'id' or 'Id'"
+    }
+  ],
+  "tone_analysis": {
+    "overall_tone": "technical",
+    "error_message_issues": [
+      {
+        "issue_type": "too_vague",
+        "severity": "medium",
+        "location": "400 error",
+        "current_text": "Bad request",
+        "description": "Error message is too vague",
+        "suggestion": "Provide specific error details: 'Invalid user ID format'"
+      }
+    ],
+    "recommendations": [
+      "Make error messages more user-friendly",
+      "Provide actionable error details"
+    ]
+  },
+  "restructuring": {
+    "hierarchy_improvements": [
+      {
+        "current": "/api/users/{id}/orders/{order_id}",
+        "suggested": "/api/orders/{order_id}?user_id={id}",
+        "rationale": "Orders are top-level resources, not nested under users",
+        "impact": "medium"
+      }
+    ],
+    "consolidation_opportunities": [
+      {
+        "items": ["/api/users/list", "/api/users"],
+        "description": "Duplicate user listing endpoints",
+        "suggestion": "Use single /api/users endpoint with query parameters",
+        "benefits": ["Simpler API", "Less maintenance"]
+      }
+    ]
+  },
+  "overall_score": 72.5,
+  "summary": "API has good structure but needs improvements in REST compliance and error messaging."
+}
+</code></pre>
+<h2 id="focus-areas"><a class="header" href="#focus-areas">Focus Areas</a></h2>
+<h3 id="anti-patterns"><a class="header" href="#anti-patterns">Anti-Patterns</a></h3>
+<p>Detects REST violations and design issues:</p>
+<ul>
+<li><strong>REST Violations</strong>: Wrong HTTP methods, non-RESTful patterns</li>
+<li><strong>Inconsistent Naming</strong>: Mixed naming conventions</li>
+<li><strong>Poor Resource Modeling</strong>: Incorrect resource hierarchy</li>
+</ul>
+<h3 id="redundancy"><a class="header" href="#redundancy">Redundancy</a></h3>
+<p>Detects duplicate or overlapping functionality:</p>
+<ul>
+<li><strong>Duplicate Endpoints</strong>: Multiple endpoints doing the same thing</li>
+<li><strong>Overlapping Functionality</strong>: Endpoints with significant overlap</li>
+</ul>
+<h3 id="naming-quality"><a class="header" href="#naming-quality">Naming Quality</a></h3>
+<p>Assesses naming consistency and clarity:</p>
+<ul>
+<li><strong>Inconsistent Conventions</strong>: Mixed naming styles</li>
+<li><strong>Unclear Names</strong>: Ambiguous or confusing names</li>
+<li><strong>Abbreviations</strong>: Overuse of abbreviations</li>
+</ul>
+<h3 id="emotional-tone"><a class="header" href="#emotional-tone">Emotional Tone</a></h3>
+<p>Analyzes user-facing text quality:</p>
+<ul>
+<li><strong>Error Messages</strong>: Too vague, technical, or unfriendly</li>
+<li><strong>Descriptions</strong>: Unclear or unhelpful</li>
+<li><strong>User-Facing Text</strong>: Tone and clarity issues</li>
+</ul>
+<h3 id="restructuring"><a class="header" href="#restructuring">Restructuring</a></h3>
+<p>Recommends structural improvements:</p>
+<ul>
+<li><strong>Hierarchy Improvements</strong>: Better resource organization</li>
+<li><strong>Consolidation Opportunities</strong>: Endpoints that can be merged</li>
+<li><strong>Resource Modeling</strong>: Better resource design</li>
+</ul>
+<h2 id="real-world-examples"><a class="header" href="#real-world-examples">Real-World Examples</a></h2>
+<h3 id="example-1-rest-violation"><a class="header" href="#example-1-rest-violation">Example 1: REST Violation</a></h3>
+<p><strong>Anti-Pattern Detected:</strong></p>
+<pre><code>POST /api/users/{id}/delete
+</code></pre>
+<p><strong>Issue:</strong> DELETE operation should use DELETE method.</p>
+<p><strong>Suggestion:</strong></p>
+<pre><code>DELETE /api/users/{id}
+</code></pre>
+<h3 id="example-2-redundancy"><a class="header" href="#example-2-redundancy">Example 2: Redundancy</a></h3>
+<p><strong>Redundancy Detected:</strong></p>
+<pre><code>GET /api/users/list
+GET /api/users
+</code></pre>
+<p><strong>Issue:</strong> Both endpoints return user lists.</p>
+<p><strong>Suggestion:</strong> Consolidate to <code>GET /api/users</code> with query parameters.</p>
+<h3 id="example-3-naming-inconsistency"><a class="header" href="#example-3-naming-inconsistency">Example 3: Naming Inconsistency</a></h3>
+<p><strong>Issue Detected:</strong></p>
+<ul>
+<li>Some fields: <code>user_id</code>, <code>order_id</code></li>
+<li>Other fields: <code>userId</code>, <code>orderId</code></li>
+</ul>
+<p><strong>Suggestion:</strong> Standardize to one convention (e.g., <code>user_id</code>).</p>
+<h3 id="example-4-error-message-tone"><a class="header" href="#example-4-error-message-tone">Example 4: Error Message Tone</a></h3>
+<p><strong>Issue Detected:</strong></p>
+<pre><code class="language-json">{
+  "error": "Bad request"
+}
+</code></pre>
+<p><strong>Issue:</strong> Too vague, not actionable.</p>
+<p><strong>Suggestion:</strong></p>
+<pre><code class="language-json">{
+  "error": "Invalid user ID format. Expected UUID.",
+  "code": "INVALID_USER_ID"
+}
+</code></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="enable-api-critique"><a class="header" href="#enable-api-critique">Enable API Critique</a></h3>
+<pre><code class="language-yaml"># mockforge.yaml
+ai_studio:
+  api_critique:
+    enabled: true
+    default_focus_areas:
+      - anti-patterns
+      - redundancy
+      - naming
+      - tone
+      - restructuring
+</code></pre>
+<h3 id="llm-configuration"><a class="header" href="#llm-configuration">LLM Configuration</a></h3>
+<pre><code class="language-yaml">ai_studio:
+  api_critique:
+    enabled: true
+    llm:
+      provider: openai
+      model: gpt-4
+      temperature: 0.3
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Run Early</strong>: Critique APIs during design phase</li>
+<li><strong>Focus Areas</strong>: Select relevant focus areas</li>
+<li><strong>Review Recommendations</strong>: AI suggestions are helpful but review manually</li>
+<li><strong>Iterate</strong>: Use critique to improve API design</li>
+<li><strong>Track Scores</strong>: Monitor overall scores over time</li>
+</ol>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="../../user-guide/llm-studio.html">AI Studio</a> - AI features overview</li>
+<li><a href="system-generation.html">System Generation</a> - NL to system generation</li>
+<li><a href="behavioral-simulation.html">Behavioral Simulation</a> - AI behavioral simulation</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../user-guide/cloud/analytics-dashboard.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../user-guide/ai/system-generation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../user-guide/cloud/analytics-dashboard.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../user-guide/ai/system-generation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../../ace.js"></script>
+        <script src="../../mode-rust.js"></script>
+        <script src="../../editor.js"></script>
+        <script src="../../theme-dawn.js"></script>
+        <script src="../../theme-tomorrow_night.js"></script>
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

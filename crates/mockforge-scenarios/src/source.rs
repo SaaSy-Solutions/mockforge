@@ -2,7 +2,7 @@
 //!
 //! Handles parsing and detection of scenario sources (local, URL, Git, registry)
 
-use crate::error::{Result, ScenarioError};
+use crate::error::Result;
 use std::path::{Path, PathBuf};
 
 /// Scenario source type

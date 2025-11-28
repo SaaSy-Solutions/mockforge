@@ -1,0 +1,9 @@
+{
+  "http_req_duration": {
+    "p95": "p(95)<500",
+    "p99": "p(99)<1000"
+  },
+  "http_req_failed": {
+    "rate": "rate<0.01"
+  }
+}

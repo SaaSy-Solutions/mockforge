@@ -9,7 +9,6 @@ use axum::{
     routing::{delete, get, patch, post, put},
     Router,
 };
-use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 

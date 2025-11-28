@@ -1,0 +1,61 @@
+id: transfer-flow
+name: Transfer Flow
+description: Transfer money between accounts
+steps:
+  - name: Get Source Account
+    method: GET
+    path: /api/accounts/{{source_account_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      source_balance: body.account.balance
+
+  - name: Get Destination Account
+    method: GET
+    path: /api/accounts/{{destination_account_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      destination_balance: body.account.balance
+
+  - name: Initiate Transfer
+    method: POST
+    path: /api/transfers
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      from_account_id: "{{source_account_id}}"
+      to_account_id: "{{destination_account_id}}"
+      amount: 500.00
+      currency: "USD"
+      description: "Transfer between accounts"
+    extract:
+      transfer_id: body.transfer.id
+      transfer_status: body.transfer.status
+
+  - name: Verify Transfer Status
+    method: GET
+    path: /api/transfers/{{transfer_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    validate:
+      - path: body.transfer.status
+        expected: "completed"
+
+  - name: Verify Source Account Balance
+    method: GET
+    path: /api/accounts/{{source_account_id}}/balance
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    validate:
+      - path: body.balance
+        expected: "{{source_balance - 500.00}}"
+
+  - name: Verify Destination Account Balance
+    method: GET
+    path: /api/accounts/{{destination_account_id}}/balance
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    validate:
+      - path: body.balance
+        expected: "{{destination_balance + 500.00}}"

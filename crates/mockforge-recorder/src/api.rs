@@ -10,6 +10,7 @@ use crate::{
     replay::ReplayEngine,
     stub_mapping::{StubFormat, StubMappingConverter},
     sync::{SyncConfig, SyncService, SyncStatus},
+    sync_snapshots::EndpointTimeline,
     test_generation::{LlmConfig, TestFormat, TestGenerationConfig, TestGenerator},
 };
 use axum::{
@@ -77,6 +78,11 @@ pub fn create_api_router(
         .route("/api/recorder/sync/config", post(update_sync_config))
         .route("/api/recorder/sync/now", post(sync_now))
         .route("/api/recorder/sync/changes", get(get_sync_changes))
+
+        // Sync snapshot endpoints (Shadow Snapshot Mode)
+        .route("/api/recorder/sync/snapshots", get(list_snapshots))
+        .route("/api/recorder/sync/snapshots/:endpoint", get(get_endpoint_timeline))
+        .route("/api/recorder/sync/snapshots/cycle/:cycle_id", get(get_snapshots_by_cycle))
 
         // Stub mapping conversion endpoints
         .route("/api/recorder/convert/:id", post(convert_to_stub))
@@ -759,5 +765,113 @@ async fn convert_batch(
         "errors": errors.len(),
         "stubs": stubs,
         "errors_list": errors,
+    })))
+}
+
+/// List all snapshots
+#[derive(Debug, Deserialize)]
+struct SnapshotListParams {
+    limit: Option<i32>,
+    offset: Option<i32>,
+}
+
+async fn list_snapshots(
+    State(state): State<ApiState>,
+    Query(params): Query<SnapshotListParams>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let limit = params.limit.unwrap_or(100);
+    let database = state.recorder.database();
+
+    // Get all unique endpoints to list snapshots
+    // For simplicity, we'll get snapshots for all endpoints
+    // In a real implementation, you might want to paginate differently
+    let snapshots = database.get_snapshots_for_endpoint("", None, Some(limit)).await?;
+
+    Ok(Json(serde_json::json!({
+        "snapshots": snapshots,
+        "total": snapshots.len(),
+    })))
+}
+
+/// Get timeline for a specific endpoint
+#[derive(Debug, Deserialize)]
+struct TimelineParams {
+    method: Option<String>,
+    limit: Option<i32>,
+}
+
+async fn get_endpoint_timeline(
+    State(state): State<ApiState>,
+    Path(endpoint): Path<String>,
+    Query(params): Query<TimelineParams>,
+) -> Result<Json<EndpointTimeline>, ApiError> {
+    let database = state.recorder.database();
+    let limit = params.limit.unwrap_or(100);
+
+    // Axum automatically URL-decodes path parameters
+    let snapshots = database
+        .get_snapshots_for_endpoint(&endpoint, params.method.as_deref(), Some(limit))
+        .await?;
+
+    // Build timeline data
+    let mut response_time_trends = Vec::new();
+    let mut status_code_history = Vec::new();
+    let mut error_patterns = std::collections::HashMap::new();
+
+    for snapshot in &snapshots {
+        response_time_trends.push((
+            snapshot.timestamp,
+            snapshot.response_time_after.or(snapshot.response_time_before),
+        ));
+        status_code_history.push((snapshot.timestamp, snapshot.after.status_code));
+
+        // Track error patterns
+        if snapshot.after.status_code >= 400 {
+            let key = format!("{}", snapshot.after.status_code);
+            let pattern =
+                error_patterns
+                    .entry(key)
+                    .or_insert_with(|| crate::sync_snapshots::ErrorPattern {
+                        status_code: snapshot.after.status_code,
+                        message_pattern: None,
+                        occurrences: 0,
+                        first_seen: snapshot.timestamp,
+                        last_seen: snapshot.timestamp,
+                    });
+            pattern.occurrences += 1;
+            if snapshot.timestamp < pattern.first_seen {
+                pattern.first_seen = snapshot.timestamp;
+            }
+            if snapshot.timestamp > pattern.last_seen {
+                pattern.last_seen = snapshot.timestamp;
+            }
+        }
+    }
+
+    let timeline = EndpointTimeline {
+        endpoint,
+        method: params.method.unwrap_or_else(|| "ALL".to_string()),
+        snapshots,
+        response_time_trends,
+        status_code_history,
+        error_patterns: error_patterns.into_values().collect(),
+    };
+
+    Ok(Json(timeline))
+}
+
+/// Get snapshots by sync cycle ID
+async fn get_snapshots_by_cycle(
+    State(state): State<ApiState>,
+    Path(cycle_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let database = state.recorder.database();
+
+    let snapshots = database.get_snapshots_by_cycle(&cycle_id).await?;
+
+    Ok(Json(serde_json::json!({
+        "sync_cycle_id": cycle_id,
+        "snapshots": snapshots,
+        "total": snapshots.len(),
     })))
 }

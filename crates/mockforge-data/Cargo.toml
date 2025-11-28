@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-data"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -29,13 +29,13 @@ rand = { workspace = true }
 fake = { version = "3.0", features = ["derive", "http", "chrono", "uuid", "random_color"] }
 fastrand = "2.0"
 itertools = { workspace = true }
-mockforge-core = "0.1.3"
 reqwest = { workspace = true }
+url = { workspace = true }
 async-trait = "0.1"
 hex = "0.4"
 
 # For vector operations and similarity calculations
-ndarray = "0.16"
+ndarray = "0.17"
 ndarray-stats = "0.5"
 
 # For mock server functionality
@@ -46,6 +46,9 @@ tower-http = { version = "0.6", features = ["cors"] }
 # For OpenAPI specification handling
 openapiv3 = "2.2"
 jsonschema = "0.33"
+
+[features]
+default = []
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }

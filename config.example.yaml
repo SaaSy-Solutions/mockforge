@@ -346,3 +346,61 @@ data:
 #     - op: replace
 #       path: /order/priority
 #       value: "HIGH"
+
+# Drift Budget and Contract Monitoring Configuration
+drift_budget:
+  # Whether drift budget tracking is enabled
+  enabled: true
+  
+  # Default budget applied to all endpoints
+  default_budget:
+    max_breaking_changes: 0
+    max_non_breaking_changes: 10
+    severity_threshold: "high"
+    enabled: true
+    # Optional: percentage-based budget (takes precedence over absolute counts)
+    # max_field_churn_percent: 10.0  # Max 10% field churn
+    # time_window_days: 30  # Monthly window for percentage calculations
+  
+  # Per-workspace budgets (key: workspace_id)
+  per_workspace_budgets:
+    # "workspace-1":
+    #   max_breaking_changes: 0
+    #   max_non_breaking_changes: 5
+    #   enabled: true
+  
+  # Per-service budgets (key: service_name or OpenAPI tag)
+  per_service_budgets:
+    # "user-service":
+    #   max_breaking_changes: 0
+    #   max_non_breaking_changes: 15
+    #   max_field_churn_percent: 5.0
+    #   time_window_days: 30
+    #   enabled: true
+  
+  # Per-tag budgets (key: OpenAPI tag name)
+  per_tag_budgets:
+    # "users":
+    #   max_breaking_changes: 0
+    #   max_non_breaking_changes: 8
+    #   enabled: true
+  
+  # Per-endpoint budgets (key: "{method} {endpoint}")
+  per_endpoint_budgets:
+    # "POST /api/users":
+    #   max_breaking_changes: 0
+    #   max_non_breaking_changes: 3
+    #   enabled: true
+  
+  # Breaking change detection rules
+  breaking_change_rules:
+    - type: "severity"
+      severity: "high"
+      include_higher: true
+      enabled: true
+    - type: "mismatch_type"
+      mismatch_type: "missing_required_field"
+      enabled: true
+  
+  # Number of days to retain incident history
+  incident_retention_days: 90

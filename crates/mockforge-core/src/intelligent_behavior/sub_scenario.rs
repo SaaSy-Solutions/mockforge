@@ -13,6 +13,7 @@ use std::collections::HashMap;
 /// state machine. It supports input/output mapping to pass data between parent
 /// and child state machines.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SubScenario {
     /// Unique identifier for this sub-scenario
     pub id: String,

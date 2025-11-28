@@ -58,6 +58,44 @@ targets = [
 ]
 
 for name, rel in targets:
+    # Check if this dependency has publish = false
+    dep_cargo_toml = Path(path.parent.parent / rel / "Cargo.toml")
+    skip_conversion = False
+    if dep_cargo_toml.exists():
+        dep_text = dep_cargo_toml.read_text()
+        if re.search(r'publish\s*=\s*false', dep_text, re.IGNORECASE):
+            skip_conversion = True
+
+    # Check if dependency is optional (if so, we can skip it or leave it as optional)
+    is_optional = re.search(rf'{name}\s*=\s*\{{[^}}]*optional\s*=\s*true', text, re.IGNORECASE)
+
+    if skip_conversion:
+        # For optional dependencies that aren't published, just remove the path part
+        # Keep it as optional so the feature can be disabled
+        if is_optional:
+            # Remove path but keep optional = true
+            pattern1 = rf'{name}\s*=\s*\{{\s*version\s*=\s*"[^"]*",\s*path\s*=\s*"{re.escape(rel)}",\s*optional\s*=\s*true\s*\}}'
+            pattern2 = rf'{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}",\s*version\s*=\s*"[^"]*",\s*optional\s*=\s*true\s*\}}'
+            pattern3 = rf'{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}",\s*optional\s*=\s*true\s*\}}'
+
+            for pattern in [pattern1, pattern2, pattern3]:
+                new_text, count = re.subn(pattern, f'{name} = {{ version = "{version}", optional = true }}  # Not published, path removed', text)
+                if count:
+                    text = new_text
+                    changed = True
+        else:
+            # Non-optional dependency that isn't published - comment it out
+            pattern1 = rf'^{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}"\s*\}}'
+            pattern2 = rf'^{name}\s*=\s*\{{\s*version\s*=\s*"[^"]*",\s*path\s*=\s*"{re.escape(rel)}"\s*\}}'
+            pattern3 = rf'^{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}",\s*version\s*=\s*"[^"]*"\s*\}}'
+
+            for pattern in [pattern1, pattern2, pattern3]:
+                new_text, count = re.subn(pattern, f'# {name} = {{ path = "{rel}" }}  # Not published, removed for publishing', text, flags=re.MULTILINE)
+                if count:
+                    text = new_text
+                    changed = True
+        continue
+
     pattern1 = rf'{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}"\s*\}}'
     pattern2 = rf'{name}\s*=\s*\{{\s*version\s*=\s*"[^"]*",\s*path\s*=\s*"{re.escape(rel)}"\s*\}}'
     pattern3 = rf'{name}\s*=\s*\{{\s*path\s*=\s*"{re.escape(rel)}",\s*version\s*=\s*"[^"]*"\s*\}}'

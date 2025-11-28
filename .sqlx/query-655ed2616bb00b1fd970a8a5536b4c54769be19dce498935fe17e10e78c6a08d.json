@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                id, entity_type, entity_id, entity_version,\n                from_environment, to_environment, promoted_by, approved_by,\n                status, comments, pr_url, metadata, created_at, updated_at\n            FROM promotion_history\n            WHERE workspace_id = ? AND entity_type = ? AND entity_id = ?\n            ORDER BY created_at ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "entity_type",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "entity_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "entity_version",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "from_environment",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "to_environment",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "promoted_by",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "approved_by",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "comments",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "pr_url",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "metadata",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 12,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 13,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "655ed2616bb00b1fd970a8a5536b4c54769be19dce498935fe17e10e78c6a08d"
+}

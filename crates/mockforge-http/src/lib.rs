@@ -165,9 +165,12 @@
 pub mod ai_handler;
 pub mod auth;
 pub mod chain_handlers;
+/// Cross-protocol consistency engine integration for HTTP
+pub mod consistency;
 /// Contract diff middleware for automatic request capture
 pub mod contract_diff_middleware;
 pub mod coverage;
+pub mod database;
 /// File generation service for creating mock PDF, CSV, JSON files
 pub mod file_generator;
 /// File serving for generated mock files
@@ -208,6 +211,9 @@ pub mod ui_builder;
 /// Verification API for request verification
 pub mod verification;
 
+// Access review handlers
+pub mod handlers;
+
 // Re-export AI handler utilities
 pub use ai_handler::{process_response_with_ai, AiResponseConfig, AiResponseHandler};
 // Re-export health check utilities
@@ -237,13 +243,58 @@ pub use http_tracing_middleware::http_tracing_middleware;
 // Re-export coverage utilities
 pub use coverage::{calculate_coverage, CoverageReport, MethodCoverage, RouteCoverage};
 
+/// Helper function to load persona from config file
+/// Tries to load from common config locations: config.yaml, mockforge.yaml, tools/mockforge/config.yaml
+async fn load_persona_from_config() -> Option<Arc<Persona>> {
+    use mockforge_core::config::load_config;
+
+    // Try common config file locations
+    let config_paths = [
+        "config.yaml",
+        "mockforge.yaml",
+        "tools/mockforge/config.yaml",
+        "../tools/mockforge/config.yaml",
+    ];
+
+    for path in &config_paths {
+        if let Ok(config) = load_config(path).await {
+            // Access intelligent_behavior through mockai config
+            // Note: Config structure is mockai.intelligent_behavior.personas
+            if let Some(persona) = config.mockai.intelligent_behavior.personas.get_active_persona()
+            {
+                tracing::info!(
+                    "Loaded active persona '{}' from config file: {}",
+                    persona.name,
+                    path
+                );
+                return Some(Arc::new(persona.clone()));
+            } else {
+                tracing::debug!(
+                    "No active persona found in config file: {} (personas count: {})",
+                    path,
+                    config.mockai.intelligent_behavior.personas.personas.len()
+                );
+            }
+        } else {
+            tracing::debug!("Could not load config from: {}", path);
+        }
+    }
+
+    tracing::debug!("No persona found in config files, persona-based generation will be disabled");
+    None
+}
+
+use axum::extract::State;
 use axum::middleware::from_fn_with_state;
-use axum::{extract::State, response::Json, Router};
+use axum::response::Json;
+use axum::Router;
 use mockforge_core::failure_injection::{FailureConfig, FailureInjector};
+use mockforge_core::intelligent_behavior::config::Persona;
 use mockforge_core::latency::LatencyInjector;
 use mockforge_core::openapi::OpenApiSpec;
 use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 use mockforge_core::openapi_routes::ValidationOptions;
+use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
 use mockforge_core::LatencyProfile;
@@ -386,17 +437,19 @@ fn apply_cors_middleware(
         }
 
         let mut cors_layer = CorsLayer::new();
+        let mut is_wildcard_origin = false;
 
         // Configure allowed origins
         if config.allowed_origins.contains(&"*".to_string()) {
             cors_layer = cors_layer.allow_origin(Any);
+            is_wildcard_origin = true;
         } else if !config.allowed_origins.is_empty() {
             // Try to parse each origin, fallback to permissive if parsing fails
             let origins: Vec<_> = config
                 .allowed_origins
                 .iter()
                 .filter_map(|origin| {
-                    origin.parse::<http::HeaderValue>().ok().map(|hv| AllowOrigin::exact(hv))
+                    origin.parse::<http::HeaderValue>().ok().map(AllowOrigin::exact)
                 })
                 .collect();
 
@@ -404,11 +457,13 @@ fn apply_cors_middleware(
                 // If no valid origins, use permissive for development
                 warn!("No valid CORS origins configured, using permissive CORS");
                 cors_layer = cors_layer.allow_origin(Any);
+                is_wildcard_origin = true;
             } else {
                 // Use the first origin as exact match (tower-http limitation)
                 // For multiple origins, we'd need a custom implementation
                 if origins.len() == 1 {
                     cors_layer = cors_layer.allow_origin(origins[0].clone());
+                    is_wildcard_origin = false;
                 } else {
                     // Multiple origins - use permissive for now
                     warn!(
@@ -416,11 +471,13 @@ fn apply_cors_middleware(
                         Consider using '*' for all origins."
                     );
                     cors_layer = cors_layer.allow_origin(Any);
+                    is_wildcard_origin = true;
                 }
             }
         } else {
             // No origins specified, use permissive for development
             cors_layer = cors_layer.allow_origin(Any);
+            is_wildcard_origin = true;
         }
 
         // Configure allowed methods
@@ -458,15 +515,32 @@ fn apply_cors_middleware(
                 cors_layer.allow_headers([http::header::CONTENT_TYPE, http::header::AUTHORIZATION]);
         }
 
-        // Allow credentials and expose common headers
-        cors_layer = cors_layer.allow_credentials(true);
+        // Configure credentials - cannot allow credentials with wildcard origin
+        // Determine if credentials should be allowed
+        // Cannot allow credentials with wildcard origin per CORS spec
+        let should_allow_credentials = if is_wildcard_origin {
+            // Wildcard origin - credentials must be false
+            false
+        } else {
+            // Specific origins - use config value (defaults to false)
+            config.allow_credentials
+        };
 
-        info!("CORS middleware enabled with configured settings");
+        cors_layer = cors_layer.allow_credentials(should_allow_credentials);
+
+        info!(
+            "CORS middleware enabled with configured settings (credentials: {})",
+            should_allow_credentials
+        );
         app.layer(cors_layer)
     } else {
         // No CORS config provided - use permissive CORS for development
+        // Note: permissive() allows credentials, but since it uses wildcard origin,
+        // we need to disable credentials to avoid CORS spec violation
         debug!("No CORS config provided, using permissive CORS for development");
-        app.layer(CorsLayer::permissive())
+        // Create a permissive CORS layer but disable credentials to avoid CORS spec violation
+        // (cannot combine credentials with wildcard origin)
+        app.layer(CorsLayer::permissive().allow_credentials(false))
     }
 }
 
@@ -528,6 +602,7 @@ pub async fn build_router_with_multi_tenant(
                     allowed_origins: prod_cors.allowed_origins.clone(),
                     allowed_methods: prod_cors.allowed_methods.clone(),
                     allowed_headers: prod_cors.allowed_headers.clone(),
+                    allow_credentials: prod_cors.allow_credentials,
                 });
                 info!("Applied production-like CORS configuration");
             }
@@ -596,12 +671,22 @@ pub async fn build_router_with_multi_tenant(
                 // Measure route registry creation
                 tracing::debug!("Creating OpenAPI route registry...");
                 let registry_start = Instant::now();
+
+                // Try to load persona from config if available
+                let persona = load_persona_from_config().await;
+
                 let registry = if let Some(opts) = options {
                     tracing::debug!("Using custom validation options");
-                    OpenApiRouteRegistry::new_with_options(openapi, opts)
+                    if let Some(ref persona) = persona {
+                        tracing::info!("Using persona '{}' for route generation", persona.name);
+                    }
+                    OpenApiRouteRegistry::new_with_options_and_persona(openapi, opts, persona)
                 } else {
                     tracing::debug!("Using environment-based options");
-                    OpenApiRouteRegistry::new_with_env(openapi)
+                    if let Some(ref persona) = persona {
+                        tracing::info!("Using persona '{}' for route generation", persona.name);
+                    }
+                    OpenApiRouteRegistry::new_with_env_and_persona(openapi, persona)
                 };
                 let registry_duration = registry_start.elapsed();
                 info!(
@@ -750,7 +835,7 @@ pub async fn build_router_with_multi_tenant(
     }
 
     // Add management API endpoints
-    let mut management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
+    let management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
 
     // Create WebSocket state and connect it to management state
     use std::sync::Arc;
@@ -787,11 +872,132 @@ pub async fn build_router_with_multi_tenant(
     // Add verification API endpoint
     app = app.merge(verification_router());
 
+    // Add OIDC well-known endpoints
+    use crate::auth::oidc::oidc_router;
+    app = app.merge(oidc_router());
+
+    // Add access review API if enabled
+    {
+        use mockforge_core::security::get_global_access_review_service;
+        if let Some(service) = get_global_access_review_service().await {
+            use crate::handlers::access_review::{access_review_router, AccessReviewState};
+            let review_state = AccessReviewState { service };
+            app = app.nest("/api/v1/security/access-reviews", access_review_router(review_state));
+            debug!("Access review API mounted at /api/v1/security/access-reviews");
+        }
+    }
+
+    // Add privileged access API if enabled
+    {
+        use mockforge_core::security::get_global_privileged_access_manager;
+        if let Some(manager) = get_global_privileged_access_manager().await {
+            use crate::handlers::privileged_access::{
+                privileged_access_router, PrivilegedAccessState,
+            };
+            let privileged_state = PrivilegedAccessState { manager };
+            app = app.nest(
+                "/api/v1/security/privileged-access",
+                privileged_access_router(privileged_state),
+            );
+            debug!("Privileged access API mounted at /api/v1/security/privileged-access");
+        }
+    }
+
+    // Add change management API if enabled
+    {
+        use mockforge_core::security::get_global_change_management_engine;
+        if let Some(engine) = get_global_change_management_engine().await {
+            use crate::handlers::change_management::{
+                change_management_router, ChangeManagementState,
+            };
+            let change_state = ChangeManagementState { engine };
+            app = app.nest("/api/v1/change-management", change_management_router(change_state));
+            debug!("Change management API mounted at /api/v1/change-management");
+        }
+    }
+
+    // Add risk assessment API if enabled
+    {
+        use mockforge_core::security::get_global_risk_assessment_engine;
+        if let Some(engine) = get_global_risk_assessment_engine().await {
+            use crate::handlers::risk_assessment::{risk_assessment_router, RiskAssessmentState};
+            let risk_state = RiskAssessmentState { engine };
+            app = app.nest("/api/v1/security", risk_assessment_router(risk_state));
+            debug!("Risk assessment API mounted at /api/v1/security/risks");
+        }
+    }
+
+    // Add token lifecycle API
+    {
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::token_lifecycle::{token_lifecycle_router, TokenLifecycleState};
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let lifecycle_state = TokenLifecycleState {
+            manager: lifecycle_manager,
+        };
+        app = app.nest("/api/v1/auth", token_lifecycle_router(lifecycle_state));
+        debug!("Token lifecycle API mounted at /api/v1/auth");
+    }
+
+    // Add OAuth2 server endpoints
+    {
+        use crate::auth::oidc::load_oidc_state;
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::oauth2_server::{oauth2_server_router, OAuth2ServerState};
+        // Load OIDC state from configuration (environment variables or config file)
+        let oidc_state = Arc::new(RwLock::new(load_oidc_state()));
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let oauth2_state = OAuth2ServerState {
+            oidc_state,
+            lifecycle_manager,
+            auth_codes: Arc::new(RwLock::new(HashMap::new())),
+        };
+        app = app.merge(oauth2_server_router(oauth2_state));
+        debug!("OAuth2 server endpoints mounted at /oauth2/authorize and /oauth2/token");
+    }
+
+    // Add consent screen endpoints
+    {
+        use crate::auth::oidc::load_oidc_state;
+        use crate::auth::risk_engine::RiskEngine;
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::consent::{consent_router, ConsentState};
+        use crate::handlers::oauth2_server::OAuth2ServerState;
+        // Load OIDC state from configuration (environment variables or config file)
+        let oidc_state = Arc::new(RwLock::new(load_oidc_state()));
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let oauth2_state = OAuth2ServerState {
+            oidc_state: oidc_state.clone(),
+            lifecycle_manager: lifecycle_manager.clone(),
+            auth_codes: Arc::new(RwLock::new(HashMap::new())),
+        };
+        let risk_engine = Arc::new(RiskEngine::default());
+        let consent_state = ConsentState {
+            oauth2_state,
+            risk_engine,
+        };
+        app = app.merge(consent_router(consent_state));
+        debug!("Consent screen endpoints mounted at /consent");
+    }
+
+    // Add risk simulation API
+    {
+        use crate::auth::risk_engine::RiskEngine;
+        use crate::handlers::risk_simulation::{risk_simulation_router, RiskSimulationState};
+        let risk_engine = Arc::new(RiskEngine::default());
+        let risk_state = RiskSimulationState { risk_engine };
+        app = app.nest("/api/v1/auth", risk_simulation_router(risk_state));
+        debug!("Risk simulation API mounted at /api/v1/auth/risk");
+    }
+
     // Add management WebSocket endpoint
     app = app.nest("/__mockforge/ws", ws_management_router(ws_state));
 
     // Add request logging middleware to capture all requests
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
+
+    // Add security middleware for security event tracking (after logging, before contract diff)
+    app = app.layer(axum::middleware::from_fn(crate::middleware::security_middleware));
 
     // Add contract diff middleware for automatic request capture
     // This captures requests for contract diff analysis (after logging)
@@ -1216,6 +1422,44 @@ pub async fn build_router_with_chains(
     .await
 }
 
+// Template expansion is now handled by mockforge_core::template_expansion
+// which is explicitly isolated from the templating module to avoid Send issues
+
+/// Helper function to apply route chaos injection (fault injection and latency)
+/// This is extracted to avoid capturing RouteChaosInjector in the closure, which causes Send issues
+/// Uses mockforge-route-chaos crate which is isolated from mockforge-core to avoid Send issues
+/// Uses the RouteChaosInjectorTrait from mockforge-core to avoid circular dependency
+async fn apply_route_chaos(
+    injector: Option<&dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>,
+    method: &axum::http::Method,
+    uri: &axum::http::Uri,
+) -> Option<axum::response::Response> {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    if let Some(injector) = injector {
+        // Check for fault injection first
+        if let Some(fault_response) = injector.get_fault_response(method, uri) {
+            // Return fault response
+            let mut response = axum::Json(serde_json::json!({
+                "error": fault_response.error_message,
+                "fault_type": fault_response.fault_type,
+            }))
+            .into_response();
+            *response.status_mut() = StatusCode::from_u16(fault_response.status_code)
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            return Some(response);
+        }
+
+        // Inject latency if configured (this is async and may delay the request)
+        if let Err(e) = injector.inject_latency(method, uri).await {
+            tracing::warn!("Failed to inject latency: {}", e);
+        }
+    }
+
+    None // No fault response, processing should continue
+}
+
 /// Build the base HTTP router with chaining and multi-tenant support
 #[allow(clippy::too_many_arguments)]
 pub async fn build_router_with_chains_and_multi_tenant(
@@ -1223,7 +1467,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     options: Option<ValidationOptions>,
     _circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
-    _route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
+    route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
     cors_config: Option<mockforge_core::config::HttpCorsConfig>,
     _ai_generator: Option<
         std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
@@ -1243,6 +1487,14 @@ pub async fn build_router_with_chains_and_multi_tenant(
     use crate::op_middleware::Shared;
     use mockforge_core::Overrides;
 
+    // Extract template expansion setting before options is moved (used in OpenAPI routes and custom routes)
+    let template_expand =
+        options.as_ref().map(|o| o.response_template_expand).unwrap_or_else(|| {
+            std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false)
+        });
+
     let _shared = Shared {
         profiles: LatencyProfiles::default(),
         overrides: Overrides::default(),
@@ -1261,11 +1513,47 @@ pub async fn build_router_with_chains_and_multi_tenant(
         match OpenApiSpec::from_file(&spec).await {
             Ok(openapi) => {
                 info!("Loaded OpenAPI spec from {}", spec);
-                let registry = if let Some(opts) = options {
-                    OpenApiRouteRegistry::new_with_options(openapi, opts)
+
+                // Try to load persona from config if available
+                let persona = load_persona_from_config().await;
+
+                let mut registry = if let Some(opts) = options {
+                    tracing::debug!("Using custom validation options");
+                    if let Some(ref persona) = persona {
+                        tracing::info!("Using persona '{}' for route generation", persona.name);
+                    }
+                    OpenApiRouteRegistry::new_with_options_and_persona(openapi, opts, persona)
                 } else {
-                    OpenApiRouteRegistry::new_with_env(openapi)
+                    tracing::debug!("Using environment-based options");
+                    if let Some(ref persona) = persona {
+                        tracing::info!("Using persona '{}' for route generation", persona.name);
+                    }
+                    OpenApiRouteRegistry::new_with_env_and_persona(openapi, persona)
                 };
+
+                // Load custom fixtures if enabled
+                let fixtures_dir = std::env::var("MOCKFORGE_FIXTURES_DIR")
+                    .unwrap_or_else(|_| "/app/fixtures".to_string());
+                let custom_fixtures_enabled = std::env::var("MOCKFORGE_CUSTOM_FIXTURES_ENABLED")
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                    .unwrap_or(true); // Enabled by default
+
+                if custom_fixtures_enabled {
+                    use mockforge_core::CustomFixtureLoader;
+                    use std::path::PathBuf;
+                    use std::sync::Arc;
+
+                    let fixtures_path = PathBuf::from(&fixtures_dir);
+                    let mut custom_loader = CustomFixtureLoader::new(fixtures_path, true);
+
+                    if let Err(e) = custom_loader.load_fixtures().await {
+                        tracing::warn!("Failed to load custom fixtures: {}", e);
+                    } else {
+                        tracing::info!("Custom fixtures loaded from {}", fixtures_dir);
+                        registry = registry.with_custom_fixture_loader(Arc::new(custom_loader));
+                    }
+                }
+
                 if registry
                     .routes()
                     .iter()
@@ -1285,6 +1573,199 @@ pub async fn build_router_with_chains_and_multi_tenant(
             Err(e) => {
                 warn!("Failed to load OpenAPI spec from {:?}: {}. Starting without OpenAPI integration.", spec_path, e);
             }
+        }
+    }
+
+    // Register custom routes from config with advanced routing features
+    // Create RouteChaosInjector for advanced fault injection and latency
+    // Store as trait object to avoid circular dependency (RouteChaosInjectorTrait is in mockforge-core)
+    let route_chaos_injector: Option<
+        std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>,
+    > = if let Some(ref route_configs) = route_configs {
+        if !route_configs.is_empty() {
+            match mockforge_route_chaos::RouteChaosInjector::new(route_configs.clone()) {
+                Ok(injector) => {
+                    info!(
+                        "Initialized advanced routing features for {} route(s)",
+                        route_configs.len()
+                    );
+                    Some(std::sync::Arc::new(injector)
+                        as std::sync::Arc<
+                            dyn mockforge_core::priority_handler::RouteChaosInjectorTrait,
+                        >)
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to initialize advanced routing features: {}. Using basic routing.",
+                        e
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    if let Some(route_configs) = route_configs {
+        use axum::http::StatusCode;
+        use axum::response::IntoResponse;
+
+        if !route_configs.is_empty() {
+            info!("Registering {} custom route(s) from config", route_configs.len());
+        }
+
+        let injector = route_chaos_injector.clone();
+        for route_config in route_configs {
+            let status = route_config.response.status;
+            let body = route_config.response.body.clone();
+            let headers = route_config.response.headers.clone();
+            let path = route_config.path.clone();
+            let method = route_config.method.clone();
+
+            // Create handler that returns the configured response with template expansion
+            // Supports both basic templates ({{uuid}}, {{now}}) and request-aware templates
+            // ({{request.query.name}}, {{request.path.id}}, {{request.headers.name}})
+            // Register route using `any()` since we need full Request access for template expansion
+            let expected_method = method.to_uppercase();
+            // Clone Arc for the closure - Arc is Send-safe
+            // Note: RouteChaosInjector is marked as Send+Sync via unsafe impl, but the compiler
+            // is conservative because rng() is available in the rand crate, even though we use thread_rng()
+            let injector_clone = injector.clone();
+            app = app.route(
+                &path,
+                #[allow(clippy::non_send_fields_in_send_ty)]
+                axum::routing::any(move |req: axum::http::Request<axum::body::Body>| {
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let expand = template_expand;
+                    let expected = expected_method.clone();
+                    let status_code = status;
+                    // Clone Arc again for the async block
+                    let injector_for_chaos = injector_clone.clone();
+
+                    async move {
+                        // Check if request method matches expected method
+                        if req.method().as_str() != expected.as_str() {
+                            // Return 405 Method Not Allowed for wrong method
+                            return axum::response::Response::builder()
+                                .status(axum::http::StatusCode::METHOD_NOT_ALLOWED)
+                                .header("Allow", &expected)
+                                .body(axum::body::Body::empty())
+                                .unwrap()
+                                .into_response();
+                        }
+
+                        // Apply advanced routing features (fault injection and latency) if available
+                        // Use helper function to avoid capturing RouteChaosInjector in closure
+                        // Pass the Arc as a reference to the helper function
+                        if let Some(fault_response) = apply_route_chaos(
+                            injector_for_chaos.as_deref(),
+                            req.method(),
+                            req.uri(),
+                        )
+                        .await
+                        {
+                            return fault_response;
+                        }
+
+                        // Create JSON response from body, or empty object if None
+                        let mut body_value = body.unwrap_or(serde_json::json!({}));
+
+                        // Apply template expansion if enabled
+                        // Use mockforge-template-expansion crate which is completely isolated
+                        // from mockforge-core to avoid Send issues (no rng() in dependency chain)
+                        if expand {
+                            use mockforge_template_expansion::RequestContext;
+                            use serde_json::Value;
+                            use std::collections::HashMap;
+
+                            // Extract request data for template expansion
+                            let method = req.method().to_string();
+                            let path = req.uri().path().to_string();
+
+                            // Extract query parameters
+                            let query_params: HashMap<String, Value> = req
+                                .uri()
+                                .query()
+                                .map(|q| {
+                                    url::form_urlencoded::parse(q.as_bytes())
+                                        .into_owned()
+                                        .map(|(k, v)| (k, Value::String(v)))
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+
+                            // Extract headers
+                            let headers: HashMap<String, Value> = req
+                                .headers()
+                                .iter()
+                                .map(|(k, v)| {
+                                    (
+                                        k.to_string(),
+                                        Value::String(v.to_str().unwrap_or_default().to_string()),
+                                    )
+                                })
+                                .collect();
+
+                            // Create RequestContext for expand_prompt_template
+                            // Using RequestContext from mockforge-template-expansion (not mockforge-core)
+                            // to avoid bringing rng() into scope
+                            let context = RequestContext {
+                                method,
+                                path,
+                                query_params,
+                                headers,
+                                body: None, // Body extraction would require reading the request stream
+                                path_params: HashMap::new(),
+                                multipart_fields: HashMap::new(),
+                                multipart_files: HashMap::new(),
+                            };
+
+                            // Perform template expansion in spawn_blocking to ensure Send safety
+                            // The template expansion crate is completely isolated from mockforge-core
+                            // and doesn't have rng() in its dependency chain
+                            let body_value_clone = body_value.clone();
+                            let context_clone = context.clone();
+                            body_value = match tokio::task::spawn_blocking(move || {
+                                mockforge_template_expansion::expand_templates_in_json(
+                                    body_value_clone,
+                                    &context_clone,
+                                )
+                            })
+                            .await
+                            {
+                                Ok(result) => result,
+                                Err(_) => body_value, // Fallback to original on error
+                            };
+                        }
+
+                        let mut response = axum::Json(body_value).into_response();
+
+                        // Set status code
+                        *response.status_mut() =
+                            StatusCode::from_u16(status_code).unwrap_or(StatusCode::OK);
+
+                        // Add custom headers
+                        for (key, value) in headers {
+                            if let Ok(header_name) =
+                                axum::http::HeaderName::from_bytes(key.as_bytes())
+                            {
+                                if let Ok(header_value) = axum::http::HeaderValue::from_str(&value)
+                                {
+                                    response.headers_mut().insert(header_name, header_value);
+                                }
+                            }
+                        }
+
+                        response
+                    }
+                }),
+            );
+
+            debug!("Registered route: {} {}", method, path);
         }
     }
 
@@ -1325,7 +1806,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
     app = app.merge(file_server::file_serving_router());
 
     // Add management API endpoints
-    let mut management_state = ManagementState::new(None, spec_path, 3000); // Port will be updated when we know the actual port
+    let spec_path_clone = spec_path.clone();
+    let management_state = ManagementState::new(None, spec_path_clone, 3000); // Port will be updated when we know the actual port
 
     // Create WebSocket state and connect it to management state
     use std::sync::Arc;
@@ -1390,6 +1872,727 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add verification API endpoint
     app = app.merge(verification_router());
+
+    // Add OIDC well-known endpoints
+    use crate::auth::oidc::oidc_router;
+    app = app.merge(oidc_router());
+
+    // Add access review API if enabled
+    {
+        use mockforge_core::security::get_global_access_review_service;
+        if let Some(service) = get_global_access_review_service().await {
+            use crate::handlers::access_review::{access_review_router, AccessReviewState};
+            let review_state = AccessReviewState { service };
+            app = app.nest("/api/v1/security/access-reviews", access_review_router(review_state));
+            debug!("Access review API mounted at /api/v1/security/access-reviews");
+        }
+    }
+
+    // Add privileged access API if enabled
+    {
+        use mockforge_core::security::get_global_privileged_access_manager;
+        if let Some(manager) = get_global_privileged_access_manager().await {
+            use crate::handlers::privileged_access::{
+                privileged_access_router, PrivilegedAccessState,
+            };
+            let privileged_state = PrivilegedAccessState { manager };
+            app = app.nest(
+                "/api/v1/security/privileged-access",
+                privileged_access_router(privileged_state),
+            );
+            debug!("Privileged access API mounted at /api/v1/security/privileged-access");
+        }
+    }
+
+    // Add change management API if enabled
+    {
+        use mockforge_core::security::get_global_change_management_engine;
+        if let Some(engine) = get_global_change_management_engine().await {
+            use crate::handlers::change_management::{
+                change_management_router, ChangeManagementState,
+            };
+            let change_state = ChangeManagementState { engine };
+            app = app.nest("/api/v1/change-management", change_management_router(change_state));
+            debug!("Change management API mounted at /api/v1/change-management");
+        }
+    }
+
+    // Add risk assessment API if enabled
+    {
+        use mockforge_core::security::get_global_risk_assessment_engine;
+        if let Some(engine) = get_global_risk_assessment_engine().await {
+            use crate::handlers::risk_assessment::{risk_assessment_router, RiskAssessmentState};
+            let risk_state = RiskAssessmentState { engine };
+            app = app.nest("/api/v1/security", risk_assessment_router(risk_state));
+            debug!("Risk assessment API mounted at /api/v1/security/risks");
+        }
+    }
+
+    // Add token lifecycle API
+    {
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::token_lifecycle::{token_lifecycle_router, TokenLifecycleState};
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let lifecycle_state = TokenLifecycleState {
+            manager: lifecycle_manager,
+        };
+        app = app.nest("/api/v1/auth", token_lifecycle_router(lifecycle_state));
+        debug!("Token lifecycle API mounted at /api/v1/auth");
+    }
+
+    // Add OAuth2 server endpoints
+    {
+        use crate::auth::oidc::load_oidc_state;
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::oauth2_server::{oauth2_server_router, OAuth2ServerState};
+        // Load OIDC state from configuration (environment variables or config file)
+        let oidc_state = Arc::new(RwLock::new(load_oidc_state()));
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let oauth2_state = OAuth2ServerState {
+            oidc_state,
+            lifecycle_manager,
+            auth_codes: Arc::new(RwLock::new(HashMap::new())),
+        };
+        app = app.merge(oauth2_server_router(oauth2_state));
+        debug!("OAuth2 server endpoints mounted at /oauth2/authorize and /oauth2/token");
+    }
+
+    // Add consent screen endpoints
+    {
+        use crate::auth::oidc::load_oidc_state;
+        use crate::auth::risk_engine::RiskEngine;
+        use crate::auth::token_lifecycle::TokenLifecycleManager;
+        use crate::handlers::consent::{consent_router, ConsentState};
+        use crate::handlers::oauth2_server::OAuth2ServerState;
+        // Load OIDC state from configuration (environment variables or config file)
+        let oidc_state = Arc::new(RwLock::new(load_oidc_state()));
+        let lifecycle_manager = Arc::new(TokenLifecycleManager::default());
+        let oauth2_state = OAuth2ServerState {
+            oidc_state: oidc_state.clone(),
+            lifecycle_manager: lifecycle_manager.clone(),
+            auth_codes: Arc::new(RwLock::new(HashMap::new())),
+        };
+        let risk_engine = Arc::new(RiskEngine::default());
+        let consent_state = ConsentState {
+            oauth2_state,
+            risk_engine,
+        };
+        app = app.merge(consent_router(consent_state));
+        debug!("Consent screen endpoints mounted at /consent");
+    }
+
+    // Add risk simulation API
+    {
+        use crate::auth::risk_engine::RiskEngine;
+        use crate::handlers::risk_simulation::{risk_simulation_router, RiskSimulationState};
+        let risk_engine = Arc::new(RiskEngine::default());
+        let risk_state = RiskSimulationState { risk_engine };
+        app = app.nest("/api/v1/auth", risk_simulation_router(risk_state));
+        debug!("Risk simulation API mounted at /api/v1/auth/risk");
+    }
+
+    // Initialize database connection (optional)
+    let database = {
+        use crate::database::Database;
+        let database_url = std::env::var("DATABASE_URL").ok();
+        match Database::connect_optional(database_url.as_deref()).await {
+            Ok(db) => {
+                if db.is_connected() {
+                    // Run migrations if database is connected
+                    if let Err(e) = db.migrate_if_connected().await {
+                        warn!("Failed to run database migrations: {}", e);
+                    } else {
+                        info!("Database connected and migrations applied");
+                    }
+                }
+                Some(db)
+            }
+            Err(e) => {
+                warn!("Failed to connect to database: {}. Continuing without database support.", e);
+                None
+            }
+        }
+    };
+
+    // Add drift budget and incident management endpoints
+    // Initialize shared components for drift tracking and protocol contracts
+    let (drift_engine, incident_manager, drift_config) = {
+        use mockforge_core::contract_drift::{DriftBudgetConfig, DriftBudgetEngine};
+        use mockforge_core::incidents::{IncidentManager, IncidentStore};
+        use std::sync::Arc;
+
+        // Initialize drift budget engine with default config
+        let drift_config = DriftBudgetConfig::default();
+        let drift_engine = Arc::new(DriftBudgetEngine::new(drift_config.clone()));
+
+        // Initialize incident store and manager
+        let incident_store = Arc::new(IncidentStore::default());
+        let incident_manager = Arc::new(IncidentManager::new(incident_store.clone()));
+
+        (drift_engine, incident_manager, drift_config)
+    };
+
+    {
+        use crate::handlers::drift_budget::{drift_budget_router, DriftBudgetState};
+        use crate::middleware::drift_tracking::DriftTrackingState;
+        use mockforge_core::ai_contract_diff::ContractDiffAnalyzer;
+        use mockforge_core::consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder};
+        use std::sync::Arc;
+
+        // Initialize usage recorder and consumer detector
+        let usage_recorder = Arc::new(UsageRecorder::default());
+        let consumer_detector =
+            Arc::new(ConsumerBreakingChangeDetector::new(usage_recorder.clone()));
+
+        // Initialize contract diff analyzer if enabled
+        let diff_analyzer = if drift_config.enabled {
+            match ContractDiffAnalyzer::new(
+                mockforge_core::ai_contract_diff::ContractDiffConfig::default(),
+            ) {
+                Ok(analyzer) => Some(Arc::new(analyzer)),
+                Err(e) => {
+                    warn!("Failed to create contract diff analyzer: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Get OpenAPI spec if available
+        // Note: Load from spec_path if available, or leave as None for manual configuration.
+        let spec = if let Some(ref spec_path) = spec_path {
+            match mockforge_core::openapi::OpenApiSpec::from_file(spec_path).await {
+                Ok(s) => Some(Arc::new(s)),
+                Err(e) => {
+                    debug!("Failed to load OpenAPI spec for drift tracking: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Create drift tracking state
+        let drift_tracking_state = DriftTrackingState {
+            diff_analyzer,
+            spec,
+            drift_engine: drift_engine.clone(),
+            incident_manager: incident_manager.clone(),
+            usage_recorder,
+            consumer_detector,
+            enabled: drift_config.enabled,
+        };
+
+        // Add response body buffering middleware (before drift tracking)
+        app = app.layer(axum::middleware::from_fn(crate::middleware::buffer_response_middleware));
+
+        // Add drift tracking middleware (after response buffering)
+        // Use a wrapper that inserts state into extensions before calling the middleware
+        let drift_tracking_state_clone = drift_tracking_state.clone();
+        app = app.layer(axum::middleware::from_fn(
+            move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                let state = drift_tracking_state_clone.clone();
+                async move {
+                    // Insert state into extensions if not already present
+                    if req
+                        .extensions()
+                        .get::<crate::middleware::drift_tracking::DriftTrackingState>()
+                        .is_none()
+                    {
+                        req.extensions_mut().insert(state);
+                    }
+                    // Call the middleware function
+                    crate::middleware::drift_tracking::drift_tracking_middleware_with_extensions(
+                        req, next,
+                    )
+                    .await
+                }
+            },
+        ));
+
+        let drift_state = DriftBudgetState {
+            engine: drift_engine.clone(),
+            incident_manager: incident_manager.clone(),
+            gitops_handler: None, // Can be initialized later if GitOps is configured
+        };
+
+        app = app.merge(drift_budget_router(drift_state));
+        debug!("Drift budget and incident management endpoints mounted at /api/v1/drift");
+    }
+
+    // Add pipeline management endpoints (MockOps)
+    #[cfg(feature = "pipelines")]
+    {
+        use crate::handlers::pipelines::{pipeline_router, PipelineState};
+
+        let pipeline_state = PipelineState::new();
+        app = app.merge(pipeline_router(pipeline_state));
+        debug!("Pipeline management endpoints mounted at /api/v1/pipelines");
+    }
+
+    // Add governance endpoints (forecasting, semantic drift, threat modeling, contract health)
+    {
+        use crate::handlers::contract_health::{contract_health_router, ContractHealthState};
+        use crate::handlers::forecasting::{forecasting_router, ForecastingState};
+        use crate::handlers::semantic_drift::{semantic_drift_router, SemanticDriftState};
+        use crate::handlers::threat_modeling::{threat_modeling_router, ThreatModelingState};
+        use mockforge_core::contract_drift::forecasting::{Forecaster, ForecastingConfig};
+        use mockforge_core::contract_drift::threat_modeling::{
+            ThreatAnalyzer, ThreatModelingConfig,
+        };
+        use mockforge_core::incidents::semantic_manager::SemanticIncidentManager;
+        use std::sync::Arc;
+
+        // Initialize forecasting
+        let forecasting_config = ForecastingConfig::default();
+        let forecaster = Arc::new(Forecaster::new(forecasting_config));
+        let forecasting_state = ForecastingState {
+            forecaster,
+            database: database.clone(),
+        };
+
+        // Initialize semantic drift manager
+        let semantic_manager = Arc::new(SemanticIncidentManager::new());
+        let semantic_state = SemanticDriftState {
+            manager: semantic_manager,
+            database: database.clone(),
+        };
+
+        // Initialize threat analyzer
+        let threat_config = ThreatModelingConfig::default();
+        let threat_analyzer = match ThreatAnalyzer::new(threat_config) {
+            Ok(analyzer) => Arc::new(analyzer),
+            Err(e) => {
+                warn!("Failed to create threat analyzer: {}. Using default.", e);
+                Arc::new(ThreatAnalyzer::new(ThreatModelingConfig::default()).unwrap_or_else(
+                    |_| {
+                        // Fallback to a minimal config if default also fails
+                        ThreatAnalyzer::new(ThreatModelingConfig {
+                            enabled: false,
+                            ..Default::default()
+                        })
+                        .expect("Failed to create fallback threat analyzer")
+                    },
+                ))
+            }
+        };
+        // Load webhook configs from ServerConfig
+        let mut webhook_configs = Vec::new();
+        let config_paths = [
+            "config.yaml",
+            "mockforge.yaml",
+            "tools/mockforge/config.yaml",
+            "../tools/mockforge/config.yaml",
+        ];
+
+        for path in &config_paths {
+            if let Ok(config) = mockforge_core::config::load_config(path).await {
+                if !config.incidents.webhooks.is_empty() {
+                    webhook_configs = config.incidents.webhooks.clone();
+                    info!("Loaded {} webhook configs from config: {}", webhook_configs.len(), path);
+                    break;
+                }
+            }
+        }
+
+        if webhook_configs.is_empty() {
+            debug!("No webhook configs found in config files, using empty list");
+        }
+
+        let threat_state = ThreatModelingState {
+            analyzer: threat_analyzer,
+            webhook_configs,
+            database: database.clone(),
+        };
+
+        // Initialize contract health state
+        let contract_health_state = ContractHealthState {
+            incident_manager: incident_manager.clone(),
+            semantic_manager: Arc::new(SemanticIncidentManager::new()),
+            database: database.clone(),
+        };
+
+        // Register routers
+        app = app.merge(forecasting_router(forecasting_state));
+        debug!("Forecasting endpoints mounted at /api/v1/forecasts");
+
+        app = app.merge(semantic_drift_router(semantic_state));
+        debug!("Semantic drift endpoints mounted at /api/v1/semantic-drift");
+
+        app = app.merge(threat_modeling_router(threat_state));
+        debug!("Threat modeling endpoints mounted at /api/v1/threats");
+
+        app = app.merge(contract_health_router(contract_health_state));
+        debug!("Contract health endpoints mounted at /api/v1/contract-health");
+    }
+
+    // Add protocol contracts endpoints with fitness registry initialization
+    {
+        use crate::handlers::protocol_contracts::{
+            protocol_contracts_router, ProtocolContractState,
+        };
+        use mockforge_core::contract_drift::{
+            ConsumerImpactAnalyzer, FitnessFunctionRegistry, ProtocolContractRegistry,
+        };
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        // Initialize protocol contract registry
+        let contract_registry = Arc::new(RwLock::new(ProtocolContractRegistry::new()));
+
+        // Initialize fitness function registry and load from config
+        let mut fitness_registry = FitnessFunctionRegistry::new();
+
+        // Try to load config and populate fitness rules
+        let config_paths = [
+            "config.yaml",
+            "mockforge.yaml",
+            "tools/mockforge/config.yaml",
+            "../tools/mockforge/config.yaml",
+        ];
+
+        let mut config_loaded = false;
+        for path in &config_paths {
+            if let Ok(config) = mockforge_core::config::load_config(path).await {
+                if !config.contracts.fitness_rules.is_empty() {
+                    if let Err(e) =
+                        fitness_registry.load_from_config(&config.contracts.fitness_rules)
+                    {
+                        warn!("Failed to load fitness rules from config {}: {}", path, e);
+                    } else {
+                        info!(
+                            "Loaded {} fitness rules from config: {}",
+                            config.contracts.fitness_rules.len(),
+                            path
+                        );
+                        config_loaded = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if !config_loaded {
+            debug!("No fitness rules found in config files, using empty registry");
+        }
+
+        let fitness_registry = Arc::new(RwLock::new(fitness_registry));
+
+        // Reuse drift engine and incident manager from drift budget section
+
+        // Initialize consumer impact analyzer
+        let consumer_mapping_registry =
+            mockforge_core::contract_drift::ConsumerMappingRegistry::new();
+        let consumer_analyzer =
+            Arc::new(RwLock::new(ConsumerImpactAnalyzer::new(consumer_mapping_registry)));
+
+        let protocol_state = ProtocolContractState {
+            registry: contract_registry,
+            drift_engine: Some(drift_engine.clone()),
+            incident_manager: Some(incident_manager.clone()),
+            fitness_registry: Some(fitness_registry),
+            consumer_analyzer: Some(consumer_analyzer),
+        };
+
+        app = app.nest("/api/v1/contracts", protocol_contracts_router(protocol_state));
+        debug!("Protocol contracts endpoints mounted at /api/v1/contracts");
+    }
+
+    // Add behavioral cloning middleware (optional - applies learned behavior to requests)
+    #[cfg(feature = "behavioral-cloning")]
+    {
+        use crate::middleware::behavioral_cloning::BehavioralCloningMiddlewareState;
+        use std::path::PathBuf;
+
+        // Determine database path (defaults to ./recordings.db)
+        let db_path = std::env::var("RECORDER_DATABASE_PATH")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| std::env::current_dir().ok().map(|p| p.join("recordings.db")));
+
+        let bc_middleware_state = if let Some(path) = db_path {
+            BehavioralCloningMiddlewareState::with_database_path(path)
+        } else {
+            BehavioralCloningMiddlewareState::new()
+        };
+
+        // Only enable if BEHAVIORAL_CLONING_ENABLED is set to true
+        let enabled = std::env::var("BEHAVIORAL_CLONING_ENABLED")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(false);
+
+        if enabled {
+            let bc_state_clone = bc_middleware_state.clone();
+            app = app.layer(axum::middleware::from_fn(
+                move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                    let state = bc_state_clone.clone();
+                    async move {
+                        // Insert state into extensions if not already present
+                        if req.extensions().get::<BehavioralCloningMiddlewareState>().is_none() {
+                            req.extensions_mut().insert(state);
+                        }
+                        // Call the middleware function
+                        crate::middleware::behavioral_cloning::behavioral_cloning_middleware(
+                            req, next,
+                        )
+                        .await
+                    }
+                },
+            ));
+            debug!("Behavioral cloning middleware enabled (applies learned behavior to requests)");
+        }
+    }
+
+    // Add consumer contracts endpoints
+    {
+        use crate::handlers::consumer_contracts::{
+            consumer_contracts_router, ConsumerContractsState,
+        };
+        use mockforge_core::consumer_contracts::{
+            ConsumerBreakingChangeDetector, ConsumerRegistry, UsageRecorder,
+        };
+        use std::sync::Arc;
+
+        // Initialize consumer registry
+        let registry = Arc::new(ConsumerRegistry::default());
+
+        // Initialize usage recorder
+        let usage_recorder = Arc::new(UsageRecorder::default());
+
+        // Initialize breaking change detector
+        let detector = Arc::new(ConsumerBreakingChangeDetector::new(usage_recorder.clone()));
+
+        let consumer_state = ConsumerContractsState {
+            registry,
+            usage_recorder,
+            detector,
+        };
+
+        app = app.merge(consumer_contracts_router(consumer_state));
+        debug!("Consumer contracts endpoints mounted at /api/v1/consumers");
+    }
+
+    // Add behavioral cloning endpoints
+    #[cfg(feature = "behavioral-cloning")]
+    {
+        use crate::handlers::behavioral_cloning::{
+            behavioral_cloning_router, BehavioralCloningState,
+        };
+        use std::path::PathBuf;
+
+        // Determine database path (defaults to ./recordings.db)
+        let db_path = std::env::var("RECORDER_DATABASE_PATH")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| std::env::current_dir().ok().map(|p| p.join("recordings.db")));
+
+        let bc_state = if let Some(path) = db_path {
+            BehavioralCloningState::with_database_path(path)
+        } else {
+            BehavioralCloningState::new()
+        };
+
+        app = app.merge(behavioral_cloning_router(bc_state));
+        debug!("Behavioral cloning endpoints mounted at /api/v1/behavioral-cloning");
+    }
+
+    // Add consistency engine and cross-protocol state management
+    {
+        use crate::consistency::{ConsistencyMiddlewareState, HttpAdapter};
+        use crate::handlers::consistency::{consistency_router, ConsistencyState};
+        use mockforge_core::consistency::ConsistencyEngine;
+        use std::sync::Arc;
+
+        // Initialize consistency engine
+        let consistency_engine = Arc::new(ConsistencyEngine::new());
+
+        // Create and register HTTP adapter
+        let http_adapter = Arc::new(HttpAdapter::new(consistency_engine.clone()));
+        consistency_engine.register_adapter(http_adapter.clone()).await;
+
+        // Create consistency state for handlers
+        let consistency_state = ConsistencyState {
+            engine: consistency_engine.clone(),
+        };
+
+        // Create X-Ray state first (needed for middleware)
+        use crate::handlers::xray::XRayState;
+        let xray_state = Arc::new(XRayState {
+            engine: consistency_engine.clone(),
+            request_contexts: std::sync::Arc::new(tokio::sync::RwLock::new(
+                std::collections::HashMap::new(),
+            )),
+        });
+
+        // Create consistency middleware state
+        let consistency_middleware_state = ConsistencyMiddlewareState {
+            engine: consistency_engine.clone(),
+            adapter: http_adapter,
+            xray_state: Some(xray_state.clone()),
+        };
+
+        // Add consistency middleware (before other middleware to inject state early)
+        let consistency_middleware_state_clone = consistency_middleware_state.clone();
+        app = app.layer(axum::middleware::from_fn(
+            move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                let state = consistency_middleware_state_clone.clone();
+                async move {
+                    // Insert state into extensions if not already present
+                    if req.extensions().get::<ConsistencyMiddlewareState>().is_none() {
+                        req.extensions_mut().insert(state);
+                    }
+                    // Call the middleware function
+                    crate::consistency::middleware::consistency_middleware(req, next).await
+                }
+            },
+        ));
+
+        // Add consistency API endpoints
+        app = app.merge(consistency_router(consistency_state));
+        debug!("Consistency engine initialized and endpoints mounted at /api/v1/consistency");
+
+        // Add fidelity score endpoints
+        {
+            use crate::handlers::fidelity::{fidelity_router, FidelityState};
+            let fidelity_state = FidelityState::new();
+            app = app.merge(fidelity_router(fidelity_state));
+            debug!("Fidelity score endpoints mounted at /api/v1/workspace/:workspace_id/fidelity");
+        }
+
+        // Add scenario studio endpoints
+        {
+            use crate::handlers::scenario_studio::{scenario_studio_router, ScenarioStudioState};
+            let scenario_studio_state = ScenarioStudioState::new();
+            app = app.merge(scenario_studio_router(scenario_studio_state));
+            debug!("Scenario Studio endpoints mounted at /api/v1/scenario-studio");
+        }
+
+        // Add performance mode endpoints
+        {
+            use crate::handlers::performance::{performance_router, PerformanceState};
+            let performance_state = PerformanceState::new();
+            app = app.nest("/api/performance", performance_router(performance_state));
+            debug!("Performance mode endpoints mounted at /api/performance");
+        }
+
+        // Add world state endpoints
+        {
+            use crate::handlers::world_state::{world_state_router, WorldStateState};
+            use mockforge_world_state::WorldStateEngine;
+            use std::sync::Arc;
+            use tokio::sync::RwLock;
+
+            let world_state_engine = Arc::new(RwLock::new(WorldStateEngine::new()));
+            let world_state_state = WorldStateState {
+                engine: world_state_engine,
+            };
+            app = app.nest("/api/world-state", world_state_router().with_state(world_state_state));
+            debug!("World state endpoints mounted at /api/world-state");
+        }
+
+        // Add snapshot management endpoints
+        {
+            use crate::handlers::snapshots::{snapshot_router, SnapshotState};
+            use mockforge_core::snapshots::SnapshotManager;
+            use std::path::PathBuf;
+
+            let snapshot_dir = std::env::var("MOCKFORGE_SNAPSHOT_DIR").ok().map(PathBuf::from);
+            let snapshot_manager = Arc::new(SnapshotManager::new(snapshot_dir));
+
+            let snapshot_state = SnapshotState {
+                manager: snapshot_manager,
+                consistency_engine: Some(consistency_engine.clone()),
+                workspace_persistence: None, // Can be initialized later if workspace persistence is available
+                vbr_engine: None, // Can be initialized when VBR engine is available in server state
+                recorder: None, // Can be initialized when Recorder is available in server state
+            };
+
+            app = app.merge(snapshot_router(snapshot_state));
+            debug!("Snapshot management endpoints mounted at /api/v1/snapshots");
+
+            // Add X-Ray API endpoints for browser extension
+            {
+                use crate::handlers::xray::xray_router;
+                app = app.merge(xray_router((*xray_state).clone()));
+                debug!("X-Ray API endpoints mounted at /api/v1/xray");
+            }
+        }
+
+        // Add A/B testing endpoints and middleware
+        {
+            use crate::handlers::ab_testing::{ab_testing_router, ABTestingState};
+            use crate::middleware::ab_testing::ab_testing_middleware;
+
+            let ab_testing_state = ABTestingState::new();
+
+            // Add A/B testing middleware (before other response middleware)
+            let ab_testing_state_clone = ab_testing_state.clone();
+            app = app.layer(axum::middleware::from_fn(
+                move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                    let state = ab_testing_state_clone.clone();
+                    async move {
+                        // Insert state into extensions if not already present
+                        if req.extensions().get::<ABTestingState>().is_none() {
+                            req.extensions_mut().insert(state);
+                        }
+                        // Call the middleware function
+                        ab_testing_middleware(req, next).await
+                    }
+                },
+            ));
+
+            // Add A/B testing API endpoints
+            app = app.merge(ab_testing_router(ab_testing_state));
+            debug!("A/B testing endpoints mounted at /api/v1/ab-tests");
+        }
+    }
+
+    // Add PR generation endpoints (optional - only if configured)
+    {
+        use crate::handlers::pr_generation::{pr_generation_router, PRGenerationState};
+        use mockforge_core::pr_generation::{PRGenerator, PRProvider};
+        use std::sync::Arc;
+
+        // Load PR generation config from environment or use default
+        let pr_config = mockforge_core::pr_generation::PRGenerationConfig::from_env();
+
+        let generator = if pr_config.enabled && pr_config.token.is_some() {
+            let token = pr_config.token.as_ref().unwrap().clone();
+            let generator = match pr_config.provider {
+                PRProvider::GitHub => PRGenerator::new_github(
+                    pr_config.owner.clone(),
+                    pr_config.repo.clone(),
+                    token,
+                    pr_config.base_branch.clone(),
+                ),
+                PRProvider::GitLab => PRGenerator::new_gitlab(
+                    pr_config.owner.clone(),
+                    pr_config.repo.clone(),
+                    token,
+                    pr_config.base_branch.clone(),
+                ),
+            };
+            Some(Arc::new(generator))
+        } else {
+            None
+        };
+
+        let pr_state = PRGenerationState {
+            generator: generator.clone(),
+        };
+
+        app = app.merge(pr_generation_router(pr_state));
+        if generator.is_some() {
+            debug!(
+                "PR generation endpoints mounted at /api/v1/pr (configured for {:?})",
+                pr_config.provider
+            );
+        } else {
+            debug!("PR generation endpoints mounted at /api/v1/pr (not configured - set GITHUB_TOKEN/GITLAB_TOKEN and PR_REPO_OWNER/PR_REPO_NAME)");
+        }
+    }
 
     // Add management WebSocket endpoint
     app = app.nest("/__mockforge/ws", ws_management_router(ws_state));
@@ -1462,6 +2665,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                     allowed_origins: prod_cors.allowed_origins.clone(),
                     allowed_methods: prod_cors.allowed_methods.clone(),
                     allowed_headers: prod_cors.allowed_headers.clone(),
+                    allow_credentials: prod_cors.allow_credentials,
                 });
                 info!("Applied production-like CORS configuration");
             }
@@ -1553,6 +2757,46 @@ pub async fn build_router_with_chains_and_multi_tenant(
         // Apply auth middleware
         app = app.layer(axum::middleware::from_fn_with_state(auth_state, auth_middleware));
         info!("Applied OAuth authentication middleware from deceptive deploy configuration");
+    }
+
+    // Add runtime daemon 404 detection middleware (if enabled)
+    #[cfg(feature = "runtime-daemon")]
+    {
+        use mockforge_runtime_daemon::{AutoGenerator, NotFoundDetector, RuntimeDaemonConfig};
+        use std::sync::Arc;
+
+        // Load runtime daemon config from environment
+        let daemon_config = RuntimeDaemonConfig::from_env();
+
+        if daemon_config.enabled {
+            info!("Runtime daemon enabled - auto-creating mocks from 404s");
+
+            // Determine management API URL (default to localhost:3000)
+            let management_api_url =
+                std::env::var("MOCKFORGE_MANAGEMENT_API_URL").unwrap_or_else(|_| {
+                    let port =
+                        std::env::var("MOCKFORGE_HTTP_PORT").unwrap_or_else(|_| "3000".to_string());
+                    format!("http://localhost:{}", port)
+                });
+
+            // Create auto-generator
+            let generator = Arc::new(AutoGenerator::new(daemon_config.clone(), management_api_url));
+
+            // Create detector and set generator
+            let detector = NotFoundDetector::new(daemon_config.clone());
+            detector.set_generator(generator).await;
+
+            // Add middleware layer
+            let detector_clone = detector.clone();
+            app = app.layer(axum::middleware::from_fn(
+                move |req: axum::extract::Request, next: axum::middleware::Next| {
+                    let detector = detector_clone.clone();
+                    async move { detector.detect_and_auto_create(req, next).await }
+                },
+            ));
+
+            debug!("Runtime daemon 404 detection middleware added");
+        }
     }
 
     // Add contract diff middleware for automatic request capture

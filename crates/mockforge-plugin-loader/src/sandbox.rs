@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use wasmtime::{Engine, Linker, Module, Store};
-use wasmtime_wasi::p2::{WasiCtx, WasiCtxBuilder};
+use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
 /// Plugin sandbox for secure execution
 pub struct PluginSandbox {

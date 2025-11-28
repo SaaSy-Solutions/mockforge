@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-plugin-loader"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -17,7 +17,7 @@ missing_docs = "deny"
 
 [dependencies]
 # Plugin core types and traits
-mockforge-plugin-core = "0.2.8"
+mockforge-plugin-core = { version = "0.3.3", path = "../mockforge-plugin-core" }
 
 # Serialization
 serde.workspace = true
@@ -38,8 +38,8 @@ uuid.workspace = true
 regex.workspace = true
 
 # WebAssembly runtime for plugin execution
-wasmtime = "34.0"
-wasmtime-wasi = "34.0"
+wasmtime = "36.0.3"
+wasmtime-wasi = "36.0.3"
 wasmparser = "0.239"
 
 # Plugin communication

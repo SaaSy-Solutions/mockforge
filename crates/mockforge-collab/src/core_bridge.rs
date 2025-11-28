@@ -25,7 +25,7 @@ impl CoreBridge {
         }
     }
 
-    /// Convert a TeamWorkspace to a Core Workspace
+    /// Convert a `TeamWorkspace` to a Core Workspace
     ///
     /// Extracts the full workspace data from the TeamWorkspace.config field
     /// and reconstructs a Core Workspace object.
@@ -36,7 +36,7 @@ impl CoreBridge {
         // Deserialize the workspace from JSON
         let mut workspace: CoreWorkspace =
             serde_json::from_value(workspace_json.clone()).map_err(|e| {
-                CollabError::Internal(format!("Failed to deserialize workspace from config: {}", e))
+                CollabError::Internal(format!("Failed to deserialize workspace from config: {e}"))
             })?;
 
         // Update the workspace ID to match the team workspace ID
@@ -48,13 +48,16 @@ impl CoreBridge {
         workspace.description = team_workspace.description.clone();
         workspace.updated_at = team_workspace.updated_at;
 
+        // Initialize default mock environments if they don't exist (for backward compatibility)
+        workspace.initialize_default_mock_environments();
+
         Ok(workspace)
     }
 
-    /// Convert a Core Workspace to a TeamWorkspace
+    /// Convert a Core Workspace to a `TeamWorkspace`
     ///
     /// Serializes the full workspace data into the TeamWorkspace.config field
-    /// and creates a TeamWorkspace with collaboration metadata.
+    /// and creates a `TeamWorkspace` with collaboration metadata.
     pub fn core_to_team(
         &self,
         core_workspace: &CoreWorkspace,
@@ -62,7 +65,7 @@ impl CoreBridge {
     ) -> Result<TeamWorkspace> {
         // Serialize the full workspace to JSON
         let workspace_json = serde_json::to_value(core_workspace).map_err(|e| {
-            CollabError::Internal(format!("Failed to serialize workspace to JSON: {}", e))
+            CollabError::Internal(format!("Failed to serialize workspace to JSON: {e}"))
         })?;
 
         // Create TeamWorkspace with the serialized workspace in config
@@ -76,14 +79,14 @@ impl CoreBridge {
         Ok(team_workspace)
     }
 
-    /// Get the full workspace state from a TeamWorkspace
+    /// Get the full workspace state from a `TeamWorkspace`
     ///
     /// Returns the complete Core Workspace including all mocks, folders, and configuration.
     pub fn get_workspace_state(&self, team_workspace: &TeamWorkspace) -> Result<CoreWorkspace> {
         self.team_to_core(team_workspace)
     }
 
-    /// Update the workspace state in a TeamWorkspace
+    /// Update the workspace state in a `TeamWorkspace`
     ///
     /// Serializes the Core Workspace and stores it in the TeamWorkspace.config field.
     pub fn update_workspace_state(
@@ -93,7 +96,7 @@ impl CoreBridge {
     ) -> Result<()> {
         // Serialize the full workspace
         let workspace_json = serde_json::to_value(core_workspace)
-            .map_err(|e| CollabError::Internal(format!("Failed to serialize workspace: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("Failed to serialize workspace: {e}")))?;
 
         // Update the config field
         team_workspace.config = workspace_json;
@@ -102,9 +105,9 @@ impl CoreBridge {
         Ok(())
     }
 
-    /// Load workspace from disk using WorkspacePersistence
+    /// Load workspace from disk using `WorkspacePersistence`
     ///
-    /// This loads a workspace from the filesystem and converts it to a TeamWorkspace.
+    /// This loads a workspace from the filesystem and converts it to a `TeamWorkspace`.
     pub async fn load_workspace_from_disk(
         &self,
         workspace_id: &str,
@@ -115,15 +118,15 @@ impl CoreBridge {
             .persistence
             .load_workspace(workspace_id)
             .await
-            .map_err(|e| CollabError::Internal(format!("Failed to load workspace: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("Failed to load workspace: {e}")))?;
 
         // Convert to TeamWorkspace
         self.core_to_team(&core_workspace, owner_id)
     }
 
-    /// Save workspace to disk using WorkspacePersistence
+    /// Save workspace to disk using `WorkspacePersistence`
     ///
-    /// This saves a TeamWorkspace to the filesystem as a Core Workspace.
+    /// This saves a `TeamWorkspace` to the filesystem as a Core Workspace.
     pub async fn save_workspace_to_disk(&self, team_workspace: &TeamWorkspace) -> Result<()> {
         // Convert to Core Workspace
         let core_workspace = self.team_to_core(team_workspace)?;
@@ -132,14 +135,14 @@ impl CoreBridge {
         self.persistence
             .save_workspace(&core_workspace)
             .await
-            .map_err(|e| CollabError::Internal(format!("Failed to save workspace: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("Failed to save workspace: {e}")))?;
 
         Ok(())
     }
 
     /// Export workspace for backup
     ///
-    /// Uses WorkspacePersistence to create a backup-compatible export.
+    /// Uses `WorkspacePersistence` to create a backup-compatible export.
     pub async fn export_workspace_for_backup(
         &self,
         team_workspace: &TeamWorkspace,
@@ -149,7 +152,7 @@ impl CoreBridge {
 
         // Serialize to JSON for backup
         serde_json::to_value(&core_workspace)
-            .map_err(|e| CollabError::Internal(format!("Failed to serialize for backup: {}", e)))
+            .map_err(|e| CollabError::Internal(format!("Failed to serialize for backup: {e}")))
     }
 
     /// Import workspace from backup
@@ -163,7 +166,7 @@ impl CoreBridge {
     ) -> Result<TeamWorkspace> {
         // Deserialize Core Workspace from backup
         let mut core_workspace: CoreWorkspace = serde_json::from_value(backup_data.clone())
-            .map_err(|e| CollabError::Internal(format!("Failed to deserialize backup: {}", e)))?;
+            .map_err(|e| CollabError::Internal(format!("Failed to deserialize backup: {e}")))?;
 
         // Update name if provided
         if let Some(name) = new_name {
@@ -185,12 +188,12 @@ impl CoreBridge {
     pub fn get_workspace_state_json(&self, team_workspace: &TeamWorkspace) -> Result<Value> {
         let core_workspace = self.team_to_core(team_workspace)?;
         serde_json::to_value(&core_workspace)
-            .map_err(|e| CollabError::Internal(format!("Failed to serialize state: {}", e)))
+            .map_err(|e| CollabError::Internal(format!("Failed to serialize state: {e}")))
     }
 
     /// Update workspace state from JSON
     ///
-    /// Updates the TeamWorkspace with state from a JSON value (from sync).
+    /// Updates the `TeamWorkspace` with state from a JSON value (from sync).
     pub fn update_workspace_state_from_json(
         &self,
         team_workspace: &mut TeamWorkspace,
@@ -198,9 +201,7 @@ impl CoreBridge {
     ) -> Result<()> {
         // Deserialize Core Workspace from JSON
         let mut core_workspace: CoreWorkspace = serde_json::from_value(state_json.clone())
-            .map_err(|e| {
-                CollabError::Internal(format!("Failed to deserialize state JSON: {}", e))
-            })?;
+            .map_err(|e| CollabError::Internal(format!("Failed to deserialize state JSON: {e}")))?;
 
         // Preserve TeamWorkspace metadata
         core_workspace.id = team_workspace.id.to_string();
@@ -213,9 +214,9 @@ impl CoreBridge {
 
     /// Create a new empty workspace
     ///
-    /// Creates a new Core Workspace and converts it to a TeamWorkspace.
+    /// Creates a new Core Workspace and converts it to a `TeamWorkspace`.
     pub fn create_empty_workspace(&self, name: String, owner_id: Uuid) -> Result<TeamWorkspace> {
-        let core_workspace = CoreWorkspace::new(name.clone());
+        let core_workspace = CoreWorkspace::new(name);
         self.core_to_team(&core_workspace, owner_id)
     }
 }

@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Latency simulation and fault injection for MockForge
 
 use crate::Result;
@@ -7,6 +9,7 @@ use std::time::Duration;
 
 /// Latency distribution types
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum LatencyDistribution {
     /// Fixed latency with optional jitter (backward compatible)
@@ -20,6 +23,7 @@ pub enum LatencyDistribution {
 
 /// Latency profile configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LatencyProfile {
     /// Base latency in milliseconds (mean for distributions)
     pub base_ms: u64,
@@ -122,7 +126,7 @@ impl LatencyProfile {
 
     /// Calculate latency for a request with optional tags
     pub fn calculate_latency(&self, tags: &[String]) -> Duration {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         // Check for tag overrides (use the first matching tag)
         // Note: Tag overrides always use fixed latency for simplicity
@@ -227,13 +231,13 @@ impl FaultConfig {
             return true;
         }
 
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         rng.random_bool(self.failure_rate)
     }
 
     /// Get a random failure response
     pub fn get_failure_response(&self) -> (u16, Option<serde_json::Value>) {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         let status_code = if self.status_codes.is_empty() {
             500

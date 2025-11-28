@@ -79,6 +79,16 @@ pub struct MetricsRegistry {
     pub successful_request_rate: GaugeVec,
     pub p95_latency_slo_compliance: GaugeVec,
     pub error_budget_remaining: GaugeVec,
+
+    // Marketplace metrics
+    pub marketplace_publish_total: IntCounterVec,
+    pub marketplace_publish_duration_seconds: HistogramVec,
+    pub marketplace_download_total: IntCounterVec,
+    pub marketplace_download_duration_seconds: HistogramVec,
+    pub marketplace_search_total: IntCounterVec,
+    pub marketplace_search_duration_seconds: HistogramVec,
+    pub marketplace_errors_total: IntCounterVec,
+    pub marketplace_items_total: IntGaugeVec,
 }
 
 impl MetricsRegistry {
@@ -86,22 +96,25 @@ impl MetricsRegistry {
     pub fn new() -> Self {
         let registry = Registry::new();
 
-        // Request metrics
+        // Request metrics (with pillar label)
         let requests_total = IntCounterVec::new(
             Opts::new(
                 "mockforge_requests_total",
-                "Total number of requests by protocol, method, and status",
+                "Total number of requests by protocol, method, status, and pillar",
             ),
-            &["protocol", "method", "status"],
+            &["protocol", "method", "status", "pillar"],
         )
         .expect("Failed to create requests_total metric");
 
         let requests_duration_seconds = HistogramVec::new(
-            HistogramOpts::new("mockforge_request_duration_seconds", "Request duration in seconds")
-                .buckets(vec![
-                    0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
-                ]),
-            &["protocol", "method"],
+            HistogramOpts::new(
+                "mockforge_request_duration_seconds",
+                "Request duration in seconds by protocol, method, and pillar",
+            )
+            .buckets(vec![
+                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ]),
+            &["protocol", "method", "pillar"],
         )
         .expect("Failed to create requests_duration_seconds metric");
 
@@ -114,13 +127,13 @@ impl MetricsRegistry {
         )
         .expect("Failed to create requests_in_flight metric");
 
-        // Error metrics
+        // Error metrics (with pillar label)
         let errors_total = IntCounterVec::new(
             Opts::new(
                 "mockforge_errors_total",
-                "Total number of errors by protocol and error type",
+                "Total number of errors by protocol, error type, and pillar",
             ),
-            &["protocol", "error_type"],
+            &["protocol", "error_type", "pillar"],
         )
         .expect("Failed to create errors_total metric");
 
@@ -406,6 +419,82 @@ impl MetricsRegistry {
         )
         .expect("Failed to create error_budget_remaining metric");
 
+        // Marketplace metrics
+        let marketplace_publish_total = IntCounterVec::new(
+            Opts::new(
+                "mockforge_marketplace_publish_total",
+                "Total number of marketplace items published by type and status",
+            ),
+            &["type", "status"], // type: plugin, template, scenario; status: success, error
+        )
+        .expect("Failed to create marketplace_publish_total metric");
+
+        let marketplace_publish_duration_seconds = HistogramVec::new(
+            HistogramOpts::new(
+                "mockforge_marketplace_publish_duration_seconds",
+                "Marketplace publish operation duration in seconds",
+            )
+            .buckets(vec![0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0]),
+            &["type"], // type: plugin, template, scenario
+        )
+        .expect("Failed to create marketplace_publish_duration_seconds metric");
+
+        let marketplace_download_total = IntCounterVec::new(
+            Opts::new(
+                "mockforge_marketplace_download_total",
+                "Total number of marketplace items downloaded by type and status",
+            ),
+            &["type", "status"], // type: plugin, template, scenario; status: success, error
+        )
+        .expect("Failed to create marketplace_download_total metric");
+
+        let marketplace_download_duration_seconds = HistogramVec::new(
+            HistogramOpts::new(
+                "mockforge_marketplace_download_duration_seconds",
+                "Marketplace download operation duration in seconds",
+            )
+            .buckets(vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]),
+            &["type"], // type: plugin, template, scenario
+        )
+        .expect("Failed to create marketplace_download_duration_seconds metric");
+
+        let marketplace_search_total = IntCounterVec::new(
+            Opts::new(
+                "mockforge_marketplace_search_total",
+                "Total number of marketplace searches by type and status",
+            ),
+            &["type", "status"], // type: plugin, template, scenario; status: success, error
+        )
+        .expect("Failed to create marketplace_search_total metric");
+
+        let marketplace_search_duration_seconds = HistogramVec::new(
+            HistogramOpts::new(
+                "mockforge_marketplace_search_duration_seconds",
+                "Marketplace search operation duration in seconds",
+            )
+            .buckets(vec![0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0]),
+            &["type"], // type: plugin, template, scenario
+        )
+        .expect("Failed to create marketplace_search_duration_seconds metric");
+
+        let marketplace_errors_total = IntCounterVec::new(
+            Opts::new(
+                "mockforge_marketplace_errors_total",
+                "Total number of marketplace errors by type and error_code",
+            ),
+            &["type", "error_code"], // type: plugin, template, scenario; error_code: validation_failed, not_found, etc.
+        )
+        .expect("Failed to create marketplace_errors_total metric");
+
+        let marketplace_items_total = IntGaugeVec::new(
+            Opts::new(
+                "mockforge_marketplace_items_total",
+                "Total number of marketplace items by type",
+            ),
+            &["type"], // type: plugin, template, scenario
+        )
+        .expect("Failed to create marketplace_items_total metric");
+
         // Register all metrics
         registry
             .register(Box::new(requests_total.clone()))
@@ -542,6 +631,30 @@ impl MetricsRegistry {
         registry
             .register(Box::new(error_budget_remaining.clone()))
             .expect("Failed to register error_budget_remaining");
+        registry
+            .register(Box::new(marketplace_publish_total.clone()))
+            .expect("Failed to register marketplace_publish_total");
+        registry
+            .register(Box::new(marketplace_publish_duration_seconds.clone()))
+            .expect("Failed to register marketplace_publish_duration_seconds");
+        registry
+            .register(Box::new(marketplace_download_total.clone()))
+            .expect("Failed to register marketplace_download_total");
+        registry
+            .register(Box::new(marketplace_download_duration_seconds.clone()))
+            .expect("Failed to register marketplace_download_duration_seconds");
+        registry
+            .register(Box::new(marketplace_search_total.clone()))
+            .expect("Failed to register marketplace_search_total");
+        registry
+            .register(Box::new(marketplace_search_duration_seconds.clone()))
+            .expect("Failed to register marketplace_search_duration_seconds");
+        registry
+            .register(Box::new(marketplace_errors_total.clone()))
+            .expect("Failed to register marketplace_errors_total");
+        registry
+            .register(Box::new(marketplace_items_total.clone()))
+            .expect("Failed to register marketplace_items_total");
 
         debug!("Initialized Prometheus metrics registry");
 
@@ -592,6 +705,14 @@ impl MetricsRegistry {
             successful_request_rate,
             p95_latency_slo_compliance,
             error_budget_remaining,
+            marketplace_publish_total,
+            marketplace_publish_duration_seconds,
+            marketplace_download_total,
+            marketplace_download_duration_seconds,
+            marketplace_search_total,
+            marketplace_search_duration_seconds,
+            marketplace_errors_total,
+            marketplace_items_total,
         }
     }
 
@@ -607,18 +728,46 @@ impl MetricsRegistry {
 
     /// Record an HTTP request
     pub fn record_http_request(&self, method: &str, status: u16, duration_seconds: f64) {
+        self.record_http_request_with_pillar(method, status, duration_seconds, "");
+    }
+
+    /// Record an HTTP request with pillar information
+    pub fn record_http_request_with_pillar(
+        &self,
+        method: &str,
+        status: u16,
+        duration_seconds: f64,
+        pillar: &str,
+    ) {
         let status_str = status.to_string();
-        self.requests_total.with_label_values(&["http", method, &status_str]).inc();
+        let pillar_label = if pillar.is_empty() { "unknown" } else { pillar };
+        self.requests_total
+            .with_label_values(&["http", method, &status_str, pillar_label])
+            .inc();
         self.requests_duration_seconds
-            .with_label_values(&["http", method])
+            .with_label_values(&["http", method, pillar_label])
             .observe(duration_seconds);
     }
 
     /// Record a gRPC request
     pub fn record_grpc_request(&self, method: &str, status: &str, duration_seconds: f64) {
-        self.requests_total.with_label_values(&["grpc", method, status]).inc();
+        self.record_grpc_request_with_pillar(method, status, duration_seconds, "");
+    }
+
+    /// Record a gRPC request with pillar information
+    pub fn record_grpc_request_with_pillar(
+        &self,
+        method: &str,
+        status: &str,
+        duration_seconds: f64,
+        pillar: &str,
+    ) {
+        let pillar_label = if pillar.is_empty() { "unknown" } else { pillar };
+        self.requests_total
+            .with_label_values(&["grpc", method, status, pillar_label])
+            .inc();
         self.requests_duration_seconds
-            .with_label_values(&["grpc", method])
+            .with_label_values(&["grpc", method, pillar_label])
             .observe(duration_seconds);
     }
 
@@ -664,7 +813,13 @@ impl MetricsRegistry {
 
     /// Record an error
     pub fn record_error(&self, protocol: &str, error_type: &str) {
-        self.errors_total.with_label_values(&[protocol, error_type]).inc();
+        self.record_error_with_pillar(protocol, error_type, "");
+    }
+
+    /// Record an error with pillar information
+    pub fn record_error_with_pillar(&self, protocol: &str, error_type: &str, pillar: &str) {
+        let pillar_label = if pillar.is_empty() { "unknown" } else { pillar };
+        self.errors_total.with_label_values(&[protocol, error_type, pillar_label]).inc();
     }
 
     /// Update memory usage
@@ -695,6 +850,18 @@ impl MetricsRegistry {
         status: u16,
         duration_seconds: f64,
     ) {
+        self.record_http_request_with_path_and_pillar(path, method, status, duration_seconds, "");
+    }
+
+    /// Record an HTTP request with path and pillar information
+    pub fn record_http_request_with_path_and_pillar(
+        &self,
+        path: &str,
+        method: &str,
+        status: u16,
+        duration_seconds: f64,
+        pillar: &str,
+    ) {
         // Normalize path to avoid cardinality explosion
         let normalized_path = normalize_path(path);
         let status_str = status.to_string();
@@ -722,8 +889,8 @@ impl MetricsRegistry {
             .with_label_values(&[normalized_path.as_str(), method])
             .set(new_avg);
 
-        // Also record in the general metrics
-        self.record_http_request(method, status, duration_seconds);
+        // Also record in the general metrics with pillar
+        self.record_http_request_with_pillar(method, status, duration_seconds, pillar);
     }
 
     /// Record a WebSocket connection established
@@ -819,6 +986,55 @@ impl MetricsRegistry {
     pub fn decrement_workspace_routes(&self, workspace_id: &str) {
         self.workspace_active_routes.with_label_values(&[workspace_id]).dec();
     }
+
+    // ==================== Marketplace metrics ====================
+
+    /// Record a marketplace publish operation
+    pub fn record_marketplace_publish(
+        &self,
+        item_type: &str,
+        success: bool,
+        duration_seconds: f64,
+    ) {
+        let status = if success { "success" } else { "error" };
+        self.marketplace_publish_total.with_label_values(&[item_type, status]).inc();
+        self.marketplace_publish_duration_seconds
+            .with_label_values(&[item_type])
+            .observe(duration_seconds);
+    }
+
+    /// Record a marketplace download operation
+    pub fn record_marketplace_download(
+        &self,
+        item_type: &str,
+        success: bool,
+        duration_seconds: f64,
+    ) {
+        let status = if success { "success" } else { "error" };
+        self.marketplace_download_total.with_label_values(&[item_type, status]).inc();
+        self.marketplace_download_duration_seconds
+            .with_label_values(&[item_type])
+            .observe(duration_seconds);
+    }
+
+    /// Record a marketplace search operation
+    pub fn record_marketplace_search(&self, item_type: &str, success: bool, duration_seconds: f64) {
+        let status = if success { "success" } else { "error" };
+        self.marketplace_search_total.with_label_values(&[item_type, status]).inc();
+        self.marketplace_search_duration_seconds
+            .with_label_values(&[item_type])
+            .observe(duration_seconds);
+    }
+
+    /// Record a marketplace error
+    pub fn record_marketplace_error(&self, item_type: &str, error_code: &str) {
+        self.marketplace_errors_total.with_label_values(&[item_type, error_code]).inc();
+    }
+
+    /// Update the total number of marketplace items
+    pub fn update_marketplace_items_total(&self, item_type: &str, count: i64) {
+        self.marketplace_items_total.with_label_values(&[item_type]).set(count);
+    }
 }
 
 /// Normalize path to avoid high cardinality
@@ -875,6 +1091,16 @@ mod tests {
         let registry = MetricsRegistry::new();
         registry.record_http_request("GET", 200, 0.045);
         registry.record_http_request("POST", 201, 0.123);
+
+        // Verify metrics were recorded (they should not panic)
+        assert!(registry.is_initialized());
+    }
+
+    #[test]
+    fn test_record_http_request_with_pillar() {
+        let registry = MetricsRegistry::new();
+        registry.record_http_request_with_pillar("GET", 200, 0.045, "reality");
+        registry.record_http_request_with_pillar("POST", 201, 0.123, "contracts");
 
         // Verify metrics were recorded (they should not panic)
         assert!(registry.is_initialized());

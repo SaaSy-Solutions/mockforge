@@ -4,8 +4,7 @@
 //! users to test and visualize mock endpoints.
 
 use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
+    extract::{Path, State},
     response::Json,
 };
 use chrono::Utc;
@@ -332,11 +331,13 @@ pub async fn execute_rest_request(
                     client_ip: None,
                     user_agent: Some("MockForge-Playground".to_string()),
                     headers: headers.clone(),
+                    query_params: HashMap::new(), // Query params not available in playground
                     response_size_bytes: serde_json::to_string(&body)
                         .map(|s| s.len() as u64)
                         .unwrap_or(0),
                     error_message: None,
                     metadata,
+                    reality_metadata: None,
                 };
                 logger.log_request(log_entry).await;
             }
@@ -456,6 +457,7 @@ pub async fn execute_graphql_query(
                     client_ip: None,
                     user_agent: Some("MockForge-Playground".to_string()),
                     headers: HashMap::new(),
+                    query_params: HashMap::new(), // Query params not available in playground
                     response_size_bytes: serde_json::to_string(&body)
                         .map(|s| s.len() as u64)
                         .unwrap_or(0),
@@ -464,6 +466,7 @@ pub async fn execute_graphql_query(
                     } else {
                         None
                     },
+                    reality_metadata: None,
                     metadata: {
                         let mut meta = HashMap::new();
                         meta.insert("query".to_string(), request.query.clone());

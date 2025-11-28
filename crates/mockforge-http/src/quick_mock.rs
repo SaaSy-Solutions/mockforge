@@ -302,7 +302,7 @@ async fn list_handler_impl(
         let paginated_items: Vec<Value> =
             filtered_items.into_iter().skip(offset).take(limit).cloned().collect();
 
-        let total_pages = (total + limit - 1) / limit;
+        let total_pages = total.div_ceil(limit);
 
         Ok(Json(json!({
             "data": paginated_items,

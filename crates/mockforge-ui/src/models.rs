@@ -305,13 +305,19 @@ impl Default for LogFilter {
     }
 }
 
-/// Metrics data
+/// Performance metrics data with detailed percentile analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsData {
     /// Request count by endpoint
     pub requests_by_endpoint: HashMap<String, u64>,
-    /// Response time percentiles
+    /// Response time percentiles (p50, p75, p90, p95, p99, p999)
     pub response_time_percentiles: HashMap<String, u64>,
+    /// Per-endpoint percentiles for detailed analysis
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint_percentiles: Option<HashMap<String, HashMap<String, u64>>>,
+    /// Latency over time (time-series data)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_over_time: Option<Vec<(chrono::DateTime<chrono::Utc>, u64)>>,
     /// Error rate by endpoint
     pub error_rate_by_endpoint: HashMap<String, f64>,
     /// Memory usage over time

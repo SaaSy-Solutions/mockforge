@@ -92,7 +92,7 @@ pub async fn generate_rust_axum_backend(
 
     let mut files = Vec::new();
     let mut todos = Vec::new();
-    let mut warnings = Vec::new();
+    let warnings = Vec::new();
 
     let port = config.port.unwrap_or(3000);
 
@@ -269,7 +269,9 @@ pub mod routes;
 /// Application state
 #[derive(Clone)]
 pub struct AppState {{
-    // TODO: Add your application state here
+    /// OpenAPI specification (for validation and documentation)
+    pub openapi_spec: Arc<serde_json::Value>,
+    // Add your application state here
     // Example: database connection pool, cache, configuration, etc.
     // pub db: Arc<Pool<Postgres>>,
     // pub cache: Arc<RedisClient>,
@@ -277,9 +279,31 @@ pub struct AppState {{
 
 impl AppState {{
     pub fn new() -> Self {{
+        // Initialize OpenAPI spec
+        // In a real application, you would embed the OpenAPI spec at compile time
+        // or load it from a file at runtime
+        // Build OpenAPI spec JSON with title and version
+        let mut spec_map = serde_json::Map::new();
+        spec_map.insert("openapi".to_string(), serde_json::Value::String("3.0.0".to_string()));
+        let mut info_map = serde_json::Map::new();
+        info_map.insert("title".to_string(), serde_json::Value::String("{}".to_string()));
+        info_map.insert("version".to_string(), serde_json::Value::String("{}".to_string()));
+        spec_map.insert("info".to_string(), serde_json::Value::Object(info_map));
+        spec_map.insert("paths".to_string(), serde_json::Value::Object(serde_json::Map::new()));
+        let spec_value = serde_json::Value::Object(spec_map);
+
         Self {{
-            // TODO: Initialize your application state
+            openapi_spec: Arc::new(spec_value),
+            // Initialize your application state here
+            // Example:
+            // db: Arc::new(create_db_pool().await?),
+            // cache: Arc::new(RedisClient::connect("redis://localhost").await?),
         }}
+    }}
+
+    /// Get OpenAPI specification as JSON value
+    pub fn get_openapi_spec(&self) -> &serde_json::Value {{
+        &self.openapi_spec
     }}
 }}
 
@@ -322,7 +346,7 @@ async fn health_check() -> impl IntoResponse {{
     (StatusCode::OK, "OK")
 }}
 "#,
-        app_name, spec.spec.info.title, spec.spec.info.version, port, handler_count, addr_str
+        app_name, spec.spec.info.title, spec.spec.info.version, port, handler_count, addr_str, spec.spec.info.title, spec.spec.info.version
     );
 
     todos.push(TodoItem {
@@ -332,12 +356,13 @@ async fn health_check() -> impl IntoResponse {{
         related_operation: None,
         category: TodoCategory::Config,
         definition_of_done: vec![
-            "Add database connection pool to AppState".to_string(),
-            "Initialize database connection".to_string(),
+            "OpenAPI spec is already initialized in AppState".to_string(),
+            "Add database connection pool to AppState if needed".to_string(),
+            "Initialize database connection in AppState::new()".to_string(),
             "Handle connection errors gracefully".to_string(),
             "Add connection health checks".to_string(),
         ],
-        complexity: Complexity::Medium,
+        complexity: Complexity::Low,
         dependencies: Vec::new(),
     });
 
@@ -422,7 +447,7 @@ fn generate_schema_struct(
     content.push_str("use serde::{Deserialize, Serialize};\n\n");
 
     if let SchemaKind::Type(Type::Object(obj)) = &schema.schema_kind {
-        content.push_str(&format!("#[derive(Debug, Clone, Serialize, Deserialize)]\n"));
+        content.push_str("#[derive(Debug, Clone, Serialize, Deserialize)]\n");
         content.push_str(&format!("pub struct {} {{\n", struct_name));
 
         for (prop_name, prop_schema_ref) in &obj.properties {
@@ -494,10 +519,10 @@ fn generate_handlers(
     let mut routes_by_tag: HashMap<String, Vec<&RouteInfo>> = HashMap::new();
     for route in routes {
         if route.tags.is_empty() {
-            routes_by_tag.entry("default".to_string()).or_insert_with(Vec::new).push(route);
+            routes_by_tag.entry("default".to_string()).or_default().push(route);
         } else {
             for tag in &route.tags {
-                routes_by_tag.entry(tag.clone()).or_insert_with(Vec::new).push(route);
+                routes_by_tag.entry(tag.clone()).or_default().push(route);
             }
         }
     }
@@ -635,7 +660,7 @@ fn generate_handler_function(
     code.push_str("    // TODO: Add authorization check if needed\n");
     code.push_str("    // TODO: Add logging\n");
     code.push_str("    // TODO: Handle errors properly\n");
-    code.push_str("\n");
+    code.push('\n');
     code.push_str("    // Placeholder response (remove when implementing)\n");
 
     // Generate placeholder response
@@ -695,7 +720,7 @@ fn generate_routes_file(
     routes: &[RouteInfo],
     config: &BackendGeneratorConfig,
 ) -> Result<(GeneratedFile, Vec<TodoItem>)> {
-    let mut todos = Vec::new();
+    let todos = Vec::new();
     let mut content =
         String::from("//! Route definitions\n//!\n//! Generated from OpenAPI paths\n\n");
     content.push_str("use axum::{routing::{get, post, put, patch, delete}, Router};\n");
@@ -973,10 +998,7 @@ Each TODO includes:
     // Group TODOs by endpoint/operation
     let mut todos_by_operation: HashMap<Option<String>, Vec<&TodoItem>> = HashMap::new();
     for todo in todos {
-        todos_by_operation
-            .entry(todo.related_operation.clone())
-            .or_insert_with(Vec::new)
-            .push(todo);
+        todos_by_operation.entry(todo.related_operation.clone()).or_default().push(todo);
     }
 
     // Add endpoint sections
@@ -1013,7 +1035,7 @@ Each TODO includes:
                         todo.dependencies.join(", ")
                     ));
                 }
-                content.push_str("\n");
+                content.push('\n');
             }
             content.push_str("---\n\n");
         }
@@ -1033,7 +1055,7 @@ Each TODO includes:
             for dod in &todo.definition_of_done {
                 content.push_str(&format!("  - [ ] {}\n", dod));
             }
-            content.push_str("\n");
+            content.push('\n');
         }
     }
 

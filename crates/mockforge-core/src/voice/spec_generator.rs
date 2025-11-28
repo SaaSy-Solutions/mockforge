@@ -3,7 +3,7 @@
 //! This module generates OpenAPI 3.0 specifications from parsed voice commands
 //! using the existing OpenApiSpec infrastructure.
 
-use crate::openapi::{OpenApiOperation, OpenApiSchema, OpenApiSpec};
+use crate::openapi::OpenApiSpec;
 use crate::Result;
 use openapiv3::*;
 use serde_json::Value;

@@ -122,14 +122,14 @@ public class MockServer : IDisposable
             _process = Process.Start(startInfo);
             if (_process == null)
             {
-                throw new MockServerException("Failed to start MockForge process");
+                throw MockServerException.ServerStartFailed("Failed to start MockForge process");
             }
 
             await WaitForServerAsync();
         }
         catch (Exception e)
         {
-            throw new MockServerException("Failed to start MockForge process", e);
+            throw MockServerException.ServerStartFailed("Failed to start MockForge process", e);
         }
     }
 
@@ -171,8 +171,9 @@ public class MockServer : IDisposable
             _process = null;
         }
 
-        throw new MockServerException(
-            $"Timeout waiting for server to start on {_host}:{_port}"
+        throw MockServerException.HealthCheckTimeout(
+            STARTUP_TIMEOUT_SECONDS * 1000,
+            _port
         );
     }
 
@@ -214,6 +215,33 @@ public class MockServer : IDisposable
             Headers = headers ?? new Dictionary<string, string>(),
             LatencyMs = latencyMs
         };
+
+        await StubResponseAsync(stub);
+    }
+
+    /// <summary>
+    /// Stub a response using a ResponseStub object
+    ///
+    /// <para>This method allows you to use StubBuilder to create stubs:</para>
+    /// <code>
+    /// var stub = new StubBuilder("GET", "/api/users/{id}")
+    ///     .Status(200)
+    ///     .Header("Content-Type", "application/json")
+    ///     .Body(new { id = 123, name = "John Doe" })
+    ///     .Latency(100)
+    ///     .Build();
+    ///
+    /// await server.StubResponseAsync(stub);
+    /// </code>
+    /// </summary>
+    /// <param name="stub">ResponseStub instance (can be created with StubBuilder)</param>
+    /// <exception cref="MockServerException">If the stub cannot be added</exception>
+    public async Task StubResponseAsync(ResponseStub stub)
+    {
+        if (stub == null)
+        {
+            throw MockServerException.InvalidConfig("ResponseStub cannot be null");
+        }
 
         _stubs.Add(stub);
 
@@ -346,7 +374,7 @@ public class MockServer : IDisposable
 
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
         {
-            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+                    throw MockServerException.NetworkError($"Verification request failed: {response.StatusCode}", null);
         }
 
         var result = await response.Content.ReadFromJsonAsync<VerificationResult>();
@@ -380,7 +408,7 @@ public class MockServer : IDisposable
 
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
         {
-            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+                    throw MockServerException.NetworkError($"Verification request failed: {response.StatusCode}", null);
         }
 
         var result = await response.Content.ReadFromJsonAsync<VerificationResult>();
@@ -419,7 +447,7 @@ public class MockServer : IDisposable
 
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
         {
-            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+                    throw MockServerException.NetworkError($"Verification request failed: {response.StatusCode}", null);
         }
 
         var result = await response.Content.ReadFromJsonAsync<VerificationResult>();
@@ -455,7 +483,7 @@ public class MockServer : IDisposable
 
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.ExpectationFailed)
         {
-            throw new MockServerException($"Verification request failed: {response.StatusCode}");
+                    throw MockServerException.NetworkError($"Verification request failed: {response.StatusCode}", null);
         }
 
         var result = await response.Content.ReadFromJsonAsync<VerificationResult>();

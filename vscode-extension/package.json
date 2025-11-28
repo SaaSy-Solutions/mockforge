@@ -100,6 +100,16 @@
       {
         "command": "mockforge.showLogs",
         "title": "Show Extension Logs"
+      },
+      {
+        "command": "mockforge.generateMockScenario",
+        "title": "Generate MockForge Scenario",
+        "category": "MockForge"
+      },
+      {
+        "command": "mockforge.openPlayground",
+        "title": "Open in Playground",
+        "category": "MockForge"
       }
     ],
     "menus": {
@@ -128,8 +138,31 @@
           "command": "mockforge.deleteMock",
           "when": "view == mockforge-explorer && viewItem == mock"
         }
+      ],
+      "editor/context": [
+        {
+          "command": "mockforge.generateMockScenario",
+          "when": "resourceExtname == .yaml || resourceExtname == .yml || resourceExtname == .json",
+          "group": "mockforge"
+        }
       ]
     },
+    "languages": [
+      {
+        "id": "yaml",
+        "aliases": [
+          "YAML",
+          "yaml"
+        ],
+        "filenames": [
+          "mockforge.yaml",
+          "mockforge.yml",
+          "*.mockforge.yaml",
+          "*.mockforge.yml"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
     "configuration": {
       "title": "MockForge",
       "properties": {
@@ -182,6 +215,11 @@
           "type": "number",
           "default": 5000,
           "description": "HTTP request timeout in milliseconds"
+        },
+        "mockforge.inlinePreview.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable inline preview of mock responses when hovering over endpoint references"
         }
       }
     }
@@ -195,19 +233,23 @@
     "lint": "eslint src --ext ts",
     "package": "vsce package"
   },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "axios": "^1.6.2",
+    "js-yaml": "^4.1.0",
+    "ws": "^8.16.0"
+  },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
-    "eslint": "^8.54.0",
-    "typescript": "^5.3.2",
     "@vscode/test-electron": "^2.3.8",
-    "@vscode/vsce": "^2.22.0"
-  },
-  "dependencies": {
-    "axios": "^1.6.2",
-    "ws": "^8.16.0"
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.2"
   }
 }

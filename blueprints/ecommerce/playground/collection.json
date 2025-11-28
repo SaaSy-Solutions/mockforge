@@ -1,0 +1,153 @@
+{
+  "name": "E-commerce API",
+  "description": "Complete e-commerce API with products, carts, orders, and fulfillment",
+  "version": "1.0.0",
+  "baseUrl": "http://localhost:3000",
+  "requests": [
+    {
+      "name": "List Products",
+      "method": "GET",
+      "path": "/api/products?category=electronics&limit=20"
+    },
+    {
+      "name": "Get Product",
+      "method": "GET",
+      "path": "/api/products/{{product_id}}"
+    },
+    {
+      "name": "Search Products",
+      "method": "GET",
+      "path": "/api/products/search?q=laptop"
+    },
+    {
+      "name": "Get Cart",
+      "method": "GET",
+      "path": "/api/cart",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Add to Cart",
+      "method": "POST",
+      "path": "/api/cart/items",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "product_id": "prod_123",
+        "quantity": 2
+      }
+    },
+    {
+      "name": "Update Cart Item",
+      "method": "PATCH",
+      "path": "/api/cart/items/{{item_id}}",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "quantity": 3
+      }
+    },
+    {
+      "name": "Remove from Cart",
+      "method": "DELETE",
+      "path": "/api/cart/items/{{item_id}}",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Apply Discount",
+      "method": "POST",
+      "path": "/api/cart/discount",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "code": "SAVE10"
+      }
+    },
+    {
+      "name": "Checkout",
+      "method": "POST",
+      "path": "/api/checkout",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "cart_id": "{{cart_id}}",
+        "shipping_address": {
+          "street": "123 Main St",
+          "city": "San Francisco",
+          "state": "CA",
+          "zip": "94102",
+          "country": "US"
+        }
+      }
+    },
+    {
+      "name": "Create Order",
+      "method": "POST",
+      "path": "/api/orders",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "checkout_id": "{{checkout_id}}",
+        "payment_method_id": "pm_123"
+      }
+    },
+    {
+      "name": "Get Order",
+      "method": "GET",
+      "path": "/api/orders/{{order_id}}",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "List Orders",
+      "method": "GET",
+      "path": "/api/orders",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Process Payment",
+      "method": "POST",
+      "path": "/api/payments/process",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "order_id": "{{order_id}}",
+        "amount": 129.99,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "Create Shipment",
+      "method": "POST",
+      "path": "/api/shipments",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "order_id": "{{order_id}}",
+        "carrier": "ups",
+        "service": "ground"
+      }
+    },
+    {
+      "name": "Track Shipment",
+      "method": "GET",
+      "path": "/api/shipments/{{shipment_id}}/track",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "name": "B2C SaaS API",
+  "description": "Complete B2C SaaS API collection with auth, billing, and subscriptions",
+  "version": "1.0.0",
+  "baseUrl": "http://localhost:3000",
+  "requests": [
+    {
+      "name": "Sign Up",
+      "method": "POST",
+      "path": "/api/auth/signup",
+      "body": {
+        "email": "user@example.com",
+        "password": "SecurePass123!",
+        "name": "John Doe"
+      }
+    },
+    {
+      "name": "Login",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "body": {
+        "email": "user@example.com",
+        "password": "SecurePass123!"
+      }
+    },
+    {
+      "name": "Get Current User",
+      "method": "GET",
+      "path": "/api/users/me",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Get Subscription",
+      "method": "GET",
+      "path": "/api/subscriptions/current",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Start Trial",
+      "method": "POST",
+      "path": "/api/subscriptions/trial",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "plan": "trial"
+      }
+    },
+    {
+      "name": "Upgrade Subscription",
+      "method": "POST",
+      "path": "/api/subscriptions/{{subscription_id}}/upgrade",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "plan": "premium",
+        "payment_method_id": "pm_123"
+      }
+    },
+    {
+      "name": "Add Payment Method",
+      "method": "POST",
+      "path": "/api/payments/methods",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "type": "card",
+        "card_number": "4242424242424242",
+        "exp_month": 12,
+        "exp_year": 2025,
+        "cvc": "123"
+      }
+    },
+    {
+      "name": "Process Payment",
+      "method": "POST",
+      "path": "/api/payments/process",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "subscription_id": "sub_123",
+        "amount": 29.99,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "Get Invoices",
+      "method": "GET",
+      "path": "/api/billing/invoices",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      }
+    },
+    {
+      "name": "Cancel Subscription",
+      "method": "POST",
+      "path": "/api/subscriptions/{{subscription_id}}/cancel",
+      "headers": {
+        "Authorization": "Bearer {{access_token}}"
+      },
+      "body": {
+        "reason": "price"
+      }
+    }
+  ]
+}

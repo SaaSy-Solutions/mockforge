@@ -262,6 +262,12 @@ pub struct WorkspaceConfig {
     /// Controls the realism of mock behavior (chaos, latency, MockAI)
     #[serde(default)]
     pub reality_level: Option<crate::RealityLevel>,
+    /// AI mode for this workspace
+    /// Controls how AI-generated artifacts are used at runtime
+    /// - generate_once_freeze: AI is only used to produce config/templates, runtime uses frozen artifacts
+    /// - live: AI is used dynamically at runtime for each request
+    #[serde(default)]
+    pub ai_mode: Option<crate::ai_studio::config::AiMode>,
 }
 
 /// Default timeout value (30 seconds)
@@ -290,6 +296,7 @@ impl Default for WorkspaceConfig {
             proxy: None,
             auto_encryption: AutoEncryptionConfig::default(),
             reality_level: None,
+            ai_mode: None, // Defaults to Live mode if not set
         }
     }
 }

@@ -1,3 +1,5 @@
+//! Pillars: [Contracts]
+//!
 //! Tests for request and response validation functionality.
 //!
 //! These tests verify that validators correctly enforce schema constraints,

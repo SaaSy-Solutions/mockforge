@@ -1,3 +1,5 @@
+//! Pillars: [DevX]
+//!
 //! Extended templating system for MockForge with request chaining support
 //!
 //! This module provides template expansion with support for:
@@ -11,7 +13,7 @@ use crate::time_travel::VirtualClock;
 use crate::Config;
 use chrono::{Duration as ChronoDuration, Utc};
 use once_cell::sync::{Lazy, OnceCell};
-use rand::{rng, Rng};
+use rand::{thread_rng, Rng};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -264,30 +266,52 @@ pub fn expand_str(input: &str) -> String {
 /// # Returns
 /// String with all template tokens replaced
 pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> String {
-    // Basic replacements first (fast paths)
-    let mut out = input.replace("{{uuid}}", &uuid::Uuid::new_v4().to_string());
+    // Early return if no template tokens present (common case optimization)
+    if !input.contains("{{") {
+        return input.to_string();
+    }
 
-    // Use virtual clock if available, otherwise use real time
-    let current_time = if let Some(clock) = &context.virtual_clock {
-        clock.now()
+    let mut out = input.to_string();
+
+    // Basic replacements first (fast paths) - only if tokens are present
+    if out.contains("{{uuid}}") {
+        out = out.replace("{{uuid}}", &uuid::Uuid::new_v4().to_string());
+    }
+
+    // Only get current time if we need it (for {{now}} or time offsets)
+    let needs_time = out.contains("{{now}}") || NOW_OFFSET_RE.is_match(&out);
+    let current_time = if needs_time {
+        if let Some(clock) = &context.virtual_clock {
+            Some(clock.now())
+        } else {
+            Some(Utc::now())
+        }
     } else {
-        Utc::now()
+        None
     };
-    out = out.replace("{{now}}", &current_time.to_rfc3339());
 
-    // now±Nd (days), now±Nh (hours), now±Nm (minutes), now±Ns (seconds)
-    out = replace_now_offset_with_time(&out, current_time);
+    if let Some(time) = current_time {
+        if out.contains("{{now}}") {
+            out = out.replace("{{now}}", &time.to_rfc3339());
+        }
+        // now±Nd (days), now±Nh (hours), now±Nm (minutes), now±Ns (seconds)
+        if NOW_OFFSET_RE.is_match(&out) {
+            out = replace_now_offset_with_time(&out, time);
+        }
+    }
 
-    // Randoms
+    // Randoms - only process if tokens are present
     if out.contains("{{rand.int}}") {
-        let n: i64 = rng().random_range(0..=1_000_000);
+        let n: i64 = thread_rng().random_range(0..=1_000_000);
         out = out.replace("{{rand.int}}", &n.to_string());
     }
     if out.contains("{{rand.float}}") {
-        let n: f64 = rng().random();
+        let n: f64 = thread_rng().random();
         out = out.replace("{{rand.float}}", &format!("{:.6}", n));
     }
-    out = replace_randint_ranges(&out);
+    if RANDINT_RE.is_match(&out) {
+        out = replace_randint_ranges(&out);
+    }
 
     // Response function tokens (new response() syntax)
     if out.contains("response(") {
@@ -307,10 +331,13 @@ pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> Stri
     }
 
     // Faker tokens (can be disabled for determinism)
-    let faker_enabled = std::env::var("MOCKFORGE_FAKE_TOKENS")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(true);
-    if faker_enabled {
+    // Cache the environment variable check using OnceCell for better performance
+    static FAKER_ENABLED: Lazy<bool> = Lazy::new(|| {
+        std::env::var("MOCKFORGE_FAKE_TOKENS")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(true)
+    });
+    if *FAKER_ENABLED && out.contains("{{faker.") {
         out = replace_faker_tokens(&out);
     }
 
@@ -341,7 +368,7 @@ pub trait FakerProvider {
     }
     /// Generate a fake email address
     fn email(&self) -> String {
-        format!("user{}@example.com", rng().random_range(1000..=9999))
+        format!("user{}@example.com", thread_rng().random_range(1000..=9999))
     }
     /// Generate a fake person name
     fn name(&self) -> String {
@@ -405,7 +432,7 @@ fn replace_randint_ranges(input: &str) -> String {
             let a: i64 = caps.get(1).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
             let b: i64 = caps.get(2).map(|m| m.as_str().parse().unwrap_or(100)).unwrap_or(100);
             let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
-            let n: i64 = rng().random_range(lo..=hi);
+            let n: i64 = thread_rng().random_range(lo..=hi);
             s = RANDINT_RE.replace(&s, n.to_string()).to_string();
         } else {
             break;
@@ -417,10 +444,6 @@ fn replace_randint_ranges(input: &str) -> String {
 /// Replace `{{ now+1d }}` style templates in input string
 ///
 /// This is a convenience wrapper around `replace_now_offset_with_time` that uses the current time.
-/// Currently kept for future templating enhancements.
-///
-/// TODO: Integrate into full templating system when date/time placeholders are implemented
-#[allow(dead_code)] // TODO: Remove when date/time template feature is implemented
 fn replace_now_offset(input: &str) -> String {
     replace_now_offset_with_time(input, Utc::now())
 }
@@ -699,15 +722,17 @@ fn replace_with_fallback(input: &str) -> String {
         out = out.replace("{{faker.uuid}}", &uuid::Uuid::new_v4().to_string());
     }
     if out.contains("{{faker.email}}") {
-        let user: String = (0..8).map(|_| (b'a' + (rng().random::<u8>() % 26)) as char).collect();
-        let dom: String = (0..6).map(|_| (b'a' + (rng().random::<u8>() % 26)) as char).collect();
+        let user: String =
+            (0..8).map(|_| (b'a' + (thread_rng().random::<u8>() % 26)) as char).collect();
+        let dom: String =
+            (0..6).map(|_| (b'a' + (thread_rng().random::<u8>() % 26)) as char).collect();
         out = out.replace("{{faker.email}}", &format!("{}@{}.example", user, dom));
     }
     if out.contains("{{faker.name}}") {
         let firsts = ["Alex", "Sam", "Taylor", "Jordan", "Casey", "Riley"];
         let lasts = ["Smith", "Lee", "Patel", "Garcia", "Kim", "Brown"];
-        let fi = rng().random::<u8>() as usize % firsts.len();
-        let li = rng().random::<u8>() as usize % lasts.len();
+        let fi = thread_rng().random::<u8>() as usize % firsts.len();
+        let li = thread_rng().random::<u8>() as usize % lasts.len();
         out = out.replace("{{faker.name}}", &format!("{} {}", firsts[fi], lasts[li]));
     }
     out

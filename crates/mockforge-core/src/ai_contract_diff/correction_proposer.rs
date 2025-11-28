@@ -5,7 +5,6 @@
 
 use super::types::{CorrectionProposal, Mismatch, PatchOperation, Recommendation};
 use crate::openapi::OpenApiSpec;
-use crate::Result;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -24,10 +23,7 @@ impl CorrectionProposer {
         // Group recommendations by mismatch
         let mut rec_by_mismatch: HashMap<String, Vec<&Recommendation>> = HashMap::new();
         for rec in recommendations {
-            rec_by_mismatch
-                .entry(rec.mismatch_id.clone())
-                .or_insert_with(Vec::new)
-                .push(rec);
+            rec_by_mismatch.entry(rec.mismatch_id.clone()).or_default().push(rec);
         }
 
         // Generate proposals for each mismatch
@@ -268,9 +264,7 @@ impl CorrectionProposer {
             mismatch.context.get("format").and_then(|v| v.as_str()).map(|s| s.to_string());
 
         let format_value_clone = format_value.clone();
-        if format_value.is_none() {
-            return None;
-        }
+        format_value.as_ref()?;
 
         let patch_path = Self::build_patch_path(&mismatch.path, mismatch.method.as_deref());
 

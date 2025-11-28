@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Integration tests for Chaos Lab features
 //!
 //! Tests the complete Chaos Lab functionality including:

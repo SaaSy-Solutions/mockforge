@@ -39,7 +39,7 @@ pub async fn auth_middleware(
     // Verify token
     let claims = auth
         .verify_token(token)
-        .map_err(|e| (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)))?;
+        .map_err(|e| (StatusCode::UNAUTHORIZED, format!("Invalid token: {e}")))?;
 
     // Parse user ID
     let user_id = Uuid::parse_str(&claims.sub)

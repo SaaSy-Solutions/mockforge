@@ -6,9 +6,270 @@ use std::collections::HashMap;
 use std::path::Path;
 use tokio::fs;
 
+/// Incident management configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct IncidentConfig {
+    /// Storage configuration
+    pub storage: IncidentStorageConfig,
+    /// External integrations configuration
+    pub external_integrations: crate::incidents::integrations::ExternalIntegrationConfig,
+    /// Webhook configurations
+    pub webhooks: Vec<crate::incidents::integrations::WebhookConfig>,
+}
+
+/// Incident storage configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct IncidentStorageConfig {
+    /// Use in-memory cache (default: true)
+    pub use_cache: bool,
+    /// Use database persistence (default: true)
+    pub use_database: bool,
+    /// Retention period for resolved incidents (days)
+    pub retention_days: u32,
+}
+
+impl Default for IncidentStorageConfig {
+    fn default() -> Self {
+        Self {
+            use_cache: true,
+            use_database: true,
+            retention_days: 90,
+        }
+    }
+}
+
+/// Consumer contracts configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct ConsumerContractsConfig {
+    /// Whether consumer contracts are enabled
+    pub enabled: bool,
+    /// Auto-register consumers from requests
+    pub auto_register: bool,
+    /// Track field usage
+    pub track_usage: bool,
+}
+
+/// Contracts configuration for fitness rules and contract management
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct ContractsConfig {
+    /// Fitness rules for contract validation
+    pub fitness_rules: Vec<FitnessRuleConfig>,
+}
+
+/// Behavioral Economics Engine configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct BehavioralEconomicsConfig {
+    /// Whether the behavioral economics engine is enabled
+    pub enabled: bool,
+    /// List of behavior rules
+    #[serde(default)]
+    pub rules: Vec<crate::behavioral_economics::BehaviorRule>,
+    /// Global sensitivity for behavioral changes (0.0 - 1.0)
+    /// A higher sensitivity means mocks react more strongly to conditions.
+    #[serde(default = "default_behavioral_sensitivity")]
+    pub global_sensitivity: f64,
+    /// Interval in milliseconds for re-evaluating time-based conditions
+    #[serde(default = "default_evaluation_interval_ms")]
+    pub evaluation_interval_ms: u64,
+}
+
+fn default_behavioral_sensitivity() -> f64 {
+    0.5
+}
+
+fn default_evaluation_interval_ms() -> u64 {
+    1000 // 1 second
+}
+
+/// Drift Learning configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct DriftLearningConfig {
+    /// Enable or disable drift learning
+    pub enabled: bool,
+    /// Learning mode (behavioral, statistical, hybrid)
+    #[serde(default)]
+    pub mode: DriftLearningMode,
+    /// How quickly mocks adapt to new patterns (0.0 - 1.0)
+    #[serde(default = "default_learning_sensitivity")]
+    pub sensitivity: f64,
+    /// How quickly old patterns are forgotten (0.0 - 1.0)
+    #[serde(default = "default_learning_decay")]
+    pub decay: f64,
+    /// Minimum number of samples required to learn a pattern
+    #[serde(default = "default_min_samples")]
+    pub min_samples: u64,
+    /// Enable persona-specific behavior adaptation
+    #[serde(default)]
+    pub persona_adaptation: bool,
+    /// Opt-in configuration for specific personas to learn
+    #[serde(default)]
+    pub persona_learning: HashMap<String, bool>, // persona_id -> enabled
+    /// Opt-in configuration for specific endpoints to learn
+    #[serde(default)]
+    pub endpoint_learning: HashMap<String, bool>, // endpoint_pattern -> enabled
+}
+
+/// Drift learning mode
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum DriftLearningMode {
+    /// Behavioral learning - adapts to behavior patterns
+    #[default]
+    Behavioral,
+    /// Statistical learning - adapts to statistical patterns
+    Statistical,
+    /// Hybrid - combines behavioral and statistical
+    Hybrid,
+}
+
+fn default_learning_sensitivity() -> f64 {
+    0.2
+}
+
+fn default_learning_decay() -> f64 {
+    0.05
+}
+
+fn default_min_samples() -> u64 {
+    10
+}
+
+/// Configuration for a fitness rule (YAML config format)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct FitnessRuleConfig {
+    /// Human-readable name for the fitness rule
+    pub name: String,
+    /// Scope where this rule applies (endpoint pattern, service name, or "global")
+    pub scope: String,
+    /// Type of fitness rule
+    #[serde(rename = "type")]
+    pub rule_type: FitnessRuleType,
+    /// Maximum percent increase for response size (for response_size_delta type)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_percent_increase: Option<f64>,
+    /// Maximum number of fields (for field_count type)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_fields: Option<u32>,
+    /// Maximum schema depth (for schema_complexity type)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_depth: Option<u32>,
+}
+
+/// Type of fitness rule (YAML config format)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum FitnessRuleType {
+    /// Response size must not increase by more than max_percent_increase
+    ResponseSizeDelta,
+    /// No new required fields allowed
+    NoNewRequiredFields,
+    /// Field count must not exceed max_fields
+    FieldCount,
+    /// Schema complexity (depth) must not exceed max_depth
+    SchemaComplexity,
+}
+
+/// Behavioral cloning configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct BehavioralCloningConfig {
+    /// Whether behavioral cloning is enabled
+    pub enabled: bool,
+    /// Path to recorder database (defaults to ./recordings.db)
+    pub database_path: Option<String>,
+    /// Enable middleware to apply learned behavior
+    pub enable_middleware: bool,
+    /// Minimum frequency threshold for sequence learning (0.0 to 1.0)
+    pub min_sequence_frequency: f64,
+    /// Minimum requests per trace for sequence discovery
+    pub min_requests_per_trace: Option<i32>,
+    /// Flow recording configuration
+    #[serde(default)]
+    pub flow_recording: FlowRecordingConfig,
+    /// Scenario replay configuration
+    #[serde(default)]
+    pub scenario_replay: ScenarioReplayConfig,
+}
+
+/// Flow recording configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct FlowRecordingConfig {
+    /// Whether flow recording is enabled
+    pub enabled: bool,
+    /// How to group requests into flows (trace_id, session_id, ip_time_window)
+    pub group_by: String,
+    /// Time window in seconds for IP-based grouping
+    pub time_window_seconds: u64,
+}
+
+impl Default for FlowRecordingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            group_by: "trace_id".to_string(),
+            time_window_seconds: 300, // 5 minutes
+        }
+    }
+}
+
+/// Scenario replay configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct ScenarioReplayConfig {
+    /// Whether scenario replay is enabled
+    pub enabled: bool,
+    /// Default replay mode (strict or flex)
+    pub default_mode: String,
+    /// List of scenario IDs to activate on startup
+    pub active_scenarios: Vec<String>,
+}
+
+impl Default for ScenarioReplayConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            default_mode: "strict".to_string(),
+            active_scenarios: Vec::new(),
+        }
+    }
+}
+
+impl Default for BehavioralCloningConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            database_path: None,
+            enable_middleware: false,
+            min_sequence_frequency: 0.1, // 10% default
+            min_requests_per_trace: None,
+            flow_recording: FlowRecordingConfig::default(),
+            scenario_replay: ScenarioReplayConfig::default(),
+        }
+    }
+}
+
 /// Authentication configuration for HTTP requests
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct AuthConfig {
     /// JWT configuration
     pub jwt: Option<JwtConfig>,
@@ -24,6 +285,7 @@ pub struct AuthConfig {
 
 /// JWT authentication configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct JwtConfig {
     /// JWT secret key for HMAC algorithms
     pub secret: Option<String>,
@@ -41,6 +303,7 @@ pub struct JwtConfig {
 
 /// OAuth2 configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct OAuth2Config {
     /// OAuth2 client ID
     pub client_id: String,
@@ -58,6 +321,7 @@ pub struct OAuth2Config {
 
 /// Basic authentication configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BasicAuthConfig {
     /// Username/password pairs
     pub credentials: HashMap<String, String>,
@@ -65,6 +329,7 @@ pub struct BasicAuthConfig {
 
 /// API key configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ApiKeyConfig {
     /// Expected header name (default: X-API-Key)
     pub header_name: String,
@@ -92,6 +357,7 @@ impl Default for AuthConfig {
 
 /// Route configuration for custom HTTP routes
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RouteConfig {
     /// Route path (supports path parameters like /users/{id})
     pub path: String,
@@ -111,6 +377,7 @@ pub struct RouteConfig {
 
 /// Request configuration for routes
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RouteRequestConfig {
     /// Request validation configuration
     pub validation: Option<RouteValidationConfig>,
@@ -118,6 +385,7 @@ pub struct RouteRequestConfig {
 
 /// Response configuration for routes
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RouteResponseConfig {
     /// HTTP status code
     pub status: u16,
@@ -130,6 +398,7 @@ pub struct RouteResponseConfig {
 
 /// Validation configuration for routes
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RouteValidationConfig {
     /// JSON schema for request validation
     pub schema: serde_json::Value,
@@ -137,6 +406,7 @@ pub struct RouteValidationConfig {
 
 /// Per-route fault injection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RouteFaultInjectionConfig {
     /// Enable fault injection for this route
     pub enabled: bool,
@@ -148,6 +418,7 @@ pub struct RouteFaultInjectionConfig {
 
 /// Fault types that can be injected per route
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RouteFaultType {
     /// HTTP error with status code
@@ -183,6 +454,7 @@ pub enum RouteFaultType {
 
 /// Per-route latency configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RouteLatencyConfig {
     /// Enable latency injection for this route
     pub enabled: bool,
@@ -201,6 +473,7 @@ pub struct RouteLatencyConfig {
 
 /// Latency distribution type
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum LatencyDistribution {
     /// Fixed delay
@@ -253,6 +526,8 @@ impl Default for RouteLatencyConfig {
 /// Deceptive deploy configuration for production-like mock APIs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Default)]
 pub struct DeceptiveDeployConfig {
     /// Enable deceptive deploy mode
     pub enabled: bool,
@@ -269,20 +544,9 @@ pub struct DeceptiveDeployConfig {
     pub custom_domain: Option<String>,
     /// Auto-start tunnel when deploying
     pub auto_tunnel: bool,
-}
-
-impl Default for DeceptiveDeployConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            cors: None,
-            rate_limit: None,
-            headers: HashMap::new(),
-            oauth: None,
-            custom_domain: None,
-            auto_tunnel: false,
-        }
-    }
+    /// Deceptive canary mode configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canary: Option<crate::deceptive_canary::DeceptiveCanaryConfig>,
 }
 
 impl DeceptiveDeployConfig {
@@ -317,12 +581,14 @@ impl DeceptiveDeployConfig {
             oauth: None, // Configured separately
             custom_domain: None,
             auto_tunnel: true,
+            canary: None,
         }
     }
 }
 
 /// Production-like CORS configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProductionCorsConfig {
     /// Allowed origins (use "*" for all origins)
     #[serde(default)]
@@ -339,6 +605,7 @@ pub struct ProductionCorsConfig {
 
 /// Production-like rate limiting configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProductionRateLimitConfig {
     /// Requests per minute allowed
     pub requests_per_minute: u32,
@@ -350,6 +617,7 @@ pub struct ProductionRateLimitConfig {
 
 /// Production-like OAuth configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProductionOAuthConfig {
     /// OAuth2 client ID
     pub client_id: String,
@@ -381,6 +649,7 @@ impl From<ProductionOAuthConfig> for OAuth2Config {
 
 /// Protocol enable/disable configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProtocolConfig {
     /// Enable this protocol
     pub enabled: bool,
@@ -388,6 +657,7 @@ pub struct ProtocolConfig {
 
 /// Protocols configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProtocolsConfig {
     /// HTTP protocol configuration
     pub http: ProtocolConfig,
@@ -438,6 +708,7 @@ impl Default for ProtocolsConfig {
 /// automatically from the level via the RealityEngine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RealitySliderConfig {
     /// Reality level (1-5)
     pub level: RealityLevel,
@@ -456,6 +727,7 @@ impl Default for RealitySliderConfig {
 
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct ServerConfig {
     /// HTTP server configuration
@@ -507,16 +779,47 @@ pub struct ServerConfig {
     /// Deceptive deploy configuration for production-like mock APIs
     #[serde(default)]
     pub deceptive_deploy: DeceptiveDeployConfig,
+    /// Behavioral cloning configuration
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behavioral_cloning: Option<BehavioralCloningConfig>,
     /// Reality slider configuration for unified realism control
     #[serde(default)]
     pub reality: RealitySliderConfig,
     /// Reality Continuum configuration for blending mock and real data sources
     #[serde(default)]
     pub reality_continuum: crate::reality_continuum::ContinuumConfig,
+    /// Security monitoring and SIEM configuration
+    #[serde(default)]
+    pub security: SecurityConfig,
+    /// Drift budget and contract monitoring configuration
+    #[serde(default)]
+    pub drift_budget: crate::contract_drift::DriftBudgetConfig,
+    /// Incident management configuration
+    #[serde(default)]
+    pub incidents: IncidentConfig,
+    /// PR generation configuration
+    #[serde(default)]
+    pub pr_generation: crate::pr_generation::PRGenerationConfig,
+    /// Consumer contracts configuration
+    #[serde(default)]
+    pub consumer_contracts: ConsumerContractsConfig,
+    /// Contracts configuration (fitness rules, etc.)
+    #[serde(default)]
+    pub contracts: ContractsConfig,
+    /// Behavioral Economics Engine configuration
+    #[serde(default)]
+    pub behavioral_economics: BehavioralEconomicsConfig,
+    /// Drift Learning configuration
+    #[serde(default)]
+    pub drift_learning: DriftLearningConfig,
+    /// Organization AI controls configuration (YAML defaults, DB overrides)
+    #[serde(default)]
+    pub org_ai_controls: crate::ai_studio::org_controls::OrgAiControlsConfig,
 }
 
 /// Profile configuration - a partial ServerConfig that overrides base settings
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct ProfileConfig {
     /// HTTP server configuration overrides
@@ -588,19 +891,24 @@ pub struct ProfileConfig {
     /// Reality Continuum configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reality_continuum: Option<crate::reality_continuum::ContinuumConfig>,
+    /// Security configuration overrides
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security: Option<SecurityConfig>,
 }
 
 // Default is derived for ServerConfig
 
 /// HTTP validation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct HttpValidationConfig {
     /// Request validation mode: off, warn, enforce
     pub mode: String,
 }
 
 /// HTTP CORS configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct HttpCorsConfig {
     /// Enable CORS
     pub enabled: bool,
@@ -613,10 +921,19 @@ pub struct HttpCorsConfig {
     /// Allowed headers
     #[serde(default)]
     pub allowed_headers: Vec<String>,
+    /// Allow credentials (cookies, authorization headers)
+    /// Note: Cannot be true when using wildcard origin (*)
+    #[serde(default = "default_cors_allow_credentials")]
+    pub allow_credentials: bool,
+}
+
+fn default_cors_allow_credentials() -> bool {
+    false
 }
 
 /// HTTP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct HttpConfig {
     /// Enable HTTP server
@@ -671,6 +988,7 @@ impl Default for HttpConfig {
                     "OPTIONS".to_string(),
                 ],
                 allowed_headers: vec!["content-type".to_string(), "authorization".to_string()],
+                allow_credentials: false, // Must be false when using wildcard origin
             }),
             request_timeout_secs: 30,
             validation: Some(HttpValidationConfig {
@@ -690,6 +1008,7 @@ impl Default for HttpConfig {
 
 /// HTTP TLS/HTTPS configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct HttpTlsConfig {
     /// Enable TLS/HTTPS
     pub enabled: bool,
@@ -731,6 +1050,7 @@ impl Default for HttpTlsConfig {
 
 /// WebSocket server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct WebSocketConfig {
     /// Enable WebSocket server
@@ -759,6 +1079,7 @@ impl Default for WebSocketConfig {
 
 /// gRPC server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct GrpcConfig {
     /// Enable gRPC server
@@ -787,6 +1108,7 @@ impl Default for GrpcConfig {
 
 /// GraphQL server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct GraphQLConfig {
     /// Enable GraphQL server
@@ -824,6 +1146,7 @@ impl Default for GraphQLConfig {
 
 /// TLS configuration for gRPC
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TlsConfig {
     /// Certificate file path
     pub cert_path: String,
@@ -834,6 +1157,7 @@ pub struct TlsConfig {
 /// MQTT server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct MqttConfig {
     /// Enable MQTT server
     pub enabled: bool,
@@ -874,6 +1198,7 @@ impl Default for MqttConfig {
 /// SMTP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SmtpConfig {
     /// Enable SMTP server
     pub enabled: bool,
@@ -923,6 +1248,7 @@ impl Default for SmtpConfig {
 /// FTP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FtpConfig {
     /// Enable FTP server
     pub enabled: bool,
@@ -963,6 +1289,7 @@ impl Default for FtpConfig {
 /// Kafka server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct KafkaConfig {
     /// Enable Kafka server
     pub enabled: bool,
@@ -1009,6 +1336,7 @@ impl Default for KafkaConfig {
 /// AMQP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct AmqpConfig {
     /// Enable AMQP server
     pub enabled: bool,
@@ -1049,6 +1377,7 @@ impl Default for AmqpConfig {
 /// TCP server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct TcpConfig {
     /// Enable TCP server
     pub enabled: bool,
@@ -1091,6 +1420,7 @@ impl Default for TcpConfig {
 
 /// Admin UI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct AdminConfig {
     /// Enable admin UI
@@ -1142,6 +1472,7 @@ impl Default for AdminConfig {
 
 /// Logging configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct LoggingConfig {
     /// Log level
@@ -1171,6 +1502,7 @@ impl Default for LoggingConfig {
 /// Request chaining configuration for multi-step request workflows
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ChainingConfig {
     /// Enable request chaining
     pub enabled: bool,
@@ -1195,6 +1527,7 @@ impl Default for ChainingConfig {
 
 /// Data generation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct DataConfig {
     /// Default number of rows to generate
@@ -1236,6 +1569,7 @@ impl Default for DataConfig {
 /// RAG configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RagConfig {
     /// Enable RAG by default
     pub enabled: bool,
@@ -1320,6 +1654,8 @@ impl Default for RagConfig {
 /// Persona registry configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Default)]
 pub struct PersonaRegistryConfig {
     /// Enable persistence (save personas to disk)
     #[serde(default = "default_false")]
@@ -1332,19 +1668,10 @@ pub struct PersonaRegistryConfig {
     pub default_traits: HashMap<String, String>,
 }
 
-impl Default for PersonaRegistryConfig {
-    fn default() -> Self {
-        Self {
-            persistent: false,
-            storage_path: None,
-            default_traits: HashMap::new(),
-        }
-    }
-}
-
 /// MockAI (Behavioral Mock Intelligence) configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct MockAIConfig {
     /// Enable MockAI features
     pub enabled: bool,
@@ -1379,6 +1706,7 @@ impl Default for MockAIConfig {
 
 /// Observability configuration for metrics and distributed tracing
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct ObservabilityConfig {
     /// Prometheus metrics configuration
@@ -1391,9 +1719,40 @@ pub struct ObservabilityConfig {
     pub chaos: Option<ChaosEngConfig>,
 }
 
+/// Security monitoring and SIEM configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+#[derive(Default)]
+pub struct SecurityConfig {
+    /// Security monitoring configuration
+    pub monitoring: SecurityMonitoringConfig,
+}
+
+/// Security monitoring configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Default)]
+pub struct SecurityMonitoringConfig {
+    /// SIEM integration configuration
+    pub siem: crate::security::siem::SiemConfig,
+    /// Access review configuration
+    pub access_review: crate::security::access_review::AccessReviewConfig,
+    /// Privileged access management configuration
+    pub privileged_access: crate::security::privileged_access::PrivilegedAccessConfig,
+    /// Change management configuration
+    pub change_management: crate::security::change_management::ChangeManagementConfig,
+    /// Compliance dashboard configuration
+    pub compliance_dashboard: crate::security::compliance_dashboard::ComplianceDashboardConfig,
+    /// Risk assessment configuration
+    pub risk_assessment: crate::security::risk_assessment::RiskAssessmentConfig,
+}
+
 /// Prometheus metrics configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PrometheusConfig {
     /// Enable Prometheus metrics endpoint
     pub enabled: bool,
@@ -1419,6 +1778,7 @@ impl Default for PrometheusConfig {
 /// OpenTelemetry distributed tracing configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct OpenTelemetryConfig {
     /// Enable OpenTelemetry tracing
     pub enabled: bool,
@@ -1453,6 +1813,7 @@ impl Default for OpenTelemetryConfig {
 /// API Flight Recorder configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RecorderConfig {
     /// Enable recording
     pub enabled: bool,
@@ -1501,6 +1862,7 @@ impl Default for RecorderConfig {
 /// Chaos engineering configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ChaosEngConfig {
     /// Enable chaos engineering
     pub enabled: bool,
@@ -1518,6 +1880,7 @@ pub struct ChaosEngConfig {
 
 /// Latency injection configuration for chaos engineering
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LatencyInjectionConfig {
     /// Enable latency injection
     pub enabled: bool,
@@ -1533,6 +1896,7 @@ pub struct LatencyInjectionConfig {
 
 /// Fault injection configuration for chaos engineering
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FaultConfig {
     /// Enable fault injection
     pub enabled: bool,
@@ -1554,6 +1918,7 @@ pub struct FaultConfig {
 
 /// Rate limiting configuration for traffic control
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RateLimitingConfig {
     /// Enable rate limiting
     pub enabled: bool,
@@ -1569,6 +1934,7 @@ pub struct RateLimitingConfig {
 
 /// Network shaping configuration for simulating network conditions
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct NetworkShapingConfig {
     /// Enable network shaping
     pub enabled: bool,

@@ -1,4 +1,8 @@
 # cargo-release configuration compatible with 0.25.x
+#
+# IMPORTANT: When updating CHANGELOG.md, ensure all changelog entries are tagged
+# with at least one pillar: [Reality], [Contracts], [DevX], [Cloud], or [AI]
+# See docs/PILLARS.md for pillar definitions and examples.
 
 allow-branch = ["main"]
 publish = true

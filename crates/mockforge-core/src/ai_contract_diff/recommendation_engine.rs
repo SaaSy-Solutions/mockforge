@@ -8,7 +8,6 @@ use crate::intelligent_behavior::config::BehaviorModelConfig;
 use crate::intelligent_behavior::llm_client::LlmClient;
 use crate::intelligent_behavior::types::LlmGenerationRequest;
 use crate::Result;
-use serde_json::json;
 use std::collections::HashMap;
 
 /// AI-powered recommendation engine
@@ -60,7 +59,7 @@ impl RecommendationEngine {
         let mut grouped: HashMap<String, Vec<&Mismatch>> = HashMap::new();
         for mismatch in mismatches {
             let key = format!("{:?}", mismatch.mismatch_type);
-            grouped.entry(key).or_insert_with(Vec::new).push(mismatch);
+            grouped.entry(key).or_default().push(mismatch);
         }
 
         // Generate recommendations for each group

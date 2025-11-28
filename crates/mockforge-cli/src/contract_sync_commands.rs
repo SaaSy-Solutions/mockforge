@@ -1,15 +1,17 @@
+//! Pillars: [Contracts]
+//!
 //! Contract Sync Commands
 //!
 //! Commands for validating mocks against Git-hosted OpenAPI specs and syncing them.
 
 use mockforge_core::{
-    contract_validation::{BreakingChange, ContractValidator, ValidationError, ValidationResult},
+    contract_validation::{ContractValidator, ValidationResult},
     git_watch::{GitWatchConfig, GitWatchService},
     openapi::OpenApiSpec,
     Error, Result,
 };
 use std::path::{Path, PathBuf};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 /// Handle the contract-sync command
 pub async fn handle_contract_sync(

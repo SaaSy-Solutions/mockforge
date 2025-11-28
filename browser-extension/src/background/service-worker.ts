@@ -122,6 +122,79 @@ chrome.runtime.onMessage.addListener(
                         }
                         break;
 
+                    case 'CREATE_MOCK_WITH_INJECTION':
+                        // Create mock with reverse-injection into workspace
+                        // This triggers the runtime daemon to auto-generate types, OpenAPI, scenarios, and client stubs
+                        if (!apiClient || !connected) {
+                            await initializeConnection();
+                        }
+                        if (apiClient && connected) {
+                            const { mock, reverse_inject, generate_types, generate_client_stubs, update_openapi, create_scenario } = message.payload;
+                            
+                            // Create the mock first
+                            const createdMock = await apiClient.createMock(mock);
+                            
+                            // If reverse injection is enabled, trigger runtime daemon auto-generation
+                            if (reverse_inject && mockForgeUrl) {
+                                try {
+                                    // Call the runtime daemon injection endpoint
+                                    // This will trigger type generation, OpenAPI updates, scenario creation, etc.
+                                    const injectionUrl = `${mockForgeUrl}/__mockforge/api/runtime-daemon/inject`;
+                                    const injectionResponse = await fetch(injectionUrl, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                            mock_id: createdMock.id,
+                                            method: mock.method,
+                                            path: mock.path,
+                                            response_body: mock.response?.body,
+                                            generate_types: generate_types ?? true,
+                                            generate_client_stubs: generate_client_stubs ?? true,
+                                            update_openapi: update_openapi ?? true,
+                                            create_scenario: create_scenario ?? true,
+                                        }),
+                                    });
+
+                                    if (!injectionResponse.ok) {
+                                        console.warn('[ForgeConnect] Runtime daemon injection failed:', await injectionResponse.text());
+                                        // Don't fail the mock creation, just log the warning
+                                    }
+                                } catch (error) {
+                                    console.warn('[ForgeConnect] Failed to trigger runtime daemon injection:', error);
+                                    // Don't fail the mock creation if injection fails
+                                }
+                            }
+
+                            // Broadcast mock created event for live reload
+                            chrome.runtime.sendMessage({
+                                type: 'MOCK_CREATED',
+                                payload: createdMock,
+                            }).catch(() => {});
+                            sendResponse({ success: true, data: createdMock });
+                        } else {
+                            sendResponse({ success: false, error: 'Not connected to MockForge' });
+                        }
+                        break;
+
+                    case 'UPDATE_MOCK':
+                        if (!apiClient || !connected) {
+                            await initializeConnection();
+                        }
+                        if (apiClient && connected) {
+                            const updatedMock = await apiClient.updateMock(message.payload.id, message.payload.mock);
+                            // Broadcast mock updated event for live reload
+                            chrome.runtime.sendMessage({
+                                type: 'MOCK_UPDATED',
+                                payload: updatedMock,
+                            }).catch(() => {});
+                            sendResponse({ success: true, data: updatedMock });
+                        } else {
+                            sendResponse({ success: false, error: 'Not connected to MockForge' });
+                        }
+                        break;
+
                     case 'DELETE_MOCK':
                         if (!apiClient || !connected) {
                             await initializeConnection();
@@ -182,6 +255,109 @@ chrome.runtime.onMessage.addListener(
                         if (apiClient && connected) {
                             const variables = await apiClient.getEnvironmentVariables(undefined, message.payload.environmentId);
                             sendResponse({ success: true, data: variables });
+                        } else {
+                            sendResponse({ success: false, error: 'Not connected to MockForge' });
+                        }
+                        break;
+
+                    case 'GET_WORKSPACE_STATE':
+                        if (!apiClient || !connected) {
+                            await initializeConnection();
+                        }
+                        if (apiClient && connected) {
+                            const state = await apiClient.getWorkspaceState();
+                            sendResponse({ success: true, data: state });
+                        } else {
+                            sendResponse({ success: false, error: 'Not connected to MockForge' });
+                        }
+                        break;
+
+                    case 'GET_PERSONAS':
+                        if (!apiClient || !connected) {
+                            await initializeConnection();
+                        }
+                        if (apiClient && connected) {
+                            // Get personas from workspace state
+                            try {
+                                const state = await apiClient.getWorkspaceState();
+                                const personas = state.active_persona ? [state.active_persona] : [];
+                                sendResponse({ success: true, data: personas });
+                            } catch {
+                                // If workspace state doesn't have personas, return empty list
+                                sendResponse({ success: true, data: [] });
+                            }
+                        } else {
+                            sendResponse({ success: false, error: 'Not connected to MockForge' });
+                        }
+                        break;
+
+                    case 'SET_ACTIVE_PERSONA':
+                        if (!apiClient || !connected) {
+                            await initializeConnection();
+                        }
+                        if (apiClient && connected) {
+                            await apiClient.setActivePersona(undefined, message.payload.persona);
+                            sendResponse({ success: true });
+                        } else {
+                            sendResponse({ success: false, error: 'Not connected to MockForge' });
+                        }
+                        break;
+
+                    case 'GET_SCENARIOS':
+                        if (!apiClient || !connected) {
+                            await initializeConnection();
+                        }
+                        if (apiClient && connected) {
+                            // Get scenarios from workspace state
+                            try {
+                                const state = await apiClient.getWorkspaceState();
+                                const scenarios = state.active_scenario ? [{
+                                    id: state.active_scenario,
+                                    name: state.active_scenario,
+                                }] : [];
+                                sendResponse({ success: true, data: scenarios });
+                            } catch {
+                                // If workspace state doesn't have scenarios, return empty list
+                                sendResponse({ success: true, data: [] });
+                            }
+                        } else {
+                            sendResponse({ success: false, error: 'Not connected to MockForge' });
+                        }
+                        break;
+
+                    case 'SET_ACTIVE_SCENARIO':
+                        if (!apiClient || !connected) {
+                            await initializeConnection();
+                        }
+                        if (apiClient && connected) {
+                            await apiClient.setActiveScenario(undefined, message.payload.scenario_id);
+                            sendResponse({ success: true });
+                        } else {
+                            sendResponse({ success: false, error: 'Not connected to MockForge' });
+                        }
+                        break;
+
+                    case 'COMPARE_SNAPSHOTS':
+                        if (!apiClient || !connected) {
+                            await initializeConnection();
+                        }
+                        if (apiClient && connected) {
+                            const baseUrl = apiClient.getBaseUrl();
+                            const response = await fetch(`${baseUrl}/__mockforge/api/snapshot-diff/snapshots/compare`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify(message.payload),
+                            });
+
+                            if (!response.ok) {
+                                const errorText = await response.text();
+                                sendResponse({ success: false, error: `Failed to compare snapshots: ${response.status} - ${errorText}` });
+                            } else {
+                                const data = await response.json();
+                                sendResponse({ success: true, data });
+                            }
                         } else {
                             sendResponse({ success: false, error: 'Not connected to MockForge' });
                         }

@@ -8,13 +8,11 @@
 
 use clap::Subcommand;
 use mockforge_core::{
-    template_library::{
-        TemplateLibrary, TemplateLibraryManager, TemplateMarketplace, TemplateMetadata,
-    },
+    template_library::{TemplateLibraryManager, TemplateMarketplace, TemplateMetadata},
     Error, Result,
 };
 use std::path::PathBuf;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum TemplateCommands {

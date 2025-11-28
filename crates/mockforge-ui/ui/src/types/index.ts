@@ -1260,3 +1260,82 @@ export type {
   GraphEdge,
   GraphCluster,
 } from './graph';
+
+// ==================== BEHAVIORAL CLONING TYPES ====================
+
+export interface FlowStep {
+  index: number;
+  request_id: string;
+  step_label?: string;
+  timing_ms?: number;
+}
+
+export interface Flow {
+  id: string;
+  name?: string;
+  description?: string;
+  created_at: string;
+  tags: string[];
+  step_count: number;
+  steps?: FlowStep[];
+}
+
+export interface FlowListResponse {
+  flows: Flow[];
+  total: number;
+}
+
+export interface TagFlowRequest {
+  name?: string;
+  description?: string;
+  tags?: string[];
+}
+
+export interface CompileFlowRequest {
+  scenario_name: string;
+  flex_mode?: boolean;
+}
+
+export interface CompileFlowResponse {
+  scenario_id: string;
+  scenario_name: string;
+  version: string;
+  message: string;
+}
+
+export interface Scenario {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+  tags: string[];
+  /// Metadata indicating if this scenario was AI-generated
+  ai_generated?: boolean;
+  /// Metadata indicating if this scenario is frozen (deterministic mode)
+  frozen?: boolean;
+  /// Path to frozen artifact file if frozen
+  frozen_path?: string;
+}
+
+export interface ScenarioStep {
+  step_id: string;
+  label?: string;
+  method: string;
+  path: string;
+  status_code: number;
+  timing_ms?: number;
+}
+
+export interface ScenarioDetail extends Scenario {
+  strict_mode: boolean;
+  steps: ScenarioStep[];
+  step_count: number;
+  state_variables: number;
+}
+
+export interface ScenarioListResponse {
+  scenarios: Scenario[];
+  total: number;
+}

@@ -201,8 +201,14 @@
 
 #![allow(deprecated)]
 
+pub mod ab_testing;
 pub mod ai_contract_diff;
 pub mod ai_response;
+/// AI Studio - Unified AI Copilot for all AI-powered features
+pub mod ai_studio;
+/// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
+pub mod behavioral_cloning;
+pub mod behavioral_economics;
 pub mod cache;
 pub mod chain_execution;
 pub mod chaos_utilities;
@@ -211,22 +217,36 @@ pub mod codegen;
 pub mod collection_export;
 pub mod conditions;
 pub mod config;
+/// Cross-protocol consistency engine for unified state across all protocols
+pub mod consistency;
+/// Consumer-driven contracts for tracking usage and detecting consumer-specific breaking changes
+pub mod consumer_contracts;
+/// Contract validation for ensuring API contracts match specifications
+pub mod contract_drift;
 /// Contract validation for ensuring API contracts match specifications
 pub mod contract_validation;
 /// Contract webhooks for notifying external systems about contract changes
 pub mod contract_webhooks;
+pub mod custom_fixture;
 /// Data source abstraction for loading test data from multiple sources
 pub mod data_source;
+/// Deceptive canary mode for routing team traffic to deceptive deploys
+pub mod deceptive_canary;
 /// Docker Compose integration for containerized mock deployments
 pub mod docker_compose;
+/// GitOps integration for drift budget violations
+pub mod drift_gitops;
 pub mod encryption;
 pub mod error;
+pub mod failure_analysis;
 pub mod failure_injection;
+pub mod fidelity;
 pub mod generate_config;
 pub mod generative_schema;
 pub mod git_watch;
 pub mod graph;
 pub mod import;
+pub mod incidents;
 pub mod intelligent_behavior;
 pub mod latency;
 pub mod lifecycle;
@@ -237,6 +257,11 @@ pub mod openapi_routes;
 pub mod output_control;
 pub mod overrides;
 pub mod performance;
+/// Pillar usage tracking utilities
+pub mod pillar_tracking;
+/// Pillar metadata system for compile-time pillar tagging
+pub mod pillars;
+pub mod pr_generation;
 pub mod priority_handler;
 pub mod protocol_abstraction;
 pub mod proxy;
@@ -248,13 +273,26 @@ pub mod request_chaining;
 pub mod request_fingerprint;
 pub mod request_logger;
 pub mod request_scripting;
-pub mod route_chaos;
+// Route chaos has been moved to mockforge-route-chaos crate to avoid Send issues
+// Import directly from mockforge-route-chaos crate instead of re-exporting here
+// to avoid circular dependency (mockforge-route-chaos depends on mockforge-core for config types)
+pub mod persona_lifecycle_time;
 pub mod routing;
+/// Runtime validation for SDKs (request/response validation at runtime)
+pub mod runtime_validation;
+/// Scenario Studio - Visual editor for co-editing business flows
+pub mod scenario_studio;
+pub mod scenarios;
 pub mod schema_diff;
+pub mod security;
 pub mod server_utils;
+/// Time travel and snapshot functionality for saving and restoring system states
+pub mod snapshots;
 pub mod spec_parser;
 pub mod stateful_handler;
 pub mod sync_watcher;
+/// Template expansion utilities (Send-safe, isolated from templating module)
+pub mod template_expansion;
 /// Template library system for shared templates, versioning, and marketplace
 pub mod template_library;
 pub mod templating;
@@ -269,6 +307,16 @@ pub mod workspace_import;
 pub mod workspace_persistence;
 pub mod ws_proxy;
 
+pub use ab_testing::{
+    apply_variant_to_response, select_variant, ABTestConfig, ABTestReport,
+    ABTestingMiddlewareState, MockVariant, VariantAllocation, VariantAnalytics, VariantComparison,
+    VariantManager, VariantSelectionStrategy,
+};
+pub use behavioral_cloning::{
+    AmplificationScope, BehavioralSequence, EdgeAmplificationConfig, EdgeAmplifier,
+    EndpointProbabilityModel, ErrorPattern, LatencyDistribution, PayloadVariation,
+    ProbabilisticModel, SequenceLearner, SequenceStep,
+};
 pub use chain_execution::{ChainExecutionEngine, ChainExecutionResult, ChainExecutionStatus};
 pub use chaos_utilities::{ChaosConfig, ChaosEngine, ChaosResult, ChaosStatistics};
 pub use conditions::{evaluate_condition, ConditionContext, ConditionError};
@@ -276,14 +324,27 @@ pub use config::{
     apply_env_overrides, load_config, load_config_with_fallback, save_config, ApiKeyConfig,
     AuthConfig, ServerConfig,
 };
+pub use consistency::{
+    ConsistencyEngine, EntityState, ProtocolState, SessionInfo, StateChangeEvent, UnifiedState,
+};
+pub use custom_fixture::{CustomFixture, CustomFixtureLoader};
 pub use data_source::{
     DataSource, DataSourceConfig, DataSourceContent, DataSourceFactory, DataSourceManager,
     DataSourceType, GitDataSource, HttpDataSource, LocalDataSource,
 };
+pub use deceptive_canary::{
+    CanaryRoutingStrategy, CanaryStats, DeceptiveCanaryConfig, DeceptiveCanaryRouter,
+    TeamIdentifiers,
+};
 pub use error::{Error, Result};
+pub use failure_analysis::{
+    ContributingFactor, FailureContext, FailureContextCollector, FailureNarrative,
+    FailureNarrativeGenerator, NarrativeFrame,
+};
 pub use failure_injection::{
     create_failure_injector, FailureConfig, FailureInjector, TagFailureConfig,
 };
+pub use fidelity::{FidelityCalculator, FidelityScore, SampleComparator, SchemaComparator};
 pub use generate_config::{
     discover_config_file, load_generate_config, load_generate_config_with_fallback,
     save_generate_config, BarrelType, GenerateConfig, GenerateOptions, InputConfig, OutputConfig,
@@ -315,6 +376,7 @@ pub use output_control::{
     process_generated_file, BarrelGenerator, FileNamingContext, GeneratedFile,
 };
 pub use overrides::{OverrideMode, OverrideRule, Overrides, PatchOp};
+pub use pillars::{Pillar, PillarMetadata};
 pub use priority_handler::{
     MockGenerator, MockResponse, PriorityHttpHandler, PriorityResponse, SimpleMockGenerator,
 };
@@ -341,14 +403,29 @@ pub use request_fingerprint::{
     RequestFingerprint, RequestHandlerResult, ResponsePriority, ResponseSource,
 };
 pub use request_logger::{
+    create_http_log_entry_with_query,
     create_grpc_log_entry, create_http_log_entry, create_websocket_log_entry, get_global_logger,
     init_global_logger, log_request_global, CentralizedRequestLogger, RequestLogEntry,
 };
-pub use route_chaos::{RouteChaosInjector, RouteFaultResponse, RouteMatcher};
+// Route chaos types moved to mockforge-route-chaos crate
+// Import directly: use mockforge_route_chaos::{RouteChaosInjector, RouteFaultResponse, RouteMatcher};
 pub use routing::{HttpMethod, Route, RouteRegistry};
+pub use runtime_validation::{
+    RuntimeValidationError, RuntimeValidationResult, RuntimeValidatorConfig, SchemaMetadata,
+};
+pub use scenario_studio::{
+    ConditionOperator, FlowCondition, FlowConnection, FlowDefinition, FlowExecutionResult,
+    FlowExecutor, FlowPosition, FlowStep, FlowStepResult, FlowType, FlowVariant, StepType,
+};
+pub use scenarios::types::StepResult;
+pub use scenarios::{
+    ScenarioDefinition, ScenarioExecutor, ScenarioParameter, ScenarioRegistry, ScenarioResult,
+    ScenarioStep,
+};
 pub use schema_diff::{to_enhanced_422_json, validation_diff, ValidationError};
 pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
+pub use snapshots::{SnapshotComponents, SnapshotManager, SnapshotManifest, SnapshotMetadata};
 pub use spec_parser::{GraphQLValidator, OpenApiValidator, SpecFormat};
 pub use stateful_handler::{
     ResourceIdExtract, StateInfo, StateResponse, StatefulConfig, StatefulResponse,
@@ -377,9 +454,11 @@ pub use verification::{
     VerificationCount, VerificationRequest, VerificationResult,
 };
 pub use voice::{
-    ConversationContext, ConversationManager, ConversationState, ParsedCommand, VoiceCommandParser,
-    VoiceSpecGenerator,
+    ConversationContext, ConversationManager, ConversationState, GeneratedWorkspaceScenario,
+    HookTranspiler, ParsedCommand, ParsedWorkspaceScenario, VoiceCommandParser, VoiceSpecGenerator,
+    WorkspaceConfigSummary, WorkspaceScenarioGenerator,
 };
+pub use workspace::promotion_trait::PromotionService;
 pub use workspace::{EntityId, Folder, MockRequest, Workspace, WorkspaceConfig, WorkspaceRegistry};
 pub use workspace_import::{
     create_workspace_from_curl, create_workspace_from_har, create_workspace_from_insomnia,
@@ -393,6 +472,7 @@ pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
 
 /// Core configuration for MockForge
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct Config {
     /// Enable latency simulation

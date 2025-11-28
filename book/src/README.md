@@ -7,6 +7,10 @@
 
 MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebSockets. It provides a unified interface for creating, managing, and deploying mock servers across different protocols.
 
+## The Five Pillars
+
+MockForge is built on five foundational pillars: **[Reality]**, **[Contracts]**, **[DevX]**, **[Cloud]**, and **[AI]**. These pillars guide every feature we build and help you understand how MockForge delivers value. See the [complete Pillars documentation](../../docs/PILLARS.md) for detailed information.
+
 ## Features
 
 - **Multi-Protocol Support**: HTTP REST APIs, gRPC services, and WebSocket connections

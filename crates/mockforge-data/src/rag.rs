@@ -24,8 +24,8 @@ pub use engine::StorageStats as EngineStorageStats;
 pub use storage::StorageStats as StorageStorageStats;
 
 // Legacy imports for compatibility
+use crate::Result;
 use crate::{schema::SchemaDefinition, DataConfig};
-use mockforge_core::Result;
 use reqwest::{Client, ClientBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -231,12 +231,12 @@ impl RagEngine {
         config: &DataConfig,
     ) -> Result<Vec<Value>> {
         if !config.rag_enabled {
-            return Err(mockforge_core::Error::generic("RAG is not enabled in config"));
+            return Err(crate::Error::generic("RAG is not enabled in config"));
         }
 
         // Validate RAG configuration before proceeding
         if self.config.api_key.is_none() {
-            return Err(mockforge_core::Error::generic(
+            return Err(crate::Error::generic(
                 "RAG is enabled but no API key is configured. Please set MOCKFORGE_RAG_API_KEY or provide --rag-api-key"
             ));
         }
@@ -255,7 +255,7 @@ impl RagEngine {
                     // If too many rows fail, return an error
                     if failed_rows > config.rows / 4 {
                         // Allow up to 25% failure rate
-                        return Err(mockforge_core::Error::generic(
+                        return Err(crate::Error::generic(
                             format!("Too many RAG generation failures ({} out of {} rows failed). Check API configuration and network connectivity.", failed_rows, config.rows)
                         ));
                     }
@@ -423,7 +423,7 @@ impl RagEngine {
             .config
             .api_key
             .as_ref()
-            .ok_or_else(|| mockforge_core::Error::generic("OpenAI API key not configured"))?;
+            .ok_or_else(|| crate::Error::generic("OpenAI API key not configured"))?;
 
         let endpoint = self
             .config
@@ -447,20 +447,15 @@ impl RagEngine {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| {
-                mockforge_core::Error::generic(format!("Embedding API request failed: {}", e))
-            })?;
+            .map_err(|e| crate::Error::generic(format!("Embedding API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!(
-                "Embedding API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Embedding API error: {}", error_text)));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to parse embedding response: {}", e))
+            crate::Error::generic(format!("Failed to parse embedding response: {}", e))
         })?;
 
         if let Some(data) = response_json.get("data").and_then(|d| d.as_array()) {
@@ -473,7 +468,7 @@ impl RagEngine {
             }
         }
 
-        Err(mockforge_core::Error::generic("Invalid embedding response format"))
+        Err(crate::Error::generic("Invalid embedding response format"))
     }
 
     /// Generate embedding using OpenAI-compatible API
@@ -502,20 +497,18 @@ impl RagEngine {
             request = request.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response = request.send().await.map_err(|e| {
-            mockforge_core::Error::generic(format!("Embedding API request failed: {}", e))
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| crate::Error::generic(format!("Embedding API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!(
-                "Embedding API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Embedding API error: {}", error_text)));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to parse embedding response: {}", e))
+            crate::Error::generic(format!("Failed to parse embedding response: {}", e))
         })?;
 
         if let Some(data) = response_json.get("data").and_then(|d| d.as_array()) {
@@ -528,7 +521,7 @@ impl RagEngine {
             }
         }
 
-        Err(mockforge_core::Error::generic("Invalid embedding response format"))
+        Err(crate::Error::generic("Invalid embedding response format"))
     }
 
     /// Compute embeddings for all document chunks
@@ -604,7 +597,7 @@ impl RagEngine {
         }
 
         Err(last_error
-            .unwrap_or_else(|| mockforge_core::Error::generic("All LLM API retry attempts failed")))
+            .unwrap_or_else(|| crate::Error::generic("All LLM API retry attempts failed")))
     }
 
     /// Single attempt to call LLM API with provider-specific implementation
@@ -623,7 +616,7 @@ impl RagEngine {
             .config
             .api_key
             .as_ref()
-            .ok_or_else(|| mockforge_core::Error::generic("OpenAI API key not configured"))?;
+            .ok_or_else(|| crate::Error::generic("OpenAI API key not configured"))?;
 
         let request_body = serde_json::json!({
             "model": self.config.model,
@@ -647,20 +640,15 @@ impl RagEngine {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| {
-                mockforge_core::Error::generic(format!("OpenAI API request failed: {}", e))
-            })?;
+            .map_err(|e| crate::Error::generic(format!("OpenAI API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!(
-                "OpenAI API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("OpenAI API error: {}", error_text)));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to parse OpenAI response: {}", e))
+            crate::Error::generic(format!("Failed to parse OpenAI response: {}", e))
         })?;
 
         if let Some(choices) = response_json.get("choices").and_then(|c| c.as_array()) {
@@ -673,15 +661,16 @@ impl RagEngine {
             }
         }
 
-        Err(mockforge_core::Error::generic("Invalid OpenAI response format"))
+        Err(crate::Error::generic("Invalid OpenAI response format"))
     }
 
     /// Call Anthropic API
     async fn call_anthropic(&self, prompt: &str) -> Result<String> {
-        let api_key =
-            self.config.api_key.as_ref().ok_or_else(|| {
-                mockforge_core::Error::generic("Anthropic API key not configured")
-            })?;
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
+            .ok_or_else(|| crate::Error::generic("Anthropic API key not configured"))?;
 
         let request_body = serde_json::json!({
             "model": self.config.model,
@@ -706,20 +695,15 @@ impl RagEngine {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| {
-                mockforge_core::Error::generic(format!("Anthropic API request failed: {}", e))
-            })?;
+            .map_err(|e| crate::Error::generic(format!("Anthropic API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!(
-                "Anthropic API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Anthropic API error: {}", error_text)));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to parse Anthropic response: {}", e))
+            crate::Error::generic(format!("Failed to parse Anthropic response: {}", e))
         })?;
 
         if let Some(content) = response_json.get("content") {
@@ -732,7 +716,7 @@ impl RagEngine {
             }
         }
 
-        Err(mockforge_core::Error::generic("Invalid Anthropic response format"))
+        Err(crate::Error::generic("Invalid Anthropic response format"))
     }
 
     /// Call OpenAI-compatible API
@@ -762,22 +746,19 @@ impl RagEngine {
         }
 
         let response = request.send().await.map_err(|e| {
-            mockforge_core::Error::generic(format!("OpenAI-compatible API request failed: {}", e))
+            crate::Error::generic(format!("OpenAI-compatible API request failed: {}", e))
         })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!(
+            return Err(crate::Error::generic(format!(
                 "OpenAI-compatible API error: {}",
                 error_text
             )));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
-            mockforge_core::Error::generic(format!(
-                "Failed to parse OpenAI-compatible response: {}",
-                e
-            ))
+            crate::Error::generic(format!("Failed to parse OpenAI-compatible response: {}", e))
         })?;
 
         if let Some(choices) = response_json.get("choices").and_then(|c| c.as_array()) {
@@ -790,7 +771,7 @@ impl RagEngine {
             }
         }
 
-        Err(mockforge_core::Error::generic("Invalid OpenAI-compatible response format"))
+        Err(crate::Error::generic("Invalid OpenAI-compatible response format"))
     }
 
     /// Call Ollama API
@@ -810,27 +791,22 @@ impl RagEngine {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| {
-                mockforge_core::Error::generic(format!("Ollama API request failed: {}", e))
-            })?;
+            .map_err(|e| crate::Error::generic(format!("Ollama API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(mockforge_core::Error::generic(format!(
-                "Ollama API error: {}",
-                error_text
-            )));
+            return Err(crate::Error::generic(format!("Ollama API error: {}", error_text)));
         }
 
         let response_json: Value = response.json().await.map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to parse Ollama response: {}", e))
+            crate::Error::generic(format!("Failed to parse Ollama response: {}", e))
         })?;
 
         if let Some(response_text) = response_json.get("response").and_then(|r| r.as_str()) {
             return Ok(response_text.to_string());
         }
 
-        Err(mockforge_core::Error::generic("Invalid Ollama response format"))
+        Err(crate::Error::generic("Invalid Ollama response format"))
     }
 
     /// Parse LLM response into structured data
@@ -845,19 +821,19 @@ impl RagEngine {
                         let json_str = &response[start..=end];
                         match serde_json::from_str(json_str) {
                             Ok(value) => Ok(value),
-                            Err(_) => Err(mockforge_core::Error::generic(format!(
+                            Err(_) => Err(crate::Error::generic(format!(
                                 "Failed to parse LLM response: {}",
                                 e
                             ))),
                         }
                     } else {
-                        Err(mockforge_core::Error::generic(format!(
+                        Err(crate::Error::generic(format!(
                             "No closing brace found in response: {}",
                             e
                         )))
                     }
                 } else {
-                    Err(mockforge_core::Error::generic(format!("No JSON found in response: {}", e)))
+                    Err(crate::Error::generic(format!("No JSON found in response: {}", e)))
                 }
             }
         }

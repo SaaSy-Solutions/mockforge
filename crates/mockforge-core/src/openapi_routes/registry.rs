@@ -519,13 +519,23 @@ impl OpenApiRouteRegistry {
                 let route = route_clone.clone();
                 async move {
                     tracing::debug!("Handling request for route: {} {}", route.method, route.path);
-                    let (status, response) = route.mock_response_with_status();
+                    let (status, response, trace) =
+                        route.mock_response_with_status_and_scenario_and_trace(None);
                     tracing::debug!("Generated response with status: {}", status);
-                    (
+
+                    // Create response with trace attached to extensions
+                    use axum::response::IntoResponse;
+                    let mut axum_response = (
                         axum::http::StatusCode::from_u16(status)
                             .unwrap_or(axum::http::StatusCode::OK),
                         axum::response::Json(response),
                     )
+                        .into_response();
+
+                    // Attach trace to response extensions so logging middleware can pick it up
+                    axum_response.extensions_mut().insert(trace);
+
+                    axum_response
                 }
             };
 
@@ -796,10 +806,8 @@ impl OpenApiRouteRegistry {
         &self,
         mockai: Option<std::sync::Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
     ) -> axum::Router {
-        use crate::intelligent_behavior::{
-            MockAI, Request as MockAIRequest, Response as MockAIResponse,
-        };
-        use axum::extract::Query;
+        use crate::intelligent_behavior::Request as MockAIRequest;
+
         use axum::routing::{delete, get, patch, post, put};
 
         let mut router = axum::Router::new();

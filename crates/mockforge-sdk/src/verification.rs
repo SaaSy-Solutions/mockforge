@@ -1,4 +1,4 @@
-//! Verification API for MockForge SDK
+//! Verification API for `MockForge` SDK
 //!
 //! Provides methods to verify that specific requests were made (or not made)
 //! during test execution.
@@ -9,7 +9,7 @@ use mockforge_core::{
     verify_sequence, VerificationCount, VerificationRequest, VerificationResult,
 };
 
-/// Extension trait for verification methods on MockServer
+/// Extension trait for verification methods on `MockServer`
 pub trait Verification {
     /// Verify requests against a pattern and count assertion
     ///

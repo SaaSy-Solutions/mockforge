@@ -4,7 +4,6 @@
 
 use crate::error::{Result, ScenarioError};
 use crate::manifest::ScenarioManifest;
-use crate::source::ScenarioSource;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -161,7 +160,7 @@ impl ScenarioStorage {
             .map_err(|e| ScenarioError::Storage(format!("Failed to read metadata file: {}", e)))?;
 
         let scenario: InstalledScenario =
-            serde_json::from_str(&content).map_err(|e| ScenarioError::Serde(e))?;
+            serde_json::from_str(&content).map_err(ScenarioError::Serde)?;
 
         Ok(scenario)
     }
@@ -171,7 +170,7 @@ impl ScenarioStorage {
         self.init().await?;
 
         let file_path = self.metadata_file_path(&scenario.name, &scenario.version);
-        let json = serde_json::to_string_pretty(&scenario).map_err(|e| ScenarioError::Serde(e))?;
+        let json = serde_json::to_string_pretty(&scenario).map_err(ScenarioError::Serde)?;
 
         fs::write(&file_path, json)
             .await
@@ -226,8 +225,8 @@ impl ScenarioStorage {
     /// Get metadata file path
     fn metadata_file_path(&self, name: &str, version: &str) -> PathBuf {
         // Sanitize name and version for filename
-        let sanitized_name = name.replace('/', "_").replace('\\', "_");
-        let sanitized_version = version.replace('/', "_").replace('\\', "_");
+        let sanitized_name = name.replace(['/', '\\'], "_");
+        let sanitized_version = version.replace(['/', '\\'], "_");
         self.metadata_dir.join(format!("{}_{}.json", sanitized_name, sanitized_version))
     }
 

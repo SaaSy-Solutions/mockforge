@@ -15,7 +15,8 @@ pub struct UserService {
 
 impl UserService {
     /// Create a new user service
-    pub fn new(db: Pool<Sqlite>, auth: Arc<AuthService>) -> Self {
+    #[must_use]
+    pub const fn new(db: Pool<Sqlite>, auth: Arc<AuthService>) -> Self {
         Self { db, auth }
     }
 

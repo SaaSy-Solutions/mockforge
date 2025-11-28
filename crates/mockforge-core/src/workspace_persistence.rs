@@ -199,6 +199,10 @@ pub struct WorkspaceConfig {
     /// Controls the realism of mock behavior (chaos, latency, MockAI)
     #[serde(default)]
     pub reality_level: Option<crate::RealityLevel>,
+    /// AI mode for this workspace
+    /// Controls how AI-generated artifacts are used at runtime
+    #[serde(default)]
+    pub ai_mode: Option<crate::ai_studio::config::AiMode>,
 }
 
 /// Authentication configuration for export
@@ -377,8 +381,11 @@ impl WorkspacePersistence {
             .await
             .map_err(|e| Error::generic(format!("Failed to read workspace file: {}", e)))?;
 
-        let workspace: Workspace = serde_yaml::from_str(&content)
+        let mut workspace: Workspace = serde_yaml::from_str(&content)
             .map_err(|e| Error::generic(format!("Failed to deserialize workspace: {}", e)))?;
+
+        // Initialize default mock environments if they don't exist (for backward compatibility)
+        workspace.initialize_default_mock_environments();
 
         Ok(workspace)
     }
@@ -437,7 +444,9 @@ impl WorkspacePersistence {
         // Load individual workspaces
         for workspace_meta in &serializable.workspaces {
             match self.load_workspace(&workspace_meta.id).await {
-                Ok(workspace) => {
+                Ok(mut workspace) => {
+                    // Ensure mock environments are initialized (for backward compatibility)
+                    workspace.initialize_default_mock_environments();
                     registry.add_workspace(workspace)?;
                 }
                 Err(e) => {
@@ -1235,6 +1244,7 @@ impl WorkspacePersistence {
             base_url: workspace.config.base_url.clone(),
             variables: workspace.config.global_environment.variables.clone(),
             reality_level: workspace.config.reality_level,
+            ai_mode: None, // Default to None for exported workspaces
         };
 
         Ok(WorkspaceExport {

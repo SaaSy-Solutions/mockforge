@@ -1,6 +1,6 @@
 import { logger } from '@/utils/logger';
 import React, { useState, useMemo } from 'react';
-import { FileText, Search, Download, RefreshCw, ChevronDown } from 'lucide-react';
+import { FileText, Search, Download, RefreshCw, ChevronDown, Eye } from 'lucide-react';
 import { useLogs } from '../hooks/useApi';
 import type { RequestLog } from '../types';
 import {
@@ -13,6 +13,7 @@ import {
 } from '../components/ui/DesignSystem';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
+import { ResponseTraceModal } from '../components/reality/ResponseTraceModal';
 
 type StatusFilter = 'all' | '2xx' | '4xx' | '5xx';
 type MethodFilter = 'ALL' | 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS';
@@ -55,6 +56,7 @@ export function LogsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [limit, setLimit] = useState(100);
   const [displayLimit, setDisplayLimit] = useState(50);
+  const [selectedTraceRequestId, setSelectedTraceRequestId] = useState<string | null>(null);
 
   const { data: logs, isLoading, error, refetch } = useLogs({
     method: methodFilter === 'ALL' ? undefined : methodFilter,
@@ -336,6 +338,20 @@ export function LogsPage() {
                     >
                       {log.status_code}
                     </ModernBadge>
+
+                    {/* View Trace Button */}
+                    {log.id && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedTraceRequestId(log.id!)}
+                        className="flex items-center gap-2"
+                        title="View response generation trace"
+                      >
+                        <Eye className="h-4 w-4" />
+                        View Trace
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -358,6 +374,19 @@ export function LogsPage() {
           )}
         </ModernCard>
       </Section>
+
+      {/* Response Trace Modal */}
+      {selectedTraceRequestId && (
+        <ResponseTraceModal
+          requestId={selectedTraceRequestId}
+          open={!!selectedTraceRequestId}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedTraceRequestId(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ from .mock_server import MockServer
 from .stub_builder import StubBuilder
 from .types import ResponseStub, MockServerConfig, VerificationRequest, VerificationResult
 from .verification import VerificationCount
+from .errors import MockServerError, MockServerErrorCode
 
 __version__ = "0.1.0"
 __all__ = [
@@ -33,4 +34,6 @@ __all__ = [
     "VerificationRequest",
     "VerificationResult",
     "VerificationCount",
+    "MockServerError",
+    "MockServerErrorCode",
 ]

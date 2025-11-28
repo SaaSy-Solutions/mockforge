@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/components/ui/Badge';
 import {
   Users,
   UserPlus,
@@ -22,7 +22,7 @@ import {
   UserCheck,
   UserX
 } from 'lucide-react';
-import { api } from '@/services/api';
+import { apiService } from '@/services/api';
 import { useToast } from '@/components/ui/ToastProvider';
 
 // Types
@@ -97,7 +97,7 @@ export function UserManagementPage() {
   const { data: users, isLoading: usersLoading } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
-      const response = await api.get('/api/users');
+      const response = await apiService.get('/api/users');
       return response.data as User[];
     },
   });
@@ -106,7 +106,7 @@ export function UserManagementPage() {
   const { data: teams, isLoading: teamsLoading } = useQuery({
     queryKey: ['teams'],
     queryFn: async () => {
-      const response = await api.get('/api/teams');
+      const response = await apiService.get('/api/teams');
       return response.data as Team[];
     },
   });
@@ -115,7 +115,7 @@ export function UserManagementPage() {
   const { data: invitations, isLoading: invitationsLoading } = useQuery({
     queryKey: ['invitations'],
     queryFn: async () => {
-      const response = await api.get('/api/invitations');
+      const response = await apiService.get('/api/invitations');
       return response.data as Invitation[];
     },
   });
@@ -124,7 +124,7 @@ export function UserManagementPage() {
   const { data: quota } = useQuery({
     queryKey: ['quota'],
     queryFn: async () => {
-      const response = await api.get('/api/quota');
+      const response = await apiService.get('/api/quota');
       return response.data as Quota;
     },
   });
@@ -133,7 +133,7 @@ export function UserManagementPage() {
   const { data: analytics } = useQuery({
     queryKey: ['user-analytics'],
     queryFn: async () => {
-      const response = await api.get('/api/analytics/users');
+      const response = await apiService.get('/api/analytics/users');
       return response.data as Analytics;
     },
   });
@@ -141,7 +141,7 @@ export function UserManagementPage() {
   // Invite user mutation
   const inviteUser = useMutation({
     mutationFn: async (data: { email: string; role: string; team_id?: string }) => {
-      const response = await api.post('/api/invitations', data);
+      const response = await apiService.post('/api/invitations', data);
       return response.data;
     },
     onSuccess: () => {
@@ -157,7 +157,7 @@ export function UserManagementPage() {
   // Update user role mutation
   const updateUserRole = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      const response = await api.put(`/api/users/${userId}/role`, { role });
+      const response = await apiService.put(`/api/users/${userId}/role`, { role });
       return response.data;
     },
     onSuccess: () => {
@@ -169,7 +169,7 @@ export function UserManagementPage() {
   // Delete user mutation
   const deleteUser = useMutation({
     mutationFn: async (userId: string) => {
-      await api.delete(`/api/users/${userId}`);
+      await apiService.delete(`/api/users/${userId}`);
     },
     onSuccess: () => {
       showToast('success', 'User deleted');
@@ -180,7 +180,7 @@ export function UserManagementPage() {
   // Resend invitation mutation
   const resendInvitation = useMutation({
     mutationFn: async (invitationId: string) => {
-      await api.post(`/api/invitations/${invitationId}/resend`);
+      await apiService.post(`/api/invitations/${invitationId}/resend`);
     },
     onSuccess: () => {
       showToast('success', 'Invitation resent');
@@ -191,7 +191,7 @@ export function UserManagementPage() {
   // Cancel invitation mutation
   const cancelInvitation = useMutation({
     mutationFn: async (invitationId: string) => {
-      await api.delete(`/api/invitations/${invitationId}`);
+      await apiService.delete(`/api/invitations/${invitationId}`);
     },
     onSuccess: () => {
       showToast('success', 'Invitation cancelled');

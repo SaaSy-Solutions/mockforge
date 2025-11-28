@@ -1,0 +1,599 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Behavioral Economics Engine - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/advanced-features/behavioral-economics.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="behavioral-economics-engine"><a class="header" href="#behavioral-economics-engine">Behavioral Economics Engine</a></h1>
+<p><strong>Pillars:</strong> [Reality]</p>
+<p>The Behavioral Economics Engine makes mocks react to real-world pressures like latency, load, pricing changes, fraud suspicion, and customer segments. This creates mocks that behave like real customer-driven systems, not just static endpoints.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Traditional mocks return fixed responses. The Behavioral Economics Engine adds intelligence that makes mocks adapt their behavior based on system conditions:</p>
+<ul>
+<li><strong>Cart conversion drops</strong> if latency exceeds 400ms</li>
+<li><strong>Bank declines transactions</strong> if prior balance checks failed</li>
+<li><strong>User churn increases</strong> after multiple 500 errors</li>
+<li><strong>Pricing changes</strong> affect purchase behavior</li>
+<li><strong>Fraud suspicion</strong> triggers additional verification</li>
+</ul>
+<h2 id="key-concepts"><a class="header" href="#key-concepts">Key Concepts</a></h2>
+<h3 id="conditions"><a class="header" href="#conditions">Conditions</a></h3>
+<p>Conditions are triggers that evaluate system state:</p>
+<ul>
+<li><strong>Latency Threshold</strong>: Endpoint latency exceeds a threshold</li>
+<li><strong>Load Pressure</strong>: Requests per second exceeds a threshold</li>
+<li><strong>Pricing Change</strong>: Product pricing changes by a percentage</li>
+<li><strong>Fraud Suspicion</strong>: User’s risk score exceeds a threshold</li>
+<li><strong>Customer Segment</strong>: User belongs to a specific segment</li>
+<li><strong>Error Rate</strong>: Error rate for an endpoint exceeds a threshold</li>
+</ul>
+<h3 id="actions"><a class="header" href="#actions">Actions</a></h3>
+<p>Actions are behaviors executed when conditions are met:</p>
+<ul>
+<li><strong>Modify Conversion Rate</strong>: Adjust success probability</li>
+<li><strong>Change Response Behavior</strong>: Modify response data</li>
+<li><strong>Trigger Chaos</strong>: Activate chaos scenarios</li>
+<li><strong>Adjust Latency</strong>: Increase/decrease response time</li>
+<li><strong>Change Error Rate</strong>: Modify error probability</li>
+</ul>
+<h3 id="rules"><a class="header" href="#rules">Rules</a></h3>
+<p>Rules combine conditions and actions:</p>
+<ul>
+<li><strong>Declarative Rules</strong>: Simple if-then logic (YAML/JSON)</li>
+<li><strong>Scriptable Rules</strong>: Advanced logic (JavaScript/WASM)</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="basic-configuration"><a class="header" href="#basic-configuration">Basic Configuration</a></h3>
+<pre><code class="language-yaml"># mockforge.yaml
+behavioral_economics:
+  enabled: true
+  rules:
+    - name: latency-conversion-impact
+      condition:
+        type: latency_threshold
+        endpoint: "/api/checkout/*"
+        threshold_ms: 400
+      action:
+        type: modify_conversion_rate
+        multiplier: 0.8  # 20% drop in conversion
+      priority: 100
+</code></pre>
+<h3 id="example-cart-abandonment"><a class="header" href="#example-cart-abandonment">Example: Cart Abandonment</a></h3>
+<pre><code class="language-yaml">behavioral_economics:
+  enabled: true
+  rules:
+    - name: cart-abandonment-on-latency
+      condition:
+        type: latency_threshold
+        endpoint: "/api/checkout/*"
+        threshold_ms: 500
+      action:
+        type: modify_response
+        field: "body.cart_status"
+        value: "abandoned"
+      priority: 200
+</code></pre>
+<h2 id="condition-types"><a class="header" href="#condition-types">Condition Types</a></h2>
+<h3 id="latency-threshold"><a class="header" href="#latency-threshold">Latency Threshold</a></h3>
+<p>Triggers when endpoint latency exceeds a threshold:</p>
+<pre><code class="language-yaml">condition:
+  type: latency_threshold
+  endpoint: "/api/checkout/*"  # Pattern matching
+  threshold_ms: 400
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Cart abandonment on slow checkout</li>
+<li>User frustration on slow search</li>
+<li>Timeout handling</li>
+</ul>
+<h3 id="load-pressure"><a class="header" href="#load-pressure">Load Pressure</a></h3>
+<p>Triggers when requests per second exceed a threshold:</p>
+<pre><code class="language-yaml">condition:
+  type: load_pressure
+  threshold_rps: 100.0
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Degraded service under load</li>
+<li>Rate limiting activation</li>
+<li>Circuit breaker patterns</li>
+</ul>
+<h3 id="pricing-change"><a class="header" href="#pricing-change">Pricing Change</a></h3>
+<p>Triggers when product pricing changes:</p>
+<pre><code class="language-yaml">condition:
+  type: pricing_change
+  product_id: "product-123"
+  threshold: 0.1  # 10% change
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Purchase behavior changes</li>
+<li>Cart abandonment on price increase</li>
+<li>Surge pricing effects</li>
+</ul>
+<h3 id="fraud-suspicion"><a class="header" href="#fraud-suspicion">Fraud Suspicion</a></h3>
+<p>Triggers when user’s fraud risk score exceeds threshold:</p>
+<pre><code class="language-yaml">condition:
+  type: fraud_suspicion
+  user_id: "user-123"
+  risk_score: 0.7  # 0.0 to 1.0
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Additional verification required</li>
+<li>Transaction declines</li>
+<li>Account restrictions</li>
+</ul>
+<h3 id="customer-segment"><a class="header" href="#customer-segment">Customer Segment</a></h3>
+<p>Triggers when user belongs to a segment:</p>
+<pre><code class="language-yaml">condition:
+  type: customer_segment
+  segment: "premium"
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Different service levels</li>
+<li>Priority handling</li>
+<li>Exclusive features</li>
+</ul>
+<h3 id="error-rate"><a class="header" href="#error-rate">Error Rate</a></h3>
+<p>Triggers when error rate exceeds threshold:</p>
+<pre><code class="language-yaml">condition:
+  type: error_rate
+  endpoint: "/api/payments/*"
+  threshold: 0.05  # 5% error rate
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>User churn after errors</li>
+<li>Retry behavior changes</li>
+<li>Fallback activation</li>
+</ul>
+<h3 id="composite-conditions"><a class="header" href="#composite-conditions">Composite Conditions</a></h3>
+<p>Combine multiple conditions with logical operators:</p>
+<pre><code class="language-yaml">condition:
+  type: composite
+  operator: and  # or, not
+  conditions:
+    - type: latency_threshold
+      endpoint: "/api/checkout/*"
+      threshold_ms: 400
+    - type: load_pressure
+      threshold_rps: 100.0
+</code></pre>
+<h2 id="action-types"><a class="header" href="#action-types">Action Types</a></h2>
+<h3 id="modify-conversion-rate"><a class="header" href="#modify-conversion-rate">Modify Conversion Rate</a></h3>
+<p>Adjusts the probability of successful operations:</p>
+<pre><code class="language-yaml">action:
+  type: modify_conversion_rate
+  multiplier: 0.8  # 80% of normal conversion
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Cart abandonment on slow checkout</li>
+<li>Purchase drop on high latency</li>
+<li>Signup reduction on errors</li>
+</ul>
+<h3 id="modify-response"><a class="header" href="#modify-response">Modify Response</a></h3>
+<p>Changes response data:</p>
+<pre><code class="language-yaml">action:
+  type: modify_response
+  field: "body.status"
+  value: "pending"
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Status changes based on conditions</li>
+<li>Data mutations</li>
+<li>State transitions</li>
+</ul>
+<h3 id="trigger-chaos"><a class="header" href="#trigger-chaos">Trigger Chaos</a></h3>
+<p>Activates chaos scenarios:</p>
+<pre><code class="language-yaml">action:
+  type: trigger_chaos
+  scenario: "high-error-rate"
+  duration_seconds: 60
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Simulating incidents</li>
+<li>Testing resilience</li>
+<li>Chaos engineering</li>
+</ul>
+<h3 id="adjust-latency"><a class="header" href="#adjust-latency">Adjust Latency</a></h3>
+<p>Modifies response latency:</p>
+<pre><code class="language-yaml">action:
+  type: adjust_latency
+  multiplier: 1.5  # 50% increase
+  max_ms: 2000
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Degraded performance simulation</li>
+<li>Network condition emulation</li>
+<li>Timeout testing</li>
+</ul>
+<h3 id="change-error-rate"><a class="header" href="#change-error-rate">Change Error Rate</a></h3>
+<p>Modifies error probability:</p>
+<pre><code class="language-yaml">action:
+  type: change_error_rate
+  multiplier: 2.0  # Double error rate
+  error_codes: [500, 503]
+</code></pre>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Error spike simulation</li>
+<li>Failure testing</li>
+<li>Resilience validation</li>
+</ul>
+<h2 id="advanced-scriptable-rules"><a class="header" href="#advanced-scriptable-rules">Advanced: Scriptable Rules</a></h2>
+<p>For complex logic, use JavaScript/WASM scripts:</p>
+<pre><code class="language-yaml">behavioral_economics:
+  enabled: true
+  rules:
+    - name: complex-fraud-detection
+      rule_type: scriptable
+      script: |
+        function evaluate(context) {
+          const latency = context.latency;
+          const load = context.load_rps;
+          const fraudScore = context.fraud_score;
+          
+          if (latency &gt; 400 &amp;&amp; load &gt; 100 &amp;&amp; fraudScore &gt; 0.7) {
+            return {
+              action: "decline_transaction",
+              reason: "High risk under load"
+            };
+          }
+          return null;
+        }
+      priority: 1000
+</code></pre>
+<h2 id="real-world-examples"><a class="header" href="#real-world-examples">Real-World Examples</a></h2>
+<h3 id="e-commerce-cart-conversion"><a class="header" href="#e-commerce-cart-conversion">E-Commerce: Cart Conversion</a></h3>
+<pre><code class="language-yaml">behavioral_economics:
+  rules:
+    - name: cart-conversion-drop
+      condition:
+        type: latency_threshold
+        endpoint: "/api/checkout/*"
+        threshold_ms: 400
+      action:
+        type: modify_conversion_rate
+        multiplier: 0.7  # 30% drop
+      priority: 100
+</code></pre>
+<p><strong>Result:</strong> When checkout latency exceeds 400ms, only 70% of carts convert (vs normal 90%).</p>
+<h3 id="fintech-transaction-declines"><a class="header" href="#fintech-transaction-declines">Fintech: Transaction Declines</a></h3>
+<pre><code class="language-yaml">behavioral_economics:
+  rules:
+    - name: decline-on-failed-balance-check
+      condition:
+        type: composite
+        operator: and
+        conditions:
+          - type: error_rate
+            endpoint: "/api/balance/*"
+            threshold: 0.1
+          - type: fraud_suspicion
+            risk_score: 0.6
+      action:
+        type: modify_response
+        field: "body.status"
+        value: "declined"
+        reason: "Balance check failed"
+      priority: 200
+</code></pre>
+<p><strong>Result:</strong> Transactions are declined if balance checks fail and fraud risk is high.</p>
+<h3 id="saas-user-churn"><a class="header" href="#saas-user-churn">SaaS: User Churn</a></h3>
+<pre><code class="language-yaml">behavioral_economics:
+  rules:
+    - name: churn-after-multiple-errors
+      condition:
+        type: error_rate
+        endpoint: "/api/*"
+        threshold: 0.05  # 5% error rate
+      action:
+        type: modify_response
+        field: "body.churn_risk"
+        value: "high"
+      priority: 150
+</code></pre>
+<p><strong>Result:</strong> User churn risk increases after experiencing multiple errors.</p>
+<h2 id="integration-with-other-features"><a class="header" href="#integration-with-other-features">Integration with Other Features</a></h2>
+<p>The Behavioral Economics Engine integrates with:</p>
+<ul>
+<li><strong>Smart Personas</strong>: Persona traits influence condition evaluation</li>
+<li><strong>Chaos Lab</strong>: Actions can trigger chaos scenarios</li>
+<li><strong>Reality Continuum</strong>: Behaviors respect reality levels</li>
+<li><strong>Scenarios</strong>: Rules can be scenario-specific</li>
+<li><strong>Time Travel</strong>: Conditions respect virtual time</li>
+</ul>
+<h2 id="configuration-reference"><a class="header" href="#configuration-reference">Configuration Reference</a></h2>
+<h3 id="full-configuration"><a class="header" href="#full-configuration">Full Configuration</a></h3>
+<pre><code class="language-yaml">behavioral_economics:
+  enabled: true
+  update_interval_ms: 1000  # How often to evaluate rules
+  rules:
+    - name: rule-name
+      rule_type: declarative  # or scriptable
+      condition:
+        # Condition configuration
+      action:
+        # Action configuration
+      priority: 100  # Higher = evaluated first
+      enabled: true
+</code></pre>
+<h3 id="rule-priority"><a class="header" href="#rule-priority">Rule Priority</a></h3>
+<p>Rules are evaluated in priority order (highest first). The first matching rule’s action is executed.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Start Simple</strong>: Use declarative rules for 80% of use cases</li>
+<li><strong>Test Incrementally</strong>: Add one rule at a time and test</li>
+<li><strong>Monitor Impact</strong>: Track how rules affect system behavior</li>
+<li><strong>Document Rules</strong>: Document why each rule exists</li>
+<li><strong>Version Control</strong>: Keep rules in version control</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="rules-not-triggering"><a class="header" href="#rules-not-triggering">Rules Not Triggering</a></h3>
+<ul>
+<li>Check condition thresholds (may be too high/low)</li>
+<li>Verify endpoint patterns match actual endpoints</li>
+<li>Check rule priority (higher priority rules may override)</li>
+<li>Enable debug logging: <code>behavioral_economics.debug: true</code></li>
+</ul>
+<h3 id="unexpected-behavior"><a class="header" href="#unexpected-behavior">Unexpected Behavior</a></h3>
+<ul>
+<li>Review rule priority order</li>
+<li>Check for conflicting rules</li>
+<li>Verify condition evaluation logic</li>
+<li>Test rules in isolation</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="smart-personas.html">Smart Personas</a> - Persona system</li>
+<li><a href="chaos-lab.html">Chaos Lab</a> - Chaos scenarios</li>
+<li><a href="reality-continuum.html">Reality Continuum</a> - Reality levels</li>
+<li><a href="scenario-state-machines.html">Scenarios</a> - Scenario system</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../user-guide/advanced-features/reality-profiles-marketplace.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../user-guide/advanced-features/world-state-engine.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../user-guide/advanced-features/reality-profiles-marketplace.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../user-guide/advanced-features/world-state-engine.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../../ace.js"></script>
+        <script src="../../mode-rust.js"></script>
+        <script src="../../editor.js"></script>
+        <script src="../../theme-dawn.js"></script>
+        <script src="../../theme-tomorrow_night.js"></script>
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 /// Migration mode for route handling
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum MigrationMode {
     /// Always use mock (ignore proxy even if rule matches)
@@ -25,6 +26,7 @@ impl Default for MigrationMode {
 
 /// Configuration for proxy behavior
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProxyConfig {
     /// Whether the proxy is enabled
     pub enabled: bool,
@@ -59,6 +61,7 @@ pub struct ProxyConfig {
 
 /// Proxy routing rule
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProxyRule {
     /// Path pattern to match
     pub path_pattern: String,
@@ -217,14 +220,13 @@ impl ProxyConfig {
         }
 
         // If there are rules, check if any rule matches with condition evaluation
-        if !self.rules.is_empty() {
-            if find_matching_rule(&self.rules, method, uri, headers, body, |pattern, path| {
+        if !self.rules.is_empty()
+            && find_matching_rule(&self.rules, method, uri, headers, body, |pattern, path| {
                 self.path_matches_pattern(pattern, path)
             })
             .is_some()
-            {
-                return true;
-            }
+        {
+            return true;
         }
 
         // If no rules match, check prefix logic (only if no rules have conditions)
@@ -433,6 +435,7 @@ pub struct MigrationGroupInfo {
 
 /// Body transformation rule for request/response replacement
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BodyTransformRule {
     /// URL pattern to match (supports wildcards like "/api/users/*")
     pub pattern: String,
@@ -478,6 +481,7 @@ impl BodyTransformRule {
 
 /// Individual body transformation
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct BodyTransform {
     /// JSONPath expression to target (e.g., "$.userId", "$.email")
     pub path: String,
@@ -490,6 +494,7 @@ pub struct BodyTransform {
 
 /// Transform operation type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum TransformOperation {
     /// Replace the value at the path

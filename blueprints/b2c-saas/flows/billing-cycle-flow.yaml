@@ -1,0 +1,55 @@
+id: billing-cycle-flow
+name: Billing Cycle Flow
+description: Monthly billing cycle with payment processing and invoice generation
+steps:
+  - name: Get Active Subscriptions
+    method: GET
+    path: /api/subscriptions?status=active
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      subscriptions: body.subscriptions
+
+  - name: Generate Invoice
+    method: POST
+    path: /api/billing/invoices
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      subscription_id: "{{subscriptions[0].id}}"
+      period_start: "2024-01-01"
+      period_end: "2024-01-31"
+    extract:
+      invoice_id: body.invoice.id
+      invoice_amount: body.invoice.amount
+
+  - name: Process Payment
+    method: POST
+    path: /api/payments/process
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      invoice_id: "{{invoice_id}}"
+      amount: "{{invoice_amount}}"
+    extract:
+      payment_id: body.payment.id
+      payment_status: body.payment.status
+
+  - name: Update Subscription
+    method: PATCH
+    path: /api/subscriptions/{{subscriptions[0].id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      last_billing_date: "2024-01-31"
+      next_billing_date: "2024-02-29"
+
+  - name: Send Invoice Email
+    method: POST
+    path: /api/notifications/send
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      type: "invoice"
+      invoice_id: "{{invoice_id}}"
+      recipient: "{{user.email}}"

@@ -1,0 +1,24 @@
+id: regular-customer
+name: Regular Customer
+domain: banking
+traits:
+  account_type: standard
+  total_balance: "8500.00"
+  account_count: 2
+  monthly_transactions: 12
+  credit_score: 720
+  relationship_years: 3
+  accounts:
+    - type: checking
+      balance: "3500.00"
+      account_number: "****3456"
+    - type: savings
+      balance: "5000.00"
+      account_number: "****7890"
+lifecycle:
+  preset: subscription
+  initial_state: active
+backstory: |
+  Standard banking customer with typical account balances and transaction patterns.
+  Maintains checking and savings accounts with moderate balances.
+  Good credit score and regular but not frequent transaction activity.

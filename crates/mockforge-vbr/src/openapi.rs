@@ -76,14 +76,35 @@ fn extract_schemas_from_openapi(spec: &OpenApiSpec) -> HashMap<String, Schema> {
     if let Some(components) = &spec.spec.components {
         if !components.schemas.is_empty() {
             for (name, schema_ref) in &components.schemas {
-                if let ReferenceOr::Item(schema) = schema_ref {
-                    schemas.insert(name.clone(), schema.clone());
+                match schema_ref {
+                    ReferenceOr::Item(schema) => {
+                        schemas.insert(name.clone(), schema.clone());
+                    }
+                    ReferenceOr::Reference { reference } => {
+                        // Resolve nested reference
+                        if let Some(resolved) = spec.get_schema(reference) {
+                            schemas.insert(name.clone(), resolved.schema);
+                        }
+                    }
                 }
             }
         }
     }
 
     schemas
+}
+
+/// Resolve a schema reference to an actual schema
+///
+/// Handles references like "#/components/schemas/User" by looking up
+/// the schema in the provided schemas HashMap.
+fn resolve_schema_reference(
+    reference: &str,
+    all_schemas: &HashMap<String, Schema>,
+) -> Option<Schema> {
+    // Extract schema name from reference (e.g., "#/components/schemas/User" -> "User")
+    let schema_name = reference.strip_prefix("#/components/schemas/")?;
+    all_schemas.get(schema_name).cloned()
 }
 
 /// Convert an OpenAPI schema to a VBR schema definition
@@ -121,11 +142,38 @@ fn convert_schema_to_vbr(
                     }
                 }
                 ReferenceOr::Reference { reference } => {
-                    // Handle schema references - for now, treat as string
-                    // TODO: Resolve references properly
-                    let field_def =
-                        FieldDefinition::new(field_name.clone(), "string".to_string()).optional();
-                    fields.push(field_def);
+                    // Resolve schema reference
+                    if let Some(resolved_schema) = resolve_schema_reference(reference, all_schemas) {
+                        // Recursively convert the resolved schema
+                        match convert_field_to_definition(field_name, &resolved_schema, &obj_type.required) {
+                            Ok(field_def) => {
+                                fields.push(field_def.clone());
+
+                                // Auto-detect primary key
+                                if is_primary_key_field(field_name, &field_def) {
+                                    primary_key.push(field_name.clone());
+                                    if primary_key.len() == 1 && !auto_generation.contains_key(field_name) {
+                                        auto_generation.insert(field_name.clone(), AutoGenerationRule::Uuid);
+                                    }
+                                }
+
+                                // Auto-detect auto-generation rules
+                                if let Some(rule) = detect_auto_generation(field_name, &resolved_schema) {
+                                    auto_generation.insert(field_name.clone(), rule);
+                                }
+                            }
+                            Err(e) => {
+                                // If conversion fails, fall back to string type
+                                let field_def = FieldDefinition::new(field_name.clone(), "string".to_string()).optional();
+                                fields.push(field_def);
+                            }
+                        }
+                    } else {
+                        // Reference not found, treat as string
+                        let field_def =
+                            FieldDefinition::new(field_name.clone(), "string".to_string()).optional();
+                        fields.push(field_def);
+                    }
                 }
             }
         }
@@ -158,7 +206,7 @@ fn convert_schema_to_vbr(
     let base_schema = SchemaDefinition {
         name: schema_name.to_string(),
         fields,
-        description: schema.schema_data.description.as_ref().map(|s| s.clone()),
+        description: schema.schema_data.description.clone(),
         metadata: HashMap::new(),
         relationships: HashMap::new(),
     };
@@ -314,8 +362,8 @@ fn detect_foreign_keys(
 ) {
     for field in &vbr_schema.base.fields {
         // Check if field name suggests a foreign key
-        if is_foreign_key_field(&field.name, &entity_names) {
-            if let Some(target_entity) = extract_target_entity(&field.name, &entity_names) {
+        if is_foreign_key_field(&field.name, entity_names) {
+            if let Some(target_entity) = extract_target_entity(&field.name, entity_names) {
                 // Check if foreign key already exists
                 if !vbr_schema.foreign_keys.iter().any(|fk| fk.field == field.name) {
                     let fk = ForeignKeyDefinition {

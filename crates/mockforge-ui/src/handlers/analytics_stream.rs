@@ -94,7 +94,7 @@ async fn handle_analytics_socket(socket: WebSocket, state: AnalyticsStreamState)
     info!("Analytics WebSocket client connected");
 
     // Default configuration
-    let mut config = StreamConfig::default();
+    let config = StreamConfig::default();
 
     // Spawn a task to handle incoming messages (config updates, ping/pong)
     let config_clone = Arc::new(tokio::sync::Mutex::new(config.clone()));

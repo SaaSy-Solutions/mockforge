@@ -35,6 +35,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
+use uuid::Uuid;
 
 use super::{get_global_clock, VirtualClock};
 
@@ -143,6 +144,11 @@ pub struct CronScheduler {
     jobs: Arc<RwLock<HashMap<String, CronJob>>>,
     /// Job actions (stored separately since they can't be serialized)
     actions: Arc<RwLock<HashMap<String, Arc<CronJobAction>>>>,
+    /// Optional ResponseScheduler for scheduled response integration
+    response_scheduler: Option<Arc<super::ResponseScheduler>>,
+    /// Optional MutationRuleManager for VBR mutation integration
+    /// Note: This requires database and registry to be passed when executing mutations
+    mutation_rule_manager: Option<Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 impl CronScheduler {
@@ -152,7 +158,23 @@ impl CronScheduler {
             clock,
             jobs: Arc::new(RwLock::new(HashMap::new())),
             actions: Arc::new(RwLock::new(HashMap::new())),
+            response_scheduler: None,
+            mutation_rule_manager: None,
         }
+    }
+
+    /// Set the ResponseScheduler for scheduled response integration
+    pub fn with_response_scheduler(mut self, scheduler: Arc<super::ResponseScheduler>) -> Self {
+        self.response_scheduler = Some(scheduler);
+        self
+    }
+
+    /// Set the MutationRuleManager for VBR mutation integration
+    /// Note: This is stored as Any since MutationRuleManager is in a different crate
+    /// The actual execution requires database and registry to be passed separately
+    pub fn with_mutation_rule_manager(mut self, manager: Arc<dyn std::any::Any + Send + Sync>) -> Self {
+        self.mutation_rule_manager = Some(manager);
+        self
     }
 
     /// Create a new cron scheduler using the global clock
@@ -306,15 +328,50 @@ impl CronScheduler {
                 headers,
             } => {
                 debug!("Scheduled response for cron job '{}'", job_id);
-                // TODO: Integrate with ResponseScheduler
-                // For now, just log
-                info!("Cron job '{}' triggered scheduled response: {}", job_id, status);
+
+                // Integrate with ResponseScheduler if available
+                if let Some(ref scheduler) = self.response_scheduler {
+                    // Create a ScheduledResponse for immediate execution (trigger_time = now)
+                    let scheduled_response = super::ScheduledResponse {
+                        id: format!("cron-{}-{}", job_id, Uuid::new_v4()),
+                        trigger_time: now,
+                        body: body.clone(),
+                        status: *status,
+                        headers: headers.clone(),
+                        name: Some(format!("Cron job: {}", job_id)),
+                        repeat: None,
+                    };
+
+                    match scheduler.schedule(scheduled_response) {
+                        Ok(response_id) => {
+                            info!("Cron job '{}' scheduled response: {}", job_id, response_id);
+                        }
+                        Err(e) => {
+                            warn!("Failed to schedule response for cron job '{}': {}", job_id, e);
+                        }
+                    }
+                } else {
+                    warn!("Cron job '{}' triggered scheduled response but ResponseScheduler not configured", job_id);
+                    info!("Cron job '{}' triggered scheduled response: {} (ResponseScheduler not available)", job_id, status);
+                }
             }
             CronJobAction::DataMutation { entity, operation } => {
                 debug!("Data mutation for cron job '{}': {} on {}", job_id, operation, entity);
-                // TODO: Integrate with VBR mutation rules
-                // For now, just log
-                info!("Cron job '{}' triggered data mutation: {} on {}", job_id, operation, entity);
+
+                // Note: VBR mutation execution requires database and registry
+                // which are not available in the cron scheduler context.
+                // The mutation_rule_manager is stored but cannot be executed here
+                // without the database and registry dependencies.
+                //
+                // For full integration, mutation rules should be created separately
+                // and referenced by ID, or the cron scheduler should be extended
+                // to accept database and registry as dependencies.
+                if self.mutation_rule_manager.is_some() {
+                    info!("Cron job '{}' triggered data mutation: {} on {} (MutationRuleManager available but execution requires database and registry)", job_id, operation, entity);
+                } else {
+                    warn!("Cron job '{}' triggered data mutation but MutationRuleManager not configured", job_id);
+                    info!("Cron job '{}' triggered data mutation: {} on {} (MutationRuleManager not available)", job_id, operation, entity);
+                }
             }
         }
 

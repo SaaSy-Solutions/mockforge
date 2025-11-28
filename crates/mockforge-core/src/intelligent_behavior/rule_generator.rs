@@ -311,7 +311,7 @@ impl RuleGenerator {
         }
 
         // Explain schemas
-        for (resource_name, _schema) in &rules.schemas {
+        for resource_name in rules.schemas.keys() {
             let rule_id = format!("schema_{}", resource_name);
             let explanation = RuleExplanation::new(
                 rule_id,
@@ -340,7 +340,7 @@ impl RuleGenerator {
         let mut field_errors: HashMap<String, Vec<&ErrorExample>> = HashMap::new();
         for error in &error_examples {
             if let Some(ref field) = error.field {
-                field_errors.entry(field.clone()).or_insert_with(Vec::new).push(error);
+                field_errors.entry(field.clone()).or_default().push(error);
             }
         }
 
@@ -365,7 +365,7 @@ impl RuleGenerator {
                 "min_length" | "max_length" => {
                     // Try to infer length constraints
                     if let Some(length) = self.infer_length_constraint(&errors, &validation_type) {
-                        parameters.insert(validation_type.clone(), Value::Number(length.into()));
+                        parameters.insert(validation_type.clone(), Value::Number(length));
                     }
                 }
                 _ => {}
@@ -405,7 +405,7 @@ impl RuleGenerator {
 
         for example in &examples {
             // Detect pagination parameters
-            for (key, _value) in &example.query_params {
+            for key in example.query_params.keys() {
                 match key.to_lowercase().as_str() {
                     "page" | "p" => {
                         parameter_names.insert("page".to_string(), key.clone());
@@ -457,10 +457,7 @@ impl RuleGenerator {
         // Group by resource type
         let mut resource_groups: HashMap<String, Vec<&CrudExample>> = HashMap::new();
         for example in &examples {
-            resource_groups
-                .entry(example.resource_type.clone())
-                .or_insert_with(Vec::new)
-                .push(example);
+            resource_groups.entry(example.resource_type.clone()).or_default().push(example);
         }
 
         // Generate state machine for each resource type
@@ -490,7 +487,7 @@ impl RuleGenerator {
         for example in examples {
             // Extract base path (remove IDs)
             let base_path = self.normalize_path(&example.path);
-            groups.entry(base_path).or_insert_with(Vec::new).push(example);
+            groups.entry(base_path).or_default().push(example);
         }
 
         groups
@@ -659,7 +656,7 @@ impl RuleGenerator {
         // Extract last meaningful segment
         path.split('/')
             .filter(|s| !s.is_empty() && !s.starts_with('{'))
-            .last()
+            .next_back()
             .unwrap_or("Resource")
             .to_string()
     }

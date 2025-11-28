@@ -3,7 +3,7 @@
  */
 
 export interface ExtensionMessage {
-    type: 'REQUEST_CAPTURED' | 'MOCK_CREATED' | 'MOCK_UPDATED' | 'MOCK_DELETED' | 'CONNECTION_CHANGE' | 'GET_MOCKS' | 'CREATE_MOCK' | 'DELETE_MOCK' | 'GET_CAPTURED_REQUESTS' | 'GET_ENVIRONMENTS' | 'SET_ACTIVE_ENVIRONMENT' | 'GET_ENVIRONMENT_VARIABLES';
+    type: 'REQUEST_CAPTURED' | 'MOCK_CREATED' | 'MOCK_UPDATED' | 'MOCK_DELETED' | 'CONNECTION_CHANGE' | 'GET_MOCKS' | 'CREATE_MOCK' | 'DELETE_MOCK' | 'GET_CAPTURED_REQUESTS' | 'GET_ENVIRONMENTS' | 'SET_ACTIVE_ENVIRONMENT' | 'GET_ENVIRONMENT_VARIABLES' | 'GET_PERSONAS' | 'SET_ACTIVE_PERSONA' | 'GET_SCENARIOS' | 'SET_ACTIVE_SCENARIO' | 'GET_WORKSPACE_STATE' | 'COMPARE_SNAPSHOTS';
     payload?: any;
 }
 
@@ -61,4 +61,26 @@ export interface Environment {
     active?: boolean;
     order?: number;
     variable_count?: number;
+}
+
+export interface Persona {
+    id: string;
+    name?: string;
+    domain?: string;
+    traits?: Record<string, string>;
+    backstory?: string;
+    relationships?: Record<string, string[]>;
+    lifecycle?: {
+        state: string;
+        transitions?: string[];
+    };
+}
+
+export interface Scenario {
+    id: string;
+    name: string;
+    description?: string;
+    version?: string;
+    category?: string;
+    tags?: string[];
 }

@@ -182,9 +182,10 @@ pub async fn handle_tunnel_command(cmd: TunnelSubcommand) -> anyhow::Result<()> 
             let manager = TunnelManager::new(&config)?;
 
             if let Some(tunnel_id) = tunnel_id {
-                // Stop specific tunnel
-                warn!("Stopping specific tunnel by ID not yet implemented. Use status to get tunnel ID first.");
-                // TODO: Implement stop by ID
+                // Stop specific tunnel by ID
+                info!("Stopping tunnel: {}", tunnel_id);
+                manager.stop_tunnel_by_id(&tunnel_id).await?;
+                println!("✅ Tunnel {} stopped successfully", tunnel_id);
                 Ok(())
             } else {
                 // Stop active tunnel

@@ -11,6 +11,24 @@
 
 MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebSockets. It provides a unified interface for creating, managing, and deploying mock servers across different protocols with advanced data generation capabilities.
 
+## 🏛️ The Five Pillars of MockForge
+
+MockForge is built on five foundational pillars that guide every feature: **[Reality]**, **[Contracts]**, **[DevX]**, **[Cloud]**, and **[AI]**. These pillars ensure MockForge delivers a cohesive, powerful mocking experience that scales from solo developers to enterprise teams.
+
+- **[Reality]** – Everything that makes mocks feel like a real, evolving backend
+- **[Contracts]** – Schema, drift, validation, and safety nets
+- **[DevX]** – SDKs, generators, playgrounds, ergonomics
+- **[Cloud]** – Registry, orgs, governance, monetization, marketplace
+- **[AI]** – LLM/voice flows, AI diff/assist, generative behaviors
+
+See the [complete Pillars documentation](docs/PILLARS.md) for detailed information about each pillar, feature mappings, and examples. All changelog entries are tagged with these pillars to make it clear what each release invests in.
+
+### Choose Your Path
+
+- **[Reality-First Onboarding](https://docs.mockforge.dev/getting-started/reality-first.html)** - Start here if you care about realism
+- **[Contracts-First Onboarding](https://docs.mockforge.dev/getting-started/contracts-first.html)** - Start here if you're a Platform/API team
+- **[AI-First Onboarding](https://docs.mockforge.dev/getting-started/ai-first.html)** - Start here if you want natural-language-driven mocks
+
 ## 🔄 Why MockForge?
 
 | Feature | MockForge | WireMock | MockServer | Mockoon |
@@ -25,6 +43,11 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 | **Kafka** | ✅ Full Mock Broker | ❌ No | ❌ No | ❌ No |
 | **MQTT** | ✅ Full Broker (3.1.1 & 5.0) | ❌ No | ❌ No | ❌ No |
 | **AMQP/RabbitMQ** | ✅ Full Broker (0.9.1) | ❌ No | ❌ No | ❌ No |
+| **SMTP** | ✅ Full Email Server | ❌ No | ❌ No | ❌ No |
+| **FTP** | ✅ Full File Transfer | ❌ No | ❌ No | ❌ No |
+| **TCP** | ✅ Raw TCP Mocking | ❌ No | ❌ No | ❌ No |
+| **Client Generation** | ✅ React, Vue, Angular, Svelte | ❌ No | ❌ No | ❌ No |
+| **TLS/mTLS** | ✅ HTTPS + Mutual TLS | ⚠️ TLS only | ⚠️ TLS only | ⚠️ TLS only |
 | **Admin UI** | ✅ Modern React UI | ⚠️ Basic | ✅ Yes | ✅ Desktop App |
 | **Data Generation** | ✅ Advanced (Faker + RAG) | ⚠️ Basic | ⚠️ Basic | ⚠️ Templates |
 | **AI-Driven Mocking** | ✅ LLM-powered generation | ❌ No | ❌ No | ❌ No |
@@ -196,9 +219,25 @@ The documentation covers:
 - Advanced features and examples
 - Contributing guidelines
 
+## 🔌 IDE Integration
+
+### VS Code Extension
+
+**[Install the MockForge VS Code Extension](https://marketplace.visualstudio.com/items?itemName=saasy-solutions.mockforge-vscode)** to enhance your development workflow:
+
+- **Peek Mock Response**: Hover over API endpoint references to see mock responses inline
+- **Config Validation**: Real-time validation of `mockforge.yaml` files with inline error reporting
+- **Mocks Explorer**: Visual tree view of all mocks with real-time WebSocket updates
+- **Playground Integration**: Quick access to MockForge Playground from hover tooltips
+- **Mock Management**: Create, edit, enable/disable, and delete mocks directly from VS Code
+
+See the [VS Code Extension README](vscode-extension/README.md) for detailed features and usage.
+
 ## 🚀 Quick Start
 
-**New to MockForge?** Follow our **[5-Minute Tutorial](https://docs.mockforge.dev/getting-started/five-minute-api.html)** to create your first mock API.
+**New to MockForge?** Follow our **[Golden Path Guide](https://docs.mockforge.dev/tutorials/golden-path.html)** ⭐ - the fastest way from zero to integrated mock API in under 10 minutes.
+
+**Prefer a quick API?** Try our **[5-Minute Tutorial](https://docs.mockforge.dev/getting-started/five-minute-api.html)** to create your first mock API.
 
 **Need help?** Check the **[FAQ](https://docs.mockforge.dev/reference/faq.html)** or **[Troubleshooting Guide](https://docs.mockforge.dev/reference/troubleshooting.html)**.
 
@@ -214,6 +253,27 @@ cd mockforge
 make setup
 make build
 make install
+```
+
+#### Command Aliases (Optional)
+
+For faster typing, you can set up command aliases:
+
+```bash
+# Run the setup script
+./scripts/setup-aliases.sh
+
+# Or manually add to your ~/.bashrc or ~/.zshrc:
+alias mf='mockforge'
+alias mf-serve='mockforge serve'
+alias mf-wizard='mockforge wizard'
+```
+
+Then use `mf` instead of `mockforge`:
+```bash
+mf wizard        # Interactive setup wizard
+mf serve         # Start mock server
+mf init .        # Initialize project
 ```
 
 ### Try the Examples

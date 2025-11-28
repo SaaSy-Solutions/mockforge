@@ -7,7 +7,7 @@
 use crate::domains::Domain;
 use crate::persona::PersonaProfile;
 use crate::persona_backstory::BackstoryGenerator;
-use mockforge_core::Result;
+use crate::Result;
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;

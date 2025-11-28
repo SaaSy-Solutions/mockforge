@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/mockforge-core",
     "crates/mockforge-http",
     "crates/mockforge-mqtt",
     "crates/mockforge-ws",
@@ -34,8 +35,15 @@ members = [
     "crates/mockforge-sdk",
     "crates/mockforge-tunnel",
     "crates/mockforge-vbr",
-    "tests"  # Integration tests package
-]
+    "crates/mockforge-schema",
+    "crates/mockforge-runtime-daemon",
+    "crates/mockforge-pipelines",
+    "crates/mockforge-federation",
+    "desktop-app",
+    "tests",  # Integration tests package
+    "crates/mockforge-template-expansion",
+    "crates/mockforge-world-state",
+    "crates/mockforge-performance"]
 exclude = [
     "crates/mockforge-registry-server",
 ]
@@ -43,7 +51,7 @@ resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.2.8"
+version = "0.3.3"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -125,7 +133,7 @@ urlencoding = "2.1"
 glob = "0.3"
 globwalk = "0.9"
 json-patch = "4.0"
-sysinfo = "0.32"
+sysinfo = "0.37"
 parking_lot = "0.12"
 
 # Authentication libraries

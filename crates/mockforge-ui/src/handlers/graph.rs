@@ -12,7 +12,7 @@ use axum::{
     },
 };
 use futures_util::stream::{self, Stream};
-use mockforge_core::graph::{GraphBuilder, GraphData};
+use mockforge_core::graph::GraphBuilder;
 use mockforge_core::request_chaining::ChainDefinition;
 use serde_json::Value;
 use std::convert::Infallible;
@@ -159,7 +159,7 @@ pub async fn graph_sse(
     let http_addr = state.http_server_addr;
 
     let stream = stream::unfold((), move |_| {
-        let http_addr = http_addr.clone();
+        let http_addr = http_addr;
         async move {
             tokio::time::sleep(Duration::from_secs(5)).await; // Update every 5 seconds
 

@@ -3,7 +3,7 @@
 //! This module provides synchronization capabilities for workspaces,
 //! including conflict resolution, merge strategies, and sync status tracking.
 
-use crate::workspace::core::{EntityId, Workspace};
+use crate::workspace::{EntityId, Workspace};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json;
