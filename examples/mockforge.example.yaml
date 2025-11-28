@@ -1,0 +1,32 @@
+# MockForge Generation Configuration
+# YAML format configuration file
+
+input:
+  # Path to OpenAPI specification file (JSON or YAML)
+  spec: openapi.json
+  # Additional input files (optional)
+  additional: []
+
+output:
+  # Output directory path
+  path: ./generated
+  # Output file name (without extension)
+  filename: null
+  # Clean output directory before generation
+  clean: false
+
+# Plugins to use during generation
+plugins: {}
+
+# Generation options
+options:
+  # Client library to generate for (reqwest, ureq, surf)
+  client: reqwest
+  # Generation mode (operations, tags, paths)
+  mode: tags
+  # Include validation in generated code
+  include-validation: true
+  # Include examples in responses
+  include-examples: true
+  # Target runtime (tokio, async-std, sync)
+  runtime: tokio

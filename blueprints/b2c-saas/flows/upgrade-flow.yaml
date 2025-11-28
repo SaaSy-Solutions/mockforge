@@ -1,0 +1,61 @@
+id: upgrade-flow
+name: Subscription Upgrade Flow
+description: Trial to paid upgrade with payment processing
+steps:
+  - name: Get Current Subscription
+    method: GET
+    path: /api/subscriptions/current
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    extract:
+      subscription_id: body.subscription.id
+      current_tier: body.subscription.tier
+
+  - name: Add Payment Method
+    method: POST
+    path: /api/payments/methods
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      type: "card"
+      card_number: "4242424242424242"
+      exp_month: 12
+      exp_year: 2025
+      cvc: "123"
+    extract:
+      payment_method_id: body.payment_method.id
+
+  - name: Upgrade Subscription
+    method: POST
+    path: /api/subscriptions/{{subscription_id}}/upgrade
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      plan: "premium"
+      payment_method_id: "{{payment_method_id}}"
+    extract:
+      new_subscription_id: body.subscription.id
+
+  - name: Process Payment
+    method: POST
+    path: /api/payments/process
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    body:
+      subscription_id: "{{new_subscription_id}}"
+      amount: 29.99
+      currency: USD
+    extract:
+      payment_id: body.payment.id
+      payment_status: body.payment.status
+
+  - name: Verify Subscription Status
+    method: GET
+    path: /api/subscriptions/{{new_subscription_id}}
+    headers:
+      Authorization: "Bearer {{access_token}}"
+    validate:
+      - path: body.subscription.status
+        expected: "active"
+      - path: body.subscription.tier
+        expected: "premium"

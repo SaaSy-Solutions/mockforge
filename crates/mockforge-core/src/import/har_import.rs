@@ -10,73 +10,104 @@ use std::collections::HashMap;
 /// HAR log structure (root object)
 #[derive(Debug, Deserialize)]
 pub struct HarLog {
+    /// HAR format version
     pub version: String,
+    /// Tool that created the HAR file
     pub creator: HarCreator,
+    /// Optional browser information
     #[serde(default)]
     pub browser: Option<HarBrowser>,
+    /// Optional page information
     #[serde(default)]
     pub pages: Vec<HarPage>,
+    /// Array of HTTP request/response entries
     pub entries: Vec<HarEntry>,
 }
 
 /// HAR creator information
 #[derive(Debug, Deserialize)]
 pub struct HarCreator {
+    /// Creator name (e.g., "Chrome DevTools")
     pub name: String,
+    /// Creator version
     pub version: String,
 }
 
 /// HAR browser information (optional)
 #[derive(Debug, Deserialize)]
 pub struct HarBrowser {
+    /// Browser name
     pub name: String,
+    /// Browser version
     pub version: String,
 }
 
 /// HAR page information (optional)
 #[derive(Debug, Deserialize)]
 pub struct HarPage {
+    /// Page load start timestamp
     pub started_date_time: String,
+    /// Unique page identifier
     pub id: String,
+    /// Page title
     pub title: String,
+    /// Page load timing information
     pub page_timings: HarPageTimings,
 }
 
 /// HAR page timings
 #[derive(Debug, Deserialize)]
 pub struct HarPageTimings {
+    /// Time to load page content (ms)
     pub on_content_load: Option<f64>,
+    /// Time to complete page load (ms)
     pub on_load: Option<f64>,
 }
 
 /// HAR entry (request/response pair)
 #[derive(Debug, Deserialize)]
 pub struct HarEntry {
+    /// Page reference ID (if applicable)
     pub pageref: Option<String>,
+    /// Request start timestamp
     #[serde(rename = "startedDateTime")]
     pub started_date_time: String,
+    /// Total request/response time (ms)
     pub time: f64,
+    /// HTTP request details
     pub request: HarRequest,
+    /// HTTP response details
     pub response: HarResponse,
+    /// Cache information
     pub cache: HarCache,
+    /// Detailed timing breakdown
     pub timings: HarTimings,
 }
 
 /// HAR request structure
 #[derive(Debug, Deserialize)]
 pub struct HarRequest {
+    /// HTTP method
     pub method: String,
+    /// Request URL
     pub url: String,
+    /// HTTP version (e.g., "HTTP/1.1")
     #[serde(rename = "httpVersion")]
     pub http_version: String,
+    /// Request cookies
     pub cookies: Vec<HarCookie>,
+    /// Request headers
     pub headers: Vec<HarHeader>,
+    /// Query parameters
     #[serde(default, rename = "queryString")]
     pub query_string: Vec<HarQueryParam>,
+    /// POST data (if any)
     #[serde(rename = "postData")]
     pub post_data: Option<HarPostData>,
+    /// Size of request headers (bytes)
     #[serde(rename = "headersSize")]
     pub headers_size: i64,
+    /// Size of request body (bytes)
     #[serde(rename = "bodySize")]
     pub body_size: i64,
 }
@@ -84,131 +115,177 @@ pub struct HarRequest {
 /// HAR response structure
 #[derive(Debug, Deserialize)]
 pub struct HarResponse {
+    /// HTTP status code
     pub status: u16,
+    /// HTTP status text
     #[serde(rename = "statusText")]
     pub status_text: String,
+    /// HTTP version (e.g., "HTTP/1.1")
     #[serde(rename = "httpVersion")]
     pub http_version: String,
+    /// Response cookies
     pub cookies: Vec<HarCookie>,
+    /// Response headers
     pub headers: Vec<HarHeader>,
+    /// Response content
     pub content: HarContent,
+    /// Redirect URL (if applicable)
     #[serde(rename = "redirectURL")]
     pub redirect_url: String,
+    /// Size of response headers (bytes)
     #[serde(rename = "headersSize")]
     pub headers_size: i64,
+    /// Size of response body (bytes)
     #[serde(rename = "bodySize")]
     pub body_size: i64,
 }
 
-/// HAR cookie
+/// HAR cookie entry
 #[derive(Debug, Deserialize)]
 pub struct HarCookie {
+    /// Cookie name
     pub name: String,
+    /// Cookie value
     pub value: String,
+    /// Cookie path
     #[serde(default)]
     pub path: Option<String>,
+    /// Cookie domain
     #[serde(default)]
     pub domain: Option<String>,
+    /// Cookie expiration timestamp
     #[serde(default)]
     pub expires: Option<String>,
+    /// Whether cookie is HTTP-only
     #[serde(default)]
     pub http_only: Option<bool>,
+    /// Whether cookie requires HTTPS
     #[serde(default)]
     pub secure: Option<bool>,
 }
 
-/// HAR header
+/// HAR header entry
 #[derive(Debug, Deserialize)]
 pub struct HarHeader {
+    /// Header name
     pub name: String,
+    /// Header value
     pub value: String,
 }
 
-/// HAR query parameter
+/// HAR query parameter entry
 #[derive(Debug, Deserialize)]
 pub struct HarQueryParam {
+    /// Parameter name
     pub name: String,
+    /// Parameter value
     pub value: String,
 }
 
-/// HAR post data
+/// HAR POST request body data
 #[derive(Debug, Deserialize)]
 pub struct HarPostData {
+    /// MIME type of the POST data
     #[serde(rename = "mimeType")]
     pub mime_type: String,
+    /// Form parameters (for form-urlencoded or multipart/form-data)
     #[serde(default)]
     pub params: Vec<HarParam>,
+    /// Raw text content (for raw or JSON bodies)
     #[serde(default)]
     pub text: Option<String>,
 }
 
-/// HAR post parameter
+/// HAR POST parameter (form field or file)
 #[derive(Debug, Deserialize)]
 pub struct HarParam {
+    /// Parameter name
     pub name: String,
+    /// Parameter value (None for file uploads)
     pub value: Option<String>,
+    /// Filename (for file uploads)
     #[serde(default, rename = "fileName")]
     pub file_name: Option<String>,
+    /// Content type (for file uploads)
     #[serde(default, rename = "contentType")]
     pub content_type: Option<String>,
 }
 
-/// HAR content
+/// HAR response content
 #[derive(Debug, Deserialize)]
 pub struct HarContent {
+    /// Content size in bytes
     pub size: i64,
+    /// Compressed size (bytes, if compression was used)
     #[serde(default)]
     pub compression: Option<i64>,
+    /// MIME type of the content
     #[serde(rename = "mimeType")]
     pub mime_type: String,
+    /// Response body text (base64 encoded if encoding is specified)
     #[serde(default)]
     pub text: Option<String>,
+    /// Content encoding (base64, gzip, etc.)
     #[serde(default)]
     pub encoding: Option<String>,
 }
 
-/// HAR cache information
+/// HAR cache information (currently empty struct per HAR spec)
 #[derive(Debug, Deserialize)]
 pub struct HarCache {}
 
-/// HAR timing information
+/// HAR timing breakdown for performance analysis
 #[derive(Debug, Deserialize)]
 pub struct HarTimings {
+    /// Time to send request (ms)
     #[serde(default)]
     pub send: Option<f64>,
+    /// Time waiting for response (ms)
     #[serde(default)]
     pub wait: Option<f64>,
+    /// Time to receive response (ms)
     #[serde(default)]
     pub receive: Option<f64>,
 }
 
-/// HAR root structure
+/// HAR archive root structure
 #[derive(Debug, Deserialize)]
 pub struct HarArchive {
+    /// HAR log containing all entries
     pub log: HarLog,
 }
 
 /// MockForge route structure for HAR import
 #[derive(Debug, Serialize)]
 pub struct MockForgeRoute {
+    /// HTTP method
     pub method: String,
+    /// Request path
     pub path: String,
+    /// Request headers
     pub headers: HashMap<String, String>,
+    /// Optional request body
     pub body: Option<String>,
+    /// Mock response for this route
     pub response: MockForgeResponse,
 }
 
 /// MockForge response structure
 #[derive(Debug, Serialize)]
 pub struct MockForgeResponse {
+    /// HTTP status code
     pub status: u16,
+    /// Response headers
     pub headers: HashMap<String, String>,
+    /// Response body
     pub body: Value,
 }
 
-/// HAR import result
+/// Result of importing a HAR archive
 pub struct HarImportResult {
+    /// Converted routes from HAR entries
     pub routes: Vec<MockForgeRoute>,
+    /// Warnings encountered during import
     pub warnings: Vec<String>,
 }
 

@@ -1,0 +1,154 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MockForge Test API",
+    "version": "1.0.0",
+    "description": "Test API for Playwright and Vitest integration tests"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Test server"
+    }
+  ],
+  "paths": {
+    "/api/users": {
+      "get": {
+        "operationId": "getUsers",
+        "summary": "Get all users",
+        "responses": {
+          "200": {
+            "description": "List of users",
+            "content": {
+              "application/json": {
+                "example": [
+                  {
+                    "id": 1,
+                    "name": "Alice Johnson",
+                    "email": "alice@example.com"
+                  },
+                  {
+                    "id": 2,
+                    "name": "Bob Smith",
+                    "email": "bob@example.com"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createUser",
+        "summary": "Create a user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "email": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "{{uuid}}",
+                  "name": "{{request.body.name}}",
+                  "email": "{{request.body.email}}"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid data",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid user data"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/1": {
+      "get": {
+        "operationId": "getUser",
+        "summary": "Get a specific user",
+        "responses": {
+          "200": {
+            "description": "User details",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 1,
+                  "name": "Alice Johnson",
+                  "email": "alice@example.com"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/protected/profile": {
+      "get": {
+        "operationId": "getProfile",
+        "summary": "Get user profile (protected)",
+        "responses": {
+          "200": {
+            "description": "User profile",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 1,
+                  "username": "testuser",
+                  "authenticated": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/slow": {
+      "get": {
+        "operationId": "slowEndpoint",
+        "summary": "Slow endpoint for testing delays",
+        "x-mockforge-delay": 1500,
+        "responses": {
+          "200": {
+            "description": "Delayed response",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "This response was delayed"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

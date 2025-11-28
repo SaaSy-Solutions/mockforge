@@ -9,6 +9,11 @@ stages:
 variables:
   DOCKER_DRIVER: overlay2
   MOCKFORGE_IMAGE: "mockforge:${CI_COMMIT_SHORT_SHA}"
+  # Reality level for mock testing (1-5, default: 3)
+  # 1 = Static Stubs, 2 = Light Simulation, 3 = Moderate Realism,
+  # 4 = High Realism, 5 = Production Chaos
+  # Override per job or pipeline variable for different test scenarios
+  MOCKFORGE_REALITY_LEVEL: "3"
 
 # Build MockForge Docker image
 build:mockforge:
@@ -73,6 +78,9 @@ test:integration:
   image: docker:latest
   services:
     - docker:dind
+  variables:
+    # Use moderate realism for integration tests
+    MOCKFORGE_REALITY_LEVEL: "3"
   before_script:
     - docker load < mockforge-image.tar
     - docker-compose -f docker-compose.microservices.yml up -d
@@ -104,6 +112,9 @@ deploy:staging:
   image: docker:latest
   services:
     - docker:dind
+  variables:
+    # Use high realism for staging environment
+    MOCKFORGE_REALITY_LEVEL: "4"
   script:
     - docker load < mockforge-image.tar
     - docker tag ${MOCKFORGE_IMAGE} ${CI_REGISTRY_IMAGE}:staging

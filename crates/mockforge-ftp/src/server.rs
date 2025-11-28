@@ -36,7 +36,7 @@ impl FtpServer {
         // Create the FTP server with our custom storage
         let server = ServerBuilder::new(Box::new(move || storage.clone()))
             .greeting("MockForge FTP Server")
-            .passive_ports(49152..65535); // Use dynamic port range for passive mode
+            .passive_ports(49152..=65534); // Use dynamic port range for passive mode
 
         println!("FTP server listening on {}", addr);
         let server = server.build()?;

@@ -149,14 +149,29 @@
 
 use mockforge_core::LatencyProfile;
 
+pub mod cache;
 pub mod executor;
 pub mod graphql_tracing;
+pub mod handlers;
 pub mod registry;
+pub mod resolvers;
 pub mod schema;
+pub mod schema_watcher;
+pub mod subscriptions;
 
+pub use cache::{CacheConfig, CacheKey, CacheMiddleware, CacheStats, ResponseCache};
 pub use executor::{create_graphql_router, start_graphql_server, GraphQLExecutor};
+pub use handlers::{
+    GraphQLContext, GraphQLHandler, HandlerRegistry, HandlerResult, OperationType, VariableMatcher,
+    VariablePattern,
+};
 pub use registry::GraphQLSchemaRegistry;
 pub use schema::GraphQLSchema;
+pub use schema_watcher::SchemaWatcher;
+pub use subscriptions::{
+    MockSubscriptionHandler, SubscriptionEvent, SubscriptionHandler, SubscriptionId,
+    SubscriptionManager, SubscriptionMetadata, Topic,
+};
 
 // Re-export tracing utilities
 pub use graphql_tracing::{

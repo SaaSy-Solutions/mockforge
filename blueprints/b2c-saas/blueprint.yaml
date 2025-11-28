@@ -1,0 +1,107 @@
+manifest_version: "1.0"
+name: b2c-saas
+version: "1.0.0"
+title: B2C SaaS with Auth + Billing
+description: |
+  Complete B2C SaaS blueprint with authentication, subscription management, and billing.
+
+  This blueprint provides:
+  - User authentication and authorization flows
+  - Subscription lifecycle management (trial, active, cancelled)
+  - Billing and payment processing
+  - User profile and settings management
+  - Usage tracking and analytics
+
+  Perfect for SaaS applications that need:
+  - Multi-tier subscription plans
+  - Trial-to-paid conversion flows
+  - Payment processing and invoicing
+  - User onboarding experiences
+
+author: MockForge Team
+author_email: team@mockforge.dev
+category: saas
+tags:
+  - saas
+  - b2c
+  - auth
+  - billing
+  - subscriptions
+  - payments
+  - onboarding
+
+setup:
+  personas:
+    - id: premium-user
+      name: Premium User
+      description: High-value customer with active premium subscription
+    - id: trial-user
+      name: Trial User
+      description: New user in trial period, evaluating the product
+    - id: churned-user
+      name: Churned User
+      description: Former customer who cancelled subscription
+
+  reality:
+    level: moderate
+    description: Moderate realism with billing-specific chaos patterns for payment failures and subscription issues
+
+  flows:
+    - id: signup-flow
+      name: User Signup Flow
+      description: Complete signup → trial → activation flow
+    - id: upgrade-flow
+      name: Subscription Upgrade Flow
+      description: Trial to paid upgrade with payment processing
+    - id: billing-cycle-flow
+      name: Billing Cycle Flow
+      description: Monthly billing cycle with payment processing and invoice generation
+
+  scenarios:
+    - id: happy-path-signup
+      name: Happy Path - User Signup
+      type: happy_path
+      description: Successful user signup and trial activation flow
+      file: scenarios/happy-path-signup.yaml
+    - id: known-failure-payment-declined
+      name: Known Failure - Payment Declined
+      type: known_failure
+      description: Payment processing failure scenario where card is declined
+      file: scenarios/known-failure-payment-declined.yaml
+    - id: slow-path-billing-delay
+      name: Slow Path - Billing Processing Delay
+      type: slow_path
+      description: Billing cycle processing with intentional delays
+      file: scenarios/slow-path-billing-delay.yaml
+
+  playground:
+    enabled: true
+    collection_file: playground/collection.json
+
+compatibility:
+  min_version: "0.3.0"
+  max_version: null
+  required_features:
+    - personas
+    - consistency
+    - reality-continuum
+  protocols:
+    - http
+
+files:
+  - blueprint.yaml
+  - config.yaml
+  - README.md
+  - personas/
+  - flows/
+  - scenarios/
+  - contracts/
+  - playground/
+
+contracts:
+  - file: contracts/auth-contract.json
+    description: Authentication endpoint contracts (signup, login)
+  - file: contracts/billing-contract.json
+    description: Billing and subscription endpoint contracts
+
+readme: README.md

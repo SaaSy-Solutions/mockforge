@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Chaos testing utilities with orchestration and randomness
 //!
 //! This module provides high-level chaos testing utilities that randomly inject
@@ -13,6 +15,7 @@ use tokio::sync::RwLock;
 
 /// Chaos mode configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ChaosConfig {
     /// Enable chaos mode
     pub enabled: bool,
@@ -183,7 +186,7 @@ impl ChaosEngine {
             return ChaosResult::Success;
         }
 
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         // First, randomly decide if we should inject an error
         if rng.random_bool(config.error_rate) {
@@ -225,7 +228,7 @@ impl ChaosEngine {
             return Ok(());
         }
 
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         // Only inject latency based on delay_rate
         if rng.random_bool(config.delay_rate) {
@@ -256,7 +259,7 @@ impl ChaosEngine {
             return None;
         }
 
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let status_code = if config.status_codes.is_empty() {
             500
         } else {
@@ -295,27 +298,44 @@ impl Default for ChaosEngine {
     }
 }
 
-/// Result of chaos processing
+/// Result of chaos engineering evaluation, indicating what effect to apply
 #[derive(Debug, Clone)]
 pub enum ChaosResult {
     /// No chaos effect - request should proceed normally
     Success,
     /// Inject an error response
-    Error { status_code: u16, message: String },
-    /// Inject a delay
-    Delay { delay_ms: u64 },
+    Error {
+        /// HTTP status code for the error
+        status_code: u16,
+        /// Error message to include
+        message: String,
+    },
+    /// Inject a delay before processing
+    Delay {
+        /// Delay duration in milliseconds
+        delay_ms: u64,
+    },
     /// Inject a timeout
-    Timeout { timeout_ms: u64 },
+    Timeout {
+        /// Timeout duration in milliseconds
+        timeout_ms: u64,
+    },
 }
 
-/// Chaos engine statistics
+/// Statistics for chaos engineering engine
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChaosStatistics {
+    /// Whether chaos engineering is enabled
     pub enabled: bool,
+    /// Error injection rate (0.0 to 1.0)
     pub error_rate: f64,
+    /// Delay injection rate (0.0 to 1.0)
     pub delay_rate: f64,
+    /// Minimum delay in milliseconds
     pub min_delay_ms: u64,
+    /// Maximum delay in milliseconds
     pub max_delay_ms: u64,
+    /// Whether to inject timeouts
     pub inject_timeouts: bool,
 }
 

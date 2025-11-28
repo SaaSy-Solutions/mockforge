@@ -23,6 +23,7 @@ impl Overrides {
         &self.rules
     }
 
+    /// Apply overrides to a response body using default condition context
     pub fn apply(&self, operation_id: &str, tags: &[String], path: &str, body: &mut Value) {
         self.apply_with_context(operation_id, tags, path, body, &ConditionContext::new())
     }

@@ -68,13 +68,48 @@ impl Default for OtelTracingConfig {
 #[cfg(feature = "opentelemetry")]
 pub fn init_with_otel(
     logging_config: LoggingConfig,
-    _tracing_config: OtelTracingConfig,
+    tracing_config: OtelTracingConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Initialize the OpenTelemetry tracer using mockforge-tracing
-    // This would require mockforge-tracing as a dependency
-    // For now, we'll just use the logging config without OpenTelemetry
+    // Try to initialize OpenTelemetry tracing if mockforge-tracing is available
+    #[cfg(feature = "mockforge-tracing")]
+    {
+        use mockforge_tracing::{init_tracer, ExporterType, TracingConfig};
 
-    tracing::warn!("OpenTelemetry integration requires mockforge-tracing crate");
+        // Map protocol string to ExporterType enum
+        let exporter_type = match tracing_config.protocol.as_str() {
+            "grpc" | "http" if tracing_config.otlp_endpoint.is_some() => ExporterType::Otlp,
+            _ => ExporterType::Jaeger, // Default to Jaeger
+        };
+
+        let tracing_cfg = TracingConfig {
+            service_name: tracing_config.service_name.clone(),
+            service_version: None, // Optional field
+            environment: tracing_config.environment.clone(),
+            jaeger_endpoint: tracing_config.jaeger_endpoint.clone(),
+            otlp_endpoint: tracing_config.otlp_endpoint.clone(),
+            exporter_type,
+            sampling_rate: tracing_config.sampling_rate,
+        };
+
+        match init_tracer(tracing_cfg) {
+            Ok(_) => {
+                tracing::info!("OpenTelemetry tracing initialized successfully");
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to initialize OpenTelemetry tracing: {}. Using logging only.",
+                    e
+                );
+            }
+        }
+    }
+
+    #[cfg(not(feature = "mockforge-tracing"))]
+    {
+        tracing::warn!("OpenTelemetry feature enabled but mockforge-tracing crate not available. Using logging only.");
+    }
+
+    // Always initialize logging
     crate::logging::init_logging(logging_config)?;
 
     Ok(())
@@ -83,8 +118,17 @@ pub fn init_with_otel(
 /// Shutdown OpenTelemetry tracer and flush pending spans
 #[cfg(feature = "opentelemetry")]
 pub fn shutdown_otel() {
-    // This would call mockforge_tracing::shutdown_tracer()
-    tracing::info!("Shutting down OpenTelemetry tracer");
+    #[cfg(feature = "mockforge-tracing")]
+    {
+        use mockforge_tracing::shutdown_tracer;
+        shutdown_tracer();
+        tracing::info!("OpenTelemetry tracer shut down");
+    }
+
+    #[cfg(not(feature = "mockforge-tracing"))]
+    {
+        tracing::debug!("OpenTelemetry shutdown called but mockforge-tracing not available");
+    }
 }
 
 #[cfg(not(feature = "opentelemetry"))]

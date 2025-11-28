@@ -1,0 +1,499 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Reality Continuum - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/reality-continuum.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="reality-continuum"><a class="header" href="#reality-continuum">Reality Continuum</a></h1>
+<p>The Reality Continuum feature enables gradual transition from mock to real backend data by intelligently blending responses from both sources. This allows teams to develop and test against a real backend that’s still under construction, smoothly transitioning from 100% mock to 100% real over time.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The Reality Continuum provides:</p>
+<ul>
+<li><strong>Dynamic Blending</strong>: Intelligently merges mock and real responses based on configurable blend ratios</li>
+<li><strong>Time-Based Progression</strong>: Automatically transitions blend ratios over time using virtual clock</li>
+<li><strong>Flexible Configuration</strong>: Supports per-route, group-level, and global blend ratio settings</li>
+<li><strong>Multiple Merge Strategies</strong>: Field-level merge, weighted selection, or body blending</li>
+<li><strong>Fallback Handling</strong>: Gracefully handles failures from either source</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="basic-configuration"><a class="header" href="#basic-configuration">Basic Configuration</a></h3>
+<pre><code class="language-yaml">reality_continuum:
+  enabled: true
+  default_ratio: 0.0  # Start with 100% mock
+  transition_mode: "manual"  # or "time_based" or "scheduled"
+  merge_strategy: "field_level"
+</code></pre>
+<h3 id="time-based-progression"><a class="header" href="#time-based-progression">Time-Based Progression</a></h3>
+<p>Configure automatic progression from mock to real over a time period:</p>
+<pre><code class="language-yaml">reality_continuum:
+  enabled: true
+  default_ratio: 0.0
+  transition_mode: "time_based"
+  time_schedule:
+    start_time: "2025-01-01T00:00:00Z"
+    end_time: "2025-02-01T00:00:00Z"
+    start_ratio: 0.0
+    end_ratio: 1.0
+    curve: "linear"  # or "exponential" or "sigmoid"
+</code></pre>
+<h3 id="per-route-configuration"><a class="header" href="#per-route-configuration">Per-Route Configuration</a></h3>
+<p>Set different blend ratios for specific routes:</p>
+<pre><code class="language-yaml">reality_continuum:
+  enabled: true
+  default_ratio: 0.0
+  routes:
+    - pattern: "/api/users/*"
+      ratio: 0.5  # 50% real for user endpoints
+      enabled: true
+    - pattern: "/api/orders/*"
+      ratio: 0.3  # 30% real for order endpoints
+      group: "api-v1"
+      enabled: true
+</code></pre>
+<h2 id="blend-ratio-priority"><a class="header" href="#blend-ratio-priority">Blend Ratio Priority</a></h2>
+<p>The blend ratio is determined in the following order (highest to lowest priority):</p>
+<ol>
+<li><strong>Manual Overrides</strong> - Set via API calls</li>
+<li><strong>Route-Specific Rules</strong> - Per-route configuration</li>
+<li><strong>Group-Level Overrides</strong> - Migration group settings</li>
+<li><strong>Time-Based Schedule</strong> - If time-based mode is enabled</li>
+<li><strong>Default Ratio</strong> - Global default setting</li>
+</ol>
+<h2 id="merge-strategies"><a class="header" href="#merge-strategies">Merge Strategies</a></h2>
+<h3 id="field-level-default"><a class="header" href="#field-level-default">Field-Level (Default)</a></h3>
+<p>Deep merges JSON objects, combines arrays, and uses weighted selection for primitives:</p>
+<pre><code class="language-json">// Mock response
+{
+  "id": 1,
+  "name": "Mock User",
+  "email": "mock@example.com"
+}
+
+// Real response
+{
+  "id": 2,
+  "name": "Real User",
+  "status": "active"
+}
+
+// Blended (ratio: 0.5)
+{
+  "id": 1.5,  // Weighted average
+  "name": "Real User",  // Selected based on ratio
+  "email": "mock@example.com",  // From mock (ratio &lt; 0.5)
+  "status": "active"  // From real (ratio &gt;= 0.5)
+}
+</code></pre>
+<h3 id="weighted-selection"><a class="header" href="#weighted-selection">Weighted Selection</a></h3>
+<p>Randomly selects between mock and real based on ratio (for testing/demo).</p>
+<h3 id="body-blend"><a class="header" href="#body-blend">Body Blend</a></h3>
+<p>Merges arrays, averages numeric fields, and deep merges objects with interleaving.</p>
+<h2 id="transition-curves"><a class="header" href="#transition-curves">Transition Curves</a></h2>
+<h3 id="linear"><a class="header" href="#linear">Linear</a></h3>
+<p>Constant rate of progression:</p>
+<pre><code>Ratio
+1.0 |                    *
+    |               *
+    |          *
+    |     *
+0.0 |*
+    +------------------- Time
+</code></pre>
+<h3 id="exponential"><a class="header" href="#exponential">Exponential</a></h3>
+<p>Slow start, fast end:</p>
+<pre><code>Ratio
+1.0 |                        *
+    |                  *
+    |            *
+    |      *
+0.0 |*
+    +------------------- Time
+</code></pre>
+<h3 id="sigmoid"><a class="header" href="#sigmoid">Sigmoid</a></h3>
+<p>Slow start and end, fast middle:</p>
+<pre><code>Ratio
+1.0 |                    *
+    |               *
+    |          *
+    |     *
+0.0 |*
+    +------------------- Time
+</code></pre>
+<h2 id="api-endpoints"><a class="header" href="#api-endpoints">API Endpoints</a></h2>
+<h3 id="get-blend-ratio"><a class="header" href="#get-blend-ratio">Get Blend Ratio</a></h3>
+<pre><code class="language-http">GET /__mockforge/continuum/ratio?path=/api/users/123
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{
+  "success": true,
+  "data": {
+    "path": "/api/users/123",
+    "blend_ratio": 0.5,
+    "enabled": true,
+    "transition_mode": "Manual",
+    "merge_strategy": "FieldLevel",
+    "default_ratio": 0.0
+  }
+}
+</code></pre>
+<h3 id="set-blend-ratio"><a class="header" href="#set-blend-ratio">Set Blend Ratio</a></h3>
+<pre><code class="language-http">PUT /__mockforge/continuum/ratio
+Content-Type: application/json
+
+{
+  "path": "/api/users/*",
+  "ratio": 0.75
+}
+</code></pre>
+<h3 id="get-time-schedule"><a class="header" href="#get-time-schedule">Get Time Schedule</a></h3>
+<pre><code class="language-http">GET /__mockforge/continuum/schedule
+</code></pre>
+<h3 id="update-time-schedule"><a class="header" href="#update-time-schedule">Update Time Schedule</a></h3>
+<pre><code class="language-http">PUT /__mockforge/continuum/schedule
+Content-Type: application/json
+
+{
+  "start_time": "2025-01-01T00:00:00Z",
+  "end_time": "2025-02-01T00:00:00Z",
+  "start_ratio": 0.0,
+  "end_ratio": 1.0,
+  "curve": "linear"
+}
+</code></pre>
+<h3 id="manually-advance-ratio"><a class="header" href="#manually-advance-ratio">Manually Advance Ratio</a></h3>
+<pre><code class="language-http">POST /__mockforge/continuum/advance
+Content-Type: application/json
+
+{
+  "increment": 0.1
+}
+</code></pre>
+<h3 id="enabledisable"><a class="header" href="#enabledisable">Enable/Disable</a></h3>
+<pre><code class="language-http">PUT /__mockforge/continuum/enabled
+Content-Type: application/json
+
+{
+  "enabled": true
+}
+</code></pre>
+<h2 id="integration-with-time-travel"><a class="header" href="#integration-with-time-travel">Integration with Time Travel</a></h2>
+<p>The Reality Continuum integrates seamlessly with MockForge’s time travel system. When virtual time is enabled, blend ratios automatically progress based on the virtual clock:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_core::{RealityContinuumEngine, VirtualClock, TimeSchedule};
+
+let clock = Arc::new(VirtualClock::new());
+clock.enable_and_set(start_time);
+
+let schedule = TimeSchedule::new(start_time, end_time, 0.0, 1.0);
+let config = ContinuumConfig {
+    enabled: true,
+    transition_mode: TransitionMode::TimeBased,
+    time_schedule: Some(schedule),
+    ..Default::default()
+};
+
+let engine = RealityContinuumEngine::with_virtual_clock(config, clock);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="gradual-backend-migration"><a class="header" href="#gradual-backend-migration">Gradual Backend Migration</a></h3>
+<p>Start with 100% mock responses and gradually increase real backend usage as endpoints are implemented:</p>
+<pre><code class="language-yaml">reality_continuum:
+  enabled: true
+  transition_mode: "time_based"
+  time_schedule:
+    start_time: "2025-01-01T00:00:00Z"
+    end_time: "2025-03-01T00:00:00Z"  # 2 months transition
+    start_ratio: 0.0
+    end_ratio: 1.0
+    curve: "sigmoid"  # Slow start and end
+</code></pre>
+<h3 id="per-endpoint-rollout"><a class="header" href="#per-endpoint-rollout">Per-Endpoint Rollout</a></h3>
+<p>Different endpoints migrate at different rates:</p>
+<pre><code class="language-yaml">reality_continuum:
+  enabled: true
+  routes:
+    - pattern: "/api/users/*"
+      ratio: 0.9  # Almost fully migrated
+    - pattern: "/api/orders/*"
+      ratio: 0.3  # Still mostly mock
+    - pattern: "/api/payments/*"
+      ratio: 0.0  # Not yet migrated
+</code></pre>
+<h3 id="ab-testing"><a class="header" href="#ab-testing">A/B Testing</a></h3>
+<p>Compare mock and real responses by blending them:</p>
+<pre><code class="language-yaml">reality_continuum:
+  enabled: true
+  default_ratio: 0.5  # 50/50 split
+  merge_strategy: "field_level"
+</code></pre>
+<h2 id="fallback-behavior"><a class="header" href="#fallback-behavior">Fallback Behavior</a></h2>
+<p>When continuum is enabled:</p>
+<ul>
+<li><strong>Both sources succeed</strong>: Responses are blended according to the blend ratio</li>
+<li><strong>Only proxy succeeds</strong>: Real response is returned (fallback to real)</li>
+<li><strong>Only mock succeeds</strong>: Mock response is returned (fallback to mock)</li>
+<li><strong>Both fail</strong>: Error is returned (unless migration mode is Real, which fails hard)</li>
+</ul>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Start Conservative</strong>: Begin with <code>default_ratio: 0.0</code> (100% mock)</li>
+<li><strong>Use Time-Based Progression</strong>: Automate the transition with time schedules</li>
+<li><strong>Monitor Both Sources</strong>: Ensure both mock and real backends are healthy</li>
+<li><strong>Test Fallback Behavior</strong>: Verify graceful degradation when one source fails</li>
+<li><strong>Use Groups for Batch Control</strong>: Group related routes for coordinated migration</li>
+<li><strong>Leverage Virtual Clock</strong>: Use time travel to simulate weeks of development in minutes</li>
+</ol>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ul>
+<li>Currently supports JSON responses only</li>
+<li>Merge strategies may not handle all edge cases perfectly</li>
+<li>Time-based progression requires time travel to be enabled for full effect</li>
+<li>Blending adds slight latency (both responses must be fetched)</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="temporal-simulation.html">Temporal Simulation</a> - Time travel integration</li>
+<li><a href="advanced-behavior.html#conditional-proxying">Proxy Mode</a> - Proxy configuration</li>
+<li><a href="../configuration/files.html">Configuration Guide</a> - Complete configuration reference</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/voice-llm-interface.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/smart-personas.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/voice-llm-interface.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/smart-personas.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ForgeConnect - Vanilla JS Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            padding-left: 10px;
+        }
+        .log-entry.error {
+            border-left-color: #dc3545;
+        }
+        .log-entry.success {
+            border-left-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ForgeConnect - Vanilla JS Example</h1>
+
+        <div id="status" class="status disconnected">
+            Connecting to MockForge...
+        </div>
+
+        <div>
+            <button id="testSuccess" disabled>Test Successful Request</button>
+            <button id="test404" disabled>Test 404 (Auto-Mock)</button>
+            <button id="test500" disabled>Test 500 (Auto-Mock)</button>
+            <button id="listMocks" disabled>List Mocks</button>
+        </div>
+
+        <div id="log" class="log"></div>
+    </div>
+
+    <script type="module">
+        import { ForgeConnect } from '../../dist/index.esm.js';
+
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+        const testSuccessBtn = document.getElementById('testSuccess');
+        const test404Btn = document.getElementById('test404');
+        const test500Btn = document.getElementById('test500');
+        const listMocksBtn = document.getElementById('listMocks');
+
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function updateStatus(connected, url) {
+            if (connected) {
+                statusEl.className = 'status connected';
+                statusEl.textContent = `✓ Connected to MockForge at ${url}`;
+                testSuccessBtn.disabled = false;
+                test404Btn.disabled = false;
+                test500Btn.disabled = false;
+                listMocksBtn.disabled = false;
+            } else {
+                statusEl.className = 'status disconnected';
+                statusEl.textContent = '✗ Not connected to MockForge';
+                testSuccessBtn.disabled = true;
+                test404Btn.disabled = true;
+                test500Btn.disabled = true;
+                listMocksBtn.disabled = true;
+            }
+        }
+
+        // Initialize ForgeConnect
+        const forgeConnect = new ForgeConnect({
+            mockMode: 'auto',
+            autoMockStatusCodes: [404, 500, 502, 503, 504],
+            autoMockNetworkErrors: true,
+            enableLogging: true,
+            onMockCreated: (mock) => {
+                log(`Mock created: ${mock.name} (${mock.id})`, 'success');
+            },
+            onConnectionChange: (connected, url) => {
+                updateStatus(connected, url);
+                if (connected) {
+                    log(`Connected to MockForge at ${url}`, 'success');
+                } else {
+                    log('Disconnected from MockForge', 'error');
+                }
+            },
+        });
+
+        // Initialize connection
+        forgeConnect.initialize().then(connected => {
+            if (connected) {
+                log('ForgeConnect initialized successfully');
+            } else {
+                log('Failed to connect to MockForge. Make sure MockForge is running on localhost:3000', 'error');
+            }
+        });
+
+        // Test buttons
+        testSuccessBtn.addEventListener('click', async () => {
+            log('Making successful request to /api/users...');
+            try {
+                const response = await fetch('/api/users');
+                const data = await response.json();
+                log(`Response: ${JSON.stringify(data, null, 2)}`, 'success');
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+            }
+        });
+
+        test404Btn.addEventListener('click', async () => {
+            log('Making request to /api/nonexistent (will trigger 404 and auto-mock)...');
+            try {
+                const response = await fetch('/api/nonexistent');
+                const data = await response.json();
+                log(`Response: ${JSON.stringify(data, null, 2)}`, 'success');
+                log('Note: If MockForge is running, this request should have created a mock', 'info');
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+            }
+        });
+
+        test500Btn.addEventListener('click', async () => {
+            log('Making request to /api/error (will trigger 500 and auto-mock)...');
+            try {
+                const response = await fetch('/api/error');
+                const data = await response.json();
+                log(`Response: ${JSON.stringify(data, null, 2)}`, 'success');
+                log('Note: If MockForge is running, this request should have created a mock', 'info');
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+            }
+        });
+
+        listMocksBtn.addEventListener('click', async () => {
+            log('Fetching list of mocks...');
+            try {
+                const mocks = await forgeConnect.listMocks();
+                log(`Found ${mocks.length} mocks:`, 'success');
+                mocks.forEach(mock => {
+                    log(`  - ${mock.name} (${mock.method} ${mock.path})`, 'info');
+                });
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+            }
+        });
+    </script>
+</body>
+</html>

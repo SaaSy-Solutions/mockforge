@@ -6,48 +6,65 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Postman Environment structure
+/// Postman Environment structure from JSON files
 #[derive(Debug, Deserialize)]
 pub struct PostmanEnvironment {
+    /// Environment ID (if specified)
     pub id: Option<String>,
+    /// Environment name
     pub name: Option<String>,
+    /// Array of environment variables
     #[serde(default)]
     pub values: Vec<EnvironmentValue>,
 }
 
-/// Environment variable value
+/// Environment variable value from Postman
 #[derive(Debug, Deserialize)]
 pub struct EnvironmentValue {
+    /// Variable key/name
     pub key: String,
+    /// Variable value (optional)
     pub value: Option<String>,
+    /// Optional description of the variable
     pub description: Option<String>,
+    /// Whether this variable is enabled
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 }
 
-/// Environment import result
+/// Result of importing a Postman environment
 #[derive(Debug)]
 pub struct EnvironmentImportResult {
+    /// Name of the imported environment
     pub name: String,
+    /// Map of variable names to their values and metadata
     pub variables: HashMap<String, EnvironmentVariable>,
+    /// Number of enabled variables imported
     pub enabled_count: usize,
+    /// Total number of variables found (enabled + disabled)
     pub total_count: usize,
 }
 
-/// Environment variable with metadata
+/// Environment variable with metadata for use in MockForge
 #[derive(Debug, Serialize, Clone)]
 pub struct EnvironmentVariable {
+    /// Variable value
     pub value: String,
+    /// Optional description from Postman
     pub description: Option<String>,
+    /// Whether this variable is enabled
     pub enabled: bool,
+    /// Source/origin of this variable
     pub source: VariableSource,
 }
 
-/// Source of the environment variable
+/// Source/origin of an environment variable
 #[derive(Debug, Serialize, Clone)]
 pub enum VariableSource {
-    Environment(String), // Environment name
-    Collection,          // From collection-level variables
+    /// Variable from a named environment
+    Environment(String),
+    /// Variable from collection-level variables
+    Collection,
 }
 
 fn default_enabled() -> bool {

@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Banking Lite Transfer Contract",
+  "description": "Contract schemas for money transfer endpoints",
+  "version": "1.0.0",
+  "endpoints": {
+    "/api/transfers": {
+      "POST": {
+        "request": {
+          "type": "object",
+          "required": ["from_account_id", "to_account_id", "amount", "currency"],
+          "properties": {
+            "from_account_id": {
+              "type": "string",
+              "description": "Source account ID"
+            },
+            "to_account_id": {
+              "type": "string",
+              "description": "Destination account ID"
+            },
+            "amount": {
+              "type": "number",
+              "minimum": 0.01,
+              "description": "Transfer amount"
+            },
+            "currency": {
+              "type": "string",
+              "enum": ["USD", "EUR", "GBP"],
+              "default": "USD"
+            },
+            "description": {
+              "type": "string",
+              "description": "Transfer description"
+            }
+          }
+        },
+        "response": {
+          "201": {
+            "type": "object",
+            "required": ["transfer"],
+            "properties": {
+              "transfer": {
+                "type": "object",
+                "required": ["id", "status", "amount"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["pending", "processing", "completed", "failed"]
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "currency": {
+                    "type": "string"
+                  },
+                  "from_account_id": {
+                    "type": "string"
+                  },
+                  "to_account_id": {
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+              "error": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": ["INSUFFICIENT_FUNDS", "INVALID_ACCOUNT", "INVALID_AMOUNT"]
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "available_balance": {
+                    "type": "number",
+                    "description": "Available balance if insufficient funds"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transfers/{transfer_id}": {
+      "GET": {
+        "response": {
+          "200": {
+            "type": "object",
+            "required": ["transfer"],
+            "properties": {
+              "transfer": {
+                "type": "object",
+                "required": ["id", "status", "amount"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["pending", "processing", "completed", "failed"]
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "from_account_id": {
+                    "type": "string"
+                  },
+                  "to_account_id": {
+                    "type": "string"
+                  },
+                  "completed_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+              "error": {
+                "type": "object",
+                "required": ["code", "message"],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": ["TRANSFER_NOT_FOUND"]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -10,15 +10,14 @@
 //! ## Key Management Architecture
 //!
 
-#![allow(dead_code)]
-#[allow(deprecated)]
+// Note: Some code is conditionally compiled for platform-specific features (Windows/macOS keychain)
+// Dead code warnings are expected for platform-specific code when building on other platforms
 pub use errors::*;
 pub use key_management::{FileKeyStorage, KeyStorage, KeyStore as KeyManagementStore};
 
 use crate::workspace_persistence::WorkspacePersistence;
-#[allow(deprecated)]
 use aes_gcm::{
-    aead::{generic_array::GenericArray, Aead, KeyInit},
+    aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
 use argon2::{
@@ -28,7 +27,7 @@ use argon2::{
 use base64::{engine::general_purpose, Engine as _};
 use chacha20poly1305::{ChaCha20Poly1305, Key as ChaChaKey};
 use pbkdf2::pbkdf2_hmac;
-use rand::{rng, Rng};
+use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::fmt;
@@ -43,26 +42,38 @@ use windows::Win32::Security::Credentials::{
 /// Errors that can occur during encryption/decryption operations
 #[derive(Error, Debug)]
 pub enum EncryptionError {
+    /// Encryption operation failed
     #[error("Encryption failure: {0}")]
     Encryption(String),
+    /// Decryption operation failed
     #[error("Decryption failure: {0}")]
     Decryption(String),
+    /// Invalid encryption key format or missing key
     #[error("Invalid key: {0}")]
     InvalidKey(String),
+    /// Invalid ciphertext format or corrupted data
     #[error("Invalid ciphertext: {0}")]
     InvalidCiphertext(String),
+    /// Key derivation function failed
     #[error("Key derivation failure: {0}")]
     KeyDerivation(String),
+    /// Generic encryption error
     #[error("Generic encryption error: {message}")]
-    Generic { message: String },
+    Generic {
+        /// Error message describing the failure
+        message: String,
+    },
 }
 
+/// Result type alias for encryption operations
 pub type Result<T> = std::result::Result<T, EncryptionError>;
 
-/// Encryption algorithms supported
+/// Encryption algorithms supported by MockForge
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EncryptionAlgorithm {
+    /// AES-256-GCM encryption (Galois/Counter Mode)
     Aes256Gcm,
+    /// ChaCha20-Poly1305 authenticated encryption
     ChaCha20Poly1305,
 }
 
@@ -75,10 +86,12 @@ impl fmt::Display for EncryptionAlgorithm {
     }
 }
 
-/// Key derivation methods
+/// Key derivation methods for generating encryption keys from passwords
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyDerivationMethod {
+    /// PBKDF2 key derivation function (password-based)
     Pbkdf2,
+    /// Argon2 memory-hard key derivation function (recommended)
     Argon2,
 }
 
@@ -126,7 +139,9 @@ impl EncryptionKey {
         salt: Option<&[u8]>,
         algorithm: EncryptionAlgorithm,
     ) -> Result<Self> {
-        let salt = salt.map(|s| s.to_vec()).unwrap_or_else(|| rng().random::<[u8; 32]>().to_vec());
+        let salt = salt
+            .map(|s| s.to_vec())
+            .unwrap_or_else(|| thread_rng().random::<[u8; 32]>().to_vec());
 
         let mut key = vec![0u8; 32];
         pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, 100_000, &mut key);
@@ -146,7 +161,7 @@ impl EncryptionKey {
         } else {
             // Generate a random salt
             let mut salt_bytes = [0u8; 32];
-            rng().fill(&mut salt_bytes);
+            thread_rng().fill(&mut salt_bytes);
             SaltString::encode_b64(&salt_bytes)
                 .map_err(|e| EncryptionError::KeyDerivation(e.to_string()))?
         };
@@ -191,9 +206,13 @@ impl EncryptionKey {
     }
 
     fn encrypt_aes_gcm(&self, plaintext: &str, associated_data: Option<&[u8]>) -> Result<String> {
-        let key = GenericArray::from_slice(&self.key_data);
-        let cipher = Aes256Gcm::new(key);
-        let nonce: [u8; 12] = rng().random(); // 96-bit nonce
+        // Convert key bytes to fixed-size array for Aes256Gcm::new()
+        let key_array: [u8; 32] =
+            self.key_data.as_slice().try_into().map_err(|_| {
+                EncryptionError::InvalidKey("Key length must be 32 bytes".to_string())
+            })?;
+        let cipher = Aes256Gcm::new(&key_array.into());
+        let nonce: [u8; 12] = thread_rng().random(); // 96-bit nonce
         let nonce = Nonce::from(nonce);
 
         let ciphertext = cipher
@@ -220,7 +239,12 @@ impl EncryptionKey {
             return Err(EncryptionError::InvalidCiphertext("Ciphertext too short".to_string()));
         }
 
-        let nonce = GenericArray::from_slice(&data[0..12]);
+        // Extract nonce (first 12 bytes)
+        let nonce_array: [u8; 12] = data[0..12].try_into().map_err(|_| {
+            EncryptionError::InvalidCiphertext("Nonce must be 12 bytes".to_string())
+        })?;
+        let nonce = Nonce::from(nonce_array);
+
         let ciphertext_len = if let Some(aad) = &associated_data {
             // Associated data is included at the end
             let aad_len = aad.len();
@@ -230,17 +254,30 @@ impl EncryptionKey {
         };
 
         let ciphertext = &data[12..12 + ciphertext_len];
-        let key = GenericArray::from_slice(&self.key_data);
-        let cipher = Aes256Gcm::new(key);
+
+        // Convert key bytes to fixed-size array for Aes256Gcm::new()
+        let key_array: [u8; 32] =
+            self.key_data.as_slice().try_into().map_err(|_| {
+                EncryptionError::InvalidKey("Key length must be 32 bytes".to_string())
+            })?;
+        let cipher = Aes256Gcm::new(&key_array.into());
 
         let plaintext = cipher
-            .decrypt(nonce, ciphertext.as_ref())
+            .decrypt(&nonce, ciphertext.as_ref())
             .map_err(|e| EncryptionError::Decryption(e.to_string()))?;
 
         String::from_utf8(plaintext)
             .map_err(|e| EncryptionError::Decryption(format!("Invalid UTF-8: {}", e)))
     }
 
+    /// Encrypt text using ChaCha20-Poly1305 authenticated encryption
+    ///
+    /// # Arguments
+    /// * `plaintext` - Text to encrypt
+    /// * `_associated_data` - Optional associated data for authenticated encryption (currently unused)
+    ///
+    /// # Returns
+    /// Base64-encoded ciphertext with prepended nonce
     pub fn encrypt_chacha20(
         &self,
         plaintext: &str,
@@ -248,7 +285,7 @@ impl EncryptionKey {
     ) -> Result<String> {
         let key = ChaChaKey::from_slice(&self.key_data);
         let cipher = ChaCha20Poly1305::new(key);
-        let nonce: [u8; 12] = rng().random(); // 96-bit nonce for ChaCha20-Poly1305
+        let nonce: [u8; 12] = thread_rng().random(); // 96-bit nonce for ChaCha20-Poly1305
         let nonce = chacha20poly1305::Nonce::from_slice(&nonce);
 
         let ciphertext = cipher
@@ -261,6 +298,14 @@ impl EncryptionKey {
         Ok(general_purpose::STANDARD.encode(&result))
     }
 
+    /// Decrypt text using ChaCha20-Poly1305 authenticated encryption
+    ///
+    /// # Arguments
+    /// * `ciphertext` - Base64-encoded ciphertext with prepended nonce
+    /// * `_associated_data` - Optional associated data (must match encryption) (currently unused)
+    ///
+    /// # Returns
+    /// Decrypted plaintext as a string
     pub fn decrypt_chacha20(
         &self,
         ciphertext: &str,
@@ -351,19 +396,38 @@ impl Default for KeyStore {
 /// Global key store instance
 static KEY_STORE: once_cell::sync::OnceCell<KeyStore> = once_cell::sync::OnceCell::new();
 
-/// Initialize the global key store
+/// Initialize the global key store singleton
+///
+/// Creates and returns the global key store instance. If the store is already
+/// initialized, returns the existing instance. The store persists for the
+/// lifetime of the application.
+///
+/// # Returns
+/// Reference to the global key store
 pub fn init_key_store() -> &'static KeyStore {
     KEY_STORE.get_or_init(KeyStore::default)
 }
 
-/// Get the global key store
+/// Get the global key store if it has been initialized
+///
+/// Returns `None` if `init_key_store()` has not been called yet.
+///
+/// # Returns
+/// `Some` reference to the key store if initialized, `None` otherwise
 pub fn get_key_store() -> Option<&'static KeyStore> {
     KEY_STORE.get()
 }
 
 /// Master key manager for OS keychain integration
+///
+/// Manages the master encryption key using platform-specific secure storage:
+/// - macOS: Keychain Services
+/// - Linux: Secret Service API (libsecret)
+/// - Windows: Credential Manager
 pub struct MasterKeyManager {
+    /// Service name for keychain storage
     _service_name: String,
+    /// Account name for keychain storage
     _account_name: String,
 }
 
@@ -520,6 +584,9 @@ impl MasterKeyManager {
             UserName: PCWSTR::null(),
         };
 
+        // SAFETY: CredWriteW is a Windows API function that requires unsafe.
+        // We validate all inputs before calling, and Windows guarantees
+        // memory safety if the credential structure is correctly formed.
         unsafe {
             CredWriteW(&mut credential, 0).map_err(|e| {
                 EncryptionError::InvalidKey(format!("Failed to store credential: {:?}", e))
@@ -589,6 +656,10 @@ impl MasterKeyManager {
 
         let mut credential_ptr: *mut CREDENTIALW = std::ptr::null_mut();
 
+        // SAFETY: CredReadW is a Windows API function that requires unsafe.
+        // We pass a valid pointer from a Vec (target_name_wide.as_ptr()) which
+        // remains valid for the duration of the call. Windows manages the
+        // credential_ptr allocation and we properly free it after use.
         unsafe {
             CredReadW(
                 PCWSTR::from_raw(target_name_wide.as_ptr()),
@@ -634,8 +705,13 @@ impl Default for MasterKeyManager {
 }
 
 /// Workspace key manager for handling per-workspace encryption keys
+///
+/// Manages individual encryption keys for each workspace, encrypted with the master key.
+/// Supports key generation, storage, retrieval, and backup/restore operations.
 pub struct WorkspaceKeyManager {
+    /// Master key manager for encrypting workspace keys
     master_key_manager: MasterKeyManager,
+    /// Secure file-based storage for encrypted workspace keys
     key_storage: std::cell::RefCell<FileKeyStorage>,
 }
 
@@ -849,9 +925,15 @@ impl Default for AutoEncryptionConfig {
 }
 
 /// Automatic encryption processor for sensitive data
+///
+/// Automatically detects and encrypts sensitive data in headers, JSON fields,
+/// and environment variables based on configuration patterns.
 pub struct AutoEncryptionProcessor {
+    /// Auto-encryption configuration with patterns and field lists
     config: AutoEncryptionConfig,
+    /// Workspace key manager for encrypting sensitive data
     workspace_manager: WorkspaceKeyManager,
+    /// Workspace ID for key management
     workspace_id: String,
 }
 
@@ -1043,7 +1125,18 @@ pub mod utils {
     }
 }
 
-/// Encrypt text using a stored key
+/// Encrypt text using a stored key from the key store
+///
+/// # Arguments
+/// * `key_id` - Identifier of the key to use for encryption
+/// * `plaintext` - Text to encrypt
+/// * `associated_data` - Optional associated data for authenticated encryption
+///
+/// # Returns
+/// Base64-encoded encrypted ciphertext
+///
+/// # Errors
+/// Returns an error if the key store is not initialized or the key is not found
 pub fn encrypt_with_key(
     key_id: &str,
     plaintext: &str,
@@ -1059,7 +1152,18 @@ pub fn encrypt_with_key(
     key.encrypt(plaintext, associated_data)
 }
 
-/// Decrypt text using a stored key
+/// Decrypt text using a stored key from the key store
+///
+/// # Arguments
+/// * `key_id` - Identifier of the key to use for decryption
+/// * `ciphertext` - Base64-encoded encrypted text to decrypt
+/// * `associated_data` - Optional associated data (must match encryption)
+///
+/// # Returns
+/// Decrypted plaintext as a string
+///
+/// # Errors
+/// Returns an error if the key store is not initialized, the key is not found, or decryption fails
 pub fn decrypt_with_key(
     key_id: &str,
     ciphertext: &str,

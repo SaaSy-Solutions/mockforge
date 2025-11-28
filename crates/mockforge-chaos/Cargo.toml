@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-chaos"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -42,7 +42,7 @@ parking_lot = { workspace = true }
 prometheus = { version = "0.14", features = ["process"] }
 
 # Rate limiting
-governor = "0.6"
+governor = "0.8"
 nonzero_ext = "0.3"
 
 # HTTP client for health checks
@@ -58,10 +58,13 @@ bincode = "1.3"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], optional = true }
 
 # Tracing
-mockforge-tracing = { path = "../mockforge-tracing" }
+mockforge-tracing = "0.3.0"
 
 # Recorder
-mockforge-recorder = { path = "../mockforge-recorder" }
+mockforge-recorder = { version = "0.3.3", path = "../mockforge-recorder" }
+
+# Core (for MockAI integration)
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
 
 # PDF generation
 printpdf = "0.7"

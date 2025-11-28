@@ -1,336 +1,409 @@
-# MockForge Examples
+# MockForge Multi-Framework Examples
 
-This directory contains example files demonstrating MockForge's capabilities with different protocols and configurations.
+This directory contains complete example applications demonstrating MockForge's multi-framework client generation capabilities.
 
-## 📑 Quick Navigation
+## Examples Overview
 
-| Example | Protocol | Features | Complexity |
-|---------|----------|----------|------------|
-| [OpenAPI Demo](#1-openapi-example-openapi-demojson) | HTTP | Templates, Path Params, Request Body | ⭐ Beginner |
-| [WebSocket Demo](#2-websocket-example-ws-demojsonl) | WebSocket | Replay Mode, Interactive Messages | ⭐ Beginner |
-| [WebSocket v2](#websocket-v2-example-ws-replay-v2-demojsonl) | WebSocket | Advanced Replay, JSONPath | ⭐⭐ Intermediate |
-| [Conditional Overrides](#conditional-overrides-example) | HTTP | Dynamic Routing, Conditions | ⭐⭐ Intermediate |
-| [Request Chaining](#request-chaining-example) | HTTP | Chain Execution, State Passing | ⭐⭐ Intermediate |
-| [Template Features](#template-features-examples) | HTTP | Advanced Templates, Data Generation | ⭐⭐⭐ Advanced |
-| [Plugins](#plugin-examples) | All | Custom Extensions, WASM | ⭐⭐⭐ Advanced |
+### React Demo (`react-demo/`)
+A complete React application showcasing:
+- Generated React hooks for API calls
+- TypeScript type safety
+- Form handling with generated types
+- Error handling and loading states
+- Modern React patterns with hooks
 
-## 📋 Examples Overview
+### Vue Demo (`vue-demo/`)
+A complete Vue 3 application showcasing:
+- Generated Vue composables for API calls
+- Pinia store integration
+- TypeScript type safety
+- Form handling with generated types
+- Error handling and loading states
+- Vue 3 Composition API patterns
 
-### 1. OpenAPI Example (`openapi-demo.json`)
+### Angular Demo (`angular-demo/`)
+A complete Angular 17 application showcasing:
+- Generated Angular services for API calls
+- Standalone components architecture
+- TypeScript type safety
+- Form handling with generated types
+- Error handling and loading states
+- Angular dependency injection patterns
 
-A comprehensive OpenAPI 3.0.3 specification demonstrating various HTTP endpoints with MockForge template features.
+### Svelte Demo (`svelte-demo/`)
+A complete SvelteKit application showcasing:
+- Generated Svelte stores for API calls
+- Reactive state management
+- TypeScript type safety
+- Form handling with generated types
+- Error handling and loading states
+- SvelteKit file-based routing
 
-#### Endpoints Available:
+## Getting Started
 
-- `GET /ping` - Health check with dynamic timestamps
-- `GET /users` - List users with query parameters
-- `POST /users` - Create new user with request body handling
-- `GET /users/{id}` - Get user by ID with path parameters
-- `GET /health` - System health check with random values
+### Prerequisites
 
-#### Template Features Demonstrated:
+1. **Install MockForge CLI**:
+   ```bash
+   cargo install mockforge-cli
+   ```
 
-- `{{uuid}}` - Generates unique UUIDs
-- `{{now}}` - Current timestamp in ISO format
-- `{{now+1h}}` - Future timestamps
-- `{{randInt 10 99}}` - Random integers in range
-- `{{request.body.name}}` - Access request body data
-- `{{request.path.id}}` - Access path parameters
+2. **Install Node.js** (version 16 or higher)
 
-#### Testing the OpenAPI Example:
+3. **Install pnpm** (recommended) or npm:
+```bash
+   npm install -g pnpm
+   ```
+
+### Running the Examples
+
+#### 1. Generate Client Code
+
+First, generate the client code for your preferred framework:
 
 ```bash
-# Test health endpoint
-curl http://localhost:3000/ping
+# For React
+cd react-demo
+npm run generate-client
 
-# Test users endpoint
-curl http://localhost:3000/users
+# For Vue
+cd vue-demo
+npm run generate-client
 
-# Test user creation
-curl -X POST http://localhost:3000/users \
-  -H "Content-Type: application/json" \
-  -d '{"name": "John Doe", "email": "john@example.com"}'
+# For Angular
+cd angular-demo
+npm run generate-client
 
-# Test path parameters
-curl http://localhost:3000/users/123
+# For Svelte
+cd svelte-demo
+npm run generate-client
 ```
 
-### 2. WebSocket Example (`ws-demo.jsonl`)
+This will create a `generated/` directory with:
+- TypeScript type definitions
+- Framework-specific hooks/composables
+- API client
+- Package configuration
+- Documentation
 
-A WebSocket replay file demonstrating scripted message sequences with interactive elements.
-
-#### Message Sequence:
-
-1. **Welcome Message** (ts: 0) - Waits for `CLIENT_READY` from client
-2. **Connection Established** (ts: 10) - Sends welcome with session ID
-3. **Data Message** (ts: 15) - Sends data and waits for `ACK`
-4. **Heartbeat** (ts: 25) - Regular heartbeat message
-5. **Notification** (ts: 30) - System notification waiting for `CONFIRMED`
-6. **Final Data** (ts: 40) - Additional data message
-
-#### Template Features:
-
-- `{{uuid}}` - Unique session IDs
-- `{{now}}` - Current timestamps
-- `{{now+1m}}` - Future timestamps (1 minute)
-- `{{now+1h}}` - Future timestamps (1 hour)
-- `{{randInt 10 99}}` - Random data IDs
-- `{{randInt 100 999}}` - Random values
-
-#### Testing the WebSocket Example:
+#### 2. Install Dependencies
 
 ```bash
-# Using Node.js (if installed):
-node -e "
-const WebSocket = require('ws');
-const ws = new WebSocket('ws://localhost:3001/ws');
-ws.on('open', () => {
-  console.log('Connected! Sending CLIENT_READY...');
-  ws.send('CLIENT_READY');
-});
-ws.on('message', (data) => {
-  console.log('Received:', data.toString());
-  if (data.toString().includes('ACK')) {
-    ws.send('ACK');
-  }
-  if (data.toString().includes('CONFIRMED')) {
-    ws.send('CONFIRMED');
-  }
-});
-ws.on('close', () => console.log('Connection closed'));
-"
+# For React
+cd react-demo
+npm install
 
-# Using websocat (command-line WebSocket client):
-websocat ws://localhost:3001/ws
-# Then type: CLIENT_READY
-# Follow prompts for ACK and CONFIRMED
+# For Vue
+cd vue-demo
+npm install
+
+# For Angular
+cd angular-demo
+npm install
+
+# For Svelte
+cd svelte-demo
+npm install
 ```
 
-## 🚀 Running the Examples
+#### 3. Start MockForge Server
 
-### Method 1: Using Configuration File
+In a separate terminal, start the MockForge server with the sample API:
 
 ```bash
-# Start with the demo configuration
-cargo run -p mockforge-cli -- serve --config demo-config.yaml
+mockforge serve --spec ../user-management-api.json --port 3000
 ```
 
-### Method 2: Using Environment Variables
+#### 4. Start the Application
 
 ```bash
-# Set environment variables
-MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
-MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
-cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --admin
+# For React
+cd react-demo
+npm start
+
+# For Vue
+cd vue-demo
+npm run dev
+
+# For Angular
+cd angular-demo
+npm start
+
+# For Svelte
+cd svelte-demo
+npm run dev
 ```
 
-### Method 3: Using Makefile
+The applications will be available at:
+- React: http://localhost:3001
+- Vue: http://localhost:5173
+- Angular: http://localhost:4200
+- Svelte: http://localhost:5173
 
-```bash
-# Run the updated example target
-make run-example
+## Example API Specification
+
+The examples use a comprehensive User Management API specification (`user-management-api.json`) that includes:
+
+- **Users**: CRUD operations for user management
+- **Posts**: Blog post management with user relationships
+- **Comments**: Comment system with post relationships
+
+### API Endpoints
+
+- `GET /users` - List all users
+- `POST /users` - Create a new user
+- `GET /users/{id}` - Get user by ID
+- `PUT /users/{id}` - Update user
+- `DELETE /users/{id}` - Delete user
+- `GET /posts` - List all posts
+- `POST /posts` - Create a new post
+- `GET /posts/{id}` - Get post by ID
+- `GET /comments` - List all comments
+- `POST /comments` - Create a new comment
+
+## Generated Code Structure
+
+### React Client
+```
+generated/
+├── types.ts          # TypeScript type definitions
+├── hooks.ts          # React hooks and API client
+├── package.json      # Package configuration
+└── README.md         # Usage documentation
 ```
 
-## 🔧 Configuration Notes
-
-### Required Environment Variables:
-- `MOCKFORGE_WS_REPLAY_FILE` - Path to WebSocket replay file
-- `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true` - Enable template expansion
-
-### Port Configuration:
-- HTTP: 3000 (configurable)
-- WebSocket: 3001 (configurable)
-- Admin UI: 9080 (configurable)
-- gRPC: 50051 (configurable)
-
-### Template Expansion:
-When `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true`, these tokens are replaced:
-- `{{uuid}}` → Random UUID v4
-- `{{now}}` → Current ISO timestamp
-- `{{now+1h}}` → Timestamp 1 hour in future
-- `{{randInt 1 100}}` → Random integer between 1-100
-- `{{request.body.field}}` → Access request body data
-- `{{request.path.param}}` → Access path parameters
-
-## 🧪 Testing Scripts
-
-### Automated HTTP Testing:
-
-```bash
-#!/bin/bash
-echo "Testing OpenAPI endpoints..."
-
-# Test ping
-echo "=== Ping Test ==="
-curl -s http://localhost:3000/ping
-
-# Test users
-echo -e "\n=== Users Test ==="
-curl -s http://localhost:3000/users
-
-# Test health
-echo -e "\n=== Health Test ==="
-curl -s http://localhost:3000/health
-
-# Test user creation
-echo -e "\n=== Create User Test ==="
-curl -s -X POST http://localhost:3000/users \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Test User", "email": "test@example.com"}'
+### Vue Client
+```
+generated/
+├── types.ts          # TypeScript type definitions
+├── composables.ts    # Vue composables and API client
+├── store.ts          # Pinia store for state management
+├── package.json      # Package configuration
+└── README.md         # Usage documentation
 ```
 
-### WebSocket Testing Script:
-
-```javascript
-// ws-test.js
-const WebSocket = require('ws');
-
-const ws = new WebSocket('ws://localhost:3001/ws');
-
-ws.on('open', () => {
-  console.log('Connected to WebSocket');
-  ws.send('CLIENT_READY');
-});
-
-ws.on('message', (data) => {
-  const message = data.toString();
-  console.log('Received:', message);
-
-  // Auto-respond to expected prompts
-  if (message.includes('ACK')) {
-    ws.send('ACK');
-  }
-  if (message.includes('CONFIRMED')) {
-    ws.send('CONFIRMED');
-  }
-});
-
-ws.on('close', () => {
-  console.log('Connection closed');
-});
-
-ws.on('error', (err) => {
-  console.error('WebSocket error:', err);
-});
+### Angular Client
+```
+generated/
+├── types.ts                    # TypeScript type definitions
+├── user-management.service.ts  # Angular service for API calls
+├── user-management.module.ts   # Angular module configuration
+├── package.json               # Package configuration
+└── README.md                  # Usage documentation
 ```
 
-## 📊 Expected Outputs
+### Svelte Client
+```
+generated/
+├── types.ts              # TypeScript type definitions
+├── store.ts              # Svelte stores and API client
+├── user-management.svelte # Svelte component
+├── package.json          # Package configuration
+└── README.md             # Usage documentation
+```
 
-### HTTP Responses:
-```json
-// GET /ping
-{
-  "status": "pong",
-  "timestamp": "2025-09-12T17:20:01.512504405+00:00",
-  "requestId": "550e8400-e29b-41d4-a716-446655440000"
+## Key Features Demonstrated
+
+### 1. Type Safety
+Both examples showcase full TypeScript integration with generated types:
+
+```typescript
+// Generated types
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  avatar?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-// GET /users
-[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440001",
-    "name": "John Doe",
-    "email": "john@example.com",
-    "createdAt": "2025-09-12T17:20:01.512504405+00:00",
-    "active": true
+// Type-safe API calls
+const { data: users } = useGetUsers(); // users is User[]
+```
+
+### 2. Reactive Data Fetching
+
+#### React
+```typescript
+const { data, loading, error } = useGetUsers();
+
+if (loading) return <div>Loading...</div>;
+if (error) return <div>Error: {error.message}</div>;
+
+return (
+  <div>
+    {data?.map(user => (
+      <div key={user.id}>{user.name}</div>
+    ))}
+  </div>
+);
+```
+
+#### Vue
+```vue
+<template>
+  <div v-if="loading">Loading...</div>
+  <div v-else-if="error">Error: {{ error.message }}</div>
+  <div v-else>
+    <div v-for="user in data" :key="user.id">
+      {{ user.name }}
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+const { data, loading, error } = useGetUsers();
+</script>
+```
+
+#### Angular
+```typescript
+@Component({
+  template: `
+    <div *ngIf="loading">Loading...</div>
+    <div *ngIf="error">Error: {{ error.message }}</div>
+    <div *ngFor="let user of users">
+      {{ user.name }}
+    </div>
+  `
+})
+export class UserComponent implements OnInit {
+  users: User[] = [];
+  loading = false;
+  error: Error | null = null;
+
+  constructor(private userService: UserManagementService) {}
+
+  ngOnInit() {
+    this.loadUsers();
   }
-]
+
+  loadUsers() {
+    this.loading = true;
+    this.userService.getUsers().subscribe({
+      next: (users) => {
+        this.users = users;
+        this.loading = false;
+      },
+      error: (error) => {
+        this.error = error;
+        this.loading = false;
+      }
+    });
+  }
+}
 ```
 
-### WebSocket Messages:
-```json
-{"type":"welcome","message":"WebSocket connection established","sessionId":"550e8400-e29b-41d4-a716-446655440002","timestamp":"2025-09-12T17:20:01.512504405+00:00"}
-{"type":"data","id":"42","value":"256","timestamp":"2025-09-12T17:20:01.512504405+00:00"}
-{"type":"heartbeat","timestamp":"2025-09-12T17:20:01.512504405+00:00"}
-{"type":"notification","title":"System Update","message":"Server maintenance scheduled","timestamp":"2025-09-12T18:20:01.512504405+00:00"}
+#### Svelte
+```svelte
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { createGetUsersStore } from './generated/store';
+
+  let users: User[] = [];
+  let loading = false;
+  let error: string | null = null;
+
+  const usersStore = createGetUsersStore();
+
+  onMount(() => {
+    const unsubscribe = usersStore.subscribe((state) => {
+      users = state.data || [];
+      loading = state.loading;
+      error = state.error?.message || null;
+    });
+
+    usersStore.execute();
+    return unsubscribe;
+  });
+</script>
+
+{#if loading}
+  <div>Loading...</div>
+{:else if error}
+  <div>Error: {error}</div>
+{:else}
+  {#each users as user (user.id)}
+    <div>{user.name}</div>
+  {/each}
+{/if}
 ```
 
-### WebSocket v2 Example (`ws-replay-v2-demo.jsonl`)
+### 3. Form Handling
+Both examples include forms for creating users and posts with proper validation and error handling.
 
-Advanced WebSocket replay with enhanced features and JSONPath support.
+### 4. Error Handling
+Comprehensive error handling patterns are demonstrated:
+- Network errors
+- Validation errors
+- User feedback
+- Loading states
 
-See [README-websocket-jsonpath.md](README-websocket-jsonpath.md) for detailed documentation.
+## Customization
 
-### Conditional Overrides Example
+### Custom Base URL
+You can customize the API base URL by modifying the generated client configuration:
 
-Demonstrates dynamic request routing based on conditions using `conditional-overrides.yaml`.
+```typescript
+// In generated/hooks.ts or generated/composables.ts
+const defaultConfig: ApiConfig = {
+  baseUrl: process.env.REACT_APP_API_URL || 'http://localhost:3000',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+};
+```
 
-Key Features:
-- Header-based routing
-- Query parameter conditions
-- Request body matching
-- Dynamic response selection
-
-See [README-conditional-overrides.md](README-conditional-overrides.md) for detailed documentation.
-
-### Request Chaining Example
-
-Chain multiple requests together with state passing between endpoints.
-
-Files:
-- `chain-example.yaml` - Advanced chaining configuration
-- `simple-chain.json` - Basic chain example
-
-### Template Features Examples
-
-Advanced template examples demonstrating all available template functions:
-
-- `template-examples.yaml` - Common template patterns
-- `advanced-template-features.yaml` - Advanced features including:
-  - Conditional rendering
-  - Loops and iteration
-  - Custom helpers
-  - Data generation integration
-
-## Plugin Examples
-
-Located in `examples/plugins/`, these demonstrate the WASM plugin system:
-
-| Plugin | Type | Description |
-|--------|------|-------------|
-| `auth-jwt` | Authentication | JWT token validation and generation |
-| `auth-basic` | Authentication | Basic HTTP authentication |
-| `template-crypto` | Template Helper | Encryption/decryption functions |
-| `template-custom` | Template Helper | Custom template functions |
-| `datasource-csv` | Data Source | Load data from CSV files |
-| `response-graphql` | Response Generator | GraphQL response generation |
-
-Each plugin includes:
-- `plugin.yaml` - Plugin configuration
-- `Cargo.toml` - Build configuration
-- `src/lib.rs` - Implementation
-- `README.md` - Usage documentation (where applicable)
-
-See [plugins/README.md](plugins/README.md) for more details.
-
-## 🔍 Troubleshooting
-
-### Common Issues:
-
-1. **Port conflicts**: Kill existing processes with `./scripts/clear-ports.sh`
-2. **Template not expanding**: Ensure `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true`
-3. **WebSocket not responding**: Check that replay file path is correct
-4. **OpenAPI not loading**: Verify JSON syntax and file path
-
-### Debug Commands:
+### Environment Variables
+Set up environment variables for different environments:
 
 ```bash
-# Check running processes
-ps aux | grep mockforge
+# .env.development
+REACT_APP_API_URL=http://localhost:3000
 
-# Check listening ports
-ss -tlnp | grep -E ":(3000|3001|9080)"
-
-# Test basic connectivity
-curl -v http://localhost:3000/
-
-# Test WebSocket port
-nc -z localhost 3001 && echo "WebSocket port open" || echo "WebSocket port closed"
+# .env.production
+REACT_APP_API_URL=https://api.myapp.com
 ```
 
-## 📚 Related Documentation
+## Troubleshooting
 
-- [Main README](../README.md) - Project overview
-- [MockForge Book](../book/README.md) - Comprehensive documentation
-- [API Reference](https://docs.rs/mockforge) - Rust API documentation
-- [Plugin Development](../docs/plugins/development-guide.md) - Plugin development guide
+### Common Issues
+
+1. **Client generation fails**:
+   - Ensure MockForge CLI is installed and in PATH
+   - Check that the OpenAPI spec file exists and is valid
+   - Verify the framework name is correct (react, vue, angular, svelte)
+
+2. **TypeScript compilation errors**:
+   - Ensure all generated types are properly imported
+   - Check that dependencies are installed
+   - Verify TypeScript configuration
+
+3. **API connection issues**:
+   - Ensure MockForge server is running on the correct port
+   - Check the base URL configuration
+   - Verify CORS settings if needed
+
+4. **Missing dependencies**:
+   - Run `npm install` in the generated client directory
+   - Check that peer dependencies are installed
+
+### Getting Help
+
+- Check the generated README.md for framework-specific instructions
+- Review the MockForge documentation
+- Open an issue on the MockForge GitHub repository
+
+## Next Steps
+
+After running these examples, you can:
+
+1. **Modify the API specification** to match your needs
+2. **Customize the generated templates** for your specific requirements
+3. **Add new frameworks** by implementing the `ClientGeneratorPlugin` trait
+4. **Integrate with your existing applications** using the generated clients
+
+## Contributing
+
+We welcome contributions to improve these examples! Please see our [Contributing Guide](../../CONTRIBUTING.md) for details on how to get started.

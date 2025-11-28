@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! MockForge Chaos Engineering
 //!
 //! Provides chaos engineering capabilities including traffic shaping, fault injection,
@@ -15,10 +17,13 @@ pub mod collaboration;
 pub mod config;
 pub mod dashboard;
 pub mod distributed_coordinator;
+pub mod failure_designer;
 pub mod fault;
 pub mod gitops;
+pub mod incident_replay;
 pub mod integrations;
 pub mod latency;
+pub mod latency_metrics;
 pub mod metrics;
 pub mod middleware;
 pub mod ml_anomaly_detector;
@@ -64,7 +69,7 @@ pub use alerts::{
     Alert, AlertHandler, AlertManager, AlertRule, AlertRuleType, AlertSeverity, AlertType,
 };
 pub use analytics::{ChaosAnalytics, ChaosImpact, MetricsBucket, TimeBucket};
-pub use api::create_chaos_api_router;
+pub use api::{create_chaos_api_router, ProfileManager};
 pub use auto_remediation::{
     ApprovalRequest, EffectivenessMetrics, RemediationAction, RemediationConfig, RemediationEngine,
     RemediationResult, RemediationStats, RemediationStatus, RiskAssessment as AutoRiskAssessment,
@@ -79,22 +84,31 @@ pub use collaboration::{
     CollaborationSession, CollaborationUser, CursorPosition,
 };
 pub use config::{
-    BulkheadConfig, ChaosConfig, CircuitBreakerConfig, FaultInjectionConfig, LatencyConfig,
-    RateLimitConfig, TrafficShapingConfig,
+    BulkheadConfig, ChaosConfig, CircuitBreakerConfig, CorruptionType, ErrorPattern,
+    FaultInjectionConfig, LatencyConfig, NetworkProfile, RateLimitConfig, TrafficShapingConfig,
 };
 pub use dashboard::{DashboardManager, DashboardQuery, DashboardStats, DashboardUpdate};
 pub use distributed_coordinator::{
     CoordinationMode, DistributedCoordinator, DistributedTask, ExecutionMetrics, LeaderState, Node,
     NodeExecutionState, NodeStatus, TaskStatus,
 };
+pub use failure_designer::{
+    ConditionOperator, ConditionType, FailureCondition, FailureDesignRule, FailureDesigner,
+    FailureTarget, FailureType,
+};
 pub use fault::{FaultInjector, FaultType};
 pub use gitops::{GitOpsAuth, GitOpsConfig, GitOpsManager, SyncState, SyncStatus};
+pub use incident_replay::{
+    IncidentEvent, IncidentEventType, IncidentFormatAdapter, IncidentReplayGenerator,
+    IncidentTimeline,
+};
 pub use integrations::{
     GrafanaConfig, GrafanaIntegration, IntegrationConfig, IntegrationManager, JiraConfig,
     JiraIntegration, Notification, NotificationResults, NotificationSeverity, PagerDutyConfig,
     PagerDutyIntegration, SlackConfig, SlackNotifier, TeamsConfig, TeamsNotifier,
 };
 pub use latency::LatencyInjector;
+pub use latency_metrics::{LatencyMetricsTracker, LatencySample, LatencyStats};
 pub use metrics::{registry as metrics_registry, ChaosMetrics, CHAOS_METRICS};
 pub use middleware::{chaos_middleware, ChaosMiddleware};
 pub use ml_anomaly_detector::{

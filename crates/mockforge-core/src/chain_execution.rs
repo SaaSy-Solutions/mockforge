@@ -7,6 +7,7 @@ use crate::request_chaining::{
     ChainConfig, ChainDefinition, ChainExecutionContext, ChainLink, ChainResponse,
     ChainTemplatingContext, RequestChainRegistry,
 };
+use crate::request_scripting::{ScriptContext, ScriptEngine};
 use crate::templating::{expand_str_with_context, TemplatingContext};
 use crate::{Error, Result};
 use chrono::Utc;
@@ -25,7 +26,9 @@ use tokio::time::{timeout, Duration};
 /// Record of a chain execution with timestamp
 #[derive(Debug, Clone)]
 pub struct ExecutionRecord {
+    /// ISO 8601 timestamp when the chain was executed
     pub executed_at: String,
+    /// Result of the chain execution
     pub result: ChainExecutionResult,
 }
 
@@ -40,22 +43,50 @@ pub struct ChainExecutionEngine {
     config: ChainConfig,
     /// Execution history storage (chain_id -> Vec<ExecutionRecord>)
     execution_history: Arc<Mutex<HashMap<String, Vec<ExecutionRecord>>>>,
+    /// JavaScript scripting engine for pre/post request scripts
+    script_engine: ScriptEngine,
 }
 
 impl ChainExecutionEngine {
     /// Create a new chain execution engine
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the HTTP client cannot be created, which typically
+    /// indicates a system configuration issue. For better error handling, use `try_new()`.
     pub fn new(registry: Arc<RequestChainRegistry>, config: ChainConfig) -> Self {
+        Self::try_new(registry, config)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to create HTTP client for chain execution engine: {}. \
+                    This typically indicates a system configuration issue (e.g., invalid timeout value).",
+                    e
+                )
+            })
+    }
+
+    /// Try to create a new chain execution engine
+    ///
+    /// Returns an error if the HTTP client cannot be created.
+    pub fn try_new(registry: Arc<RequestChainRegistry>, config: ChainConfig) -> Result<Self> {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(config.global_timeout_secs))
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|e| {
+                Error::generic(format!(
+                    "Failed to create HTTP client: {}. \
+                Check that the timeout value ({}) is valid.",
+                    e, config.global_timeout_secs
+                ))
+            })?;
 
-        Self {
+        Ok(Self {
             http_client,
             registry,
             config,
             execution_history: Arc::new(Mutex::new(HashMap::new())),
-        }
+            script_engine: ScriptEngine::new(),
+        })
     }
 
     /// Execute a chain by ID
@@ -306,6 +337,40 @@ impl ChainExecutionEngine {
             request_builder = request_builder.timeout(Duration::from_secs(timeout_secs));
         }
 
+        // Execute pre-request script if configured
+        if let Some(scripting) = &link.request.scripting {
+            if let Some(pre_script) = &scripting.pre_script {
+                let script_context = ScriptContext {
+                    request: Some(link.request.clone()),
+                    response: None,
+                    chain_context: execution_context.templating.chain_context.variables.clone(),
+                    variables: HashMap::new(),
+                    env_vars: std::env::vars().collect(),
+                };
+
+                match self
+                    .script_engine
+                    .execute_script(pre_script, &script_context, scripting.timeout_ms)
+                    .await
+                {
+                    Ok(script_result) => {
+                        // Merge script-modified variables into chain context
+                        for (key, value) in script_result.modified_variables {
+                            execution_context.templating.chain_context.set_variable(key, value);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Pre-script execution failed for request '{}': {}",
+                            link.request.id,
+                            e
+                        );
+                        // Continue execution even if script fails
+                    }
+                }
+            }
+        }
+
         // Execute the request
         let response_result =
             timeout(Duration::from_secs(self.config.global_timeout_secs), request_builder.send())
@@ -368,6 +433,40 @@ impl ChainExecutionEngine {
         for (var_name, extraction_path) in &link.extract {
             if let Some(value) = self.extract_from_response(&chain_response, extraction_path) {
                 execution_context.templating.chain_context.set_variable(var_name.clone(), value);
+            }
+        }
+
+        // Execute post-request script if configured
+        if let Some(scripting) = &link.request.scripting {
+            if let Some(post_script) = &scripting.post_script {
+                let script_context = ScriptContext {
+                    request: Some(link.request.clone()),
+                    response: Some(chain_response.clone()),
+                    chain_context: execution_context.templating.chain_context.variables.clone(),
+                    variables: HashMap::new(),
+                    env_vars: std::env::vars().collect(),
+                };
+
+                match self
+                    .script_engine
+                    .execute_script(post_script, &script_context, scripting.timeout_ms)
+                    .await
+                {
+                    Ok(script_result) => {
+                        // Merge script-modified variables into chain context
+                        for (key, value) in script_result.modified_variables {
+                            execution_context.templating.chain_context.set_variable(key, value);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Post-script execution failed for request '{}': {}",
+                            link.request.id,
+                            e
+                        );
+                        // Continue execution even if script fails
+                    }
+                }
             }
         }
 
@@ -519,21 +618,29 @@ impl ChainExecutionEngine {
     }
 }
 
-/// Result of chain execution
+/// Result of executing a request chain
 #[derive(Debug, Clone)]
 pub struct ChainExecutionResult {
+    /// Unique identifier for the executed chain
     pub chain_id: String,
+    /// Overall execution status
     pub status: ChainExecutionStatus,
+    /// Total duration of chain execution in milliseconds
     pub total_duration_ms: u64,
+    /// Results of individual requests in the chain, keyed by request ID
     pub request_results: HashMap<String, ChainResponse>,
+    /// Error message if execution failed
     pub error_message: Option<String>,
 }
 
 /// Status of chain execution
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChainExecutionStatus {
+    /// All requests in the chain succeeded
     Successful,
+    /// Some requests succeeded but others failed
     PartialSuccess,
+    /// Chain execution failed
     Failed,
 }
 

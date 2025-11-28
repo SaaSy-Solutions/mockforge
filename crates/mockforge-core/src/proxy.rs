@@ -8,19 +8,24 @@
 //! - routing: Route matching and rule evaluation
 
 // Re-export sub-modules for backward compatibility
+pub mod body_transform;
 pub mod client;
+pub mod conditional;
 pub mod config;
 pub mod handler;
 pub mod middleware;
 pub mod routing;
 
 // Re-export commonly used types
+pub use body_transform::BodyTransformationMiddleware;
+pub use config::{BodyTransform, BodyTransformRule, MigrationMode, TransformOperation};
 pub use middleware::*;
 pub use routing::*;
 
 // Legacy imports for compatibility
 
 pub use client::{ProxyClient, ProxyResponse};
+pub use conditional::{evaluate_proxy_condition, find_matching_rule};
 /// Legacy types and structures - moved to sub-modules
 /// These are kept for backward compatibility
 // Re-export the main types from sub-modules
@@ -68,6 +73,9 @@ mod tests {
             enabled: true,
             pattern: "/api/users/*".to_string(),
             upstream_url: "http://users.example.com".to_string(),
+            migration_mode: MigrationMode::Auto,
+            migration_group: None,
+            condition: None,
         });
         config.rules.push(ProxyRule {
             path_pattern: "/api/orders/*".to_string(),
@@ -75,6 +83,9 @@ mod tests {
             enabled: true,
             pattern: "/api/orders/*".to_string(),
             upstream_url: "http://orders.example.com".to_string(),
+            migration_mode: MigrationMode::Auto,
+            migration_group: None,
+            condition: None,
         });
 
         assert!(config.should_proxy(&Method::GET, "/api/users/123"));

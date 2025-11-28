@@ -565,6 +565,67 @@ echo "API tests completed!"
 <p><strong>Wrong response returned</strong>: Verify request matching rules and parameter handling</p>
 <p><strong>Performance issues</strong>: Reduce template complexity or use static responses</p>
 <p><strong>Port conflicts</strong>: Change default ports with <code>--http-port</code> option</p>
+<h2 id="advanced-behavior-and-simulation"><a class="header" href="#advanced-behavior-and-simulation">Advanced Behavior and Simulation</a></h2>
+<p>MockForge supports advanced behavior simulation features for realistic API testing:</p>
+<h3 id="record--playback"><a class="header" href="#record--playback">Record &amp; Playback</a></h3>
+<p>Automatically record API interactions and convert them to replayable fixtures:</p>
+<pre><code class="language-bash"># Record requests while proxying
+mockforge serve --spec api-spec.json --proxy --record
+
+# Convert recordings to stub mappings
+mockforge recorder convert --input recordings.db --output fixtures/
+</code></pre>
+<h3 id="stateful-behavior"><a class="header" href="#stateful-behavior">Stateful Behavior</a></h3>
+<p>Simulate stateful APIs where responses change based on previous requests:</p>
+<pre><code class="language-yaml">core:
+  stateful:
+    enabled: true
+    state_machines:
+      - name: "order_workflow"
+        resource_id_extract:
+          type: "path_param"
+          param: "order_id"
+        transitions:
+          - method: "POST"
+            path_pattern: "/api/orders"
+            from_state: "initial"
+            to_state: "pending"
+</code></pre>
+<h3 id="per-route-fault-injection"><a class="header" href="#per-route-fault-injection">Per-Route Fault Injection</a></h3>
+<p>Configure fault injection on specific routes:</p>
+<pre><code class="language-yaml">core:
+  routes:
+    - path: "/api/payments/process"
+      method: "POST"
+      fault_injection:
+        enabled: true
+        probability: 0.05
+        fault_types:
+          - type: "http_error"
+            status_code: 503
+</code></pre>
+<h3 id="per-route-latency"><a class="header" href="#per-route-latency">Per-Route Latency</a></h3>
+<p>Simulate network conditions per route:</p>
+<pre><code class="language-yaml">core:
+  routes:
+    - path: "/api/search"
+      method: "GET"
+      latency:
+        enabled: true
+        distribution: "normal"
+        mean_ms: 500.0
+        std_dev_ms: 100.0
+</code></pre>
+<h3 id="conditional-proxying"><a class="header" href="#conditional-proxying">Conditional Proxying</a></h3>
+<p>Proxy requests conditionally based on request attributes:</p>
+<pre><code class="language-yaml">core:
+  proxy:
+    rules:
+      - pattern: "/api/admin/*"
+        upstream_url: "https://admin-api.example.com"
+        condition: "$.user.role == 'admin'"
+</code></pre>
+<p>For detailed documentation on these features, see <a href="../../../docs/ADVANCED_BEHAVIOR_SIMULATION.html">Advanced Behavior and Simulation</a>.</p>
 <p>For more advanced HTTP mocking features, see the following guides:</p>
 <ul>
 <li><a href="http-mocking/openapi.html">OpenAPI Integration</a> - Advanced OpenAPI features</li>
@@ -576,7 +637,7 @@ echo "API tests completed!"
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../tutorials/add-custom-plugin.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../protocols/ftp/examples.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -590,7 +651,7 @@ echo "API tests completed!"
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../tutorials/add-custom-plugin.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../protocols/ftp/examples.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 

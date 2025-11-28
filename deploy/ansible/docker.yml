@@ -1,0 +1,118 @@
+---
+# Ansible Playbook: Deploy MockForge with Docker
+#
+# This playbook deploys MockForge using Docker on target servers.
+# It handles installation, configuration, and service management.
+
+- name: Deploy MockForge with Docker
+  hosts: servers
+  become: yes
+  vars:
+    mockforge_version: "latest"
+    mockforge_http_port: 3000
+    mockforge_admin_port: 9080
+    mockforge_ws_port: 3001
+    mockforge_grpc_port: 50051
+    docker_compose_version: "2.24.0"
+    config_dir: "/etc/mockforge"
+    data_dir: "/var/lib/mockforge"
+
+  tasks:
+    - name: Update apt cache (Debian/Ubuntu)
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install required packages
+      package:
+        name:
+          - curl
+          - ca-certificates
+          - gnupg
+          - lsb-release
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install Docker
+      package:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create MockForge directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ config_dir }}"
+        - "{{ data_dir }}"
+        - "{{ data_dir }}/workspaces"
+        - "{{ data_dir }}/logs"
+
+    - name: Copy MockForge configuration file
+      template:
+        src: config.yaml.j2
+        dest: "{{ config_dir }}/config.yaml"
+        mode: '0644'
+      notify: restart mockforge
+
+    - name: Create Docker Compose file
+      template:
+        src: docker-compose.yml.j2
+        dest: "{{ config_dir }}/docker-compose.yml"
+        mode: '0644'
+      notify: restart mockforge
+
+    - name: Pull MockForge Docker image
+      docker_image:
+        name: "ghcr.io/saasy-solutions/mockforge:{{ mockforge_version }}"
+        source: pull
+
+    - name: Start MockForge with Docker Compose
+      docker_compose:
+        project_src: "{{ config_dir }}"
+        state: present
+        restarted: no
+
+    - name: Wait for MockForge to be ready
+      uri:
+        url: "http://localhost:{{ mockforge_admin_port }}/health/live"
+        method: GET
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 30
+      delay: 2
+      ignore_errors: yes
+
+    - name: Display service status
+      debug:
+        msg: "MockForge is running at http://{{ ansible_default_ipv4.address }}:{{ mockforge_http_port }}"
+
+  handlers:
+    - name: restart mockforge
+      docker_compose:
+        project_src: "{{ config_dir }}"
+        state: restarted

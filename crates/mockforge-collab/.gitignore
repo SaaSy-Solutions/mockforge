@@ -1,0 +1,5 @@
+# .sqlx/ - REMOVED: Need to track .sqlx files for offline mode in published crate
+# Only ignore database files, not the query cache
+*.db
+*.db-shm
+*.db-wal

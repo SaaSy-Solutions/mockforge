@@ -140,3 +140,11 @@ server.log
 
 # Plugin marketplace (separate project)
 plugin-marketplace/
+examples/test-integration/playwright/playwright-report/
+examples/test-integration/playwright/test-results/
+# MockForge Collaboration SQLite databases
+crates/mockforge-collab/*.db
+crates/mockforge-collab/*.db-shm
+crates/mockforge-collab/*.db-wal
+vscode-extension/out/
+vscode-extension/*.vsix

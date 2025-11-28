@@ -1,0 +1,205 @@
+name: Load Testing & Performance Regression
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  schedule:
+    # Run extended load tests nightly
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of load test to run'
+        required: true
+        default: 'standard'
+        type: choice
+        options:
+          - standard
+          - extended
+          - stress
+
+jobs:
+  standard-load-test:
+    name: Standard Load Test
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.test_type == 'standard')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Build MockForge
+        run: |
+          cargo build --release --bin mockforge-cli
+
+      - name: Start MockForge server
+        run: |
+          ./target/release/mockforge-cli serve --http-port 3000 --admin &
+          sleep 5
+          curl -f http://localhost:3000/health || exit 1
+
+      - name: Run standard load test
+        run: |
+          cd tests/load
+          k6 run --out json=load-test-results.json standard_load.js
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: load-test-results-standard
+          path: tests/load/load-test-results.json
+          retention-days: 30
+
+      - name: Check performance thresholds
+        run: |
+          python3 tests/load/check_thresholds.py tests/load/load-test-results.json tests/load/thresholds/standard.json
+
+  extended-load-test:
+    name: Extended Load Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: |
+      github.event_name == 'schedule' ||
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.test_type == 'extended')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Build MockForge
+        run: |
+          cargo build --release --bin mockforge-cli
+
+      - name: Start MockForge server
+        run: |
+          ./target/release/mockforge-cli serve --http-port 3000 --admin &
+          sleep 5
+          curl -f http://localhost:3000/health || exit 1
+
+      - name: Run extended load test
+        run: |
+          cd tests/load
+          k6 run --out json=load-test-results-extended.json extended_load.js
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: load-test-results-extended
+          path: tests/load/load-test-results-extended.json
+          retention-days: 90
+
+      - name: Check performance thresholds
+        run: |
+          python3 tests/load/check_thresholds.py tests/load/load-test-results-extended.json tests/load/thresholds/extended.json
+
+      - name: Compare with baseline
+        run: |
+          python3 tests/load/compare_baseline.py tests/load/load-test-results-extended.json
+
+  performance-benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' ||
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run benchmarks
+        run: |
+          cargo bench --bench core_benchmarks -- --output-format json | tee benchmark-results.json
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: benchmark-results
+          path: benchmark-results.json
+          retention-days: 90
+
+      - name: Check for performance regressions
+        run: |
+          python3 scripts/check_benchmark_regressions.py benchmark-results.json
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build MockForge
+        run: |
+          cargo build --release --bin mockforge-cli
+
+      - name: Run E2E tests
+        run: |
+          cargo test --package mockforge-integration-tests --test http_e2e_tests --release
+          cargo test --package mockforge-integration-tests --test websocket_e2e_tests --release
+          cargo test --package mockforge-integration-tests --test grpc_e2e_tests --release
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: e2e-test-results
+          path: target/test-results/
+          retention-days: 7

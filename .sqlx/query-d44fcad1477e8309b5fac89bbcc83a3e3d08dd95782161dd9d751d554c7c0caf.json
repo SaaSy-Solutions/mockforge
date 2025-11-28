@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE workspace_members\n            SET role = ?\n            WHERE workspace_id = ? AND user_id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "d44fcad1477e8309b5fac89bbcc83a3e3d08dd95782161dd9d751d554c7c0caf"
+}

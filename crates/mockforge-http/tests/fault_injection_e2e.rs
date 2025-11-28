@@ -1,3 +1,8 @@
+//! End-to-end tests for fault injection functionality in the HTTP mock server.
+//!
+//! These tests verify that fault injection can properly simulate various failure
+//! scenarios including 500 errors, timeouts, and other error conditions.
+
 use axum::Router;
 use mockforge_core::failure_injection::FailureConfig;
 use mockforge_core::openapi_routes::ValidationOptions;

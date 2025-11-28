@@ -12,18 +12,23 @@ use thiserror::Error;
 /// Errors that can occur during condition evaluation
 #[derive(Debug, Error)]
 pub enum ConditionError {
+    /// JSONPath expression is invalid or cannot be parsed
     #[error("Invalid JSONPath expression: {0}")]
     InvalidJsonPath(String),
 
+    /// XPath expression is invalid or cannot be parsed
     #[error("Invalid XPath expression: {0}")]
     InvalidXPath(String),
 
+    /// XML document is malformed or cannot be parsed
     #[error("Invalid XML: {0}")]
     InvalidXml(String),
 
+    /// Condition type is not supported by the evaluator
     #[error("Unsupported condition type: {0}")]
     UnsupportedCondition(String),
 
+    /// General condition evaluation failure with error message
     #[error("Condition evaluation failed: {0}")]
     EvaluationFailed(String),
 }
@@ -60,6 +65,7 @@ impl Default for ConditionContext {
 }
 
 impl ConditionContext {
+    /// Create a new empty condition context
     pub fn new() -> Self {
         Self {
             request_body: None,
@@ -75,51 +81,61 @@ impl ConditionContext {
         }
     }
 
+    /// Set the request body as JSON
     pub fn with_request_body(mut self, body: Value) -> Self {
         self.request_body = Some(body);
         self
     }
 
+    /// Set the response body as JSON
     pub fn with_response_body(mut self, body: Value) -> Self {
         self.response_body = Some(body);
         self
     }
 
+    /// Set the request body as XML string
     pub fn with_request_xml(mut self, xml: String) -> Self {
         self.request_xml = Some(xml);
         self
     }
 
+    /// Set the response body as XML string
     pub fn with_response_xml(mut self, xml: String) -> Self {
         self.response_xml = Some(xml);
         self
     }
 
+    /// Set the request headers
     pub fn with_headers(mut self, headers: HashMap<String, String>) -> Self {
         self.headers = headers;
         self
     }
 
+    /// Set the query parameters
     pub fn with_query_params(mut self, params: HashMap<String, String>) -> Self {
         self.query_params = params;
         self
     }
 
+    /// Set the request path
     pub fn with_path(mut self, path: String) -> Self {
         self.path = path;
         self
     }
 
+    /// Set the HTTP method
     pub fn with_method(mut self, method: String) -> Self {
         self.method = method;
         self
     }
 
+    /// Set the OpenAPI operation ID
     pub fn with_operation_id(mut self, operation_id: String) -> Self {
         self.operation_id = Some(operation_id);
         self
     }
 
+    /// Set the OpenAPI tags
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
         self

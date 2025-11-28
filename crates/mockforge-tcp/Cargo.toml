@@ -1,0 +1,40 @@
+[package]
+name = "mockforge-tcp"
+version = "0.3.3"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "TCP protocol mocking support for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/mockforge"
+keywords = ["tcp", "mock", "testing", "api", "network"]
+categories = ["development-tools", "network-programming"]
+
+[dependencies]
+# MockForge core
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+
+# Standard workspace dependencies
+tokio = { workspace = true, features = ["net", "io-util", "time", "sync"] }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+
+# TCP/TLS-specific dependencies
+tokio-rustls = "0.24"
+rustls-pemfile = "1.0"
+rustls = "0.23"
+bytes = "1.0"
+hex = "0.4"
+base64 = "0.22"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+tempfile = "3.0"
+criterion = { workspace = true }

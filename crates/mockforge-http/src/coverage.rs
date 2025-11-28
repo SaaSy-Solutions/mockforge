@@ -54,8 +54,11 @@ pub struct CoverageReport {
 /// Coverage statistics for a specific HTTP method
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MethodCoverage {
+    /// Total number of routes for this HTTP method
     pub total: usize,
+    /// Number of routes that have been covered (called at least once)
     pub covered: usize,
+    /// Coverage percentage (0.0 to 100.0)
     pub percentage: f64,
 }
 

@@ -1,3 +1,8 @@
+//! End-to-end tests for request validation functionality.
+//!
+//! These tests verify that request validation correctly enforces OpenAPI schema
+//! constraints and returns appropriate error responses for invalid requests.
+
 use axum::Router;
 use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
 use mockforge_http::build_router;

@@ -24,15 +24,16 @@ impl LatencyInjector {
     }
 
     /// Inject latency based on configuration
-    pub async fn inject(&self) {
+    /// Returns the delay amount in milliseconds that was injected (0 if no delay was injected)
+    pub async fn inject(&self) -> u64 {
         if !self.config.enabled {
-            return;
+            return 0;
         }
 
         // Check probability
         let mut rng = rand::rng();
         if rng.random::<f64>() > self.config.probability {
-            return;
+            return 0;
         }
 
         let delay_ms = self.calculate_delay();
@@ -40,6 +41,8 @@ impl LatencyInjector {
             debug!("Injecting latency: {}ms", delay_ms);
             sleep(Duration::from_millis(delay_ms)).await;
         }
+
+        delay_ms
     }
 
     /// Calculate the delay in milliseconds
@@ -146,11 +149,13 @@ mod tests {
 
         let injector = LatencyInjector::new(config);
         let start = std::time::Instant::now();
-        injector.inject().await;
+        let delay_ms = injector.inject().await;
         let elapsed = start.elapsed();
 
         // Should have delayed at least 10ms
         assert!(elapsed >= Duration::from_millis(10));
+        // Should return the delay amount
+        assert_eq!(delay_ms, 10);
     }
 
     #[tokio::test]
@@ -165,10 +170,12 @@ mod tests {
 
         let injector = LatencyInjector::new(config);
         let start = std::time::Instant::now();
-        injector.inject().await;
+        let delay_ms = injector.inject().await;
         let elapsed = start.elapsed();
 
         // Should not have delayed
         assert!(elapsed < Duration::from_millis(5));
+        // Should return 0 when probability prevents injection
+        assert_eq!(delay_ms, 0);
     }
 }

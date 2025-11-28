@@ -1,0 +1,21 @@
+id: trial-user
+name: Trial User
+domain: saas
+traits:
+  subscription_tier: trial
+  subscription_status: trial
+  trial_days_remaining: 7
+  trial_started: "2024-01-20"
+  trial_ends: "2024-01-27"
+  payment_method: null
+  onboarding_completed: false
+  feature_flags:
+    - basic_features
+    - email_support
+lifecycle:
+  preset: subscription
+  initial_state: new
+backstory: |
+  New user who signed up for a free trial. Currently exploring the product.
+  Hasn't entered payment information yet. May convert to paid if they find value.
+  Needs onboarding guidance and feature discovery.

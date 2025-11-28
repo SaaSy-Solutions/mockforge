@@ -124,7 +124,7 @@ pub async fn get_plugin_badges(
     }
 
     // Check for "Highly Rated" badge (4.5+ stars with 10+ reviews)
-    if plugin.rating_avg >= rust_decimal::Decimal::new(45, 1) && plugin.rating_count >= 10 {
+    if plugin.rating_avg >= 4.5 && plugin.rating_count >= 10 {
         badges.push("highly-rated".to_string());
     }
 

@@ -1,0 +1,90 @@
+[package]
+name = "mockforge-scenarios"
+version = "0.3.3"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords = ["scenarios", "marketplace", "mockforge", "templates"]
+categories = ["development-tools"]
+description = "Data scenarios marketplace for sharing and importing complete mock system configurations"
+
+[lints.rust]
+missing_docs = "warn"
+
+[dependencies]
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+
+# Async runtime
+tokio = { workspace = true, features = ["fs", "rt-multi-thread"] }
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Utility libraries
+uuid.workspace = true
+chrono.workspace = true
+url.workspace = true
+regex.workspace = true
+
+# Path expansion
+shellexpand = "2.1"
+
+# Directory utilities
+dirs = "5.0"
+
+# HTTP client for remote scenario downloads
+reqwest = { version = "0.12", features = ["stream", "rustls-tls", "json"], default-features = false }
+
+# Archive extraction
+zip = "2.2"
+flate2 = "1.0"
+tar = "0.4"
+
+# Git repository cloning
+git2 = { version = "0.19", optional = true }
+
+# Progress tracking
+indicatif = "0.17"
+
+# Temporary file handling
+tempfile = "3.0"
+
+# Semver parsing
+semver = "1.0"
+
+# Cryptography for checksum verification
+ring = "0.17"
+hex = "0.4"
+
+# Reuse plugin registry infrastructure
+mockforge-plugin-registry = { version = "0.3.3", path = "../mockforge-plugin-registry" }
+
+# Reuse plugin loader patterns
+mockforge-plugin-loader = { version = "0.3.3", path = "../mockforge-plugin-loader" }
+
+# Core types for state machines
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+
+# Data types for schemas
+mockforge-data = { version = "0.3.3", path = "../mockforge-data" }
+
+[features]
+default = ["git-support"]
+git-support = ["git2"]
+studio-packs = []
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3.0"
+wiremock = "0.6"

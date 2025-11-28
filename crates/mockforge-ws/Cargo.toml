@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-ws"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -10,6 +10,9 @@ homepage.workspace = true
 documentation.workspace = true
 keywords = ["websocket", "ws", "api", "mock", "testing"]
 categories = ["development-tools::testing", "web-programming::websocket"]
+
+[lints.rust]
+missing_docs = "deny"
 
 [dependencies]
 axum = { workspace = true }
@@ -23,10 +26,12 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 fastrand = "2.0"
-mockforge-core = { version = "0.1.2", path = "../mockforge-core" }
-mockforge-data = { version = "0.1.2", path = "../mockforge-data" }
-mockforge-observability = { version = "0.1.2", path = "../mockforge-observability" }
-mockforge-tracing = { version = "0.1.2", path = "../mockforge-tracing" }
+async-trait = { workspace = true }
+thiserror = "2.0"
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.3", path = "../mockforge-data" }
+mockforge-observability = "0.3.0"
+mockforge-tracing = "0.3.0"
 opentelemetry = "0.21"
 
 [dev-dependencies]

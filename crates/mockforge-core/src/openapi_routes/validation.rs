@@ -11,24 +11,31 @@ use std::collections::HashMap;
 /// Validation mode for requests and responses
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, Default)]
 pub enum ValidationMode {
+    /// Validation is disabled (no checks performed)
     Disabled,
+    /// Validation warnings are logged but do not fail requests
     #[default]
     Warn,
+    /// Validation failures return error responses
     Enforce,
 }
 
-/// Validation options for OpenAPI route validation
+/// Validation options for configuring OpenAPI route validation
 #[derive(Debug, Clone)]
 pub struct ValidationOptions {
+    /// Validation mode for incoming requests
     pub request_mode: ValidationMode,
+    /// Whether to aggregate multiple validation errors into a single response
     pub aggregate_errors: bool,
+    /// Whether to validate outgoing responses against schemas
     pub validate_responses: bool,
+    /// Per-operation validation mode overrides (operation ID -> mode)
     pub overrides: HashMap<String, ValidationMode>,
     /// Skip validation for request paths starting with any of these prefixes
     pub admin_skip_prefixes: Vec<String>,
-    /// Expand templating tokens in responses/examples
+    /// Expand templating tokens in responses/examples after generation
     pub response_template_expand: bool,
-    /// HTTP status code to return when validation fails
+    /// HTTP status code to return when validation fails (e.g., 400 or 422)
     pub validation_status: Option<u16>,
 }
 
@@ -46,20 +53,27 @@ impl Default for ValidationOptions {
     }
 }
 
-/// Validation error information
+/// Validation error information for a specific field
 #[derive(Debug, Clone, Deserialize)]
 pub struct ValidationError {
+    /// JSON path to the field with the validation issue
     pub field: String,
+    /// Human-readable error message
     pub message: String,
+    /// Expected value or type (if applicable)
     pub expected: Option<Value>,
+    /// Actual value found (if applicable)
     pub actual: Option<Value>,
 }
 
-/// Validation result
+/// Result of a validation operation
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
+    /// Whether the validation passed (no errors)
     pub is_valid: bool,
+    /// List of validation errors found
     pub errors: Vec<ValidationError>,
+    /// List of validation warnings (non-blocking)
     pub warnings: Vec<ValidationError>,
 }
 

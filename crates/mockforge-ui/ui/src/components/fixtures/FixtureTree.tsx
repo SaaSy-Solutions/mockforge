@@ -1,5 +1,5 @@
 import { logger } from '@/utils/logger';
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import type { FixtureInfo } from '../../types';
@@ -22,7 +22,13 @@ interface FixtureTreeProps {
   selectedFixtureId?: string;
 }
 
-export function FixtureTree({
+/**
+ * FixtureTree component with performance optimizations:
+ * - Memoized tree building (only rebuilds when fixtures change)
+ * - Memoized callbacks to prevent unnecessary re-renders
+ * - Only renders expanded folder children (collapsed folders skip rendering)
+ */
+function FixtureTreeComponent({
   fixtures,
   onSelectFixture,
   onRenameFixture,
@@ -35,8 +41,11 @@ export function FixtureTree({
   const [newName, setNewName] = useState('');
   const [draggedItem, setDraggedItem] = useState<FixtureInfo | null>(null);
 
-  // Build tree structure from flat fixture list
-  const buildTree = (fixtures: FixtureInfo[]): FixtureTreeNode[] => {
+  /**
+   * Build tree structure from flat fixture list
+   * Memoized to avoid rebuilding on every render when fixtures haven't changed
+   */
+  const buildTree = useCallback((fixtures: FixtureInfo[]): FixtureTreeNode[] => {
     const tree: FixtureTreeNode[] = [];
     const folderMap = new Map<string, FixtureTreeNode>();
 
@@ -78,47 +87,60 @@ export function FixtureTree({
     });
 
     return tree;
-  };
+  }, []);
 
-  const treeData = buildTree(fixtures);
+  /**
+   * Memoize tree data - only rebuild when fixtures change
+   * This prevents unnecessary tree rebuilding on every render
+   */
+  const treeData = useMemo(() => buildTree(fixtures), [fixtures, buildTree]);
 
-  const toggleFolder = (folderId: string) => {
-    const newExpanded = new Set(expandedFolders);
-    if (newExpanded.has(folderId)) {
-      newExpanded.delete(folderId);
-    } else {
-      newExpanded.add(folderId);
-    }
-    setExpandedFolders(newExpanded);
-  };
+  /**
+   * Toggle folder expansion state
+   * Memoized to prevent unnecessary re-renders
+   */
+  const toggleFolder = useCallback((folderId: string) => {
+    setExpandedFolders(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(folderId)) {
+        newExpanded.delete(folderId);
+      } else {
+        newExpanded.add(folderId);
+      }
+      return newExpanded;
+    });
+  }, []);
 
-  const startRename = (id: string, currentName: string) => {
+  /**
+   * Memoize callbacks to prevent unnecessary re-renders of child components
+   */
+  const startRename = useCallback((id: string, currentName: string) => {
     setRenamingId(id);
     setNewName(currentName);
-  };
+  }, []);
 
-  const confirmRename = () => {
+  const confirmRename = useCallback(() => {
     if (renamingId && newName.trim()) {
       onRenameFixture(renamingId, newName.trim());
       setRenamingId(null);
       setNewName('');
     }
-  };
+  }, [renamingId, newName, onRenameFixture]);
 
-  const cancelRename = () => {
+  const cancelRename = useCallback(() => {
     setRenamingId(null);
     setNewName('');
-  };
+  }, []);
 
-  const handleDragStart = (fixture: FixtureInfo) => {
+  const handleDragStart = useCallback((fixture: FixtureInfo) => {
     setDraggedItem(fixture);
-  };
+  }, []);
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-  };
+  }, []);
 
-  const handleDrop = (e: React.DragEvent, targetPath: string) => {
+  const handleDrop = useCallback((e: React.DragEvent, targetPath: string) => {
     e.preventDefault();
     if (draggedItem) {
       const newPath = `${targetPath}/${draggedItem.name}`;
@@ -127,7 +149,7 @@ export function FixtureTree({
       }
       setDraggedItem(null);
     }
-  };
+  }, [draggedItem, onMoveFixture]);
 
   const renderNode = (node: FixtureTreeNode, depth = 0) => {
     const isExpanded = expandedFolders.has(node.id);
@@ -245,3 +267,9 @@ export function FixtureTree({
     </div>
   );
 }
+
+/**
+ * Memoized export to prevent re-renders when parent re-renders
+ * but props haven't changed
+ */
+export const FixtureTree = React.memo(FixtureTreeComponent);

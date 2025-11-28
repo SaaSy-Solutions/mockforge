@@ -16,8 +16,11 @@ MockForge includes powerful time travel capabilities for testing time-dependent 
 - [Configuration](#configuration)
 - [Virtual Clock](#virtual-clock)
 - [Scheduled Responses](#scheduled-responses)
+- [Cron Scheduler](#cron-scheduler)
+- [Mutation Rules](#mutation-rules)
 - [Template Integration](#template-integration)
 - [Admin API](#admin-api)
+- [CLI Commands](#cli-commands)
 - [Use Cases](#use-cases)
 - [Examples](#examples)
 
@@ -69,7 +72,41 @@ Create an endpoint that returns current time:
 }
 ```
 
-### 4. Control Time via Admin API
+### 4. Control Time via CLI (Recommended)
+
+```bash
+# Get time travel status
+mockforge time status
+
+# Enable time travel at a specific time
+mockforge time enable --time "2025-01-01T00:00:00Z"
+
+# Advance time by 1 month (instantly!)
+mockforge time advance 1month
+
+# Advance time by 2 hours
+mockforge time advance 2h
+
+# Set time to a specific point
+mockforge time set "2025-06-01T12:00:00Z"
+
+# Set time scale (2x speed)
+mockforge time scale 2.0
+
+# Save current state as a scenario
+mockforge time save "1-month-later" --description "Scenario after 1 month"
+
+# Load a saved scenario
+mockforge time load "1-month-later"
+
+# List all saved scenarios
+mockforge time list
+
+# Reset to real time
+mockforge time reset
+```
+
+### 5. Control Time via Admin API
 
 ```bash
 # Get time travel status
@@ -79,6 +116,11 @@ curl http://localhost:9080/__mockforge/time-travel/status
 curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
   -H "Content-Type: application/json" \
   -d '{"duration": "2h"}'
+
+# Advance time by 1 month
+curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
+  -H "Content-Type: application/json" \
+  -d '{"duration": "1month"}'
 
 # Schedule a response for 30 minutes from now
 curl -X POST http://localhost:9080/__mockforge/time-travel/schedule \
@@ -240,6 +282,320 @@ curl -X DELETE http://localhost:9080/__mockforge/time-travel/scheduled/{id}
 curl -X POST http://localhost:9080/__mockforge/time-travel/scheduled/clear
 ```
 
+## Cron Scheduler
+
+The cron scheduler allows you to schedule recurring events using cron expressions. It works alongside the ResponseScheduler and integrates with the virtual clock.
+
+### Creating Cron Jobs
+
+```bash
+# Create a cron job that runs every day at 3am
+curl -X POST http://localhost:9080/__mockforge/time-travel/cron \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "daily-cleanup",
+    "name": "Daily Cleanup",
+    "schedule": "0 3 * * *",
+    "description": "Runs daily cleanup at 3am",
+    "action_type": "callback",
+    "action_metadata": {}
+  }'
+
+# Create a cron job that sends a response every hour
+curl -X POST http://localhost:9080/__mockforge/time-travel/cron \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "hourly-report",
+    "name": "Hourly Report",
+    "schedule": "0 * * * *",
+    "action_type": "response",
+    "action_metadata": {
+      "body": {"report": "hourly_data"},
+      "status": 200,
+      "headers": {"Content-Type": "application/json"}
+    }
+  }'
+```
+
+### Cron Expression Format
+
+Standard 5-field cron format:
+```
+┌───────────── minute (0 - 59)
+│ ┌───────────── hour (0 - 23)
+│ │ ┌───────────── day of month (1 - 31)
+│ │ │ ┌───────────── month (1 - 12)
+│ │ │ │ ┌───────────── day of week (0 - 6) (Sunday to Saturday)
+│ │ │ │ │
+* * * * *
+```
+
+Examples:
+- `0 3 * * *` - Every day at 3:00 AM
+- `*/15 * * * *` - Every 15 minutes
+- `0 0 * * 0` - Every Sunday at midnight
+- `0 9-17 * * 1-5` - Every hour from 9 AM to 5 PM on weekdays
+
+### Managing Cron Jobs
+
+```bash
+# List all cron jobs
+curl http://localhost:9080/__mockforge/time-travel/cron
+
+# Get a specific cron job
+curl http://localhost:9080/__mockforge/time-travel/cron/{id}
+
+# Enable/disable a cron job
+curl -X POST http://localhost:9080/__mockforge/time-travel/cron/{id}/enable \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+
+# Delete a cron job
+curl -X DELETE http://localhost:9080/__mockforge/time-travel/cron/{id}
+```
+
+### CLI Commands for Cron Jobs
+
+```bash
+# List all cron jobs
+mockforge time cron list
+
+# Create a cron job
+mockforge time cron create \
+  --id "daily-cleanup" \
+  --name "Daily Cleanup" \
+  --schedule "0 3 * * *" \
+  --action-type "callback" \
+  --action-metadata ./action.json
+
+# Get a specific cron job
+mockforge time cron get daily-cleanup
+
+# Enable/disable a cron job
+mockforge time cron enable daily-cleanup
+mockforge time cron disable daily-cleanup
+
+# Delete a cron job
+mockforge time cron delete daily-cleanup
+```
+
+## Mutation Rules
+
+Mutation rules automatically modify VBR entity data based on time triggers. This is useful for simulating data aging, status changes, and other time-based data evolution.
+
+### Creating Mutation Rules
+
+```bash
+# Create a rule that increments a counter every hour
+curl -X POST http://localhost:9080/__mockforge/time-travel/mutations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "hourly-counter",
+    "entity_name": "User",
+    "trigger": {
+      "type": "interval",
+      "duration_seconds": 3600
+    },
+    "operation": {
+      "type": "increment",
+      "field": "login_count",
+      "amount": 1.0
+    },
+    "description": "Increment login count every hour"
+  }'
+
+# Create a rule that runs at a specific time daily
+curl -X POST http://localhost:9080/__mockforge/time-travel/mutations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "daily-reset",
+    "entity_name": "User",
+    "trigger": {
+      "type": "attime",
+      "hour": 3,
+      "minute": 0
+    },
+    "operation": {
+      "type": "set",
+      "field": "status",
+      "value": "active"
+    }
+  }'
+```
+
+### Trigger Types
+
+#### Interval Trigger
+Executes after a duration has elapsed:
+```json
+{
+  "type": "interval",
+  "duration_seconds": 3600
+}
+```
+
+#### At Time Trigger
+Executes at a specific time each day:
+```json
+{
+  "type": "attime",
+  "hour": 3,
+  "minute": 0
+}
+```
+
+#### Field Threshold Trigger
+Executes when a field value reaches a threshold:
+```json
+{
+  "type": "fieldthreshold",
+  "field": "balance",
+  "threshold": 0,
+  "operator": "lte"
+}
+```
+
+### Operation Types
+
+#### Set Operation
+Set a field to a specific value:
+```json
+{
+  "type": "set",
+  "field": "status",
+  "value": "expired"
+}
+```
+
+#### Increment Operation
+Increment a numeric field:
+```json
+{
+  "type": "increment",
+  "field": "count",
+  "amount": 1.0
+}
+```
+
+#### Decrement Operation
+Decrement a numeric field:
+```json
+{
+  "type": "decrement",
+  "field": "balance",
+  "amount": 10.0
+}
+```
+
+#### Update Status Operation
+Update a status field:
+```json
+{
+  "type": "updatestatus",
+  "status": "inactive"
+}
+```
+
+### Managing Mutation Rules
+
+```bash
+# List all mutation rules
+curl http://localhost:9080/__mockforge/time-travel/mutations
+
+# Get a specific mutation rule
+curl http://localhost:9080/__mockforge/time-travel/mutations/{id}
+
+# Enable/disable a mutation rule
+curl -X POST http://localhost:9080/__mockforge/time-travel/mutations/{id}/enable \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+
+# Delete a mutation rule
+curl -X DELETE http://localhost:9080/__mockforge/time-travel/mutations/{id}
+```
+
+### CLI Commands for Mutation Rules
+
+```bash
+# List all mutation rules
+mockforge time mutation list
+
+# Create a mutation rule
+mockforge time mutation create \
+  --id "hourly-counter" \
+  --entity User \
+  --trigger-type interval \
+  --trigger-config ./trigger.json \
+  --operation-type increment \
+  --operation-config ./operation.json
+
+# Get a specific mutation rule
+mockforge time mutation get hourly-counter
+
+# Enable/disable a mutation rule
+mockforge time mutation enable hourly-counter
+mockforge time mutation disable hourly-counter
+
+# Delete a mutation rule
+mockforge time mutation delete hourly-counter
+```
+
+## VBR Snapshot Integration
+
+VBR snapshots can optionally include time travel state (cron jobs and mutation rules) for complete state restoration.
+
+### Creating Snapshots with Time Travel State
+
+When creating a VBR snapshot, you can include time travel state:
+
+```rust
+use mockforge_vbr::{VbrEngine, TimeTravelSnapshotState};
+use chrono::Utc;
+
+let engine = VbrEngine::new(config).await?;
+
+// Create time travel state
+let time_travel_state = TimeTravelSnapshotState {
+    enabled: true,
+    current_time: Some(Utc::now()),
+    scale_factor: 1.0,
+    cron_jobs: vec![/* serialized cron jobs */],
+    mutation_rules: vec![/* serialized mutation rules */],
+};
+
+// Create snapshot with time travel state
+let metadata = engine
+    .create_snapshot_with_time_travel(
+        "snapshot-with-time-travel",
+        Some("Snapshot with time travel state".to_string()),
+        "./snapshots",
+        true,
+        Some(time_travel_state),
+    )
+    .await?;
+```
+
+### Restoring Snapshots with Time Travel State
+
+When restoring a snapshot, you can restore the time travel state:
+
+```rust
+// Restore snapshot with time travel state
+engine
+    .restore_snapshot_with_time_travel(
+        "snapshot-with-time-travel",
+        "./snapshots",
+        true,
+        Some(|state| {
+            // Restore time travel state
+            // This callback receives the TimeTravelSnapshotState
+            // and can restore it to the TimeTravelManager
+            Ok(())
+        }),
+    )
+    .await?;
+```
+
 ## Template Integration
 
 When time travel is enabled, all time-related template tokens use the virtual clock.
@@ -286,6 +642,136 @@ paths:
                 expires_at: "{{now+1h}}"
 ```
 
+## CLI Commands
+
+The `mockforge time` command provides a convenient CLI interface for controlling time travel:
+
+### Basic Commands
+
+```bash
+# Show current status
+mockforge time status
+
+# Enable time travel
+mockforge time enable [--time TIME] [--scale FACTOR]
+
+# Disable time travel
+mockforge time disable
+
+# Advance time
+mockforge time advance <duration>
+
+# Set time to specific point
+mockforge time set <time>
+
+# Set time scale
+mockforge time scale <factor>
+
+# Reset to real time
+mockforge time reset
+```
+
+### Duration Formats
+
+Supported duration formats for `advance`:
+- `10s`, `30m`, `2h`, `1d` - Standard units
+- `1week`, `1 week`, `2weeks` - Weeks (7 days)
+- `1month`, `2months` - Months (approximate: 30 days)
+- `1year`, `2years` - Years (approximate: 365 days)
+- `+1h`, `+1 week`, `+2d` - With + prefix (optional)
+
+Examples:
+```bash
+mockforge time advance 1month    # Advance by 1 month
+mockforge time advance 2h        # Advance by 2 hours
+mockforge time advance 30m       # Advance by 30 minutes
+mockforge time advance +1 week   # Advance by 1 week (with + prefix)
+mockforge time advance 1week      # Advance by 1 week
+```
+
+### Cron Job Management
+
+```bash
+# List all cron jobs
+mockforge time cron list
+
+# Create a cron job
+mockforge time cron create \
+  --id "daily-cleanup" \
+  --name "Daily Cleanup" \
+  --schedule "0 3 * * *" \
+  --action-type "callback" \
+  --action-metadata ./action.json
+
+# Get a specific cron job
+mockforge time cron get daily-cleanup
+
+# Enable/disable a cron job
+mockforge time cron enable daily-cleanup
+mockforge time cron disable daily-cleanup
+
+# Delete a cron job
+mockforge time cron delete daily-cleanup
+```
+
+### Mutation Rule Management
+
+```bash
+# List all mutation rules
+mockforge time mutation list
+
+# Create a mutation rule
+mockforge time mutation create \
+  --id "hourly-counter" \
+  --entity User \
+  --trigger-type interval \
+  --trigger-config ./trigger.json \
+  --operation-type increment \
+  --operation-config ./operation.json
+
+# Get a specific mutation rule
+mockforge time mutation get hourly-counter
+
+# Enable/disable a mutation rule
+mockforge time mutation enable hourly-counter
+mockforge time mutation disable hourly-counter
+
+# Delete a mutation rule
+mockforge time mutation delete hourly-counter
+```
+
+### Scenario Management
+
+Save and load time travel states for repeatable testing:
+
+```bash
+# Save current state
+mockforge time save <name> [--description TEXT] [--output PATH]
+
+# Load a saved scenario
+mockforge time load <name>
+
+# List all saved scenarios
+mockforge time list [--dir PATH]
+```
+
+Example workflow:
+```bash
+# 1. Enable time travel and set initial time
+mockforge time enable --time "2025-01-01T00:00:00Z"
+
+# 2. Advance to 1 month later
+mockforge time advance 1month
+
+# 3. Save this state
+mockforge time save "1-month-later" --description "State after 1 month"
+
+# 4. Later, load it again
+mockforge time load "1-month-later"
+```
+
+Scenarios are saved as JSON files in `./scenarios/` by default.
+
 ## Admin API
 
 ### Endpoints
@@ -302,6 +788,18 @@ paths:
 | `/__mockforge/time-travel/scheduled` | GET | List scheduled responses |
 | `/__mockforge/time-travel/scheduled/{id}` | DELETE | Cancel scheduled response |
 | `/__mockforge/time-travel/scheduled/clear` | POST | Clear all scheduled responses |
+| `/__mockforge/time-travel/scenario/save` | POST | Save current state as scenario |
+| `/__mockforge/time-travel/scenario/load` | POST | Load a scenario |
+| `/__mockforge/time-travel/cron` | GET | List all cron jobs |
+| `/__mockforge/time-travel/cron` | POST | Create a cron job |
+| `/__mockforge/time-travel/cron/{id}` | GET | Get a specific cron job |
+| `/__mockforge/time-travel/cron/{id}` | DELETE | Delete a cron job |
+| `/__mockforge/time-travel/cron/{id}/enable` | POST | Enable/disable a cron job |
+| `/__mockforge/time-travel/mutations` | GET | List all mutation rules |
+| `/__mockforge/time-travel/mutations` | POST | Create a mutation rule |
+| `/__mockforge/time-travel/mutations/{id}` | GET | Get a specific mutation rule |
+| `/__mockforge/time-travel/mutations/{id}` | DELETE | Delete a mutation rule |
+| `/__mockforge/time-travel/mutations/{id}/enable` | POST | Enable/disable a mutation rule |
 
 ### Request/Response Schemas
 
@@ -326,7 +824,61 @@ curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
 curl -H "Authorization: Bearer abc123" http://localhost:3000/api/data
 ```
 
-### 2. Testing Scheduled Events
+### 2. Testing Scheduled Events with Cron Jobs
+
+Test recurring events using cron scheduler:
+
+```bash
+# Create a cron job that runs every hour
+curl -X POST http://localhost:9080/__mockforge/time-travel/cron \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "hourly-check",
+    "name": "Hourly Health Check",
+    "schedule": "0 * * * *",
+    "action_type": "response",
+    "action_metadata": {
+      "body": {"status": "healthy"},
+      "status": 200
+    }
+  }'
+
+# Advance time by 1 hour to trigger the job
+curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
+  -d '{"duration": "1h"}'
+```
+
+### 3. Testing Data Aging with Mutation Rules
+
+Simulate data that changes over time:
+
+```bash
+# Create a mutation rule that increments a counter every hour
+curl -X POST http://localhost:9080/__mockforge/time-travel/mutations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "hourly-login-count",
+    "entity_name": "User",
+    "trigger": {
+      "type": "interval",
+      "duration_seconds": 3600
+    },
+    "operation": {
+      "type": "increment",
+      "field": "login_count",
+      "amount": 1.0
+    }
+  }'
+
+# Advance time by 1 hour
+curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
+  -d '{"duration": "1h"}'
+
+# Check that login_count was incremented
+curl http://localhost:3000/api/users/user1
+```
+
+### 4. Testing Scheduled Events
 
 Test event-based systems:
 
@@ -407,7 +959,10 @@ curl http://localhost:3000/orders/123
 # 1. Start MockForge with time travel
 mockforge serve --config time-travel-demo.yaml --admin
 
-# 2. Enable time travel at a known time
+# 2. Enable time travel at a known time (using CLI)
+mockforge time enable --time "2025-01-01T00:00:00Z"
+
+# Or using API
 curl -X POST http://localhost:9080/__mockforge/time-travel/enable \
   -d '{"time": "2025-01-01T00:00:00Z"}'
 
@@ -428,7 +983,10 @@ curl -X POST http://localhost:9080/__mockforge/time-travel/schedule \
     "name": "token_refresh"
   }'
 
-# 4. Advance time to trigger first event
+# 4. Advance time to trigger first event (using CLI)
+mockforge time advance 35m
+
+# Or using API
 curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
   -d '{"duration": "35m"}'
 
@@ -437,11 +995,13 @@ curl http://localhost:3000/api/events
 # Response: {"event": "token_refresh_needed"}
 
 # 6. Continue advancing
-curl -X POST http://localhost:9080/__mockforge/time-travel/advance \
-  -d '{"duration": "30m"}'
+mockforge time advance 30m
 
 curl http://localhost:3000/api/events
 # Response: {"event": "hourly_sync"}
+
+# 7. Save scenario for future use
+mockforge time save "test-scenario" --description "Complete test scenario"
 ```
 
 ### Integration Test Example

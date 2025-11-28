@@ -6,6 +6,180 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+/// Reality continuum type based on blend ratio
+///
+/// Categorizes responses based on how much real vs mock data is used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RealityContinuumType {
+    /// 100% synthetic/mock data (blend ratio = 0.0)
+    Synthetic,
+    /// Mix of mock and real data (0.0 < blend ratio < 1.0)
+    Blended,
+    /// 100% real/upstream data (blend ratio = 1.0)
+    Live,
+}
+
+impl RealityContinuumType {
+    /// Determine continuum type from blend ratio
+    pub fn from_blend_ratio(ratio: f64) -> Self {
+        if ratio <= 0.0 {
+            Self::Synthetic
+        } else if ratio >= 1.0 {
+            Self::Live
+        } else {
+            Self::Blended
+        }
+    }
+
+    /// Get human-readable name
+    pub fn name(&self) -> &'static str {
+        match self {
+            RealityContinuumType::Synthetic => "Synthetic",
+            RealityContinuumType::Blended => "Blended",
+            RealityContinuumType::Live => "Live",
+        }
+    }
+}
+
+/// Data source breakdown showing percentages from different sources
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataSourceBreakdown {
+    /// Percentage from recorded/production data (0.0 - 100.0)
+    #[serde(default)]
+    pub recorded_percent: f64,
+    /// Percentage from generator/synthetic data (0.0 - 100.0)
+    #[serde(default)]
+    pub generator_percent: f64,
+    /// Percentage from upstream/real data (0.0 - 100.0)
+    #[serde(default)]
+    pub upstream_percent: f64,
+}
+
+impl Default for DataSourceBreakdown {
+    fn default() -> Self {
+        Self {
+            recorded_percent: 0.0,
+            generator_percent: 100.0,
+            upstream_percent: 0.0,
+        }
+    }
+}
+
+impl DataSourceBreakdown {
+    /// Create breakdown from blend ratio
+    ///
+    /// Assumes blend ratio represents the mix between mock (generator) and real (upstream).
+    /// Recorded data is treated as a separate category.
+    pub fn from_blend_ratio(blend_ratio: f64, recorded_ratio: f64) -> Self {
+        let upstream = blend_ratio * (1.0 - recorded_ratio);
+        let generator = (1.0 - blend_ratio) * (1.0 - recorded_ratio);
+        let recorded = recorded_ratio;
+
+        Self {
+            recorded_percent: recorded * 100.0,
+            generator_percent: generator * 100.0,
+            upstream_percent: upstream * 100.0,
+        }
+    }
+
+    /// Normalize percentages to ensure they sum to 100.0
+    pub fn normalize(&mut self) {
+        let total = self.recorded_percent + self.generator_percent + self.upstream_percent;
+        if total > 0.0 {
+            self.recorded_percent = (self.recorded_percent / total) * 100.0;
+            self.generator_percent = (self.generator_percent / total) * 100.0;
+            self.upstream_percent = (self.upstream_percent / total) * 100.0;
+        }
+    }
+}
+
+/// Reality trace metadata for a request
+///
+/// Captures information about how the response was generated, including
+/// reality level, data sources, active personas, scenarios, and chaos profiles.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RealityTraceMetadata {
+    /// Reality level (1-5) from RealityLevel enum
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reality_level: Option<crate::reality::RealityLevel>,
+    /// Reality continuum type (Synthetic/Blended/Live)
+    pub reality_continuum_type: RealityContinuumType,
+    /// Blend ratio used (0.0 = mock, 1.0 = real)
+    #[serde(default)]
+    pub blend_ratio: f64,
+    /// Data source breakdown showing percentages
+    pub data_source_breakdown: DataSourceBreakdown,
+    /// Active persona ID (if any)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_persona_id: Option<String>,
+    /// Active scenario identifier (if any)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_scenario: Option<String>,
+    /// Active chaos profiles/rules
+    #[serde(default)]
+    pub active_chaos_profiles: Vec<String>,
+    /// Active latency profiles
+    #[serde(default)]
+    pub active_latency_profiles: Vec<String>,
+}
+
+impl Default for RealityTraceMetadata {
+    fn default() -> Self {
+        Self {
+            reality_level: None,
+            reality_continuum_type: RealityContinuumType::Synthetic,
+            blend_ratio: 0.0,
+            data_source_breakdown: DataSourceBreakdown::default(),
+            active_persona_id: None,
+            active_scenario: None,
+            active_chaos_profiles: Vec::new(),
+            active_latency_profiles: Vec::new(),
+        }
+    }
+}
+
+impl RealityTraceMetadata {
+    /// Create reality trace metadata from unified state and blend ratio
+    ///
+    /// Builds metadata from the consistency engine's unified state and
+    /// the actual blend ratio used for the request.
+    pub fn from_unified_state(
+        unified_state: &crate::consistency::types::UnifiedState,
+        blend_ratio: f64,
+        path: &str,
+    ) -> Self {
+        let reality_continuum_type = RealityContinuumType::from_blend_ratio(blend_ratio);
+
+        // Extract chaos rule names
+        let active_chaos_profiles: Vec<String> = unified_state
+            .active_chaos_rules
+            .iter()
+            .filter_map(|r| r.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .collect();
+
+        // For now, latency profiles are not stored in unified state
+        // This would need to be added or extracted from elsewhere
+        let active_latency_profiles = Vec::new();
+
+        // Build data source breakdown
+        // Assume recorded ratio is 0 for now (could be enhanced later)
+        let mut breakdown = DataSourceBreakdown::from_blend_ratio(blend_ratio, 0.0);
+        breakdown.normalize();
+
+        Self {
+            reality_level: Some(unified_state.reality_level),
+            reality_continuum_type,
+            blend_ratio,
+            data_source_breakdown: breakdown,
+            active_persona_id: unified_state.active_persona.as_ref().map(|p| p.id.clone()),
+            active_scenario: unified_state.active_scenario.clone(),
+            active_chaos_profiles,
+            active_latency_profiles,
+        }
+    }
+}
+
 /// A request log entry that can represent HTTP, WebSocket, or gRPC requests
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestLogEntry {
@@ -29,12 +203,21 @@ pub struct RequestLogEntry {
     pub user_agent: Option<String>,
     /// Request headers (filtered for security)
     pub headers: HashMap<String, String>,
+    /// Query parameters from the request URL
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub query_params: HashMap<String, String>,
     /// Response size in bytes
     pub response_size_bytes: u64,
     /// Error message (if any)
     pub error_message: Option<String>,
     /// Additional metadata specific to server type
     pub metadata: HashMap<String, String>,
+    /// Reality trace metadata (if available)
+    ///
+    /// Contains information about how the response was generated,
+    /// including reality level, data sources, personas, and chaos profiles.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reality_metadata: Option<RealityTraceMetadata>,
 }
 
 /// Centralized request logger that all servers can write to
@@ -112,6 +295,72 @@ impl CentralizedRequestLogger {
         let mut logs = self.logs.write().await;
         logs.clear();
     }
+
+    /// Find all request log entries that match the verification pattern
+    ///
+    /// This method is used by the verification API to find matching requests.
+    /// It returns all log entries that match the given pattern, ordered by
+    /// timestamp (most recent first).
+    pub async fn find_matching_requests(
+        &self,
+        pattern: &crate::verification::VerificationRequest,
+    ) -> Vec<RequestLogEntry> {
+        let logs = self.logs.read().await;
+        logs.iter()
+            .filter(|entry| crate::verification::matches_verification_pattern(entry, pattern))
+            .cloned()
+            .collect()
+    }
+
+    /// Count request log entries that match the verification pattern
+    ///
+    /// This is a convenience method that returns just the count of matching requests
+    /// without collecting all the matching entries, which is more efficient when
+    /// you only need the count.
+    pub async fn count_matching_requests(
+        &self,
+        pattern: &crate::verification::VerificationRequest,
+    ) -> usize {
+        let logs = self.logs.read().await;
+        logs.iter()
+            .filter(|entry| crate::verification::matches_verification_pattern(entry, pattern))
+            .count()
+    }
+
+    /// Get request sequence matching the given patterns in order
+    ///
+    /// This method finds requests that match the patterns in the specified order,
+    /// which is useful for verifying request sequences. It returns the matching
+    /// entries in the order they were found (chronological order).
+    pub async fn get_request_sequence(
+        &self,
+        patterns: &[crate::verification::VerificationRequest],
+    ) -> Vec<RequestLogEntry> {
+        let logs = self.logs.read().await;
+        let mut log_idx = 0;
+        let mut all_matches = Vec::new();
+
+        for pattern in patterns {
+            // Find the next matching request after the last match
+            let mut found = false;
+            while log_idx < logs.len() {
+                if crate::verification::matches_verification_pattern(&logs[log_idx], pattern) {
+                    all_matches.push(logs[log_idx].clone());
+                    log_idx += 1;
+                    found = true;
+                    break;
+                }
+                log_idx += 1;
+            }
+
+            if !found {
+                // If we can't find a match for this pattern, return what we have so far
+                break;
+            }
+        }
+
+        all_matches
+    }
 }
 
 /// Global singleton instance of the centralized logger
@@ -148,6 +397,34 @@ pub fn create_http_log_entry(
     response_size_bytes: u64,
     error_message: Option<String>,
 ) -> RequestLogEntry {
+    create_http_log_entry_with_query(
+        method,
+        path,
+        status_code,
+        response_time_ms,
+        client_ip,
+        user_agent,
+        headers,
+        HashMap::new(), // Default empty query params
+        response_size_bytes,
+        error_message,
+    )
+}
+
+/// Helper to create HTTP request log entry with query parameters
+#[allow(clippy::too_many_arguments)]
+pub fn create_http_log_entry_with_query(
+    method: &str,
+    path: &str,
+    status_code: u16,
+    response_time_ms: u64,
+    client_ip: Option<String>,
+    user_agent: Option<String>,
+    headers: HashMap<String, String>,
+    query_params: HashMap<String, String>,
+    response_size_bytes: u64,
+    error_message: Option<String>,
+) -> RequestLogEntry {
     RequestLogEntry {
         id: uuid::Uuid::new_v4().to_string(),
         timestamp: Utc::now(),
@@ -159,9 +436,11 @@ pub fn create_http_log_entry(
         client_ip,
         user_agent,
         headers,
+        query_params,
         response_size_bytes,
         error_message,
         metadata: HashMap::new(),
+        reality_metadata: None,
     }
 }
 
@@ -188,9 +467,11 @@ pub fn create_websocket_log_entry(
         client_ip,
         user_agent: None,
         headers: HashMap::new(),
+        query_params: HashMap::new(),
         response_size_bytes: message_size_bytes,
         error_message,
         metadata,
+        reality_metadata: None,
     }
 }
 
@@ -221,9 +502,11 @@ pub fn create_grpc_log_entry(
         client_ip,
         user_agent: None,
         headers: HashMap::new(),
+        query_params: HashMap::new(),
         response_size_bytes,
         error_message,
         metadata,
+        reality_metadata: None,
     }
 }
 
@@ -246,6 +529,7 @@ mod tests {
             response_size_bytes: 1024,
             error_message: None,
             metadata: HashMap::new(),
+            reality_metadata: None,
         }
     }
 

@@ -3,16 +3,23 @@
 use crate::Result;
 use std::collections::HashMap;
 
-/// HTTP method enum
+/// HTTP method enum representing standard HTTP request methods
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HttpMethod {
+    /// GET method - retrieve data from server
     GET,
+    /// POST method - submit data to server
     POST,
+    /// PUT method - update/replace resource
     PUT,
+    /// DELETE method - remove resource
     DELETE,
+    /// PATCH method - partial resource update
     PATCH,
+    /// HEAD method - retrieve headers only
     HEAD,
+    /// OPTIONS method - get allowed methods/headers
     OPTIONS,
 }
 

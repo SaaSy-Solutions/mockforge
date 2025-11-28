@@ -1,0 +1,105 @@
+# Override configuration for Apiary Pro frontend integration fixes
+# This file standardizes response formats and adds download URLs to export endpoints
+
+# 1. Enhanced Route Optimization Response
+# Standardize POST /api/ai/route-optimizer/optimize response structure
+- targets: ["operation:optimizeRoute", "path:/api/ai/route-optimizer/optimize"]
+  mode: merge
+  patch:
+    - op: add
+      path: /route
+      value:
+        stops:
+          - apiary_id: "{{uuid}}"
+            order: 1
+            distance: 15.5
+            estimated_time: 30
+            fuel_cost: 2.50
+        total_distance: 125.5
+        total_time: 240
+        total_cost: 45.00
+    - op: add
+      path: /optimization_metrics
+      value:
+        efficiency: 0.92
+        risk_reduction: 0.15
+
+# 2. Printable Labels Response
+# Add download URL to POST /api/assets/print-labels response
+- targets: ["operation:printLabels", "path:/api/assets/print-labels"]
+  mode: merge
+  patch:
+    - op: add
+      path: /download_url
+      value: "http://localhost:3000/mock-files/labels/{{uuid}}.pdf"
+    - op: add
+      path: /label_urls
+      value:
+        - "http://localhost:3000/mock-files/labels/{{uuid}}_1.pdf"
+        - "http://localhost:3000/mock-files/labels/{{uuid}}_2.pdf"
+    - op: add
+      path: /format
+      value: "pdf"
+
+# 3. Invoice Export Response
+# Add download URL to GET /api/contractor/invoices/{id}/export response
+- targets: ["operation:exportInvoice", "path:/api/contractor/invoices/*/export"]
+  mode: merge
+  patch:
+    - op: add
+      path: /download_url
+      value: "http://localhost:3000/mock-files/invoices/{{uuid}}.csv"
+    - op: add
+      path: /format
+      value: "csv"
+    - op: add
+      path: /generated_at
+      value: "{{now}}"
+
+# 4. Provenance Pack Response
+# Add download URL to POST /api/provenance/export response
+- targets: ["operation:exportProvenance", "path:/api/provenance/export"]
+  mode: merge
+  patch:
+    - op: add
+      path: /download_url
+      value: "http://localhost:3000/mock-files/provenance/{{uuid}}.json"
+    - op: add
+      path: /export_url
+      value: "http://localhost:3000/mock-files/provenance/{{uuid}}.json"
+    - op: add
+      path: /format
+      value: "json"
+    - op: add
+      path: /generated_at
+      value: "{{now}}"
+
+# 5. Standardize Pagination Format
+# Note: Pagination standardization should be applied selectively to specific endpoints
+# Example for a specific list endpoint:
+# - targets: ["operation:listApiaries", "path:/api/apiaries"]
+#   mode: merge
+#   patch:
+#     - op: replace
+#       path: ""
+#       value:
+#         data: "{{$}}"
+#         pagination:
+#           page: 1
+#           limit: 20
+#           total: 100
+#           total_pages: 5
+
+# 6. Standardize Error Response Format
+# Note: Error format standardization should be applied at the framework level
+# or selectively to specific endpoints that need it
+# Example for a specific endpoint:
+# - targets: ["operation:createApiary"]
+#   mode: merge
+#   patch:
+#     - op: add
+#       path: /error
+#       value:
+#         code: "VALIDATION_ERROR"
+#         message: "{{message}}"
+#         details: {}

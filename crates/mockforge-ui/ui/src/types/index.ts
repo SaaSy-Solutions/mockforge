@@ -139,6 +139,89 @@ export interface ProxyConfig {
   requests_proxied: number;
 }
 
+// ==================== CHAOS ENGINEERING TYPES ====================
+
+/**
+ * Payload corruption type
+ */
+export type CorruptionType = 'none' | 'random_bytes' | 'truncate' | 'bit_flip';
+
+/**
+ * Latency injection configuration for chaos engineering
+ */
+export interface ChaosLatencyConfig {
+  enabled: boolean;
+  fixed_delay_ms?: number | null;
+  random_delay_range_ms?: [number, number] | null;
+  jitter_percent: number;
+  probability: number;
+}
+
+/**
+ * Fault injection configuration for chaos engineering
+ */
+export interface ChaosFaultInjectionConfig {
+  enabled: boolean;
+  http_errors: number[];
+  http_error_probability: number;
+  connection_errors: boolean;
+  connection_error_probability: number;
+  timeout_errors: boolean;
+  timeout_ms: number;
+  timeout_probability: number;
+  partial_responses: boolean;
+  partial_response_probability: number;
+  payload_corruption: boolean;
+  payload_corruption_probability: number;
+  corruption_type: CorruptionType;
+}
+
+/**
+ * Traffic shaping configuration for chaos engineering
+ */
+export interface ChaosTrafficShapingConfig {
+  enabled: boolean;
+  bandwidth_limit_bps: number;
+  packet_loss_percent: number;
+  max_connections: number;
+  connection_timeout_ms: number;
+}
+
+/**
+ * Rate limiting configuration for chaos engineering
+ */
+export interface ChaosRateLimitConfig {
+  enabled: boolean;
+  requests_per_second: number;
+  burst_size: number;
+  per_ip: boolean;
+  per_endpoint: boolean;
+}
+
+/**
+ * Main chaos engineering configuration
+ */
+export interface ChaosConfig {
+  enabled: boolean;
+  latency?: ChaosLatencyConfig | null;
+  fault_injection?: ChaosFaultInjectionConfig | null;
+  rate_limit?: ChaosRateLimitConfig | null;
+  traffic_shaping?: ChaosTrafficShapingConfig | null;
+}
+
+/**
+ * Chaos engineering status response
+ */
+export interface ChaosStatus {
+  enabled: boolean;
+  active_scenarios?: string[];
+  latency_enabled?: boolean;
+  fault_injection_enabled?: boolean;
+  rate_limit_enabled?: boolean;
+  traffic_shaping_enabled?: boolean;
+  current_config?: ChaosConfig;
+}
+
 export interface ServerInfo {
   version: string;
   build_time: string;
@@ -1143,4 +1226,116 @@ export interface SaveFileRequest {
   path: string;
   content: string;
   encoding?: string;
+}
+
+// ==================== VERIFICATION TYPES ====================
+
+export interface VerificationRequest {
+  method?: string;
+  path?: string;
+  query_params?: Record<string, string>;
+  headers?: Record<string, string>;
+  body_pattern?: string;
+}
+
+export type VerificationCount =
+  | { type: 'exactly'; value: number }
+  | { type: 'at_least'; value: number }
+  | { type: 'at_most'; value: number }
+  | { type: 'never' }
+  | { type: 'at_least_once' };
+
+export interface VerificationResult {
+  matched: boolean;
+  count: number;
+  expected: VerificationCount;
+  matches: RequestLog[];
+  error_message?: string;
+}
+
+// Re-export graph types
+export type {
+  GraphData,
+  GraphNode,
+  GraphEdge,
+  GraphCluster,
+} from './graph';
+
+// ==================== BEHAVIORAL CLONING TYPES ====================
+
+export interface FlowStep {
+  index: number;
+  request_id: string;
+  step_label?: string;
+  timing_ms?: number;
+}
+
+export interface Flow {
+  id: string;
+  name?: string;
+  description?: string;
+  created_at: string;
+  tags: string[];
+  step_count: number;
+  steps?: FlowStep[];
+}
+
+export interface FlowListResponse {
+  flows: Flow[];
+  total: number;
+}
+
+export interface TagFlowRequest {
+  name?: string;
+  description?: string;
+  tags?: string[];
+}
+
+export interface CompileFlowRequest {
+  scenario_name: string;
+  flex_mode?: boolean;
+}
+
+export interface CompileFlowResponse {
+  scenario_id: string;
+  scenario_name: string;
+  version: string;
+  message: string;
+}
+
+export interface Scenario {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+  tags: string[];
+  /// Metadata indicating if this scenario was AI-generated
+  ai_generated?: boolean;
+  /// Metadata indicating if this scenario is frozen (deterministic mode)
+  frozen?: boolean;
+  /// Path to frozen artifact file if frozen
+  frozen_path?: string;
+}
+
+export interface ScenarioStep {
+  step_id: string;
+  label?: string;
+  method: string;
+  path: string;
+  status_code: number;
+  timing_ms?: number;
+}
+
+export interface ScenarioDetail extends Scenario {
+  strict_mode: boolean;
+  steps: ScenarioStep[];
+  step_count: number;
+  state_variables: number;
+}
+
+export interface ScenarioListResponse {
+  scenarios: Scenario[];
+  total: number;
 }

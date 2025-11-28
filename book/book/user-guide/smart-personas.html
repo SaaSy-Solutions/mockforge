@@ -1,0 +1,509 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Smart Personas - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/smart-personas.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="smart-personas"><a class="header" href="#smart-personas">Smart Personas</a></h1>
+<p>Smart Personas enable generating coherent, consistent mock data using persona profiles with unique backstories and deterministic generation. The same persona always generates the same data, ensuring consistency across endpoints and requests.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Smart Personas provide:</p>
+<ul>
+<li><strong>Persona Profiles</strong>: Unique personas with IDs and domain associations</li>
+<li><strong>Coherent Backstories</strong>: Template-based backstory generation</li>
+<li><strong>Persona Relationships</strong>: Connections between personas (users, devices, organizations)</li>
+<li><strong>Deterministic Generation</strong>: Same persona = same data every time</li>
+<li><strong>Domain-Specific Templates</strong>: Finance, E-commerce, Healthcare, IoT personas</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="enable-smart-personas"><a class="header" href="#enable-smart-personas">Enable Smart Personas</a></h3>
+<pre><code class="language-yaml"># config.yaml
+data:
+  personas:
+    enabled: true
+    auto_generate_backstories: true
+    domain: "ecommerce"  # or "finance", "healthcare", "iot"
+</code></pre>
+<h3 id="use-in-templates"><a class="header" href="#use-in-templates">Use in Templates</a></h3>
+<pre><code class="language-yaml">responses:
+  - path: "/api/users/{id}"
+    body: |
+      {
+        "id": "{{persona.id}}",
+        "name": "{{persona.name}}",
+        "email": "{{persona.email}}",
+        "backstory": "{{persona.backstory}}"
+      }
+</code></pre>
+<h2 id="persona-profiles"><a class="header" href="#persona-profiles">Persona Profiles</a></h2>
+<h3 id="automatic-persona-creation"><a class="header" href="#automatic-persona-creation">Automatic Persona Creation</a></h3>
+<p>Personas are automatically created when referenced:</p>
+<pre><code class="language-bash"># Request to /api/users/123
+# Persona with ID "123" is automatically created
+# Same persona used for all requests with ID "123"
+</code></pre>
+<h3 id="manual-persona-creation"><a class="header" href="#manual-persona-creation">Manual Persona Creation</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_data::{PersonaProfile, PersonaRegistry};
+
+let mut registry = PersonaRegistry::new();
+let persona = PersonaProfile::new("user-123", "ecommerce");
+registry.add_persona(persona);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="backstories"><a class="header" href="#backstories">Backstories</a></h2>
+<h3 id="automatic-backstory-generation"><a class="header" href="#automatic-backstory-generation">Automatic Backstory Generation</a></h3>
+<p>Backstories are automatically generated based on domain:</p>
+<pre><code class="language-yaml">data:
+  personas:
+    enabled: true
+    auto_generate_backstories: true
+    domain: "ecommerce"
+</code></pre>
+<h3 id="domain-specific-templates"><a class="header" href="#domain-specific-templates">Domain-Specific Templates</a></h3>
+<h4 id="e-commerce"><a class="header" href="#e-commerce">E-commerce</a></h4>
+<pre><code>"Alice is a 32-year-old marketing professional living in San Francisco. 
+She frequently shops online for electronics and fashion items. 
+Her average order value is $150, and she prefers express shipping."
+</code></pre>
+<h4 id="finance"><a class="header" href="#finance">Finance</a></h4>
+<pre><code>"Bob is a 45-year-old investment banker based in New York. 
+He manages a portfolio worth $2.5M and prefers conservative investments. 
+He has been a customer for 8 years."
+</code></pre>
+<h4 id="healthcare"><a class="header" href="#healthcare">Healthcare</a></h4>
+<pre><code>"Carol is a 28-year-old nurse practitioner in Boston. 
+She manages chronic conditions for 50+ patients. 
+She prefers digital health tools and telemedicine."
+</code></pre>
+<h4 id="iot"><a class="header" href="#iot">IoT</a></h4>
+<pre><code>"Device-001 is a smart thermostat installed in a 3-bedroom home in Seattle. 
+It monitors temperature, humidity, and energy usage. 
+It's connected to 5 other smart home devices."
+</code></pre>
+<h3 id="custom-backstories"><a class="header" href="#custom-backstories">Custom Backstories</a></h3>
+<p>Set custom backstories:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut persona = PersonaProfile::new("user-123", "ecommerce");
+persona.set_backstory("Custom backstory text".to_string());
+<span class="boring">}</span></code></pre></pre>
+<h2 id="persona-relationships"><a class="header" href="#persona-relationships">Persona Relationships</a></h2>
+<h3 id="define-relationships"><a class="header" href="#define-relationships">Define Relationships</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_data::PersonaRegistry;
+
+let mut registry = PersonaRegistry::new();
+
+// Add relationship
+registry.add_relationship(
+    "user-123",
+    "device-456",
+    "owns"
+);
+
+// Get related personas
+let devices = registry.get_related_personas("user-123", "owns");
+<span class="boring">}</span></code></pre></pre>
+<h3 id="relationship-types"><a class="header" href="#relationship-types">Relationship Types</a></h3>
+<p>Common relationship types:</p>
+<ul>
+<li><code>owns</code> - User owns device/organization</li>
+<li><code>belongs_to</code> - Device/organization belongs to user</li>
+<li><code>manages</code> - User manages organization</li>
+<li><code>connected_to</code> - Device connected to other device</li>
+<li><code>parent_of</code> - Organization parent-child relationship</li>
+</ul>
+<h3 id="cross-entity-consistency"><a class="header" href="#cross-entity-consistency">Cross-Entity Consistency</a></h3>
+<p>Same base ID across different entity types:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// User persona
+let user = registry.get_or_create_persona_by_type("123", EntityType::User, "ecommerce");
+
+// Device persona (same ID, different type)
+let device = registry.get_or_create_persona_by_type("123", EntityType::Device, "iot");
+
+// Automatically establishes relationship
+<span class="boring">}</span></code></pre></pre>
+<h2 id="deterministic-generation"><a class="header" href="#deterministic-generation">Deterministic Generation</a></h2>
+<h3 id="same-persona-same-data"><a class="header" href="#same-persona-same-data">Same Persona, Same Data</a></h3>
+<p>The same persona always generates the same data:</p>
+<pre><code class="language-bash"># First request
+GET /api/users/123
+# Response: {"id": 123, "name": "Alice", "email": "alice@example.com"}
+
+# Second request (same persona ID)
+GET /api/users/123
+# Response: {"id": 123, "name": "Alice", "email": "alice@example.com"}  # Same!
+</code></pre>
+<h3 id="seed-based-generation"><a class="header" href="#seed-based-generation">Seed-Based Generation</a></h3>
+<p>Personas use deterministic seeds:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let persona = PersonaProfile::new("user-123", "ecommerce");
+// Seed is derived from persona ID and domain
+// Same ID + same domain = same seed = same data
+<span class="boring">}</span></code></pre></pre>
+<h2 id="template-functions"><a class="header" href="#template-functions">Template Functions</a></h2>
+<h3 id="persona-functions"><a class="header" href="#persona-functions">Persona Functions</a></h3>
+<pre><code class="language-yaml"># In response templates
+{
+  "id": "{{persona.id}}",
+  "name": "{{persona.name}}",
+  "email": "{{persona.email}}",
+  "phone": "{{persona.phone}}",
+  "address": "{{persona.address}}",
+  "backstory": "{{persona.backstory}}",
+  "traits": "{{persona.traits}}"
+}
+</code></pre>
+<h3 id="relationship-functions"><a class="header" href="#relationship-functions">Relationship Functions</a></h3>
+<pre><code class="language-yaml"># Get related personas
+{
+  "user": {
+    "id": "{{persona.id}}",
+    "name": "{{persona.name}}"
+  },
+  "devices": "{{persona.related.owns}}"
+}
+</code></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="full-configuration"><a class="header" href="#full-configuration">Full Configuration</a></h3>
+<pre><code class="language-yaml">data:
+  personas:
+    enabled: true
+    auto_generate_backstories: true
+    domain: "ecommerce"  # finance, healthcare, iot, generic
+    backstory_templates:
+      ecommerce:
+        - "{{name}} is a {{age}}-year-old {{profession}} living in {{city}}."
+        - "They frequently shop for {{interests}} with an average order value of ${{avg_order_value}}."
+    relationship_types:
+      - owns
+      - belongs_to
+      - manages
+      - connected_to
+</code></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="consistent-user-data"><a class="header" href="#consistent-user-data">Consistent User Data</a></h3>
+<p>Generate consistent user data across endpoints:</p>
+<pre><code class="language-yaml"># User endpoint
+responses:
+  - path: "/api/users/{id}"
+    body: |
+      {
+        "id": "{{persona.id}}",
+        "name": "{{persona.name}}",
+        "email": "{{persona.email}}"
+      }
+
+# User's orders endpoint
+responses:
+  - path: "/api/users/{id}/orders"
+    body: |
+      {
+        "user_id": "{{persona.id}}",
+        "user_name": "{{persona.name}}",
+        "orders": [...]
+      }
+</code></pre>
+<h3 id="device-relationships"><a class="header" href="#device-relationships">Device Relationships</a></h3>
+<p>Model device ownership:</p>
+<pre><code class="language-yaml"># Device endpoint
+responses:
+  - path: "/api/devices/{id}"
+    body: |
+      {
+        "id": "{{persona.id}}",
+        "owner_id": "{{persona.relationship.owner}}",
+        "type": "{{persona.type}}"
+      }
+</code></pre>
+<h3 id="organization-hierarchies"><a class="header" href="#organization-hierarchies">Organization Hierarchies</a></h3>
+<p>Model organizational structures:</p>
+<pre><code class="language-yaml"># Organization endpoint
+responses:
+  - path: "/api/organizations/{id}"
+    body: |
+      {
+        "id": "{{persona.id}}",
+        "name": "{{persona.name}}",
+        "parent_id": "{{persona.relationship.parent}}",
+        "children": "{{persona.related.children}}"
+      }
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Use Consistent IDs</strong>: Use the same persona ID across related endpoints</li>
+<li><strong>Choose Appropriate Domain</strong>: Select domain that matches your use case</li>
+<li><strong>Leverage Relationships</strong>: Use relationships to model complex data structures</li>
+<li><strong>Customize Backstories</strong>: Add domain-specific details to backstories</li>
+<li><strong>Test Determinism</strong>: Verify same persona generates same data</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="persona-not-found"><a class="header" href="#persona-not-found">Persona Not Found</a></h3>
+<ul>
+<li>Ensure personas are enabled in configuration</li>
+<li>Check persona ID is consistent across requests</li>
+<li>Verify domain matches persona domain</li>
+</ul>
+<h3 id="backstory-not-generated"><a class="header" href="#backstory-not-generated">Backstory Not Generated</a></h3>
+<ul>
+<li>Check <code>auto_generate_backstories</code> is enabled</li>
+<li>Verify domain is supported</li>
+<li>Review persona creation logs</li>
+</ul>
+<h3 id="relationships-not-working"><a class="header" href="#relationships-not-working">Relationships Not Working</a></h3>
+<ul>
+<li>Verify relationship types are defined</li>
+<li>Check relationship is added to registry</li>
+<li>Review relationship query syntax</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="vbr-engine.html">VBR Engine</a> - State management with personas</li>
+<li><a href="../reference/fixtures.html">Data Generation</a> - Data generation features</li>
+<li><a href="../configuration/files.html">Configuration Guide</a> - Complete configuration reference</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/reality-continuum.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/contracts/api-change-forecasting.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/reality-continuum.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/contracts/api-change-forecasting.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

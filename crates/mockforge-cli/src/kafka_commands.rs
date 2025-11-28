@@ -9,7 +9,6 @@ use rdkafka::message::{Header, Headers, Message, OwnedHeaders};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::topic_partition_list::TopicPartitionList;
 use rdkafka::Offset;
-use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -88,7 +87,7 @@ pub enum KafkaCommands {
         key: Option<String>,
 
         /// Message value
-        #[arg(short, long)]
+        #[arg(short = 'm', long)]
         value: String,
 
         /// Message partition
@@ -96,7 +95,7 @@ pub enum KafkaCommands {
         partition: Option<i32>,
 
         /// Header (key:value format)
-        #[arg(short, long)]
+        #[arg(short = 'H', long)]
         header: Vec<String>,
     },
 
@@ -261,7 +260,7 @@ pub enum KafkaSimulateCommands {
         topic: String,
 
         /// Reset to offset
-        #[arg(short, long, default_value = "earliest")]
+        #[arg(short = 'o', long, default_value = "earliest")]
         to: String,
     },
 }
@@ -335,7 +334,7 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
                     );
                 }
                 Err((e, _)) => {
-                    return Err(anyhow::anyhow!("Failed to produce message: {}", e).into());
+                    return Err(anyhow::anyhow!("Failed to produce message: {}", e));
                 }
             }
             Ok(())
@@ -366,7 +365,7 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
                 let offset = match from.as_str() {
                     "beginning" => rdkafka::Offset::Beginning,
                     "end" => rdkafka::Offset::End,
-                    _ => return Err(anyhow::anyhow!("Invalid 'from' value: {}", from).into()),
+                    _ => return Err(anyhow::anyhow!("Invalid 'from' value: {}", from)),
                 };
                 consumer
                     .seek(&topic, p, offset, Duration::from_secs(30))
@@ -416,7 +415,7 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
                         println!();
                     }
                     Err(e) => {
-                        return Err(anyhow::anyhow!("Receive failed: {}", e).into());
+                        return Err(anyhow::anyhow!("Receive failed: {}", e));
                     }
                 }
             }
@@ -540,7 +539,7 @@ async fn execute_topic_command(command: KafkaTopicCommands) -> Result<()> {
                     "  Partition {}: Leader={}, Replicas={:?}",
                     partition.id(),
                     partition.leader(),
-                    partition.replicas().iter().map(|b| *b).collect::<Vec<_>>()
+                    partition.replicas().to_vec()
                 );
             }
             Ok(())
@@ -595,16 +594,17 @@ async fn execute_groups_command(command: KafkaGroupsCommands) -> Result<()> {
                 .fetch_group_list(None, Duration::from_secs(30))
                 .map_err(|e| anyhow::anyhow!("List groups failed: {}", e))?;
 
-            let group = groups.groups().iter().find(|g| g.name() == group_id);
-            if group.is_none() {
-                return Err(anyhow::anyhow!("Consumer group {} not found", group_id));
-            }
+            let group = groups
+                .groups()
+                .iter()
+                .find(|g| g.name() == group_id)
+                .ok_or_else(|| anyhow::anyhow!("Consumer group {} not found", group_id))?;
 
             println!("Consumer Group: {}", group_id);
-            println!("  State: {}", group.unwrap().state());
-            println!("  Protocol: {}", group.unwrap().protocol());
-            println!("  Protocol Type: {}", group.unwrap().protocol_type());
-            println!("  Members: {}", group.unwrap().members().len());
+            println!("  State: {}", group.state());
+            println!("  Protocol: {}", group.protocol());
+            println!("  Protocol Type: {}", group.protocol_type());
+            println!("  Members: {}", group.members().len());
 
             Ok(())
         }
@@ -809,7 +809,7 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
 
                 // Calculate target offset as high_watermark - lag
                 let target_offset = if lag >= 0 {
-                    high_watermark.saturating_sub(lag as i64)
+                    high_watermark.saturating_sub(lag)
                 } else {
                     // Negative lag doesn't make sense, default to low watermark
                     low_watermark

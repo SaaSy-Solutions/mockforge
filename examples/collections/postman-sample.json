@@ -1,0 +1,36 @@
+{
+  "info": {
+    "name": "MockForge Sample",
+    "_postman_id": "b1e63c7b-2f8b-4e7a-b1b0-111111111111",
+    "description": "Sample requests for MockForge import",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" }
+  ],
+  "item": [
+    {
+      "name": "GET /health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "GET /hello",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/hello"
+      }
+    },
+    {
+      "name": "POST /echo",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"message\":\"Hello from Postman\"}" },
+        "url": "{{baseUrl}}/echo"
+      }
+    }
+  ]
+}

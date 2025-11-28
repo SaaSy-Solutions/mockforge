@@ -1,3 +1,8 @@
+//! Tests for OpenAPI schema constraint validation.
+//!
+//! These tests verify that schema constraints such as pattern matching,
+//! array size limits, and value ranges are correctly enforced.
+
 use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec};
 use serde_json::json;
 

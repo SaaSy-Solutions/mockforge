@@ -146,7 +146,9 @@ impl SmartMockGenerator {
     }
 
     /// Generate a deterministic random number within a range
-    #[allow(dead_code)] // Used in future smart generation features
+    ///
+    /// TODO: Use in smart generation features when range-based field inference is implemented
+    #[allow(dead_code)] // TODO: Remove when range-based smart generation is implemented
     fn next_random_range(&mut self, min: i64, max: i64) -> i64 {
         if let Some(ref mut rng) = self.rng {
             rng.random_range(min..=max)
@@ -607,10 +609,19 @@ impl SmartMockGenerator {
     }
 
     /// Generate a mock message for the given descriptor
+    ///
+    /// # Panics
+    /// This function will panic if `generate_mock_message` returns a non-Message Value,
+    /// which should never happen in practice as `generate_mock_message` always returns
+    /// `Value::Message`. This is defensive programming to catch any unexpected bugs.
     pub fn generate_message(&mut self, descriptor: &MessageDescriptor) -> DynamicMessage {
         match self.generate_mock_message(descriptor, 0) {
             Value::Message(msg) => msg,
-            _ => panic!("generate_mock_message should always return a Message Value"),
+            // This should never happen - generate_mock_message always returns Value::Message
+            // Using unreachable!() instead of panic!() as this is a logic error if it occurs
+            _ => unreachable!(
+                "generate_mock_message should always return a Message Value - this indicates a bug"
+            ),
         }
     }
 

@@ -1,22 +1,32 @@
-/// Contract validation for CI/CD pipelines
-///
-/// Validates that mock configurations match live API responses
-/// and detects breaking changes in API contracts
+//! Pillars: [Contracts]
+//!
+//! Contract validation for CI/CD pipelines
+//!
+//! Validates that mock configurations match live API responses
+//! and detects breaking changes in API contracts
 use serde::{Deserialize, Serialize};
 
-/// Validation result
+/// Result of contract validation with detailed breakdown
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationResult {
+    /// Whether all validation checks passed
     pub passed: bool,
+    /// Total number of validation checks performed
     pub total_checks: usize,
+    /// Number of checks that passed
     pub passed_checks: usize,
+    /// Number of checks that failed
     pub failed_checks: usize,
+    /// Non-blocking warnings encountered during validation
     pub warnings: Vec<ValidationWarning>,
+    /// Validation errors that prevent the contract from being valid
     pub errors: Vec<ValidationError>,
+    /// Breaking changes detected compared to previous contract version
     pub breaking_changes: Vec<BreakingChange>,
 }
 
 impl ValidationResult {
+    /// Create a new empty validation result
     pub fn new() -> Self {
         Self {
             passed: true,
@@ -29,6 +39,7 @@ impl ValidationResult {
         }
     }
 
+    /// Add a validation error (marks result as failed)
     pub fn add_error(&mut self, error: ValidationError) {
         self.errors.push(error);
         self.failed_checks += 1;
@@ -36,17 +47,20 @@ impl ValidationResult {
         self.passed = false;
     }
 
+    /// Add a validation warning (does not fail the result)
     pub fn add_warning(&mut self, warning: ValidationWarning) {
         self.warnings.push(warning);
         self.passed_checks += 1;
         self.total_checks += 1;
     }
 
+    /// Add a breaking change (marks result as failed)
     pub fn add_breaking_change(&mut self, change: BreakingChange) {
         self.breaking_changes.push(change);
         self.passed = false;
     }
 
+    /// Record a successful validation check
     pub fn add_success(&mut self) {
         self.passed_checks += 1;
         self.total_checks += 1;
@@ -59,65 +73,99 @@ impl Default for ValidationResult {
     }
 }
 
-/// Validation warning
+/// Validation warning for non-blocking issues
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationWarning {
+    /// JSON path or endpoint path where the warning occurred
     pub path: String,
+    /// Human-readable warning message
     pub message: String,
+    /// Severity level of the warning
     pub severity: WarningSeverity,
 }
 
+/// Severity level for validation warnings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WarningSeverity {
+    /// Informational message (low priority)
     Info,
+    /// Warning that should be reviewed (medium priority)
     Warning,
 }
 
-/// Validation error
+/// Validation error for contract violations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationError {
+    /// JSON path or endpoint path where the error occurred
     pub path: String,
+    /// Human-readable error message
     pub message: String,
+    /// Expected value or format (if applicable)
     pub expected: Option<String>,
+    /// Actual value found (if applicable)
     pub actual: Option<String>,
+    /// Link to contract diff entry (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contract_diff_id: Option<String>,
+    /// Whether this is a breaking change
+    #[serde(default)]
+    pub is_breaking_change: bool,
 }
 
-/// Breaking change detected
+/// Breaking change detected between contract versions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BreakingChange {
+    /// Type of breaking change detected
     pub change_type: BreakingChangeType,
+    /// Path or endpoint affected by the change
     pub path: String,
+    /// Human-readable description of the breaking change
     pub description: String,
+    /// Severity of the breaking change
     pub severity: ChangeSeverity,
 }
 
+/// Types of breaking changes that can be detected
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BreakingChangeType {
+    /// An API endpoint was removed
     EndpointRemoved,
+    /// A required field was added to a request/response
     RequiredFieldAdded,
+    /// A field's data type was changed
     FieldTypeChanged,
+    /// A field was removed from a request/response
     FieldRemoved,
+    /// An HTTP response status code was changed
     ResponseCodeChanged,
+    /// Authentication requirements were changed
     AuthenticationChanged,
 }
 
+/// Severity level for breaking changes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ChangeSeverity {
+    /// Critical breaking change - will break all clients
     Critical,
+    /// Major breaking change - will break most clients
     Major,
+    /// Minor breaking change - may break some clients
     Minor,
 }
 
-/// Contract validator
+/// Contract validator for validating OpenAPI specs against live APIs
 pub struct ContractValidator {
+    /// Whether to use strict validation mode (fails on warnings)
     strict_mode: bool,
+    /// Whether to ignore optional fields during validation
     ignore_optional_fields: bool,
 }
 
 impl ContractValidator {
+    /// Create a new contract validator with default settings
     pub fn new() -> Self {
         Self {
             strict_mode: false,
@@ -125,11 +173,13 @@ impl ContractValidator {
         }
     }
 
+    /// Configure strict validation mode (fails validation on warnings)
     pub fn with_strict_mode(mut self, strict: bool) -> Self {
         self.strict_mode = strict;
         self
     }
 
+    /// Configure whether to ignore optional fields during validation
     pub fn with_ignore_optional_fields(mut self, ignore: bool) -> Self {
         self.ignore_optional_fields = ignore;
         self
@@ -188,6 +238,8 @@ impl ContractValidator {
                     message: format!("Unsupported HTTP method: {}", method),
                     expected: None,
                     actual: None,
+                    contract_diff_id: None,
+                    is_breaking_change: false,
                 });
                 return;
             }
@@ -229,6 +281,8 @@ impl ContractValidator {
                         message: format!("Failed to reach endpoint: {}", e),
                         expected: Some("2xx response".to_string()),
                         actual: Some("connection error".to_string()),
+                        contract_diff_id: None,
+                        is_breaking_change: false,
                     });
                 } else {
                     result.add_warning(ValidationWarning {
@@ -358,6 +412,8 @@ mod tests {
             message: "Test error".to_string(),
             expected: None,
             actual: None,
+            contract_diff_id: None,
+            is_breaking_change: false,
         });
 
         assert!(!result.passed);
@@ -404,6 +460,8 @@ mod tests {
             message: "Test failed".to_string(),
             expected: Some("200".to_string()),
             actual: Some("404".to_string()),
+            contract_diff_id: None,
+            is_breaking_change: false,
         });
 
         let validator = ContractValidator::new();

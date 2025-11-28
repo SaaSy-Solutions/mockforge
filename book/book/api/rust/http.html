@@ -183,6 +183,641 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="http-module"><a class="header" href="#http-module">HTTP Module</a></h1>
+<p>The <code>mockforge_http</code> crate provides comprehensive HTTP/REST API mocking capabilities with OpenAPI integration, AI-powered responses, and advanced management features.</p>
+<h2 id="modules"><a class="header" href="#modules">Modules</a></h2>
+<h3 id="core-functions"><a class="header" href="#core-functions">Core Functions</a></h3>
+<h4 id="build_router"><a class="header" href="#build_router"><code>build_router</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn build_router(
+    spec_path: Option&lt;String&gt;,
+    options: Option&lt;ValidationOptions&gt;,
+    failure_config: Option&lt;FailureConfig&gt;,
+) -&gt; Router
+<span class="boring">}</span></code></pre></pre>
+<p>Creates a basic HTTP router with optional OpenAPI specification support.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>spec_path</code>: Optional path to OpenAPI specification file</li>
+<li><code>options</code>: Optional validation options for request/response validation</li>
+<li><code>failure_config</code>: Optional failure injection configuration</li>
+</ul>
+<p><strong>Returns:</strong> Axum <code>Router</code> configured for HTTP mocking</p>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_http::build_router;
+use mockforge_core::ValidationOptions;
+
+let router = build_router(
+    Some("./api.yaml".to_string()),
+    Some(ValidationOptions::enforce()),
+    None,
+).await;
+<span class="boring">}</span></code></pre></pre>
+<h4 id="build_router_with_auth"><a class="header" href="#build_router_with_auth"><code>build_router_with_auth</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn build_router_with_auth(
+    spec_path: Option&lt;String&gt;,
+    options: Option&lt;ValidationOptions&gt;,
+    auth_config: Option&lt;AuthConfig&gt;,
+) -&gt; Router
+<span class="boring">}</span></code></pre></pre>
+<p>Creates an HTTP router with authentication support.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>spec_path</code>: Optional path to OpenAPI specification file</li>
+<li><code>options</code>: Optional validation options</li>
+<li><code>auth_config</code>: Authentication configuration (OAuth2, JWT, API keys)</li>
+</ul>
+<p><strong>Returns:</strong> Axum <code>Router</code> with authentication middleware</p>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_http::build_router_with_auth;
+use mockforge_core::config::AuthConfig;
+
+let auth_config = AuthConfig {
+    oauth2: Some(OAuth2Config {
+        client_id: "client123".to_string(),
+        client_secret: "secret".to_string(),
+        ..Default::default()
+    }),
+    ..Default::default()
+};
+
+let router = build_router_with_auth(
+    Some("./api.yaml".to_string()),
+    None,
+    Some(auth_config),
+).await;
+<span class="boring">}</span></code></pre></pre>
+<h4 id="build_router_with_chains"><a class="header" href="#build_router_with_chains"><code>build_router_with_chains</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn build_router_with_chains(
+    spec_path: Option&lt;String&gt;,
+    options: Option&lt;ValidationOptions&gt;,
+    chain_config: Option&lt;RequestChainingConfig&gt;,
+) -&gt; Router
+<span class="boring">}</span></code></pre></pre>
+<p>Creates an HTTP router with request chaining support for multi-step workflows.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>spec_path</code>: Optional path to OpenAPI specification file</li>
+<li><code>options</code>: Optional validation options</li>
+<li><code>chain_config</code>: Request chaining configuration</li>
+</ul>
+<p><strong>Returns:</strong> Axum <code>Router</code> with chaining capabilities</p>
+<h4 id="build_router_with_multi_tenant"><a class="header" href="#build_router_with_multi_tenant"><code>build_router_with_multi_tenant</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn build_router_with_multi_tenant(
+    spec_path: Option&lt;String&gt;,
+    options: Option&lt;ValidationOptions&gt;,
+    failure_config: Option&lt;FailureConfig&gt;,
+    multi_tenant_config: Option&lt;MultiTenantConfig&gt;,
+    route_configs: Option&lt;Vec&lt;RouteConfig&gt;&gt;,
+    cors_config: Option&lt;HttpCorsConfig&gt;,
+) -&gt; Router
+<span class="boring">}</span></code></pre></pre>
+<p>Creates an HTTP router with multi-tenant workspace support.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>spec_path</code>: Optional path to OpenAPI specification file</li>
+<li><code>options</code>: Optional validation options</li>
+<li><code>failure_config</code>: Optional failure injection configuration</li>
+<li><code>multi_tenant_config</code>: Multi-tenant workspace configuration</li>
+<li><code>route_configs</code>: Custom route configurations</li>
+<li><code>cors_config</code>: CORS configuration</li>
+</ul>
+<p><strong>Returns:</strong> Axum <code>Router</code> with multi-tenant support</p>
+<h4 id="build_router_with_traffic_shaping"><a class="header" href="#build_router_with_traffic_shaping"><code>build_router_with_traffic_shaping</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn build_router_with_traffic_shaping(
+    spec_path: Option&lt;String&gt;,
+    options: Option&lt;ValidationOptions&gt;,
+    traffic_shaper: Option&lt;TrafficShaper&gt;,
+    traffic_shaping_enabled: bool,
+) -&gt; Router
+<span class="boring">}</span></code></pre></pre>
+<p>Creates an HTTP router with traffic shaping capabilities.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>spec_path</code>: Optional path to OpenAPI specification file</li>
+<li><code>options</code>: Optional validation options</li>
+<li><code>traffic_shaper</code>: Traffic shaping configuration</li>
+<li><code>traffic_shaping_enabled</code>: Whether traffic shaping is active</li>
+</ul>
+<p><strong>Returns:</strong> Axum <code>Router</code> with traffic shaping middleware</p>
+<h3 id="server-functions"><a class="header" href="#server-functions">Server Functions</a></h3>
+<h4 id="serve_router"><a class="header" href="#serve_router"><code>serve_router</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn serve_router(
+    port: u16,
+    app: Router,
+) -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt;
+<span class="boring">}</span></code></pre></pre>
+<p>Starts the HTTP server on the specified port.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>port</code>: Port number to bind to</li>
+<li><code>app</code>: Axum router to serve</li>
+</ul>
+<p><strong>Returns:</strong> <code>Result&lt;(), Error&gt;</code> indicating server startup success</p>
+<p><strong>Errors:</strong></p>
+<ul>
+<li>Port binding failures</li>
+<li>Server startup errors</li>
+</ul>
+<h4 id="start"><a class="header" href="#start"><code>start</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn start(
+    port: u16,
+    spec_path: Option&lt;String&gt;,
+    options: Option&lt;ValidationOptions&gt;,
+) -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt;
+<span class="boring">}</span></code></pre></pre>
+<p>Convenience function to build and start an HTTP server.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>port</code>: Port number to bind to</li>
+<li><code>spec_path</code>: Optional path to OpenAPI specification file</li>
+<li><code>options</code>: Optional validation options</li>
+</ul>
+<h4 id="start_with_auth_and_latency"><a class="header" href="#start_with_auth_and_latency"><code>start_with_auth_and_latency</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn start_with_auth_and_latency(
+    port: u16,
+    spec_path: Option&lt;String&gt;,
+    options: Option&lt;ValidationOptions&gt;,
+    auth_config: Option&lt;AuthConfig&gt;,
+    latency_profile: Option&lt;LatencyProfile&gt;,
+) -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt;
+<span class="boring">}</span></code></pre></pre>
+<p>Starts HTTP server with authentication and latency simulation.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>port</code>: Port number to bind to</li>
+<li><code>spec_path</code>: Optional path to OpenAPI specification file</li>
+<li><code>options</code>: Optional validation options</li>
+<li><code>auth_config</code>: Authentication configuration</li>
+<li><code>latency_profile</code>: Latency injection profile</li>
+</ul>
+<h3 id="management-api"><a class="header" href="#management-api">Management API</a></h3>
+<h4 id="management_router"><a class="header" href="#management_router"><code>management_router</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn management_router(state: ManagementState) -&gt; Router
+<span class="boring">}</span></code></pre></pre>
+<p>Creates a management API router for server control and monitoring.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>state</code>: Management state containing server statistics and configuration</li>
+</ul>
+<p><strong>Returns:</strong> Axum <code>Router</code> with management endpoints</p>
+<p><strong>Endpoints:</strong></p>
+<ul>
+<li><code>GET /health</code> - Health check</li>
+<li><code>GET /stats</code> - Server statistics</li>
+<li><code>GET /routes</code> - Route information</li>
+<li><code>GET /coverage</code> - API coverage metrics</li>
+<li><code>GET/POST/PUT/DELETE /mocks</code> - Mock management</li>
+</ul>
+<h4 id="management_ws_router"><a class="header" href="#management_ws_router"><code>management_ws_router</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn ws_management_router(state: WsManagementState) -&gt; Router
+<span class="boring">}</span></code></pre></pre>
+<p>Creates a WebSocket management router for real-time monitoring.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>state</code>: WebSocket management state</li>
+</ul>
+<p><strong>Returns:</strong> Axum <code>Router</code> with WebSocket management endpoints</p>
+<h3 id="ai-integration"><a class="header" href="#ai-integration">AI Integration</a></h3>
+<h4 id="process_response_with_ai"><a class="header" href="#process_response_with_ai"><code>process_response_with_ai</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn process_response_with_ai(
+    response_body: Option&lt;Value&gt;,
+    intelligent_config: Option&lt;Value&gt;,
+    drift_config: Option&lt;Value&gt;,
+) -&gt; Result&lt;Value&gt;
+<span class="boring">}</span></code></pre></pre>
+<p>Processes a response body using AI features if configured.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>response_body</code>: Base response body as JSON Value</li>
+<li><code>intelligent_config</code>: Intelligent mock generation configuration</li>
+<li><code>drift_config</code>: Data drift simulation configuration</li>
+</ul>
+<p><strong>Returns:</strong> <code>Result&lt;Value, Error&gt;</code> with processed response</p>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_http::process_response_with_ai;
+use serde_json::json;
+
+let config = json!({
+    "enabled": true,
+    "prompt": "Generate realistic user data"
+});
+
+let response = process_response_with_ai(
+    Some(json!({"name": "John"})),
+    Some(config),
+    None,
+).await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="data-structures"><a class="header" href="#data-structures">Data Structures</a></h3>
+<h4 id="httpserverstate"><a class="header" href="#httpserverstate"><code>HttpServerState</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct HttpServerState {
+    pub routes: Vec&lt;RouteInfo&gt;,
+    pub rate_limiter: Option&lt;Arc&lt;GlobalRateLimiter&gt;&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Shared state for HTTP server route information and rate limiting.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>routes</code>: Vector of route information</li>
+<li><code>rate_limiter</code>: Optional global rate limiter</li>
+</ul>
+<p><strong>Methods:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl HttpServerState {
+    pub fn new() -&gt; Self
+    pub fn with_routes(routes: Vec&lt;RouteInfo&gt;) -&gt; Self
+    pub fn with_rate_limiter(rate_limiter: Arc&lt;GlobalRateLimiter&gt;) -&gt; Self
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="routeinfo"><a class="header" href="#routeinfo"><code>RouteInfo</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct RouteInfo {
+    pub method: String,
+    pub path: String,
+    pub operation_id: Option&lt;String&gt;,
+    pub summary: Option&lt;String&gt;,
+    pub description: Option&lt;String&gt;,
+    pub parameters: Vec&lt;String&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Information about an HTTP route.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>method</code>: HTTP method (GET, POST, etc.)</li>
+<li><code>path</code>: Route path pattern</li>
+<li><code>operation_id</code>: Optional OpenAPI operation ID</li>
+<li><code>summary</code>: Optional route summary</li>
+<li><code>description</code>: Optional route description</li>
+<li><code>parameters</code>: List of parameter names</li>
+</ul>
+<h4 id="managementstate"><a class="header" href="#managementstate"><code>ManagementState</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ManagementState {
+    pub mocks: Arc&lt;RwLock&lt;Vec&lt;MockConfig&gt;&gt;&gt;,
+    pub spec: Option&lt;Arc&lt;OpenApiSpec&gt;&gt;,
+    pub spec_path: Option&lt;String&gt;,
+    pub port: u16,
+    pub start_time: Instant,
+    pub request_counter: Arc&lt;RwLock&lt;u64&gt;&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>State for the management API.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>mocks</code>: Thread-safe vector of mock configurations</li>
+<li><code>spec</code>: Optional OpenAPI specification</li>
+<li><code>spec_path</code>: Optional path to spec file</li>
+<li><code>port</code>: Server port</li>
+<li><code>start_time</code>: Server startup timestamp</li>
+<li><code>request_counter</code>: Request counter for statistics</li>
+</ul>
+<p><strong>Methods:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl ManagementState {
+    pub fn new(
+        spec: Option&lt;Arc&lt;OpenApiSpec&gt;&gt;,
+        spec_path: Option&lt;String&gt;,
+        port: u16,
+    ) -&gt; Self
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="mockconfig"><a class="header" href="#mockconfig"><code>MockConfig</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct MockConfig {
+    pub id: String,
+    pub name: String,
+    pub method: String,
+    pub path: String,
+    pub response: MockResponse,
+    pub enabled: bool,
+    pub latency_ms: Option&lt;u64&gt;,
+    pub status_code: Option&lt;u16&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Configuration for a mock endpoint.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>id</code>: Unique mock identifier</li>
+<li><code>name</code>: Human-readable name</li>
+<li><code>method</code>: HTTP method</li>
+<li><code>path</code>: Route path</li>
+<li><code>response</code>: Mock response configuration</li>
+<li><code>enabled</code>: Whether mock is active</li>
+<li><code>latency_ms</code>: Optional latency injection</li>
+<li><code>status_code</code>: Optional status code override</li>
+</ul>
+<h4 id="mockresponse"><a class="header" href="#mockresponse"><code>MockResponse</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct MockResponse {
+    pub body: Value,
+    pub headers: Option&lt;HashMap&lt;String, String&gt;&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Mock response configuration.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>body</code>: JSON response body</li>
+<li><code>headers</code>: Optional HTTP headers</li>
+</ul>
+<h4 id="serverstats"><a class="header" href="#serverstats"><code>ServerStats</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ServerStats {
+    pub uptime_seconds: u64,
+    pub total_requests: u64,
+    pub active_mocks: usize,
+    pub enabled_mocks: usize,
+    pub registered_routes: usize,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Server statistics.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>uptime_seconds</code>: Server uptime in seconds</li>
+<li><code>total_requests</code>: Total requests processed</li>
+<li><code>active_mocks</code>: Number of configured mocks</li>
+<li><code>enabled_mocks</code>: Number of enabled mocks</li>
+<li><code>registered_routes</code>: Number of registered routes</li>
+</ul>
+<h4 id="serverconfig"><a class="header" href="#serverconfig"><code>ServerConfig</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ServerConfig {
+    pub version: String,
+    pub port: u16,
+    pub has_openapi_spec: bool,
+    pub spec_path: Option&lt;String&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Server configuration information.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>version</code>: MockForge version</li>
+<li><code>port</code>: Server port</li>
+<li><code>has_openapi_spec</code>: Whether OpenAPI spec is loaded</li>
+<li><code>spec_path</code>: Optional path to spec file</li>
+</ul>
+<h3 id="ai-types"><a class="header" href="#ai-types">AI Types</a></h3>
+<h4 id="airesponseconfig"><a class="header" href="#airesponseconfig"><code>AiResponseConfig</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct AiResponseConfig {
+    pub enabled: bool,
+    pub rag_config: RagConfig,
+    pub prompt: String,
+    pub schema: Option&lt;Value&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Configuration for AI-powered response generation.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>enabled</code>: Whether AI responses are enabled</li>
+<li><code>rag_config</code>: RAG (Retrieval-Augmented Generation) configuration</li>
+<li><code>prompt</code>: AI generation prompt</li>
+<li><code>schema</code>: Optional response schema</li>
+</ul>
+<h4 id="airesponsehandler"><a class="header" href="#airesponsehandler"><code>AiResponseHandler</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct AiResponseHandler { /* fields omitted */ }
+<span class="boring">}</span></code></pre></pre>
+<p>Handler for AI-powered response generation.</p>
+<p><strong>Methods:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl AiResponseHandler {
+    pub fn new(
+        intelligent_config: Option&lt;IntelligentMockConfig&gt;,
+        drift_config: Option&lt;DataDriftConfig&gt;,
+    ) -&gt; Result&lt;Self&gt;
+
+    pub fn is_enabled(&amp;self) -&gt; bool
+
+    pub async fn generate_response(&amp;mut self, base_response: Option&lt;Value&gt;) -&gt; Result&lt;Value&gt;
+
+    pub async fn reset_drift(&amp;self)
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="coverage-types"><a class="header" href="#coverage-types">Coverage Types</a></h3>
+<h4 id="coveragereport"><a class="header" href="#coveragereport"><code>CoverageReport</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct CoverageReport {
+    pub routes: HashMap&lt;String, RouteCoverage&gt;,
+    pub total_routes: usize,
+    pub covered_routes: usize,
+    pub coverage_percentage: f64,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>API coverage report.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>routes</code>: Coverage data per route</li>
+<li><code>total_routes</code>: Total number of routes</li>
+<li><code>covered_routes</code>: Number of covered routes</li>
+<li><code>coverage_percentage</code>: Coverage percentage (0.0-100.0)</li>
+</ul>
+<h4 id="routecoverage"><a class="header" href="#routecoverage"><code>RouteCoverage</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct RouteCoverage {
+    pub method: String,
+    pub path: String,
+    pub methods: HashMap&lt;String, MethodCoverage&gt;,
+    pub total_requests: u64,
+    pub covered_methods: usize,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Coverage information for a specific route.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>method</code>: HTTP method</li>
+<li><code>path</code>: Route path</li>
+<li><code>methods</code>: Coverage per HTTP method</li>
+<li><code>total_requests</code>: Total requests to this route</li>
+<li><code>covered_methods</code>: Number of methods with coverage</li>
+</ul>
+<h4 id="methodcoverage"><a class="header" href="#methodcoverage"><code>MethodCoverage</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct MethodCoverage {
+    pub request_count: u64,
+    pub response_codes: HashMap&lt;u16, u64&gt;,
+    pub last_request: Option&lt;DateTime&lt;Utc&gt;&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Coverage information for a specific HTTP method.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>request_count</code>: Number of requests</li>
+<li><code>response_codes</code>: Response code distribution</li>
+<li><code>last_request</code>: Timestamp of last request</li>
+</ul>
+<h3 id="coverage-functions"><a class="header" href="#coverage-functions">Coverage Functions</a></h3>
+<h4 id="calculate_coverage"><a class="header" href="#calculate_coverage"><code>calculate_coverage</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn calculate_coverage(
+    routes: &amp;[RouteInfo],
+    request_logs: &amp;[RequestLogEntry],
+) -&gt; CoverageReport
+<span class="boring">}</span></code></pre></pre>
+<p>Calculates API coverage from route information and request logs.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>routes</code>: Available routes</li>
+<li><code>request_logs</code>: Historical request logs</li>
+</ul>
+<p><strong>Returns:</strong> <code>CoverageReport</code> with coverage statistics</p>
+<h4 id="get_coverage_handler"><a class="header" href="#get_coverage_handler"><code>get_coverage_handler</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn get_coverage_handler(State(state): State&lt;HttpServerState&gt;) -&gt; Json&lt;Value&gt;
+<span class="boring">}</span></code></pre></pre>
+<p>Axum handler for coverage endpoint.</p>
+<p><strong>Returns:</strong> JSON response with coverage data</p>
+<h3 id="middleware-functions"><a class="header" href="#middleware-functions">Middleware Functions</a></h3>
+<h4 id="collect_http_metrics"><a class="header" href="#collect_http_metrics"><code>collect_http_metrics</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn collect_http_metrics(request: &amp;Request, response: &amp;Response, duration: Duration)
+<span class="boring">}</span></code></pre></pre>
+<p>Collects HTTP metrics for observability.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>request</code>: HTTP request</li>
+<li><code>response</code>: HTTP response</li>
+<li><code>duration</code>: Request processing duration</li>
+</ul>
+<h4 id="http_tracing_middleware"><a class="header" href="#http_tracing_middleware"><code>http_tracing_middleware</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn http_tracing_middleware(
+    request: Request,
+    next: Next,
+) -&gt; impl Future&lt;Output = Response&gt;
+<span class="boring">}</span></code></pre></pre>
+<p>Middleware for HTTP request tracing.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>request</code>: Incoming HTTP request</li>
+<li><code>next</code>: Next middleware in chain</li>
+</ul>
+<p><strong>Returns:</strong> Future resolving to HTTP response</p>
+<h3 id="error-types"><a class="header" href="#error-types">Error Types</a></h3>
+<p>All functions return <code>Result&lt;T, Box&lt;dyn std::error::Error + Send + Sync&gt;&gt;</code> for error handling. Common errors include:</p>
+<ul>
+<li>File I/O errors (spec file reading)</li>
+<li>JSON parsing errors</li>
+<li>Server binding errors</li>
+<li>Validation errors</li>
+<li>AI service errors</li>
+</ul>
+<h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
+<ul>
+<li><code>DEFAULT_RATE_LIMIT_RPM</code>: Default requests per minute (1000)</li>
+<li><code>DEFAULT_RATE_LIMIT_BURST</code>: Default burst size (2000)</li>
+</ul>
+<h3 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h3>
+<ul>
+<li><code>data-faker</code>: Enables rich data generation features</li>
+</ul>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="basic-http-server"><a class="header" href="#basic-http-server">Basic HTTP Server</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_http::build_router;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let router = build_router(
+        Some("./api.yaml".to_string()),
+        None,
+        None,
+    ).await;
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    axum::serve(listener, router).await?;
+    Ok(())
+}</code></pre></pre>
+<h3 id="server-with-management-api"><a class="header" href="#server-with-management-api">Server with Management API</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_http::{build_router, management_router, ManagementState};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Build main router
+    let app = build_router(None, None, None).await;
+
+    // Add management API
+    let mgmt_state = ManagementState::new(None, None, 3000);
+    let mgmt_router = management_router(mgmt_state);
+
+    let app = app.nest("/__mockforge", mgmt_router);
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    axum::serve(listener, app).await?;
+    Ok(())
+}</code></pre></pre>
+<h3 id="ai-powered-responses"><a class="header" href="#ai-powered-responses">AI-Powered Responses</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_http::{AiResponseConfig, process_response_with_ai};
+use mockforge_data::RagConfig;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let ai_config = AiResponseConfig {
+        enabled: true,
+        rag_config: RagConfig {
+            provider: "openai".to_string(),
+            model: "gpt-3.5-turbo".to_string(),
+            api_key: Some("sk-...".to_string()),
+            ..Default::default()
+        },
+        prompt: "Generate realistic user data".to_string(),
+        schema: None,
+    };
+
+    let response = process_response_with_ai(
+        Some(serde_json::json!({"id": 1})),
+        Some(serde_json::to_value(ai_config)?),
+        None,
+    ).await?;
+
+    println!("AI response: {}", response);
+    Ok(())
+}</code></pre></pre>
 
                     </main>
 

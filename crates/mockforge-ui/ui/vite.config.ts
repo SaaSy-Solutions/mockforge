@@ -19,6 +19,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    dedupe: ['react', 'react-dom'], // Ensure React is not duplicated
   },
   server: {
     proxy: {
@@ -37,6 +38,8 @@ export default defineConfig({
   build: {
     manifest: true,
     chunkSizeWarningLimit: 600,
+    minify: false, // Disable minification to see actual React errors
+    sourcemap: true, // Enable source maps to help debug React errors
     rollupOptions: {
       output: {
         entryFileNames: (chunkInfo) => {
@@ -52,33 +55,28 @@ export default defineConfig({
           return 'assets/[name].[hash].[ext]';
         },
         manualChunks: (id) => {
-          // Core React libraries
-          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
+          // Core React libraries - MUST be in the same chunk to avoid duplicate React instances
+          // Include MUI, Emotion, Zustand, and React Query with React since they have tight coupling
+          if (id.includes('node_modules/react/') || 
+              id.includes('node_modules/react-dom/') || 
+              id.includes('node_modules/react-router-dom') ||
+              id.includes('node_modules/@mui') || 
+              id.includes('node_modules/@emotion') ||
+              id.includes('node_modules/zustand') ||
+              id.includes('node_modules/@tanstack/react-query')) {
+            // Exclude devtools from main vendor chunk
+            if (id.includes('devtools')) {
+              return 'query-devtools';
+            }
             return 'react-vendor';
           }
           // Radix UI components
           if (id.includes('node_modules/@radix-ui')) {
             return 'ui-vendor';
           }
-          // React Query and devtools
-          if (id.includes('node_modules/@tanstack/react-query')) {
-            // Exclude devtools from production vendor chunk
-            if (id.includes('devtools')) {
-              return 'query-devtools';
-            }
-            return 'query-vendor';
-          }
           // Chart.js library
           if (id.includes('node_modules/chart.js') || id.includes('node_modules/react-chartjs-2')) {
             return 'chart-vendor';
-          }
-          // Zustand state management
-          if (id.includes('node_modules/zustand')) {
-            return 'state-vendor';
-          }
-          // MUI components
-          if (id.includes('node_modules/@mui') || id.includes('node_modules/@emotion')) {
-            return 'mui-vendor';
           }
         }
       }

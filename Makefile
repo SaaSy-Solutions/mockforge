@@ -1,5 +1,5 @@
 # MockForge Development Makefile
-.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run
+.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc load-test-marketplace
 
 # Default target
 help: ## Show this help message
@@ -12,7 +12,8 @@ setup: ## Install development dependencies
 	cargo install cargo-watch
 	cargo install cargo-edit
 	cargo install cargo-release
-	cargo install cargo-audit
+	cargo install cargo-audit --locked
+	cargo install cargo-deny --locked
 	cargo install cargo-llvm-cov
 	cargo install mdbook
 	cargo install mdbook-toc
@@ -35,6 +36,9 @@ build-release: ## Build all crates in release mode
 # Testing
 test: ## Run all tests
 	cargo test --workspace
+
+test-integration: ## Run integration tests (including ignored tests)
+	cargo test --package mockforge-integration-tests --test '*' -- --ignored --nocapture
 
 test-coverage: ## Run tests with coverage report
 	cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
@@ -70,6 +74,22 @@ test-mutants-report: ## Generate mutation testing report
 test-mutants-core: ## Run mutation testing on core crate only
 	cargo mutants -p mockforge-core
 
+# UI E2E Testing (Playwright)
+test-ui-e2e: ## Run Playwright E2E tests for Admin UI
+	cd crates/mockforge-ui/ui && npm run test:e2e
+
+test-ui-e2e-ui: ## Run Playwright E2E tests in UI mode (interactive)
+	cd crates/mockforge-ui/ui && npm run test:e2e:ui
+
+test-ui-e2e-debug: ## Run Playwright E2E tests in debug mode
+	cd crates/mockforge-ui/ui && npx playwright test --debug
+
+test-ui-e2e-headed: ## Run Playwright E2E tests in headed mode (see browser)
+	cd crates/mockforge-ui/ui && npx playwright test --headed
+
+test-ui-e2e-report: ## Show Playwright test report
+	cd crates/mockforge-ui/ui && npx playwright show-report
+
 # Code quality
 fmt: ## Format code
 	cargo fmt --all
@@ -97,8 +117,45 @@ book-deploy: ## Deploy documentation to GitHub Pages
 	@echo "Documentation built. Use GitHub Actions to deploy to Pages."
 
 # Security
-audit: ## Run security audit
+audit: ## Run RustSec security audit
 	cargo audit
+
+# Load Testing
+load-test: ## Run standard load tests (all protocols)
+	./tests/load/run_all_load_tests.sh
+
+load-test-high-scale: ## Run high-scale load test (10,000+ concurrent connections)
+	./tests/load/run_high_scale_load.sh
+
+load-test-http: ## Run HTTP load test only
+	./tests/load/run_http_load.sh
+
+load-test-websocket: ## Run WebSocket load test only
+	./tests/load/run_websocket_load.sh
+
+load-test-grpc: ## Run gRPC load test only
+	./tests/load/run_grpc_load.sh
+
+load-test-marketplace: ## Run marketplace load test only
+	./tests/load/run_marketplace_load.sh
+
+security-scan: ## Run comprehensive security scan (RustSec, licenses, static analysis)
+	./scripts/security-scan.sh
+
+security-check: ## Quick security check (audit + clippy)
+	cargo audit
+	cargo clippy --all-targets --all-features -- -D warnings
+
+security-deny: ## Check licenses and sources with cargo-deny
+	cargo deny check licenses sources bans
+
+security-unsafe: ## List all unsafe code blocks
+	@echo "Files containing 'unsafe' blocks:"
+	@find crates -name "*.rs" -type f -exec grep -l "unsafe" {} \; | sort || true
+
+security-secrets: ## Scan for potential hardcoded secrets (warning only)
+	@echo "Scanning for potential secrets..."
+	@grep -r -i -E "(password|api[_-]?key|secret|token)\s*=\s*[\"'][^\"']+[\"']" crates/ --include="*.rs" --exclude-dir=target 2>/dev/null | grep -v "test\|example\|mock" | head -10 || echo "No obvious secrets found"
 
 # Release management
 release: ## Create a new release (interactive)
@@ -129,7 +186,7 @@ dev: ## Start development mode with watch
 dev-full: ## Start both Rust backend and UI dev server
 	./scripts/dev.sh
 
-check-all: fmt-check clippy audit test ## Run all checks
+check-all: fmt-check clippy audit security-deny test ## Run all checks (including security)
 
 # Install CLI tool locally
 install: ## Install the CLI tool locally
@@ -202,6 +259,19 @@ sync-selective: ## Sync specific workspaces to a directory
 sync-dry-run: ## Preview what would be synced without actually doing it
 	@echo "Dry run - preview sync..."
 	@cargo run -p mockforge-cli -- workspace sync --target-dir ./preview-sync --dry-run
+
+# SQLx query cache management
+sqlx-prepare: ## Regenerate SQLx query cache for mockforge-collab
+	@echo "Setting up temporary database for SQLx query preparation..."
+	@cd crates/mockforge-collab && \
+		rm -f /tmp/mockforge-sqlx-prepare.db && \
+		sqlx database create --database-url "sqlite:/tmp/mockforge-sqlx-prepare.db" && \
+		sqlx migrate run --database-url "sqlite:/tmp/mockforge-sqlx-prepare.db" && \
+		cd ../.. && \
+		cd crates/mockforge-collab && \
+		cargo sqlx prepare --database-url "sqlite:/tmp/mockforge-sqlx-prepare.db" && \
+		rm /tmp/mockforge-sqlx-prepare.db && \
+		echo "✅ SQLx query cache regenerated successfully"
 
 # Pre-commit checks (run before committing)
 pre-commit: fmt clippy test audit spellcheck ## Run all pre-commit checks

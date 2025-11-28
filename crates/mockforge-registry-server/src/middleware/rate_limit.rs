@@ -64,7 +64,7 @@ pub async fn rate_limit_middleware(
     // For now, we'll skip the actual check and just pass through
     // The limiter would be injected via app state in production
 
-    Ok(next.run(request).await)
+    Ok::<Response, Response>(next.run(request).await)
 }
 
 /// Create a rate-limited response

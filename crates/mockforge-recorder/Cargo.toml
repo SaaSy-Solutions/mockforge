@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-recorder"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -21,6 +21,7 @@ futures = { workspace = true }
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9"
 
 # Time
 chrono = { workspace = true }
@@ -36,6 +37,9 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 base64 = { workspace = true }
+regex = "1.10"
+once_cell = "1.19"
+async-trait = "0.1"
 
 # HAR export
 har = "0.8"
@@ -46,6 +50,9 @@ serde_path_to_error = "0.1"
 
 # HTTP client for LLM calls
 reqwest = { workspace = true }
+
+# Core types for OpenAPI generation
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

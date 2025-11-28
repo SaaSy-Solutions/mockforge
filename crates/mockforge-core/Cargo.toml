@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-core"
-version = "0.1.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -15,10 +15,15 @@ categories = ["development-tools::testing", "web-programming"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints.rust]
+missing_docs = "deny"
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+dirs = "5.0"
+toml = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = "0.28"
 futures = "0.3"
@@ -31,9 +36,10 @@ url = { workspace = true }
 urlencoding = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
-uuid = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }
 rand = { workspace = true }
 once_cell = { workspace = true }
+rayon = { version = "1.10", optional = true }
 base64 = { workspace = true }
 base32 = "0.5"
 hex = "0.4"
@@ -59,9 +65,17 @@ tempfile = "3.10"
 prost = "0.14"
 prost-reflect = "0.16"
 prost-types = "0.14"
+bytes = "1.5"
 notify = "8.2"
 # JavaScript runtime for scripting
 rquickjs = { version = "0.9", features = ["macro", "classes"] }
+# Cron expression parsing for scheduled events
+cron = "0.15"
+# JSON Schema generation (optional, for schema crate)
+schemars = { version = "0.8", features = ["derive"], optional = true }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"], optional = true }
+
+mockforge-data = { version = "0.3.3", path = "../mockforge-data", optional = true }
 
 [dev-dependencies]
 tempfile = "3.10"
@@ -69,7 +83,6 @@ tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
 criterion = { workspace = true }
 proptest = "1.8.0"
-mockforge-data = { version = "0.1.2", path = "../mockforge-data" }
 
 [[bench]]
 name = "core_benchmarks"
@@ -78,3 +91,11 @@ harness = false
 # Windows Credential Manager (Windows-only)
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = ["Win32_Security_Credentials"] }
+
+[features]
+default = ["data"]
+parallel-routes = ["rayon"]
+schema = ["schemars"]
+database = ["sqlx"]
+data = ["mockforge-data"]
+persona-graph = []

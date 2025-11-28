@@ -1,0 +1,789 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Common Issues &amp; Solutions - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/reference/common-issues.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="common-issues--solutions"><a class="header" href="#common-issues--solutions">Common Issues &amp; Solutions</a></h1>
+<p>This guide addresses the most frequently encountered issues when using MockForge and provides quick solutions.</p>
+<h2 id="server-issues"><a class="header" href="#server-issues">Server Issues</a></h2>
+<h3 id="port-already-in-use"><a class="header" href="#port-already-in-use">Port Already in Use</a></h3>
+<p><strong>Problem</strong>: <code>Error: Address already in use (os error 98)</code></p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Find what's using the port
+lsof -i :3000
+# On Windows: netstat -ano | findstr :3000
+
+# Kill the process
+kill -9 &lt;PID&gt;
+
+# Or use a different port
+mockforge serve --spec api.json --http-port 3001
+</code></pre>
+<p><strong>Prevention</strong>: Check ports before starting:</p>
+<pre><code class="language-bash"># Quick check script
+ports=(3000 3001 9080 50051)
+for port in "${ports[@]}"; do
+  if lsof -i :$port &gt; /dev/null; then
+    echo "Port $port is in use"
+  fi
+end
+</code></pre>
+<h3 id="server-wont-start"><a class="header" href="#server-wont-start">Server Won’t Start</a></h3>
+<p><strong>Problem</strong>: MockForge exits immediately or fails silently</p>
+<p><strong>Debugging Steps</strong>:</p>
+<ol>
+<li><strong>Check configuration</strong></li>
+</ol>
+<pre><code class="language-bash"># Validate config file
+mockforge config validate --config mockforge.yaml
+</code></pre>
+<ol start="2">
+<li><strong>Check logs</strong></li>
+</ol>
+<pre><code class="language-bash"># Enable verbose logging
+RUST_LOG=debug mockforge serve --spec api.json 2&gt;&amp;1 | tee mockforge.log
+</code></pre>
+<ol start="3">
+<li><strong>Test with minimal config</strong></li>
+</ol>
+<pre><code class="language-bash"># Start with just the spec
+mockforge serve --spec examples/openapi-demo.json --http-port 3000
+</code></pre>
+<ol start="4">
+<li><strong>Check file permissions</strong></li>
+</ol>
+<pre><code class="language-bash">ls -la api.json mockforge.yaml
+chmod 644 api.json mockforge.yaml
+</code></pre>
+<h2 id="template--data-issues"><a class="header" href="#template--data-issues">Template &amp; Data Issues</a></h2>
+<h3 id="template-variables-not-expanding"><a class="header" href="#template-variables-not-expanding">Template Variables Not Expanding</a></h3>
+<p><strong>Problem</strong>: <code>{{uuid}}</code> appears literally in responses instead of generating UUIDs</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Enable template expansion via environment variable
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api.json
+
+# Or via config file
+# mockforge.yaml
+http:
+  response_template_expand: true
+
+# Or via CLI flag
+mockforge serve --spec api.json --response-template-expand
+</code></pre>
+<p><strong>Common Mistake</strong>: Forgetting that template expansion is opt-in for security reasons.</p>
+<h3 id="faker-functions-not-working"><a class="header" href="#faker-functions-not-working">Faker Functions Not Working</a></h3>
+<p><strong>Problem</strong>: <code>{{faker.name}}</code> not generating fake data</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Enable template expansion</strong> (see above)</li>
+<li><strong>Check faker function name</strong>: Use lowercase, e.g., <code>{{faker.name}}</code> not <code>{{Faker.Name}}</code></li>
+<li><strong>Install faker if required</strong>: Some advanced faker features may require additional setup</li>
+</ol>
+<p><strong>Valid faker functions</strong>:</p>
+<ul>
+<li><code>{{faker.name}}</code> - Person name</li>
+<li><code>{{faker.email}}</code> - Email address</li>
+<li><code>{{faker.address}}</code> - Street address</li>
+<li><code>{{faker.phone}}</code> - Phone number</li>
+<li><code>{{faker.company}}</code> - Company name</li>
+</ul>
+<p>See <a href="templating.html">Templating Reference</a> for complete list.</p>
+<h3 id="invalid-datetimestamp-format"><a class="header" href="#invalid-datetimestamp-format">Invalid Date/Timestamp Format</a></h3>
+<p><strong>Problem</strong>: <code>{{now}}</code> generates invalid date format</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-yaml"># Use proper format in OpenAPI spec
+properties:
+  createdAt:
+    type: string
+    format: date-time  # Important!
+    example: "{{now}}"
+</code></pre>
+<p><strong>Alternative</strong>: Use custom format</p>
+<pre><code class="language-json">{
+  "timestamp": "{{now | date:'%Y-%m-%d'}}"
+}
+</code></pre>
+<h2 id="openapi-spec-issues"><a class="header" href="#openapi-spec-issues">OpenAPI Spec Issues</a></h2>
+<h3 id="spec-not-loading"><a class="header" href="#spec-not-loading">Spec Not Loading</a></h3>
+<p><strong>Problem</strong>: <code>Error: Failed to parse OpenAPI specification</code></p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Validate spec syntax</strong></li>
+</ol>
+<pre><code class="language-bash"># Using swagger-cli
+swagger-cli validate api.json
+
+# Or online
+# https://editor.swagger.io/
+</code></pre>
+<ol start="2">
+<li><strong>Check file format</strong></li>
+</ol>
+<pre><code class="language-bash"># JSON
+cat api.json | jq .
+
+# YAML
+yamllint api.yaml
+</code></pre>
+<ol start="3">
+<li><strong>Check OpenAPI version</strong></li>
+</ol>
+<pre><code class="language-json">{
+  "openapi": "3.0.3",  // Not "3.0" or "swagger": "2.0"
+  ...
+}
+</code></pre>
+<ol start="4">
+<li><strong>Resolve JSON schema references</strong></li>
+</ol>
+<pre><code class="language-bash"># Use json-schema-ref-resolver if needed
+npm install -g json-schema-ref-resolver
+json-schema-ref-resolver api.json &gt; resolved-api.json
+</code></pre>
+<h3 id="404-for-valid-routes"><a class="header" href="#404-for-valid-routes">404 for Valid Routes</a></h3>
+<p><strong>Problem</strong>: Endpoints return 404 even though they exist in the spec</p>
+<p><strong>Debugging</strong>:</p>
+<ol>
+<li><strong>Check path matching</strong></li>
+</ol>
+<pre><code class="language-bash"># Verify paths don't have trailing slashes mismatch
+# Spec: /users (should match request: GET /users)
+curl http://localhost:3000/users  # ✅
+curl http://localhost:3000/users/ # ❌ May not match
+</code></pre>
+<ol start="2">
+<li><strong>Check HTTP method</strong></li>
+</ol>
+<pre><code class="language-bash"># Ensure method matches spec
+# Spec defines GET but you're using POST
+curl -X GET http://localhost:3000/users  # ✅
+curl -X POST http://localhost:3000/users # ❌ May not match
+</code></pre>
+<ol start="3">
+<li><strong>Enable debug logging</strong></li>
+</ol>
+<pre><code class="language-bash">RUST_LOG=mockforge_http=debug mockforge serve --spec api.json
+</code></pre>
+<h2 id="cors-issues"><a class="header" href="#cors-issues">CORS Issues</a></h2>
+<h3 id="cors-errors-in-browser"><a class="header" href="#cors-errors-in-browser">CORS Errors in Browser</a></h3>
+<p><strong>Problem</strong>: <code>Access to fetch at 'http://localhost:3000/users' from origin 'http://localhost:3001' has been blocked by CORS policy</code></p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-yaml"># mockforge.yaml
+http:
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://localhost:3000"
+      - "http://localhost:3001"
+      - "http://localhost:5173"  # Vite default
+    allowed_methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+    allowed_headers: ["Content-Type", "Authorization"]
+</code></pre>
+<p><strong>Or via environment variable</strong>:</p>
+<pre><code class="language-bash">MOCKFORGE_CORS_ENABLED=true \
+MOCKFORGE_CORS_ALLOWED_ORIGINS="http://localhost:3001,http://localhost:5173" \
+mockforge serve --spec api.json
+</code></pre>
+<p><strong>Debugging</strong>: Check browser console for exact CORS error message - it will tell you which header is missing.</p>
+<h2 id="validation-issues"><a class="header" href="#validation-issues">Validation Issues</a></h2>
+<h3 id="valid-requests-getting-rejected"><a class="header" href="#valid-requests-getting-rejected">Valid Requests Getting Rejected</a></h3>
+<p><strong>Problem</strong>: Requests return 422/400 even though they look correct</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Check validation mode</strong></li>
+</ol>
+<pre><code class="language-bash"># Use 'warn' instead of 'enforce' for development
+MOCKFORGE_REQUEST_VALIDATION=warn mockforge serve --spec api.json
+</code></pre>
+<ol start="2">
+<li><strong>Check Content-Type header</strong></li>
+</ol>
+<pre><code class="language-bash"># Ensure Content-Type matches spec
+curl -X POST http://localhost:3000/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "John"}'
+</code></pre>
+<ol start="3">
+<li><strong>Check required fields</strong></li>
+</ol>
+<pre><code class="language-bash"># Spec may require fields you're not sending
+# Check spec for 'required' array
+</code></pre>
+<ol start="4">
+<li><strong>Validate request body structure</strong></li>
+</ol>
+<pre><code class="language-bash"># Use Admin UI to see exact request received
+# Visit http://localhost:9080 to inspect requests
+</code></pre>
+<h3 id="validation-too-strict"><a class="header" href="#validation-too-strict">Validation Too Strict</a></h3>
+<p><strong>Problem</strong>: Validation rejects requests that should be valid</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Temporarily disable validation</strong></li>
+</ol>
+<pre><code class="language-bash">mockforge serve --spec api.json --validation off
+</code></pre>
+<ol start="2">
+<li><strong>Fix spec if it’s incorrect</strong></li>
+</ol>
+<pre><code class="language-json">// Spec might mark optional fields as required
+"properties": {
+  "name": { "type": "string" },
+  "email": { "type": "string" }
+},
+"required": []  // Empty array = all optional
+</code></pre>
+<h2 id="websocket-issues"><a class="header" href="#websocket-issues">WebSocket Issues</a></h2>
+<h3 id="connection-refused"><a class="header" href="#connection-refused">Connection Refused</a></h3>
+<p><strong>Problem</strong>: WebSocket connection fails immediately</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Check WebSocket port</strong></li>
+</ol>
+<pre><code class="language-bash"># Verify port is open
+netstat -tlnp | grep :3001
+</code></pre>
+<ol start="2">
+<li><strong>Check replay file exists</strong></li>
+</ol>
+<pre><code class="language-bash"># Ensure file path is correct
+ls -la ws-replay.jsonl
+MOCKFORGE_WS_REPLAY_FILE=./ws-replay.jsonl mockforge serve --ws-port 3001
+</code></pre>
+<ol start="3">
+<li><strong>Check WebSocket enabled</strong></li>
+</ol>
+<pre><code class="language-bash"># Ensure WebSocket server is started
+mockforge serve --ws-port 3001  # Explicit port needed
+</code></pre>
+<h3 id="messages-not-received"><a class="header" href="#messages-not-received">Messages Not Received</a></h3>
+<p><strong>Problem</strong>: WebSocket connects but no messages arrive</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Check replay file format</strong></li>
+</ol>
+<pre><code class="language-bash"># Validate JSONL syntax
+cat ws-replay.jsonl | jq -r '.'  # Should parse each line as JSON
+</code></pre>
+<ol start="2">
+<li><strong>Check message timing</strong></li>
+</ol>
+<pre><code class="language-json">// Replay file format
+{"ts": 0, "dir": "out", "text": "Welcome"}
+{"ts": 1000, "dir": "out", "text": "Next message"}
+</code></pre>
+<ol start="3">
+<li><strong>Check waitFor patterns</strong></li>
+</ol>
+<pre><code class="language-json">// Ensure regex patterns match
+{"waitFor": "^CLIENT_READY$", "text": "Acknowledged"}
+</code></pre>
+<h2 id="configuration-issues"><a class="header" href="#configuration-issues">Configuration Issues</a></h2>
+<h3 id="config-file-not-found"><a class="header" href="#config-file-not-found">Config File Not Found</a></h3>
+<p><strong>Problem</strong>: <code>Error: Configuration file not found</code></p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Use absolute path</strong></li>
+</ol>
+<pre><code class="language-bash">mockforge serve --config /full/path/to/mockforge.yaml
+</code></pre>
+<ol start="2">
+<li><strong>Check file name</strong></li>
+</ol>
+<pre><code class="language-bash"># Valid names
+mockforge.yaml
+mockforge.yml
+.mockforge.yaml
+.mockforge.yml
+mockforge.config.ts
+mockforge.config.js
+</code></pre>
+<ol start="3">
+<li><strong>Check current directory</strong></li>
+</ol>
+<pre><code class="language-bash">pwd
+ls -la mockforge.yaml
+</code></pre>
+<h3 id="environment-variables-not-applied"><a class="header" href="#environment-variables-not-applied">Environment Variables Not Applied</a></h3>
+<p><strong>Problem</strong>: Environment variables seem to be ignored</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Check variable names</strong></li>
+</ol>
+<pre><code class="language-bash"># Correct format: MOCKFORGE_&lt;SECTION&gt;_&lt;OPTION&gt;
+MOCKFORGE_HTTP_PORT=3000       # ✅
+MOCKFORGE_PORT=3000            # ❌ Wrong
+</code></pre>
+<ol start="2">
+<li><strong>Check shell reload</strong></li>
+</ol>
+<pre><code class="language-bash"># Export and verify
+export MOCKFORGE_HTTP_PORT=3000
+echo $MOCKFORGE_HTTP_PORT  # Should show 3000
+
+# Or use inline
+MOCKFORGE_HTTP_PORT=3000 mockforge serve --spec api.json
+</code></pre>
+<ol start="3">
+<li><strong>Check precedence</strong></li>
+</ol>
+<pre><code class="language-bash"># CLI flags override env vars
+mockforge serve --spec api.json --http-port 3001
+# Even if MOCKFORGE_HTTP_PORT=3000, port will be 3001
+</code></pre>
+<h2 id="performance-issues"><a class="header" href="#performance-issues">Performance Issues</a></h2>
+<h3 id="slow-response-times"><a class="header" href="#slow-response-times">Slow Response Times</a></h3>
+<p><strong>Problem</strong>: API responses are slow</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Disable template expansion if not needed</strong></li>
+</ol>
+<pre><code class="language-bash"># Template expansion adds overhead
+mockforge serve --spec api.json  # No templates = faster
+</code></pre>
+<ol start="2">
+<li><strong>Reduce validation overhead</strong></li>
+</ol>
+<pre><code class="language-bash"># Validation adds latency
+mockforge serve --spec api.json --validation warn  # Faster than 'enforce'
+</code></pre>
+<ol start="3">
+<li><strong>Check response complexity</strong></li>
+</ol>
+<pre><code class="language-bash"># Large responses or complex templates slow things down
+# Consider simplifying responses for development
+</code></pre>
+<ol start="4">
+<li><strong>Monitor resource usage</strong></li>
+</ol>
+<pre><code class="language-bash"># Check CPU/memory
+top -p $(pgrep mockforge)
+</code></pre>
+<h3 id="high-memory-usage"><a class="header" href="#high-memory-usage">High Memory Usage</a></h3>
+<p><strong>Problem</strong>: MockForge consumes too much memory</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Limit connection pool</strong></li>
+</ol>
+<pre><code class="language-bash">MOCKFORGE_MAX_CONNECTIONS=100 mockforge serve --spec api.json
+</code></pre>
+<ol start="2">
+<li><strong>Disable features not needed</strong></li>
+</ol>
+<pre><code class="language-bash"># Minimal configuration
+mockforge serve --spec api.json \
+  --validation off \
+  --response-template-expand false \
+  --admin false
+</code></pre>
+<ol start="3">
+<li><strong>Check for memory leaks</strong></li>
+</ol>
+<pre><code class="language-bash"># Monitor over time
+watch -n 1 'ps aux | grep mockforge | grep -v grep'
+</code></pre>
+<h2 id="docker-issues"><a class="header" href="#docker-issues">Docker Issues</a></h2>
+<h3 id="container-exits-immediately"><a class="header" href="#container-exits-immediately">Container Exits Immediately</a></h3>
+<p><strong>Problem</strong>: Docker container starts then immediately stops</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Check logs</strong></li>
+</ol>
+<pre><code class="language-bash">docker logs &lt;container-id&gt;
+docker logs -f &lt;container-id&gt;  # Follow logs
+</code></pre>
+<ol start="2">
+<li><strong>Run interactively</strong></li>
+</ol>
+<pre><code class="language-bash">docker run -it --rm mockforge mockforge serve --spec api.json
+</code></pre>
+<ol start="3">
+<li><strong>Check volume mounts</strong></li>
+</ol>
+<pre><code class="language-bash"># Ensure spec file is accessible
+docker run -v $(pwd)/api.json:/app/api.json \
+  mockforge mockforge serve --spec /app/api.json
+</code></pre>
+<h3 id="port-mapping-issues"><a class="header" href="#port-mapping-issues">Port Mapping Issues</a></h3>
+<p><strong>Problem</strong>: Can’t access MockForge from host</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Proper port mapping
+docker run -p 3000:3000 -p 9080:9080 mockforge
+
+# Verify ports are exposed
+docker port &lt;container-id&gt;
+</code></pre>
+<h3 id="permission-issues"><a class="header" href="#permission-issues">Permission Issues</a></h3>
+<p><strong>Problem</strong>: Can’t read/write mounted volumes</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Fix permissions
+sudo chown -R 1000:1000 ./fixtures ./logs
+
+# Or run as specific user
+docker run --user $(id -u):$(id -g) \
+  -v $(pwd)/fixtures:/app/fixtures \
+  mockforge
+</code></pre>
+<h2 id="admin-ui-issues"><a class="header" href="#admin-ui-issues">Admin UI Issues</a></h2>
+<h3 id="admin-ui-not-loading"><a class="header" href="#admin-ui-not-loading">Admin UI Not Loading</a></h3>
+<p><strong>Problem</strong>: Can’t access http://localhost:9080</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Enable admin UI</strong></li>
+</ol>
+<pre><code class="language-bash">mockforge serve --spec api.json --admin --admin-port 9080
+</code></pre>
+<ol start="2">
+<li><strong>Check port</strong></li>
+</ol>
+<pre><code class="language-bash"># Verify port is listening
+curl http://localhost:9080
+netstat -tlnp | grep :9080
+</code></pre>
+<ol start="3">
+<li><strong>Try different port</strong></li>
+</ol>
+<pre><code class="language-bash">mockforge serve --spec api.json --admin --admin-port 9090
+# Access at http://localhost:9090
+</code></pre>
+<h3 id="admin-api-not-working"><a class="header" href="#admin-api-not-working">Admin API Not Working</a></h3>
+<p><strong>Problem</strong>: Admin UI loads but API calls fail</p>
+<p><strong>Solutions</strong>:</p>
+<pre><code class="language-bash"># Test admin API directly
+curl http://localhost:9080/__mockforge/status
+
+# Enable admin API explicitly
+mockforge serve --spec api.json --admin --admin-api-enabled
+</code></pre>
+<h2 id="plugin-issues"><a class="header" href="#plugin-issues">Plugin Issues</a></h2>
+<h3 id="plugin-wont-load"><a class="header" href="#plugin-wont-load">Plugin Won’t Load</a></h3>
+<p><strong>Problem</strong>: <code>Error: Failed to load plugin</code></p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Check plugin format</strong></li>
+</ol>
+<pre><code class="language-bash"># Validate WASM file
+file plugin.wasm  # Should show: WebAssembly
+
+# Check plugin manifest
+mockforge plugin validate plugin.wasm
+</code></pre>
+<ol start="2">
+<li><strong>Check permissions</strong></li>
+</ol>
+<pre><code class="language-bash"># Ensure plugin file is readable
+chmod 644 plugin.wasm
+</code></pre>
+<ol start="3">
+<li><strong>Check compatibility</strong></li>
+</ol>
+<pre><code class="language-bash"># Plugin may be for different MockForge version
+mockforge --version
+# Check plugin requirements
+</code></pre>
+<h3 id="plugin-crashes"><a class="header" href="#plugin-crashes">Plugin Crashes</a></h3>
+<p><strong>Problem</strong>: Plugin causes MockForge to crash</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><strong>Check plugin logs</strong></li>
+</ol>
+<pre><code class="language-bash">RUST_LOG=mockforge_plugin=debug mockforge serve --plugin ./plugin.wasm
+</code></pre>
+<ol start="2">
+<li><strong>Check resource limits</strong></li>
+</ol>
+<pre><code class="language-yaml"># plugin.yaml
+capabilities:
+  resources:
+    max_memory_bytes: 67108864  # 64MB
+    max_cpu_time_ms: 5000      # 5 seconds
+</code></pre>
+<h2 id="getting-more-help"><a class="header" href="#getting-more-help">Getting More Help</a></h2>
+<p>If none of these solutions work:</p>
+<ol>
+<li><strong>Collect debug information</strong></li>
+</ol>
+<pre><code class="language-bash"># System info
+uname -a
+rustc --version
+mockforge --version
+
+# Check logs
+RUST_LOG=debug mockforge serve --spec api.json 2&gt;&amp;1 | tee debug.log
+
+# Test with minimal config
+mockforge serve --spec examples/openapi-demo.json --http-port 3000
+</code></pre>
+<ol start="2">
+<li>
+<p><strong>Search existing issues</strong></p>
+<ul>
+<li>Check <a href="https://github.com/SaaSy-Solutions/mockforge/issues">GitHub Issues</a></li>
+<li>Search for similar problems</li>
+</ul>
+</li>
+<li>
+<p><strong>Create minimal reproduction</strong></p>
+<ul>
+<li>Create smallest possible config that reproduces issue</li>
+<li>Include OpenAPI spec (if relevant)</li>
+<li>Include error logs</li>
+</ul>
+</li>
+<li>
+<p><strong>Open GitHub issue</strong></p>
+<ul>
+<li>Use descriptive title</li>
+<li>Include system info, version, logs</li>
+<li>Attach minimal reproduction</li>
+</ul>
+</li>
+</ol>
+<hr />
+<p><strong>See Also</strong>:</p>
+<ul>
+<li><a href="troubleshooting.html">Troubleshooting Guide</a> - Detailed diagnostic steps</li>
+<li><a href="faq.html">FAQ</a> - Common questions and answers</li>
+<li><a href="../configuration/files.html">Configuration Reference</a> - All configuration options</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/troubleshooting.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/faq.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/troubleshooting.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/faq.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

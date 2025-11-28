@@ -154,13 +154,18 @@ impl MockReflectionProxy {
     }
 }
 
-/// Statistics about the proxy
+/// Statistics about the proxy performance and state
 #[derive(Debug, Clone)]
 pub struct ProxyStats {
+    /// Number of services cached in memory
     pub cached_services: usize,
+    /// Number of methods cached in memory
     pub cached_methods: usize,
+    /// Total number of registered gRPC services
     pub registered_services: usize,
+    /// Total number of requests processed
     pub total_requests: u64,
+    /// Current number of active gRPC connections
     pub active_connections: usize,
 }
 

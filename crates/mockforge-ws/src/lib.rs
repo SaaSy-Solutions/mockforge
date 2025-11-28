@@ -149,11 +149,14 @@
 //! - [API Reference](https://docs.rs/mockforge-ws)
 
 pub mod ai_event_generator;
+pub mod handlers;
 pub mod ws_tracing;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::{response::IntoResponse, routing::get, Router};
+use futures::sink::SinkExt;
+use futures::stream::StreamExt;
 use mockforge_core::{latency::LatencyInjector, LatencyProfile, WsProxyHandler};
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
@@ -170,6 +173,12 @@ pub use ai_event_generator::{AiEventGenerator, WebSocketAiConfig};
 pub use ws_tracing::{
     create_ws_connection_span, create_ws_message_span, record_ws_connection_success,
     record_ws_error, record_ws_message_success,
+};
+
+// Re-export handler utilities
+pub use handlers::{
+    HandlerError, HandlerRegistry, HandlerResult, MessagePattern, MessageRouter, PassthroughConfig,
+    PassthroughHandler, RoomManager, WsContext, WsHandler, WsMessage,
 };
 
 /// Build the WebSocket router (exposed for tests and embedding)
@@ -201,9 +210,29 @@ pub fn router_with_proxy(proxy_handler: WsProxyHandler) -> Router {
         .with_state(proxy_handler)
 }
 
+/// Build the WebSocket router with handler registry
+pub fn router_with_handlers(registry: std::sync::Arc<HandlerRegistry>) -> Router {
+    #[cfg(feature = "data-faker")]
+    register_core_faker_provider();
+
+    Router::new()
+        .route("/ws", get(ws_handler_with_registry))
+        .route("/ws/{*path}", get(ws_handler_with_registry_path))
+        .with_state(registry)
+}
+
 /// Start WebSocket server with latency simulation
 pub async fn start_with_latency(
     port: u16,
+    latency: Option<LatencyProfile>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    start_with_latency_and_host(port, "0.0.0.0", latency).await
+}
+
+/// Start WebSocket server with latency simulation and custom host
+pub async fn start_with_latency_and_host(
+    port: u16,
+    host: &str,
     latency: Option<LatencyProfile>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let latency_injector = latency.map(|profile| LatencyInjector::new(profile, Default::default()));
@@ -213,7 +242,7 @@ pub async fn start_with_latency(
         router()
     };
 
-    let addr: std::net::SocketAddr = format!("127.0.0.1:{}", port).parse()?;
+    let addr: std::net::SocketAddr = format!("{}:{}", host, port).parse()?;
     info!("WebSocket server listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
@@ -254,6 +283,22 @@ async fn ws_handler_with_proxy_path(
 ) -> impl IntoResponse {
     let full_path = format!("/ws/{}", path);
     ws.on_upgrade(move |socket| handle_socket_with_proxy(socket, proxy, full_path))
+}
+
+async fn ws_handler_with_registry(
+    ws: WebSocketUpgrade,
+    State(registry): State<std::sync::Arc<HandlerRegistry>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_socket_with_handlers(socket, registry, "/ws".to_string()))
+}
+
+async fn ws_handler_with_registry_path(
+    Path(path): Path<String>,
+    ws: WebSocketUpgrade,
+    State(registry): State<std::sync::Arc<HandlerRegistry>>,
+) -> impl IntoResponse {
+    let full_path = format!("/ws/{}", path);
+    ws.on_upgrade(move |socket| handle_socket_with_handlers(socket, registry, full_path))
 }
 
 async fn handle_socket(mut socket: WebSocket) {
@@ -460,6 +505,121 @@ async fn handle_socket_with_proxy(socket: WebSocket, proxy: WsProxyHandler, path
     registry.record_ws_connection_closed(duration, status);
     debug!(
         "Proxied WebSocket connection closed (status: {}, duration: {:.2}s)",
+        status, duration
+    );
+}
+
+async fn handle_socket_with_handlers(
+    socket: WebSocket,
+    registry: std::sync::Arc<HandlerRegistry>,
+    path: String,
+) {
+    use std::time::Instant;
+
+    let metrics_registry = get_global_registry();
+    let connection_start = Instant::now();
+    metrics_registry.record_ws_connection_established();
+
+    let mut status = "normal";
+
+    // Generate unique connection ID
+    let connection_id = uuid::Uuid::new_v4().to_string();
+
+    // Get handlers for this path
+    let handlers = registry.get_handlers(&path);
+    if handlers.is_empty() {
+        info!("No handlers found for path: {}, falling back to echo mode", path);
+        metrics_registry.record_ws_connection_closed(0.0, "");
+        handle_socket(socket).await;
+        return;
+    }
+
+    info!(
+        "Handling WebSocket connection with {} handler(s) for path: {}",
+        handlers.len(),
+        path
+    );
+
+    // Create room manager
+    let room_manager = RoomManager::new();
+
+    // Split socket for concurrent send/receive
+    let (mut socket_sender, mut socket_receiver) = socket.split();
+
+    // Create message channel for handlers to send messages
+    let (message_tx, mut message_rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
+
+    // Create context
+    let mut ctx =
+        WsContext::new(connection_id.clone(), path.clone(), room_manager.clone(), message_tx);
+
+    // Call on_connect for all handlers
+    for handler in &handlers {
+        if let Err(e) = handler.on_connect(&mut ctx).await {
+            error!("Handler on_connect error: {}", e);
+            status = "handler_error";
+        }
+    }
+
+    // Spawn task to send messages from handlers to the socket
+    let send_task = tokio::spawn(async move {
+        while let Some(msg) = message_rx.recv().await {
+            if socket_sender.send(msg).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    // Handle incoming messages
+    while let Some(msg) = socket_receiver.next().await {
+        match msg {
+            Ok(axum_msg) => {
+                metrics_registry.record_ws_message_received();
+
+                let ws_msg: WsMessage = axum_msg.into();
+
+                // Check for close message
+                if matches!(ws_msg, WsMessage::Close) {
+                    status = "client_close";
+                    break;
+                }
+
+                // Pass message through all handlers
+                for handler in &handlers {
+                    if let Err(e) = handler.on_message(&mut ctx, ws_msg.clone()).await {
+                        error!("Handler on_message error: {}", e);
+                        status = "handler_error";
+                    }
+                }
+
+                metrics_registry.record_ws_message_sent();
+            }
+            Err(e) => {
+                error!("WebSocket error: {}", e);
+                metrics_registry.record_ws_error();
+                status = "error";
+                break;
+            }
+        }
+    }
+
+    // Call on_disconnect for all handlers
+    for handler in &handlers {
+        if let Err(e) = handler.on_disconnect(&mut ctx).await {
+            error!("Handler on_disconnect error: {}", e);
+        }
+    }
+
+    // Clean up room memberships
+    let _ = room_manager.leave_all(&connection_id).await;
+
+    // Abort send task
+    send_task.abort();
+
+    let duration = connection_start.elapsed().as_secs_f64();
+    metrics_registry.record_ws_connection_closed(duration, status);
+    debug!(
+        "Handler-based WebSocket connection closed (status: {}, duration: {:.2}s)",
         status, duration
     );
 }

@@ -1,0 +1,601 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>ForgeConnect SDK - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/forgeconnect-sdk.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="forgeconnect-sdk"><a class="header" href="#forgeconnect-sdk">ForgeConnect SDK</a></h1>
+<p>ForgeConnect SDK provides browser extension and framework SDKs for capturing network traffic, auto-generating mocks, and integrating with popular frontend frameworks. Develop and test frontend applications with seamless mock integration.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>ForgeConnect includes:</p>
+<ul>
+<li><strong>Browser Extension</strong>: Capture network traffic and create mocks automatically</li>
+<li><strong>Browser SDK</strong>: JavaScript/TypeScript SDK for framework integration</li>
+<li><strong>Auto-Mock Generation</strong>: Automatically create mocks for unhandled requests</li>
+<li><strong>Framework Adapters</strong>: React, Vue, Angular, Next.js support</li>
+<li><strong>Auth Passthrough</strong>: Support for OAuth flows and authentication</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="install-browser-extension"><a class="header" href="#install-browser-extension">Install Browser Extension</a></h3>
+<ol>
+<li>Install from Chrome Web Store or Firefox Add-ons</li>
+<li>Open browser DevTools</li>
+<li>Navigate to “MockForge” tab</li>
+<li>Connect to MockForge server</li>
+</ol>
+<h3 id="install-browser-sdk"><a class="header" href="#install-browser-sdk">Install Browser SDK</a></h3>
+<pre><code class="language-bash">npm install @mockforge/forgeconnect
+</code></pre>
+<h3 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h3>
+<pre><code class="language-typescript">import { ForgeConnect } from '@mockforge/forgeconnect';
+
+// Initialize ForgeConnect
+const forgeConnect = new ForgeConnect({
+  serverUrl: 'http://localhost:3000',
+  autoMock: true
+});
+
+// Start intercepting requests
+forgeConnect.start();
+</code></pre>
+<h2 id="browser-extension"><a class="header" href="#browser-extension">Browser Extension</a></h2>
+<h3 id="features"><a class="header" href="#features">Features</a></h3>
+<ul>
+<li><strong>Request Capture</strong>: Automatically capture all network requests</li>
+<li><strong>Mock Creation</strong>: Create mocks from captured requests with one click</li>
+<li><strong>DevTools Integration</strong>: Full DevTools panel with React UI</li>
+<li><strong>Auto-Discovery</strong>: Automatically discover MockForge server</li>
+<li><strong>Request Filtering</strong>: Filter requests by URL, method, status</li>
+<li><strong>Live Response Modification</strong>: Modify responses on-the-fly in DevTools</li>
+<li><strong>Persona/Scenario Toggling</strong>: Switch personas and scenarios directly from DevTools</li>
+<li><strong>Reverse Injection</strong>: Automatically inject mocks back into workspace</li>
+<li><strong>Snapshot Diff</strong>: Compare mock behavior between environments</li>
+</ul>
+<h3 id="devtools-panel"><a class="header" href="#devtools-panel">DevTools Panel</a></h3>
+<p>The ForgeConnect extension adds a dedicated “MockForge” tab to your browser’s DevTools with the following features:</p>
+<h4 id="request-capture-tab"><a class="header" href="#request-capture-tab">Request Capture Tab</a></h4>
+<ul>
+<li><strong>Live Request Monitoring</strong>: See all fetch/XHR requests in real-time</li>
+<li><strong>Request Details</strong>: View request method, URL, headers, body, and response</li>
+<li><strong>Filter &amp; Search</strong>: Filter requests by URL pattern, method, or status code</li>
+<li><strong>One-Click Mock Creation</strong>: Click “Mock this endpoint” to create a mock from any request</li>
+</ul>
+<h4 id="mocks-management-tab"><a class="header" href="#mocks-management-tab">Mocks Management Tab</a></h4>
+<ul>
+<li><strong>View All Mocks</strong>: See all mocks in your MockForge workspace</li>
+<li><strong>Edit Mocks</strong>: Modify mock responses directly in DevTools</li>
+<li><strong>Delete Mocks</strong>: Remove mocks with one click</li>
+<li><strong>Toggle Mocks</strong>: Enable/disable mocks without leaving the browser</li>
+</ul>
+<h4 id="mock-preview-tab"><a class="header" href="#mock-preview-tab">Mock Preview Tab</a></h4>
+<ul>
+<li><strong>Create/Edit Mocks</strong>: Visual interface for creating and editing mocks</li>
+<li><strong>Response Editor</strong>: JSON editor with syntax highlighting</li>
+<li><strong>Status Code Selection</strong>: Choose response status codes</li>
+<li><strong>Headers Configuration</strong>: Add/modify response headers</li>
+<li><strong>Save to Workspace</strong>: Automatically reverse-inject mocks into your workspace</li>
+</ul>
+<h4 id="x-ray-tab"><a class="header" href="#x-ray-tab">X-Ray Tab</a></h4>
+<ul>
+<li><strong>Request Analysis</strong>: Deep dive into request/response details</li>
+<li><strong>Timing Information</strong>: View request latency and timing breakdown</li>
+<li><strong>Header Inspection</strong>: Inspect all request and response headers</li>
+<li><strong>Body Analysis</strong>: View and analyze request/response bodies</li>
+</ul>
+<h4 id="snapshot-diff-tab"><a class="header" href="#snapshot-diff-tab">Snapshot Diff Tab</a></h4>
+<ul>
+<li><strong>Environment Comparison</strong>: Compare mock behavior between test and prod</li>
+<li><strong>Persona Comparison</strong>: Compare responses for different personas</li>
+<li><strong>Reality Level Comparison</strong>: Compare behavior at different reality levels</li>
+<li><strong>Side-by-Side Visualization</strong>: See differences highlighted side-by-side</li>
+</ul>
+<h3 id="usage"><a class="header" href="#usage">Usage</a></h3>
+<ol>
+<li><strong>Open DevTools</strong>: Press F12 or right-click → Inspect</li>
+<li><strong>Navigate to MockForge Tab</strong>: Click “MockForge” in DevTools</li>
+<li><strong>Connect to Server</strong>: Enter MockForge server URL or use auto-discovery</li>
+<li><strong>Capture Requests</strong>: Requests are automatically captured</li>
+<li><strong>Create Mocks</strong>: Click “Mock this endpoint” on any captured request</li>
+</ol>
+<h3 id="mock-this-endpoint-feature"><a class="header" href="#mock-this-endpoint-feature">“Mock this Endpoint” Feature</a></h3>
+<p>The “Mock this endpoint” button appears on every captured request:</p>
+<ol>
+<li><strong>Click “Mock this endpoint”</strong>: Opens the mock preview panel</li>
+<li><strong>Review Request Details</strong>: See the original request method, path, headers, and body</li>
+<li><strong>Edit Response</strong>: Modify the response status, headers, and body</li>
+<li><strong>Save Mock</strong>: Click “Save” to create the mock in your workspace</li>
+<li><strong>Auto-Injection</strong>: The mock is automatically reverse-injected into your MockForge workspace</li>
+</ol>
+<p><strong>Example Workflow:</strong></p>
+<pre><code>1. Make API call: GET /api/users/123
+2. Request appears in DevTools "Captured Requests" tab
+3. Click "Mock this endpoint" button
+4. Edit response in preview panel
+5. Click "Save" → Mock created in workspace
+6. Future requests to /api/users/123 use the mock
+</code></pre>
+<h3 id="live-response-modification"><a class="header" href="#live-response-modification">Live Response Modification</a></h3>
+<p>Modify responses on-the-fly without leaving the browser:</p>
+<ol>
+<li><strong>Select a Mock</strong>: Click on a mock in the “Mocks” tab</li>
+<li><strong>Edit Response</strong>: Modify the response JSON directly</li>
+<li><strong>Save Changes</strong>: Changes are immediately applied</li>
+<li><strong>Test</strong>: Refresh the page to see the new response</li>
+</ol>
+<h3 id="personascenario-toggling"><a class="header" href="#personascenario-toggling">Persona/Scenario Toggling</a></h3>
+<p>Switch personas and scenarios directly from DevTools:</p>
+<ol>
+<li><strong>Open Mocks Tab</strong>: Navigate to the “Mocks” tab</li>
+<li><strong>Select Mock</strong>: Click on a mock to view details</li>
+<li><strong>Change Persona</strong>: Use the persona dropdown to switch personas</li>
+<li><strong>Change Scenario</strong>: Use the scenario dropdown to switch scenarios</li>
+<li><strong>Apply</strong>: Changes are immediately applied to the mock</li>
+</ol>
+<h3 id="reverse-injection-into-workspace"><a class="header" href="#reverse-injection-into-workspace">Reverse Injection into Workspace</a></h3>
+<p>When you create or modify a mock in DevTools, it’s automatically reverse-injected into your MockForge workspace:</p>
+<ul>
+<li><strong>Automatic Sync</strong>: Changes sync to your workspace immediately</li>
+<li><strong>Workspace Integration</strong>: Mocks appear in your workspace configuration</li>
+<li><strong>Version Control</strong>: Mocks can be committed to version control</li>
+<li><strong>Team Sharing</strong>: Other team members see the mocks in shared workspaces</li>
+</ul>
+<h3 id="auto-mock-generation"><a class="header" href="#auto-mock-generation">Auto-Mock Generation</a></h3>
+<p>When a request fails or returns an error, ForgeConnect can automatically create a mock:</p>
+<pre><code class="language-typescript">const forgeConnect = new ForgeConnect({
+  serverUrl: 'http://localhost:3000',
+  autoMock: true,
+  autoMockOnError: true  // Create mock on 4xx/5xx errors
+});
+</code></pre>
+<h2 id="browser-sdk"><a class="header" href="#browser-sdk">Browser SDK</a></h2>
+<h3 id="installation"><a class="header" href="#installation">Installation</a></h3>
+<pre><code class="language-bash">npm install @mockforge/forgeconnect
+</code></pre>
+<h3 id="basic-setup"><a class="header" href="#basic-setup">Basic Setup</a></h3>
+<pre><code class="language-typescript">import { ForgeConnect } from '@mockforge/forgeconnect';
+
+const forgeConnect = new ForgeConnect({
+  serverUrl: 'http://localhost:3000',
+  autoMock: true,
+  interceptFetch: true,
+  interceptXHR: true
+});
+
+// Start intercepting
+forgeConnect.start();
+</code></pre>
+<h3 id="framework-adapters"><a class="header" href="#framework-adapters">Framework Adapters</a></h3>
+<h4 id="react"><a class="header" href="#react">React</a></h4>
+<pre><code class="language-typescript">import { useForgeConnect } from '@mockforge/forgeconnect/react';
+
+function App() {
+  const { isConnected, mocks } = useForgeConnect({
+    serverUrl: 'http://localhost:3000'
+  });
+
+  return (
+    &lt;div&gt;
+      {isConnected ? 'Connected' : 'Disconnected'}
+      &lt;ul&gt;
+        {mocks.map(mock =&gt; (
+          &lt;li key={mock.id}&gt;{mock.path}&lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<h4 id="vue"><a class="header" href="#vue">Vue</a></h4>
+<pre><code class="language-typescript">import { useForgeConnect } from '@mockforge/forgeconnect/vue';
+
+export default {
+  setup() {
+    const { isConnected, mocks } = useForgeConnect({
+      serverUrl: 'http://localhost:3000'
+    });
+
+    return { isConnected, mocks };
+  }
+};
+</code></pre>
+<h4 id="nextjs"><a class="header" href="#nextjs">Next.js</a></h4>
+<pre><code class="language-typescript">// pages/_app.tsx
+import { ForgeConnectProvider } from '@mockforge/forgeconnect/next';
+
+function MyApp({ Component, pageProps }) {
+  return (
+    &lt;ForgeConnectProvider serverUrl="http://localhost:3000"&gt;
+      &lt;Component {...pageProps} /&gt;
+    &lt;/ForgeConnectProvider&gt;
+  );
+}
+</code></pre>
+<h3 id="request-interception"><a class="header" href="#request-interception">Request Interception</a></h3>
+<p>ForgeConnect intercepts both <code>fetch</code> and <code>XMLHttpRequest</code>:</p>
+<pre><code class="language-typescript">const forgeConnect = new ForgeConnect({
+  serverUrl: 'http://localhost:3000',
+  interceptFetch: true,
+  interceptXHR: true
+});
+
+// All fetch requests are intercepted
+fetch('/api/users')
+  .then(response =&gt; response.json())
+  .then(data =&gt; console.log(data));
+
+// All XHR requests are intercepted
+const xhr = new XMLHttpRequest();
+xhr.open('GET', '/api/users');
+xhr.send();
+</code></pre>
+<h3 id="mock-management"><a class="header" href="#mock-management">Mock Management</a></h3>
+<h4 id="list-mocks"><a class="header" href="#list-mocks">List Mocks</a></h4>
+<pre><code class="language-typescript">const mocks = await forgeConnect.listMocks();
+console.log('Available mocks:', mocks);
+</code></pre>
+<h4 id="create-mock"><a class="header" href="#create-mock">Create Mock</a></h4>
+<pre><code class="language-typescript">const mock = await forgeConnect.createMock({
+  method: 'GET',
+  path: '/api/users',
+  response: {
+    status: 200,
+    body: { users: [] }
+  }
+});
+</code></pre>
+<h4 id="update-mock"><a class="header" href="#update-mock">Update Mock</a></h4>
+<pre><code class="language-typescript">await forgeConnect.updateMock(mockId, {
+  response: {
+    status: 200,
+    body: { users: [{ id: 1, name: 'Alice' }] }
+  }
+});
+</code></pre>
+<h4 id="delete-mock"><a class="header" href="#delete-mock">Delete Mock</a></h4>
+<pre><code class="language-typescript">await forgeConnect.deleteMock(mockId);
+</code></pre>
+<h2 id="auth-passthrough"><a class="header" href="#auth-passthrough">Auth Passthrough</a></h2>
+<p>ForgeConnect supports OAuth flows and authentication:</p>
+<pre><code class="language-typescript">const forgeConnect = new ForgeConnect({
+  serverUrl: 'http://localhost:3000',
+  authPassthrough: true,
+  authPaths: ['/auth', '/oauth', '/login']
+});
+</code></pre>
+<p>Requests to auth paths are passed through to the real server without interception.</p>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="sdk-configuration"><a class="header" href="#sdk-configuration">SDK Configuration</a></h3>
+<pre><code class="language-typescript">interface ForgeConnectConfig {
+  serverUrl: string;
+  autoMock?: boolean;
+  autoMockOnError?: boolean;
+  interceptFetch?: boolean;
+  interceptXHR?: boolean;
+  authPassthrough?: boolean;
+  authPaths?: string[];
+  mockPaths?: string[];
+  excludePaths?: string[];
+}
+</code></pre>
+<h3 id="extension-configuration"><a class="header" href="#extension-configuration">Extension Configuration</a></h3>
+<p>Configure via extension options:</p>
+<ol>
+<li>Right-click extension icon</li>
+<li>Select “Options”</li>
+<li>Configure server URL and settings</li>
+</ol>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="frontend-development"><a class="header" href="#frontend-development">Frontend Development</a></h3>
+<p>Develop frontend without backend:</p>
+<pre><code class="language-typescript">// Start ForgeConnect
+const forgeConnect = new ForgeConnect({
+  serverUrl: 'http://localhost:3000',
+  autoMock: true
+});
+
+forgeConnect.start();
+
+// Develop frontend - mocks created automatically
+</code></pre>
+<h3 id="api-testing"><a class="header" href="#api-testing">API Testing</a></h3>
+<p>Test API integration:</p>
+<pre><code class="language-typescript">// Capture real API calls
+const forgeConnect = new ForgeConnect({
+  serverUrl: 'http://localhost:3000',
+  autoMock: false  // Don't auto-create, capture only
+});
+
+// Review captured requests
+const captures = await forgeConnect.getCaptures();
+
+// Create mocks from captures
+for (const capture of captures) {
+  await forgeConnect.createMockFromCapture(capture);
+}
+</code></pre>
+<h3 id="debugging"><a class="header" href="#debugging">Debugging</a></h3>
+<p>Debug API issues:</p>
+<pre><code class="language-typescript">// Enable detailed logging
+const forgeConnect = new ForgeConnect({
+  serverUrl: 'http://localhost:3000',
+  debug: true
+});
+
+// View intercepted requests in console
+forgeConnect.on('request', (request) =&gt; {
+  console.log('Intercepted:', request);
+});
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Use Auto-Mock Sparingly</strong>: Only enable for development</li>
+<li><strong>Filter Requests</strong>: Use <code>mockPaths</code> and <code>excludePaths</code> to control interception</li>
+<li><strong>Auth Passthrough</strong>: Always enable for authentication flows</li>
+<li><strong>Version Control Mocks</strong>: Export and commit mocks to version control</li>
+<li><strong>Test with Real APIs</strong>: Periodically test against real APIs</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="extension-not-connecting"><a class="header" href="#extension-not-connecting">Extension Not Connecting</a></h3>
+<ul>
+<li>Verify MockForge server is running</li>
+<li>Check server URL is correct</li>
+<li>Review browser console for errors</li>
+</ul>
+<h3 id="requests-not-intercepted"><a class="header" href="#requests-not-intercepted">Requests Not Intercepted</a></h3>
+<ul>
+<li>Verify interception is enabled</li>
+<li>Check request paths match configuration</li>
+<li>Review SDK logs for errors</li>
+</ul>
+<h3 id="mocks-not-working"><a class="header" href="#mocks-not-working">Mocks Not Working</a></h3>
+<ul>
+<li>Verify mock is created correctly</li>
+<li>Check mock path matches request path</li>
+<li>Review MockForge server logs</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="advanced-behavior.html#browser-proxy-with-conditional-forwarding">Browser Proxy Mode</a> - Proxy mode features</li>
+<li><a href="../configuration/files.html">Configuration Guide</a> - Complete configuration reference</li>
+<li><a href="../../sdk/README.html">SDK Documentation</a> - Complete SDK reference</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/scenario-marketplace.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/deceptive-deploys.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/scenario-marketplace.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/deceptive-deploys.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

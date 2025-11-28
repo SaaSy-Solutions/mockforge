@@ -1,0 +1,48 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2025-10-30T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:2025.0.0",
+  "resources": [
+    {
+      "_id": "wrk_mockforge_sample",
+      "_type": "workspace",
+      "name": "MockForge Sample",
+      "scope": "collection"
+    },
+    {
+      "_id": "fld_root",
+      "_type": "request_group",
+      "parentId": "wrk_mockforge_sample",
+      "name": "Sample"
+    },
+    {
+      "_id": "req_health",
+      "_type": "request",
+      "parentId": "fld_root",
+      "name": "GET /health",
+      "method": "GET",
+      "url": "http://localhost:3000/health"
+    },
+    {
+      "_id": "req_hello",
+      "_type": "request",
+      "parentId": "fld_root",
+      "name": "GET /hello",
+      "method": "GET",
+      "url": "http://localhost:3000/hello"
+    },
+    {
+      "_id": "req_echo",
+      "_type": "request",
+      "parentId": "fld_root",
+      "name": "POST /echo",
+      "method": "POST",
+      "url": "http://localhost:3000/echo",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\"message\":\"Hello from Insomnia\"}"
+      }
+    }
+  ]
+}

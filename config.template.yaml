@@ -10,6 +10,26 @@ http:
   port: 3000                              # HTTP server port (default: 3000)
   host: "0.0.0.0"                        # Bind address (0.0.0.0 = all interfaces)
 
+  # TLS/HTTPS Configuration (optional)
+  # tls:
+  #   enabled: true                        # Enable TLS/HTTPS
+  #   cert_file: "./certs/server.crt"     # Path to TLS certificate (PEM format)
+  #   key_file: "./certs/server.key"      # Path to TLS private key (PEM format)
+  #   ca_file: "./certs/ca.crt"           # Path to CA certificate for mTLS (optional)
+  #   min_version: "1.2"                  # Minimum TLS version ("1.2" or "1.3")
+  #   require_client_cert: false          # Require client certificates (mutual TLS)
+  #
+  # Example: Enable mTLS (mutual TLS)
+  # tls:
+  #   enabled: true
+  #   cert_file: "./certs/server.crt"
+  #   key_file: "./certs/server.key"
+  #   ca_file: "./certs/ca.crt"           # Required for mTLS
+  #   require_client_cert: true           # Enable mTLS - requires client certificates
+  #   min_version: "1.3"                  # Use TLS 1.3 for best security
+  #
+  # See docs/mTLS_CONFIGURATION.md for complete mTLS setup guide
+
   # OpenAPI Integration
   openapi_spec: "./examples/openapi.json" # OpenAPI spec file for HTTP server (local file or URL)
 

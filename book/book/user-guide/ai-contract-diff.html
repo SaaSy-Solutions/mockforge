@@ -1,0 +1,563 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>AI Contract Diff - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/ai-contract-diff.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="ai-contract-diff"><a class="header" href="#ai-contract-diff">AI Contract Diff</a></h1>
+<p>AI Contract Diff automatically detects and analyzes differences between API contracts (OpenAPI specifications) and live requests. It provides contextual recommendations for mismatches and generates correction proposals to keep your contracts in sync with reality.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>AI Contract Diff helps you:</p>
+<ul>
+<li><strong>Detect Contract Drift</strong>: Find discrepancies between your OpenAPI spec and actual API usage</li>
+<li><strong>Get AI-Powered Recommendations</strong>: Understand why mismatches occur and how to fix them</li>
+<li><strong>Generate Correction Patches</strong>: Automatically create JSON Patch files to update your specs</li>
+<li><strong>Integrate with CI/CD</strong>: Automatically verify contracts in your pipeline</li>
+<li><strong>Visualize Mismatches</strong>: Dashboard visualization of contract differences</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="analyze-a-request"><a class="header" href="#analyze-a-request">Analyze a Request</a></h3>
+<pre><code class="language-bash"># Analyze a captured request against an OpenAPI spec
+mockforge contract-diff analyze \
+  --spec api.yaml \
+  --request-id &lt;capture-id&gt;
+
+# Or analyze from file
+mockforge contract-diff analyze \
+  --spec api.yaml \
+  --request-file request.json
+</code></pre>
+<h3 id="compare-two-specs"><a class="header" href="#compare-two-specs">Compare Two Specs</a></h3>
+<pre><code class="language-bash"># Compare two OpenAPI specifications
+mockforge contract-diff compare \
+  --spec1 api-v1.yaml \
+  --spec2 api-v2.yaml
+</code></pre>
+<h3 id="generate-correction-patch"><a class="header" href="#generate-correction-patch">Generate Correction Patch</a></h3>
+<pre><code class="language-bash"># Generate JSON Patch file for corrections
+mockforge contract-diff generate-patch \
+  --spec api.yaml \
+  --request-id &lt;capture-id&gt; \
+  --output patch.json
+</code></pre>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<h3 id="1-request-capture"><a class="header" href="#1-request-capture">1. Request Capture</a></h3>
+<p>MockForge automatically captures requests for contract analysis:</p>
+<pre><code class="language-yaml"># config.yaml
+core:
+  contract_diff:
+    enabled: true
+    auto_capture: true
+    capture_all: false  # Only capture mismatches
+</code></pre>
+<h3 id="2-contract-analysis"><a class="header" href="#2-contract-analysis">2. Contract Analysis</a></h3>
+<p>When a request is captured, it’s analyzed against your OpenAPI specification:</p>
+<ul>
+<li><strong>Path Matching</strong>: Verify request path matches spec</li>
+<li><strong>Method Validation</strong>: Check HTTP method is defined</li>
+<li><strong>Header Validation</strong>: Compare request headers with spec</li>
+<li><strong>Query Parameter Validation</strong>: Verify query params match</li>
+<li><strong>Body Validation</strong>: Validate request body against schema</li>
+</ul>
+<h3 id="3-mismatch-detection"><a class="header" href="#3-mismatch-detection">3. Mismatch Detection</a></h3>
+<p>The analyzer identifies several types of mismatches:</p>
+<ul>
+<li><strong>Missing Endpoint</strong>: Request path not in spec</li>
+<li><strong>Invalid Method</strong>: HTTP method not allowed</li>
+<li><strong>Missing Header</strong>: Required header not present</li>
+<li><strong>Invalid Parameter</strong>: Query param doesn’t match spec</li>
+<li><strong>Schema Mismatch</strong>: Request body doesn’t match schema</li>
+<li><strong>Type Mismatch</strong>: Value type doesn’t match spec</li>
+</ul>
+<h3 id="4-ai-recommendations"><a class="header" href="#4-ai-recommendations">4. AI Recommendations</a></h3>
+<p>AI-powered recommendations explain mismatches:</p>
+<pre><code class="language-json">{
+  "mismatch": {
+    "type": "missing_field",
+    "field": "email",
+    "location": "request.body"
+  },
+  "recommendation": {
+    "message": "The 'email' field is required but missing from the request. Add it to the request body or mark it as optional in the schema.",
+    "confidence": 0.95,
+    "suggested_fix": "Add 'email' field to request body or update schema to make it optional"
+  }
+}
+</code></pre>
+<h3 id="5-correction-proposals"><a class="header" href="#5-correction-proposals">5. Correction Proposals</a></h3>
+<p>Generate JSON Patch files to fix mismatches:</p>
+<pre><code class="language-json">[
+  {
+    "op": "add",
+    "path": "/paths/~1users/post/requestBody/content/application~1json/schema/required",
+    "value": ["email"]
+  }
+]
+</code></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="basic-configuration"><a class="header" href="#basic-configuration">Basic Configuration</a></h3>
+<pre><code class="language-yaml">core:
+  contract_diff:
+    enabled: true
+    auto_capture: true
+    capture_all: false
+    spec_path: "./api.yaml"
+</code></pre>
+<h3 id="ai-provider-configuration"><a class="header" href="#ai-provider-configuration">AI Provider Configuration</a></h3>
+<pre><code class="language-yaml">core:
+  contract_diff:
+    ai_provider: "ollama"  # or "openai", "anthropic"
+    ai_model: "llama3.2"
+    ai_base_url: "http://localhost:11434"
+    ai_api_key: "${AI_API_KEY}"  # For OpenAI/Anthropic
+</code></pre>
+<h3 id="webhook-configuration"><a class="header" href="#webhook-configuration">Webhook Configuration</a></h3>
+<pre><code class="language-yaml">core:
+  contract_diff:
+    webhooks:
+      - url: "https://example.com/webhook"
+        events: ["mismatch", "high_severity"]
+        secret: "${WEBHOOK_SECRET}"
+</code></pre>
+<h2 id="cli-commands"><a class="header" href="#cli-commands">CLI Commands</a></h2>
+<h3 id="analyze-request"><a class="header" href="#analyze-request">Analyze Request</a></h3>
+<pre><code class="language-bash"># Analyze captured request
+mockforge contract-diff analyze \
+  --spec api.yaml \
+  --request-id &lt;capture-id&gt;
+
+# Analyze from file
+mockforge contract-diff analyze \
+  --spec api.yaml \
+  --request-file request.json
+
+# With AI recommendations
+mockforge contract-diff analyze \
+  --spec api.yaml \
+  --request-id &lt;capture-id&gt; \
+  --ai-enabled \
+  --ai-provider ollama
+</code></pre>
+<h3 id="compare-specs"><a class="header" href="#compare-specs">Compare Specs</a></h3>
+<pre><code class="language-bash"># Compare two OpenAPI specs
+mockforge contract-diff compare \
+  --spec1 api-v1.yaml \
+  --spec2 api-v2.yaml
+
+# Output to file
+mockforge contract-diff compare \
+  --spec1 api-v1.yaml \
+  --spec2 api-v2.yaml \
+  --output diff.json
+</code></pre>
+<h3 id="generate-patch"><a class="header" href="#generate-patch">Generate Patch</a></h3>
+<pre><code class="language-bash"># Generate correction patch
+mockforge contract-diff generate-patch \
+  --spec api.yaml \
+  --request-id &lt;capture-id&gt; \
+  --output patch.json
+
+# Apply patch automatically
+mockforge contract-diff generate-patch \
+  --spec api.yaml \
+  --request-id &lt;capture-id&gt; \
+  --apply
+</code></pre>
+<h3 id="apply-patch"><a class="header" href="#apply-patch">Apply Patch</a></h3>
+<pre><code class="language-bash"># Apply patch to spec
+mockforge contract-diff apply-patch \
+  --spec api.yaml \
+  --patch patch.json \
+  --output api-updated.yaml
+</code></pre>
+<h2 id="api-endpoints"><a class="header" href="#api-endpoints">API Endpoints</a></h2>
+<h3 id="upload-request"><a class="header" href="#upload-request">Upload Request</a></h3>
+<pre><code class="language-http">POST /__mockforge/contract-diff/upload
+Content-Type: application/json
+
+{
+  "method": "POST",
+  "path": "/users",
+  "headers": {"Content-Type": "application/json"},
+  "query_params": {},
+  "body": {"name": "Alice", "email": "alice@example.com"}
+}
+</code></pre>
+<h3 id="get-captured-requests"><a class="header" href="#get-captured-requests">Get Captured Requests</a></h3>
+<pre><code class="language-http">GET /__mockforge/contract-diff/captures?limit=10&amp;offset=0
+</code></pre>
+<h3 id="analyze-request-1"><a class="header" href="#analyze-request-1">Analyze Request</a></h3>
+<pre><code class="language-http">POST /__mockforge/contract-diff/captures/{id}/analyze
+Content-Type: application/json
+
+{
+  "spec_path": "./api.yaml"
+}
+</code></pre>
+<h3 id="generate-patch-1"><a class="header" href="#generate-patch-1">Generate Patch</a></h3>
+<pre><code class="language-http">POST /__mockforge/contract-diff/captures/{id}/patch
+Content-Type: application/json
+
+{
+  "spec_path": "./api.yaml"
+}
+</code></pre>
+<h3 id="get-statistics"><a class="header" href="#get-statistics">Get Statistics</a></h3>
+<pre><code class="language-http">GET /__mockforge/contract-diff/statistics
+</code></pre>
+<h2 id="dashboard"><a class="header" href="#dashboard">Dashboard</a></h2>
+<p>The Contract Diff dashboard provides:</p>
+<ul>
+<li><strong>Statistics Overview</strong>: Total captures, analyzed requests, mismatch counts</li>
+<li><strong>Captured Requests List</strong>: Browse and filter captured requests</li>
+<li><strong>Analysis Results</strong>: View mismatches, recommendations, and confidence scores</li>
+<li><strong>Patch Generation</strong>: Generate and download correction patches</li>
+</ul>
+<p>Access via: <strong>Admin UI → Contract Diff</strong></p>
+<h2 id="cicd-integration"><a class="header" href="#cicd-integration">CI/CD Integration</a></h2>
+<h3 id="github-actions"><a class="header" href="#github-actions">GitHub Actions</a></h3>
+<pre><code class="language-yaml">name: Contract Diff Analysis
+
+on:
+  pull_request:
+    paths:
+      - 'api.yaml'
+      - '**/*.yaml'
+
+jobs:
+  contract-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Analyze contracts
+        run: |
+          mockforge contract-diff analyze \
+            --spec api.yaml \
+            --request-id ${{ github.event.pull_request.number }}
+      
+      - name: Generate patch
+        run: |
+          mockforge contract-diff generate-patch \
+            --spec api.yaml \
+            --request-id ${{ github.event.pull_request.number }} \
+            --output patch.json
+      
+      - name: Upload patch
+        uses: actions/upload-artifact@v3
+        with:
+          name: contract-patch
+          path: patch.json
+</code></pre>
+<h3 id="gitlab-ci"><a class="header" href="#gitlab-ci">GitLab CI</a></h3>
+<pre><code class="language-yaml">contract-diff:
+  script:
+    - mockforge contract-diff analyze --spec api.yaml --request-id $CI_PIPELINE_ID
+    - mockforge contract-diff generate-patch --spec api.yaml --request-id $CI_PIPELINE_ID --output patch.json
+  artifacts:
+    paths:
+      - patch.json
+</code></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="contract-validation"><a class="header" href="#contract-validation">Contract Validation</a></h3>
+<p>Ensure your API spec matches actual usage:</p>
+<pre><code class="language-bash"># Run analysis on all captured requests
+for id in $(mockforge contract-diff list-captures --ids); do
+  mockforge contract-diff analyze --spec api.yaml --request-id $id
+done
+</code></pre>
+<h3 id="spec-maintenance"><a class="header" href="#spec-maintenance">Spec Maintenance</a></h3>
+<p>Keep specs up-to-date automatically:</p>
+<pre><code class="language-bash"># Generate patches for all mismatches
+mockforge contract-diff generate-patch \
+  --spec api.yaml \
+  --request-id &lt;capture-id&gt; \
+  --output patches/
+
+# Review and apply patches
+mockforge contract-diff apply-patch \
+  --spec api.yaml \
+  --patch patches/patch-1.json \
+  --output api-updated.yaml
+</code></pre>
+<h3 id="api-versioning"><a class="header" href="#api-versioning">API Versioning</a></h3>
+<p>Compare API versions:</p>
+<pre><code class="language-bash"># Compare v1 and v2
+mockforge contract-diff compare \
+  --spec1 api-v1.yaml \
+  --spec2 api-v2.yaml \
+  --output version-diff.json
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Enable Auto-Capture</strong>: Automatically capture requests for analysis</li>
+<li><strong>Regular Analysis</strong>: Run analysis regularly to catch drift early</li>
+<li><strong>Review Recommendations</strong>: Always review AI recommendations before applying</li>
+<li><strong>Version Control Patches</strong>: Commit patches to version control</li>
+<li><strong>CI/CD Integration</strong>: Automate contract validation in your pipeline</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="no-mismatches-detected"><a class="header" href="#no-mismatches-detected">No Mismatches Detected</a></h3>
+<ul>
+<li>Verify OpenAPI spec is valid</li>
+<li>Check that request path matches spec</li>
+<li>Ensure method is defined in spec</li>
+</ul>
+<h3 id="ai-recommendations-not-available"><a class="header" href="#ai-recommendations-not-available">AI Recommendations Not Available</a></h3>
+<ul>
+<li>Check AI provider is configured</li>
+<li>Verify API key is set (for OpenAI/Anthropic)</li>
+<li>Ensure Ollama is running (for local provider)</li>
+</ul>
+<h3 id="patch-generation-fails"><a class="header" href="#patch-generation-fails">Patch Generation Fails</a></h3>
+<ul>
+<li>Verify spec path is correct</li>
+<li>Check that mismatches exist</li>
+<li>Review patch generation logs</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="http-mocking/openapi.html">OpenAPI Integration</a> - Working with OpenAPI specs</li>
+<li><a href="../configuration/files.html">Configuration Guide</a> - Complete configuration reference</li>
+<li><a href="../contributing/release.html">CI/CD Integration</a> - Pipeline integration</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/generative-schema.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/chaos-lab.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/generative-schema.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/chaos-lab.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

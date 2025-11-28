@@ -1,3 +1,8 @@
+//! Integration tests for GraphQL mock server functionality.
+//!
+//! These tests verify GraphQL schema parsing, query execution, subscription handling,
+//! and latency injection for GraphQL endpoints.
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use mockforge_core::{latency::LatencyDistribution, LatencyProfile};

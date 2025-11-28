@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-tracing"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,10 +12,10 @@ publish = false  # Internal tracing component
 
 [dependencies]
 # OpenTelemetry core
-opentelemetry = { version = "0.21", features = ["trace"] }
-opentelemetry_sdk = { version = "0.21", features = ["trace", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.14", features = ["trace", "grpc-tonic"] }
-opentelemetry-jaeger = { version = "0.20", features = ["rt-tokio"] }
+opentelemetry = { version = "0.22", features = ["trace"] }
+opentelemetry_sdk = { version = "0.31", features = ["trace", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.15", features = ["trace", "grpc-tonic"] }
+opentelemetry-jaeger = { version = "0.21", features = ["rt-tokio"] }
 opentelemetry-semantic-conventions = "0.31"
 
 # Tracing integration
@@ -28,7 +28,6 @@ tokio = { version = "1.35", features = ["full"] }
 
 # HTTP headers for context propagation
 http = "1.0"
-axum = "0.8"
 
 # Error handling
 thiserror = "1.0"

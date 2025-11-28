@@ -181,14 +181,16 @@ impl RequestFingerprint {
 pub enum ResponsePriority {
     /// Replay from recorded fixtures (highest priority)
     Replay = 0,
-    /// Fail injection (second priority)
-    Fail = 1,
-    /// Proxy to upstream (third priority)
-    Proxy = 2,
-    /// Mock from OpenAPI spec (fourth priority)
-    Mock = 3,
+    /// Stateful response based on state machine (second priority)
+    Stateful = 1,
+    /// Fail injection (third priority)
+    Fail = 2,
+    /// Proxy to upstream (fourth priority)
+    Proxy = 3,
+    /// Mock from OpenAPI spec (fifth priority)
+    Mock = 4,
     /// Record request for future replay (lowest priority)
-    Record = 4,
+    Record = 5,
 }
 
 /// Response source information
@@ -280,7 +282,8 @@ mod tests {
 
     #[test]
     fn test_response_priority_ordering() {
-        assert!(ResponsePriority::Replay < ResponsePriority::Fail);
+        assert!(ResponsePriority::Replay < ResponsePriority::Stateful);
+        assert!(ResponsePriority::Stateful < ResponsePriority::Fail);
         assert!(ResponsePriority::Fail < ResponsePriority::Proxy);
         assert!(ResponsePriority::Proxy < ResponsePriority::Mock);
         assert!(ResponsePriority::Mock < ResponsePriority::Record);

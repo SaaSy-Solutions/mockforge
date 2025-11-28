@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE workspaces\n            SET is_archived = TRUE, updated_at = ?\n            WHERE id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "977a5b93daae5b2f0489e033697d11e2cac814b394019ca9b009a98a039057a9"
+}

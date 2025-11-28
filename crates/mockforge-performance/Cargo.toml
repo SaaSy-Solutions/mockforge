@@ -1,0 +1,26 @@
+[package]
+name = "mockforge-performance"
+version = "0.3.3"
+edition = "2021"
+authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
+license = "MIT OR Apache-2.0"
+description = "Performance Mode - Lightweight load simulation with RPS control and bottleneck simulation"
+repository = "https://github.com/SaaSy-Solutions/mockforge"
+homepage = "https://mockforge.dev"
+documentation = "https://docs.rs/mockforge-performance"
+keywords = ["mock", "api", "performance", "load", "simulation", "rps"]
+categories = ["development-tools", "api-bindings"]
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+uuid = { workspace = true, features = ["v4"] }
+tokio = { workspace = true, features = ["sync", "time"] }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+
+[dev-dependencies]
+tokio-test = "0.4"

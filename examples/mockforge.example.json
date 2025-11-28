@@ -1,0 +1,19 @@
+{
+  "input": {
+    "spec": "openapi.json",
+    "additional": []
+  },
+  "output": {
+    "path": "./generated",
+    "filename": null,
+    "clean": false
+  },
+  "plugins": {},
+  "options": {
+    "client": "reqwest",
+    "mode": "tags",
+    "include-validation": true,
+    "include-examples": true,
+    "runtime": "tokio"
+  }
+}

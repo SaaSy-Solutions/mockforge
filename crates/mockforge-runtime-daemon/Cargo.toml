@@ -1,0 +1,43 @@
+[package]
+name = "mockforge-runtime-daemon"
+version = "0.3.3"
+edition = "2021"
+authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
+license = "MIT OR Apache-2.0"
+description = "Runtime daemon for zero-config auto-mock generation from 404s"
+repository = "https://github.com/SaaSy-Solutions/mockforge"
+homepage = "https://mockforge.dev"
+documentation = "https://docs.rs/mockforge-runtime-daemon"
+keywords = ["mock", "api", "testing", "daemon", "auto-generation"]
+categories = ["development-tools::testing", "web-programming"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints.rust]
+missing_docs = "warn"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+axum = { workspace = true }
+uuid = { workspace = true, features = ["serde", "v4"] }
+chrono = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.3", path = "../mockforge-data", optional = true }
+
+[features]
+default = []
+ai = ["dep:mockforge-data"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "test-util"] }
+tower = { workspace = true }
+

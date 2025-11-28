@@ -6,8 +6,9 @@ use crate::{
     auto_remediation::{RemediationConfig, RemediationEngine},
     config::{
         BulkheadConfig, ChaosConfig, CircuitBreakerConfig, FaultInjectionConfig, LatencyConfig,
-        RateLimitConfig, TrafficShapingConfig,
+        NetworkProfile, RateLimitConfig, TrafficShapingConfig,
     },
+    latency_metrics::LatencyMetricsTracker,
     recommendations::{
         Recommendation, RecommendationCategory, RecommendationEngine, RecommendationSeverity,
     },
@@ -18,16 +19,78 @@ use crate::{
     scenarios::{ChaosScenario, PredefinedScenarios, ScenarioEngine},
 };
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json, Response},
     routing::{delete, get, post, put},
     Router,
 };
+use parking_lot::RwLock as ParkingRwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
+
+/// Profile manager for storing custom profiles
+#[derive(Clone)]
+pub struct ProfileManager {
+    /// Custom user-created profiles
+    custom_profiles: Arc<ParkingRwLock<std::collections::HashMap<String, NetworkProfile>>>,
+}
+
+impl ProfileManager {
+    /// Create a new profile manager
+    pub fn new() -> Self {
+        Self {
+            custom_profiles: Arc::new(ParkingRwLock::new(std::collections::HashMap::new())),
+        }
+    }
+
+    /// Get all profiles (built-in + custom)
+    pub fn get_all_profiles(&self) -> Vec<NetworkProfile> {
+        let mut profiles = NetworkProfile::predefined_profiles();
+        let custom = self.custom_profiles.read();
+        profiles.extend(custom.values().cloned());
+        profiles
+    }
+
+    /// Get a profile by name
+    pub fn get_profile(&self, name: &str) -> Option<NetworkProfile> {
+        // Check built-in profiles first
+        for profile in NetworkProfile::predefined_profiles() {
+            if profile.name == name {
+                return Some(profile);
+            }
+        }
+        // Check custom profiles
+        let custom = self.custom_profiles.read();
+        custom.get(name).cloned()
+    }
+
+    /// Add or update a custom profile
+    pub fn save_profile(&self, profile: NetworkProfile) {
+        let mut custom = self.custom_profiles.write();
+        custom.insert(profile.name.clone(), profile);
+    }
+
+    /// Delete a custom profile
+    pub fn delete_profile(&self, name: &str) -> bool {
+        let mut custom = self.custom_profiles.write();
+        custom.remove(name).is_some()
+    }
+
+    /// Get only custom profiles
+    pub fn get_custom_profiles(&self) -> Vec<NetworkProfile> {
+        let custom = self.custom_profiles.read();
+        custom.values().cloned().collect()
+    }
+}
+
+impl Default for ProfileManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// API state
 #[derive(Clone)]
@@ -42,10 +105,26 @@ pub struct ChaosApiState {
     pub recorder: Arc<ScenarioRecorder>,
     pub replay_engine: Arc<tokio::sync::RwLock<ScenarioReplayEngine>>,
     pub scheduler: Arc<tokio::sync::RwLock<ScenarioScheduler>>,
+    pub latency_tracker: Arc<LatencyMetricsTracker>,
+    pub profile_manager: Arc<ProfileManager>,
+    pub mockai:
+        Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
 }
 
 /// Create the chaos management API router
-pub fn create_chaos_api_router(config: ChaosConfig) -> (Router, Arc<RwLock<ChaosConfig>>) {
+///
+/// # Arguments
+/// * `config` - Initial chaos configuration
+/// * `mockai` - Optional MockAI instance for dynamic error message generation
+///
+/// # Returns
+/// Tuple of (Router, Config, LatencyTracker, ChaosApiState) - The router, config, latency tracker, and API state for hot-reload support
+pub fn create_chaos_api_router(
+    config: ChaosConfig,
+    mockai: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+    >,
+) -> (Router, Arc<RwLock<ChaosConfig>>, Arc<LatencyMetricsTracker>, Arc<ChaosApiState>) {
     let config_arc = Arc::new(RwLock::new(config));
     let scenario_engine = Arc::new(ScenarioEngine::new());
     let orchestrator = Arc::new(tokio::sync::RwLock::new(ScenarioOrchestrator::new()));
@@ -57,6 +136,11 @@ pub fn create_chaos_api_router(config: ChaosConfig) -> (Router, Arc<RwLock<Chaos
     let recorder = Arc::new(ScenarioRecorder::new());
     let replay_engine = Arc::new(tokio::sync::RwLock::new(ScenarioReplayEngine::new()));
     let scheduler = Arc::new(tokio::sync::RwLock::new(ScenarioScheduler::new()));
+    let latency_tracker = Arc::new(LatencyMetricsTracker::new());
+    let profile_manager = Arc::new(ProfileManager::new());
+
+    // Clone latency_tracker for return value (state will own the original)
+    let latency_tracker_for_return = latency_tracker.clone();
 
     let state = ChaosApiState {
         config: config_arc.clone(),
@@ -69,6 +153,9 @@ pub fn create_chaos_api_router(config: ChaosConfig) -> (Router, Arc<RwLock<Chaos
         recorder,
         replay_engine,
         scheduler,
+        latency_tracker,
+        profile_manager,
+        mockai,
     };
 
     let router = Router::new()
@@ -100,12 +187,25 @@ pub fn create_chaos_api_router(config: ChaosConfig) -> (Router, Arc<RwLock<Chaos
         // Scenario endpoints
         .route("/api/chaos/scenarios", get(list_scenarios))
         .route("/api/chaos/scenarios/predefined", get(list_predefined_scenarios))
-        .route("/api/chaos/scenarios/:name", post(start_scenario))
-        .route("/api/chaos/scenarios/:name", delete(stop_scenario))
+        .route("/api/chaos/scenarios/{name}", post(start_scenario))
+        .route("/api/chaos/scenarios/{name}", delete(stop_scenario))
         .route("/api/chaos/scenarios", delete(stop_all_scenarios))
 
         // Status endpoint
         .route("/api/chaos/status", get(get_status))
+
+        // Metrics endpoints
+        .route("/api/chaos/metrics/latency", get(get_latency_metrics))
+        .route("/api/chaos/metrics/latency/stats", get(get_latency_stats))
+
+        // Profile management endpoints
+        .route("/api/chaos/profiles", get(list_profiles))
+        .route("/api/chaos/profiles/{name}", get(get_profile))
+        .route("/api/chaos/profiles/{name}/apply", post(apply_profile))
+        .route("/api/chaos/profiles", post(create_profile))
+        .route("/api/chaos/profiles/{name}", delete(delete_profile))
+        .route("/api/chaos/profiles/{name}/export", get(export_profile))
+        .route("/api/chaos/profiles/import", post(import_profile))
 
         // Scenario recording endpoints
         .route("/api/chaos/recording/start", post(start_recording))
@@ -128,52 +228,52 @@ pub fn create_chaos_api_router(config: ChaosConfig) -> (Router, Arc<RwLock<Chaos
 
         // Scenario scheduling endpoints
         .route("/api/chaos/schedule", post(add_schedule))
-        .route("/api/chaos/schedule/:id", get(get_schedule))
-        .route("/api/chaos/schedule/:id", delete(remove_schedule))
-        .route("/api/chaos/schedule/:id/enable", post(enable_schedule))
-        .route("/api/chaos/schedule/:id/disable", post(disable_schedule))
+        .route("/api/chaos/schedule/{id}", get(get_schedule))
+        .route("/api/chaos/schedule/{id}", delete(remove_schedule))
+        .route("/api/chaos/schedule/{id}/enable", post(enable_schedule))
+        .route("/api/chaos/schedule/{id}/disable", post(disable_schedule))
         // NOTE: Manual trigger endpoint has a known Rust/Axum type inference issue
         // when combining State + Path extractors with nested async calls.
         // The trigger_schedule_by_path handler is implemented but cannot be registered.
         // Workaround: Use the scheduler's automatic execution or recreate the schedule.
-        // .route("/api/chaos/schedule/:id/trigger", post(trigger_schedule_by_path))
+        // .route("/api/chaos/schedule/{id}/trigger", post(trigger_schedule_by_path))
         .route("/api/chaos/schedules", get(list_schedules))
 
         // AI-powered recommendation endpoints
         .route("/api/chaos/recommendations", get(get_recommendations))
         .route("/api/chaos/recommendations/analyze", post(analyze_and_recommend))
-        .route("/api/chaos/recommendations/category/:category", get(get_recommendations_by_category))
-        .route("/api/chaos/recommendations/severity/:severity", get(get_recommendations_by_severity))
+        .route("/api/chaos/recommendations/category/{category}", get(get_recommendations_by_category))
+        .route("/api/chaos/recommendations/severity/{severity}", get(get_recommendations_by_severity))
         .route("/api/chaos/recommendations", delete(clear_recommendations))
 
         // Auto-remediation endpoints
         .route("/api/chaos/remediation/config", get(get_remediation_config))
         .route("/api/chaos/remediation/config", put(update_remediation_config))
         .route("/api/chaos/remediation/process", post(process_remediation))
-        .route("/api/chaos/remediation/approve/:id", post(approve_remediation))
-        .route("/api/chaos/remediation/reject/:id", post(reject_remediation))
-        .route("/api/chaos/remediation/rollback/:id", post(rollback_remediation))
+        .route("/api/chaos/remediation/approve/{id}", post(approve_remediation))
+        .route("/api/chaos/remediation/reject/{id}", post(reject_remediation))
+        .route("/api/chaos/remediation/rollback/{id}", post(rollback_remediation))
         .route("/api/chaos/remediation/actions", get(get_remediation_actions))
-        .route("/api/chaos/remediation/actions/:id", get(get_remediation_action))
+        .route("/api/chaos/remediation/actions/{id}", get(get_remediation_action))
         .route("/api/chaos/remediation/approvals", get(get_approval_queue))
-        .route("/api/chaos/remediation/effectiveness/:id", get(get_remediation_effectiveness))
+        .route("/api/chaos/remediation/effectiveness/{id}", get(get_remediation_effectiveness))
         .route("/api/chaos/remediation/stats", get(get_remediation_stats))
 
         // A/B testing endpoints
         .route("/api/chaos/ab-tests", post(create_ab_test))
         .route("/api/chaos/ab-tests", get(get_ab_tests))
-        .route("/api/chaos/ab-tests/:id", get(get_ab_test))
-        .route("/api/chaos/ab-tests/:id/start", post(start_ab_test))
-        .route("/api/chaos/ab-tests/:id/stop", post(stop_ab_test))
-        .route("/api/chaos/ab-tests/:id/pause", post(pause_ab_test))
-        .route("/api/chaos/ab-tests/:id/resume", post(resume_ab_test))
-        .route("/api/chaos/ab-tests/:id/record/:variant", post(record_ab_test_result))
-        .route("/api/chaos/ab-tests/:id", delete(delete_ab_test))
+        .route("/api/chaos/ab-tests/{id}", get(get_ab_test))
+        .route("/api/chaos/ab-tests/{id}/start", post(start_ab_test))
+        .route("/api/chaos/ab-tests/{id}/stop", post(stop_ab_test))
+        .route("/api/chaos/ab-tests/{id}/pause", post(pause_ab_test))
+        .route("/api/chaos/ab-tests/{id}/resume", post(resume_ab_test))
+        .route("/api/chaos/ab-tests/{id}/record/{variant}", post(record_ab_test_result))
+        .route("/api/chaos/ab-tests/{id}", delete(delete_ab_test))
         .route("/api/chaos/ab-tests/stats", get(get_ab_test_stats))
 
-        .with_state(state);
+        .with_state(state.clone());
 
-    (router, config_arc)
+    (router, config_arc, latency_tracker_for_return, Arc::new(state))
 }
 
 /// Get current configuration
@@ -1566,6 +1666,188 @@ async fn get_ab_test_stats(
 ) -> Json<crate::ab_testing::ABTestStats> {
     let engine = state.ab_testing_engine.read().await;
     Json(engine.get_stats())
+}
+
+// Latency metrics endpoints
+
+/// Get latency metrics (time-series data)
+async fn get_latency_metrics(State(state): State<ChaosApiState>) -> Json<LatencyMetricsResponse> {
+    let samples = state.latency_tracker.get_samples();
+    Json(LatencyMetricsResponse { samples })
+}
+
+/// Get latency statistics
+async fn get_latency_stats(
+    State(state): State<ChaosApiState>,
+) -> Json<crate::latency_metrics::LatencyStats> {
+    let stats = state.latency_tracker.get_stats();
+    Json(stats)
+}
+
+#[derive(Debug, Serialize)]
+struct LatencyMetricsResponse {
+    samples: Vec<crate::latency_metrics::LatencySample>,
+}
+
+// Profile management endpoints
+
+/// List all profiles (built-in + custom)
+async fn list_profiles(State(state): State<ChaosApiState>) -> Json<Vec<NetworkProfile>> {
+    let profiles = state.profile_manager.get_all_profiles();
+    Json(profiles)
+}
+
+/// Get a specific profile by name
+async fn get_profile(
+    State(state): State<ChaosApiState>,
+    Path(name): Path<String>,
+) -> Result<Json<NetworkProfile>, ChaosApiError> {
+    match state.profile_manager.get_profile(&name) {
+        Some(profile) => Ok(Json(profile)),
+        None => Err(ChaosApiError::NotFound(format!("Profile '{}' not found", name))),
+    }
+}
+
+/// Apply a profile (update chaos config)
+async fn apply_profile(
+    State(state): State<ChaosApiState>,
+    Path(name): Path<String>,
+) -> Result<Json<StatusResponse>, ChaosApiError> {
+    let profile = state
+        .profile_manager
+        .get_profile(&name)
+        .ok_or_else(|| ChaosApiError::NotFound(format!("Profile '{}' not found", name)))?;
+
+    // Apply the profile's chaos config
+    let mut config = state.config.write().await;
+    *config = profile.chaos_config.clone();
+
+    info!("Applied profile: {}", name);
+    Ok(Json(StatusResponse {
+        message: format!("Profile '{}' applied successfully", name),
+    }))
+}
+
+/// Create a new custom profile
+async fn create_profile(
+    State(state): State<ChaosApiState>,
+    Json(profile): Json<NetworkProfile>,
+) -> Result<Json<StatusResponse>, ChaosApiError> {
+    // Check if it's a built-in profile name
+    for builtin in NetworkProfile::predefined_profiles() {
+        if builtin.name == profile.name {
+            return Err(ChaosApiError::NotFound(format!(
+                "Cannot create profile '{}': name conflicts with built-in profile",
+                profile.name
+            )));
+        }
+    }
+
+    // Mark as custom
+    let mut custom_profile = profile;
+    custom_profile.builtin = false;
+
+    state.profile_manager.save_profile(custom_profile.clone());
+    info!("Created custom profile: {}", custom_profile.name);
+    Ok(Json(StatusResponse {
+        message: format!("Profile '{}' created successfully", custom_profile.name),
+    }))
+}
+
+/// Delete a custom profile
+async fn delete_profile(
+    State(state): State<ChaosApiState>,
+    Path(name): Path<String>,
+) -> Result<Json<StatusResponse>, ChaosApiError> {
+    // Check if it's a built-in profile
+    for builtin in NetworkProfile::predefined_profiles() {
+        if builtin.name == name {
+            return Err(ChaosApiError::NotFound(format!(
+                "Cannot delete built-in profile '{}'",
+                name
+            )));
+        }
+    }
+
+    if state.profile_manager.delete_profile(&name) {
+        info!("Deleted custom profile: {}", name);
+        Ok(Json(StatusResponse {
+            message: format!("Profile '{}' deleted successfully", name),
+        }))
+    } else {
+        Err(ChaosApiError::NotFound(format!("Profile '{}' not found", name)))
+    }
+}
+
+/// Export a profile as JSON or YAML
+async fn export_profile(
+    State(state): State<ChaosApiState>,
+    Path(name): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Response, ChaosApiError> {
+    let profile = state
+        .profile_manager
+        .get_profile(&name)
+        .ok_or_else(|| ChaosApiError::NotFound(format!("Profile '{}' not found", name)))?;
+
+    let format = params.get("format").map(|s| s.as_str()).unwrap_or("json");
+
+    if format == "yaml" {
+        let yaml = serde_yaml::to_string(&profile).map_err(|e| {
+            ChaosApiError::NotFound(format!("Failed to serialize profile to YAML: {}", e))
+        })?;
+        Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "application/yaml")
+            .body(axum::body::Body::from(yaml))
+            .unwrap()
+            .into_response())
+    } else {
+        // Default to JSON
+        let json = serde_json::to_value(&profile)
+            .map_err(|e| ChaosApiError::NotFound(format!("Failed to serialize profile: {}", e)))?;
+        Ok(Json(json).into_response())
+    }
+}
+
+/// Import a profile from JSON or YAML
+async fn import_profile(
+    State(state): State<ChaosApiState>,
+    Json(req): Json<ImportProfileRequest>,
+) -> Result<Json<StatusResponse>, ChaosApiError> {
+    let profile: NetworkProfile = if req.format == "yaml" {
+        serde_yaml::from_str(&req.content)
+            .map_err(|e| ChaosApiError::NotFound(format!("Failed to parse YAML: {}", e)))?
+    } else {
+        serde_json::from_str(&req.content)
+            .map_err(|e| ChaosApiError::NotFound(format!("Failed to parse JSON: {}", e)))?
+    };
+
+    // Check if it's a built-in profile name
+    for builtin in NetworkProfile::predefined_profiles() {
+        if builtin.name == profile.name {
+            return Err(ChaosApiError::NotFound(format!(
+                "Cannot import profile '{}': name conflicts with built-in profile",
+                profile.name
+            )));
+        }
+    }
+
+    // Mark as custom
+    let mut custom_profile = profile;
+    custom_profile.builtin = false;
+
+    state.profile_manager.save_profile(custom_profile.clone());
+    info!("Imported profile: {}", custom_profile.name);
+    Ok(Json(StatusResponse {
+        message: format!("Profile '{}' imported successfully", custom_profile.name),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportProfileRequest {
+    content: String,
+    format: String, // "json" or "yaml"
 }
 
 // Error handling

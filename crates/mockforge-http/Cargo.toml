@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-http"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -10,6 +10,9 @@ homepage.workspace = true
 documentation.workspace = true
 keywords = ["http", "rest", "api", "mock", "testing"]
 categories = ["development-tools::testing", "web-programming::http-server"]
+
+[lints.rust]
+missing_docs = "deny"
 
 [dependencies]
 axum = { workspace = true }
@@ -29,7 +32,8 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-mockforge-smtp = { version = "0.1.2", path = "../mockforge-smtp", optional = true }
+mockforge-smtp = { version = "0.3.0", optional = true }
+mockforge-chaos = { version = "0.3.3", path = "../mockforge-chaos" }
 async-trait = { workspace = true }
 glob = { workspace = true }
 globwalk = { workspace = true }
@@ -44,17 +48,32 @@ thiserror = { workspace = true }
 itertools = { workspace = true }
 mime_guess = { workspace = true }
 futures = { workspace = true }
+futures-util = "0.3"
 tokio-stream = "0.1"
 jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = { version = "0.1.2", path = "../mockforge-core" }
-mockforge-data = { version = "0.1.2", path = "../mockforge-data" }
-mockforge-observability = { version = "0.1.2", path = "../mockforge-observability" }
-mockforge-tracing = { version = "0.1.2", path = "../mockforge-tracing" }
-mockforge-mqtt = { version = "0.1.2", path = "../mockforge-mqtt", optional = true }
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-pipelines = { version = "0.3.3", path = "../mockforge-pipelines", optional = true }
+dashmap = "6.1"
+mockforge-data = { version = "0.3.3", path = "../mockforge-data" }
+mockforge-template-expansion = { version = "0.3.3", path = "../mockforge-template-expansion" }
+mockforge-route-chaos = { version = "0.3.3", path = "../mockforge-route-chaos" }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate"], optional = true }
+mockforge-observability = "0.3.0"
+mockforge-recorder = { version = "0.3.3", path = "../mockforge-recorder", optional = true }
+mockforge-scenarios = { version = "0.3.3", path = "../mockforge-scenarios" }
+mockforge-tracing = "0.3.0"
+mockforge-world-state = { version = "0.3.3", path = "../mockforge-world-state" }
+mockforge-performance = { version = "0.3.3", path = "../mockforge-performance" }
+mockforge-mqtt = { version = "0.3.0", optional = true }
+mockforge-kafka = { version = "0.3.3", path = "../mockforge-kafka", optional = true }
+mockforge-runtime-daemon = { version = "0.3.3", path = "../mockforge-runtime-daemon", optional = true }
 opentelemetry = "0.21"
+rustls = "0.23"
+rustls-pemfile = "1.0"
+tokio-rustls = "0.24"
 
 [features]
 default = []
@@ -64,6 +83,18 @@ data-faker = []
 smtp = ["mockforge-smtp"]
 # Enable MQTT integration
 mqtt = ["mockforge-mqtt"]
+# Enable database support (PostgreSQL)
+database = ["sqlx"]
+# Enable behavioral cloning features (requires mockforge-recorder)
+behavioral-cloning = ["dep:mockforge-recorder"]
+# Enable runtime daemon for zero-config auto-mock generation
+runtime-daemon = ["dep:mockforge-runtime-daemon"]
+# Enable pipeline event emission for drift detection and schema changes
+pipelines = ["dep:mockforge-pipelines"]
+# Enable Kafka support
+kafka = ["dep:mockforge-kafka"]
+# Enable chaos engineering features
+chaos = []
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
@@ -71,8 +102,8 @@ reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
-mockforge-ws = { path = "../mockforge-ws" }
-mockforge-plugin-core = { version = "0.1.2", path = "../mockforge-plugin-core" }
+mockforge-ws = "0.3.0"
+mockforge-plugin-core = { version = "0.3.3", path = "../mockforge-plugin-core" }
 opentelemetry_sdk = "0.21"
 uuid = { version = "1", features = ["v4"] }
 once_cell = { workspace = true }

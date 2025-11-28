@@ -1,0 +1,27 @@
+id: high-value-customer
+name: High-Value Customer
+domain: banking
+traits:
+  account_type: premium
+  total_balance: "125000.00"
+  account_count: 3
+  monthly_transactions: 45
+  credit_score: 780
+  relationship_years: 8
+  accounts:
+    - type: checking
+      balance: "45000.00"
+      account_number: "****1234"
+    - type: savings
+      balance: "75000.00"
+      account_number: "****5678"
+    - type: investment
+      balance: "5000.00"
+      account_number: "****9012"
+lifecycle:
+  preset: subscription
+  initial_state: active
+backstory: |
+  Premium banking customer with high account balances and long relationship history.
+  Maintains multiple accounts (checking, savings, investment) with significant balances.
+  High credit score and frequent transaction activity. Eligible for premium services.

@@ -1,0 +1,35 @@
+[package]
+name = "mockforge-integration-tests"
+version = "0.1.0"
+edition = "2021"
+
+# This package exists only for integration tests
+[lib]
+name = "mockforge_integration_tests"
+path = "src/lib.rs"
+
+[dependencies]
+# Workspace dependencies
+mockforge-test = { path = "../crates/mockforge-test" }
+mockforge-core = { path = "../crates/mockforge-core" }
+mockforge-http = { path = "../crates/mockforge-http" }
+mockforge-vbr = { path = "../crates/mockforge-vbr" }
+mockforge-data = { path = "../crates/mockforge-data" }
+mockforge-recorder = { path = "../crates/mockforge-recorder" }
+mockforge-chaos = { path = "../crates/mockforge-chaos" }
+mockforge-scenarios = { path = "../crates/mockforge-scenarios" }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
+# Time handling
+chrono = { workspace = true }
+# WebSocket client dependencies
+tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
+futures-util = "0.3"
+# Test utilities
+tempfile = "3.8"

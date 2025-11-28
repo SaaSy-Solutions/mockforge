@@ -63,6 +63,10 @@ macro_rules! export_plugin {
         #[no_mangle]
         pub extern "C" fn destroy_plugin(ptr: *mut std::ffi::c_void) {
             if !ptr.is_null() {
+                // SAFETY: This is WASM plugin cleanup code. The pointer comes from
+                // the WASM runtime and is guaranteed to be valid for the plugin type.
+                // We take ownership via Box::from_raw to ensure proper cleanup when
+                // the plugin is dropped. The WASM runtime ensures memory safety.
                 unsafe {
                     let _ = Box::from_raw(ptr as *mut $plugin_type);
                 }

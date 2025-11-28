@@ -10,7 +10,7 @@
 //! - fixtures: Fixture management operations
 
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{self, StatusCode},
     response::{
         sse::{Event, Sse},
@@ -44,15 +44,33 @@ use mockforge_core::workspace_import::{ImportResponse, ImportRoute};
 
 // Handler sub-modules
 pub mod admin;
+pub mod ai_studio;
 pub mod analytics;
+pub mod analytics_stream;
+pub mod analytics_v2;
 pub mod assets;
+pub mod behavioral_cloning;
 pub mod chains;
+pub mod community;
+pub mod contract_diff;
+pub mod coverage_metrics;
+pub mod failure_analysis;
+pub mod graph;
 pub mod health;
+pub mod migration;
+pub mod pillar_analytics;
+pub mod playground;
 pub mod plugin;
+pub mod promotions;
+pub mod verification;
+pub mod voice;
+pub mod workspaces;
 
 // Re-export commonly used types
 pub use assets::*;
 pub use chains::*;
+pub use graph::*;
+pub use migration::*;
 pub use plugin::*;
 
 // Import workspace persistence
@@ -262,6 +280,21 @@ pub struct AdminState {
     pub workspace_persistence: Arc<WorkspacePersistence>,
     /// Plugin registry (protected by RwLock)
     pub plugin_registry: Arc<RwLock<PluginRegistry>>,
+    /// Reality engine for managing realism levels
+    pub reality_engine: Arc<RwLock<mockforge_core::RealityEngine>>,
+    /// Reality Continuum engine for blending mock and real data sources
+    pub continuum_engine: Arc<RwLock<mockforge_core::RealityContinuumEngine>>,
+    /// Chaos API state for hot-reload support (optional)
+    /// Contains config that can be updated at runtime
+    pub chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
+    /// Latency injector for HTTP middleware (optional)
+    /// Allows updating latency profile at runtime
+    pub latency_injector:
+        Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>>,
+    /// MockAI instance (optional)
+    /// Allows updating MockAI configuration at runtime
+    pub mockai:
+        Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
 }
 
 impl AdminState {
@@ -315,6 +348,19 @@ impl AdminState {
     }
 
     /// Create new admin state
+    ///
+    /// # Arguments
+    /// * `http_server_addr` - HTTP server address
+    /// * `ws_server_addr` - WebSocket server address
+    /// * `grpc_server_addr` - gRPC server address
+    /// * `graphql_server_addr` - GraphQL server address
+    /// * `api_enabled` - Whether API endpoints are enabled
+    /// * `admin_port` - Admin server port
+    /// * `chaos_api_state` - Optional chaos API state for hot-reload support
+    /// * `latency_injector` - Optional latency injector for hot-reload support
+    /// * `mockai` - Optional MockAI instance for hot-reload support
+    /// * `continuum_config` - Optional Reality Continuum configuration
+    /// * `virtual_clock` - Optional virtual clock for time-based progression
     pub fn new(
         http_server_addr: Option<std::net::SocketAddr>,
         ws_server_addr: Option<std::net::SocketAddr>,
@@ -322,6 +368,15 @@ impl AdminState {
         graphql_server_addr: Option<std::net::SocketAddr>,
         api_enabled: bool,
         admin_port: u16,
+        chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
+        latency_injector: Option<
+            std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>,
+        >,
+        mockai: Option<
+            std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+        >,
+        continuum_config: Option<mockforge_core::ContinuumConfig>,
+        virtual_clock: Option<std::sync::Arc<mockforge_core::VirtualClock>>,
     ) -> Self {
         let start_time = chrono::Utc::now();
 
@@ -377,6 +432,18 @@ impl AdminState {
             import_history: Arc::new(RwLock::new(Vec::new())),
             workspace_persistence: Arc::new(WorkspacePersistence::new("./workspaces")),
             plugin_registry: Arc::new(RwLock::new(PluginRegistry::new())),
+            reality_engine: Arc::new(RwLock::new(mockforge_core::RealityEngine::new())),
+            continuum_engine: Arc::new(RwLock::new({
+                let config = continuum_config.unwrap_or_default();
+                if let Some(clock) = virtual_clock {
+                    mockforge_core::RealityContinuumEngine::with_virtual_clock(config, clock)
+                } else {
+                    mockforge_core::RealityContinuumEngine::new(config)
+                }
+            })),
+            chaos_api_state,
+            latency_injector,
+            mockai,
         }
     }
 
@@ -1011,6 +1078,48 @@ pub async fn get_logs(
     Json(ApiResponse::success(logs))
 }
 
+/// Get reality trace metadata for a specific request
+///
+/// GET /__mockforge/api/reality/trace/:request_id
+pub async fn get_reality_trace(
+    Path(request_id): Path<String>,
+) -> Json<ApiResponse<Option<mockforge_core::request_logger::RealityTraceMetadata>>> {
+    if let Some(global_logger) = mockforge_core::get_global_logger() {
+        let logs = global_logger.get_recent_logs(None).await;
+        if let Some(log_entry) = logs.into_iter().find(|log| log.id == request_id) {
+            Json(ApiResponse::success(log_entry.reality_metadata))
+        } else {
+            Json(ApiResponse::error(format!("Request {} not found", request_id)))
+        }
+    } else {
+        Json(ApiResponse::error("Request logger not initialized".to_string()))
+    }
+}
+
+/// Get response generation trace for a specific request
+///
+/// GET /__mockforge/api/reality/response-trace/:request_id
+pub async fn get_response_trace(
+    Path(request_id): Path<String>,
+) -> Json<ApiResponse<Option<serde_json::Value>>> {
+    if let Some(global_logger) = mockforge_core::get_global_logger() {
+        let logs = global_logger.get_recent_logs(None).await;
+        if let Some(log_entry) = logs.into_iter().find(|log| log.id == request_id) {
+            // Response generation trace would be stored in metadata
+            // For now, return the metadata as JSON
+            let trace = log_entry
+                .metadata
+                .get("response_generation_trace")
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
+            Json(ApiResponse::success(trace))
+        } else {
+            Json(ApiResponse::error(format!("Request {} not found", request_id)))
+        }
+    } else {
+        Json(ApiResponse::error("Request logger not initialized".to_string()))
+    }
+}
+
 // Configuration for recent logs display
 const RECENT_LOGS_LIMIT: usize = 20;
 const RECENT_LOGS_TTL_MINUTES: i64 = 5;
@@ -1128,29 +1237,58 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
     let system_metrics = state.get_system_metrics().await;
     let time_series = state.get_time_series_data().await;
 
-    // Calculate percentiles from response times
+    // Helper function to calculate percentile from sorted array
+    fn calculate_percentile(sorted_data: &[u64], percentile: f64) -> u64 {
+        if sorted_data.is_empty() {
+            return 0;
+        }
+        let idx = ((sorted_data.len() as f64) * percentile).ceil() as usize;
+        let idx = idx.min(sorted_data.len().saturating_sub(1));
+        sorted_data[idx]
+    }
+
+    // Calculate percentiles from response times (p50, p75, p90, p95, p99, p99.9)
     let mut response_times = metrics.response_times.clone();
     response_times.sort();
 
-    let p50 = if !response_times.is_empty() {
-        response_times[response_times.len() / 2] as u64
-    } else {
-        0
-    };
+    let p50 = calculate_percentile(&response_times, 0.50);
+    let p75 = calculate_percentile(&response_times, 0.75);
+    let p90 = calculate_percentile(&response_times, 0.90);
+    let p95 = calculate_percentile(&response_times, 0.95);
+    let p99 = calculate_percentile(&response_times, 0.99);
+    let p999 = calculate_percentile(&response_times, 0.999);
 
-    let p95 = if !response_times.is_empty() {
-        let idx = (response_times.len() as f64 * 0.95) as usize;
-        response_times[response_times.len().min(idx)] as u64
-    } else {
-        0
-    };
+    // Calculate per-endpoint percentiles for detailed analysis
+    let mut response_times_by_endpoint: HashMap<String, Vec<u64>> = HashMap::new();
+    if let Some(global_logger) = mockforge_core::get_global_logger() {
+        let all_logs = global_logger.get_recent_logs(None).await;
+        for log in &all_logs {
+            let endpoint_key = format!("{} {}", log.method, log.path);
+            response_times_by_endpoint
+                .entry(endpoint_key)
+                .or_default()
+                .push(log.response_time_ms);
+        }
+    }
 
-    let p99 = if !response_times.is_empty() {
-        let idx = (response_times.len() as f64 * 0.99) as usize;
-        response_times[response_times.len().min(idx)] as u64
-    } else {
-        0
-    };
+    // Calculate percentiles for each endpoint
+    let mut endpoint_percentiles: HashMap<String, HashMap<String, u64>> = HashMap::new();
+    for (endpoint, times) in &mut response_times_by_endpoint {
+        times.sort();
+        if !times.is_empty() {
+            endpoint_percentiles.insert(
+                endpoint.clone(),
+                HashMap::from([
+                    ("p50".to_string(), calculate_percentile(times, 0.50)),
+                    ("p75".to_string(), calculate_percentile(times, 0.75)),
+                    ("p90".to_string(), calculate_percentile(times, 0.90)),
+                    ("p95".to_string(), calculate_percentile(times, 0.95)),
+                    ("p99".to_string(), calculate_percentile(times, 0.99)),
+                    ("p999".to_string(), calculate_percentile(times, 0.999)),
+                ]),
+            );
+        }
+    }
 
     // Calculate error rates
     let mut error_rate_by_endpoint = HashMap::new();
@@ -1186,13 +1324,27 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
             .collect()
     };
 
+    // Build time-series latency data (last 100 data points)
+    let latency_over_time: Vec<(chrono::DateTime<chrono::Utc>, u64)> =
+        if let Some(global_logger) = mockforge_core::get_global_logger() {
+            let all_logs = global_logger.get_recent_logs(Some(100)).await;
+            all_logs.iter().map(|log| (log.timestamp, log.response_time_ms)).collect()
+        } else {
+            Vec::new()
+        };
+
     let metrics_data = MetricsData {
         requests_by_endpoint: metrics.requests_by_endpoint,
         response_time_percentiles: HashMap::from([
             ("p50".to_string(), p50),
+            ("p75".to_string(), p75),
+            ("p90".to_string(), p90),
             ("p95".to_string(), p95),
             ("p99".to_string(), p99),
+            ("p999".to_string(), p999),
         ]),
+        endpoint_percentiles: Some(endpoint_percentiles),
+        latency_over_time: Some(latency_over_time),
         error_rate_by_endpoint,
         memory_usage_over_time,
         cpu_usage_over_time,
@@ -1204,18 +1356,21 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
 /// Update latency profile
 pub async fn update_latency(
     State(state): State<AdminState>,
+    headers: axum::http::HeaderMap,
     Json(update): Json<ConfigUpdate>,
 ) -> Json<ApiResponse<String>> {
+    use crate::audit::{create_audit_log, get_global_audit_store, AdminActionType};
+    use crate::rbac::{extract_user_context, get_default_user_context};
+
     if update.config_type != "latency" {
         return Json(ApiResponse::error("Invalid config type".to_string()));
     }
 
     // Extract latency configuration from the update data
     let base_ms = update.data.get("base_ms").and_then(|v| v.as_u64()).unwrap_or(50);
-
     let jitter_ms = update.data.get("jitter_ms").and_then(|v| v.as_u64()).unwrap_or(20);
 
-    let tag_overrides = update
+    let tag_overrides: std::collections::HashMap<String, u64> = update
         .data
         .get("tag_overrides")
         .and_then(|v| v.as_object())
@@ -1223,7 +1378,46 @@ pub async fn update_latency(
         .unwrap_or_default();
 
     // Update the actual configuration
-    state.update_latency_config(base_ms, jitter_ms, tag_overrides).await;
+    state.update_latency_config(base_ms, jitter_ms, tag_overrides.clone()).await;
+
+    // Record audit log with user context
+    if let Some(audit_store) = get_global_audit_store() {
+        let metadata = serde_json::json!({
+            "base_ms": base_ms,
+            "jitter_ms": jitter_ms,
+            "tag_overrides": tag_overrides,
+        });
+        let mut audit_log = create_audit_log(
+            AdminActionType::ConfigLatencyUpdated,
+            format!("Latency profile updated: base_ms={}, jitter_ms={}", base_ms, jitter_ms),
+            None,
+            true,
+            None,
+            Some(metadata),
+        );
+
+        // Extract user context from headers
+        if let Some(user_ctx) = extract_user_context(&headers).or_else(get_default_user_context) {
+            audit_log.user_id = Some(user_ctx.user_id);
+            audit_log.username = Some(user_ctx.username);
+        }
+
+        // Extract IP address from headers
+        if let Some(ip) = headers
+            .get("x-forwarded-for")
+            .or_else(|| headers.get("x-real-ip"))
+            .and_then(|h| h.to_str().ok())
+        {
+            audit_log.ip_address = Some(ip.to_string());
+        }
+
+        // Extract user agent
+        if let Some(ua) = headers.get("user-agent").and_then(|h| h.to_str().ok()) {
+            audit_log.user_agent = Some(ua.to_string());
+        }
+
+        audit_store.record(audit_log).await;
+    }
 
     tracing::info!("Updated latency profile: base_ms={}, jitter_ms={}", base_ms, jitter_ms);
 
@@ -1303,6 +1497,7 @@ pub async fn clear_logs(State(state): State<AdminState>) -> Json<ApiResponse<Str
 
 /// Restart servers
 pub async fn restart_servers(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
+    use crate::audit::{create_audit_log, get_global_audit_store, AdminActionType};
     // Check if restart is already in progress
     let current_status = state.get_restart_status().await;
     if current_status.in_progress {
@@ -1310,10 +1505,27 @@ pub async fn restart_servers(State(state): State<AdminState>) -> Json<ApiRespons
     }
 
     // Initiate restart status
-    if let Err(e) = state
+    let restart_result = state
         .initiate_restart("Manual restart requested via admin UI".to_string())
-        .await
-    {
+        .await;
+
+    let success = restart_result.is_ok();
+    let error_msg = restart_result.as_ref().err().map(|e| format!("{}", e));
+
+    // Record audit log
+    if let Some(audit_store) = get_global_audit_store() {
+        let audit_log = create_audit_log(
+            AdminActionType::ServerRestarted,
+            "Server restart initiated via admin UI".to_string(),
+            None,
+            success,
+            error_msg.clone(),
+            None,
+        );
+        audit_store.record(audit_log).await;
+    }
+
+    if let Err(e) = restart_result {
         return Json(ApiResponse::error(format!("Failed to initiate restart: {}", e)));
     }
 
@@ -1507,6 +1719,49 @@ pub async fn get_restart_status(
 ) -> Json<ApiResponse<RestartStatus>> {
     let status = state.get_restart_status().await;
     Json(ApiResponse::success(status))
+}
+
+/// Get audit logs
+pub async fn get_audit_logs(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<ApiResponse<Vec<crate::audit::AdminAuditLog>>> {
+    use crate::audit::{get_global_audit_store, AdminActionType};
+
+    let action_type_str = params.get("action_type");
+    let user_id = params.get("user_id").map(|s| s.as_str());
+    let limit = params.get("limit").and_then(|s| s.parse::<usize>().ok());
+    let offset = params.get("offset").and_then(|s| s.parse::<usize>().ok());
+
+    // Parse action type if provided
+    let action_type = action_type_str.and_then(|s| {
+        // Simple string matching - could be enhanced with proper parsing
+        match s.as_str() {
+            "config_latency_updated" => Some(AdminActionType::ConfigLatencyUpdated),
+            "config_faults_updated" => Some(AdminActionType::ConfigFaultsUpdated),
+            "server_restarted" => Some(AdminActionType::ServerRestarted),
+            "logs_cleared" => Some(AdminActionType::LogsCleared),
+            _ => None,
+        }
+    });
+
+    if let Some(audit_store) = get_global_audit_store() {
+        let logs = audit_store.get_logs(action_type, user_id, limit, offset).await;
+        Json(ApiResponse::success(logs))
+    } else {
+        Json(ApiResponse::error("Audit logging not initialized".to_string()))
+    }
+}
+
+/// Get audit log statistics
+pub async fn get_audit_stats() -> Json<ApiResponse<crate::audit::AuditLogStats>> {
+    use crate::audit::get_global_audit_store;
+
+    if let Some(audit_store) = get_global_audit_store() {
+        let stats = audit_store.get_stats().await;
+        Json(ApiResponse::success(stats))
+    } else {
+        Json(ApiResponse::error("Audit logging not initialized".to_string()))
+    }
 }
 
 /// Get server configuration
@@ -3578,6 +3833,474 @@ pub async fn open_workspace_from_directory(
     Json(ApiResponse::success("Workspace opened from directory".to_string()))
 }
 
+// Reality Slider API handlers
+
+/// Get current reality level
+pub async fn get_reality_level(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.reality_engine.read().await;
+    let level = engine.get_level().await;
+    let config = engine.get_config().await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "level": level.value(),
+        "level_name": level.name(),
+        "description": level.description(),
+        "chaos": {
+            "enabled": config.chaos.enabled,
+            "error_rate": config.chaos.error_rate,
+            "delay_rate": config.chaos.delay_rate,
+        },
+        "latency": {
+            "base_ms": config.latency.base_ms,
+            "jitter_ms": config.latency.jitter_ms,
+        },
+        "mockai": {
+            "enabled": config.mockai.enabled,
+        },
+    })))
+}
+
+/// Set reality level
+#[derive(Deserialize)]
+pub struct SetRealityLevelRequest {
+    level: u8,
+}
+
+pub async fn set_reality_level(
+    State(state): State<AdminState>,
+    Json(request): Json<SetRealityLevelRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let level = match mockforge_core::RealityLevel::from_value(request.level) {
+        Some(l) => l,
+        None => {
+            return Json(ApiResponse::error(format!(
+                "Invalid reality level: {}. Must be between 1 and 5.",
+                request.level
+            )));
+        }
+    };
+
+    // Update reality engine
+    let engine = state.reality_engine.write().await;
+    engine.set_level(level).await;
+    let config = engine.get_config().await;
+    drop(engine); // Release lock early
+
+    // Apply hot-reload updates to subsystems
+    let mut update_errors = Vec::new();
+
+    // Update chaos config if available
+    if let Some(ref chaos_api_state) = state.chaos_api_state {
+        let mut chaos_config = chaos_api_state.config.write().await;
+
+        // Convert reality config to chaos config using helper function
+        // This ensures proper mapping of all fields
+        use mockforge_chaos::config::{FaultInjectionConfig, LatencyConfig};
+
+        let latency_config = if config.latency.base_ms > 0 {
+            Some(LatencyConfig {
+                enabled: true,
+                fixed_delay_ms: Some(config.latency.base_ms),
+                random_delay_range_ms: config
+                    .latency
+                    .max_ms
+                    .map(|max| (config.latency.min_ms, max)),
+                jitter_percent: if config.latency.jitter_ms > 0 {
+                    (config.latency.jitter_ms as f64 / config.latency.base_ms as f64).min(1.0)
+                } else {
+                    0.0
+                },
+                probability: 1.0,
+            })
+        } else {
+            None
+        };
+
+        let fault_injection_config = if config.chaos.enabled {
+            Some(FaultInjectionConfig {
+                enabled: true,
+                http_errors: config.chaos.status_codes.clone(),
+                http_error_probability: config.chaos.error_rate,
+                connection_errors: false,
+                connection_error_probability: 0.0,
+                timeout_errors: config.chaos.inject_timeouts,
+                timeout_ms: config.chaos.timeout_ms,
+                timeout_probability: if config.chaos.inject_timeouts {
+                    config.chaos.error_rate
+                } else {
+                    0.0
+                },
+                partial_responses: false,
+                partial_response_probability: 0.0,
+                payload_corruption: false,
+                payload_corruption_probability: 0.0,
+                corruption_type: mockforge_chaos::config::CorruptionType::None,
+                error_pattern: Some(mockforge_chaos::config::ErrorPattern::Random {
+                    probability: config.chaos.error_rate,
+                }),
+                mockai_enabled: false,
+            })
+        } else {
+            None
+        };
+
+        // Update chaos config from converted config
+        chaos_config.enabled = config.chaos.enabled;
+        chaos_config.latency = latency_config;
+        chaos_config.fault_injection = fault_injection_config;
+
+        drop(chaos_config);
+        tracing::info!("✅ Updated chaos config for reality level {}", level.value());
+
+        // Update middleware injectors if middleware is accessible
+        // Note: The middleware reads from shared config, so injectors will be updated
+        // on next request, but we can also trigger an update if middleware is stored
+        // For now, the middleware reads config directly, so this is sufficient
+    }
+
+    // Update latency injector if available
+    if let Some(ref latency_injector) = state.latency_injector {
+        match mockforge_core::latency::LatencyInjector::update_profile_async(
+            latency_injector,
+            config.latency.clone(),
+        )
+        .await
+        {
+            Ok(_) => {
+                tracing::info!("✅ Updated latency injector for reality level {}", level.value());
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to update latency injector: {}", e);
+                tracing::warn!("{}", error_msg);
+                update_errors.push(error_msg);
+            }
+        }
+    }
+
+    // Update MockAI if available
+    if let Some(ref mockai) = state.mockai {
+        match mockforge_core::intelligent_behavior::MockAI::update_config_async(
+            mockai,
+            config.mockai.clone(),
+        )
+        .await
+        {
+            Ok(_) => {
+                tracing::info!("✅ Updated MockAI config for reality level {}", level.value());
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to update MockAI: {}", e);
+                tracing::warn!("{}", error_msg);
+                update_errors.push(error_msg);
+            }
+        }
+    }
+
+    // Build response
+    let mut response = serde_json::json!({
+        "level": level.value(),
+        "level_name": level.name(),
+        "description": level.description(),
+        "chaos": {
+            "enabled": config.chaos.enabled,
+            "error_rate": config.chaos.error_rate,
+            "delay_rate": config.chaos.delay_rate,
+        },
+        "latency": {
+            "base_ms": config.latency.base_ms,
+            "jitter_ms": config.latency.jitter_ms,
+        },
+        "mockai": {
+            "enabled": config.mockai.enabled,
+        },
+    });
+
+    // Add warnings if any updates failed
+    if !update_errors.is_empty() {
+        response["warnings"] = serde_json::json!(update_errors);
+        tracing::warn!(
+            "Reality level updated to {} but some subsystems failed to update: {:?}",
+            level.value(),
+            update_errors
+        );
+    } else {
+        tracing::info!(
+            "✅ Reality level successfully updated to {} (hot-reload applied)",
+            level.value()
+        );
+    }
+
+    Json(ApiResponse::success(response))
+}
+
+/// List all available reality presets
+pub async fn list_reality_presets(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<Vec<serde_json::Value>>> {
+    let persistence = &state.workspace_persistence;
+    match persistence.list_reality_presets().await {
+        Ok(preset_paths) => {
+            let presets: Vec<serde_json::Value> = preset_paths
+                .iter()
+                .map(|path| {
+                    serde_json::json!({
+                        "id": path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown"),
+                        "path": path.to_string_lossy(),
+                        "name": path.file_stem().and_then(|n| n.to_str()).unwrap_or("unknown"),
+                    })
+                })
+                .collect();
+            Json(ApiResponse::success(presets))
+        }
+        Err(e) => Json(ApiResponse::error(format!("Failed to list presets: {}", e))),
+    }
+}
+
+/// Import a reality preset
+#[derive(Deserialize)]
+pub struct ImportPresetRequest {
+    path: String,
+}
+
+pub async fn import_reality_preset(
+    State(state): State<AdminState>,
+    Json(request): Json<ImportPresetRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let persistence = &state.workspace_persistence;
+    let path = std::path::Path::new(&request.path);
+
+    match persistence.import_reality_preset(path).await {
+        Ok(preset) => {
+            // Apply the preset to the reality engine
+            let engine = state.reality_engine.write().await;
+            engine.apply_preset(preset.clone()).await;
+
+            Json(ApiResponse::success(serde_json::json!({
+                "name": preset.name,
+                "description": preset.description,
+                "level": preset.config.level.value(),
+                "level_name": preset.config.level.name(),
+            })))
+        }
+        Err(e) => Json(ApiResponse::error(format!("Failed to import preset: {}", e))),
+    }
+}
+
+/// Export current reality configuration as a preset
+#[derive(Deserialize)]
+pub struct ExportPresetRequest {
+    name: String,
+    description: Option<String>,
+}
+
+pub async fn export_reality_preset(
+    State(state): State<AdminState>,
+    Json(request): Json<ExportPresetRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.reality_engine.read().await;
+    let preset = engine.create_preset(request.name.clone(), request.description.clone()).await;
+
+    let persistence = &state.workspace_persistence;
+    let presets_dir = persistence.presets_dir();
+    let filename = format!("{}.json", request.name.replace(' ', "_").to_lowercase());
+    let output_path = presets_dir.join(&filename);
+
+    match persistence.export_reality_preset(&preset, &output_path).await {
+        Ok(_) => Json(ApiResponse::success(serde_json::json!({
+            "name": preset.name,
+            "description": preset.description,
+            "path": output_path.to_string_lossy(),
+            "level": preset.config.level.value(),
+        }))),
+        Err(e) => Json(ApiResponse::error(format!("Failed to export preset: {}", e))),
+    }
+}
+
+// Reality Continuum API handlers
+
+/// Get current blend ratio for a path
+pub async fn get_continuum_ratio(
+    State(state): State<AdminState>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let path = params.get("path").cloned().unwrap_or_else(|| "/".to_string());
+    let engine = state.continuum_engine.read().await;
+    let ratio = engine.get_blend_ratio(&path).await;
+    let config = engine.get_config().await;
+    let enabled = engine.is_enabled().await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "path": path,
+        "blend_ratio": ratio,
+        "enabled": enabled,
+        "transition_mode": format!("{:?}", config.transition_mode),
+        "merge_strategy": format!("{:?}", config.merge_strategy),
+        "default_ratio": config.default_ratio,
+    })))
+}
+
+/// Set blend ratio for a path
+#[derive(Deserialize)]
+pub struct SetContinuumRatioRequest {
+    path: String,
+    ratio: f64,
+}
+
+pub async fn set_continuum_ratio(
+    State(state): State<AdminState>,
+    Json(request): Json<SetContinuumRatioRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let ratio = request.ratio.clamp(0.0, 1.0);
+    let engine = state.continuum_engine.read().await;
+    engine.set_blend_ratio(&request.path, ratio).await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "path": request.path,
+        "blend_ratio": ratio,
+    })))
+}
+
+/// Get time schedule
+pub async fn get_continuum_schedule(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.continuum_engine.read().await;
+    let schedule = engine.get_time_schedule().await;
+
+    match schedule {
+        Some(s) => Json(ApiResponse::success(serde_json::json!({
+            "start_time": s.start_time.to_rfc3339(),
+            "end_time": s.end_time.to_rfc3339(),
+            "start_ratio": s.start_ratio,
+            "end_ratio": s.end_ratio,
+            "curve": format!("{:?}", s.curve),
+            "duration_days": s.duration().num_days(),
+        }))),
+        None => Json(ApiResponse::success(serde_json::json!(null))),
+    }
+}
+
+/// Update time schedule
+#[derive(Deserialize)]
+pub struct SetContinuumScheduleRequest {
+    start_time: String,
+    end_time: String,
+    start_ratio: f64,
+    end_ratio: f64,
+    curve: Option<String>,
+}
+
+pub async fn set_continuum_schedule(
+    State(state): State<AdminState>,
+    Json(request): Json<SetContinuumScheduleRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let start_time = chrono::DateTime::parse_from_rfc3339(&request.start_time)
+        .map_err(|e| format!("Invalid start_time: {}", e))
+        .map(|dt| dt.with_timezone(&chrono::Utc));
+
+    let end_time = chrono::DateTime::parse_from_rfc3339(&request.end_time)
+        .map_err(|e| format!("Invalid end_time: {}", e))
+        .map(|dt| dt.with_timezone(&chrono::Utc));
+
+    match (start_time, end_time) {
+        (Ok(start), Ok(end)) => {
+            let curve = request
+                .curve
+                .as_deref()
+                .map(|c| match c {
+                    "linear" => mockforge_core::TransitionCurve::Linear,
+                    "exponential" => mockforge_core::TransitionCurve::Exponential,
+                    "sigmoid" => mockforge_core::TransitionCurve::Sigmoid,
+                    _ => mockforge_core::TransitionCurve::Linear,
+                })
+                .unwrap_or(mockforge_core::TransitionCurve::Linear);
+
+            let schedule = mockforge_core::TimeSchedule::with_curve(
+                start,
+                end,
+                request.start_ratio.clamp(0.0, 1.0),
+                request.end_ratio.clamp(0.0, 1.0),
+                curve,
+            );
+
+            let engine = state.continuum_engine.read().await;
+            engine.set_time_schedule(schedule.clone()).await;
+
+            Json(ApiResponse::success(serde_json::json!({
+                "start_time": schedule.start_time.to_rfc3339(),
+                "end_time": schedule.end_time.to_rfc3339(),
+                "start_ratio": schedule.start_ratio,
+                "end_ratio": schedule.end_ratio,
+                "curve": format!("{:?}", schedule.curve),
+            })))
+        }
+        (Err(e), _) | (_, Err(e)) => Json(ApiResponse::error(e)),
+    }
+}
+
+/// Manually advance blend ratio
+#[derive(Deserialize)]
+pub struct AdvanceContinuumRatioRequest {
+    increment: Option<f64>,
+}
+
+pub async fn advance_continuum_ratio(
+    State(state): State<AdminState>,
+    Json(request): Json<AdvanceContinuumRatioRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let increment = request.increment.unwrap_or(0.1);
+    let engine = state.continuum_engine.read().await;
+    engine.advance_ratio(increment).await;
+    let config = engine.get_config().await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "default_ratio": config.default_ratio,
+        "increment": increment,
+    })))
+}
+
+/// Enable or disable continuum
+#[derive(Deserialize)]
+pub struct SetContinuumEnabledRequest {
+    enabled: bool,
+}
+
+pub async fn set_continuum_enabled(
+    State(state): State<AdminState>,
+    Json(request): Json<SetContinuumEnabledRequest>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.continuum_engine.read().await;
+    engine.set_enabled(request.enabled).await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "enabled": request.enabled,
+    })))
+}
+
+/// Get all manual overrides
+pub async fn get_continuum_overrides(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.continuum_engine.read().await;
+    let overrides = engine.get_manual_overrides().await;
+
+    Json(ApiResponse::success(serde_json::json!(overrides)))
+}
+
+/// Clear all manual overrides
+pub async fn clear_continuum_overrides(
+    State(state): State<AdminState>,
+) -> Json<ApiResponse<serde_json::Value>> {
+    let engine = state.continuum_engine.read().await;
+    engine.clear_manual_overrides().await;
+
+    Json(ApiResponse::success(serde_json::json!({
+        "message": "All manual overrides cleared",
+    })))
+}
+
 pub async fn get_workspace(
     State(_state): State<AdminState>,
     axum::extract::Path(workspace_id): axum::extract::Path<String>,
@@ -3935,7 +4658,19 @@ mod tests {
     #[test]
     fn test_admin_state_new() {
         let http_addr: std::net::SocketAddr = "127.0.0.1:3000".parse().unwrap();
-        let state = AdminState::new(Some(http_addr), None, None, None, true, 8080);
+        let state = AdminState::new(
+            Some(http_addr),
+            None,
+            None,
+            None,
+            true,
+            8080,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
 
         assert_eq!(state.http_server_addr, Some(http_addr));
         assert!(state.api_enabled);

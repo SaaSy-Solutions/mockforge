@@ -84,8 +84,8 @@ impl ProxyHandler {
             return Err(Error::generic("Proxy is not enabled"));
         }
 
-        // Check if this request should be proxied
-        if !self.config.should_proxy(method, uri.path()) {
+        // Check if this request should be proxied (with conditional evaluation)
+        if !self.config.should_proxy_with_condition(method, uri, headers, body) {
             return Err(Error::generic("Request should not be proxied"));
         }
 

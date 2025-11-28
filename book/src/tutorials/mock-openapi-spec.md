@@ -334,9 +334,131 @@ MOCKFORGE_REQUEST_VALIDATION=warn mockforge serve --spec petstore-api.json
 - Add route overrides in your config file (see Advanced section above)
 - Or use [Custom Responses Guide](../user-guide/http-mocking/custom-responses.md)
 
+## Complete Workflow Example
+
+Here's a complete workflow for generating mocks from an OpenAPI spec and using them in development:
+
+### 1. Start with OpenAPI Spec
+
+```bash
+# Your API team provides this spec
+cat petstore-api.json
+```
+
+### 2. Generate Mock Server
+
+```bash
+# Start MockForge with the spec
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
+  mockforge serve --spec petstore-api.json --http-port 3000 --admin
+```
+
+### 3. Test Generated Endpoints
+
+```bash
+# All endpoints from the spec are now available
+curl http://localhost:3000/pets
+curl http://localhost:3000/pets/123
+curl -X POST http://localhost:3000/pets -d '{"name": "Fluffy", "species": "cat"}'
+```
+
+### 4. Monitor in Admin UI
+
+Visit http://localhost:9080 to see:
+- All requests in real-time
+- Request/response bodies
+- Response times
+- Error rates
+
+### 5. Use in Frontend Development
+
+Point your frontend app to the mock server:
+
+```javascript
+// In your React/Vue/Angular app
+const API_URL = 'http://localhost:3000';
+
+fetch(`${API_URL}/pets`)
+  .then(res => res.json())
+  .then(data => console.log('Pets:', data));
+```
+
+### 6. Iterate as API Evolves
+
+When the API spec changes:
+
+```bash
+# 1. Update the OpenAPI spec file
+vim petstore-api.json
+
+# 2. Restart MockForge (it auto-reloads from spec)
+# Or use watch mode if available
+
+# 3. Regenerate client code (if using code generation)
+mockforge client generate --spec petstore-api.json --framework react
+```
+
+## Best Practices
+
+### Organization
+
+1. **Keep specs in version control**
+   ```bash
+   git add petstore-api.json
+   git commit -m "Add Pet Store API spec v1.2"
+   ```
+
+2. **Use environment-specific configs**
+   ```yaml
+   # mockforge.dev.yaml
+   http:
+     port: 3000
+     response_template_expand: true
+     cors:
+       enabled: true
+   ```
+
+3. **Document any custom overrides**
+   ```yaml
+   # Custom route overrides
+   http:
+     routes:
+       - path: /pets/{petId}
+         method: GET
+         response:
+           # Override default response
+           status: 200
+           body: |
+             {
+               "id": "{{request.path.petId}}",
+               "name": "Custom Pet",
+               "species": "custom"
+             }
+   ```
+
+### Testing
+
+1. **Use deterministic data for tests**
+   ```yaml
+   # Disable template expansion for consistent test data
+   response:
+     template_expand: false
+   ```
+
+2. **Enable validation for contract testing**
+   ```bash
+   mockforge serve --spec api.json --validation enforce
+   ```
+
+3. **Record test scenarios**
+   - Use Admin UI to record request/response pairs
+   - Export as fixtures for automated tests
+
 ## What's Next?
 
 - [Dynamic Data Generation](../user-guide/http-mocking/dynamic-data.md) - Add faker functions and advanced templates
+- [React Workflow](react-workflow.md) - Complete React + MockForge setup
+- [Vue Workflow](vue-workflow.md) - Complete Vue + MockForge setup
 - [Admin UI Walkthrough](admin-ui-walkthrough.md) - Visualize and manage your mock server
 - [Add a Custom Plugin](add-custom-plugin.md) - Extend MockForge with custom functionality
 - [Team Collaboration](../user-guide/sync.md) - Share mocks with your team via Git

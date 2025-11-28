@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>10.0</LangVersion>
+    <Version>0.1.0</Version>
+    <Authors>MockForge Contributors</Authors>
+    <Company>MockForge</Company>
+    <Description>MockForge SDK for .NET - Embed mock servers in your tests</Description>
+    <PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/SaaSy-Solutions/mockforge</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SaaSy-Solutions/mockforge</RepositoryUrl>
+    <PackageTags>mock;testing;api;http;server;stub</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="7.0.3" />
+  </ItemGroup>
+
+</Project>

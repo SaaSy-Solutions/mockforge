@@ -179,20 +179,32 @@ impl PerformanceMetrics {
     }
 }
 
-/// Performance summary snapshot
+/// Performance summary snapshot with aggregated metrics
 #[derive(Debug, Clone)]
 pub struct PerformanceSummary {
+    /// Total number of requests processed
     pub total_requests: u64,
+    /// Current number of active concurrent requests
     pub active_requests: usize,
+    /// Average request processing duration
     pub avg_duration: Option<Duration>,
+    /// 50th percentile (median) request duration
     pub p50_duration: Option<Duration>,
+    /// 95th percentile request duration
     pub p95_duration: Option<Duration>,
+    /// 99th percentile request duration
     pub p99_duration: Option<Duration>,
+    /// Cache hit rate as a ratio (0.0 to 1.0)
     pub cache_hit_rate: f64,
+    /// Total number of cache hits
     pub cache_hits: u64,
+    /// Total number of cache misses
     pub cache_misses: u64,
+    /// Current memory usage in bytes
     pub memory_usage_bytes: u64,
+    /// Total number of errors encountered
     pub error_count: u64,
+    /// Error rate as a ratio (0.0 to 1.0)
     pub error_rate: f64,
 }
 

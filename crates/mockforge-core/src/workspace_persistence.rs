@@ -195,6 +195,14 @@ pub struct WorkspaceConfig {
     pub base_url: Option<String>,
     /// Environment variables
     pub variables: HashMap<String, String>,
+    /// Reality level for this workspace (1-5)
+    /// Controls the realism of mock behavior (chaos, latency, MockAI)
+    #[serde(default)]
+    pub reality_level: Option<crate::RealityLevel>,
+    /// AI mode for this workspace
+    /// Controls how AI-generated artifacts are used at runtime
+    #[serde(default)]
+    pub ai_mode: Option<crate::ai_studio::config::AiMode>,
 }
 
 /// Authentication configuration for export
@@ -373,8 +381,11 @@ impl WorkspacePersistence {
             .await
             .map_err(|e| Error::generic(format!("Failed to read workspace file: {}", e)))?;
 
-        let workspace: Workspace = serde_yaml::from_str(&content)
+        let mut workspace: Workspace = serde_yaml::from_str(&content)
             .map_err(|e| Error::generic(format!("Failed to deserialize workspace: {}", e)))?;
+
+        // Initialize default mock environments if they don't exist (for backward compatibility)
+        workspace.initialize_default_mock_environments();
 
         Ok(workspace)
     }
@@ -433,7 +444,9 @@ impl WorkspacePersistence {
         // Load individual workspaces
         for workspace_meta in &serializable.workspaces {
             match self.load_workspace(&workspace_meta.id).await {
-                Ok(workspace) => {
+                Ok(mut workspace) => {
+                    // Ensure mock environments are initialized (for backward compatibility)
+                    workspace.initialize_default_mock_environments();
                     registry.add_workspace(workspace)?;
                 }
                 Err(e) => {
@@ -1230,6 +1243,8 @@ impl WorkspacePersistence {
             auth: workspace.config.auth.as_ref().and_then(AuthConfig::from_config_auth),
             base_url: workspace.config.base_url.clone(),
             variables: workspace.config.global_environment.variables.clone(),
+            reality_level: workspace.config.reality_level,
+            ai_mode: None, // Default to None for exported workspaces
         };
 
         Ok(WorkspaceExport {
@@ -1780,6 +1795,106 @@ impl WorkspacePersistence {
             .map_err(|e| Error::generic(format!("Failed to write metadata file: {}", e)))?;
 
         Ok(())
+    }
+
+    /// Export a reality preset to a file
+    ///
+    /// Exports a reality preset (JSON or YAML format) to the specified path.
+    /// The preset can be imported later to restore the reality configuration.
+    pub async fn export_reality_preset(
+        &self,
+        preset: &crate::RealityPreset,
+        output_path: &Path,
+    ) -> Result<()> {
+        self.ensure_workspace_dir().await?;
+
+        // Determine format from file extension
+        let content = if output_path.extension().and_then(|s| s.to_str()) == Some("yaml")
+            || output_path.extension().and_then(|s| s.to_str()) == Some("yml")
+        {
+            serde_yaml::to_string(preset)
+                .map_err(|e| Error::generic(format!("Failed to serialize preset to YAML: {}", e)))?
+        } else {
+            serde_json::to_string_pretty(preset)
+                .map_err(|e| Error::generic(format!("Failed to serialize preset to JSON: {}", e)))?
+        };
+
+        // Ensure parent directory exists
+        if let Some(parent) = output_path.parent() {
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|e| Error::generic(format!("Failed to create preset directory: {}", e)))?;
+        }
+
+        fs::write(output_path, content)
+            .await
+            .map_err(|e| Error::generic(format!("Failed to write preset file: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Import a reality preset from a file
+    ///
+    /// Loads a reality preset from a JSON or YAML file and returns it.
+    /// The preset can then be applied to a workspace or the global configuration.
+    pub async fn import_reality_preset(&self, input_path: &Path) -> Result<crate::RealityPreset> {
+        let content = fs::read_to_string(input_path)
+            .await
+            .map_err(|e| Error::generic(format!("Failed to read preset file: {}", e)))?;
+
+        // Determine format from file extension
+        let preset = if input_path
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|ext| ext == "yaml" || ext == "yml")
+            .unwrap_or(false)
+        {
+            serde_yaml::from_str(&content).map_err(|e| {
+                Error::generic(format!("Failed to deserialize preset from YAML: {}", e))
+            })?
+        } else {
+            serde_json::from_str(&content).map_err(|e| {
+                Error::generic(format!("Failed to deserialize preset from JSON: {}", e))
+            })?
+        };
+
+        Ok(preset)
+    }
+
+    /// Get the presets directory path
+    pub fn presets_dir(&self) -> PathBuf {
+        self.base_dir.join("presets")
+    }
+
+    /// List all available reality presets
+    ///
+    /// Scans the presets directory and returns a list of all preset files found.
+    pub async fn list_reality_presets(&self) -> Result<Vec<PathBuf>> {
+        let presets_dir = self.presets_dir();
+        if !presets_dir.exists() {
+            return Ok(vec![]);
+        }
+
+        let mut presets = Vec::new();
+        let mut entries = fs::read_dir(&presets_dir)
+            .await
+            .map_err(|e| Error::generic(format!("Failed to read presets directory: {}", e)))?;
+
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?
+        {
+            let path = entry.path();
+            if path.is_file() {
+                let ext = path.extension().and_then(|s| s.to_str());
+                if ext == Some("json") || ext == Some("yaml") || ext == Some("yml") {
+                    presets.push(path);
+                }
+            }
+        }
+
+        Ok(presets)
     }
 
     /// Sanitize filename for filesystem compatibility

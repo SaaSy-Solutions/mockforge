@@ -1,3 +1,8 @@
+//! Build script for gRPC code generation
+//!
+//! This build script automatically discovers and compiles Protocol Buffer (.proto) files
+//! in the proto directory, generating Rust code using tonic and prost.
+
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -30,7 +35,8 @@ fn main() {
     // Configure tonic build
     let config = tonic_prost_build::configure()
         .out_dir(&out_dir)
-        .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+        .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
+        .type_attribute(".", "#[allow(missing_docs)]");
 
     // Add include paths for all proto files
     let include_paths: Vec<String> = proto_files

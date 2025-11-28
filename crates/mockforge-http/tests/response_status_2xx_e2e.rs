@@ -1,3 +1,8 @@
+//! End-to-end tests for 2xx response status codes.
+//!
+//! These tests verify that successful requests return proper 2xx status codes
+//! (200, 201, 202, etc.) based on the OpenAPI specification.
+
 use axum::Router;
 use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_http::build_router;

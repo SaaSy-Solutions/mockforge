@@ -1,0 +1,46 @@
+# MockForge Generation Configuration
+# This file configures how MockForge generates mock servers from OpenAPI specifications
+
+# Input specification configuration
+[input]
+# Path to OpenAPI specification file (JSON or YAML)
+spec = "openapi.json"
+
+# Additional input files (optional)
+# additional = ["schemas/openapi.json"]
+
+# Output configuration
+[output]
+# Output directory path
+path = "./generated"
+
+# Output file name (without extension)
+# filename = "mock_server"
+
+# Clean output directory before generation
+clean = false
+
+# Plugins to use during generation
+[plugins]
+# Example: Simple plugin
+# "oas-types" = "oas-types"
+
+# Example: Advanced plugin with options
+# "json" = { package = "json-schema-validator", options = { strict = true } }
+
+# Generation options
+[options]
+# Client library to generate for (reqwest, ureq, surf)
+client = "reqwest"
+
+# Generation mode (operations, tags, paths)
+mode = "tags"
+
+# Include validation in generated code
+include-validation = true
+
+# Include examples in responses
+include-examples = true
+
+# Target runtime (tokio, async-std, sync)
+runtime = "tokio"

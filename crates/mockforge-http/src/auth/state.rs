@@ -21,8 +21,11 @@ pub struct CachedIntrospection {
 /// Authentication middleware state
 #[derive(Clone)]
 pub struct AuthState {
+    /// Authentication configuration
     pub config: AuthConfig,
+    /// Optional OpenAPI specification for route security validation
     pub spec: Option<Arc<OpenApiSpec>>,
+    /// Optional OAuth2 client for token validation
     pub oauth2_client: Option<oauth2::basic::BasicClient>,
     /// Cache for OAuth2 token introspection results
     pub introspection_cache: Arc<RwLock<HashMap<String, CachedIntrospection>>>,
