@@ -146,6 +146,17 @@ Comprehensive performance monitoring and analysis:
 
 ## Advanced Features
 
+The Admin UI provides access to many advanced MockForge features:
+
+- **Chaos Lab**: Interactive network condition simulation with real-time latency visualization
+- **Reality Slider**: Unified control for adjusting mock environment realism
+- **Scenario State Machine Editor**: Visual flow editor for creating state machines
+- **Time Travel Controls**: Virtual clock controls for temporal simulation
+- **Contract Diff Dashboard**: Visualize and analyze API contract mismatches
+- **Voice Interface**: Create APIs using natural language commands
+
+For detailed documentation on these features, see the [Advanced Features](advanced-features.md) section.
+
 ### Authentication & Authorization
 
 #### JWT-based Security

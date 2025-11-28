@@ -1,0 +1,99 @@
+[package]
+name = "mockforge-collab"
+version = "0.3.3"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
+description = "Cloud collaboration features for MockForge - team workspaces, real-time sync, and version control"
+include = ["src/**/*", "migrations/**/*", ".sqlx/**/*", ".cargo/**/*", "build.rs", "Cargo.toml", "README.md", "LICENSE-*"]
+
+[lints]
+workspace = true
+
+[dependencies]
+# Core dependencies
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-pipelines = { version = "0.3.3", path = "../mockforge-pipelines", optional = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# HTTP/web framework for collaboration API
+axum = { workspace = true, features = ["ws", "macros"] }
+tower = { workspace = true }
+tower-http = { workspace = true, features = ["cors", "trace"] }
+
+# WebSocket for real-time sync
+tokio-tungstenite = "0.24"
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Utility libraries
+uuid = { workspace = true, features = ["v4", "serde"] }
+chrono = { workspace = true, features = ["serde"] }
+url = { workspace = true }
+
+# Authentication & authorization
+jsonwebtoken = { workspace = true }
+argon2 = { workspace = true }
+blake3 = { workspace = true }
+
+# Database for persistence (SQLite for self-hosted, PostgreSQL support)
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "postgres", "chrono", "uuid", "json", "migrate"] }
+
+# Concurrency
+parking_lot = { workspace = true }
+dashmap = "6.1"
+
+# Conflict resolution
+similar = "2.6"
+
+# Hashing for state snapshots
+sha2 = "0.10"
+
+# Azure Storage support (optional)
+azure_storage_blobs = { version = "0.19", optional = true }
+azure_identity = { version = "0.20", optional = true }
+
+# Google Cloud Storage support (optional)
+# Updated to 1.4.0 to address security vulnerabilities in transitive dependencies
+google-cloud-storage = { version = "1.4", optional = true }
+
+# AWS S3 support (optional)
+aws-sdk-s3 = { version = "1", optional = true }
+aws-config = { version = "1", optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tempfile = "3.13"
+tower = { workspace = true, features = ["util"] }
+hyper = { workspace = true, features = ["client", "http1"] }
+axum-test = "16.0"
+
+[features]
+default = ["sqlite"]
+sqlite = []
+postgres = []
+cloud = []
+azure = ["azure_storage_blobs", "azure_identity"]
+gcs = ["google-cloud-storage"]
+s3 = ["aws-sdk-s3", "aws-config"]
+pipelines = ["mockforge-pipelines"]

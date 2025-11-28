@@ -1,0 +1,31 @@
+{
+  "name": "@mockforge/forgeconnect-extension",
+  "version": "0.1.0",
+  "description": "Browser extension for ForgeConnect - MockForge browser integration",
+  "scripts": {
+    "build": "npm run build:background && npm run build:content && npm run build:devtools && npm run build:popup",
+    "build:background": "esbuild src/background/service-worker.ts --bundle --outfile=dist/background/service-worker.js --format=esm --platform=browser --target=es2020",
+    "build:content": "esbuild src/content/content-script.ts --bundle --outfile=dist/content/content-script.js --format=iife --platform=browser --target=es2020",
+    "build:devtools": "npm run build:devtools:ts && npm run build:devtools:html",
+    "build:devtools:ts": "esbuild src/devtools/panel.tsx --bundle --outfile=dist/devtools/panel.js --format=iife --platform=browser --target=es2020 --jsx=automatic --loader:.tsx=tsx",
+    "build:devtools:html": "cp src/devtools/devtools.html dist/devtools/",
+    "build:popup": "npm run build:popup:ts && npm run build:popup:html",
+    "build:popup:ts": "esbuild src/popup/popup.ts --bundle --outfile=dist/popup/popup.js --format=iife --platform=browser --target=es2020",
+    "build:popup:html": "cp src/popup/popup.html dist/popup/",
+    "watch": "npm run build && chokidar 'src/**/*' -c 'npm run build'",
+    "package": "npm run build && cd dist && zip -r ../forgeconnect-extension.zip ."
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.251",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "chokidar-cli": "^3.0.0",
+    "esbuild": "^0.19.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@mockforge/forgeconnect": "file:../sdk/browser"
+  }
+}

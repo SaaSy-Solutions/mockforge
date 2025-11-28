@@ -29,14 +29,30 @@ cargo install mockforge-cli
 # Start all servers with default configuration
 mockforge serve
 
-# Start with custom ports
-mockforge serve --http-port 8080 --ws-port 8081 --grpc-port 9090
+# Start with custom ports and progress indicators
+mockforge serve --http-port 8080 --ws-port 8081 --grpc-port 9090 --progress
 
-# Start with OpenAPI spec
-mockforge serve --spec api.yaml
+# Start with OpenAPI spec and verbose logging
+mockforge serve --spec api.yaml --verbose
 
-# Start with admin UI and metrics
-mockforge serve --admin --metrics
+# Start with admin UI, metrics, and progress bar
+mockforge serve --admin --metrics --progress
+```
+
+### Generate Mock Servers
+
+```bash
+# Generate mock server from OpenAPI spec
+mockforge generate --spec api.yaml --output ./generated
+
+# Generate with progress bar and verbose output
+mockforge generate --spec api.json --output ./mocks --progress --verbose
+
+# Watch mode for development (auto-regenerate on file changes)
+mockforge generate --spec api.yaml --watch --progress
+
+# Dry run to validate configuration
+mockforge generate --config mockforge.toml --dry-run
 ```
 
 ### Generate Test Data
@@ -56,6 +72,44 @@ mockforge data schema my-schema.json --rows 50 --output data.json
 mockforge bench --spec api.yaml --target https://api.example.com --vus 50 --duration 30s
 ```
 
+## Enhanced Features
+
+### Progress Indicators & Feedback
+
+MockForge CLI provides comprehensive progress tracking and user feedback:
+
+- **Progress Bars**: Visual progress indicators for long-running operations
+- **Spinners**: Animated spinners for indeterminate operations
+- **Step Indicators**: Clear step-by-step progress for multi-step processes
+- **Verbose Logging**: Detailed output with `--verbose` flag
+- **Error Handling**: Structured error messages with helpful suggestions
+
+### Watch Mode
+
+Development-friendly watch mode automatically regenerates mock servers when files change:
+
+```bash
+# Watch OpenAPI spec for changes
+mockforge generate --spec api.yaml --watch --progress
+
+# Custom debounce time (default: 500ms)
+mockforge generate --spec api.yaml --watch --watch-debounce 1000
+```
+
+### Exit Codes
+
+Consistent exit codes for programmatic integration:
+
+- `0`: Success
+- `1`: General error
+- `2`: Invalid arguments
+- `3`: File not found
+- `4`: Permission denied
+- `5`: Network error
+- `6`: Configuration error
+- `7`: Generation error
+- `8`: Server error
+
 ## Core Commands
 
 ### Server Management (`serve`)
@@ -73,6 +127,7 @@ mockforge serve [OPTIONS]
 - **Observability**: `--metrics`, `--tracing`, `--recorder`
 - **Chaos Engineering**: `--chaos`, `--traffic-shaping`
 - **AI Features**: `--ai-enabled`, `--rag-provider`
+- **Progress & Feedback**: `--progress`, `--verbose`, `--dry-run`
 
 #### Examples
 
@@ -80,7 +135,7 @@ mockforge serve [OPTIONS]
 # Basic HTTP mock server
 mockforge serve --http-port 3000
 
-# Full-stack with all protocols
+# Full-stack with all protocols and progress indicators
 mockforge serve \
   --http-port 3000 \
   --ws-port 3001 \

@@ -1,3 +1,8 @@
+//! Tests for UUID validation and generation.
+//!
+//! These tests verify that UUID validation patterns correctly identify
+//! valid and invalid UUID formats across different versions.
+
 use regex::Regex;
 use serde_json::json;
 

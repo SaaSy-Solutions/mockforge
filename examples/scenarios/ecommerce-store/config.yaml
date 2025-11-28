@@ -1,0 +1,19 @@
+# E-commerce Store MockForge Configuration
+
+http:
+  port: 3000
+  host: "0.0.0.0"
+  openapi_spec: "openapi.json"
+  cors_enabled: true
+
+websocket:
+  port: 3001
+  host: "0.0.0.0"
+  enabled: true
+
+admin:
+  enabled: true
+  port: 3002
+
+logging:
+  level: "info"

@@ -1,6 +1,10 @@
 use crate::faker::EnhancedFaker;
-use mockforge_core::templating::{register_faker_provider, FakerProvider};
-use std::sync::Arc;
+// NOTE: mockforge_core dependency removed to break circular dependency
+// The provider registration functionality has been moved to a higher-level crate
+
+// NOTE: FakerProvider trait and registration removed to break circular dependency
+// This functionality should be implemented in a higher-level crate that depends on both
+// mockforge-core and mockforge-data
 
 struct DataFakerProvider(std::sync::Mutex<EnhancedFaker>);
 
@@ -10,6 +14,8 @@ impl DataFakerProvider {
     }
 }
 
+// NOTE: FakerProvider implementation removed - see comment above
+/*
 impl FakerProvider for DataFakerProvider {
     fn uuid(&self) -> String {
         self.0.lock().unwrap().uuid()
@@ -48,11 +54,14 @@ impl FakerProvider for DataFakerProvider {
         self.0.lock().unwrap().paragraph()
     }
 }
+*/
 
 /// Register the mockforge-data backed faker provider with core templating.
+/// NOTE: Disabled to break circular dependency
 pub fn register_core_faker_provider() {
-    let provider: Arc<dyn FakerProvider + Send + Sync> = Arc::new(DataFakerProvider::new());
-    register_faker_provider(provider);
+    // Disabled - functionality moved to higher-level crate
+    // let provider: Arc<dyn FakerProvider + Send + Sync> = Arc::new(DataFakerProvider::new());
+    // register_faker_provider(provider);
 }
 
 #[cfg(test)]
@@ -68,7 +77,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_uuid() {
         let provider = DataFakerProvider::new();
-        let uuid = provider.uuid();
+        let mut faker = provider.0.lock().unwrap();
+        let uuid = faker.uuid();
 
         assert_eq!(uuid.len(), 36);
         assert!(uuid.contains('-'));
@@ -77,7 +87,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_email() {
         let provider = DataFakerProvider::new();
-        let email = provider.email();
+        let mut faker = provider.0.lock().unwrap();
+        let email = faker.email();
 
         assert!(!email.is_empty());
         assert!(email.contains('@'));
@@ -86,7 +97,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_name() {
         let provider = DataFakerProvider::new();
-        let name = provider.name();
+        let mut faker = provider.0.lock().unwrap();
+        let name = faker.name();
 
         assert!(!name.is_empty());
     }
@@ -94,7 +106,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_address() {
         let provider = DataFakerProvider::new();
-        let address = provider.address();
+        let mut faker = provider.0.lock().unwrap();
+        let address = faker.address();
 
         assert!(!address.is_empty());
     }
@@ -102,7 +115,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_phone() {
         let provider = DataFakerProvider::new();
-        let phone = provider.phone();
+        let mut faker = provider.0.lock().unwrap();
+        let phone = faker.phone();
 
         assert!(!phone.is_empty());
     }
@@ -110,7 +124,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_company() {
         let provider = DataFakerProvider::new();
-        let company = provider.company();
+        let mut faker = provider.0.lock().unwrap();
+        let company = faker.company();
 
         assert!(!company.is_empty());
     }
@@ -118,7 +133,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_url() {
         let provider = DataFakerProvider::new();
-        let url = provider.url();
+        let mut faker = provider.0.lock().unwrap();
+        let url = faker.url();
 
         assert!(url.starts_with("https://"));
     }
@@ -126,7 +142,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_ip() {
         let provider = DataFakerProvider::new();
-        let ip = provider.ip();
+        let mut faker = provider.0.lock().unwrap();
+        let ip = faker.ip_address();
 
         assert!(!ip.is_empty());
         assert!(ip.contains('.'));
@@ -135,7 +152,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_color() {
         let provider = DataFakerProvider::new();
-        let color = provider.color();
+        let mut faker = provider.0.lock().unwrap();
+        let color = faker.color();
 
         let valid_colors = [
             "red", "blue", "green", "yellow", "purple", "orange", "pink", "brown", "black", "white",
@@ -146,7 +164,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_word() {
         let provider = DataFakerProvider::new();
-        let word = provider.word();
+        let mut faker = provider.0.lock().unwrap();
+        let word = faker.word();
 
         assert!(!word.is_empty());
     }
@@ -154,7 +173,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_sentence() {
         let provider = DataFakerProvider::new();
-        let sentence = provider.sentence();
+        let mut faker = provider.0.lock().unwrap();
+        let sentence = faker.sentence();
 
         assert!(!sentence.is_empty());
     }
@@ -162,7 +182,8 @@ mod tests {
     #[test]
     fn test_data_faker_provider_paragraph() {
         let provider = DataFakerProvider::new();
-        let paragraph = provider.paragraph();
+        let mut faker = provider.0.lock().unwrap();
+        let paragraph = faker.paragraph();
 
         assert!(!paragraph.is_empty());
     }
@@ -171,13 +192,5 @@ mod tests {
     fn test_register_core_faker_provider() {
         // Just test that registration doesn't panic
         register_core_faker_provider();
-    }
-
-    #[test]
-    fn test_provider_trait_usage() {
-        let provider: Arc<dyn FakerProvider + Send + Sync> = Arc::new(DataFakerProvider::new());
-
-        let uuid = provider.uuid();
-        assert_eq!(uuid.len(), 36);
     }
 }

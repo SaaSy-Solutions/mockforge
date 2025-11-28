@@ -1,3 +1,8 @@
+//! End-to-end tests for WebSocket proxy functionality.
+//!
+//! These tests verify that WebSocket proxying correctly forwards messages
+//! between clients and upstream servers with proper rule matching.
+
 use futures_util::{SinkExt, StreamExt};
 use mockforge_core::ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
 use tokio_tungstenite::tungstenite::protocol::Message;

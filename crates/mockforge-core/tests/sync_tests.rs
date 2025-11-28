@@ -1,3 +1,10 @@
+//! Pillars: [Contracts]
+//!
+//! Tests for workspace synchronization functionality.
+//!
+//! These tests verify that workspace synchronization correctly detects changes,
+//! handles bidirectional sync, and maintains consistency across directories.
+
 use mockforge_core::sync_watcher::SyncWatcher;
 use mockforge_core::workspace::{SyncConfig, SyncDirection, SyncDirectoryStructure, Workspace};
 use std::fs;

@@ -1,0 +1,597 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>The Five Pillars - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/../../docs/PILLARS.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="the-five-pillars-of-mockforge"><a class="header" href="#the-five-pillars-of-mockforge">The Five Pillars of MockForge</a></h1>
+<p><strong>Version:</strong> 1.0.0
+<strong>Last Updated:</strong> 2025-01-27</p>
+<p>MockForge is built on five foundational pillars that define our product vision and guide every feature we build. These pillars ensure that MockForge delivers a cohesive, powerful mocking experience that scales from solo developers to enterprise teams.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Every feature in MockForge maps to one or more pillars. This structure helps us:</p>
+<ul>
+<li><strong>Communicate value</strong> clearly in changelogs, docs, and marketing</li>
+<li><strong>Prioritize development</strong> based on pillar investment</li>
+<li><strong>Maintain consistency</strong> across features and releases</li>
+<li><strong>Guide users</strong> to the right features for their needs</li>
+</ul>
+<hr />
+<h2 id="the-five-pillars"><a class="header" href="#the-five-pillars">The Five Pillars</a></h2>
+<h3 id="reality--everything-that-makes-mocks-feel-like-a-real-evolving-backend"><a class="header" href="#reality--everything-that-makes-mocks-feel-like-a-real-evolving-backend">[Reality] – Everything that makes mocks feel like a real, evolving backend</a></h3>
+<p><strong>Purpose:</strong> Make mocks indistinguishable from production backends through realistic behavior, state management, and dynamic data generation.</p>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>Realistic data generation with relationships and constraints</li>
+<li>Stateful behavior and persistence</li>
+<li>Network condition simulation (latency, packet loss, failures)</li>
+<li>Time-based mutations and temporal simulation</li>
+<li>Progressive data evolution and drift</li>
+<li>Multi-protocol support (HTTP, gRPC, WebSocket, Kafka, MQTT, AMQP, SMTP, FTP, TCP)</li>
+</ul>
+<p><strong>Example Features:</strong></p>
+<ul>
+<li><strong>Reality Continuum</strong>: Blend mock and real data with configurable reality levels</li>
+<li><strong>Reality Slider</strong>: Hot-reload reality level adjustments</li>
+<li><strong>Smart Personas</strong>: Consistent cross-endpoint data generation</li>
+<li><strong>Generative Schema Mode</strong>: Dynamic mock data generation without seed data</li>
+<li><strong>Chaos Lab</strong>: Interactive network condition simulation</li>
+<li><strong>Deceptive Deploy</strong>: Advanced testing scenarios with realistic failures</li>
+<li><strong>Virtual Backend Reality (VBR)</strong>: Virtual database layer with CRUD operations</li>
+<li><strong>Temporal Simulation</strong>: Time travel and time-based data mutations</li>
+<li><strong>Latency Injection</strong>: Configurable latency profiles and recording</li>
+<li><strong>Response Selection Modes</strong>: Sequential, random, and weighted response selection</li>
+<li><strong>Template Expansion</strong>: Dynamic data generation with faker functions</li>
+<li><strong>Capture Scrubbing</strong>: Deterministic replay with data sanitization</li>
+</ul>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Frontend teams need realistic data that evolves over time</li>
+<li>Testing resilience and failure scenarios</li>
+<li>Simulating production-like network conditions</li>
+<li>Creating believable mock backends before real APIs exist</li>
+</ul>
+<hr />
+<h3 id="contracts--schema-drift-validation-and-safety-nets"><a class="header" href="#contracts--schema-drift-validation-and-safety-nets">[Contracts] – Schema, drift, validation, and safety nets</a></h3>
+<p><strong>Purpose:</strong> Ensure API contracts are correct, validated, and stay in sync with real backends.</p>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>OpenAPI/GraphQL schema validation</li>
+<li>Request/response validation with detailed error reporting</li>
+<li>Contract drift detection and monitoring</li>
+<li>Automatic API sync and change detection</li>
+<li>Schema-driven mock generation</li>
+<li>Cross-endpoint validation and referential integrity</li>
+<li>Multi-protocol contract support (HTTP, gRPC, WebSocket, MQTT, Kafka)</li>
+<li>Contract fitness functions for quality enforcement</li>
+<li>Consumer impact analysis for downstream dependencies</li>
+</ul>
+<p><strong>Example Features:</strong></p>
+<ul>
+<li><strong>AI Contract Diff</strong>: Compare and visualize API contract changes</li>
+<li><strong>Automatic API Sync &amp; Change Detection</strong>: Periodic polling and sync for upstream API changes</li>
+<li><strong>Request/Response Validation</strong>: Built-in validation with configurable modes (disabled, warn, enforce)</li>
+<li><strong>OpenAPI Integration</strong>: Full OpenAPI v3 support with deep $ref resolution</li>
+<li><strong>Schema Validation</strong>: Composite schemas (oneOf/anyOf/allOf) support</li>
+<li><strong>Validation Modes</strong>: Runtime admin UI to view/toggle validation mode</li>
+<li><strong>Contract Testing</strong>: Verify API contracts match specifications</li>
+<li><strong>Protocol Contracts</strong>: gRPC, WebSocket, MQTT, and Kafka contract management</li>
+<li><strong>Fitness Functions</strong>: Custom tests to enforce contract quality and evolution rules</li>
+<li><strong>Consumer Impact Analysis</strong>: Map endpoints to SDK methods and consuming applications</li>
+<li><strong>Drift Budgets</strong>: Configurable thresholds for acceptable contract changes</li>
+</ul>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Catch breaking changes before they reach production</li>
+<li>Ensure mocks stay in sync with real APIs</li>
+<li>Validate API contracts during development</li>
+<li>Detect schema drift automatically</li>
+</ul>
+<hr />
+<h3 id="devx--sdks-generators-playgrounds-ergonomics"><a class="header" href="#devx--sdks-generators-playgrounds-ergonomics">[DevX] – SDKs, generators, playgrounds, ergonomics</a></h3>
+<p><strong>Purpose:</strong> Make MockForge effortless to use, integrate, and extend for developers.</p>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>Multi-language SDKs (Rust, Node.js, Python, Go, Java, .NET)</li>
+<li>Client code generation (React, Vue, Angular, Svelte)</li>
+<li>Interactive playgrounds and admin UI</li>
+<li>CLI tooling and configuration management</li>
+<li>Comprehensive documentation and examples</li>
+<li>Plugin system for extensibility</li>
+</ul>
+<p><strong>Example Features:</strong></p>
+<ul>
+<li><strong>ForgeConnect SDK</strong>: Complete SDK implementation with full feature set</li>
+<li><strong>GraphQL + REST Playground</strong>: Interactive playground with workspace filtering</li>
+<li><strong>Multi-Language SDKs</strong>: Native SDKs for 6 languages</li>
+<li><strong>Client Generators</strong>: React, Vue, Angular, Svelte client code generation</li>
+<li><strong>CLI Tool</strong>: Full-featured command-line interface</li>
+<li><strong>Admin UI</strong>: Modern React-based admin interface</li>
+<li><strong>Configuration Management</strong>: YAML/JSON config files with profiles</li>
+<li><strong>Browser Proxy Mode</strong>: Seamless integration with browser workflows</li>
+<li><strong>Git Sync</strong>: Workspace synchronization via Git</li>
+<li><strong>Plugin System</strong>: WASM-based plugin architecture</li>
+<li><strong>E2E Test Suite</strong>: Comprehensive end-to-end testing tools</li>
+<li><strong>Custom Routes</strong>: Flexible routing configuration</li>
+<li><strong>Voice + LLM Interface</strong>: Voice interface with Speech-to-Text support</li>
+<li><strong>WireMock-Inspired Features</strong>: Familiar patterns for WireMock users</li>
+</ul>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Embed mock servers directly in test suites</li>
+<li>Generate type-safe API clients automatically</li>
+<li>Integrate with existing development workflows</li>
+<li>Extend functionality with custom plugins</li>
+</ul>
+<hr />
+<h3 id="cloud--registry-orgs-governance-monetization-marketplace"><a class="header" href="#cloud--registry-orgs-governance-monetization-marketplace">[Cloud] – Registry, orgs, governance, monetization, marketplace</a></h3>
+<p><strong>Purpose:</strong> Enable team collaboration, sharing, and scaling from solo developers to enterprise organizations.</p>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>Organization and user management</li>
+<li>Scenario marketplace and sharing</li>
+<li>Registry server for mock distribution</li>
+<li>Cloud workspaces and synchronization</li>
+<li>Governance and access controls</li>
+<li>Monetization infrastructure</li>
+</ul>
+<p><strong>Example Features:</strong></p>
+<ul>
+<li><strong>Cloud Workspaces</strong>: Shared workspaces with team collaboration</li>
+<li><strong>Scenario Marketplace</strong>: Browse and share mock scenarios</li>
+<li><strong>Registry Server</strong>: Centralized mock distribution and discovery</li>
+<li><strong>Organization Management</strong>: Multi-tenant organization support</li>
+<li><strong>User Management</strong>: Team member and permission management</li>
+<li><strong>Cloud Sync</strong>: Synchronize workspaces across devices</li>
+<li><strong>Security Controls</strong>: Enterprise-grade access controls and audit trails</li>
+<li><strong>Cloud Monetization</strong>: Pricing models and subscription management</li>
+<li><strong>Enhanced Metrics</strong>: Team-level analytics and monitoring</li>
+</ul>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Share mock scenarios across teams</li>
+<li>Manage enterprise deployments</li>
+<li>Discover and reuse community scenarios</li>
+<li>Scale from individual to team usage</li>
+</ul>
+<hr />
+<h3 id="ai--llmvoice-flows-ai-diffassist-generative-behaviors"><a class="header" href="#ai--llmvoice-flows-ai-diffassist-generative-behaviors">[AI] – LLM/voice flows, AI diff/assist, generative behaviors</a></h3>
+<p><strong>Purpose:</strong> Leverage artificial intelligence to automate mock generation, enhance data realism, and assist developers.</p>
+<p><strong>Key Capabilities:</strong></p>
+<ul>
+<li>LLM-powered mock generation</li>
+<li>AI-driven data synthesis</li>
+<li>Voice interface for mock creation</li>
+<li>Intelligent contract analysis</li>
+<li>Generative data behaviors</li>
+<li>Natural language to mock conversion</li>
+</ul>
+<p><strong>Example Features:</strong></p>
+<ul>
+<li><strong>MockAI</strong>: Intelligent mock generation from natural language</li>
+<li><strong>AI Response Generation</strong>: LLM-powered realistic response generation</li>
+<li><strong>AI Contract Diff</strong>: AI-assisted contract comparison and analysis</li>
+<li><strong>Voice + LLM Interface</strong>: Voice-driven mock creation and management</li>
+<li><strong>Generative Schema Mode</strong>: AI-powered schema extrapolation</li>
+<li><strong>AI Event Streams</strong>: LLM-generated narrative-driven WebSocket events</li>
+<li><strong>Data Drift Simulation</strong>: AI-driven evolving mock data</li>
+<li><strong>Smart Data Generation</strong>: RAG-powered synthetic data with relationship awareness</li>
+</ul>
+<p><strong>Use Cases:</strong></p>
+<ul>
+<li>Generate mocks from natural language descriptions</li>
+<li>Create realistic data without manual configuration</li>
+<li>Analyze and compare API contracts intelligently</li>
+<li>Build mocks through voice commands</li>
+</ul>
+<hr />
+<h2 id="pillar-feature-matrix"><a class="header" href="#pillar-feature-matrix">Pillar Feature Matrix</a></h2>
+<p>This matrix shows how key MockForge features map to the five pillars:</p>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Reality</th><th>Contracts</th><th>DevX</th><th>Cloud</th><th>AI</th></tr></thead><tbody>
+<tr><td><strong>Reality Continuum</strong></td><td>✅</td><td></td><td></td><td></td><td></td></tr>
+<tr><td><strong>Reality Slider</strong></td><td>✅</td><td></td><td>✅</td><td></td><td></td></tr>
+<tr><td><strong>Smart Personas</strong></td><td>✅</td><td></td><td></td><td></td><td>✅</td></tr>
+<tr><td><strong>Generative Schema Mode</strong></td><td>✅</td><td>✅</td><td></td><td></td><td>✅</td></tr>
+<tr><td><strong>Chaos Lab</strong></td><td>✅</td><td></td><td>✅</td><td></td><td></td></tr>
+<tr><td><strong>Deceptive Deploy</strong></td><td>✅</td><td></td><td></td><td></td><td></td></tr>
+<tr><td><strong>VBR Engine</strong></td><td>✅</td><td>✅</td><td></td><td></td><td></td></tr>
+<tr><td><strong>Temporal Simulation</strong></td><td>✅</td><td></td><td>✅</td><td></td><td></td></tr>
+<tr><td><strong>AI Contract Diff</strong></td><td></td><td>✅</td><td>✅</td><td></td><td>✅</td></tr>
+<tr><td><strong>Automatic API Sync</strong></td><td></td><td>✅</td><td></td><td></td><td></td></tr>
+<tr><td><strong>Request/Response Validation</strong></td><td></td><td>✅</td><td>✅</td><td></td><td></td></tr>
+<tr><td><strong>ForgeConnect SDK</strong></td><td></td><td></td><td>✅</td><td></td><td></td></tr>
+<tr><td><strong>Client Generators</strong></td><td></td><td>✅</td><td>✅</td><td></td><td></td></tr>
+<tr><td><strong>GraphQL + REST Playground</strong></td><td></td><td></td><td>✅</td><td></td><td></td></tr>
+<tr><td><strong>Admin UI</strong></td><td></td><td></td><td>✅</td><td></td><td></td></tr>
+<tr><td><strong>Plugin System</strong></td><td></td><td></td><td>✅</td><td></td><td></td></tr>
+<tr><td><strong>Cloud Workspaces</strong></td><td></td><td></td><td></td><td>✅</td><td></td></tr>
+<tr><td><strong>Scenario Marketplace</strong></td><td></td><td></td><td></td><td>✅</td><td></td></tr>
+<tr><td><strong>Registry Server</strong></td><td></td><td></td><td></td><td>✅</td><td></td></tr>
+<tr><td><strong>Organization Management</strong></td><td></td><td></td><td></td><td>✅</td><td></td></tr>
+<tr><td><strong>MockAI</strong></td><td></td><td></td><td>✅</td><td></td><td>✅</td></tr>
+<tr><td><strong>Voice + LLM Interface</strong></td><td></td><td></td><td>✅</td><td></td><td>✅</td></tr>
+<tr><td><strong>AI Event Streams</strong></td><td>✅</td><td></td><td></td><td></td><td>✅</td></tr>
+<tr><td><strong>Data Drift Simulation</strong></td><td>✅</td><td></td><td></td><td></td><td>✅</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="using-pillars-in-changelog-entries"><a class="header" href="#using-pillars-in-changelog-entries">Using Pillars in Changelog Entries</a></h2>
+<p>When adding features to the changelog, tag them with one or more relevant pillars:</p>
+<pre><code class="language-markdown">- **[Reality] Smart Personas** with array generation and relationship inference
+
+- **[Contracts][DevX] AI Contract Diff** with interactive playground integration
+
+- **[Cloud] Organization management endpoints** for team collaboration
+</code></pre>
+<p><strong>Guidelines:</strong></p>
+<ul>
+<li>Use <code>[Pillar]</code> format with square brackets</li>
+<li>Multiple pillars: <code>[Pillar1][Pillar2]</code></li>
+<li>Tag the primary pillar first, then secondary pillars</li>
+<li>Every major feature should have at least one pillar tag</li>
+<li>Minor fixes and internal changes may not need tags</li>
+</ul>
+<hr />
+<h2 id="pillar-investment-by-release"><a class="header" href="#pillar-investment-by-release">Pillar Investment by Release</a></h2>
+<p>Understanding which pillars receive investment in each release helps users understand the product direction:</p>
+<ul>
+<li><strong>Reality-heavy releases</strong>: Focus on making mocks more realistic and production-like</li>
+<li><strong>Contracts-heavy releases</strong>: Emphasis on validation, sync, and contract safety</li>
+<li><strong>DevX-heavy releases</strong>: Improved ergonomics, SDKs, and developer experience</li>
+<li><strong>Cloud-heavy releases</strong>: Team features, collaboration, and enterprise capabilities</li>
+<li><strong>AI-heavy releases</strong>: Intelligent automation and AI-powered features</li>
+</ul>
+<hr />
+<h2 id="documentation-by-pillar"><a class="header" href="#documentation-by-pillar">Documentation by Pillar</a></h2>
+<p>This section organizes MockForge documentation by pillar to help you find relevant guides quickly.</p>
+<p><strong>New to MockForge?</strong> Start with <a href="JOURNEYS_BY_PILLAR.html">Journeys by Pillar</a> to choose the onboarding path that best fits your needs.</p>
+<h3 id="reality-documentation"><a class="header" href="#reality-documentation">[Reality] Documentation</a></h3>
+<p><strong>Getting Started:</strong></p>
+<ul>
+<li><a href="../book/src/getting-started/reality-first.html">Reality-First Onboarding</a> - Start here for reality features</li>
+</ul>
+<p><strong>Core Features:</strong></p>
+<ul>
+<li><a href="REALITY_CONTINUUM.html">Reality Continuum</a> - Blend mock and real data</li>
+<li><a href="PERSONAS.html">Smart Personas</a> - Consistent cross-endpoint data generation</li>
+<li><a href="REALITY_SLIDER.html">Reality Slider</a> - Hot-reload reality level adjustments</li>
+<li><a href="CHAOS_LAB.html">Chaos Lab</a> - Interactive network condition simulation</li>
+<li><a href="BEHAVIORAL_CLONING.html">Behavioral Cloning</a> - Record and replay realistic flows</li>
+<li><a href="REALITY_TRACE.html">Reality Trace</a> - Observability for mock behavior</li>
+</ul>
+<p><strong>Advanced:</strong></p>
+<ul>
+<li><a href="LIFECYCLES_AND_TIME.html">Lifecysles and Time</a> - Time-based mutations and temporal simulation</li>
+<li><a href="DECEPTIVE_DEPLOY.html">Deceptive Deploy</a> - Advanced testing scenarios</li>
+</ul>
+<h3 id="contracts-documentation"><a class="header" href="#contracts-documentation">[Contracts] Documentation</a></h3>
+<p><strong>Getting Started:</strong></p>
+<ul>
+<li><a href="../book/src/getting-started/contracts-first.html">Contracts-First Onboarding</a> - Start here for contract features</li>
+</ul>
+<p><strong>Core Features:</strong></p>
+<ul>
+<li><a href="DRIFT_BUDGETS.html">Drift Budgets</a> - Configurable thresholds for contract changes</li>
+<li><a href="PROTOCOL_CONTRACTS.html">Protocol Contracts</a> - Multi-protocol contract management</li>
+<li><a href="CONTRACT_FITNESS.html">Contract Fitness</a> - Quality enforcement functions</li>
+<li><a href="CONSUMER_IMPACT_ANALYSIS.html">Consumer Impact Analysis</a> - Map endpoints to consumers</li>
+</ul>
+<p><strong>Advanced:</strong></p>
+<ul>
+<li><a href="DRIFT_BUDGET_SETUP.html">Drift Budget Setup</a> - Configuration guide</li>
+</ul>
+<h3 id="devx-documentation"><a class="header" href="#devx-documentation">[DevX] Documentation</a></h3>
+<p><strong>Getting Started:</strong></p>
+<ul>
+<li><a href="../book/src/getting-started/devx-first.html">DevX-First Onboarding</a> - Start here for developer experience features</li>
+</ul>
+<p><strong>Core Features:</strong></p>
+<ul>
+<li><a href="ADMIN_UI_QUICKSTART.html">Admin UI Quickstart</a> - Interactive playground</li>
+<li><a href="PLUGIN_MARKETPLACE_PRODUCTION.html">Plugin Marketplace</a> - Extend MockForge</li>
+<li><a href="MULTI_FRAMEWORK_CLIENT_GENERATION.html">Multi-Framework Client Generation</a> - Generate clients</li>
+</ul>
+<p><strong>Advanced:</strong></p>
+<ul>
+<li><a href="DEVELOPER_WORKFLOW_INTEGRATION.html">Developer Workflow Integration</a> - Integrate into workflows</li>
+<li><a href="REALITY_TRACE.html">Reality Trace</a> - Developer debugging tools</li>
+</ul>
+<h3 id="cloud-documentation"><a class="header" href="#cloud-documentation">[Cloud] Documentation</a></h3>
+<p><strong>Getting Started:</strong></p>
+<ul>
+<li><a href="../book/src/getting-started/cloud-first.html">Cloud-First Onboarding</a> - Start here for cloud features</li>
+</ul>
+<p><strong>Core Features:</strong></p>
+<ul>
+<li><a href="CLOUD_ENVIRONMENTS.html">Cloud Environments</a> - Multi-tenant workspaces</li>
+<li><a href="SCENARIOS_MARKETPLACE.html">Scenario Marketplace</a> - Discover and share scenarios</li>
+<li><a href="MARKETPLACE_MONITORING.html">Marketplace Monitoring</a> - Analytics and dashboards</li>
+<li><a href="CLOUD_SYNC_IMPLEMENTATION_GUIDE.html">Cloud Sync Implementation</a> - Synchronization guide</li>
+<li><a href="RBAC_GUIDE.html">RBAC Guide</a> - Access control and governance</li>
+</ul>
+<p><strong>Advanced:</strong></p>
+<ul>
+<li><a href="ENTERPRISE_DEPLOYMENT_GUIDE.html">Enterprise Deployment Guide</a> - Enterprise features</li>
+<li><a href="CLOUD_SAAS_MVP_GUIDE.html">Cloud SaaS MVP Guide</a> - SaaS implementation</li>
+</ul>
+<h3 id="ai-documentation"><a class="header" href="#ai-documentation">[AI] Documentation</a></h3>
+<p><strong>Getting Started:</strong></p>
+<ul>
+<li><a href="../book/src/getting-started/ai-first.html">AI-First Onboarding</a> - Start here for AI features</li>
+</ul>
+<p><strong>Core Features:</strong></p>
+<ul>
+<li><a href="AI_STUDIO.html">AI Studio</a> - Unified AI interface</li>
+<li><a href="MOCKAI_USAGE.html">MockAI Usage</a> - Natural language mock generation</li>
+<li><a href="PROTOCOL_CONTRACTS.html#ai-contract-diff">AI Contract Diff</a> - Intelligent contract analysis</li>
+</ul>
+<p><strong>Advanced:</strong></p>
+<ul>
+<li><a href="AI_FEATURES_README.html">AI Features README</a> - Complete AI feature overview</li>
+<li><a href="AI_DRIVEN_MOCKING.html">AI-Driven Mocking</a> - AI-powered mock generation</li>
+</ul>
+<h3 id="cross-pillar-documentation"><a class="header" href="#cross-pillar-documentation">Cross-Pillar Documentation</a></h3>
+<ul>
+<li><a href="JOURNEYS_BY_PILLAR.html">Journeys by Pillar</a> - Choose your onboarding journey</li>
+<li><a href="contributing/PILLAR_TAGGING.html">Pillar Tagging Guide</a> - How to tag code with pillars</li>
+<li><a href="contributing/PILLAR_QUERIES.html">Pillar Queries Guide</a> - Query by pillar</li>
+</ul>
+<hr />
+<h2 id="references"><a class="header" href="#references">References</a></h2>
+<ul>
+<li><a href="../CHANGELOG.html">Changelog</a> - See pillar tags in action</li>
+<li><a href="../book/src/getting-started/getting-started.html">Getting Started Guide</a> - Learn about MockForge</li>
+<li><a href="../CONTRIBUTING.html">Contributing Guide</a> - How to contribute with pillar tagging</li>
+<li><a href="../book/src/contributing/release.html">Release Process</a> - Release process with pillar requirements</li>
+</ul>
+<hr />
+<h2 id="questions"><a class="header" href="#questions">Questions?</a></h2>
+<p>If you’re unsure which pillar(s) a feature belongs to:</p>
+<ol>
+<li><strong>Reality</strong>: Does it make mocks feel more like real backends?</li>
+<li><strong>Contracts</strong>: Does it validate, sync, or monitor API contracts?</li>
+<li><strong>DevX</strong>: Does it improve developer experience or ergonomics?</li>
+<li><strong>Cloud</strong>: Does it enable team collaboration or sharing?</li>
+<li><strong>AI</strong>: Does it use AI/LLM to automate or enhance functionality?</li>
+</ol>
+<p>Many features span multiple pillars—that’s intentional and encouraged!</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../getting-started/concepts.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../getting-started/reality-first.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../getting-started/concepts.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../getting-started/reality-first.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

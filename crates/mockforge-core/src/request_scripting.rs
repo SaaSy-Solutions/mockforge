@@ -9,7 +9,6 @@ use rquickjs::{Context, Ctx, Function, Object, Runtime};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
@@ -43,21 +42,27 @@ pub struct ScriptContext {
 
 /// JavaScript scripting engine
 pub struct ScriptEngine {
-    _runtime: Rc<Runtime>,
     semaphore: Arc<Semaphore>,
 }
 
-#[allow(dead_code)]
+impl std::fmt::Debug for ScriptEngine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScriptEngine")
+            .field("semaphore", &format!("Semaphore({})", self.semaphore.available_permits()))
+            .finish()
+    }
+}
+
+/// JavaScript script engine for request/response processing
+///
+/// Provides JavaScript scripting capabilities for executing custom logic
+/// before and after HTTP requests in request chains.
 impl ScriptEngine {
     /// Create a new script engine
     pub fn new() -> Self {
-        let runtime = Rc::new(Runtime::new().expect("Failed to create JavaScript runtime"));
         let semaphore = Arc::new(Semaphore::new(10)); // Limit concurrent script executions
 
-        Self {
-            _runtime: runtime,
-            semaphore,
-        }
+        Self { semaphore }
     }
 
     /// Execute a JavaScript script with access to the script context
@@ -78,45 +83,15 @@ impl ScriptEngine {
         let start_time = std::time::Instant::now();
 
         // Execute with timeout handling using spawn_blocking for rquickjs
+        // Create a helper function that returns Result instead of panicking
+        let script_clone = script.clone();
+        let script_context_clone = script_context.clone();
+
         let timeout_duration = std::time::Duration::from_millis(timeout_ms);
         let timeout_result = tokio::time::timeout(
             timeout_duration,
             tokio::task::spawn_blocking(move || {
-                let runtime = Runtime::new().expect("Failed to create JavaScript runtime");
-                let context = Context::full(&runtime).expect("Failed to create JavaScript context");
-
-                context.with(|ctx| {
-                    // Create the global context object
-                    let global = ctx.globals();
-                    let mockforge_obj = Object::new(ctx.clone()).expect("Failed to create object");
-
-                    // Expose context data
-                    expose_script_context_static(ctx.clone(), &mockforge_obj, &script_context)
-                        .expect("Failed to expose context");
-
-                    // Add the mockforge object to global scope
-                    global.set("mockforge", mockforge_obj).expect("Failed to set global");
-
-                    // Add utility functions
-                    add_global_functions_static(ctx.clone(), &global, &script_context)
-                        .expect("Failed to add functions");
-
-                    // Execute the script
-                    let result = ctx.eval(script.as_str()).expect("Script execution failed");
-
-                    // Extract modified variables and return value
-                    let modified_vars = extract_modified_variables_static(&ctx, &script_context)
-                        .expect("Failed to extract variables");
-                    let return_value = extract_return_value_static(&ctx, &result)
-                        .expect("Failed to extract return value");
-
-                    ScriptResult {
-                        return_value,
-                        modified_variables: modified_vars,
-                        errors: vec![],       // No errors if we reach here
-                        execution_time_ms: 0, // Will be set by the caller
-                    }
-                })
+                execute_script_in_runtime(&script_clone, &script_context_clone)
             }),
         )
         .await;
@@ -125,11 +100,12 @@ impl ScriptEngine {
 
         match timeout_result {
             Ok(join_result) => match join_result {
-                Ok(mut script_result) => {
+                Ok(Ok(mut script_result)) => {
                     script_result.execution_time_ms = execution_time_ms;
                     Ok(script_result)
                 }
-                Err(e) => Err(Error::generic(format!("Script execution failed: {}", e))),
+                Ok(Err(e)) => Err(e),
+                Err(e) => Err(Error::generic(format!("Script execution task failed: {}", e))),
             },
             Err(_) => {
                 Err(Error::generic(format!("Script execution timed out after {}ms", timeout_ms)))
@@ -143,8 +119,9 @@ impl ScriptEngine {
         script: &str,
         script_context: &ScriptContext,
     ) -> Result<ScriptResult> {
-        let runtime = &*self._runtime;
-        let context = Context::full(runtime)?;
+        // Create a new runtime for this execution
+        let runtime = Runtime::new()?;
+        let context = Context::full(&runtime)?;
 
         context.with(|ctx| self.execute_in_context(ctx, script, script_context, 0))
     }
@@ -209,7 +186,6 @@ impl ScriptEngine {
     }
 }
 
-#[allow(dead_code)]
 /// Extract return value from script execution
 fn extract_return_value<'js>(
     ctx: &Ctx<'js>,
@@ -218,21 +194,95 @@ fn extract_return_value<'js>(
     extract_return_value_static(ctx, result)
 }
 
+/// Execute script in a new JavaScript runtime (blocking helper)
+/// This function is used by spawn_blocking to avoid panics
+fn execute_script_in_runtime(script: &str, script_context: &ScriptContext) -> Result<ScriptResult> {
+    // Create JavaScript runtime with proper error handling
+    let runtime = Runtime::new()
+        .map_err(|e| Error::generic(format!("Failed to create JavaScript runtime: {:?}", e)))?;
+
+    let context = Context::full(&runtime)
+        .map_err(|e| Error::generic(format!("Failed to create JavaScript context: {:?}", e)))?;
+
+    context.with(|ctx| {
+        // Create the global context object with proper error handling
+        let global = ctx.globals();
+        let mockforge_obj = Object::new(ctx.clone())
+            .map_err(|e| Error::generic(format!("Failed to create mockforge object: {:?}", e)))?;
+
+        // Expose context data
+        expose_script_context_static(ctx.clone(), &mockforge_obj, script_context)
+            .map_err(|e| Error::generic(format!("Failed to expose script context: {:?}", e)))?;
+
+        // Add the mockforge object to global scope
+        global.set("mockforge", mockforge_obj).map_err(|e| {
+            Error::generic(format!("Failed to set global mockforge object: {:?}", e))
+        })?;
+
+        // Add utility functions
+        add_global_functions_static(ctx.clone(), &global, script_context)
+            .map_err(|e| Error::generic(format!("Failed to add global functions: {:?}", e)))?;
+
+        // Execute the script
+        let result = ctx
+            .eval(script)
+            .map_err(|e| Error::generic(format!("Script execution failed: {:?}", e)))?;
+
+        // Extract modified variables and return value
+        let modified_vars =
+            extract_modified_variables_static(&ctx, script_context).map_err(|e| {
+                Error::generic(format!("Failed to extract modified variables: {:?}", e))
+            })?;
+
+        let return_value = extract_return_value_static(&ctx, &result)
+            .map_err(|e| Error::generic(format!("Failed to extract return value: {:?}", e)))?;
+
+        Ok(ScriptResult {
+            return_value,
+            modified_variables: modified_vars,
+            errors: vec![],       // No errors if we reach here
+            execution_time_ms: 0, // Will be set by the caller
+        })
+    })
+}
+
 /// Extract return value from script execution (static version)
 fn extract_return_value_static<'js>(
     _ctx: &Ctx<'js>,
     result: &rquickjs::Value<'js>,
 ) -> Result<Option<Value>> {
     match result.type_of() {
-        rquickjs::Type::String => Ok(Some(Value::String(result.as_string().unwrap().to_string()?))),
+        rquickjs::Type::String => {
+            // Use defensive pattern matching instead of unwrap()
+            if let Some(string_val) = result.as_string() {
+                Ok(Some(Value::String(string_val.to_string()?)))
+            } else {
+                Ok(None)
+            }
+        }
         rquickjs::Type::Float => {
             if let Some(num) = result.as_number() {
-                Ok(Some(Value::Number(serde_json::Number::from_f64(num).unwrap())))
+                // Use defensive pattern matching for number conversion
+                // Try to convert to f64 first, fallback to int if that fails
+                if let Some(f64_val) = serde_json::Number::from_f64(num) {
+                    Ok(Some(Value::Number(f64_val)))
+                } else {
+                    // Fallback to integer conversion if f64 conversion fails
+                    Ok(Some(Value::Number(serde_json::Number::from(result.as_int().unwrap_or(0)))))
+                }
             } else {
+                // Fallback to integer if number extraction fails
                 Ok(Some(Value::Number(serde_json::Number::from(result.as_int().unwrap_or(0)))))
             }
         }
-        rquickjs::Type::Bool => Ok(Some(Value::Bool(result.as_bool().unwrap()))),
+        rquickjs::Type::Bool => {
+            // Use defensive pattern matching instead of unwrap()
+            if let Some(bool_val) = result.as_bool() {
+                Ok(Some(Value::Bool(bool_val)))
+            } else {
+                Ok(None)
+            }
+        }
         rquickjs::Type::Object => {
             // Try to convert to JSON string and then parse back
             if let Some(obj) = result.as_object() {
@@ -250,7 +300,6 @@ fn extract_return_value_static<'js>(
     }
 }
 
-#[allow(dead_code)]
 /// Extract modified variables from the script context
 fn extract_modified_variables<'js>(
     ctx: &Ctx<'js>,
@@ -326,7 +375,6 @@ fn js_value_to_json_value(js_value: &rquickjs::Value) -> Option<Value> {
     }
 }
 
-#[allow(dead_code)]
 /// Execute script with timeout
 fn eval_script_with_timeout<'js>(
     ctx: &Ctx<'js>,
@@ -528,7 +576,7 @@ fn add_global_functions_static<'js>(
 
     let random_bytes_func = Function::new(ctx.clone(), |length: usize| -> String {
         use rand::Rng;
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let bytes: Vec<u8> = (0..length).map(|_| rng.random()).collect();
         hex::encode(bytes)
     })?;
@@ -576,8 +624,14 @@ fn add_global_functions_static<'js>(
 
     let email_func = Function::new(ctx.clone(), |email: String| -> bool {
         // Simple email regex validation
-        let email_regex = regex::Regex::new(r"^[^@]+@[^@]+\.[^@]+$").unwrap();
-        email_regex.is_match(&email)
+        // Note: This regex pattern is static and should never fail compilation,
+        // but we handle errors defensively to prevent panics
+        regex::Regex::new(r"^[^@]+@[^@]+\.[^@]+$")
+            .map(|re| re.is_match(&email))
+            .unwrap_or_else(|_| {
+                // Fallback: basic string check if regex compilation fails (should never happen)
+                email.contains('@') && email.contains('.') && email.len() > 5
+            })
     })?;
     validate_obj.set("email", email_func)?;
 

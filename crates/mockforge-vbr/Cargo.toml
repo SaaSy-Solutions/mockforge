@@ -1,0 +1,63 @@
+[package]
+name = "mockforge-vbr"
+version = "0.3.3"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Virtual Backend Reality engine - stateful mock servers with persistent virtual databases"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+publish = true
+
+[dependencies]
+# Core dependencies
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.3", path = "../mockforge-data" }
+mockforge-http = { version = "0.3.3", path = "../mockforge-http" }
+
+# OpenAPI support
+openapiv3 = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "uuid"] }
+
+# Logging
+tracing = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Utilities
+uuid = { workspace = true, features = ["v4", "serde"] }
+chrono = { workspace = true, features = ["serde"] }
+url = { workspace = true }
+sha2 = "0.10"
+base64 = "0.21"
+jsonwebtoken = { version = "9", optional = true }
+rand = "0.9"
+regex = "1.10"
+jsonpath = "0.1"
+
+# HTTP framework
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+
+[features]
+default = []
+jwt = ["jsonwebtoken"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }

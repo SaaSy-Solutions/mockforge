@@ -1,25 +1,40 @@
 //! Operation-aware latency/failure profiles (per operationId and per tag).
 use globwalk::GlobWalkerBuilder;
-use rand::{rng, Rng};
+use rand::{thread_rng, Rng};
 use serde::Deserialize;
-use std::{collections::HashMap, time::Duration};
-use tokio::time::sleep;
+use std::collections::HashMap;
+use tokio::time::{sleep, Duration};
 
+/// Latency and failure profile for request simulation
 #[derive(Debug, Clone, Deserialize)]
 pub struct Profile {
+    /// Fixed latency in milliseconds
     pub fixed_ms: Option<u64>,
+    /// Random jitter to add to fixed latency (milliseconds)
     pub jitter_ms: Option<u64>,
+    /// Probability of failure (0.0 to 1.0)
     pub fail_p: Option<f64>,
+    /// HTTP status code to return on failure
     pub fail_status: Option<u16>,
 }
 
+/// Collection of latency profiles organized by operation ID and tags
 #[derive(Debug, Default, Clone)]
 pub struct LatencyProfiles {
+    /// Profiles keyed by OpenAPI operation ID
     by_operation: HashMap<String, Profile>,
+    /// Profiles keyed by OpenAPI tag
     by_tag: HashMap<String, Profile>,
 }
 
 impl LatencyProfiles {
+    /// Load latency profiles from files matching a glob pattern
+    ///
+    /// # Arguments
+    /// * `pattern` - Glob pattern to match profile files (e.g., "profiles/*.yaml")
+    ///
+    /// # Returns
+    /// `Ok(LatencyProfiles)` on success, `Err` if files cannot be read or parsed
     pub async fn load_from_glob(pattern: &str) -> anyhow::Result<Self> {
         let mut result = LatencyProfiles::default();
         for dir_entry in GlobWalkerBuilder::from_patterns(".", &[pattern]).build()? {
@@ -39,6 +54,17 @@ impl LatencyProfiles {
         Ok(result)
     }
 
+    /// Check if a fault should be injected for the given operation or tags
+    ///
+    /// Returns the HTTP status code and error message if a fault should be injected,
+    /// otherwise returns None.
+    ///
+    /// # Arguments
+    /// * `operation_id` - OpenAPI operation ID to check for operation-specific profile
+    /// * `tags` - List of tags to check for tag-specific profiles
+    ///
+    /// # Returns
+    /// `Some((status_code, message))` if fault should be injected, `None` otherwise
     pub async fn maybe_fault(&self, operation_id: &str, tags: &[String]) -> Option<(u16, String)> {
         let profile = self
             .by_operation
@@ -47,7 +73,7 @@ impl LatencyProfiles {
         if let Some(p) = profile {
             let base = p.fixed_ms.unwrap_or(0);
             let jitter = p.jitter_ms.unwrap_or(0);
-            let mut rng = rng();
+            let mut rng = thread_rng();
             let extra: u64 = if jitter > 0 {
                 rng.random_range(0..=jitter)
             } else {

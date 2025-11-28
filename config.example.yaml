@@ -87,7 +87,143 @@ core:
     headers: {}
     prefix: "/proxy"
     passthrough_by_default: false
-    rules: []
+    # Enable migration pipeline features
+    migration_enabled: true
+    # Group-level migration mode overrides
+    # Groups allow you to toggle multiple routes together
+    migration_groups:
+      "api-v1": "mock"      # All v1 routes start with mock
+      "api-v2": "shadow"    # All v2 routes in shadow mode (compare real vs mock)
+      "legacy": "real"      # Legacy routes already migrated to real
+    rules:
+      # Example: Route with migration mode
+      - pattern: "/api/users/*"
+        upstream_url: "https://api.example.com"
+        migration_mode: "mock"  # Start with mock
+        migration_group: "api-v1"  # Belongs to api-v1 group
+      # Example: Route in shadow mode (proxy + generate mock for comparison)
+      - pattern: "/api/orders/*"
+        upstream_url: "https://api.example.com"
+        migration_mode: "shadow"  # Compare real vs mock responses
+        migration_group: "api-v2"
+      # Example: Route already migrated to real backend
+      - pattern: "/api/legacy/*"
+        upstream_url: "https://api.example.com"
+        migration_mode: "real"  # Always use real backend
+        migration_group: "legacy"
+      # Example: Route without migration (uses auto/default behavior)
+      - pattern: "/api/public/*"
+        upstream_url: "https://api.example.com"
+        migration_mode: "auto"  # Use existing priority chain
+      # Example: Conditional proxying - only proxy admin requests
+      - pattern: "/api/admin/*"
+        upstream_url: "https://admin-api.example.com"
+        condition: "$.user.role == 'admin'"  # JSONPath condition
+      # Example: Conditional proxying - only proxy authenticated requests
+      - pattern: "/api/protected/*"
+        upstream_url: "https://protected-api.example.com"
+        condition: "header[authorization] != ''"  # Header condition
+      # Example: Conditional proxying - complex condition
+      - pattern: "/api/orders/*"
+        upstream_url: "https://orders-api.example.com"
+        condition: "AND(header[authorization] != '', $.order.amount > 1000)"  # Multiple conditions
+
+# Reality Continuum configuration
+# Gradually transition from mock to real backend data by blending responses
+reality_continuum:
+  enabled: false  # Enable Reality Continuum feature
+  default_ratio: 0.0  # Default blend ratio (0.0 = 100% mock, 1.0 = 100% real)
+  transition_mode: "manual"  # manual, time_based, or scheduled
+  merge_strategy: "field_level"  # field_level, weighted, or body_blend
+
+  # Time-based progression schedule (optional, used when transition_mode is time_based or scheduled)
+  time_schedule:
+    start_time: "2025-01-01T00:00:00Z"  # RFC3339 timestamp
+    end_time: "2025-02-01T00:00:00Z"     # RFC3339 timestamp
+    start_ratio: 0.0                     # Blend ratio at start time
+    end_ratio: 1.0                       # Blend ratio at end time
+    curve: "linear"                       # linear, exponential, or sigmoid
+
+  # Per-route blend ratio overrides
+  routes:
+    - pattern: "/api/users/*"
+      ratio: 0.5                          # 50% real, 50% mock for user endpoints
+      group: "api-v1"                     # Optional: migration group
+      enabled: true
+    - pattern: "/api/orders/*"
+      ratio: 0.3                          # 30% real, 70% mock for order endpoints
+      enabled: true
+
+  # Group-level blend ratio overrides
+  groups:
+    "api-v1": 0.0                        # All routes in api-v1 group use 0% real
+    "api-v2": 0.5                        # All routes in api-v2 group use 50% real
+
+  # ============================================================================
+  # Per-Route Configuration: Fault Injection & Latency
+  # ============================================================================
+  # Configure fault injection and latency on a per-route basis
+  routes:
+    # Example: High-latency payment endpoint with occasional failures
+    - path: "/api/payments/process"
+      method: "POST"
+      response:
+        status: 200
+        body:
+          message: "Payment processed"
+      latency:
+        enabled: true
+        probability: 1.0
+        fixed_delay_ms: 500
+        jitter_percent: 20.0
+        distribution: "normal"  # fixed, normal, exponential, uniform
+        mean_ms: 500.0
+        std_dev_ms: 100.0
+      fault_injection:
+        enabled: true
+        probability: 0.05  # 5% chance of failure
+        fault_types:
+          - type: "http_error"
+            status_code: 503
+            message: "Payment service temporarily unavailable"
+          - type: "timeout"
+            duration_ms: 5000
+            message: "Payment processing timeout"
+
+    # Example: Unreliable user service
+    - path: "/api/users/{user_id}"
+      method: "GET"
+      response:
+        status: 200
+        body:
+          id: "{{user_id}}"
+          name: "John Doe"
+      fault_injection:
+        enabled: true
+        probability: 0.1  # 10% chance of failure
+        fault_types:
+          - type: "http_error"
+            status_code: 500
+            message: "Internal server error"
+          - type: "connection_error"
+            message: "Connection refused"
+          - type: "partial_response"
+            truncate_percent: 50.0
+
+    # Example: Slow search endpoint with exponential latency
+    - path: "/api/search"
+      method: "GET"
+      response:
+        status: 200
+        body:
+          results: []
+      latency:
+        enabled: true
+        probability: 0.8  # 80% of requests get latency
+        distribution: "exponential"
+        lambda: 0.001  # Mean delay of 1000ms
+        jitter_percent: 15.0
+
   default_latency:
     base_ms: 50
     jitter_ms: 20
@@ -210,3 +346,61 @@ data:
 #     - op: replace
 #       path: /order/priority
 #       value: "HIGH"
+
+# Drift Budget and Contract Monitoring Configuration
+drift_budget:
+  # Whether drift budget tracking is enabled
+  enabled: true
+  
+  # Default budget applied to all endpoints
+  default_budget:
+    max_breaking_changes: 0
+    max_non_breaking_changes: 10
+    severity_threshold: "high"
+    enabled: true
+    # Optional: percentage-based budget (takes precedence over absolute counts)
+    # max_field_churn_percent: 10.0  # Max 10% field churn
+    # time_window_days: 30  # Monthly window for percentage calculations
+  
+  # Per-workspace budgets (key: workspace_id)
+  per_workspace_budgets:
+    # "workspace-1":
+    #   max_breaking_changes: 0
+    #   max_non_breaking_changes: 5
+    #   enabled: true
+  
+  # Per-service budgets (key: service_name or OpenAPI tag)
+  per_service_budgets:
+    # "user-service":
+    #   max_breaking_changes: 0
+    #   max_non_breaking_changes: 15
+    #   max_field_churn_percent: 5.0
+    #   time_window_days: 30
+    #   enabled: true
+  
+  # Per-tag budgets (key: OpenAPI tag name)
+  per_tag_budgets:
+    # "users":
+    #   max_breaking_changes: 0
+    #   max_non_breaking_changes: 8
+    #   enabled: true
+  
+  # Per-endpoint budgets (key: "{method} {endpoint}")
+  per_endpoint_budgets:
+    # "POST /api/users":
+    #   max_breaking_changes: 0
+    #   max_non_breaking_changes: 3
+    #   enabled: true
+  
+  # Breaking change detection rules
+  breaking_change_rules:
+    - type: "severity"
+      severity: "high"
+      include_higher: true
+      enabled: true
+    - type: "mismatch_type"
+      mismatch_type: "missing_required_field"
+      enabled: true
+  
+  # Number of days to retain incident history
+  incident_retention_days: 90

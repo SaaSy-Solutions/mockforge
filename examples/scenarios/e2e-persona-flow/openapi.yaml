@@ -1,0 +1,208 @@
+openapi: 3.0.0
+info:
+  title: E2E Persona Flow API
+  version: 1.0.0
+  description: |
+    E2E persona flow API demonstrating cross-protocol consistency.
+    All endpoints use the same persona graph and shared state model.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+paths:
+  /api/auth/login:
+    post:
+      operationId: login
+      summary: User login
+      description: |
+        Authenticates a user and activates their persona for the workspace.
+        The persona will be used across all subsequent requests (HTTP, WebSocket, webhooks).
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+
+  /api/products:
+    get:
+      operationId: browseProducts
+      summary: Browse products
+      description: |
+        Returns products filtered by the active persona's preferences.
+        Uses the persona graph to determine relevant products.
+      tags:
+        - Products
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: workspace
+          in: query
+          schema:
+            type: string
+            default: default
+      responses:
+        '200':
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+
+  /api/orders:
+    post:
+      operationId: createOrder
+      summary: Create order
+      description: |
+        Creates an order linked to the active user via persona graph.
+        Triggers WebSocket notifications and webhook callbacks.
+      tags:
+        - Orders
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - product_id
+                - quantity
+              properties:
+                product_id:
+                  type: string
+                quantity:
+                  type: integer
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /api/orders/{orderId}:
+    get:
+      operationId: getOrder
+      summary: Get order status
+      description: |
+        Returns order details enriched with persona graph data.
+        Order status reflects lifecycle state (pending → processing → shipped → delivered → completed).
+      tags:
+        - Orders
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: workspace
+          in: query
+          schema:
+            type: string
+            default: default
+      responses:
+        '200':
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        subscription_tier:
+          type: string
+          enum: [free, premium, enterprise]
+        # Persona graph enrichment
+        order_ids:
+          type: array
+          items:
+            type: string
+        order_count:
+          type: integer
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        price:
+          type: number
+        in_stock:
+          type: boolean
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        product_id:
+          type: string
+        quantity:
+          type: integer
+        status:
+          type: string
+          enum: [pending, processing, shipped, delivered, completed]
+          description: Order status based on lifecycle state
+        created_at:
+          type: string
+          format: date-time
+        shipped_at:
+          type: string
+          format: date-time
+          nullable: true
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        tracking_number:
+          type: string
+          nullable: true
+        # Persona graph enrichment
+        payment_ids:
+          type: array
+          items:
+            type: string

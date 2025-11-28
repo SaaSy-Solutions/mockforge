@@ -4,9 +4,13 @@
 //! files for the admin UI.
 
 use axum::{
-    http::{self},
+    extract::Path,
+    http::{self, StatusCode},
     response::{Html, IntoResponse, Redirect},
 };
+
+// Include the generated asset map from build.rs
+include!(concat!(env!("OUT_DIR"), "/asset_paths.rs"));
 
 /// Serve the main admin HTML page
 pub async fn serve_admin_html() -> Html<&'static str> {
@@ -29,42 +33,101 @@ pub async fn serve_admin_js() -> ([(http::HeaderName, &'static str); 1], &'stati
     )
 }
 
+/// Serve vendor JavaScript files dynamically
+/// This handler uses a build-time generated asset map that includes all files
+/// from the assets directory, so it automatically handles files with changing hashes
+pub async fn serve_vendor_asset(Path(filename): Path<String>) -> impl IntoResponse {
+    // Determine content type based on file extension
+    let content_type = if filename.ends_with(".js") {
+        "application/javascript"
+    } else if filename.ends_with(".css") {
+        "text/css"
+    } else if filename.ends_with(".png") {
+        "image/png"
+    } else if filename.ends_with(".svg") {
+        "image/svg+xml"
+    } else if filename.ends_with(".woff") || filename.ends_with(".woff2") {
+        "font/woff2"
+    } else {
+        "application/octet-stream"
+    };
+
+    // Look up the asset in the dynamically generated map (built at compile time)
+    let asset_map = get_asset_map();
+    if let Some(content) = asset_map.get(filename.as_str()) {
+        ([(http::header::CONTENT_TYPE, content_type)], *content).into_response()
+    } else {
+        // Return 404 for unknown files
+        (
+            StatusCode::NOT_FOUND,
+            [(http::header::CONTENT_TYPE, "text/plain")],
+            "Asset not found",
+        )
+            .into_response()
+    }
+}
+
+// Embedded icon/logo assets to avoid 404s/fallbacks in the admin UI
+const ICON_DEFAULT: &[u8] = include_bytes!("../../ui/public/mockforge-icon.png");
+const ICON_32: &[u8] = include_bytes!("../../ui/public/mockforge-icon-32.png");
+const ICON_48: &[u8] = include_bytes!("../../ui/public/mockforge-icon-48.png");
+const LOGO_40: &[u8] = include_bytes!("../../ui/public/mockforge-logo-40.png");
+const LOGO_80: &[u8] = include_bytes!("../../ui/public/mockforge-logo-80.png");
+
 /// Serve icon files
 pub async fn serve_icon() -> impl IntoResponse {
-    // Return a simple SVG icon or placeholder
-    let icon_svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\"><rect width=\"32\" height=\"32\" fill=\"#4f46e5\"/><text x=\"16\" y=\"20\" text-anchor=\"middle\" fill=\"white\" font-family=\"Arial\" font-size=\"14\">MF</text></svg>";
-    ([(http::header::CONTENT_TYPE, "image/svg+xml")], icon_svg)
+    ([(http::header::CONTENT_TYPE, "image/png")], ICON_DEFAULT)
 }
 
 /// Serve 32x32 icon
 pub async fn serve_icon_32() -> impl IntoResponse {
-    serve_icon().await
+    ([(http::header::CONTENT_TYPE, "image/png")], ICON_32)
 }
 
 /// Serve 48x48 icon
 pub async fn serve_icon_48() -> impl IntoResponse {
-    serve_icon().await
+    ([(http::header::CONTENT_TYPE, "image/png")], ICON_48)
 }
 
 /// Serve logo files
 pub async fn serve_logo() -> impl IntoResponse {
-    serve_icon().await
+    ([(http::header::CONTENT_TYPE, "image/png")], ICON_DEFAULT)
 }
 
 /// Serve 40x40 logo
 pub async fn serve_logo_40() -> impl IntoResponse {
-    serve_icon().await
+    ([(http::header::CONTENT_TYPE, "image/png")], LOGO_40)
 }
 
 /// Serve 80x80 logo
 pub async fn serve_logo_80() -> impl IntoResponse {
-    serve_icon().await
+    ([(http::header::CONTENT_TYPE, "image/png")], LOGO_80)
 }
 
 /// Serve the API documentation - redirects to the book
 pub async fn serve_api_docs() -> impl IntoResponse {
     // Redirect to the comprehensive documentation in the book
     Redirect::permanent("https://docs.mockforge.dev/api/admin-ui-rest.html")
+}
+
+/// Serve the PWA manifest.json file
+/// Note: Vite generates its own manifest.json, so we use pwa-manifest.json
+/// which is copied from ui/public/manifest.json by the build script
+pub async fn serve_manifest() -> impl IntoResponse {
+    // Use the PWA manifest that's copied from public/ during build
+    // The build script ensures this file exists
+    (
+        [(http::header::CONTENT_TYPE, "application/manifest+json")],
+        include_str!("../../ui/dist/pwa-manifest.json"),
+    )
+}
+
+/// Serve the service worker JavaScript file
+pub async fn serve_service_worker() -> impl IntoResponse {
+    (
+        [(http::header::CONTENT_TYPE, "application/javascript")],
+        include_str!("../../ui/dist/sw.js"),
+    )
 }
 
 #[cfg(test)]

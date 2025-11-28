@@ -472,9 +472,116 @@ MOCKFORGE_REQUEST_VALIDATION=warn mockforge serve --spec petstore-api.json
 <li>Add route overrides in your config file (see Advanced section above)</li>
 <li>Or use <a href="../user-guide/http-mocking/custom-responses.html">Custom Responses Guide</a></li>
 </ul>
+<h2 id="complete-workflow-example"><a class="header" href="#complete-workflow-example">Complete Workflow Example</a></h2>
+<p>Here’s a complete workflow for generating mocks from an OpenAPI spec and using them in development:</p>
+<h3 id="1-start-with-openapi-spec"><a class="header" href="#1-start-with-openapi-spec">1. Start with OpenAPI Spec</a></h3>
+<pre><code class="language-bash"># Your API team provides this spec
+cat petstore-api.json
+</code></pre>
+<h3 id="2-generate-mock-server"><a class="header" href="#2-generate-mock-server">2. Generate Mock Server</a></h3>
+<pre><code class="language-bash"># Start MockForge with the spec
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
+  mockforge serve --spec petstore-api.json --http-port 3000 --admin
+</code></pre>
+<h3 id="3-test-generated-endpoints"><a class="header" href="#3-test-generated-endpoints">3. Test Generated Endpoints</a></h3>
+<pre><code class="language-bash"># All endpoints from the spec are now available
+curl http://localhost:3000/pets
+curl http://localhost:3000/pets/123
+curl -X POST http://localhost:3000/pets -d '{"name": "Fluffy", "species": "cat"}'
+</code></pre>
+<h3 id="4-monitor-in-admin-ui"><a class="header" href="#4-monitor-in-admin-ui">4. Monitor in Admin UI</a></h3>
+<p>Visit http://localhost:9080 to see:</p>
+<ul>
+<li>All requests in real-time</li>
+<li>Request/response bodies</li>
+<li>Response times</li>
+<li>Error rates</li>
+</ul>
+<h3 id="5-use-in-frontend-development"><a class="header" href="#5-use-in-frontend-development">5. Use in Frontend Development</a></h3>
+<p>Point your frontend app to the mock server:</p>
+<pre><code class="language-javascript">// In your React/Vue/Angular app
+const API_URL = 'http://localhost:3000';
+
+fetch(`${API_URL}/pets`)
+  .then(res =&gt; res.json())
+  .then(data =&gt; console.log('Pets:', data));
+</code></pre>
+<h3 id="6-iterate-as-api-evolves"><a class="header" href="#6-iterate-as-api-evolves">6. Iterate as API Evolves</a></h3>
+<p>When the API spec changes:</p>
+<pre><code class="language-bash"># 1. Update the OpenAPI spec file
+vim petstore-api.json
+
+# 2. Restart MockForge (it auto-reloads from spec)
+# Or use watch mode if available
+
+# 3. Regenerate client code (if using code generation)
+mockforge client generate --spec petstore-api.json --framework react
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="organization"><a class="header" href="#organization">Organization</a></h3>
+<ol>
+<li>
+<p><strong>Keep specs in version control</strong></p>
+<pre><code class="language-bash">git add petstore-api.json
+git commit -m "Add Pet Store API spec v1.2"
+</code></pre>
+</li>
+<li>
+<p><strong>Use environment-specific configs</strong></p>
+<pre><code class="language-yaml"># mockforge.dev.yaml
+http:
+  port: 3000
+  response_template_expand: true
+  cors:
+    enabled: true
+</code></pre>
+</li>
+<li>
+<p><strong>Document any custom overrides</strong></p>
+<pre><code class="language-yaml"># Custom route overrides
+http:
+  routes:
+    - path: /pets/{petId}
+      method: GET
+      response:
+        # Override default response
+        status: 200
+        body: |
+          {
+            "id": "{{request.path.petId}}",
+            "name": "Custom Pet",
+            "species": "custom"
+          }
+</code></pre>
+</li>
+</ol>
+<h3 id="testing"><a class="header" href="#testing">Testing</a></h3>
+<ol>
+<li>
+<p><strong>Use deterministic data for tests</strong></p>
+<pre><code class="language-yaml"># Disable template expansion for consistent test data
+response:
+  template_expand: false
+</code></pre>
+</li>
+<li>
+<p><strong>Enable validation for contract testing</strong></p>
+<pre><code class="language-bash">mockforge serve --spec api.json --validation enforce
+</code></pre>
+</li>
+<li>
+<p><strong>Record test scenarios</strong></p>
+<ul>
+<li>Use Admin UI to record request/response pairs</li>
+<li>Export as fixtures for automated tests</li>
+</ul>
+</li>
+</ol>
 <h2 id="whats-next"><a class="header" href="#whats-next">What’s Next?</a></h2>
 <ul>
 <li><a href="../user-guide/http-mocking/dynamic-data.html">Dynamic Data Generation</a> - Add faker functions and advanced templates</li>
+<li><a href="react-workflow.html">React Workflow</a> - Complete React + MockForge setup</li>
+<li><a href="vue-workflow.html">Vue Workflow</a> - Complete Vue + MockForge setup</li>
 <li><a href="admin-ui-walkthrough.html">Admin UI Walkthrough</a> - Visualize and manage your mock server</li>
 <li><a href="add-custom-plugin.html">Add a Custom Plugin</a> - Extend MockForge with custom functionality</li>
 <li><a href="../user-guide/sync.html">Team Collaboration</a> - Share mocks with your team via Git</li>
@@ -486,11 +593,11 @@ MOCKFORGE_REQUEST_VALIDATION=warn mockforge serve --spec petstore-api.json
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../tutorials/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../tutorials/golden-path.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../tutorials/admin-ui-walkthrough.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tutorials/react-workflow.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -500,11 +607,11 @@ MOCKFORGE_REQUEST_VALIDATION=warn mockforge serve --spec petstore-api.json
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../tutorials/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../tutorials/golden-path.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../tutorials/admin-ui-walkthrough.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tutorials/react-workflow.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

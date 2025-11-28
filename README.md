@@ -11,16 +11,43 @@
 
 MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebSockets. It provides a unified interface for creating, managing, and deploying mock servers across different protocols with advanced data generation capabilities.
 
+## 🏛️ The Five Pillars of MockForge
+
+MockForge is built on five foundational pillars that guide every feature: **[Reality]**, **[Contracts]**, **[DevX]**, **[Cloud]**, and **[AI]**. These pillars ensure MockForge delivers a cohesive, powerful mocking experience that scales from solo developers to enterprise teams.
+
+- **[Reality]** – Everything that makes mocks feel like a real, evolving backend
+- **[Contracts]** – Schema, drift, validation, and safety nets
+- **[DevX]** – SDKs, generators, playgrounds, ergonomics
+- **[Cloud]** – Registry, orgs, governance, monetization, marketplace
+- **[AI]** – LLM/voice flows, AI diff/assist, generative behaviors
+
+See the [complete Pillars documentation](docs/PILLARS.md) for detailed information about each pillar, feature mappings, and examples. All changelog entries are tagged with these pillars to make it clear what each release invests in.
+
+### Choose Your Path
+
+- **[Reality-First Onboarding](https://docs.mockforge.dev/getting-started/reality-first.html)** - Start here if you care about realism
+- **[Contracts-First Onboarding](https://docs.mockforge.dev/getting-started/contracts-first.html)** - Start here if you're a Platform/API team
+- **[AI-First Onboarding](https://docs.mockforge.dev/getting-started/ai-first.html)** - Start here if you want natural-language-driven mocks
+
 ## 🔄 Why MockForge?
 
 | Feature | MockForge | WireMock | MockServer | Mockoon |
 |---------|-----------|----------|------------|---------|
 | **Language** | Rust | Java | Java/JavaScript | JavaScript |
+| **Multi-Language SDKs** | ✅ Rust, Node.js, Python, Go, Java, .NET | ⚠️ Java native, clients for others | ⚠️ Java/JS native, clients for others | ⚠️ JS native, clients for others |
 | **Performance** | ⚡ High (native Rust) | Medium | Medium | Medium |
 | **HTTP/REST** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
 | **gRPC Native** | ✅ Full + HTTP Bridge | ❌ No | ❌ No | ⚠️ Limited |
 | **WebSocket** | ✅ Scripted Replay + JSONPath | ❌ No | ⚠️ Basic | ❌ No |
 | **GraphQL** | ✅ Yes | ⚠️ Via HTTP | ⚠️ Via HTTP | ✅ Yes |
+| **Kafka** | ✅ Full Mock Broker | ❌ No | ❌ No | ❌ No |
+| **MQTT** | ✅ Full Broker (3.1.1 & 5.0) | ❌ No | ❌ No | ❌ No |
+| **AMQP/RabbitMQ** | ✅ Full Broker (0.9.1) | ❌ No | ❌ No | ❌ No |
+| **SMTP** | ✅ Full Email Server | ❌ No | ❌ No | ❌ No |
+| **FTP** | ✅ Full File Transfer | ❌ No | ❌ No | ❌ No |
+| **TCP** | ✅ Raw TCP Mocking | ❌ No | ❌ No | ❌ No |
+| **Client Generation** | ✅ React, Vue, Angular, Svelte | ❌ No | ❌ No | ❌ No |
+| **TLS/mTLS** | ✅ HTTPS + Mutual TLS | ⚠️ TLS only | ⚠️ TLS only | ⚠️ TLS only |
 | **Admin UI** | ✅ Modern React UI | ⚠️ Basic | ✅ Yes | ✅ Desktop App |
 | **Data Generation** | ✅ Advanced (Faker + RAG) | ⚠️ Basic | ⚠️ Basic | ⚠️ Templates |
 | **AI-Driven Mocking** | ✅ LLM-powered generation | ❌ No | ❌ No | ❌ No |
@@ -40,6 +67,65 @@ MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebS
 | **CLI Tool** | ✅ Full-featured | ✅ Yes | ✅ Yes | ✅ Yes |
 | **License** | MIT/Apache-2.0 | Apache-2.0 | Apache-2.0 | MIT |
 
+## 🌐 Multi-Language Ecosystem
+
+MockForge provides native SDKs for multiple programming languages, enabling developers to embed mock servers directly in their test suites regardless of their technology stack.
+
+### Supported Languages
+
+- **Rust** - Native SDK with zero-overhead embedding
+- **Node.js/TypeScript** - Full TypeScript support with type definitions
+- **Python** - Context manager support with type hints
+- **Go** - Idiomatic Go API with module support
+- **Java** - Maven/Gradle integration
+- **.NET/C#** - NuGet package with async/await support
+
+### Quick Example
+
+**Rust**:
+```rust
+let mut server = MockServer::new().port(3000).start().await?;
+server.stub_response("GET", "/api/users/{id}", json!({"id": 123})).await?;
+```
+
+**Node.js**:
+```typescript
+const server = await MockServer.start({ port: 3000 });
+await server.stubResponse('GET', '/api/users/123', { id: 123 });
+```
+
+**Python**:
+```python
+with MockServer(port=3000) as server:
+    server.stub_response('GET', '/api/users/123', {'id': 123})
+```
+
+See [SDK Documentation](sdk/README.md) for complete examples and [Ecosystem & Use Cases Guide](docs/ECOSYSTEM_AND_USE_CASES.md) for detailed comparisons with WireMock.
+
+## 🎯 Use Cases
+
+MockForge supports a wide range of use cases, from unit testing to service virtualization:
+
+### 1. Unit Tests
+Embed mock servers directly in test suites across all supported languages. No separate server process required for most SDKs.
+
+### 2. Integration Tests
+Test complex multi-service interactions with stateful mocking and multi-protocol support (HTTP, gRPC, WebSocket).
+
+### 3. Service Virtualization
+Replace external dependencies with mocks using proxy mode and record/replay workflows. Capture real API behavior and replay it later.
+
+### 4. Development/Stub Environments
+Create local development environments without backend dependencies. Share mock configurations across teams with workspace synchronization.
+
+### 5. Isolating from Flaky Dependencies
+Simulate network failures, timeouts, and slow responses with built-in latency and fault injection. Test application resilience under various failure conditions.
+
+### 6. Simulating APIs That Don't Exist Yet
+Generate realistic mocks from API specifications (OpenAPI, GraphQL, gRPC) before implementation. Enable parallel development with schema-driven mock generation.
+
+For detailed use case examples and code samples, see [Ecosystem & Use Cases Guide](docs/ECOSYSTEM_AND_USE_CASES.md).
+
 ### v1.0 Feature Status
 
 All major features listed in this README are **implemented and functional in v1.0**, with the following clarification:
@@ -51,7 +137,7 @@ All commands, options, and features documented in each protocol section (HTTP, g
 
 ### Key Differentiators
 
-- **🚀 True Multi-Protocol**: Only MockForge provides first-class support for HTTP, gRPC, WebSocket, and GraphQL in a single binary
+- **🚀 True Multi-Protocol**: Only MockForge provides first-class support for HTTP, gRPC, WebSocket, GraphQL, **Kafka, MQTT, and AMQP** in a single binary
 - **🧠 AI-Driven Mocking**: Industry-first LLM-powered mock generation from natural language prompts
 - **📊 Data Drift Simulation**: Unique realistic data evolution across requests (order status progression, stock depletion, price changes)
 - **🌊 AI Event Streams**: Generate narrative-driven WebSocket events for real-time testing scenarios
@@ -63,7 +149,7 @@ All commands, options, and features documented in each protocol section (HTTP, g
 
 ## ✨ Features
 
-- **Multi-Protocol Support**: HTTP REST APIs, gRPC services, GraphQL APIs, WebSocket connections, and SMTP email testing
+- **Multi-Protocol Support**: HTTP REST APIs, gRPC services, GraphQL APIs, WebSocket connections, SMTP email testing, **Kafka event streaming**, **MQTT pub/sub**, and **AMQP message queuing**
 - **🧠 AI-Powered Mocking** *(Industry First)*: Revolutionary artificial intelligence features:
   - **Intelligent Mock Generation**: Generate realistic responses from natural language prompts
     - Natural language → realistic JSON data
@@ -110,7 +196,8 @@ All commands, options, and features documented in each protocol section (HTTP, g
 - **Dynamic Response Generation**: Create realistic mock responses with configurable latency and failure rates
 - **Cross-Endpoint Validation**: Ensure referential integrity across different endpoints
 - **Admin UI v2**: Modern React-based interface with:
-  - **Role-Based Authentication**: _(Planned for v1.1)_ Admin and viewer access control (frontend UI components ready, backend authentication to be implemented)
+  - **Role-Based Authentication**: ✅ Complete JWT-based authentication with Admin, Editor, and Viewer roles
+  - **Real-time Collaboration**: ✅ WebSocket-based collaborative editing with presence awareness and cursor tracking
   - **Real-time Monitoring**: Live logs via Server-Sent Events (SSE), metrics, and performance tracking
   - **Visual Configuration**: Drag-and-drop fixture management with tree view
   - **Advanced Search**: Full-text search across services and logs
@@ -132,9 +219,25 @@ The documentation covers:
 - Advanced features and examples
 - Contributing guidelines
 
+## 🔌 IDE Integration
+
+### VS Code Extension
+
+**[Install the MockForge VS Code Extension](https://marketplace.visualstudio.com/items?itemName=saasy-solutions.mockforge-vscode)** to enhance your development workflow:
+
+- **Peek Mock Response**: Hover over API endpoint references to see mock responses inline
+- **Config Validation**: Real-time validation of `mockforge.yaml` files with inline error reporting
+- **Mocks Explorer**: Visual tree view of all mocks with real-time WebSocket updates
+- **Playground Integration**: Quick access to MockForge Playground from hover tooltips
+- **Mock Management**: Create, edit, enable/disable, and delete mocks directly from VS Code
+
+See the [VS Code Extension README](vscode-extension/README.md) for detailed features and usage.
+
 ## 🚀 Quick Start
 
-**New to MockForge?** Follow our **[5-Minute Tutorial](https://docs.mockforge.dev/getting-started/five-minute-api.html)** to create your first mock API.
+**New to MockForge?** Follow our **[Golden Path Guide](https://docs.mockforge.dev/tutorials/golden-path.html)** ⭐ - the fastest way from zero to integrated mock API in under 10 minutes.
+
+**Prefer a quick API?** Try our **[5-Minute Tutorial](https://docs.mockforge.dev/getting-started/five-minute-api.html)** to create your first mock API.
 
 **Need help?** Check the **[FAQ](https://docs.mockforge.dev/reference/faq.html)** or **[Troubleshooting Guide](https://docs.mockforge.dev/reference/troubleshooting.html)**.
 
@@ -152,6 +255,27 @@ make build
 make install
 ```
 
+#### Command Aliases (Optional)
+
+For faster typing, you can set up command aliases:
+
+```bash
+# Run the setup script
+./scripts/setup-aliases.sh
+
+# Or manually add to your ~/.bashrc or ~/.zshrc:
+alias mf='mockforge'
+alias mf-serve='mockforge serve'
+alias mf-wizard='mockforge wizard'
+```
+
+Then use `mf` instead of `mockforge`:
+```bash
+mf wizard        # Interactive setup wizard
+mf serve         # Start mock server
+mf init .        # Initialize project
+```
+
 ### Try the Examples
 
 MockForge comes with comprehensive examples to get you started quickly:
@@ -167,6 +291,207 @@ cargo run -p mockforge-cli -- serve --config demo-config.yaml
 MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
 MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
 cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --admin
+```
+
+## 📋 Schema/Specification Input Support
+
+MockForge supports multiple API specification formats for generating mocks and clients:
+
+### Supported Formats
+
+- **OpenAPI 3.0.x and 3.1.x**: Full support with comprehensive validation
+- **OpenAPI 2.0 (Swagger)**: Format detection and validation (parsing via conversion to 3.x recommended)
+- **GraphQL Schema**: Schema Definition Language (SDL) parsing and validation
+- **Protocol Buffers**: gRPC service definitions from `.proto` files
+
+### Usage Examples
+
+#### OpenAPI Specification
+
+```bash
+# Generate mocks from OpenAPI spec
+mockforge generate --spec api.json --output ./generated
+
+# Serve with OpenAPI spec
+mockforge serve --spec api.yaml --admin
+
+# Import OpenAPI spec and generate mocks
+mockforge import openapi ./specs/api.yaml --output mocks.json
+```
+
+**Example OpenAPI 3.0 Specification:**
+
+```json
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "User Management API",
+    "version": "1.0.0",
+    "description": "API for managing users"
+  },
+  "servers": [
+    {
+      "url": "https://api.example.com/v1"
+    }
+  ],
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "List users",
+        "responses": {
+          "200": {
+            "description": "List of users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "User": {
+        "type": "object",
+        "required": ["id", "name", "email"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+#### GraphQL Schema
+
+```bash
+# Serve with GraphQL schema
+mockforge serve --graphql schema.graphql --graphql-port 4000
+
+# Generate from GraphQL schema
+mockforge generate --spec schema.graphql --output ./generated
+```
+
+**Example GraphQL Schema:**
+
+```graphql
+type Query {
+  users: [User!]!
+  user(id: ID!): User
+}
+
+type Mutation {
+  createUser(input: CreateUserInput!): User!
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  createdAt: DateTime!
+}
+
+input CreateUserInput {
+  name: String!
+  email: String!
+}
+
+input UpdateUserInput {
+  name: String
+  email: String
+}
+
+scalar DateTime
+```
+
+#### gRPC/Protocol Buffers
+
+```bash
+# Serve with proto files
+mockforge serve --grpc-port 50051
+
+# Proto files are discovered from configured directories
+```
+
+### Validation and Error Reporting
+
+MockForge provides comprehensive validation with detailed error messages:
+
+**Example validation output:**
+
+```bash
+$ mockforge generate --spec invalid-api.json
+
+Invalid OpenAPI specification:
+  Missing 'info' section in OpenAPI 3.x spec (at /info). Hint: Add an 'info' section with 'title' and 'version' fields
+  Missing or empty 'info.title' field (at /info/title). Hint: Add 'title' field to the 'info' section
+  'paths' object cannot be empty. At least one endpoint is required (at /paths). Hint: Add at least one path definition
+
+Fix the validation errors above and try again
+```
+
+**Validation Features:**
+
+- ✅ Automatic format detection (OpenAPI, GraphQL, Protobuf)
+- ✅ Detailed error messages with JSON pointers to problematic fields
+- ✅ Helpful suggestions for fixing validation errors
+- ✅ Support for both JSON and YAML formats
+- ✅ Warnings for incomplete or suboptimal specifications
+
+### Converting Swagger 2.0 to OpenAPI 3.x
+
+While MockForge can detect and validate Swagger 2.0 specifications, full parsing requires OpenAPI 3.x format. Use conversion tools:
+
+```bash
+# Using swagger2openapi (Node.js)
+npx swagger2openapi swagger.json -o openapi.json
+
+# Or use online converter
+# https://editor.swagger.io/
 ```
 
 See `examples/README.md` for detailed documentation on the example files.
@@ -200,6 +525,85 @@ docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
 ```
 
 See [DOCKER.md](DOCKER.md) for comprehensive Docker documentation and deployment options.
+
+## 🎯 Multi-Framework Client Generation
+
+MockForge now supports generating client code for multiple frontend frameworks from your OpenAPI specifications. This enables seamless integration with your existing applications and reduces development time.
+
+### Supported Frameworks
+
+- **React** - Generate React hooks and TypeScript types
+- **Vue** - Generate Vue composables and Pinia stores
+- **Angular** - Generate Angular services and modules
+- **Svelte** - Generate Svelte stores and components
+
+### Quick Start with Client Generation
+
+```bash
+# Generate React client
+mockforge client generate --spec examples/user-management-api.json --framework react --output ./generated
+
+# Generate Vue client
+mockforge client generate --spec examples/user-management-api.json --framework vue --output ./generated
+
+# Generate Angular client
+mockforge client generate --spec examples/user-management-api.json --framework angular --output ./generated
+
+# Generate Svelte client
+mockforge client generate --spec examples/user-management-api.json --framework svelte --output ./generated
+```
+
+### Example Applications
+
+Complete example applications are available in the `examples/` directory:
+
+- **`react-demo/`** - React application with generated hooks
+- **`vue-demo/`** - Vue 3 application with generated composables
+- **`angular-demo/`** - Angular 17 application with generated services
+- **`svelte-demo/`** - SvelteKit application with generated stores
+
+Each demo includes:
+- ✅ Complete working application
+- ✅ Generated client integration
+- ✅ TypeScript type safety
+- ✅ Error handling and loading states
+- ✅ Form handling examples
+- ✅ Comprehensive documentation
+
+### Generated Code Features
+
+All generated clients include:
+
+- **TypeScript Types** - Full type safety from OpenAPI schemas
+- **API Clients** - Framework-specific HTTP clients
+- **Error Handling** - Built-in error management
+- **Loading States** - Reactive loading indicators
+- **Documentation** - Usage examples and API reference
+
+### Usage Example
+
+```typescript
+// React
+const { data: users, loading, error } = useGetUsers();
+
+// Vue
+const { data, loading, error } = useGetUsers();
+
+// Angular
+this.userService.getUsers().subscribe({
+  next: (users) => this.users = users,
+  error: (error) => this.error = error
+});
+
+// Svelte
+const usersStore = createGetUsersStore();
+usersStore.subscribe(state => {
+  users = state.data;
+  loading = state.loading;
+});
+```
+
+See [`examples/README.md`](examples/README.md) for detailed documentation on all framework examples.
 
 ### Basic Usage
 
@@ -641,6 +1045,197 @@ Features:
 3. **Mixed Environments**: Support for both gRPC and HTTP clients
 4. **Development Tools**: Use Postman, curl, or any HTTP client
 5. **Documentation**: Auto-generated API docs for gRPC services
+
+## 📨 Async/Event Protocols (Kafka, MQTT, AMQP)
+
+MockForge provides **first-class support** for async and event-driven protocols, enabling comprehensive testing of message-driven architectures, pub/sub systems, and event-driven microservices.
+
+### Supported Protocols
+
+- **Kafka** - Distributed event streaming with full broker simulation
+- **MQTT** - IoT and pub/sub messaging with QoS support
+- **AMQP** - Enterprise message queuing (RabbitMQ compatible)
+
+### Quick Start
+
+```bash
+# Start all protocols (Kafka, MQTT, AMQP enabled by default)
+mockforge serve
+
+# Override ports
+mockforge serve --kafka-port 9092 --mqtt-port 1883 --amqp-port 5672
+
+# Or use dedicated commands
+mockforge kafka serve --port 9092
+mockforge mqtt publish --topic "sensors/temp" --payload '{"temp": 22.5}'
+mockforge amqp serve --port 5672
+```
+
+### Kafka Mock Broker
+
+**Features:**
+- ✅ 10+ Kafka APIs (Produce, Fetch, Metadata, Consumer Groups, etc.)
+- ✅ Topic & partition management with auto-creation
+- ✅ Consumer group coordination with rebalancing
+- ✅ Offset management and commit tracking
+- ✅ Auto-produce messages at configurable rates
+- ✅ Compatible with rdkafka, KafkaJS, confluent-kafka
+
+**Example:** Using with Python
+
+```python
+from confluent_kafka import Producer, Consumer
+
+# Producer
+producer = Producer({'bootstrap.servers': 'localhost:9092'})
+producer.produce('orders', key='order-123', value='{"total": 99.99}')
+producer.flush()
+
+# Consumer
+consumer = Consumer({
+    'bootstrap.servers': 'localhost:9092',
+    'group.id': 'my-group',
+    'auto.offset.reset': 'earliest'
+})
+consumer.subscribe(['orders'])
+```
+
+**Fixture-Based Testing:**
+
+Create `fixtures/kafka/orders.yaml`:
+
+```yaml
+- identifier: "order-created"
+  topic: "orders.created"
+  key_pattern: "order-{{uuid}}"
+  value_template:
+    order_id: "{{uuid}}"
+    customer_id: "customer-{{faker.int 1000 9999}}"
+    total: "{{faker.float 10.0 1000.0 | round 2}}"
+    status: "pending"
+    created_at: "{{now}}"
+  auto_produce:
+    enabled: true
+    rate_per_second: 10  # Generate 10 orders/second
+```
+
+### MQTT Broker
+
+**Features:**
+- ✅ MQTT 3.1.1 and 5.0 support
+- ✅ QoS levels (0, 1, 2) with delivery guarantees
+- ✅ Topic hierarchies with wildcards (`+`, `#`)
+- ✅ Retained messages and Last Will Testament
+- ✅ Session management and auto-publish
+- ✅ Compatible with Paho, rumqttc, MQTT.js
+
+**Example:** Using with JavaScript
+
+```javascript
+const mqtt = require('mqtt');
+const client = mqtt.connect('mqtt://localhost:1883');
+
+// Publish
+client.publish('sensors/temperature', JSON.stringify({ temp: 22.5 }), { qos: 1 });
+
+// Subscribe
+client.subscribe('sensors/#');
+client.on('message', (topic, message) => {
+  console.log(`${topic}: ${message.toString()}`);
+});
+```
+
+### AMQP Broker
+
+**Features:**
+- ✅ AMQP 0.9.1 protocol (RabbitMQ compatible)
+- ✅ Exchange types (direct, fanout, topic, headers)
+- ✅ Queue management with bindings
+- ✅ Consumer coordination and message routing
+- ✅ Fixture-driven testing
+- ✅ Compatible with lapin, amqplib, RabbitMQ clients
+
+**Example:** Using with Python
+
+```python
+import pika
+
+connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+channel = connection.channel()
+
+# Declare and bind
+channel.exchange_declare(exchange='orders', exchange_type='topic')
+channel.queue_declare(queue='order.processing')
+channel.queue_bind(exchange='orders', queue='order.processing', routing_key='order.created')
+
+# Publish
+channel.basic_publish(exchange='orders', routing_key='order.created',
+                      body='{"order_id": "123"}')
+```
+
+### Advanced Features
+
+**Auto-Production:**
+```yaml
+auto_produce:
+  enabled: true
+  rate_per_second: 100
+  duration_seconds: 0  # 0 = infinite
+```
+
+**Template Engine:**
+```yaml
+value_template:
+  id: "{{uuid}}"
+  customer_name: "{{faker.name}}"
+  amount: "{{faker.float 10.0 1000.0 | round 2}}"
+  created_at: "{{now}}"
+  status: "{{faker.randomChoice ['pending', 'processing', 'completed']}}"
+```
+
+**Metrics & Monitoring:**
+```bash
+curl http://localhost:9080/__mockforge/metrics
+
+# Example metrics
+kafka_messages_produced_total 12345
+mqtt_messages_published_total 5678
+amqp_messages_published_total 9012
+```
+
+### Configuration
+
+```yaml
+kafka:
+  enabled: true
+  port: 9092
+  auto_create_topics: true
+  default_partitions: 3
+  fixtures_dir: "./fixtures/kafka"
+
+mqtt:
+  enabled: true
+  port: 1883
+  max_connections: 1000
+  keep_alive_secs: 60
+  fixtures_dir: "./fixtures/mqtt"
+
+amqp:
+  enabled: true
+  port: 5672
+  max_connections: 1000
+  heartbeat_interval: 60
+  fixtures_dir: "./fixtures/amqp"
+```
+
+### Example Use Cases
+
+1. **Microservices Event Bus** - Order service → Inventory → Notifications → Analytics
+2. **IoT Sensor Networks** - Temperature/humidity sensors publishing via MQTT
+3. **Task Queue Systems** - API publishes tasks, workers consume from specific queues
+4. **Event Sourcing & CQRS** - Event store with read model projections
+
+📖 **For detailed documentation, see [ASYNC_PROTOCOLS.md](ASYNC_PROTOCOLS.md)**
 
 ## 🎯 Data Generation
 
@@ -1102,6 +1697,7 @@ See the [complete troubleshooting guide](https://docs.mockforge.dev/reference/tr
 
 - **[GitHub Issues](https://github.com/SaaSy-Solutions/mockforge/issues)** - Report bugs or request features
 - **[GitHub Discussions](https://github.com/SaaSy-Solutions/mockforge/discussions)** - Ask questions and share ideas
+- **[Discord](https://discord.gg/2FxXqKpa)** - Join our community chat
 - **[Contributing Guide](CONTRIBUTING.md)** - Contribute to MockForge development
 
 ### Need Help?

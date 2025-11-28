@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Play, Pause, Square, RefreshCw, Zap, Settings } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Play, Pause, Square, RefreshCw, Zap, Settings, Wifi, AlertCircle, Gauge, RotateCcw, Loader2 } from 'lucide-react';
 import {
   PageHeader,
   ModernCard,
@@ -7,6 +7,26 @@ import {
   Section,
   ModernBadge
 } from '../components/ui/DesignSystem';
+import { Slider } from '../components/ui/slider';
+import { Button } from '../components/ui/button';
+import { Switch } from '../components/ui/switch';
+import { Spinner } from '../components/ui/LoadingStates';
+import { StatusBadge } from '../components/ui/StatusBadge';
+import {
+  useChaosConfig,
+  useChaosStatus,
+  useUpdateChaosLatency,
+  useUpdateChaosFaults,
+  useUpdateChaosTraffic,
+  useResetChaos,
+} from '../hooks/useApi';
+import type { ChaosLatencyConfig, ChaosFaultInjectionConfig, ChaosTrafficShapingConfig, CorruptionType } from '../types';
+import { toast } from 'sonner';
+// Chaos Lab components
+import { LatencyGraph } from '../components/chaos/LatencyGraph';
+import { ErrorPatternEditor } from '../components/chaos/ErrorPatternEditor';
+import { NetworkProfileSelector } from '../components/chaos/NetworkProfileSelector';
+import { ProfileExporter } from '../components/chaos/ProfileExporter';
 
 interface ChaosScenario {
   name: string;
@@ -46,6 +66,105 @@ export function ChaosPage() {
   const [status, setStatus] = useState<ScenarioStatus>({ is_enabled: false });
   const [loading, setLoading] = useState(true);
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
+
+  // Chaos API hooks
+  const { data: chaosConfig, isLoading: configLoading, isError: configError } = useChaosConfig();
+  const { data: chaosStatus, isLoading: statusLoading } = useChaosStatus();
+  const updateLatency = useUpdateChaosLatency();
+  const updateFaults = useUpdateChaosFaults();
+  const updateTraffic = useUpdateChaosTraffic();
+  const resetChaos = useResetChaos();
+
+  // Local state for controls with debouncing
+  const [latencyConfig, setLatencyConfig] = useState<ChaosLatencyConfig>({
+    enabled: false,
+    fixed_delay_ms: null,
+    random_delay_range_ms: null,
+    jitter_percent: 0,
+    probability: 1.0,
+  });
+
+  const [faultConfig, setFaultConfig] = useState<ChaosFaultInjectionConfig>({
+    enabled: false,
+    http_errors: [500, 502, 503, 504],
+    http_error_probability: 0.1,
+    connection_errors: false,
+    connection_error_probability: 0.05,
+    timeout_errors: false,
+    timeout_ms: 5000,
+    timeout_probability: 0.05,
+    partial_responses: false,
+    partial_response_probability: 0.05,
+    payload_corruption: false,
+    payload_corruption_probability: 0.05,
+    corruption_type: 'none',
+  });
+
+  const [trafficConfig, setTrafficConfig] = useState<ChaosTrafficShapingConfig>({
+    enabled: false,
+    bandwidth_limit_bps: 0,
+    packet_loss_percent: 0,
+    max_connections: 0,
+    connection_timeout_ms: 30000,
+  });
+
+  // Debounce timers
+  const debounceTimers = React.useRef<Record<string, NodeJS.Timeout>>({});
+
+  // Loading states for each mutation (combine local state with React Query state)
+  const updatingLatency = updateLatency.isPending || updateLatency.isError;
+  const updatingFaults = updateFaults.isPending || updateFaults.isError;
+  const updatingTraffic = updateTraffic.isPending || updateTraffic.isError;
+
+  // Initialize from API config
+  useEffect(() => {
+    if (chaosConfig) {
+      if (chaosConfig.latency) {
+        setLatencyConfig(chaosConfig.latency);
+      }
+      if (chaosConfig.fault_injection) {
+        setFaultConfig(chaosConfig.fault_injection);
+      }
+      if (chaosConfig.traffic_shaping) {
+        setTrafficConfig(chaosConfig.traffic_shaping);
+      }
+    }
+  }, [chaosConfig]);
+
+  // Debounced update function with loading state
+  const debouncedUpdate = useCallback((
+    key: string,
+    updateFn: (config: any) => Promise<any>,
+    config: any,
+    delay: number = 300
+  ) => {
+    if (debounceTimers.current[key]) {
+      clearTimeout(debounceTimers.current[key]);
+    }
+
+    debounceTimers.current[key] = setTimeout(() => {
+      updateFn(config)
+        .then(() => {
+          toast.success('Configuration updated', {
+            description: 'Chaos settings have been applied successfully',
+            duration: 2000,
+          });
+        })
+        .catch((err) => {
+          toast.error('Failed to update configuration', {
+            description: err.message || 'An error occurred while updating chaos settings',
+            duration: 4000,
+          });
+        });
+    }, delay);
+  }, []);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(debounceTimers.current).forEach(timer => clearTimeout(timer));
+    };
+  }, []);
 
   useEffect(() => {
     fetchScenarios();
@@ -100,18 +219,6 @@ export function ChaosPage() {
     }
   };
 
-  const resetChaos = async () => {
-    try {
-      const response = await fetch('/api/chaos/reset', {
-        method: 'POST',
-      });
-      if (!response.ok) throw new Error('Failed to reset chaos');
-      fetchStatus();
-    } catch (err) {
-      alert(`Failed to reset chaos: ${err}`);
-    }
-  };
-
   const predefinedScenarios = [
     {
       name: 'network_degradation',
@@ -140,14 +247,35 @@ export function ChaosPage() {
     }
   ];
 
-  if (loading) {
+  if (loading || configLoading) {
     return (
       <div className="space-y-8">
         <PageHeader
           title="Chaos Engineering"
           subtitle="Control and monitor chaos scenarios"
         />
-        <Alert type="info" title="Loading" message="Fetching chaos scenarios..." />
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center space-y-4">
+            <Spinner size="lg" />
+            <p className="text-gray-600 dark:text-gray-400">Loading chaos configuration...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (configError) {
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          title="Chaos Engineering"
+          subtitle="Control and monitor chaos scenarios"
+        />
+        <Alert
+          type="error"
+          title="Failed to Load Configuration"
+          message="Unable to fetch chaos configuration. Please refresh the page."
+        />
       </div>
     );
   }
@@ -159,6 +287,7 @@ export function ChaosPage() {
         subtitle="Test system resilience with controlled failure injection"
         actions={
           <div className="flex gap-2">
+            <ProfileExporter compact />
             <button
               onClick={fetchStatus}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
@@ -187,7 +316,7 @@ export function ChaosPage() {
           message={`Active scenario: ${status.active_scenario || 'Custom configuration'}`}
           actions={
             <button
-              onClick={resetChaos}
+              onClick={() => resetChaos.mutate()}
               className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
             >
               Reset
@@ -201,6 +330,14 @@ export function ChaosPage() {
           message="Select a scenario below to start testing system resilience"
         />
       )}
+
+      {/* Network Profiles - New Chaos Lab Feature */}
+      <NetworkProfileSelector
+        onProfileApplied={(profileName) => {
+          toast.success(`Applied profile: ${profileName}`);
+          fetchStatus();
+        }}
+      />
 
       {/* Predefined Scenarios */}
       <Section
@@ -239,6 +376,14 @@ export function ChaosPage() {
         </div>
       </Section>
 
+      {/* Real-time Latency Graph - New Chaos Lab Feature */}
+      <Section
+        title="Real-time Latency Metrics"
+        subtitle="Visualize request latency over time"
+      >
+        <LatencyGraph height={400} showStats />
+      </Section>
+
       {/* Current Configuration */}
       {status.is_enabled && status.current_config && (
         <Section
@@ -255,80 +400,408 @@ export function ChaosPage() {
         </Section>
       )}
 
-      {/* Latency Control */}
+      {/* Quick Controls */}
       <Section
         title="Quick Controls"
-        subtitle="Adjust chaos parameters on the fly"
+        subtitle="Adjust chaos parameters on the fly with real-time sliders"
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <ModernCard>
-            <div className="flex items-center gap-3 mb-4">
-              <Settings className="h-5 w-5 text-gray-400" />
-              <h4 className="font-semibold text-gray-900 dark:text-gray-100">Latency</h4>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
-                  Delay (ms)
-                </label>
-                <input
-                  type="number"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                  placeholder="500"
+        <div className="space-y-6">
+          {/* Status Summary */}
+          {(latencyConfig.enabled || faultConfig.enabled || trafficConfig.enabled) && (
+            <ModernCard className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border-orange-200 dark:border-orange-800 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <Zap className="h-6 w-6 text-orange-600 dark:text-orange-400 animate-pulse" />
+                    <div className="absolute inset-0 h-6 w-6 bg-orange-400 rounded-full opacity-75 animate-ping" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 text-lg">
+                      Chaos Engineering Active
+                    </h4>
+                    <div className="flex items-center gap-4 mt-1">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {[
+                          latencyConfig.enabled && `Latency (${latencyConfig.fixed_delay_ms || 0}ms)`,
+                          faultConfig.enabled && `Faults (${(faultConfig.http_error_probability * 100).toFixed(0)}%)`,
+                          trafficConfig.enabled && `Traffic (${trafficConfig.packet_loss_percent.toFixed(1)}% loss)`
+                        ].filter(Boolean).join(' • ')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status="running" />
+                  {(updatingLatency || updatingFaults || updatingTraffic) && (
+                    <Spinner size="sm" className="text-orange-600" />
+                  )}
+                </div>
+              </div>
+            </ModernCard>
+          )}
+
+          {/* Reset All Button */}
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                resetChaos.mutate();
+                toast.success('Chaos configuration reset to defaults');
+              }}
+              disabled={resetChaos.isPending}
+            >
+              {resetChaos.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4 mr-2" />
+              )}
+              Reset All
+            </Button>
+          </div>
+
+          {/* Latency Controls */}
+          <ModernCard className={latencyConfig.enabled ? 'ring-2 ring-blue-500/50 dark:ring-blue-400/50' : ''}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="relative">
+                <Zap className={`h-5 w-5 ${latencyConfig.enabled ? 'text-blue-500' : 'text-gray-400'}`} />
+                {latencyConfig.enabled && (
+                  <div className="absolute inset-0 h-5 w-5 bg-blue-400 rounded-full opacity-75 animate-ping" />
+                )}
+              </div>
+              <h4 className="font-semibold text-gray-900 dark:text-gray-100">Latency Injection</h4>
+              <div className="ml-auto flex items-center gap-2">
+                {updatingLatency && (
+                  <Spinner size="sm" className="text-blue-500" />
+                )}
+                {latencyConfig.enabled && (
+                  <StatusBadge status="running" size="sm" />
+                )}
+                <Switch
+                  checked={latencyConfig.enabled}
+                  onCheckedChange={(checked) => {
+                    const newConfig = { ...latencyConfig, enabled: checked };
+                    setLatencyConfig(newConfig);
+                    debouncedUpdate('latency', updateLatency.mutateAsync, newConfig);
+                  }}
+                  disabled={updatingLatency || configLoading}
                 />
               </div>
-              <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                Apply
-              </button>
             </div>
+            {latencyConfig.enabled && (
+              <div className="space-y-4">
+                <Slider
+                  label="Fixed Delay"
+                  min={0}
+                  max={5000}
+                  step={50}
+                  value={latencyConfig.fixed_delay_ms || 0}
+                  onChange={(value) => {
+                    const newConfig = { ...latencyConfig, fixed_delay_ms: value };
+                    setLatencyConfig(newConfig);
+                    debouncedUpdate('latency', updateLatency.mutateAsync, newConfig);
+                  }}
+                  unit="ms"
+                  description="Add a consistent delay to all requests"
+                  disabled={updatingLatency || configLoading || !latencyConfig.enabled}
+                />
+                <Slider
+                  label="Jitter"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={latencyConfig.jitter_percent}
+                  onChange={(value) => {
+                    const newConfig = { ...latencyConfig, jitter_percent: value };
+                    setLatencyConfig(newConfig);
+                    debouncedUpdate('latency', updateLatency.mutateAsync, newConfig);
+                  }}
+                  unit="%"
+                  description="Random variance applied to delays"
+                  disabled={updatingLatency || configLoading || !latencyConfig.enabled}
+                />
+                <Slider
+                  label="Probability"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={latencyConfig.probability * 100}
+                  onChange={(value) => {
+                    const newConfig = { ...latencyConfig, probability: value / 100 };
+                    setLatencyConfig(newConfig);
+                    debouncedUpdate('latency', updateLatency.mutateAsync, newConfig);
+                  }}
+                  unit="%"
+                  description="Percentage of requests that will have latency applied"
+                  disabled={updatingLatency || configLoading || !latencyConfig.enabled}
+                />
+              </div>
+            )}
           </ModernCard>
 
-          <ModernCard>
-            <div className="flex items-center gap-3 mb-4">
-              <Settings className="h-5 w-5 text-gray-400" />
+          {/* Fault Injection Controls */}
+          <ModernCard className={faultConfig.enabled ? 'ring-2 ring-red-500/50 dark:ring-red-400/50' : ''}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="relative">
+                <AlertCircle className={`h-5 w-5 ${faultConfig.enabled ? 'text-red-500' : 'text-gray-400'}`} />
+                {faultConfig.enabled && (
+                  <div className="absolute inset-0 h-5 w-5 bg-red-400 rounded-full opacity-75 animate-ping" />
+                )}
+              </div>
               <h4 className="font-semibold text-gray-900 dark:text-gray-100">Fault Injection</h4>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
-                  Error Rate (%)
-                </label>
-                <input
-                  type="number"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                  placeholder="10"
-                  min="0"
-                  max="100"
+              <div className="ml-auto flex items-center gap-2">
+                {updatingFaults && (
+                  <Spinner size="sm" className="text-red-500" />
+                )}
+                {faultConfig.enabled && (
+                  <StatusBadge status="warning" size="sm" />
+                )}
+                <Switch
+                  checked={faultConfig.enabled}
+                  onCheckedChange={(checked) => {
+                    const newConfig = { ...faultConfig, enabled: checked };
+                    setFaultConfig(newConfig);
+                    debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                  }}
+                  disabled={updatingFaults || configLoading}
                 />
               </div>
-              <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                Apply
-              </button>
             </div>
+            {faultConfig.enabled && (
+              <div className="space-y-4">
+                <Slider
+                  label="HTTP Error Rate"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={faultConfig.http_error_probability * 100}
+                  onChange={(value) => {
+                    const newConfig = { ...faultConfig, http_error_probability: value / 100 };
+                    setFaultConfig(newConfig);
+                    debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                  }}
+                  unit="%"
+                  description="Probability of injecting HTTP errors"
+                  disabled={updatingFaults || configLoading || !faultConfig.enabled}
+                />
+                <div className="flex items-center gap-4">
+                    <Switch
+                    checked={faultConfig.connection_errors}
+                    onCheckedChange={(checked) => {
+                      const newConfig = { ...faultConfig, connection_errors: checked };
+                      setFaultConfig(newConfig);
+                      debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                    }}
+                    disabled={updatingFaults || configLoading || !faultConfig.enabled}
+                  />
+                  <div className="flex-1">
+                    <Slider
+                      label="Connection Error Rate"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={faultConfig.connection_error_probability * 100}
+                      onChange={(value) => {
+                        const newConfig = { ...faultConfig, connection_error_probability: value / 100 };
+                        setFaultConfig(newConfig);
+                        debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                      }}
+                      unit="%"
+                      description="Probability of connection disconnects"
+                      disabled={!faultConfig.connection_errors || updatingFaults || configLoading || !faultConfig.enabled}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Switch
+                    checked={faultConfig.timeout_errors}
+                    onCheckedChange={(checked) => {
+                      const newConfig = { ...faultConfig, timeout_errors: checked };
+                      setFaultConfig(newConfig);
+                      debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                    }}
+                    disabled={updatingFaults || configLoading || !faultConfig.enabled}
+                  />
+                  <div className="flex-1">
+                    <Slider
+                      label="Timeout Error Rate"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={faultConfig.timeout_probability * 100}
+                      onChange={(value) => {
+                        const newConfig = { ...faultConfig, timeout_probability: value / 100 };
+                        setFaultConfig(newConfig);
+                        debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                      }}
+                      unit="%"
+                      description="Probability of timeout errors"
+                      disabled={!faultConfig.timeout_errors || updatingFaults || configLoading || !faultConfig.enabled}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Switch
+                    checked={faultConfig.payload_corruption}
+                    onCheckedChange={(checked) => {
+                      const newConfig = { ...faultConfig, payload_corruption: checked };
+                      setFaultConfig(newConfig);
+                      debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                    }}
+                    disabled={updatingFaults || configLoading || !faultConfig.enabled}
+                  />
+                  <div className="flex-1 space-y-2">
+                    <Slider
+                      label="Payload Corruption Rate"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={faultConfig.payload_corruption_probability * 100}
+                      onChange={(value) => {
+                        const newConfig = { ...faultConfig, payload_corruption_probability: value / 100 };
+                        setFaultConfig(newConfig);
+                        debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                      }}
+                      unit="%"
+                      description="Probability of corrupting response payloads"
+                      disabled={!faultConfig.payload_corruption || updatingFaults || configLoading || !faultConfig.enabled}
+                    />
+                    <div>
+                      <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
+                        Corruption Type
+                      </label>
+                      <select
+                        value={faultConfig.corruption_type}
+                        onChange={(e) => {
+                          const newConfig = { ...faultConfig, corruption_type: e.target.value as CorruptionType };
+                          setFaultConfig(newConfig);
+                          debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                        }}
+                        disabled={!faultConfig.payload_corruption || updatingFaults || configLoading || !faultConfig.enabled}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <option value="none">None</option>
+                        <option value="random_bytes">Random Bytes</option>
+                        <option value="truncate">Truncate</option>
+                        <option value="bit_flip">Bit Flip</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </ModernCard>
 
-          <ModernCard>
-            <div className="flex items-center gap-3 mb-4">
-              <Settings className="h-5 w-5 text-gray-400" />
-              <h4 className="font-semibold text-gray-900 dark:text-gray-100">Rate Limiting</h4>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
-                  Max RPS
-                </label>
-                <input
-                  type="number"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                  placeholder="100"
+          {/* Error Pattern Editor - New Chaos Lab Feature */}
+          {faultConfig.enabled && (
+            <ErrorPatternEditor
+              currentPattern={
+                chaosConfig?.fault_injection?.error_pattern
+                  ? {
+                      type: chaosConfig.fault_injection.error_pattern.type as 'burst' | 'random' | 'sequential',
+                      count: chaosConfig.fault_injection.error_pattern.count,
+                      interval_ms: chaosConfig.fault_injection.error_pattern.interval_ms,
+                      probability: chaosConfig.fault_injection.error_pattern.probability,
+                      sequence: chaosConfig.fault_injection.error_pattern.sequence,
+                    }
+                  : null
+              }
+              onPatternChange={(pattern) => {
+                if (pattern) {
+                  const newConfig = { ...faultConfig, error_pattern: pattern };
+                  setFaultConfig(newConfig);
+                  debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
+                }
+              }}
+              disabled={updatingFaults || configLoading}
+            />
+          )}
+
+          {/* Traffic Shaping Controls */}
+          <ModernCard className={trafficConfig.enabled ? 'ring-2 ring-green-500/50 dark:ring-green-400/50' : ''}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="relative">
+                <Wifi className={`h-5 w-5 ${trafficConfig.enabled ? 'text-green-500' : 'text-gray-400'}`} />
+                {trafficConfig.enabled && (
+                  <div className="absolute inset-0 h-5 w-5 bg-green-400 rounded-full opacity-75 animate-ping" />
+                )}
+              </div>
+              <h4 className="font-semibold text-gray-900 dark:text-gray-100">Traffic Shaping</h4>
+              <div className="ml-auto flex items-center gap-2">
+                {updatingTraffic && (
+                  <Spinner size="sm" className="text-green-500" />
+                )}
+                {trafficConfig.enabled && (
+                  <StatusBadge status="running" size="sm" />
+                )}
+                <Switch
+                  checked={trafficConfig.enabled}
+                  onCheckedChange={(checked) => {
+                    const newConfig = { ...trafficConfig, enabled: checked };
+                    setTrafficConfig(newConfig);
+                    debouncedUpdate('traffic', updateTraffic.mutateAsync, newConfig);
+                  }}
+                  disabled={updatingTraffic || configLoading}
                 />
               </div>
-              <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                Apply
-              </button>
             </div>
+            {trafficConfig.enabled && (
+              <div className="space-y-4">
+                <Slider
+                  label="Packet Loss"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={trafficConfig.packet_loss_percent}
+                  onChange={(value) => {
+                    const newConfig = { ...trafficConfig, packet_loss_percent: value };
+                    setTrafficConfig(newConfig);
+                    debouncedUpdate('traffic', updateTraffic.mutateAsync, newConfig);
+                  }}
+                  unit="%"
+                  description="Percentage of packets to drop (simulates network issues)"
+                  disabled={updatingTraffic || configLoading || !trafficConfig.enabled}
+                />
+                <Slider
+                  label="Bandwidth Limit"
+                  min={0}
+                  max={10000000}
+                  step={100000}
+                  value={trafficConfig.bandwidth_limit_bps}
+                  onChange={(value) => {
+                    const newConfig = { ...trafficConfig, bandwidth_limit_bps: value };
+                    setTrafficConfig(newConfig);
+                    debouncedUpdate('traffic', updateTraffic.mutateAsync, newConfig);
+                  }}
+                  unit="bps"
+                  description="Maximum bandwidth in bytes per second (0 = unlimited)"
+                  disabled={updatingTraffic || configLoading || !trafficConfig.enabled}
+                />
+                <Slider
+                  label="Max Connections"
+                  min={0}
+                  max={1000}
+                  step={10}
+                  value={trafficConfig.max_connections}
+                  onChange={(value) => {
+                    const newConfig = { ...trafficConfig, max_connections: value };
+                    setTrafficConfig(newConfig);
+                    debouncedUpdate('traffic', updateTraffic.mutateAsync, newConfig);
+                  }}
+                  description="Maximum concurrent connections (0 = unlimited)"
+                  disabled={updatingTraffic || configLoading || !trafficConfig.enabled}
+                />
+              </div>
+            )}
           </ModernCard>
         </div>
+      </Section>
+
+      {/* Profile Export/Import - New Chaos Lab Feature */}
+      <Section
+        title="Profile Management"
+        subtitle="Export and import chaos configuration profiles"
+      >
+        <ProfileExporter />
       </Section>
     </div>
   );

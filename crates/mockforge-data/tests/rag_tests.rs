@@ -1,3 +1,8 @@
+//! Tests for RAG (Retrieval-Augmented Generation) functionality.
+//!
+//! These tests verify that RAG engines correctly process documents, generate
+//! embeddings, and retrieve relevant context for LLM queries.
+
 use mockforge_data::rag::{DocumentChunk, EmbeddingProvider, LlmProvider, RagConfig, RagEngine};
 use serde_json::json;
 use std::collections::HashMap;

@@ -1,3 +1,8 @@
+//! End-to-end tests for 422 validation status responses.
+//!
+//! These tests verify that invalid requests return proper 422 Unprocessable Entity
+//! status codes with appropriate validation error messages.
+
 use axum::Router;
 use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
 use mockforge_http::build_router;

@@ -150,11 +150,19 @@ paths:
 }
 
 impl OpenApiRouteRegistry {
-    /// Create a new registry from an OpenAPI spec
+    /// Create a new registry from an OpenAPI spec with default options
     pub fn new(spec: OpenApiSpec) -> Self {
         Self::new_with_env(spec)
     }
 
+    /// Create a new registry from an OpenAPI spec with environment-based options
+    ///
+    /// Options are read from environment variables:
+    /// - `MOCKFORGE_REQUEST_VALIDATION`: "off"/"warn"/"enforce" (default: "enforce")
+    /// - `MOCKFORGE_AGGREGATE_ERRORS`: "1"/"true" to aggregate errors (default: true)
+    /// - `MOCKFORGE_RESPONSE_VALIDATION`: "1"/"true" to validate responses (default: false)
+    /// - `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND`: "1"/"true" to expand templates (default: false)
+    /// - `MOCKFORGE_VALIDATION_STATUS`: HTTP status code for validation failures (optional)
     pub fn new_with_env(spec: OpenApiSpec) -> Self {
         tracing::debug!("Creating OpenAPI route registry");
         let spec = Arc::new(spec);
@@ -191,7 +199,11 @@ impl OpenApiRouteRegistry {
         }
     }
 
-    /// Construct with explicit options
+    /// Create a new registry from an OpenAPI spec with explicit validation options
+    ///
+    /// # Arguments
+    /// * `spec` - OpenAPI specification
+    /// * `options` - Validation options to use
     pub fn new_with_options(spec: OpenApiSpec, options: ValidationOptions) -> Self {
         tracing::debug!("Creating OpenAPI route registry with custom options");
         let spec = Arc::new(spec);
@@ -205,13 +217,52 @@ impl OpenApiRouteRegistry {
 
     /// Generate routes from the OpenAPI specification
     fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
-        let mut routes = Vec::new();
         tracing::debug!(
             "Generating routes from OpenAPI spec with {} paths",
             spec.spec.paths.paths.len()
         );
         let base_paths = Self::collect_base_paths(spec);
 
+        // Optimize: Use parallel iteration for route generation when beneficial
+        #[cfg(feature = "rayon")]
+        {
+            use rayon::prelude::*;
+            let path_items: Vec<_> = spec.spec.paths.paths.iter().collect();
+
+            // Use parallel processing for large specs (100+ paths)
+            if path_items.len() > 100 {
+                tracing::debug!("Using parallel route generation for {} paths", path_items.len());
+                let routes: Vec<Vec<OpenApiRoute>> = path_items
+                    .par_iter()
+                    .map(|(path, path_item)| {
+                        let mut routes = Vec::new();
+                        let mut visited = HashSet::new();
+                        if let Some(item) = Self::resolve_path_item(path_item, spec, &mut visited) {
+                            Self::collect_routes_for_path(&mut routes, path, &item, spec, &base_paths);
+                        } else {
+                            tracing::warn!(
+                                "Skipping path {} because the referenced PathItem could not be resolved",
+                                path
+                            );
+                        }
+                        routes
+                    })
+                    .collect();
+
+                let mut all_routes = Vec::new();
+                for route_batch in routes {
+                    all_routes.extend(route_batch);
+                }
+                tracing::debug!(
+                    "Generated {} total routes from OpenAPI spec (parallel)",
+                    all_routes.len()
+                );
+                return all_routes;
+            }
+        }
+
+        // Sequential processing for smaller specs or when rayon is not available
+        let mut routes = Vec::new();
         for (path, path_item) in &spec.spec.paths.paths {
             tracing::debug!("Processing path: {}", path);
             let mut visited = HashSet::new();
@@ -429,22 +480,22 @@ impl OpenApiRouteRegistry {
         segments.join("/")
     }
 
-    /// Get all routes
+    /// Get all generated routes
     pub fn routes(&self) -> &[OpenApiRoute] {
         &self.routes
     }
 
-    /// Get the OpenAPI specification
+    /// Get the OpenAPI specification used to generate routes
     pub fn spec(&self) -> &OpenApiSpec {
         &self.spec
     }
 
-    /// Get validation options
+    /// Get immutable reference to validation options
     pub fn options(&self) -> &ValidationOptions {
         &self.options
     }
 
-    /// Get mutable validation options
+    /// Get mutable reference to validation options for runtime configuration changes
     pub fn options_mut(&mut self) -> &mut ValidationOptions {
         &mut self.options
     }
@@ -457,8 +508,8 @@ impl OpenApiRouteRegistry {
         tracing::debug!("Building router from {} routes", self.routes.len());
 
         for route in &self.routes {
-            println!("Adding route: {} {}", route.method, route.path);
-            println!(
+            tracing::debug!("Adding route: {} {}", route.method, route.path);
+            tracing::debug!(
                 "Route operation responses: {:?}",
                 route.operation.responses.responses.keys().collect::<Vec<_>>()
             );
@@ -467,46 +518,63 @@ impl OpenApiRouteRegistry {
             let handler = move || {
                 let route = route_clone.clone();
                 async move {
-                    println!("Handling request for route: {} {}", route.method, route.path);
-                    let (status, response) = route.mock_response_with_status();
-                    println!("Generated response with status: {}", status);
-                    (
+                    tracing::debug!("Handling request for route: {} {}", route.method, route.path);
+                    let (status, response, trace) =
+                        route.mock_response_with_status_and_scenario_and_trace(None);
+                    tracing::debug!("Generated response with status: {}", status);
+
+                    // Create response with trace attached to extensions
+                    use axum::response::IntoResponse;
+                    let mut axum_response = (
                         axum::http::StatusCode::from_u16(status)
                             .unwrap_or(axum::http::StatusCode::OK),
                         axum::response::Json(response),
                     )
+                        .into_response();
+
+                    // Attach trace to response extensions so logging middleware can pick it up
+                    axum_response.extensions_mut().insert(trace);
+
+                    axum_response
                 }
             };
 
             match route.method.as_str() {
                 "GET" => {
-                    println!("Registering GET route: {}", route.path);
+                    tracing::debug!("Registering GET route: {}", route.path);
                     router = router.route(&route.path, get(handler));
                 }
                 "POST" => {
-                    println!("Registering POST route: {}", route.path);
+                    tracing::debug!("Registering POST route: {}", route.path);
                     router = router.route(&route.path, post(handler));
                 }
                 "PUT" => {
-                    println!("Registering PUT route: {}", route.path);
+                    tracing::debug!("Registering PUT route: {}", route.path);
                     router = router.route(&route.path, put(handler));
                 }
                 "DELETE" => {
-                    println!("Registering DELETE route: {}", route.path);
+                    tracing::debug!("Registering DELETE route: {}", route.path);
                     router = router.route(&route.path, delete(handler));
                 }
                 "PATCH" => {
-                    println!("Registering PATCH route: {}", route.path);
+                    tracing::debug!("Registering PATCH route: {}", route.path);
                     router = router.route(&route.path, patch(handler));
                 }
-                _ => println!("Unsupported HTTP method: {}", route.method),
+                _ => tracing::warn!("Unsupported HTTP method: {}", route.method),
             }
         }
 
         router
     }
 
-    /// Build router with injectors (latency, failure)
+    /// Build router with latency and failure injection support
+    ///
+    /// # Arguments
+    /// * `latency_injector` - Latency injector for simulating network delays
+    /// * `failure_injector` - Optional failure injector for simulating errors
+    ///
+    /// # Returns
+    /// Axum router with chaos engineering capabilities
     pub fn build_router_with_injectors(
         &self,
         latency_injector: crate::latency::LatencyInjector,
@@ -582,6 +650,13 @@ impl OpenApiRouteRegistry {
     }
 
     /// Extract path parameters from a request path by matching against known routes
+    ///
+    /// # Arguments
+    /// * `path` - Request path (e.g., "/users/123")
+    /// * `method` - HTTP method (e.g., "GET")
+    ///
+    /// # Returns
+    /// Map of parameter names to values extracted from the path
     pub fn extract_path_parameters(&self, path: &str, method: &str) -> HashMap<String, String> {
         for route in &self.routes {
             if route.method != method {
@@ -626,7 +701,13 @@ impl OpenApiRouteRegistry {
         Some(params)
     }
 
-    /// Build router with AI generator support
+    /// Build router with AI generator support for dynamic response generation
+    ///
+    /// # Arguments
+    /// * `ai_generator` - Optional AI generator for creating dynamic responses based on request context
+    ///
+    /// # Returns
+    /// Axum router with AI-powered response generation
     pub fn build_router_with_ai(
         &self,
         ai_generator: Option<std::sync::Arc<dyn AiGenerator + Send + Sync>>,
@@ -705,6 +786,129 @@ impl OpenApiRouteRegistry {
                     router = router.route(&route.path, patch(handler));
                 }
                 _ => tracing::warn!("Unsupported HTTP method for AI: {}", route.method),
+            }
+        }
+
+        router
+    }
+
+    /// Build router with MockAI (Behavioral Mock Intelligence) support
+    ///
+    /// This method integrates MockAI for intelligent, context-aware response generation,
+    /// mutation detection, validation error generation, and pagination intelligence.
+    ///
+    /// # Arguments
+    /// * `mockai` - Optional MockAI instance for intelligent behavior
+    ///
+    /// # Returns
+    /// Axum router with MockAI-powered response generation
+    pub fn build_router_with_mockai(
+        &self,
+        mockai: Option<std::sync::Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
+    ) -> axum::Router {
+        use crate::intelligent_behavior::Request as MockAIRequest;
+
+        use axum::routing::{delete, get, patch, post, put};
+
+        let mut router = axum::Router::new();
+        tracing::debug!("Building router with MockAI support from {} routes", self.routes.len());
+
+        for route in &self.routes {
+            tracing::debug!("Adding MockAI-enabled route: {} {}", route.method, route.path);
+
+            let route_clone = route.clone();
+            let mockai_clone = mockai.clone();
+
+            // Create async handler that processes requests through MockAI
+            // Query params are extracted via Query extractor with HashMap
+            // Note: Using Query<HashMap<String, String>> to handle query params
+            let handler = move |query: axum::extract::Query<HashMap<String, String>>,
+                                headers: HeaderMap,
+                                body: Option<Json<Value>>| {
+                let route = route_clone.clone();
+                let mockai = mockai_clone.clone();
+
+                async move {
+                    tracing::debug!(
+                        "Handling MockAI request for route: {} {}",
+                        route.method,
+                        route.path
+                    );
+
+                    // Query parameters are already parsed by Query extractor
+                    let mockai_query = query.0;
+
+                    // If MockAI is enabled, use it to process the request
+                    if let Some(mockai_arc) = mockai {
+                        let mockai_guard = mockai_arc.read().await;
+
+                        // Build MockAI request
+                        let mut mockai_headers = HashMap::new();
+                        for (k, v) in headers.iter() {
+                            mockai_headers
+                                .insert(k.to_string(), v.to_str().unwrap_or("").to_string());
+                        }
+
+                        let mockai_request = MockAIRequest {
+                            method: route.method.clone(),
+                            path: route.path.clone(),
+                            body: body.as_ref().map(|Json(b)| b.clone()),
+                            query_params: mockai_query,
+                            headers: mockai_headers,
+                        };
+
+                        // Process request through MockAI
+                        match mockai_guard.process_request(&mockai_request).await {
+                            Ok(mockai_response) => {
+                                tracing::debug!(
+                                    "MockAI generated response with status: {}",
+                                    mockai_response.status_code
+                                );
+                                return (
+                                    axum::http::StatusCode::from_u16(mockai_response.status_code)
+                                        .unwrap_or(axum::http::StatusCode::OK),
+                                    axum::response::Json(mockai_response.body),
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "MockAI processing failed for {} {}: {}, falling back to standard response",
+                                    route.method,
+                                    route.path,
+                                    e
+                                );
+                                // Fall through to standard response generation
+                            }
+                        }
+                    }
+
+                    // Fallback to standard response generation
+                    let (status, response) = route.mock_response_with_status();
+                    (
+                        axum::http::StatusCode::from_u16(status)
+                            .unwrap_or(axum::http::StatusCode::OK),
+                        axum::response::Json(response),
+                    )
+                }
+            };
+
+            match route.method.as_str() {
+                "GET" => {
+                    router = router.route(&route.path, get(handler));
+                }
+                "POST" => {
+                    router = router.route(&route.path, post(handler));
+                }
+                "PUT" => {
+                    router = router.route(&route.path, put(handler));
+                }
+                "DELETE" => {
+                    router = router.route(&route.path, delete(handler));
+                }
+                "PATCH" => {
+                    router = router.route(&route.path, patch(handler));
+                }
+                _ => tracing::warn!("Unsupported HTTP method for MockAI: {}", route.method),
             }
         }
 

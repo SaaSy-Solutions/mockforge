@@ -23,40 +23,62 @@ pub struct SyncWatcher {
     persistence: Arc<WorkspacePersistence>,
 }
 
+/// File system synchronization events for workspace monitoring
 #[derive(Debug, Clone)]
 pub enum SyncEvent {
-    /// File created in directory
+    /// A new file was created in the watched directory
     FileCreated {
+        /// Workspace ID this file belongs to
         workspace_id: String,
+        /// Path to the created file
         path: PathBuf,
+        /// Contents of the created file
         content: String,
     },
-    /// File modified in directory
+    /// An existing file was modified in the watched directory
     FileModified {
+        /// Workspace ID this file belongs to
         workspace_id: String,
+        /// Path to the modified file
         path: PathBuf,
+        /// Updated contents of the file
         content: String,
     },
-    /// File deleted from directory
-    FileDeleted { workspace_id: String, path: PathBuf },
-    /// Directory changes detected (summary)
-    DirectoryChanged {
+    /// A file was deleted from the watched directory
+    FileDeleted {
+        /// Workspace ID this file belonged to
         workspace_id: String,
+        /// Path to the deleted file
+        path: PathBuf,
+    },
+    /// Multiple directory changes detected (batched summary)
+    DirectoryChanged {
+        /// Workspace ID where changes occurred
+        workspace_id: String,
+        /// List of file changes detected
         changes: Vec<FileChange>,
     },
 }
 
+/// Represents a single file change in the watched directory
 #[derive(Debug, Clone)]
 pub struct FileChange {
+    /// Path to the file that changed
     pub path: PathBuf,
+    /// Type of change that occurred
     pub kind: ChangeKind,
+    /// Optional file contents (for created/modified events)
     pub content: Option<String>,
 }
 
+/// Type of file system change detected
 #[derive(Debug, Clone)]
 pub enum ChangeKind {
+    /// File was created
     Created,
+    /// File was modified
     Modified,
+    /// File was deleted
     Deleted,
 }
 

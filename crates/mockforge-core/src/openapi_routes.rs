@@ -21,6 +21,8 @@ pub use validation::*;
 use crate::ai_response::RequestContext;
 use crate::openapi::response::AiGenerator;
 use crate::openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
+use crate::reality_continuum::response_trace::ResponseGenerationTrace;
+use crate::schema_diff::validation_diff;
 use crate::templating::expand_tokens as core_expand_tokens;
 use crate::{latency::LatencyInjector, overrides::Overrides, Error, Result};
 use axum::extract::{Path as AxumPath, RawQuery};
@@ -32,12 +34,12 @@ use chrono::Utc;
 use once_cell::sync::Lazy;
 use openapiv3::ParameterSchemaOrContent;
 use serde_json::{json, Map, Value};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use tracing;
 
 /// OpenAPI route registry that manages generated routes
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OpenApiRouteRegistry {
     /// The OpenAPI specification
     spec: Arc<OpenApiSpec>,
@@ -45,27 +47,38 @@ pub struct OpenApiRouteRegistry {
     routes: Vec<OpenApiRoute>,
     /// Validation options
     options: ValidationOptions,
+    /// Custom fixture loader (optional)
+    custom_fixture_loader: Option<Arc<crate::CustomFixtureLoader>>,
 }
 
+/// Validation mode for request/response validation
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
 pub enum ValidationMode {
+    /// Validation is disabled (no checks performed)
     Disabled,
+    /// Validation warnings are logged but do not fail requests
     #[default]
     Warn,
+    /// Validation failures return error responses
     Enforce,
 }
 
+/// Options for configuring validation behavior
 #[derive(Debug, Clone)]
 pub struct ValidationOptions {
+    /// Validation mode for incoming requests
     pub request_mode: ValidationMode,
+    /// Whether to aggregate multiple validation errors into a single response
     pub aggregate_errors: bool,
+    /// Whether to validate outgoing responses against schemas
     pub validate_responses: bool,
+    /// Per-operation validation mode overrides (operation ID -> mode)
     pub overrides: std::collections::HashMap<String, ValidationMode>,
     /// Skip validation for request paths starting with any of these prefixes
     pub admin_skip_prefixes: Vec<String>,
-    /// Expand templating tokens in responses/examples
+    /// Expand templating tokens in responses/examples after generation
     pub response_template_expand: bool,
-    /// HTTP status for validation failures (e.g., 400 or 422)
+    /// HTTP status code to return for validation failures (e.g., 400 or 422)
     pub validation_status: Option<u16>,
 }
 
@@ -89,10 +102,26 @@ impl OpenApiRouteRegistry {
         Self::new_with_env(spec)
     }
 
+    /// Create a new registry from an OpenAPI spec with environment-based validation options
+    ///
+    /// Options are read from environment variables:
+    /// - `MOCKFORGE_REQUEST_VALIDATION`: "off"/"warn"/"enforce" (default: "enforce")
+    /// - `MOCKFORGE_AGGREGATE_ERRORS`: "1"/"true" to aggregate errors (default: true)
+    /// - `MOCKFORGE_RESPONSE_VALIDATION`: "1"/"true" to validate responses (default: false)
+    /// - `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND`: "1"/"true" to expand templates (default: false)
+    /// - `MOCKFORGE_VALIDATION_STATUS`: HTTP status code for validation failures (optional)
     pub fn new_with_env(spec: OpenApiSpec) -> Self {
+        Self::new_with_env_and_persona(spec, None)
+    }
+
+    /// Create a new registry from an OpenAPI spec with environment-based validation options and persona
+    pub fn new_with_env_and_persona(
+        spec: OpenApiSpec,
+        persona: Option<Arc<crate::intelligent_behavior::config::Persona>>,
+    ) -> Self {
         tracing::debug!("Creating OpenAPI route registry");
         let spec = Arc::new(spec);
-        let routes = Self::generate_routes(&spec);
+        let routes = Self::generate_routes_with_persona(&spec, persona);
         let options = ValidationOptions {
             request_mode: match std::env::var("MOCKFORGE_REQUEST_VALIDATION")
                 .unwrap_or_else(|_| "enforce".into())
@@ -122,31 +151,61 @@ impl OpenApiRouteRegistry {
             spec,
             routes,
             options,
+            custom_fixture_loader: None,
         }
     }
 
     /// Construct with explicit options
     pub fn new_with_options(spec: OpenApiSpec, options: ValidationOptions) -> Self {
+        Self::new_with_options_and_persona(spec, options, None)
+    }
+
+    /// Construct with explicit options and persona
+    pub fn new_with_options_and_persona(
+        spec: OpenApiSpec,
+        options: ValidationOptions,
+        persona: Option<Arc<crate::intelligent_behavior::config::Persona>>,
+    ) -> Self {
         tracing::debug!("Creating OpenAPI route registry with custom options");
         let spec = Arc::new(spec);
-        let routes = Self::generate_routes(&spec);
+        let routes = Self::generate_routes_with_persona(&spec, persona);
         Self {
             spec,
             routes,
             options,
+            custom_fixture_loader: None,
         }
     }
 
+    /// Set custom fixture loader
+    pub fn with_custom_fixture_loader(mut self, loader: Arc<crate::CustomFixtureLoader>) -> Self {
+        self.custom_fixture_loader = Some(loader);
+        self
+    }
+
+    /// Clone this registry for validation purposes (creates an independent copy)
+    ///
+    /// This is useful when you need a separate registry instance for validation
+    /// that won't interfere with the main registry's state.
     pub fn clone_for_validation(&self) -> Self {
         OpenApiRouteRegistry {
             spec: self.spec.clone(),
             routes: self.routes.clone(),
             options: self.options.clone(),
+            custom_fixture_loader: self.custom_fixture_loader.clone(),
         }
     }
 
     /// Generate routes from the OpenAPI specification
     fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
+        Self::generate_routes_with_persona(spec, None)
+    }
+
+    /// Generate routes from the OpenAPI specification with optional persona
+    fn generate_routes_with_persona(
+        spec: &Arc<OpenApiSpec>,
+        persona: Option<Arc<crate::intelligent_behavior::config::Persona>>,
+    ) -> Vec<OpenApiRoute> {
         let mut routes = Vec::new();
 
         let all_paths_ops = spec.all_paths_and_operations();
@@ -155,11 +214,12 @@ impl OpenApiRouteRegistry {
         for (path, operations) in all_paths_ops {
             tracing::debug!("Processing path: {}", path);
             for (method, operation) in operations {
-                routes.push(OpenApiRoute::from_operation(
+                routes.push(OpenApiRoute::from_operation_with_persona(
                     &method,
                     path.clone(),
                     &operation,
                     spec.clone(),
+                    persona.clone(),
                 ));
             }
         }
@@ -184,6 +244,7 @@ impl OpenApiRouteRegistry {
         tracing::debug!("Building router from {} routes", self.routes.len());
 
         // Create individual routes for each operation
+        let custom_loader = self.custom_fixture_loader.clone();
         for route in &self.routes {
             tracing::debug!("Adding route: {} {}", route.method, route.path);
             let axum_path = route.axum_path();
@@ -192,8 +253,9 @@ impl OpenApiRouteRegistry {
             let path_template = route.path.clone();
             let validator = self.clone_for_validation();
             let route_clone = route.clone();
+            let custom_loader_clone = custom_loader.clone();
 
-            // Handler: validate path/query/header/cookie/body, then return mock
+            // Handler: check custom fixtures, then validate path/query/header/cookie/body, then return mock
             let handler = move |AxumPath(path_params): AxumPath<
                 std::collections::HashMap<String, String>,
             >,
@@ -201,6 +263,100 @@ impl OpenApiRouteRegistry {
                                 headers: HeaderMap,
                                 body: axum::body::Bytes| async move {
                 tracing::debug!("Handling OpenAPI request: {} {}", method, path_template);
+
+                // Check for custom fixture first (highest priority)
+                if let Some(ref loader) = custom_loader_clone {
+                    use crate::RequestFingerprint;
+                    use axum::http::{Method, Uri};
+
+                    // Reconstruct the full path from template and params
+                    let mut request_path = path_template.clone();
+                    for (key, value) in &path_params {
+                        request_path = request_path.replace(&format!("{{{}}}", key), value);
+                    }
+
+                    // Build query string
+                    let query_string =
+                        raw_query.as_ref().map(|q| q.to_string()).unwrap_or_default();
+
+                    // Create URI for fingerprint
+                    // Note: RequestFingerprint only uses the path, not the full URI with query
+                    // So we can create a simple URI from just the path
+                    let uri_str = if query_string.is_empty() {
+                        request_path.clone()
+                    } else {
+                        format!("{}?{}", request_path, query_string)
+                    };
+
+                    if let Ok(uri) = uri_str.parse::<Uri>() {
+                        let http_method =
+                            Method::from_bytes(method.as_bytes()).unwrap_or(Method::GET);
+                        let body_slice = if body.is_empty() {
+                            None
+                        } else {
+                            Some(body.as_ref())
+                        };
+                        let fingerprint =
+                            RequestFingerprint::new(http_method, &uri, &headers, body_slice);
+
+                        if let Some(custom_fixture) = loader.load_fixture(&fingerprint) {
+                            tracing::debug!(
+                                "Using custom fixture for {} {}",
+                                method,
+                                path_template
+                            );
+
+                            // Apply delay if specified
+                            if custom_fixture.delay_ms > 0 {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(
+                                    custom_fixture.delay_ms,
+                                ))
+                                .await;
+                            }
+
+                            // Convert response to JSON string if needed
+                            let response_body = if custom_fixture.response.is_string() {
+                                custom_fixture.response.as_str().unwrap().to_string()
+                            } else {
+                                serde_json::to_string(&custom_fixture.response)
+                                    .unwrap_or_else(|_| "{}".to_string())
+                            };
+
+                            // Parse response body as JSON
+                            let json_value: serde_json::Value =
+                                serde_json::from_str(&response_body)
+                                    .unwrap_or_else(|_| serde_json::json!({}));
+
+                            // Build response with status and JSON body
+                            let status = axum::http::StatusCode::from_u16(custom_fixture.status)
+                                .unwrap_or(axum::http::StatusCode::OK);
+
+                            let mut response =
+                                (status, axum::response::Json(json_value)).into_response();
+
+                            // Add custom headers to response
+                            let response_headers = response.headers_mut();
+                            for (key, value) in &custom_fixture.headers {
+                                if let (Ok(header_name), Ok(header_value)) = (
+                                    axum::http::HeaderName::from_bytes(key.as_bytes()),
+                                    axum::http::HeaderValue::from_str(value),
+                                ) {
+                                    response_headers.insert(header_name, header_value);
+                                }
+                            }
+
+                            // Ensure content-type is set if not already present
+                            if !custom_fixture.headers.contains_key("content-type") {
+                                response_headers.insert(
+                                    axum::http::header::CONTENT_TYPE,
+                                    axum::http::HeaderValue::from_static("application/json"),
+                                );
+                            }
+
+                            return response;
+                        }
+                    }
+                }
 
                 // Determine scenario from header or environment variable
                 // Header takes precedence over environment variable
@@ -261,12 +417,45 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
-                // Body: try JSON when present
-                let body_json: Option<Value> = if !body.is_empty() {
-                    serde_json::from_slice(&body).ok()
+                // Check if this is a multipart request
+                let is_multipart = headers
+                    .get(axum::http::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|ct| ct.starts_with("multipart/form-data"))
+                    .unwrap_or(false);
+
+                // Extract multipart data if applicable
+                let mut multipart_fields = std::collections::HashMap::new();
+                let mut multipart_files = std::collections::HashMap::new();
+                let mut body_json: Option<Value> = None;
+
+                if is_multipart {
+                    // For multipart requests, extract fields and files
+                    match extract_multipart_from_bytes(&body, &headers).await {
+                        Ok((fields, files)) => {
+                            multipart_fields = fields;
+                            multipart_files = files;
+                            // Also create a JSON representation for validation
+                            let mut body_obj = serde_json::Map::new();
+                            for (k, v) in &multipart_fields {
+                                body_obj.insert(k.clone(), v.clone());
+                            }
+                            if !body_obj.is_empty() {
+                                body_json = Some(Value::Object(body_obj));
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to parse multipart data: {}", e);
+                        }
+                    }
                 } else {
-                    None
-                };
+                    // Body: try JSON when present
+                    body_json = if !body.is_empty() {
+                        serde_json::from_slice(&body).ok()
+                    } else {
+                        None
+                    };
+                }
 
                 if let Err(e) = validator.validate_request_with_all(
                     &path_template,
@@ -371,8 +560,66 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
-                // Return the mock response with the correct status code
+                // Capture final payload and run schema validation for trace
+                let mut trace = ResponseGenerationTrace::new();
+                trace.set_final_payload(final_response.clone());
+
+                // Extract response schema and run validation diff
+                if let Some((_status_code, response_ref)) = operation
+                    .responses
+                    .responses
+                    .iter()
+                    .filter_map(|(status, resp)| match status {
+                        openapiv3::StatusCode::Code(code) if *code == selected_status => {
+                            resp.as_item().map(|r| ((*code), r))
+                        }
+                        openapiv3::StatusCode::Range(range) if *range >= 200 && *range < 300 => {
+                            resp.as_item().map(|r| (200, r))
+                        }
+                        _ => None,
+                    })
+                    .next()
+                    .or_else(|| {
+                        // Fallback to first 2xx response
+                        operation
+                            .responses
+                            .responses
+                            .iter()
+                            .filter_map(|(status, resp)| match status {
+                                openapiv3::StatusCode::Code(code)
+                                    if *code >= 200 && *code < 300 =>
+                                {
+                                    resp.as_item().map(|r| ((*code), r))
+                                }
+                                _ => None,
+                            })
+                            .next()
+                    })
+                {
+                    // response_ref is already a Response, not a ReferenceOr
+                    let response_item = response_ref;
+                    // Extract schema from application/json content
+                    if let Some(content) = response_item.content.get("application/json") {
+                        if let Some(schema_ref) = &content.schema {
+                            // Convert OpenAPI schema to JSON Schema Value
+                            // Try to convert the schema to JSON Schema format
+                            if let Some(schema) = schema_ref.as_item() {
+                                // Convert OpenAPI Schema to JSON Schema Value
+                                // Use serde_json::to_value as a starting point
+                                if let Ok(schema_json) = serde_json::to_value(schema) {
+                                    // Run validation diff
+                                    let validation_errors =
+                                        validation_diff(&schema_json, &final_response);
+                                    trace.set_schema_validation_diff(validation_errors);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Store trace in response extensions for later retrieval by logging middleware
                 let mut response = Json(final_response).into_response();
+                response.extensions_mut().insert(trace);
                 *response.status_mut() = axum::http::StatusCode::from_u16(selected_status)
                     .unwrap_or(axum::http::StatusCode::OK);
                 response
@@ -531,12 +778,45 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
-                // Body: try JSON when present
-                let body_json: Option<Value> = if !body.is_empty() {
-                    serde_json::from_slice(&body).ok()
+                // Check if this is a multipart request
+                let is_multipart = headers
+                    .get(axum::http::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|ct| ct.starts_with("multipart/form-data"))
+                    .unwrap_or(false);
+
+                // Extract multipart data if applicable
+                let mut multipart_fields = std::collections::HashMap::new();
+                let mut multipart_files = std::collections::HashMap::new();
+                let mut body_json: Option<Value> = None;
+
+                if is_multipart {
+                    // For multipart requests, extract fields and files
+                    match extract_multipart_from_bytes(&body, &headers).await {
+                        Ok((fields, files)) => {
+                            multipart_fields = fields;
+                            multipart_files = files;
+                            // Also create a JSON representation for validation
+                            let mut body_obj = serde_json::Map::new();
+                            for (k, v) in &multipart_fields {
+                                body_obj.insert(k.clone(), v.clone());
+                            }
+                            if !body_obj.is_empty() {
+                                body_json = Some(Value::Object(body_obj));
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to parse multipart data: {}", e);
+                        }
+                    }
                 } else {
-                    None
-                };
+                    // Body: try JSON when present
+                    body_json = if !body.is_empty() {
+                        serde_json::from_slice(&body).ok()
+                    } else {
+                        None
+                    };
+                }
 
                 if let Err(e) = validator.validate_request_with_all(
                     &path_template,
@@ -1064,9 +1344,318 @@ impl OpenApiRouteRegistry {
 
         router
     }
+
+    /// Build router with MockAI (Behavioral Mock Intelligence) support
+    ///
+    /// This method integrates MockAI for intelligent, context-aware response generation,
+    /// mutation detection, validation error generation, and pagination intelligence.
+    ///
+    /// # Arguments
+    /// * `mockai` - Optional MockAI instance for intelligent behavior
+    ///
+    /// # Returns
+    /// Axum router with MockAI-powered response generation
+    pub fn build_router_with_mockai(
+        &self,
+        mockai: Option<std::sync::Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
+    ) -> Router {
+        use crate::intelligent_behavior::Request as MockAIRequest;
+
+        use axum::routing::{delete, get, patch, post, put};
+
+        let mut router = Router::new();
+        tracing::debug!("Building router with MockAI support from {} routes", self.routes.len());
+
+        for route in &self.routes {
+            tracing::debug!("Adding MockAI-enabled route: {} {}", route.method, route.path);
+
+            let route_clone = route.clone();
+            let mockai_clone = mockai.clone();
+
+            // Create async handler that processes requests through MockAI
+            // Query params are extracted via Query extractor with HashMap
+            // Note: Using Query<HashMap<String, String>> wrapped in Option to handle missing query params
+            let handler = move |query: axum::extract::Query<HashMap<String, String>>,
+                                headers: HeaderMap,
+                                body: Option<Json<Value>>| {
+                let route = route_clone.clone();
+                let mockai = mockai_clone.clone();
+
+                async move {
+                    tracing::debug!(
+                        "Handling MockAI request for route: {} {}",
+                        route.method,
+                        route.path
+                    );
+
+                    // Query parameters are already parsed by Query extractor
+                    let mockai_query = query.0;
+
+                    // If MockAI is enabled, use it to process the request
+                    // CRITICAL FIX: Skip MockAI for GET, HEAD, and OPTIONS requests
+                    // These are read-only operations and should use OpenAPI response generation
+                    // MockAI's mutation analysis incorrectly treats GET requests as "Create" mutations
+                    let method_upper = route.method.to_uppercase();
+                    let should_use_mockai =
+                        matches!(method_upper.as_str(), "POST" | "PUT" | "PATCH" | "DELETE");
+
+                    if should_use_mockai {
+                        if let Some(mockai_arc) = mockai {
+                            let mockai_guard = mockai_arc.read().await;
+
+                            // Build MockAI request
+                            let mut mockai_headers = HashMap::new();
+                            for (k, v) in headers.iter() {
+                                mockai_headers
+                                    .insert(k.to_string(), v.to_str().unwrap_or("").to_string());
+                            }
+
+                            let mockai_request = MockAIRequest {
+                                method: route.method.clone(),
+                                path: route.path.clone(),
+                                body: body.as_ref().map(|Json(b)| b.clone()),
+                                query_params: mockai_query,
+                                headers: mockai_headers,
+                            };
+
+                            // Process request through MockAI
+                            match mockai_guard.process_request(&mockai_request).await {
+                                Ok(mockai_response) => {
+                                    // Check if MockAI returned an empty object (signals to use OpenAPI generation)
+                                    let is_empty = mockai_response.body.is_object()
+                                        && mockai_response
+                                            .body
+                                            .as_object()
+                                            .map(|obj| obj.is_empty())
+                                            .unwrap_or(false);
+
+                                    if is_empty {
+                                        tracing::debug!(
+                                            "MockAI returned empty object for {} {}, falling back to OpenAPI response generation",
+                                            route.method,
+                                            route.path
+                                        );
+                                        // Fall through to standard OpenAPI response generation
+                                    } else {
+                                        tracing::debug!(
+                                            "MockAI generated response with status: {}",
+                                            mockai_response.status_code
+                                        );
+                                        return (
+                                            axum::http::StatusCode::from_u16(
+                                                mockai_response.status_code,
+                                            )
+                                            .unwrap_or(axum::http::StatusCode::OK),
+                                            axum::response::Json(mockai_response.body),
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "MockAI processing failed for {} {}: {}, falling back to standard response",
+                                        route.method,
+                                        route.path,
+                                        e
+                                    );
+                                    // Fall through to standard response generation
+                                }
+                            }
+                        }
+                    } else {
+                        tracing::debug!(
+                            "Skipping MockAI for {} request {} - using OpenAPI response generation",
+                            method_upper,
+                            route.path
+                        );
+                    }
+
+                    // Fallback to standard response generation
+                    let (status, response) = route.mock_response_with_status();
+                    (
+                        axum::http::StatusCode::from_u16(status)
+                            .unwrap_or(axum::http::StatusCode::OK),
+                        axum::response::Json(response),
+                    )
+                }
+            };
+
+            match route.method.as_str() {
+                "GET" => {
+                    router = router.route(&route.path, get(handler));
+                }
+                "POST" => {
+                    router = router.route(&route.path, post(handler));
+                }
+                "PUT" => {
+                    router = router.route(&route.path, put(handler));
+                }
+                "DELETE" => {
+                    router = router.route(&route.path, delete(handler));
+                }
+                "PATCH" => {
+                    router = router.route(&route.path, patch(handler));
+                }
+                _ => tracing::warn!("Unsupported HTTP method for MockAI: {}", route.method),
+            }
+        }
+
+        router
+    }
 }
 
 // Note: templating helpers are now in core::templating (shared across modules)
+
+/// Extract multipart form data from request body bytes
+/// Returns (form_fields, file_paths) where file_paths maps field names to stored file paths
+async fn extract_multipart_from_bytes(
+    body: &axum::body::Bytes,
+    headers: &HeaderMap,
+) -> Result<(
+    std::collections::HashMap<String, Value>,
+    std::collections::HashMap<String, String>,
+)> {
+    // Get boundary from Content-Type header
+    let boundary = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|ct| {
+            ct.split(';').find_map(|part| {
+                let part = part.trim();
+                if part.starts_with("boundary=") {
+                    Some(part.strip_prefix("boundary=").unwrap_or("").trim_matches('"'))
+                } else {
+                    None
+                }
+            })
+        })
+        .ok_or_else(|| Error::generic("Missing boundary in Content-Type header"))?;
+
+    let mut fields = std::collections::HashMap::new();
+    let mut files = std::collections::HashMap::new();
+
+    // Parse multipart data using bytes directly (not string conversion)
+    // Multipart format: --boundary\r\n...\r\n--boundary\r\n...\r\n--boundary--\r\n
+    let boundary_prefix = format!("--{}", boundary).into_bytes();
+    let boundary_line = format!("\r\n--{}\r\n", boundary).into_bytes();
+    let end_boundary = format!("\r\n--{}--\r\n", boundary).into_bytes();
+
+    // Find all boundary positions
+    let mut pos = 0;
+    let mut parts = Vec::new();
+
+    // Skip initial boundary if present
+    if body.starts_with(&boundary_prefix) {
+        if let Some(first_crlf) = body.iter().position(|&b| b == b'\r') {
+            pos = first_crlf + 2; // Skip --boundary\r\n
+        }
+    }
+
+    // Find all middle boundaries
+    while let Some(boundary_pos) = body[pos..]
+        .windows(boundary_line.len())
+        .position(|window| window == boundary_line.as_slice())
+    {
+        let actual_pos = pos + boundary_pos;
+        if actual_pos > pos {
+            parts.push((pos, actual_pos));
+        }
+        pos = actual_pos + boundary_line.len();
+    }
+
+    // Find final boundary
+    if let Some(end_pos) = body[pos..]
+        .windows(end_boundary.len())
+        .position(|window| window == end_boundary.as_slice())
+    {
+        let actual_end = pos + end_pos;
+        if actual_end > pos {
+            parts.push((pos, actual_end));
+        }
+    } else if pos < body.len() {
+        // No final boundary found, treat rest as last part
+        parts.push((pos, body.len()));
+    }
+
+    // Process each part
+    for (start, end) in parts {
+        let part_data = &body[start..end];
+
+        // Find header/body separator (CRLF CRLF)
+        let separator = b"\r\n\r\n";
+        if let Some(sep_pos) =
+            part_data.windows(separator.len()).position(|window| window == separator)
+        {
+            let header_bytes = &part_data[..sep_pos];
+            let body_start = sep_pos + separator.len();
+            let body_data = &part_data[body_start..];
+
+            // Parse headers (assuming UTF-8)
+            let header_str = String::from_utf8_lossy(header_bytes);
+            let mut field_name = None;
+            let mut filename = None;
+
+            for header_line in header_str.lines() {
+                if header_line.starts_with("Content-Disposition:") {
+                    // Extract field name
+                    if let Some(name_start) = header_line.find("name=\"") {
+                        let name_start = name_start + 6;
+                        if let Some(name_end) = header_line[name_start..].find('"') {
+                            field_name =
+                                Some(header_line[name_start..name_start + name_end].to_string());
+                        }
+                    }
+
+                    // Extract filename if present
+                    if let Some(file_start) = header_line.find("filename=\"") {
+                        let file_start = file_start + 10;
+                        if let Some(file_end) = header_line[file_start..].find('"') {
+                            filename =
+                                Some(header_line[file_start..file_start + file_end].to_string());
+                        }
+                    }
+                }
+            }
+
+            if let Some(name) = field_name {
+                if let Some(file) = filename {
+                    // This is a file upload - store to temp directory
+                    let temp_dir = std::env::temp_dir().join("mockforge-uploads");
+                    std::fs::create_dir_all(&temp_dir).map_err(|e| {
+                        Error::generic(format!("Failed to create temp directory: {}", e))
+                    })?;
+
+                    let file_path = temp_dir.join(format!("{}_{}", uuid::Uuid::new_v4(), file));
+                    std::fs::write(&file_path, body_data)
+                        .map_err(|e| Error::generic(format!("Failed to write file: {}", e)))?;
+
+                    let file_path_str = file_path.to_string_lossy().to_string();
+                    files.insert(name.clone(), file_path_str.clone());
+                    fields.insert(name, Value::String(file_path_str));
+                } else {
+                    // This is a regular form field - try to parse as UTF-8 string
+                    // Trim trailing CRLF
+                    let body_str = body_data
+                        .strip_suffix(b"\r\n")
+                        .or_else(|| body_data.strip_suffix(b"\n"))
+                        .unwrap_or(body_data);
+
+                    if let Ok(field_value) = String::from_utf8(body_str.to_vec()) {
+                        fields.insert(name, Value::String(field_value.trim().to_string()));
+                    } else {
+                        // Non-UTF-8 field value - store as base64 encoded string
+                        use base64::{engine::general_purpose, Engine as _};
+                        fields.insert(
+                            name,
+                            Value::String(general_purpose::STANDARD.encode(body_str)),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((fields, files))
+}
 
 static LAST_ERRORS: Lazy<Mutex<VecDeque<serde_json::Value>>> =
     Lazy::new(|| Mutex::new(VecDeque::with_capacity(20)));

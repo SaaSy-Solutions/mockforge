@@ -1,0 +1,21 @@
+id: premium-customer
+name: Premium Customer
+domain: ecommerce
+traits:
+  membership_tier: premium
+  total_orders: 45
+  total_spent: "5420.50"
+  average_order_value: "120.45"
+  favorite_categories:
+    - electronics
+    - home
+  shipping_preference: express
+  loyalty_points: 5420
+  discount_percentage: 10
+lifecycle:
+  preset: subscription
+  initial_state: active
+backstory: |
+  Premium member who shops frequently, averaging 3-4 orders per month.
+  Prefers express shipping and often purchases electronics and home goods.
+  High lifetime value customer with strong brand loyalty.

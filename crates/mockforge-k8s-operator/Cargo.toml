@@ -29,9 +29,9 @@ anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 
 # MockForge dependencies
-mockforge-chaos = { path = "../mockforge-chaos" }
+mockforge-chaos = "0.2.9"
 
 # Metrics
-prometheus = "0.13"
+prometheus = { version = "0.14", features = ["process"] }
 
 [dev-dependencies]

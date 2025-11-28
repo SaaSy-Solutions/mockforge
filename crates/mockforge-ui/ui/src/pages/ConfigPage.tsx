@@ -1,5 +1,5 @@
 import { logger } from '@/utils/logger';
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Settings, Save, RefreshCw, Shield, Zap, Server, Database, Wifi, WifiOff } from 'lucide-react';
 import { useConfig, useValidation, useServerInfo, useUpdateLatency, useUpdateFaults, useUpdateProxy, useUpdateValidation, useRestartServers, useRestartStatus } from '../hooks/useApi';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
@@ -12,6 +12,7 @@ import {
 } from '../components/ui/DesignSystem';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,10 @@ import {
 } from '../components/ui/Dialog';
 import { EnvironmentManager } from '../components/workspace/EnvironmentManager';
 import { AutocompleteInput } from '../components/ui/AutocompleteInput';
+import { RealitySlider } from '../components/reality/RealitySlider';
+import { RealityIndicator } from '../components/reality/RealityIndicator';
+import { RealityPresetManager } from '../components/reality/RealityPresetManager';
+import { useRealityShortcuts } from '../hooks/useRealityShortcuts';
 
 function extractPort(address?: string): string {
   if (!address) return '';
@@ -46,11 +51,25 @@ function isValidPort(port: number): boolean {
 }
 
 export function ConfigPage() {
-  const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment' | 'protocols'>('general');
+  const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment' | 'protocols' | 'reality'>('general');
   const { activeWorkspace } = useWorkspaceStore();
   const workspaceId = activeWorkspace?.id || 'default-workspace';
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showRestartDialog, setShowRestartDialog] = useState(false);
+
+  // Enable keyboard shortcuts for reality level changes
+  useRealityShortcuts({
+    onOpenPresetManager: () => {
+      setActiveSection('reality');
+      // Scroll to preset manager section
+      setTimeout(() => {
+        const presetSection = document.querySelector('[data-section="reality"]');
+        if (presetSection) {
+          presetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    },
+  });
 
   const { data: config, isLoading: configLoading } = useConfig();
   const { data: validation, isLoading: validationLoading } = useValidation();
@@ -69,7 +88,8 @@ export function ConfigPage() {
       http_port: 3000,
       ws_port: 3001,
       grpc_port: 50051,
-      admin_port: 9080
+      admin_port: 9080,
+      ai_mode: 'live' as 'generate_once_freeze' | 'live'
     },
     restartInProgress: false,
     latency: { base_ms: 0, jitter_ms: 0 },
@@ -562,6 +582,7 @@ export function ConfigPage() {
   }
 
   const sections = [
+    { id: 'reality', label: 'Reality Slider', icon: Zap, description: 'Unified realism control' },
     { id: 'general', label: 'General', icon: Settings, description: 'Basic MockForge settings' },
     { id: 'protocols', label: 'Protocols', icon: Server, description: 'Protocol enable/disable settings' },
     { id: 'latency', label: 'Latency', icon: Zap, description: 'Response delay and timing' },
@@ -583,6 +604,7 @@ export function ConfigPage() {
         }
         action={
           <div className="flex items-center gap-3">
+            <RealityIndicator />
             <Button
               variant="outline"
               size="sm"
@@ -636,6 +658,25 @@ export function ConfigPage() {
 
         {/* Main Content */}
         <div className="lg:col-span-3">
+          {activeSection === 'reality' && (
+            <Section title="Reality Slider" subtitle="Unified control for chaos, latency, and MockAI" data-section="reality">
+              <div className="space-y-6">
+                <RealitySlider />
+                <RealityPresetManager />
+                <div className="mt-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                  <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                    Keyboard Shortcuts
+                  </h4>
+                  <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+                    <div><kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-blue-300 dark:border-blue-700">Ctrl+Shift+1-5</kbd> Set reality level</div>
+                    <div><kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-blue-300 dark:border-blue-700">Ctrl+Shift+R</kbd> Reset to default (Level 3)</div>
+                    <div><kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-blue-300 dark:border-blue-700">Ctrl+Shift+P</kbd> Open preset manager</div>
+                  </div>
+                </div>
+              </div>
+            </Section>
+          )}
+
           {activeSection === 'general' && (
             <Section title="General Settings" subtitle="Basic MockForge configuration">
               <ModernCard>
@@ -704,6 +745,48 @@ export function ConfigPage() {
                             general: { ...prev.general, admin_port: parseInt(e.target.value) || 9080 }
                           }))}
                         />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI Mode Configuration */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      AI Mode
+                    </label>
+                    <div className="space-y-4">
+                      <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          Control how AI-generated artifacts are used at runtime. In <strong>Generate Once Freeze</strong> mode,
+                          AI is only used to produce config/templates, and runtime mocks use frozen artifacts (no LLM calls).
+                          In <strong>Live</strong> mode, AI is used dynamically at runtime for each request.
+                        </p>
+                        <Select
+                          value={formData.general.ai_mode || 'live'}
+                          onValueChange={(value) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              general: { ...prev.general, ai_mode: value as 'generate_once_freeze' | 'live' }
+                            }));
+                            setHasUnsavedChanges(true);
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="live">Live - AI used dynamically at runtime</SelectItem>
+                            <SelectItem value="generate_once_freeze">Generate Once Freeze - Use frozen artifacts only</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {formData.general.ai_mode === 'generate_once_freeze' && (
+                          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
+                            <p className="text-xs text-blue-800 dark:text-blue-200">
+                              <strong>Note:</strong> In this mode, AI-generated scenarios and personas will use frozen artifacts.
+                              Make sure to freeze your AI-generated artifacts before using them in this mode.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

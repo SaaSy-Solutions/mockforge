@@ -156,32 +156,51 @@ pub async fn deep_health_check(State(state): State<AdminState>) -> Json<HealthRe
     let timestamp = start.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
 
     let mut checks = vec![];
-    let overall_status = HealthStatus::Healthy;
+    let mut overall_status = HealthStatus::Healthy;
 
-    // Check all servers
+    // Check Admin UI status
+    checks.push(HealthCheck {
+        name: "admin_ui".to_string(),
+        status: if state.api_enabled {
+            HealthStatus::Healthy
+        } else {
+            HealthStatus::Degraded
+        },
+        message: Some(if state.api_enabled {
+            format!("Admin UI is accessible on port {}", state.admin_port)
+        } else {
+            "Admin UI API endpoints are disabled".to_string()
+        }),
+        duration_ms: 0,
+    });
+
+    // Check all servers with addresses
     let servers = vec![
-        ("http_server", state.http_server_addr.is_some()),
-        ("websocket_server", state.ws_server_addr.is_some()),
-        ("grpc_server", state.grpc_server_addr.is_some()),
-        ("graphql_server", state.graphql_server_addr.is_some()),
+        ("http_server", state.http_server_addr.as_ref().map(|a| a.to_string())),
+        ("websocket_server", state.ws_server_addr.as_ref().map(|a| a.to_string())),
+        ("grpc_server", state.grpc_server_addr.as_ref().map(|a| a.to_string())),
+        ("graphql_server", state.graphql_server_addr.as_ref().map(|a| a.to_string())),
     ];
 
-    for (name, is_running) in servers {
-        checks.push(HealthCheck {
-            name: name.to_string(),
-            status: if is_running {
-                HealthStatus::Healthy
-            } else {
-                HealthStatus::Degraded
-            },
-            message: Some(if is_running {
-                format!("{} is running", name)
-            } else {
-                format!("{} is not enabled", name)
-            }),
-            duration_ms: 0,
-        });
+    for (name, addr_opt) in servers {
+        if let Some(addr) = addr_opt {
+            checks.push(HealthCheck {
+                name: name.to_string(),
+                status: HealthStatus::Healthy,
+                message: Some(format!("{} is running on {}", name, addr)),
+                duration_ms: 0,
+            });
+        } else {
+            checks.push(HealthCheck {
+                name: name.to_string(),
+                status: HealthStatus::Degraded,
+                message: Some(format!("{} is not enabled", name)),
+                duration_ms: 0,
+            });
+        }
     }
+
+    // Configuration is loaded and valid (no separate check needed as it's validated at startup)
 
     // Check metrics
     let metrics = state.metrics.read().await;
@@ -196,7 +215,18 @@ pub async fn deep_health_check(State(state): State<AdminState>) -> Json<HealthRe
     });
 
     // Calculate overall duration
-    let _duration = SystemTime::now().duration_since(start).unwrap().as_millis() as u64;
+    let duration = SystemTime::now().duration_since(start).unwrap().as_millis() as u64;
+
+    // Determine overall status - unhealthy if any critical service is unhealthy
+    let critical_failures = checks.iter().any(|c| {
+        matches!(c.status, HealthStatus::Unhealthy)
+            && (c.name == "http_server" || c.name == "admin_ui")
+    });
+    if critical_failures {
+        overall_status = HealthStatus::Unhealthy;
+    } else if checks.iter().any(|c| matches!(c.status, HealthStatus::Degraded)) {
+        overall_status = HealthStatus::Degraded;
+    }
 
     let uptime_seconds = (chrono::Utc::now() - state.start_time).num_seconds() as u64;
 

@@ -1,0 +1,503 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Advanced Behavior and Simulation - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/advanced-behavior.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="advanced-behavior-and-simulation"><a class="header" href="#advanced-behavior-and-simulation">Advanced Behavior and Simulation</a></h1>
+<p>MockForge provides advanced behavior and simulation features that allow you to create realistic, stateful, and resilient API mocks. This guide covers record &amp; playback, stateful behavior simulation, fault injection, latency simulation, and conditional proxying.</p>
+<h2 id="table-of-contents"><a class="header" href="#table-of-contents">Table of Contents</a></h2>
+<ul>
+<li><a href="#record--playback">Record &amp; Playback</a></li>
+<li><a href="#stateful-behavior-simulation">Stateful Behavior Simulation</a></li>
+<li><a href="#per-route-fault-injection">Per-Route Fault Injection</a></li>
+<li><a href="#per-route-latency-simulation">Per-Route Latency Simulation</a></li>
+<li><a href="#conditional-proxying">Conditional Proxying</a></li>
+<li><a href="#browser-proxy-with-conditional-forwarding">Browser Proxy with Conditional Forwarding</a></li>
+</ul>
+<h2 id="record--playback"><a class="header" href="#record--playback">Record &amp; Playback</a></h2>
+<p>The record &amp; playback feature allows you to capture real API interactions and convert them into replayable stub mappings.</p>
+<h3 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h3>
+<ol>
+<li><strong>Start recording</strong> while proxying to a real service:</li>
+</ol>
+<pre><code class="language-bash">mockforge serve --spec api-spec.json --proxy --record
+</code></pre>
+<ol start="2">
+<li><strong>Convert recordings</strong> to stub mappings:</li>
+</ol>
+<pre><code class="language-bash"># Convert a specific recording
+mockforge recorder convert --recording-id abc123 --output fixtures/user-api.yaml
+
+# Batch convert all recordings
+mockforge recorder convert --input recordings.db --output fixtures/ --format yaml
+</code></pre>
+<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
+<pre><code class="language-yaml">core:
+  recorder:
+    enabled: true
+    auto_convert: true
+    output_dir: "./fixtures/recorded"
+    format: "yaml"
+    filters:
+      min_status_code: 200
+      max_status_code: 299
+      exclude_paths:
+        - "/health"
+        - "/metrics"
+</code></pre>
+<h3 id="api-usage"><a class="header" href="#api-usage">API Usage</a></h3>
+<pre><code class="language-bash"># Convert via API
+curl -X POST http://localhost:9080/api/recorder/convert/abc123 \
+  -H "Content-Type: application/json" \
+  -d '{"format": "yaml"}'
+</code></pre>
+<h2 id="stateful-behavior-simulation"><a class="header" href="#stateful-behavior-simulation">Stateful Behavior Simulation</a></h2>
+<p>Stateful behavior simulation allows responses to change based on previous requests, using state machines to track resource state.</p>
+<h3 id="basic-example"><a class="header" href="#basic-example">Basic Example</a></h3>
+<pre><code class="language-yaml">core:
+  stateful:
+    enabled: true
+    state_machines:
+      - name: "order_workflow"
+        initial_state: "pending"
+        states:
+          - name: "pending"
+            response:
+              status_code: 200
+              body_template: '{"order_id": "{{resource_id}}", "status": "pending"}'
+          - name: "processing"
+            response:
+              status_code: 200
+              body_template: '{"order_id": "{{resource_id}}", "status": "processing"}'
+          - name: "shipped"
+            response:
+              status_code: 200
+              body_template: '{"order_id": "{{resource_id}}", "status": "shipped"}'
+        resource_id_extract:
+          type: "path_param"
+          param: "order_id"
+        transitions:
+          - method: "POST"
+            path_pattern: "/api/orders"
+            from_state: "initial"
+            to_state: "pending"
+          - method: "PUT"
+            path_pattern: "/api/orders/{order_id}/process"
+            from_state: "pending"
+            to_state: "processing"
+</code></pre>
+<h3 id="resource-id-extraction"><a class="header" href="#resource-id-extraction">Resource ID Extraction</a></h3>
+<p>Extract resource IDs from various sources:</p>
+<pre><code class="language-yaml"># From path parameter
+resource_id_extract:
+  type: "path_param"
+  param: "order_id"
+
+# From header
+resource_id_extract:
+  type: "header"
+  name: "X-Resource-ID"
+
+# From JSONPath in request body
+resource_id_extract:
+  type: "json_path"
+  path: "$.order.id"
+
+# Composite (tries multiple sources)
+resource_id_extract:
+  type: "composite"
+  extractors:
+    - type: "path_param"
+      param: "order_id"
+    - type: "header"
+      name: "X-Order-ID"
+</code></pre>
+<h2 id="per-route-fault-injection"><a class="header" href="#per-route-fault-injection">Per-Route Fault Injection</a></h2>
+<p>Configure fault injection on specific routes with multiple fault types.</p>
+<h3 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h3>
+<pre><code class="language-yaml">core:
+  routes:
+    - path: "/api/payments/process"
+      method: "POST"
+      fault_injection:
+        enabled: true
+        probability: 0.05  # 5% chance
+        fault_types:
+          - type: "http_error"
+            status_code: 503
+            message: "Service unavailable"
+          - type: "timeout"
+            duration_ms: 5000
+          - type: "connection_error"
+            message: "Connection refused"
+</code></pre>
+<h3 id="fault-types"><a class="header" href="#fault-types">Fault Types</a></h3>
+<ul>
+<li><strong>HTTP Error</strong>: Return specific status codes</li>
+<li><strong>Connection Error</strong>: Simulate connection failures</li>
+<li><strong>Timeout</strong>: Simulate request timeouts</li>
+<li><strong>Partial Response</strong>: Truncate responses</li>
+<li><strong>Payload Corruption</strong>: Corrupt response payloads</li>
+</ul>
+<h2 id="per-route-latency-simulation"><a class="header" href="#per-route-latency-simulation">Per-Route Latency Simulation</a></h2>
+<p>Simulate network latency with various distributions.</p>
+<h3 id="configuration-2"><a class="header" href="#configuration-2">Configuration</a></h3>
+<pre><code class="language-yaml">core:
+  routes:
+    - path: "/api/search"
+      method: "GET"
+      latency:
+        enabled: true
+        probability: 0.8
+        distribution: "normal"  # fixed, normal, exponential, uniform
+        mean_ms: 500.0
+        std_dev_ms: 100.0
+        jitter_percent: 15.0
+</code></pre>
+<h3 id="distributions"><a class="header" href="#distributions">Distributions</a></h3>
+<ul>
+<li><strong>Fixed</strong>: Constant delay with optional jitter</li>
+<li><strong>Normal</strong>: Gaussian distribution (realistic for most APIs)</li>
+<li><strong>Exponential</strong>: Exponential distribution (simulates network delays)</li>
+<li><strong>Uniform</strong>: Random delay within a range</li>
+</ul>
+<h2 id="conditional-proxying"><a class="header" href="#conditional-proxying">Conditional Proxying</a></h2>
+<p>Proxy requests conditionally based on request attributes using expressions.</p>
+<h3 id="basic-examples"><a class="header" href="#basic-examples">Basic Examples</a></h3>
+<pre><code class="language-yaml">core:
+  proxy:
+    enabled: true
+    rules:
+      # Proxy admin requests
+      - pattern: "/api/admin/*"
+        upstream_url: "https://admin-api.example.com"
+        condition: "$.user.role == 'admin'"
+      
+      # Proxy authenticated requests
+      - pattern: "/api/protected/*"
+        upstream_url: "https://protected-api.example.com"
+        condition: "header[authorization] != ''"
+      
+      # Proxy based on query parameter
+      - pattern: "/api/data/*"
+        upstream_url: "https://data-api.example.com"
+        condition: "query[env] == 'production'"
+</code></pre>
+<h3 id="condition-types"><a class="header" href="#condition-types">Condition Types</a></h3>
+<h4 id="jsonpath-expressions"><a class="header" href="#jsonpath-expressions">JSONPath Expressions</a></h4>
+<pre><code class="language-yaml">condition: "$.user.role == 'admin'"
+condition: "$.order.amount &gt; 1000"
+</code></pre>
+<h4 id="header-checks"><a class="header" href="#header-checks">Header Checks</a></h4>
+<pre><code class="language-yaml">condition: "header[authorization] != ''"
+condition: "header[user-agent] == 'MobileApp/1.0'"
+</code></pre>
+<h4 id="query-parameters"><a class="header" href="#query-parameters">Query Parameters</a></h4>
+<pre><code class="language-yaml">condition: "query[env] == 'production'"
+condition: "query[version] == 'v2'"
+</code></pre>
+<h4 id="logical-operators"><a class="header" href="#logical-operators">Logical Operators</a></h4>
+<pre><code class="language-yaml"># AND
+condition: "AND(header[authorization] != '', $.user.role == 'admin')"
+
+# OR
+condition: "OR(query[env] == 'production', query[env] == 'staging')"
+
+# NOT
+condition: "NOT(query[env] == 'development')"
+</code></pre>
+<h2 id="browser-proxy-with-conditional-forwarding"><a class="header" href="#browser-proxy-with-conditional-forwarding">Browser Proxy with Conditional Forwarding</a></h2>
+<p>The browser proxy mode supports the same conditional forwarding rules.</p>
+<h3 id="usage"><a class="header" href="#usage">Usage</a></h3>
+<pre><code class="language-bash"># Start browser proxy with conditional rules
+mockforge proxy --port 8081 --config config.yaml
+</code></pre>
+<p>Configure your browser/mobile app to use <code>127.0.0.1:8081</code> as the HTTP proxy. All requests will be evaluated against conditional rules before proxying.</p>
+<h3 id="example-configuration"><a class="header" href="#example-configuration">Example Configuration</a></h3>
+<pre><code class="language-yaml">proxy:
+  enabled: true
+  rules:
+    # Route admin users to production
+    - pattern: "/api/admin/*"
+      upstream_url: "https://admin-api.production.com"
+      condition: "$.user.role == 'admin'"
+    
+    # Route authenticated users to staging
+    - pattern: "/api/*"
+      upstream_url: "https://api.staging.com"
+      condition: "header[authorization] != ''"
+</code></pre>
+<h2 id="priority-chain"><a class="header" href="#priority-chain">Priority Chain</a></h2>
+<p>MockForge processes requests through this priority chain:</p>
+<ol>
+<li><strong>Replay</strong> - Check for recorded fixtures</li>
+<li><strong>Stateful</strong> - Check for stateful response handling</li>
+<li><strong>Route Chaos</strong> - Apply per-route fault injection and latency</li>
+<li><strong>Global Fail</strong> - Apply global/tag-based failure injection</li>
+<li><strong>Proxy</strong> - Check for conditional proxying</li>
+<li><strong>Mock</strong> - Generate mock response from OpenAPI spec</li>
+<li><strong>Record</strong> - Record request for future replay</li>
+</ol>
+<h2 id="related-advanced-features"><a class="header" href="#related-advanced-features">Related Advanced Features</a></h2>
+<p>MockForge includes many additional advanced features that complement the basic advanced behavior:</p>
+<ul>
+<li><strong><a href="vbr-engine.html">VBR Engine</a></strong>: Virtual database layer with automatic CRUD generation</li>
+<li><strong><a href="temporal-simulation.html">Temporal Simulation</a></strong>: Time travel and time-based data mutations</li>
+<li><strong><a href="scenario-state-machines.html">Scenario State Machines</a></strong>: Visual flow editor for complex workflows</li>
+<li><strong><a href="mockai.html">MockAI</a></strong>: AI-powered intelligent response generation</li>
+<li><strong><a href="chaos-lab.html">Chaos Lab</a></strong>: Interactive network condition simulation</li>
+<li><strong><a href="reality-slider.html">Reality Slider</a></strong>: Unified control for mock environment realism</li>
+</ul>
+<p>For a complete overview, see <a href="advanced-features.html">Advanced Features</a>.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Start simple</strong> - Begin with basic configurations and add complexity gradually</li>
+<li><strong>Test thoroughly</strong> - Verify state transitions and conditions work as expected</li>
+<li><strong>Monitor performance</strong> - Latency injection can slow down tests</li>
+<li><strong>Document conditions</strong> - Keep conditional logic well-documented</li>
+<li><strong>Use version control</strong> - Track configuration changes over time</li>
+</ol>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<p>See the <a href="../../../tests/fixtures/configs/example-advanced-features.yaml">example configuration file</a> for comprehensive examples of all features.</p>
+<p>For more details, see the <a href="../../../docs/ADVANCED_BEHAVIOR_SIMULATION.html">Advanced Behavior and Simulation documentation</a>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/http-mocking/dynamic-data.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/grpc-mocking.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/http-mocking/dynamic-data.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/grpc-mocking.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

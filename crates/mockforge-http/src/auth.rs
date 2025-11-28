@@ -19,7 +19,11 @@ pub mod state;
 pub mod types;
 
 pub mod authenticator;
+pub mod jwks_converter;
 pub mod oauth2;
+pub mod oidc;
+pub mod risk_engine;
+pub mod token_lifecycle;
 
 // Re-export main types and functions for convenience
 pub use admin_auth::check_admin_auth;

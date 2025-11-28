@@ -42,10 +42,18 @@ export function Logo({ variant = 'full', size = 'md', className = '', loading = 
   const logoSrc = getLogoSrc();
   const altText = variant === 'icon' ? 'MockForge' : 'MockForge Logo';
 
+  const handleImageError = () => {
+    logger.warn(`Failed to load logo image: ${logoSrc}. Using fallback.`);
+    setImageError(true);
+  };
+
   if (imageError) {
     return (
       <div className={`flex items-center ${className}`}>
-        <div className={`bg-gradient-to-br from-orange-500 to-red-600 rounded-lg px-3 py-1 ${sizeClasses[size]} flex items-center justify-center text-white font-bold text-sm`}>
+        <div
+          className={`bg-gradient-to-br from-orange-500 via-orange-600 to-red-600 rounded-lg px-3 py-1 ${sizeClasses[size]} flex items-center justify-center text-white font-bold text-sm shadow-md`}
+          title="MockForge (fallback logo)"
+        >
           {variant === 'icon' ? 'M' : 'MockForge'}
         </div>
       </div>
@@ -58,7 +66,7 @@ export function Logo({ variant = 'full', size = 'md', className = '', loading = 
       alt={altText}
       className={`${sizeClasses[size]} ${className}`}
       loading={loading}
-      onError={() => setImageError(true)}
+      onError={handleImageError}
     />
   );
 }

@@ -1,0 +1,114 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "E-commerce Store API",
+    "version": "1.0.0",
+    "description": "Complete e-commerce API with shopping carts, products, and orders"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/api/products": {
+      "get": {
+        "operationId": "listProducts",
+        "summary": "List all products",
+        "responses": {
+          "200": {
+            "description": "List of products",
+            "content": {
+              "application/json": {
+                "example": {
+                  "products": [
+                    {
+                      "id": "{{uuid}}",
+                      "name": "{{faker.commerce.productName}}",
+                      "price": "{{faker.commerce.price}}",
+                      "category": "{{faker.commerce.department}}",
+                      "description": "{{faker.commerce.productDescription}}",
+                      "stock": "{{random.int(0,100)}}"
+                    }
+                  ],
+                  "total": "{{random.int(10,100)}}"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cart": {
+      "get": {
+        "operationId": "getCart",
+        "summary": "Get current shopping cart",
+        "responses": {
+          "200": {
+            "description": "Shopping cart",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "{{uuid}}",
+                  "items": [
+                    {
+                      "productId": "{{uuid}}",
+                      "quantity": "{{random.int(1,5)}}",
+                      "price": "{{faker.commerce.price}}"
+                    }
+                  ],
+                  "total": "{{faker.commerce.price}}"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "addToCart",
+        "summary": "Add item to cart",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "productId": { "type": "string" },
+                  "quantity": { "type": "integer", "minimum": 1 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Item added to cart"
+          }
+        }
+      }
+    },
+    "/api/orders": {
+      "post": {
+        "operationId": "createOrder",
+        "summary": "Create order from cart",
+        "responses": {
+          "201": {
+            "description": "Order created",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "{{uuid}}",
+                  "status": "pending",
+                  "total": "{{faker.commerce.price}}",
+                  "createdAt": "{{now}}"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

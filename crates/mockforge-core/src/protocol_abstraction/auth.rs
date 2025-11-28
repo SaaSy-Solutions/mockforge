@@ -8,26 +8,32 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-/// JWT Claims
+/// JWT token claims extracted from authentication tokens
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
+    /// Subject (user ID or identifier)
     pub sub: String,
+    /// Expiration timestamp
     pub exp: Option<usize>,
+    /// Issued at timestamp
     pub iat: Option<usize>,
+    /// Audience (intended recipient)
     pub aud: Option<String>,
+    /// Issuer (token issuer identifier)
     pub iss: Option<String>,
+    /// Additional custom claims (flattened into the struct)
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }
 
-/// Authentication result
+/// Result of authentication attempt
 #[derive(Debug, Clone)]
 pub enum AuthResult {
-    /// Authentication successful
+    /// Authentication successful with extracted claims
     Success(Claims),
-    /// Authentication failed
+    /// Authentication failed with error message
     Failure(String),
-    /// Network error during auth
+    /// Network error occurred during authentication
     NetworkError(String),
 }
 

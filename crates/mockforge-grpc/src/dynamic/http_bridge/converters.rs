@@ -14,20 +14,40 @@ use tracing::{debug, warn};
 /// Errors that can occur during JSON/protobuf conversion
 #[derive(Debug, thiserror::Error)]
 pub enum ConversionError {
+    /// Required field is missing from JSON input
     #[error("Field '{field}' required but missing from JSON")]
-    MissingField { field: String },
+    MissingField {
+        /// Name of the missing field
+        field: String,
+    },
+    /// Invalid value provided for a field
     #[error("Invalid value for field '{field}': {message}")]
-    InvalidValue { field: String, message: String },
+    InvalidValue {
+        /// Name of the field with invalid value
+        field: String,
+        /// Error message describing why the value is invalid
+        message: String,
+    },
+    /// Unknown field found in JSON (not in protobuf schema)
     #[error("Unknown field '{field}' in message")]
-    UnknownField { field: String },
+    UnknownField {
+        /// Name of the unknown field
+        field: String,
+    },
+    /// Type mismatch between JSON and protobuf schema
     #[error("Type mismatch for field '{field}': expected {expected}, got {actual}")]
     TypeMismatch {
+        /// Name of the field with type mismatch
         field: String,
+        /// Expected protobuf type
         expected: String,
+        /// Actual JSON type
         actual: String,
     },
+    /// Error in nested message conversion
     #[error("Failed to convert nested message: {0}")]
     NestedError(String),
+    /// Protobuf reflection/descriptor error
     #[error("Protobuf reflection error: {0}")]
     ProtobufError(String),
 }
@@ -40,7 +60,9 @@ impl ConversionError {
 #[derive(Debug, Clone)]
 pub struct ProtobufJsonConverter {
     /// Descriptor pool containing protobuf definitions
-    #[allow(dead_code)] // Used in future implementations
+    ///
+    /// Used for resolving message descriptors and schema information
+    /// during JSON/protobuf conversion operations.
     pool: DescriptorPool,
 }
 
@@ -130,6 +152,20 @@ impl ProtobufJsonConverter {
         json_value: &JsonValue,
     ) -> Result<Value, ConversionError> {
         use prost_reflect::Kind::*;
+
+        // Handle repeated fields (protobuf lists) - if field is a list and JSON value is an array
+        if field.is_list() {
+            if let JsonValue::Array(json_array) = json_value {
+                return self.convert_json_array_to_protobuf_list(field, json_array);
+            } else {
+                // For repeated fields, we expect an array
+                return Err(ConversionError::TypeMismatch {
+                    field: field.name().to_string(),
+                    expected: "array".to_string(),
+                    actual: self.json_type_name(json_value),
+                });
+            }
+        }
 
         match field.kind() {
             Message(ref message_descriptor) => {
@@ -536,7 +572,9 @@ impl ProtobufJsonConverter {
     }
 
     /// Handle repeated field conversion for JSON arrays
-    #[allow(dead_code)] // Used in future implementations
+    ///
+    /// Converts a JSON array to a protobuf repeated field (list) by converting each
+    /// array element according to the field's type.
     fn convert_json_array_to_protobuf_list(
         &self,
         field: &FieldDescriptor,

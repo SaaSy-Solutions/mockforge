@@ -379,7 +379,7 @@ git push origin feature/your-feature
 
 - **GitHub Issues**: For bugs, features, and general discussion
 - **GitHub Discussions**: For questions and longer-form discussion
-- **Discord/Slack**: For real-time chat (if available)
+- **Discord**: [Join our community chat](https://discord.gg/2FxXqKpa) - For real-time chat
 
 ### When to Ask for Help
 

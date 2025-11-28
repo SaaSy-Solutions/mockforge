@@ -8,73 +8,84 @@ use openapiv3::Operation;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Generated command structure
+/// Generated HTTP command with examples for an OpenAPI operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeneratedCommand {
     /// The operation ID from the OpenAPI spec
     pub operation_id: String,
-    /// HTTP method (GET, POST, etc.)
+    /// HTTP method (GET, POST, PUT, DELETE, etc.)
     pub method: String,
-    /// Full URL for the request
+    /// Full URL for the request (with parameters substituted)
     pub url: String,
-    /// Path template (with parameters)
+    /// Path template with parameter placeholders (e.g., "/users/{id}")
     pub path_template: String,
-    /// Headers to include
+    /// HTTP headers to include in the request
     pub headers: HashMap<String, String>,
-    /// Request body (if any)
+    /// Request body content (if applicable)
     pub body: Option<String>,
-    /// Generated curl command
+    /// Generated curl command string
     pub curl_command: String,
-    /// Generated HTTPie command
+    /// Generated HTTPie command string
     pub httpie_command: String,
-    /// Description of the operation
+    /// Optional description from the OpenAPI operation
     pub description: Option<String>,
-    /// Parameter examples used
+    /// Map of parameter names to example values used
     pub parameter_examples: HashMap<String, String>,
 }
 
-/// Options for command generation
+/// Options for customizing command generation behavior
 #[derive(Debug, Clone)]
 pub struct CommandGenerationOptions {
-    /// Base URL to use (overrides spec servers)
+    /// Base URL to use (overrides OpenAPI spec servers if provided)
     pub base_url: Option<String>,
-    /// Command format to generate (curl, httpie, or both)
+    /// Command format(s) to generate (curl, httpie, or both)
     pub format: CommandFormat,
-    /// Include authentication headers if defined in spec
+    /// Whether to include authentication headers if defined in spec
     pub include_auth: bool,
-    /// Generate examples for all operations or only those with examples
+    /// Whether to generate examples for all operations or only those with examples
     pub all_operations: bool,
-    /// Include request body examples
+    /// Whether to include request body examples in generated commands
     pub include_examples: bool,
-    /// Custom headers to add to all requests
+    /// Custom headers to add to all generated requests
     pub custom_headers: HashMap<String, String>,
     /// Maximum number of parameter combinations to generate per operation
     pub max_examples_per_operation: usize,
 }
 
-/// Command format options
+/// Command format options for code generation
 #[derive(Debug, Clone, PartialEq)]
 pub enum CommandFormat {
+    /// Generate curl commands only
     Curl,
+    /// Generate HTTPie commands only
     Httpie,
+    /// Generate both curl and HTTPie commands
     Both,
 }
 
-/// Result of command generation
+/// Result of command generation from an OpenAPI specification
 #[derive(Debug)]
 pub struct CommandGenerationResult {
+    /// Generated commands for each operation
     pub commands: Vec<GeneratedCommand>,
+    /// Warnings encountered during generation
     pub warnings: Vec<String>,
+    /// Metadata extracted from the OpenAPI specification
     pub spec_info: OpenApiSpecInfo,
 }
 
-/// OpenAPI specification metadata
+/// OpenAPI specification metadata extracted during command generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenApiSpecInfo {
+    /// API title from the OpenAPI spec
     pub title: String,
+    /// API version from the OpenAPI spec
     pub version: String,
+    /// Optional API description
     pub description: Option<String>,
+    /// OpenAPI specification version (e.g., "3.0.0", "3.1.0")
     pub openapi_version: String,
+    /// List of server URLs from the OpenAPI spec
     pub servers: Vec<String>,
 }
 

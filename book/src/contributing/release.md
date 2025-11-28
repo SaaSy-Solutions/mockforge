@@ -82,6 +82,8 @@ make benchmark
 
 ```bash
 # Update CHANGELOG.md with release notes
+# IMPORTANT: Tag all changelog entries with pillars: [Reality], [Contracts], [DevX], [Cloud], [AI]
+# See docs/PILLARS.md for pillar definitions and examples
 # Update version numbers in documentation
 # Build and test documentation
 make docs
@@ -90,6 +92,26 @@ make docs-serve
 # Test documentation links
 mdbook test
 ```
+
+**Changelog Pillar Tagging Requirements:**
+
+All changelog entries must be tagged with at least one pillar. The release scripts will validate this automatically.
+
+**Format:**
+```markdown
+- **[Reality] Feature description**
+
+- **[Contracts][DevX] Multi-pillar feature**
+```
+
+**Pillars:**
+- **[Reality]** – Everything that makes mocks feel like a real, evolving backend
+- **[Contracts]** – Schema, drift, validation, and safety nets
+- **[DevX]** – SDKs, generators, playgrounds, ergonomics
+- **[Cloud]** – Registry, orgs, governance, monetization, marketplace
+- **[AI]** – LLM/voice flows, AI diff/assist, generative behaviors
+
+See [docs/PILLARS.md](../../../docs/PILLARS.md) for detailed pillar definitions, feature mappings, and examples.
 
 ### 3. Version Bump
 
@@ -424,7 +446,7 @@ gh issue list --label bug --state open --limit 10
 
 - **GitHub Issues**: Bug reports and feature requests
 - **GitHub Discussions**: General questions and support
-- **Discord/Slack**: Real-time community support
+- **Discord**: [Join our community chat](https://discord.gg/2FxXqKpa) - Real-time community support
 - **Documentation**: Self-service troubleshooting
 
 ### 3. Follow-up Releases

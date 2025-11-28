@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>ForgeConnect</title>
+    <style>
+        body {
+            width: 300px;
+            padding: 15px;
+            font-family: system-ui;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h2>ForgeConnect</h2>
+    <div id="status" class="status disconnected">Checking connection...</div>
+    <button id="openDevTools">Open DevTools</button>
+    <button id="refresh">Refresh Connection</button>
+    <script src="popup.js"></script>
+</body>
+</html>

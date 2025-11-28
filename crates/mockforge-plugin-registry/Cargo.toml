@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-plugin-registry"
-version.workspace = true
+version = "0.3.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true

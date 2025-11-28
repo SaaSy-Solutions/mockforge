@@ -10,33 +10,47 @@ use std::collections::HashMap;
 /// Parsed curl command components
 #[derive(Debug)]
 pub struct ParsedCurlCommand {
+    /// HTTP method extracted from curl command
     pub method: String,
+    /// URL from curl command
     pub url: String,
+    /// Headers extracted from -H flags
     pub headers: HashMap<String, String>,
+    /// Request body extracted from -d or --data flags
     pub body: Option<String>,
 }
 
 /// MockForge route structure for curl import (similar to postman_import.rs)
 #[derive(Debug, serde::Serialize)]
 pub struct MockForgeRoute {
+    /// HTTP method
     pub method: String,
+    /// Request path
     pub path: String,
+    /// Request headers
     pub headers: HashMap<String, String>,
+    /// Optional request body
     pub body: Option<String>,
+    /// Mock response for this route
     pub response: MockForgeResponse,
 }
 
 /// MockForge response structure
 #[derive(Debug, serde::Serialize)]
 pub struct MockForgeResponse {
+    /// HTTP status code
     pub status: u16,
+    /// Response headers
     pub headers: HashMap<String, String>,
+    /// Response body
     pub body: serde_json::Value,
 }
 
-/// Import result for curl commands
+/// Result of importing curl commands
 pub struct CurlImportResult {
+    /// Converted routes from curl commands
     pub routes: Vec<MockForgeRoute>,
+    /// Warnings encountered during import
     pub warnings: Vec<String>,
 }
 

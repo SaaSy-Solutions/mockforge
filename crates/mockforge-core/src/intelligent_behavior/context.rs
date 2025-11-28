@@ -15,6 +15,7 @@ use crate::Result;
 ///
 /// Tracks state across multiple requests within a session, maintaining
 /// conversation history and enabling intelligent, context-aware responses.
+#[derive(Clone)]
 pub struct StatefulAiContext {
     /// Session ID
     session_id: String,
@@ -55,8 +56,11 @@ impl StatefulAiContext {
     }
 
     /// Record an interaction
+    ///
+    /// Note: Takes `&self` instead of `&mut self` because internal state
+    /// is protected by `RwLock`, allowing concurrent access.
     pub async fn record_interaction(
-        &mut self,
+        &self,
         method: impl Into<String>,
         path: impl Into<String>,
         request: Option<serde_json::Value>,

@@ -56,47 +56,80 @@ pub type LoaderResult<T> = std::result::Result<T, PluginLoaderError>;
 pub enum PluginLoaderError {
     /// Plugin loading failed
     #[error("Plugin loading error: {message}")]
-    LoadError { message: String },
+    LoadError {
+        /// Error message describing the load failure
+        message: String,
+    },
 
     /// Plugin validation failed
     #[error("Plugin validation error: {message}")]
-    ValidationError { message: String },
+    ValidationError {
+        /// Error message describing the validation failure
+        message: String,
+    },
 
     /// Security violation during plugin loading
     #[error("Security violation: {violation}")]
-    SecurityViolation { violation: String },
+    SecurityViolation {
+        /// Description of the security violation
+        violation: String,
+    },
 
     /// Plugin manifest error
     #[error("Plugin manifest error: {message}")]
-    ManifestError { message: String },
+    ManifestError {
+        /// Error message describing the manifest issue
+        message: String,
+    },
 
     /// WebAssembly module error
     #[error("WebAssembly module error: {message}")]
-    WasmError { message: String },
+    WasmError {
+        /// Error message describing the WASM issue
+        message: String,
+    },
 
     /// File system error
     #[error("File system error: {message}")]
-    FsError { message: String },
+    FsError {
+        /// Error message describing the file system issue
+        message: String,
+    },
 
     /// Plugin already loaded
     #[error("Plugin already loaded: {plugin_id}")]
-    AlreadyLoaded { plugin_id: PluginId },
+    AlreadyLoaded {
+        /// ID of the plugin that is already loaded
+        plugin_id: PluginId,
+    },
 
     /// Plugin not found
     #[error("Plugin not found: {plugin_id}")]
-    NotFound { plugin_id: PluginId },
+    NotFound {
+        /// ID of the plugin that was not found
+        plugin_id: PluginId,
+    },
 
     /// Plugin dependency error
     #[error("Plugin dependency error: {message}")]
-    DependencyError { message: String },
+    DependencyError {
+        /// Error message describing the dependency issue
+        message: String,
+    },
 
     /// Resource limit exceeded
     #[error("Resource limit exceeded: {message}")]
-    ResourceLimit { message: String },
+    ResourceLimit {
+        /// Error message describing the resource limit that was exceeded
+        message: String,
+    },
 
     /// Plugin execution error
     #[error("Plugin execution error: {message}")]
-    ExecutionError { message: String },
+    ExecutionError {
+        /// Error message describing the execution failure
+        message: String,
+    },
 }
 
 impl PluginLoaderError {

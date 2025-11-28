@@ -183,6 +183,193 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="cli-crate"><a class="header" href="#cli-crate">CLI Crate</a></h1>
+<p>The <code>mockforge-cli</code> crate provides the primary command-line interface for MockForge, serving as the main entry point for users to interact with the MockForge ecosystem. It orchestrates all MockForge services and provides comprehensive configuration and management capabilities.</p>
+<h2 id="architecture-overview"><a class="header" href="#architecture-overview">Architecture Overview</a></h2>
+<pre><code class="language-mermaid">graph TD
+    A[CLI Entry Point] --&gt; B[Command Parser]
+    B --&gt; C{Command Type}
+    C --&gt; D[Serve Command]
+    C --&gt; E[Plugin Commands]
+    C --&gt; F[Workspace Commands]
+    C --&gt; G[Data Commands]
+    C --&gt; H[Other Commands]
+
+    D --&gt; I[Server Orchestration]
+    I --&gt; J[HTTP Server]
+    I --&gt; K[WebSocket Server]
+    I --&gt; L[gRPC Server]
+    I --&gt; M[SMTP Server]
+    I --&gt; N[Admin UI]
+    I --&gt; O[Metrics Server]
+</code></pre>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="command-structure"><a class="header" href="#command-structure">Command Structure</a></h3>
+<p>The CLI uses <a href="https://github.com/clap-rs/clap">clap</a> for argument parsing and command structure. The main <code>Cli</code> struct defines the top-level interface with global options and subcommands.</p>
+<h4 id="main-commands"><a class="header" href="#main-commands">Main Commands</a></h4>
+<ul>
+<li><strong><code>serve</code></strong>: Start MockForge servers (HTTP, WebSocket, gRPC, SMTP)</li>
+<li><strong><code>admin</code></strong>: Start standalone admin UI server</li>
+<li><strong><code>sync</code></strong>: Bidirectional workspace synchronization daemon</li>
+<li><strong><code>plugin</code></strong>: Plugin management (install, uninstall, update, list)</li>
+<li><strong><code>workspace</code></strong>: Multi-tenant workspace management</li>
+<li><strong><code>data</code></strong>: Synthetic data generation</li>
+<li><strong><code>generate-tests</code></strong>: Test generation from recorded API interactions</li>
+<li><strong><code>suggest</code></strong>: AI-powered API specification suggestions</li>
+<li><strong><code>bench</code></strong>: Load testing against real services</li>
+<li><strong><code>orchestrate</code></strong>: Chaos experiment orchestration</li>
+</ul>
+<h3 id="server-orchestration"><a class="header" href="#server-orchestration">Server Orchestration</a></h3>
+<p>The <code>serve</code> command is the most complex, supporting extensive configuration options:</p>
+<h4 id="server-types"><a class="header" href="#server-types">Server Types</a></h4>
+<ul>
+<li><strong>HTTP Server</strong>: REST API mocking with OpenAPI support</li>
+<li><strong>WebSocket Server</strong>: Real-time messaging simulation</li>
+<li><strong>gRPC Server</strong>: Protocol buffer-based service mocking</li>
+<li><strong>SMTP Server</strong>: Email service simulation</li>
+<li><strong>Admin UI</strong>: Web-based management interface</li>
+<li><strong>Metrics Server</strong>: Prometheus metrics endpoint</li>
+</ul>
+<h4 id="configuration-layers"><a class="header" href="#configuration-layers">Configuration Layers</a></h4>
+<p>The CLI implements a three-tier configuration precedence system:</p>
+<ol>
+<li><strong>CLI Arguments</strong>: Highest precedence, command-line flags</li>
+<li><strong>Configuration File</strong>: YAML/JSON config file (optional)</li>
+<li><strong>Environment Variables</strong>: Lowest precedence, environment overrides</li>
+</ol>
+<h4 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h4>
+<ul>
+<li><strong>Chaos Engineering</strong>: Fault injection, latency simulation, network degradation</li>
+<li><strong>Traffic Shaping</strong>: Bandwidth limiting, packet loss simulation</li>
+<li><strong>Observability</strong>: OpenTelemetry tracing, Prometheus metrics, API flight recording</li>
+<li><strong>AI Integration</strong>: RAG-powered intelligent mocking</li>
+<li><strong>Multi-tenancy</strong>: Workspace isolation and management</li>
+</ul>
+<h2 id="key-modules"><a class="header" href="#key-modules">Key Modules</a></h2>
+<h3 id="mainrs"><a class="header" href="#mainrs"><code>main.rs</code></a></h3>
+<p>The main entry point that:</p>
+<ul>
+<li>Parses CLI arguments using clap</li>
+<li>Initializes logging and observability</li>
+<li>Routes commands to appropriate handlers</li>
+<li>Manages server lifecycle and graceful shutdown</li>
+</ul>
+<h3 id="plugin_commandsrs"><a class="header" href="#plugin_commandsrs"><code>plugin_commands.rs</code></a></h3>
+<p>Handles plugin ecosystem management:</p>
+<ul>
+<li>Plugin installation from various sources (URLs, Git repos, local paths)</li>
+<li>Plugin validation and security verification</li>
+<li>Cache management for downloaded plugins</li>
+<li>Registry integration (future feature)</li>
+</ul>
+<h3 id="workspace_commandsrs"><a class="header" href="#workspace_commandsrs"><code>workspace_commands.rs</code></a></h3>
+<p>Multi-tenant workspace management:</p>
+<ul>
+<li>CRUD operations for workspaces</li>
+<li>Workspace statistics and monitoring</li>
+<li>Enable/disable workspace functionality</li>
+<li>REST API integration with admin UI</li>
+</ul>
+<h3 id="import-modules"><a class="header" href="#import-modules">Import Modules</a></h3>
+<ul>
+<li><code>curl_import.rs</code>: Convert curl commands to MockForge configurations</li>
+<li><code>postman_import.rs</code>: Import Postman collections</li>
+<li><code>insomnia_import.rs</code>: Import Insomnia workspaces</li>
+<li><code>import_utils.rs</code>: Shared utilities for import operations</li>
+</ul>
+<h2 id="configuration-management"><a class="header" href="#configuration-management">Configuration Management</a></h2>
+<h3 id="server-configuration-building"><a class="header" href="#server-configuration-building">Server Configuration Building</a></h3>
+<p>The <code>build_server_config_from_cli()</code> function merges configuration from multiple sources:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Step 1: Load config from file if provided
+let mut config = load_config_with_fallback(path)?;
+
+// Step 2: Apply environment variable overrides
+config = apply_env_overrides(config);
+
+// Step 3: Apply CLI argument overrides (highest precedence)
+config.http.port = serve_args.http_port;
+// ... more overrides
+<span class="boring">}</span></code></pre></pre>
+<h3 id="validation"><a class="header" href="#validation">Validation</a></h3>
+<p>Before starting servers, the CLI performs comprehensive validation:</p>
+<ul>
+<li>Configuration file existence and readability</li>
+<li>OpenAPI spec file validation</li>
+<li>Port availability checking</li>
+<li>Dry-run mode for configuration testing</li>
+</ul>
+<h2 id="server-lifecycle-management"><a class="header" href="#server-lifecycle-management">Server Lifecycle Management</a></h2>
+<h3 id="concurrent-server-startup"><a class="header" href="#concurrent-server-startup">Concurrent Server Startup</a></h3>
+<p>All servers are started concurrently using Tokio tasks:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Start HTTP server
+let http_handle = tokio::spawn(async move {
+    mockforge_http::serve_router(http_port, http_app)
+});
+
+// Start WebSocket server
+let ws_handle = tokio::spawn(async move {
+    mockforge_ws::start_with_latency(ws_port, None)
+});
+
+// Start gRPC server
+let grpc_handle = tokio::spawn(async move {
+    mockforge_grpc::start(grpc_port)
+});
+<span class="boring">}</span></code></pre></pre>
+<h3 id="graceful-shutdown"><a class="header" href="#graceful-shutdown">Graceful Shutdown</a></h3>
+<p>The CLI implements graceful shutdown using Tokio’s <code>CancellationToken</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let shutdown_token = CancellationToken::new();
+
+// All servers listen for cancellation
+tokio::select! {
+    result = server_task =&gt; { /* handle result */ }
+    _ = shutdown_token.cancelled() =&gt; { /* cleanup */ }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="integration-points"><a class="header" href="#integration-points">Integration Points</a></h2>
+<h3 id="core-crate-dependencies"><a class="header" href="#core-crate-dependencies">Core Crate Dependencies</a></h3>
+<p>The CLI depends on all MockForge service crates:</p>
+<ul>
+<li><code>mockforge-core</code>: Configuration and shared utilities</li>
+<li><code>mockforge-http</code>: HTTP server implementation</li>
+<li><code>mockforge-ws</code>: WebSocket server</li>
+<li><code>mockforge-grpc</code>: gRPC server</li>
+<li><code>mockforge-smtp</code>: SMTP server</li>
+<li><code>mockforge-ui</code>: Admin interface</li>
+<li><code>mockforge-observability</code>: Metrics and tracing</li>
+<li><code>mockforge-data</code>: Data generation and RAG</li>
+<li><code>mockforge-plugin-*</code>: Plugin ecosystem</li>
+</ul>
+<h3 id="external-integrations"><a class="header" href="#external-integrations">External Integrations</a></h3>
+<ul>
+<li><strong>OpenTelemetry</strong>: Distributed tracing</li>
+<li><strong>Prometheus</strong>: Metrics collection</li>
+<li><strong>Jaeger</strong>: Trace visualization</li>
+<li><strong>Plugin Registry</strong>: Remote plugin distribution</li>
+<li><strong>AI Providers</strong>: OpenAI, Anthropic, Ollama for intelligent features</li>
+</ul>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>The CLI implements comprehensive error handling:</p>
+<ul>
+<li>User-friendly error messages with suggestions</li>
+<li>Validation errors with specific guidance</li>
+<li>Network error recovery and retry logic</li>
+<li>Graceful degradation when services fail</li>
+</ul>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<p>The CLI includes integration tests in <code>tests/cli_integration_tests.rs</code> and configuration validation tests in <code>tests/config_validation_tests.rs</code>, ensuring reliability of the command-line interface and configuration parsing.</p>
+<h2 id="future-enhancements"><a class="header" href="#future-enhancements">Future Enhancements</a></h2>
+<ul>
+<li><strong>Plugin Marketplace</strong>: Integrated plugin discovery and installation</li>
+<li><strong>Interactive Mode</strong>: Shell-like interface for complex workflows</li>
+<li><strong>Configuration Wizards</strong>: Guided setup for new users</li>
+<li><strong>Remote Management</strong>: Cloud-based MockForge instance management</li>
+</ul>
 
                     </main>
 

@@ -1,0 +1,566 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Cloud Workspaces - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/cloud-workspaces.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="cloud-workspaces-collaboration"><a class="header" href="#cloud-workspaces-collaboration">Cloud Workspaces (Collaboration)</a></h1>
+<p>Cloud Workspaces enables multi-user collaborative editing with real-time state synchronization, version control, and role-based permissions. Work together on mock configurations with Git-style versioning and conflict resolution.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Cloud Workspaces provides:</p>
+<ul>
+<li><strong>User Authentication</strong>: JWT-based authentication with secure sessions</li>
+<li><strong>Multi-User Editing</strong>: Real-time collaborative editing with presence awareness</li>
+<li><strong>State Synchronization</strong>: WebSocket-based real-time sync between clients</li>
+<li><strong>Version Control</strong>: Git-style version control for mocks and data</li>
+<li><strong>Change Tracking</strong>: Full history with rollback capabilities</li>
+<li><strong>Role-Based Permissions</strong>: Owner, Editor, and Viewer roles</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="create-a-workspace"><a class="header" href="#create-a-workspace">Create a Workspace</a></h3>
+<pre><code class="language-bash"># Create a new workspace
+mockforge workspace create --name "My Workspace" --description "Team workspace"
+
+# Or via API
+curl -X POST http://localhost:9080/api/workspaces \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -d '{
+    "name": "My Workspace",
+    "description": "Team workspace"
+  }'
+</code></pre>
+<h3 id="join-a-workspace"><a class="header" href="#join-a-workspace">Join a Workspace</a></h3>
+<pre><code class="language-bash"># List available workspaces
+mockforge workspace list
+
+# Join a workspace (requires invitation)
+mockforge workspace join &lt;workspace-id&gt;
+</code></pre>
+<h3 id="start-collaborative-server"><a class="header" href="#start-collaborative-server">Start Collaborative Server</a></h3>
+<pre><code class="language-bash"># Start server with collaboration enabled
+mockforge serve --collab-enabled --collab-port 8080
+</code></pre>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<h3 id="user-authentication"><a class="header" href="#user-authentication">User Authentication</a></h3>
+<h4 id="register"><a class="header" href="#register">Register</a></h4>
+<pre><code class="language-bash"># Register new user
+mockforge auth register \
+  --email "user@example.com" \
+  --password "secure-password" \
+  --name "User Name"
+</code></pre>
+<h4 id="login"><a class="header" href="#login">Login</a></h4>
+<pre><code class="language-bash"># Login and get JWT token
+mockforge auth login \
+  --email "user@example.com" \
+  --password "secure-password"
+</code></pre>
+<h3 id="workspace-management"><a class="header" href="#workspace-management">Workspace Management</a></h3>
+<h4 id="create-workspace"><a class="header" href="#create-workspace">Create Workspace</a></h4>
+<pre><code class="language-bash">mockforge workspace create \
+  --name "Team Workspace" \
+  --description "Shared workspace for team"
+</code></pre>
+<h4 id="list-workspaces"><a class="header" href="#list-workspaces">List Workspaces</a></h4>
+<pre><code class="language-bash"># List your workspaces
+mockforge workspace list
+
+# List all workspaces (admin only)
+mockforge workspace list --all
+</code></pre>
+<h4 id="get-workspace-details"><a class="header" href="#get-workspace-details">Get Workspace Details</a></h4>
+<pre><code class="language-bash">mockforge workspace get &lt;workspace-id&gt;
+</code></pre>
+<h3 id="member-management"><a class="header" href="#member-management">Member Management</a></h3>
+<h4 id="add-member"><a class="header" href="#add-member">Add Member</a></h4>
+<pre><code class="language-bash"># Add member to workspace
+mockforge workspace member add \
+  --workspace &lt;workspace-id&gt; \
+  --user &lt;user-id&gt; \
+  --role editor
+</code></pre>
+<h4 id="list-members"><a class="header" href="#list-members">List Members</a></h4>
+<pre><code class="language-bash"># List workspace members
+mockforge workspace member list --workspace &lt;workspace-id&gt;
+</code></pre>
+<h4 id="change-role"><a class="header" href="#change-role">Change Role</a></h4>
+<pre><code class="language-bash"># Change member role
+mockforge workspace member role \
+  --workspace &lt;workspace-id&gt; \
+  --user &lt;user-id&gt; \
+  --role viewer
+</code></pre>
+<h4 id="remove-member"><a class="header" href="#remove-member">Remove Member</a></h4>
+<pre><code class="language-bash"># Remove member from workspace
+mockforge workspace member remove \
+  --workspace &lt;workspace-id&gt; \
+  --user &lt;user-id&gt;
+</code></pre>
+<h3 id="real-time-synchronization"><a class="header" href="#real-time-synchronization">Real-Time Synchronization</a></h3>
+<p>Workspaces use WebSocket for real-time synchronization:</p>
+<h4 id="websocket-connection"><a class="header" href="#websocket-connection">WebSocket Connection</a></h4>
+<pre><code class="language-javascript">const ws = new WebSocket('ws://localhost:8080/ws');
+
+// Subscribe to workspace
+ws.send(JSON.stringify({
+  type: 'subscribe',
+  workspace_id: 'workspace-uuid'
+}));
+
+// Receive updates
+ws.onmessage = (event) =&gt; {
+  const data = JSON.parse(event.data);
+  if (data.type === 'change') {
+    console.log('Change event:', data.event);
+  }
+};
+</code></pre>
+<h4 id="change-events"><a class="header" href="#change-events">Change Events</a></h4>
+<ul>
+<li><code>mock_created</code> - New mock added</li>
+<li><code>mock_updated</code> - Mock modified</li>
+<li><code>mock_deleted</code> - Mock removed</li>
+<li><code>workspace_updated</code> - Workspace settings changed</li>
+<li><code>member_added</code> - New team member</li>
+<li><code>member_removed</code> - Member left</li>
+<li><code>role_changed</code> - Member role updated</li>
+<li><code>snapshot_created</code> - New snapshot</li>
+<li><code>user_joined</code> - User connected</li>
+<li><code>user_left</code> - User disconnected</li>
+<li><code>cursor_moved</code> - Cursor position updated</li>
+</ul>
+<h3 id="version-control"><a class="header" href="#version-control">Version Control</a></h3>
+<h4 id="create-snapshot"><a class="header" href="#create-snapshot">Create Snapshot</a></h4>
+<pre><code class="language-bash"># Create workspace snapshot
+mockforge workspace snapshot create \
+  --workspace &lt;workspace-id&gt; \
+  --message "Initial state"
+</code></pre>
+<h4 id="list-snapshots"><a class="header" href="#list-snapshots">List Snapshots</a></h4>
+<pre><code class="language-bash"># List workspace snapshots
+mockforge workspace snapshot list --workspace &lt;workspace-id&gt;
+</code></pre>
+<h4 id="restore-snapshot"><a class="header" href="#restore-snapshot">Restore Snapshot</a></h4>
+<pre><code class="language-bash"># Restore workspace to snapshot
+mockforge workspace snapshot restore \
+  --workspace &lt;workspace-id&gt; \
+  --snapshot &lt;snapshot-id&gt;
+</code></pre>
+<h3 id="conflict-resolution"><a class="header" href="#conflict-resolution">Conflict Resolution</a></h3>
+<p>When multiple users edit simultaneously, conflicts are resolved automatically:</p>
+<ul>
+<li><strong>Last Write Wins</strong>: Default strategy for simple conflicts</li>
+<li><strong>Merge Strategy</strong>: Intelligent merging for compatible changes</li>
+<li><strong>Manual Resolution</strong>: Manual conflict resolution for complex cases</li>
+</ul>
+<h2 id="api-endpoints"><a class="header" href="#api-endpoints">API Endpoints</a></h2>
+<h3 id="authentication"><a class="header" href="#authentication">Authentication</a></h3>
+<pre><code class="language-http">POST /auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "secure-password",
+  "name": "User Name"
+}
+</code></pre>
+<pre><code class="language-http">POST /auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "secure-password"
+}
+</code></pre>
+<h3 id="workspaces"><a class="header" href="#workspaces">Workspaces</a></h3>
+<pre><code class="language-http">POST /workspaces
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{
+  "name": "My Workspace",
+  "description": "Team workspace"
+}
+</code></pre>
+<pre><code class="language-http">GET /workspaces
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<pre><code class="language-http">GET /workspaces/:id
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<pre><code class="language-http">PUT /workspaces/:id
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{
+  "name": "Updated Name",
+  "description": "Updated description"
+}
+</code></pre>
+<pre><code class="language-http">DELETE /workspaces/:id
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<h3 id="members"><a class="header" href="#members">Members</a></h3>
+<pre><code class="language-http">POST /workspaces/:id/members
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{
+  "user_id": "user-uuid",
+  "role": "editor"
+}
+</code></pre>
+<pre><code class="language-http">GET /workspaces/:id/members
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<pre><code class="language-http">PUT /workspaces/:id/members/:user_id/role
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{
+  "role": "viewer"
+}
+</code></pre>
+<pre><code class="language-http">DELETE /workspaces/:id/members/:user_id
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<h2 id="role-based-permissions"><a class="header" href="#role-based-permissions">Role-Based Permissions</a></h2>
+<h3 id="owner"><a class="header" href="#owner">Owner</a></h3>
+<ul>
+<li>Full access to workspace</li>
+<li>Can delete workspace</li>
+<li>Can manage all members</li>
+<li>Can change any member’s role</li>
+</ul>
+<h3 id="editor"><a class="header" href="#editor">Editor</a></h3>
+<ul>
+<li>Can create, update, and delete mocks</li>
+<li>Can view all workspace content</li>
+<li>Cannot delete workspace</li>
+<li>Cannot manage members</li>
+</ul>
+<h3 id="viewer"><a class="header" href="#viewer">Viewer</a></h3>
+<ul>
+<li>Can view workspace content</li>
+<li>Cannot modify anything</li>
+<li>Read-only access</li>
+</ul>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="server-configuration"><a class="header" href="#server-configuration">Server Configuration</a></h3>
+<pre><code class="language-yaml">collab:
+  enabled: true
+  port: 8080
+  database:
+    type: "sqlite"  # or "postgres"
+    path: "./collab.db"  # For SQLite
+    connection_string: "postgresql://..."  # For PostgreSQL
+  jwt:
+    secret: "${JWT_SECRET}"
+    expiration_hours: 24
+</code></pre>
+<h3 id="client-configuration"><a class="header" href="#client-configuration">Client Configuration</a></h3>
+<pre><code class="language-yaml">collab:
+  server_url: "http://localhost:8080"
+  workspace_id: "workspace-uuid"
+  auto_sync: true
+  sync_interval_ms: 1000
+</code></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="team-development"><a class="header" href="#team-development">Team Development</a></h3>
+<p>Multiple developers working on the same mock configuration:</p>
+<ol>
+<li>Create shared workspace</li>
+<li>Invite team members</li>
+<li>Edit mocks collaboratively</li>
+<li>View changes in real-time</li>
+</ol>
+<h3 id="staging-environment"><a class="header" href="#staging-environment">Staging Environment</a></h3>
+<p>Shared staging environment with controlled access:</p>
+<ol>
+<li>Create workspace for staging</li>
+<li>Add team members as editors</li>
+<li>Add stakeholders as viewers</li>
+<li>Track all changes with version control</li>
+</ol>
+<h3 id="client-demos"><a class="header" href="#client-demos">Client Demos</a></h3>
+<p>Share mock environments with clients:</p>
+<ol>
+<li>Create workspace for client</li>
+<li>Add client as viewer</li>
+<li>Update mocks as needed</li>
+<li>Client sees changes in real-time</li>
+</ol>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Use Appropriate Roles</strong>: Assign roles based on responsibilities</li>
+<li><strong>Regular Snapshots</strong>: Create snapshots before major changes</li>
+<li><strong>Monitor Conflicts</strong>: Watch for conflict warnings</li>
+<li><strong>Version Control</strong>: Use snapshots for important milestones</li>
+<li><strong>Secure Secrets</strong>: Never commit JWT secrets to version control</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="connection-issues"><a class="header" href="#connection-issues">Connection Issues</a></h3>
+<ul>
+<li>Verify WebSocket endpoint is accessible</li>
+<li>Check firewall settings</li>
+<li>Review server logs for errors</li>
+</ul>
+<h3 id="sync-conflicts"><a class="header" href="#sync-conflicts">Sync Conflicts</a></h3>
+<ul>
+<li>Review conflict resolution strategy</li>
+<li>Use manual resolution for complex cases</li>
+<li>Create snapshots before major changes</li>
+</ul>
+<h3 id="permission-errors"><a class="header" href="#permission-errors">Permission Errors</a></h3>
+<ul>
+<li>Verify user role has required permissions</li>
+<li>Check workspace membership</li>
+<li>Review JWT token expiration</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="vbr-engine.html">VBR Engine</a> - State management</li>
+<li><a href="scenario-marketplace.html">Scenario Marketplace</a> - Sharing scenarios</li>
+<li><a href="../configuration/files.html">Configuration Guide</a> - Complete configuration reference</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/advanced-features/drift-learning.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/scenario-marketplace.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/advanced-features/drift-learning.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/scenario-marketplace.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,63 @@
+# Cargo-deny configuration for license compliance and dependency checks
+# See: https://github.com/embarkstudios/cargo-deny
+
+[licenses]
+# Allow all licenses (adjust based on your organization's policy)
+# Use "deny" to deny-by-default and explicitly allow specific licenses
+default = "allow"
+# allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "ISC"]
+# deny = ["GPL-2.0", "GPL-3.0"]
+
+# Ignore licenses for specific crates
+# exemptions = [
+#     { crate = "some-crate", license = "GPL-2.0", reason = "Only used in tests" },
+# ]
+
+[sources]
+# Allow all sources (crates.io, git, local, etc.)
+# Use "deny" to deny-by-default and explicitly allow specific sources
+unknown-registry = "allow"
+unknown-git = "allow"
+# allow-registry = ["crates-io"]
+# allow-git = ["https://github.com/"]
+# deny = ["unknown"]
+
+# Ignore specific crates from source checks
+# exemptions = [
+#     { crate = "some-crate", source = "git", reason = "Internal dependency" },
+# ]
+
+[bans]
+# Check for duplicate dependencies
+multiple-versions = "warn"
+multiple-versions-include-dev = false
+# Allow multiple versions of the same crate
+# allow = [
+#     { name = "serde", version = "1.0.0" },
+#     { name = "serde", version = "1.0.1" },
+# ]
+
+# Skip checking for updates
+skip = [
+    # Add crates that should be skipped from duplicate checks
+]
+
+[advisories]
+# Check for security advisories
+vulnerability = "deny"
+# Check for unmaintained crates (allowed values: "all", "workspace", "transitive", "none")
+unmaintained = "none"
+# Check for unsound crates
+unsound = "deny"
+# Ignore specific advisories
+ignore = [
+    # Add advisory IDs to ignore if needed
+]
+
+# Ignore advisories for specific crates
+# exemptions = [
+#     { crate = "some-crate", advisory = "RUSTSEC-YYYY-XXXX", reason = "False positive" },
+# ]
+
+# Check for yanked crates
+yanked = "deny"

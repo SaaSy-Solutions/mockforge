@@ -1,3 +1,8 @@
+//! Tests for OpenAPI route generation and handling.
+//!
+//! These tests verify that OpenAPI specifications are correctly parsed and
+//! converted into mock routes with proper request/response handling.
+
 use axum::{body::Body, http::Request, Router};
 use mockforge_core::openapi_routes::*;
 use serde_json::json;

@@ -1,0 +1,203 @@
+# MockForge Advanced Features Example Configuration
+# This file demonstrates all the new advanced behavior and simulation features
+
+# HTTP server configuration
+http:
+  port: 3000
+  host: "0.0.0.0"
+  openapi_spec: "examples/openapi-demo.json"
+  cors_enabled: true
+
+# Core MockForge configuration with advanced features
+core:
+  latency_enabled: true
+  failures_enabled: false
+  overrides_enabled: true
+
+  # ============================================================================
+  # 1. RECORD & PLAYBACK: Stub Mapping Conversion
+  # ============================================================================
+  # The recorder automatically converts recorded requests/responses into
+  # replayable stub mappings (fixtures). Configure recording behavior:
+  recorder:
+    enabled: true
+    auto_convert: true  # Automatically convert recordings to stub mappings
+    output_dir: "./fixtures/recorded"
+    format: "yaml"  # or "json"
+    # Filter options for batch conversion
+    filters:
+      min_status_code: 200
+      max_status_code: 299
+      exclude_paths:
+        - "/health"
+        - "/metrics"
+
+  # ============================================================================
+  # 2. STATEFUL BEHAVIOR SIMULATION
+  # ============================================================================
+  # Configure stateful responses that change based on request history
+  stateful:
+    enabled: true
+    # State machine configuration
+    state_machines:
+      - name: "order_workflow"
+        initial_state: "pending"
+        states:
+          - name: "pending"
+            response:
+              status_code: 200
+              body_template: '{"order_id": "{{resource_id}}", "status": "pending", "message": "Order created"}'
+              content_type: "application/json"
+          - name: "processing"
+            response:
+              status_code: 200
+              body_template: '{"order_id": "{{resource_id}}", "status": "processing", "message": "Order is being processed"}'
+              content_type: "application/json"
+          - name: "shipped"
+            response:
+              status_code: 200
+              body_template: '{"order_id": "{{resource_id}}", "status": "shipped", "tracking": "{{uuid}}"}'
+              content_type: "application/json"
+        # Resource ID extraction (how to identify the resource)
+        resource_id_extract:
+          type: "path_param"
+          param: "order_id"
+        # State transitions
+        transitions:
+          - method: "POST"
+            path_pattern: "/api/orders"
+            from_state: "initial"
+            to_state: "pending"
+          - method: "PUT"
+            path_pattern: "/api/orders/{order_id}/process"
+            from_state: "pending"
+            to_state: "processing"
+          - method: "PUT"
+            path_pattern: "/api/orders/{order_id}/ship"
+            from_state: "processing"
+            to_state: "shipped"
+            condition: "$.ready == true"  # Optional condition
+
+  # ============================================================================
+  # 3. PER-ROUTE FAULT INJECTION & LATENCY
+  # ============================================================================
+  # Configure fault injection and latency on a per-route basis
+  routes:
+    # Example: High-latency payment endpoint
+    - path: "/api/payments/process"
+      method: "POST"
+      response:
+        status: 200
+        body:
+          message: "Payment processed"
+      latency:
+        enabled: true
+        probability: 1.0
+        fixed_delay_ms: 500
+        jitter_percent: 20.0
+        distribution: "normal"
+        mean_ms: 500.0
+        std_dev_ms: 100.0
+      fault_injection:
+        enabled: true
+        probability: 0.05  # 5% chance of failure
+        fault_types:
+          - type: "http_error"
+            status_code: 503
+            message: "Payment service temporarily unavailable"
+          - type: "timeout"
+            duration_ms: 5000
+            message: "Payment processing timeout"
+
+    # Example: Unreliable user service
+    - path: "/api/users/{user_id}"
+      method: "GET"
+      response:
+        status: 200
+        body:
+          id: "{{user_id}}"
+          name: "John Doe"
+      fault_injection:
+        enabled: true
+        probability: 0.1  # 10% chance of failure
+        fault_types:
+          - type: "http_error"
+            status_code: 500
+            message: "Internal server error"
+          - type: "connection_error"
+            message: "Connection refused"
+          - type: "partial_response"
+            truncate_percent: 50.0
+
+    # Example: Slow search endpoint with exponential latency
+    - path: "/api/search"
+      method: "GET"
+      response:
+        status: 200
+        body:
+          results: []
+      latency:
+        enabled: true
+        probability: 0.8  # 80% of requests get latency
+        distribution: "exponential"
+        lambda: 0.001  # Mean delay of 1000ms
+        jitter_percent: 15.0
+
+  # ============================================================================
+  # 4. CONDITIONAL PROXYING
+  # ============================================================================
+  # Proxy requests conditionally based on request attributes
+  proxy:
+    enabled: true
+    target_url: "http://api.example.com"
+    timeout_seconds: 30
+    prefix: "/proxy"
+    passthrough_by_default: false
+    rules:
+      # Example: Proxy admin requests to production
+      - pattern: "/api/admin/*"
+        target_url: "https://admin-api.production.com"
+        upstream_url: "https://admin-api.production.com"
+        enabled: true
+        condition: "$.user.role == 'admin'"  # Only proxy if user is admin
+
+      # Example: Proxy authenticated requests
+      - pattern: "/api/users/*"
+        target_url: "https://users-api.staging.com"
+        upstream_url: "https://users-api.staging.com"
+        enabled: true
+        condition: "header[authorization] != ''"  # Only proxy if authenticated
+
+      # Example: Proxy based on query parameter
+      - pattern: "/api/data/*"
+        target_url: "https://data-api.example.com"
+        upstream_url: "https://data-api.example.com"
+        enabled: true
+        condition: "query[env] == 'production'"  # Only proxy in production mode
+
+      # Example: Complex condition with AND/OR
+      - pattern: "/api/orders/*"
+        target_url: "https://orders-api.example.com"
+        upstream_url: "https://orders-api.example.com"
+        enabled: true
+        condition: "AND(header[authorization] != '', $.order.amount > 1000)"  # Authenticated AND high-value orders
+
+      # Example: Proxy based on JSONPath in request body
+      - pattern: "/api/payments/*"
+        target_url: "https://payments-api.example.com"
+        upstream_url: "https://payments-api.example.com"
+        enabled: true
+        condition: "$.payment.method == 'credit_card'"  # Only proxy credit card payments
+
+  # ============================================================================
+  # 5. BROWSER PROXY WITH CONDITIONAL FORWARDING
+  # ============================================================================
+  # The browser proxy also supports conditional forwarding rules
+  # (same configuration as above, but used when running `mockforge proxy`)
+
+# Admin UI configuration
+admin:
+  enabled: true
+  port: 9080
+  host: "127.0.0.1"
+  api_enabled: true

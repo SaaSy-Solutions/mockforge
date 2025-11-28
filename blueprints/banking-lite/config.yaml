@@ -1,0 +1,136 @@
+# Banking Lite Configuration
+# Complete setup for banking applications with accounts, transactions, and transfers
+
+# HTTP Server
+http:
+  port: 3000
+  host: "0.0.0.0"
+  enabled: true
+  cors_enabled: true
+  openapi_spec: "openapi.yaml"
+
+# Admin UI
+admin:
+  enabled: true
+  port: 9080
+  host: "127.0.0.1"
+
+# Reality Configuration
+reality:
+  level: high
+  enabled: true
+
+# Reality Continuum
+reality_continuum:
+  enabled: true
+  default_ratio: 0.5  # 50% reality, 50% mock
+  route_rules:
+    - pattern: "/api/accounts/*"
+      ratio: 0.6  # Account data uses 60% real data
+    - pattern: "/api/transactions/*"
+      ratio: 0.7  # Transactions use 70% real data for accuracy
+    - pattern: "/api/transfers/*"
+      ratio: 0.3  # Transfers mostly mock (safer for testing)
+
+# Consistency Engine with Personas
+consistency:
+  persona_graphs:
+    enabled: true
+
+  personas:
+    high_value_customer:
+      id: "user:high-value-001"
+      name: "High-Value Customer"
+      domain: "banking"
+      traits:
+        account_type: "premium"
+        total_balance: "125000.00"
+        account_count: 3
+        monthly_transactions: 45
+        credit_score: 780
+        relationship_years: 8
+      lifecycle:
+        preset: "subscription"
+        initial_state: "active"
+
+    regular_customer:
+      id: "user:regular-001"
+      name: "Regular Customer"
+      domain: "banking"
+      traits:
+        account_type: "standard"
+        total_balance: "8500.00"
+        account_count: 2
+        monthly_transactions: 12
+        credit_score: 720
+        relationship_years: 3
+      lifecycle:
+        preset: "subscription"
+        initial_state: "active"
+
+    business_account:
+      id: "user:business-001"
+      name: "Business Account"
+      domain: "banking"
+      traits:
+        account_type: "business"
+        total_balance: "250000.00"
+        account_count: 5
+        monthly_transactions: 120
+        business_type: "retail"
+        employees: 25
+      lifecycle:
+        preset: "subscription"
+        initial_state: "active"
+
+# Drift Budget - STRICT for banking
+drift_budget:
+  enabled: true
+  default_budget:
+    max_breaking_changes: 0  # NO breaking changes allowed
+    max_non_breaking_changes: 2  # Very limited non-breaking changes
+  per_endpoint_budgets:
+    "GET /api/accounts/{id}/balance":
+      max_breaking_changes: 0
+      max_non_breaking_changes: 0  # Balance must never change structure
+    "POST /api/transfers":
+      max_breaking_changes: 0
+      max_non_breaking_changes: 1  # Transfer API must be stable
+    "GET /api/transactions":
+      max_breaking_changes: 0
+      max_non_breaking_changes: 2
+    "POST /api/accounts":
+      max_breaking_changes: 0
+      max_non_breaking_changes: 1
+
+# Chaos Configuration - minimal for banking
+core:
+  failures_enabled: true
+  failure_config:
+    global_error_rate: 0.01  # Very low error rate (1%)
+    tag_configs:
+      transfers:
+        error_rate: 0.02  # 2% error rate for transfers
+        status_codes: [503, 504]
+        error_message: "Transfer service temporarily unavailable"
+      transactions:
+        error_rate: 0.01  # 1% error rate for transactions
+        status_codes: [503]
+        error_message: "Transaction processing temporarily unavailable"
+
+# Logging
+logging:
+  level: "info"
+  json_format: true  # Structured logging for banking
+
+# Observability
+observability:
+  prometheus:
+    enabled: true
+    port: 9090
+
+# Security - enhanced for banking
+security:
+  monitoring:
+    enabled: true
+    alert_on_suspicious_activity: true

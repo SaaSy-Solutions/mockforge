@@ -183,6 +183,441 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="websocket-module"><a class="header" href="#websocket-module">WebSocket Module</a></h1>
+<p>The <code>mockforge_ws</code> crate provides comprehensive WebSocket mocking with replay, proxy, and AI-powered event generation capabilities.</p>
+<h2 id="modules"><a class="header" href="#modules">Modules</a></h2>
+<h3 id="core-functions"><a class="header" href="#core-functions">Core Functions</a></h3>
+<h4 id="router"><a class="header" href="#router"><code>router</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn router() -&gt; Router
+<span class="boring">}</span></code></pre></pre>
+<p>Creates a basic WebSocket router with echo functionality.</p>
+<p><strong>Returns:</strong> Axum <code>Router</code> configured for WebSocket connections</p>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_ws::router;
+
+let app = router();
+// Routes WebSocket connections to /ws
+<span class="boring">}</span></code></pre></pre>
+<h4 id="router_with_latency"><a class="header" href="#router_with_latency"><code>router_with_latency</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn router_with_latency(latency_injector: LatencyInjector) -&gt; Router
+<span class="boring">}</span></code></pre></pre>
+<p>Creates a WebSocket router with latency simulation.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>latency_injector</code>: Latency injection configuration</li>
+</ul>
+<p><strong>Returns:</strong> Axum <code>Router</code> with latency simulation</p>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_ws::router_with_latency;
+use mockforge_core::{LatencyProfile, latency::LatencyInjector};
+
+let latency = LatencyProfile::slow(); // 300-800ms
+let injector = LatencyInjector::new(latency, Default::default());
+let app = router_with_latency(injector);
+<span class="boring">}</span></code></pre></pre>
+<h4 id="router_with_proxy"><a class="header" href="#router_with_proxy"><code>router_with_proxy</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn router_with_proxy(proxy_handler: WsProxyHandler) -&gt; Router
+<span class="boring">}</span></code></pre></pre>
+<p>Creates a WebSocket router with proxy capabilities.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>proxy_handler</code>: WebSocket proxy handler configuration</li>
+</ul>
+<p><strong>Returns:</strong> Axum <code>Router</code> with proxy functionality</p>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_ws::router_with_proxy;
+use mockforge_core::{WsProxyConfig, WsProxyHandler};
+
+let proxy_config = WsProxyConfig {
+    upstream_url: "wss://api.example.com/ws".to_string(),
+    should_proxy: true,
+    ..Default::default()
+};
+let proxy = WsProxyHandler::new(proxy_config);
+let app = router_with_proxy(proxy);
+<span class="boring">}</span></code></pre></pre>
+<h3 id="server-functions"><a class="header" href="#server-functions">Server Functions</a></h3>
+<h4 id="start_with_latency"><a class="header" href="#start_with_latency"><code>start_with_latency</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn start_with_latency(
+    port: u16,
+    latency: Option&lt;LatencyProfile&gt;,
+) -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt;
+<span class="boring">}</span></code></pre></pre>
+<p>Starts a WebSocket server with optional latency simulation.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>port</code>: Port number to bind to</li>
+<li><code>latency</code>: Optional latency profile</li>
+</ul>
+<p><strong>Returns:</strong> <code>Result&lt;(), Error&gt;</code> indicating server startup success</p>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_ws::start_with_latency;
+use mockforge_core::LatencyProfile;
+
+start_with_latency(3001, Some(LatencyProfile::normal())).await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="ai-event-generation"><a class="header" href="#ai-event-generation">AI Event Generation</a></h3>
+<h4 id="aieventgenerator"><a class="header" href="#aieventgenerator"><code>AiEventGenerator</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct AiEventGenerator { /* fields omitted */ }
+<span class="boring">}</span></code></pre></pre>
+<p>Generator for AI-powered WebSocket event streams.</p>
+<p><strong>Methods:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl AiEventGenerator {
+    pub fn new(config: ReplayAugmentationConfig) -&gt; Result&lt;Self&gt;
+
+    pub async fn stream_events(
+        &amp;self,
+        socket: WebSocket,
+        max_events: Option&lt;usize&gt;,
+    )
+
+    pub async fn stream_events_with_rate(
+        &amp;self,
+        socket: WebSocket,
+        max_events: Option&lt;usize&gt;,
+        events_per_second: f64,
+    )
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_ws::AiEventGenerator;
+use mockforge_data::ReplayAugmentationConfig;
+
+let config = ReplayAugmentationConfig {
+    narrative: "Simulate stock market trading".to_string(),
+    ..Default::default()
+};
+
+let generator = AiEventGenerator::new(config)?;
+generator.stream_events(socket, Some(100)).await?;
+<span class="boring">}</span></code></pre></pre>
+<h4 id="websocketaiconfig"><a class="header" href="#websocketaiconfig"><code>WebSocketAiConfig</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct WebSocketAiConfig {
+    pub enabled: bool,
+    pub replay: Option&lt;ReplayAugmentationConfig&gt;,
+    pub max_events: Option&lt;usize&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Configuration for WebSocket AI features.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>enabled</code>: Whether AI features are enabled</li>
+<li><code>replay</code>: Optional replay augmentation configuration</li>
+<li><code>max_events</code>: Maximum number of events to generate</li>
+</ul>
+<h3 id="tracing-functions"><a class="header" href="#tracing-functions">Tracing Functions</a></h3>
+<h4 id="create_ws_connection_span"><a class="header" href="#create_ws_connection_span"><code>create_ws_connection_span</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn create_ws_connection_span(request: &amp;Request) -&gt; Span
+<span class="boring">}</span></code></pre></pre>
+<p>Creates an OpenTelemetry span for WebSocket connection establishment.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>request</code>: HTTP request that initiated the WebSocket connection</li>
+</ul>
+<p><strong>Returns:</strong> OpenTelemetry <code>Span</code> for connection tracking</p>
+<h4 id="create_ws_message_span"><a class="header" href="#create_ws_message_span"><code>create_ws_message_span</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn create_ws_message_span(message_size: usize, direction: &amp;str) -&gt; Span
+<span class="boring">}</span></code></pre></pre>
+<p>Creates an OpenTelemetry span for WebSocket message processing.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>message_size</code>: Size of the message in bytes</li>
+<li><code>direction</code>: Message direction (“in” or “out”)</li>
+</ul>
+<p><strong>Returns:</strong> OpenTelemetry <code>Span</code> for message tracking</p>
+<h4 id="record_ws_connection_success"><a class="header" href="#record_ws_connection_success"><code>record_ws_connection_success</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn record_ws_connection_success(span: &amp;Span)
+<span class="boring">}</span></code></pre></pre>
+<p>Records successful WebSocket connection establishment.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>span</code>: Connection span to record success on</li>
+</ul>
+<h4 id="record_ws_message_success"><a class="header" href="#record_ws_message_success"><code>record_ws_message_success</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn record_ws_message_success(span: &amp;Span, message_size: usize)
+<span class="boring">}</span></code></pre></pre>
+<p>Records successful WebSocket message processing.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>span</code>: Message span to record success on</li>
+<li><code>message_size</code>: Size of processed message</li>
+</ul>
+<h4 id="record_ws_error"><a class="header" href="#record_ws_error"><code>record_ws_error</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn record_ws_error(span: &amp;Span, error: &amp;str)
+<span class="boring">}</span></code></pre></pre>
+<p>Records WebSocket error.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>span</code>: Span to record error on</li>
+<li><code>error</code>: Error description</li>
+</ul>
+<h3 id="template-expansion"><a class="header" href="#template-expansion">Template Expansion</a></h3>
+<h4 id="token-expansion-functions"><a class="header" href="#token-expansion-functions">Token Expansion Functions</a></h4>
+<p>The crate includes internal template expansion functionality for replay files:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn expand_tokens(text: &amp;str) -&gt; String
+<span class="boring">}</span></code></pre></pre>
+<p>Expands template tokens in replay file content.</p>
+<p><strong>Supported Tokens:</strong></p>
+<ul>
+<li><code>{{uuid}}</code>: Generates random UUID</li>
+<li><code>{{now}}</code>: Current timestamp in RFC3339 format</li>
+<li><code>{{now+1m}}</code>: Timestamp 1 minute from now</li>
+<li><code>{{now+1h}}</code>: Timestamp 1 hour from now</li>
+<li><code>{{randInt min max}}</code>: Random integer between min and max</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let text = "Hello {{uuid}} at {{now}}";
+let expanded = expand_tokens(text);
+// Result: "Hello 550e8400-e29b-41d4-a716-446655440000 at 2024-01-15T10:30:00Z"
+<span class="boring">}</span></code></pre></pre>
+<h3 id="internal-types"><a class="header" href="#internal-types">Internal Types</a></h3>
+<h4 id="websocket-message-handling"><a class="header" href="#websocket-message-handling">WebSocket Message Handling</a></h4>
+<p>The crate uses Axum’s WebSocket types internally:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Message Types:</strong></p>
+<ul>
+<li><code>Message::Text(String)</code>: Text message</li>
+<li><code>Message::Binary(Vec&lt;u8&gt;)</code>: Binary message</li>
+<li><code>Message::Close(Option&lt;CloseFrame&gt;)</code>: Connection close</li>
+<li><code>Message::Ping(Vec&lt;u8&gt;)</code>: Ping message</li>
+<li><code>Message::Pong(Vec&lt;u8&gt;)</code>: Pong message</li>
+</ul>
+<h3 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h3>
+<p>All public functions return <code>Result&lt;T, Box&lt;dyn std::error::Error&gt;&gt;</code>. Common errors include:</p>
+<ul>
+<li>Server binding errors</li>
+<li>WebSocket protocol errors</li>
+<li>File I/O errors (for replay files)</li>
+<li>AI service errors</li>
+<li>Template expansion errors</li>
+</ul>
+<h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
+<ul>
+<li>Default WebSocket path: <code>/ws</code></li>
+<li>Default server port: 3001</li>
+</ul>
+<h3 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h3>
+<ul>
+<li><code>data-faker</code>: Enables rich data generation features</li>
+</ul>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="basic-websocket-server"><a class="header" href="#basic-websocket-server">Basic WebSocket Server</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_ws::router;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let app = router();
+
+    let addr = "0.0.0.0:3001".parse()?;
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
+}</code></pre></pre>
+<h3 id="server-with-latency-simulation"><a class="header" href="#server-with-latency-simulation">Server with Latency Simulation</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_ws::start_with_latency;
+use mockforge_core::LatencyProfile;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Add 50-200ms latency to all messages
+    start_with_latency(3001, Some(LatencyProfile::normal())).await?;
+    Ok(())
+}</code></pre></pre>
+<h3 id="proxy-server"><a class="header" href="#proxy-server">Proxy Server</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_ws::router_with_proxy;
+use mockforge_core::{WsProxyConfig, WsProxyHandler};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let proxy_config = WsProxyConfig {
+        upstream_url: "wss://echo.websocket.org".to_string(),
+        should_proxy: true,
+        message_transform: None,
+    };
+
+    let proxy = WsProxyHandler::new(proxy_config);
+    let app = router_with_proxy(proxy);
+
+    let addr = "0.0.0.0:3001".parse()?;
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
+}</code></pre></pre>
+<h3 id="replay-mode"><a class="header" href="#replay-mode">Replay Mode</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_ws::router;
+
+// Set replay file via environment variable
+std::env::set_var("MOCKFORGE_WS_REPLAY_FILE", "./replay.jsonl");
+
+// Enable template expansion
+std::env::set_var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND", "1");
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let app = router();
+
+    let addr = "0.0.0.0:3001".parse()?;
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
+}</code></pre></pre>
+<h3 id="ai-event-generation-1"><a class="header" href="#ai-event-generation-1">AI Event Generation</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_ws::AiEventGenerator;
+use mockforge_data::ReplayAugmentationConfig;
+use axum::extract::ws::WebSocket;
+
+async fn handle_ai_events(mut socket: WebSocket) {
+    let config = ReplayAugmentationConfig {
+        narrative: "Simulate a live chat conversation with multiple users".to_string(),
+        event_count: 50,
+        provider: "openai".to_string(),
+        ..Default::default()
+    };
+
+    let generator = AiEventGenerator::new(config)?;
+    generator.stream_events_with_rate(socket, None, 2.0).await?; // 2 events/sec
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="custom-websocket-handler"><a class="header" href="#custom-websocket-handler">Custom WebSocket Handler</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use axum::{
+    extract::ws::{WebSocket, WebSocketUpgrade},
+    response::IntoResponse,
+};
+
+async fn custom_ws_handler(ws: WebSocketUpgrade) -&gt; impl IntoResponse {
+    ws.on_upgrade(|socket| handle_custom_socket(socket))
+}
+
+async fn handle_custom_socket(mut socket: WebSocket) {
+    while let Some(msg) = socket.recv().await {
+        match msg {
+            Ok(axum::extract::ws::Message::Text(text)) =&gt; {
+                // Process text message
+                let response = format!("Echo: {}", text);
+                if socket.send(axum::extract::ws::Message::Text(response.into())).await.is_err() {
+                    break;
+                }
+            }
+            Ok(axum::extract::ws::Message::Close(_)) =&gt; {
+                break;
+            }
+            Err(e) =&gt; {
+                eprintln!("WebSocket error: {}", e);
+                break;
+            }
+            _ =&gt; {}
+        }
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="tracing-integration"><a class="header" href="#tracing-integration">Tracing Integration</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_ws::{create_ws_connection_span, record_ws_connection_success};
+use axum::extract::ws::WebSocketUpgrade;
+
+async fn traced_ws_handler(
+    ws: WebSocketUpgrade,
+    request: axum::http::Request&lt;axum::body::Body&gt;,
+) -&gt; impl IntoResponse {
+    // Create connection span
+    let span = create_ws_connection_span(&amp;request);
+
+    // Record successful connection
+    record_ws_connection_success(&amp;span);
+
+    ws.on_upgrade(|socket| handle_socket_with_tracing(socket, span))
+}
+
+async fn handle_socket_with_tracing(mut socket: WebSocket, connection_span: tracing::Span) {
+    let _guard = connection_span.enter();
+
+    while let Some(msg) = socket.recv().await {
+        match msg {
+            Ok(axum::extract::ws::Message::Text(text)) =&gt; {
+                let message_span = create_ws_message_span(text.len(), "in");
+                let _msg_guard = message_span.enter();
+
+                // Process message...
+
+                record_ws_message_success(&amp;message_span, text.len());
+            }
+            // ... other message types
+        }
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="replay-file-format"><a class="header" href="#replay-file-format">Replay File Format</a></h3>
+<p>Replay files use JSON Lines format with the following structure:</p>
+<pre><code class="language-json">{"ts":0,"dir":"out","text":"HELLO {{uuid}}","waitFor":"^CLIENT_READY$"}
+{"ts":10,"dir":"out","text":"{\"type\":\"welcome\",\"sessionId\":\"{{uuid}}\"}"}
+{"ts":20,"dir":"out","text":"{\"data\":{{randInt 1 100}}}","waitFor":"^ACK$"}
+</code></pre>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>ts</code>: Timestamp offset in milliseconds</li>
+<li><code>dir</code>: Direction (“in” for received, “out” for sent)</li>
+<li><code>text</code>: Message content (supports template expansion)</li>
+<li><code>waitFor</code>: Optional regex pattern to wait for before sending</li>
+</ul>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<ul>
+<li><code>MOCKFORGE_WS_REPLAY_FILE</code>: Path to replay file for replay mode</li>
+<li><code>MOCKFORGE_RESPONSE_TEMPLATE_EXPAND</code>: Enable template expansion (“1” or “true”)</li>
+</ul>
+<h3 id="integration-with-mockforge-core"><a class="header" href="#integration-with-mockforge-core">Integration with MockForge Core</a></h3>
+<p>The WebSocket crate integrates with core MockForge functionality:</p>
+<ul>
+<li><strong>Latency Injection</strong>: Uses <code>LatencyInjector</code> for network simulation</li>
+<li><strong>Proxy Handler</strong>: Uses <code>WsProxyHandler</code> for upstream forwarding</li>
+<li><strong>Metrics</strong>: Integrates with global metrics registry</li>
+<li><strong>Tracing</strong>: Uses OpenTelemetry for distributed tracing</li>
+<li><strong>Data Generation</strong>: Supports AI-powered content generation</li>
+</ul>
 
                     </main>
 

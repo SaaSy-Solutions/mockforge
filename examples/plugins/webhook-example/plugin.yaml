@@ -1,0 +1,65 @@
+plugin:
+  id: "webhook-example"
+  version: "0.1.0"
+  name: "Webhook Example Plugin"
+  description: "Example plugin demonstrating webhook functionality with outbound HTTP calls"
+  types: ["response"]
+  author:
+    name: "MockForge Team"
+    email: "team@mockforge.dev"
+  homepage: "https://github.com/mockforge/mockforge"
+  repository: "https://github.com/mockforge/mockforge/tree/main/examples/plugins/webhook-example"
+  license: "MIT OR Apache-2.0"
+  keywords: ["mockforge", "plugin", "response", "webhook", "http", "example"]
+
+capabilities:
+  network:
+    allow_http_outbound: true  # Required for webhook functionality
+    allowed_hosts:
+      - "*"  # Configure specific hosts in production
+  filesystem:
+    allow_read: false
+    allow_write: false
+    allowed_paths: []
+  resources:
+    max_memory_bytes: 20971520  # 20MB
+    max_cpu_time_ms: 5000
+
+dependencies: []
+
+configuration:
+  schema:
+    type: object
+    properties:
+      webhook_url:
+        type: string
+        format: uri
+        description: "Webhook endpoint URL to send requests to"
+        default: "https://example.com/webhook"
+      secret:
+        type: string
+        description: "Optional secret for webhook signature (HMAC-SHA256)"
+        default: null
+      timeout_ms:
+        type: integer
+        description: "Request timeout in milliseconds"
+        default: 5000
+        minimum: 100
+        maximum: 30000
+      enable_retries:
+        type: boolean
+        description: "Enable automatic retries on failure"
+        default: true
+      max_retries:
+        type: integer
+        description: "Maximum number of retry attempts"
+        default: 3
+        minimum: 0
+        maximum: 10
+      events:
+        type: array
+        description: "List of events to trigger webhooks for"
+        items:
+          type: string
+        default: ["payment.completed", "order.created"]
+    required: ["webhook_url"]

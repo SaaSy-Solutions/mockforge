@@ -1,3 +1,9 @@
+//! End-to-end tests for UUID override functionality.
+//!
+//! These tests verify that UUID values in responses can be overridden
+//! through request headers or query parameters, and that the overrides
+//! are correctly applied to response templates.
+
 use axum::Router;
 use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_http::build_router;

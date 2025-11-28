@@ -288,12 +288,15 @@ fn build_url(
                 // Query
                 let query_parts: Vec<String> = structured.query.iter()
                     .filter(|q| !q.disabled && q.key.is_some())
-                    .map(|q| {
-                        let key = resolve_variables(q.key.as_ref().unwrap(), variables);
-                        let value = q.value.as_ref()
-                            .map(|v| resolve_variables(v, variables))
-                            .unwrap_or_default();
-                        format!("{}={}", key, value)
+                    .filter_map(|q| {
+                        // Safe unwrap: we filtered for q.key.is_some() above
+                        q.key.as_ref().map(|k| {
+                            let key = resolve_variables(k, variables);
+                            let value = q.value.as_ref()
+                                .map(|v| resolve_variables(v, variables))
+                                .unwrap_or_default();
+                            format!("{}={}", key, value)
+                        })
                     })
                     .collect();
 

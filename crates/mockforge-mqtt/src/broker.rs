@@ -85,7 +85,7 @@ impl MqttBroker {
         &self,
         client_id: &str,
         clean_session: bool,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
 
         let mut clients = self.clients.write().await;
@@ -146,7 +146,7 @@ impl MqttBroker {
     pub async fn client_disconnect(
         &self,
         client_id: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
 
         let mut clients = self.clients.write().await;
@@ -186,7 +186,7 @@ impl MqttBroker {
         &self,
         client_id: &str,
         topics: Vec<(String, u8)>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut clients = self.clients.write().await;
         let mut broker_topics = self.topics.write().await;
 
@@ -227,7 +227,7 @@ impl MqttBroker {
         &self,
         client_id: &str,
         filters: Vec<String>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut clients = self.clients.write().await;
         let mut broker_topics = self.topics.write().await;
 
@@ -280,7 +280,7 @@ impl MqttBroker {
     pub async fn disconnect_client(
         &self,
         client_id: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.client_disconnect(client_id).await
     }
 
@@ -308,7 +308,7 @@ impl MqttBroker {
         payload: Vec<u8>,
         qos: u8,
         retain: bool,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.handle_publish_internal(client_id, topic, payload, qos, retain, false)
             .await
     }
@@ -321,7 +321,7 @@ impl MqttBroker {
         payload: Vec<u8>,
         qos: u8,
         retain: bool,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Publishing with QoS to topic: {} with QoS: {}", topic, qos);
 
         let qos_level = crate::qos::QoS::from_u8(qos).unwrap_or(crate::qos::QoS::AtMostOnce);
@@ -374,7 +374,7 @@ impl MqttBroker {
         qos: u8,
         retain: bool,
         is_fixture_response: bool,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Handling publish to topic: {} with QoS: {}", topic, qos);
 
         let qos_level = crate::qos::QoS::from_u8(qos).unwrap_or(crate::qos::QoS::AtMostOnce);
@@ -463,7 +463,7 @@ impl MqttBroker {
         topic: &str,
         payload: &[u8],
         qos: crate::qos::QoS,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let topics_read = self.topics.read().await;
         let subscribers = topics_read.match_topic(topic);
         for subscriber in &subscribers {
@@ -482,7 +482,7 @@ impl MqttBroker {
         fixture: &crate::fixtures::MqttFixture,
         topic: &str,
         received_payload: &[u8],
-    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
         use mockforge_core::templating;
 
         // Create templating context with environment variables
@@ -516,7 +516,7 @@ impl MqttBroker {
         topic: &str,
         payload: &[u8],
         qos: crate::qos::QoS,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Check if client is connected
         let clients = self.clients.read().await;
         if let Some(client_state) = clients.get(client_id) {

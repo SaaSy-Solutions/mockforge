@@ -226,7 +226,11 @@ impl HttpBridge {
     async fn get_stats(
         State(bridge): State<Arc<HttpBridge>>,
     ) -> axum::response::Json<serde_json::Value> {
-        let stats = bridge.stats.lock().unwrap();
+        // Handle poisoned mutex gracefully - if mutex is poisoned, use default stats
+        let stats = bridge.stats.lock().unwrap_or_else(|poisoned| {
+            warn!("Statistics mutex is poisoned, using default values");
+            poisoned.into_inner()
+        });
         axum::response::Json(serde_json::json!({
             "requests_served": stats.requests_served,
             "requests_successful": stats.requests_successful,
@@ -314,10 +318,13 @@ impl HttpBridge {
             }
         };
 
-        // Update stats
+        // Update stats - handle poisoned mutex gracefully
         {
-            let mut stats = state.stats.lock().unwrap();
-            stats.requests_served += 1;
+            if let Ok(mut stats) = state.stats.lock() {
+                stats.requests_served += 1;
+            } else {
+                warn!("Failed to update request stats (mutex poisoned)");
+            }
         }
 
         // Handle the request
@@ -333,18 +340,24 @@ impl HttpBridge {
 
         match result {
             Ok(response) => {
-                // Update successful stats
+                // Update successful stats - handle poisoned mutex gracefully
                 {
-                    let mut stats = state.stats.lock().unwrap();
-                    stats.requests_successful += 1;
+                    if let Ok(mut stats) = state.stats.lock() {
+                        stats.requests_successful += 1;
+                    } else {
+                        warn!("Failed to update success stats (mutex poisoned)");
+                    }
                 }
                 (axum::http::StatusCode::OK, Json(response)).into_response()
             }
             Err(err) => {
-                // Update failed stats
+                // Update failed stats - handle poisoned mutex gracefully
                 {
-                    let mut stats = state.stats.lock().unwrap();
-                    stats.requests_failed += 1;
+                    if let Ok(mut stats) = state.stats.lock() {
+                        stats.requests_failed += 1;
+                    } else {
+                        warn!("Failed to update failure stats (mutex poisoned)");
+                    }
                 }
                 warn!("Bridge request failed for {}.{}: {}", service_name, method_name, err);
                 let error_response = BridgeResponse::<Value> {
@@ -360,7 +373,9 @@ impl HttpBridge {
     }
 
     /// Create a handler function for a specific gRPC method
-    #[allow(dead_code)] // Used in future HTTP bridge implementations
+    ///
+    /// TODO: Use when dynamic HTTP bridge handler creation is fully implemented
+    #[allow(dead_code)] // TODO: Remove when HTTP bridge handler factory is complete
     fn create_bridge_handler(
         &self,
         service_name: String,
@@ -380,10 +395,13 @@ impl HttpBridge {
                 let converter = state.converter.clone();
 
                 Box::pin(async move {
-                    // Update stats
+                    // Update stats - handle poisoned mutex gracefully
                     {
-                        let mut stats = stats.lock().unwrap();
-                        stats.requests_served += 1;
+                        if let Ok(mut stats) = stats.lock() {
+                            stats.requests_served += 1;
+                        } else {
+                            warn!("Failed to update request stats (mutex poisoned)");
+                        }
                     }
 
                     // Handle the request
@@ -399,18 +417,24 @@ impl HttpBridge {
 
                     match result {
                         Ok(response) => {
-                            // Update successful stats
+                            // Update successful stats - handle poisoned mutex gracefully
                             {
-                                let mut stats = stats.lock().unwrap();
-                                stats.requests_successful += 1;
+                                if let Ok(mut stats) = stats.lock() {
+                                    stats.requests_successful += 1;
+                                } else {
+                                    warn!("Failed to update success stats (mutex poisoned)");
+                                }
                             }
                             (axum::http::StatusCode::OK, Json(response)).into_response()
                         }
                         Err(err) => {
-                            // Update failed stats
+                            // Update failed stats - handle poisoned mutex gracefully
                             {
-                                let mut stats = stats.lock().unwrap();
-                                stats.requests_failed += 1;
+                                if let Ok(mut stats) = stats.lock() {
+                                    stats.requests_failed += 1;
+                                } else {
+                                    warn!("Failed to update failure stats (mutex poisoned)");
+                                }
                             }
                             warn!(
                                 "Bridge request failed for {}.{}: {}",
@@ -432,9 +456,15 @@ impl HttpBridge {
     }
 
     /// Get bridge statistics (static method for handler)
-    #[allow(dead_code)] // Used in future HTTP bridge implementations
+    ///
+    /// TODO: Integrate into HTTP bridge admin endpoints when stats API is implemented
+    #[allow(dead_code)] // TODO: Remove when bridge stats endpoint is complete
     async fn get_stats_static(bridge: &Arc<HttpBridge>) -> axum::response::Json<serde_json::Value> {
-        let stats = bridge.stats.lock().unwrap();
+        // Handle poisoned mutex gracefully - if mutex is poisoned, use default stats
+        let stats = bridge.stats.lock().unwrap_or_else(|poisoned| {
+            warn!("Statistics mutex is poisoned, using default values");
+            poisoned.into_inner()
+        });
         axum::response::Json(serde_json::json!({
             "requests_served": stats.requests_served,
             "requests_successful": stats.requests_successful,
@@ -529,20 +559,26 @@ impl HttpBridge {
         let service_registry = registry.clone();
 
         // Find the service and method
-        let service_opt = service_registry.get(service_name);
-        if service_opt.is_none() {
-            return Err(format!("Service '{}' not found", service_name).into());
-        }
+        let service = match service_registry.get(service_name) {
+            Some(s) => s,
+            None => {
+                return Err(format!("Service '{}' not found", service_name).into());
+            }
+        };
 
-        let service = service_opt.unwrap();
-        let method_opt = service.service().methods.iter().find(|m| m.name == method_name);
-        if method_opt.is_none() {
-            return Err(format!(
-                "Method '{}' not found in service '{}'",
-                method_name, service_name
-            )
-            .into());
-        }
+        let method = match service.service().methods.iter().find(|m| m.name == method_name) {
+            Some(m) => m,
+            None => {
+                return Err(format!(
+                    "Method '{}' not found in service '{}'",
+                    method_name, service_name
+                )
+                .into());
+            }
+        };
+
+        // Use method for future implementation
+        let _method = method;
 
         // For now, create a generic response since we don't have full descriptor integration
         // In a complete implementation, this would:

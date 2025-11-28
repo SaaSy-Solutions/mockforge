@@ -1,0 +1,587 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Chaos Lab - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/chaos-lab.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="chaos-lab"><a class="header" href="#chaos-lab">Chaos Lab</a></h1>
+<p>Chaos Lab is an interactive module that enables you to simulate various real-world network conditions and errors directly from the UI. Test application resilience, debug network-related issues, and validate error handling logic.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Chaos Lab provides:</p>
+<ul>
+<li><strong>Real-time latency visualization</strong> - Visual graph showing request latency over time</li>
+<li><strong>Network profile management</strong> - Predefined and custom profiles for common network conditions</li>
+<li><strong>Error pattern scripting</strong> - Configure burst, random, or sequential error injection</li>
+<li><strong>Profile export/import</strong> - Share and version control chaos configurations</li>
+<li><strong>CLI integration</strong> - Apply profiles and manage configurations from the command line</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="using-the-ui"><a class="header" href="#using-the-ui">Using the UI</a></h3>
+<ol>
+<li>Navigate to the <strong>Chaos Engineering</strong> page in the MockForge Admin UI</li>
+<li>Use the <strong>Network Profiles</strong> section to apply predefined conditions (slow 3G, flaky Wi-Fi, etc.)</li>
+<li>Monitor real-time latency in the <strong>Latency Metrics</strong> graph</li>
+<li>Configure error patterns in the <strong>Error Pattern Editor</strong></li>
+</ol>
+<h3 id="using-the-cli"><a class="header" href="#using-the-cli">Using the CLI</a></h3>
+<pre><code class="language-bash"># Apply a network profile
+mockforge serve --chaos-profile slow_3g
+
+# List available profiles
+mockforge chaos profile list
+
+# Export a profile
+mockforge chaos profile export slow_3g --format json --output profile.json
+
+# Import a profile
+mockforge chaos profile import --file profile.json
+</code></pre>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<h3 id="real-time-latency-graph"><a class="header" href="#real-time-latency-graph">Real-Time Latency Graph</a></h3>
+<p>The latency graph displays request latency over time with:</p>
+<ul>
+<li><strong>Time-series visualization</strong> - See latency trends in real-time</li>
+<li><strong>Statistics overlay</strong> - Min, max, average, P95, P99 percentiles</li>
+<li><strong>Auto-refresh</strong> - Updates every 500ms for live monitoring</li>
+<li><strong>Configurable history</strong> - View last 100 samples by default</li>
+</ul>
+<p><strong>Usage:</strong></p>
+<ul>
+<li>Enable latency injection in the Quick Controls section</li>
+<li>The graph automatically populates as requests are made</li>
+<li>Hover over data points to see exact latency values</li>
+</ul>
+<h3 id="network-profiles"><a class="header" href="#network-profiles">Network Profiles</a></h3>
+<p>Network profiles are pre-configured chaos settings that simulate specific network conditions:</p>
+<h4 id="built-in-profiles"><a class="header" href="#built-in-profiles">Built-in Profiles</a></h4>
+<ul>
+<li><strong>slow_3g</strong> - Simulates slow 3G connection (high latency, low bandwidth)</li>
+<li><strong>flaky_wifi</strong> - Intermittent connection issues with packet loss</li>
+<li><strong>high_latency</strong> - Consistent high latency for all requests</li>
+<li><strong>unstable_connection</strong> - Random connection drops and timeouts</li>
+</ul>
+<h4 id="custom-profiles"><a class="header" href="#custom-profiles">Custom Profiles</a></h4>
+<p>Create your own profiles:</p>
+<ol>
+<li>Configure chaos settings in the Quick Controls</li>
+<li>Use the Profile Exporter to save your configuration</li>
+<li>Import it later or share with your team</li>
+</ol>
+<p><strong>Applying Profiles:</strong></p>
+<pre><code class="language-bash"># Via UI
+Click "Apply Profile" on any profile card
+
+# Via CLI
+mockforge chaos profile apply slow_3g
+</code></pre>
+<h3 id="error-pattern-editor"><a class="header" href="#error-pattern-editor">Error Pattern Editor</a></h3>
+<p>Configure sophisticated error injection patterns:</p>
+<h4 id="burst-pattern"><a class="header" href="#burst-pattern">Burst Pattern</a></h4>
+<p>Inject multiple errors within a time window:</p>
+<pre><code class="language-json">{
+  "type": "burst",
+  "count": 5,
+  "interval_ms": 1000
+}
+</code></pre>
+<p>This injects 5 errors within 1 second, then waits for the next interval.</p>
+<h4 id="random-pattern"><a class="header" href="#random-pattern">Random Pattern</a></h4>
+<p>Inject errors with a probability:</p>
+<pre><code class="language-json">{
+  "type": "random",
+  "probability": 0.1
+}
+</code></pre>
+<p>Each request has a 10% chance of receiving an error.</p>
+<h4 id="sequential-pattern"><a class="header" href="#sequential-pattern">Sequential Pattern</a></h4>
+<p>Inject errors in a specific order:</p>
+<pre><code class="language-json">{
+  "type": "sequential",
+  "sequence": [500, 502, 503, 504]
+}
+</code></pre>
+<p>Errors are injected in the specified order, then the sequence repeats.</p>
+<p><strong>Usage:</strong></p>
+<ol>
+<li>Enable Fault Injection in Quick Controls</li>
+<li>Open the Error Pattern Editor</li>
+<li>Select pattern type and configure parameters</li>
+<li>Click “Save Pattern”</li>
+</ol>
+<h3 id="profile-exportimport"><a class="header" href="#profile-exportimport">Profile Export/Import</a></h3>
+<p>Export and import chaos configurations for:</p>
+<ul>
+<li><strong>Version control</strong> - Track chaos configurations in git</li>
+<li><strong>Team sharing</strong> - Share tested configurations</li>
+<li><strong>CI/CD integration</strong> - Apply profiles in automated tests</li>
+<li><strong>Backup</strong> - Save working configurations</li>
+</ul>
+<p><strong>Export Format:</strong></p>
+<pre><code class="language-json">{
+  "name": "custom_profile",
+  "description": "Custom network condition",
+  "chaos_config": {
+    "latency": {
+      "enabled": true,
+      "fixed_delay_ms": 500,
+      "probability": 1.0
+    },
+    "fault_injection": {
+      "enabled": true,
+      "http_errors": [500, 502, 503],
+      "http_error_probability": 0.1
+    }
+  },
+  "tags": ["custom", "testing"],
+  "builtin": false
+}
+</code></pre>
+<p><strong>Import:</strong></p>
+<ul>
+<li>Via UI: Use the Profile Exporter component</li>
+<li>Via CLI: <code>mockforge chaos profile import --file profile.json</code></li>
+</ul>
+<h2 id="api-endpoints"><a class="header" href="#api-endpoints">API Endpoints</a></h2>
+<h3 id="latency-metrics"><a class="header" href="#latency-metrics">Latency Metrics</a></h3>
+<pre><code class="language-http">GET /api/chaos/metrics/latency
+</code></pre>
+<p>Returns time-series latency data:</p>
+<pre><code class="language-json">{
+  "samples": [
+    {
+      "timestamp": "2024-01-01T12:00:00Z",
+      "latency_ms": 150
+    }
+  ]
+}
+</code></pre>
+<pre><code class="language-http">GET /api/chaos/metrics/latency/stats
+</code></pre>
+<p>Returns aggregated statistics:</p>
+<pre><code class="language-json">{
+  "avg_latency_ms": 145.5,
+  "min_latency_ms": 100,
+  "max_latency_ms": 200,
+  "total_requests": 100,
+  "p50_ms": 140,
+  "p95_ms": 180,
+  "p99_ms": 195
+}
+</code></pre>
+<h3 id="profile-management"><a class="header" href="#profile-management">Profile Management</a></h3>
+<pre><code class="language-http">GET /api/chaos/profiles
+</code></pre>
+<p>List all available profiles.</p>
+<pre><code class="language-http">GET /api/chaos/profiles/{name}
+</code></pre>
+<p>Get a specific profile.</p>
+<pre><code class="language-http">POST /api/chaos/profiles/{name}/apply
+</code></pre>
+<p>Apply a profile to the current configuration.</p>
+<pre><code class="language-http">POST /api/chaos/profiles
+</code></pre>
+<p>Create a custom profile.</p>
+<pre><code class="language-http">DELETE /api/chaos/profiles/{name}
+</code></pre>
+<p>Delete a custom profile.</p>
+<pre><code class="language-http">GET /api/chaos/profiles/{name}/export?format=json
+</code></pre>
+<p>Export a profile.</p>
+<pre><code class="language-http">POST /api/chaos/profiles/import
+</code></pre>
+<p>Import a profile.</p>
+<h3 id="error-pattern-configuration"><a class="header" href="#error-pattern-configuration">Error Pattern Configuration</a></h3>
+<p>Update error patterns via the fault injection config endpoint:</p>
+<pre><code class="language-http">PUT /api/chaos/config/faults
+</code></pre>
+<pre><code class="language-json">{
+  "enabled": true,
+  "http_errors": [500, 502, 503],
+  "error_pattern": {
+    "type": "burst",
+    "count": 5,
+    "interval_ms": 1000
+  }
+}
+</code></pre>
+<h2 id="cli-commands"><a class="header" href="#cli-commands">CLI Commands</a></h2>
+<h3 id="profile-management-1"><a class="header" href="#profile-management-1">Profile Management</a></h3>
+<pre><code class="language-bash"># List all profiles
+mockforge chaos profile list
+
+# Apply a profile
+mockforge chaos profile apply slow_3g
+
+# Export a profile
+mockforge chaos profile export slow_3g --format json --output profile.json
+
+# Import a profile
+mockforge chaos profile import --file profile.json
+</code></pre>
+<h3 id="server-startup"><a class="header" href="#server-startup">Server Startup</a></h3>
+<pre><code class="language-bash"># Start server with a profile applied
+mockforge serve --chaos-profile slow_3g --spec openapi.json
+</code></pre>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="testing-resilience"><a class="header" href="#testing-resilience">Testing Resilience</a></h3>
+<ol>
+<li>Apply a “flaky_wifi” profile</li>
+<li>Monitor your application’s retry logic</li>
+<li>Verify error handling and recovery</li>
+</ol>
+<h3 id="debugging-network-issues"><a class="header" href="#debugging-network-issues">Debugging Network Issues</a></h3>
+<ol>
+<li>Reproduce reported network conditions</li>
+<li>Use the latency graph to identify patterns</li>
+<li>Test fixes under controlled conditions</li>
+</ol>
+<h3 id="load-testing-preparation"><a class="header" href="#load-testing-preparation">Load Testing Preparation</a></h3>
+<ol>
+<li>Create profiles matching production network conditions</li>
+<li>Export profiles for CI/CD pipelines</li>
+<li>Apply profiles during automated tests</li>
+</ol>
+<h3 id="team-collaboration"><a class="header" href="#team-collaboration">Team Collaboration</a></h3>
+<ol>
+<li>Export tested chaos configurations</li>
+<li>Share profiles via version control</li>
+<li>Standardize testing across environments</li>
+</ol>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="profile-naming"><a class="header" href="#profile-naming">Profile Naming</a></h3>
+<ul>
+<li>Use descriptive names: <code>production_like_network</code>, <code>mobile_edge_conditions</code></li>
+<li>Include tags for categorization: <code>["mobile", "edge", "testing"]</code></li>
+<li>Document profile purpose in the description field</li>
+</ul>
+<h3 id="error-pattern-design"><a class="header" href="#error-pattern-design">Error Pattern Design</a></h3>
+<ul>
+<li>Start with low probabilities (0.05-0.1) and increase gradually</li>
+<li>Use burst patterns to test rate limiting and circuit breakers</li>
+<li>Use sequential patterns to test specific error code handling</li>
+</ul>
+<h3 id="monitoring"><a class="header" href="#monitoring">Monitoring</a></h3>
+<ul>
+<li>Always monitor the latency graph when chaos is active</li>
+<li>Set up alerts for unexpected latency spikes</li>
+<li>Review statistics regularly to understand impact</li>
+</ul>
+<h3 id="version-control"><a class="header" href="#version-control">Version Control</a></h3>
+<ul>
+<li>Export profiles before making changes</li>
+<li>Commit profiles to version control</li>
+<li>Tag profiles with application versions</li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="latency-graph-not-updating"><a class="header" href="#latency-graph-not-updating">Latency Graph Not Updating</a></h3>
+<ul>
+<li>Ensure latency injection is enabled</li>
+<li>Check that requests are being made to the server</li>
+<li>Verify the API endpoint is accessible: <code>GET /api/chaos/metrics/latency</code></li>
+</ul>
+<h3 id="profile-not-applying"><a class="header" href="#profile-not-applying">Profile Not Applying</a></h3>
+<ul>
+<li>Verify profile name is correct: <code>mockforge chaos profile list</code></li>
+<li>Check server logs for errors</li>
+<li>Ensure chaos engineering is enabled in configuration</li>
+</ul>
+<h3 id="error-pattern-not-working"><a class="header" href="#error-pattern-not-working">Error Pattern Not Working</a></h3>
+<ul>
+<li>Verify fault injection is enabled</li>
+<li>Check error pattern configuration is valid JSON</li>
+<li>Ensure HTTP error codes are configured: <code>http_errors: [500, 502, 503]</code></li>
+</ul>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>Chaos Lab settings can be configured in <code>mockforge.yaml</code>:</p>
+<pre><code class="language-yaml">observability:
+  chaos:
+    enabled: true
+    latency:
+      enabled: true
+      fixed_delay_ms: 200
+      probability: 0.5
+    fault_injection:
+      enabled: true
+      http_errors: [500, 502, 503]
+      http_error_probability: 0.1
+      error_pattern:
+        type: random
+        probability: 0.1
+</code></pre>
+<h2 id="integration-with-test-automation"><a class="header" href="#integration-with-test-automation">Integration with Test Automation</a></h2>
+<h3 id="cicd-integration"><a class="header" href="#cicd-integration">CI/CD Integration</a></h3>
+<pre><code class="language-yaml"># Example GitHub Actions workflow
+- name: Test with chaos profile
+  run: |
+    mockforge serve --chaos-profile slow_3g &amp;
+    sleep 5
+    pytest tests/
+    mockforge chaos profile apply none
+</code></pre>
+<h3 id="test-scripts"><a class="header" href="#test-scripts">Test Scripts</a></h3>
+<pre><code class="language-bash">#!/bin/bash
+# Apply profile and run tests
+mockforge chaos profile apply flaky_wifi --base-url http://localhost:3000
+npm test
+mockforge chaos profile apply none --base-url http://localhost:3000
+</code></pre>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<ul>
+<li>Latency metrics are stored in memory (last 100 samples)</li>
+<li>Profile application is instant (no server restart required)</li>
+<li>Error pattern evaluation adds minimal overhead (&lt; 1ms per request)</li>
+<li>Real-time graph updates every 500ms (configurable)</li>
+</ul>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ul>
+<li>Latency samples are limited to the last 100 requests</li>
+<li>Custom profiles are stored in memory (not persisted across restarts)</li>
+<li>Error patterns apply globally (not per-endpoint)</li>
+<li>MockAI integration requires MockAI to be enabled</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="reality-slider.html">Reality Slider</a> - Unified realism control</li>
+<li><a href="advanced-behavior.html">Advanced Behavior</a> - Basic chaos features</li>
+<li><a href="../configuration/files.html">Configuration Guide</a> - Complete configuration reference</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../user-guide/ai-contract-diff.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../user-guide/reality-slider.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../user-guide/ai-contract-diff.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../user-guide/reality-slider.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

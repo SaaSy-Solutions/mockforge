@@ -1,0 +1,746 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>IDE Extension Guide - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/tutorials/ide-extension-guide.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="ide-extension-guide"><a class="header" href="#ide-extension-guide">IDE Extension Guide</a></h1>
+<p>This guide walks you through installing, configuring, and using the MockForge VS Code extension to enhance your development workflow with inline mock previews, config validation, and seamless playground integration.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The MockForge VS Code extension brings the power of MockForge directly into your editor, providing:</p>
+<ul>
+<li><strong>Peek Mock Response</strong>: Hover over API endpoints to see mock responses inline</li>
+<li><strong>Config Validation</strong>: Real-time validation of <code>mockforge.yaml</code> files with inline errors</li>
+<li><strong>Mocks Explorer</strong>: Visual tree view of all mocks with real-time updates</li>
+<li><strong>Playground Integration</strong>: Quick access to MockForge Playground from hover tooltips</li>
+<li><strong>Mock Management</strong>: Create, edit, enable/disable, and delete mocks from VS Code</li>
+</ul>
+<h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
+<h3 id="from-vs-code-marketplace"><a class="header" href="#from-vs-code-marketplace">From VS Code Marketplace</a></h3>
+<ol>
+<li>Open VS Code</li>
+<li>Go to Extensions (Ctrl+Shift+X / Cmd+Shift+X)</li>
+<li>Search for “MockForge”</li>
+<li>Click <strong>Install</strong></li>
+</ol>
+<p>Or install via command line:</p>
+<pre><code class="language-bash">code --install-extension saasy-solutions.mockforge-vscode
+</code></pre>
+<h3 id="from-vsix-file"><a class="header" href="#from-vsix-file">From VSIX File</a></h3>
+<p>If you have a <code>.vsix</code> file:</p>
+<pre><code class="language-bash">code --install-extension mockforge-vscode-0.1.0.vsix
+</code></pre>
+<h3 id="verify-installation"><a class="header" href="#verify-installation">Verify Installation</a></h3>
+<p>After installation, you should see:</p>
+<ul>
+<li>MockForge icon in the Activity Bar (left sidebar)</li>
+<li>MockForge commands available in Command Palette (Ctrl+Shift+P / Cmd+Shift+P)</li>
+</ul>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="basic-setup"><a class="header" href="#basic-setup">Basic Setup</a></h3>
+<p>Configure the extension in VS Code settings:</p>
+<ol>
+<li>Open Settings (Ctrl+, / Cmd+,)</li>
+<li>Search for “mockforge”</li>
+<li>Configure the following:</li>
+</ol>
+<pre><code class="language-json">{
+  "mockforge.serverUrl": "http://localhost:3000",
+  "mockforge.autoConnect": true,
+  "mockforge.showNotifications": true,
+  "mockforge.inlinePreview.enabled": true
+}
+</code></pre>
+<p><strong>Settings:</strong></p>
+<ul>
+<li><code>mockforge.serverUrl</code>: MockForge server URL (default: <code>http://localhost:3000</code>)</li>
+<li><code>mockforge.autoConnect</code>: Automatically connect on startup (default: <code>true</code>)</li>
+<li><code>mockforge.showNotifications</code>: Show notifications for mock changes (default: <code>true</code>)</li>
+<li><code>mockforge.inlinePreview.enabled</code>: Enable inline preview of mock responses (default: <code>true</code>)</li>
+</ul>
+<h3 id="workspace-settings"><a class="header" href="#workspace-settings">Workspace Settings</a></h3>
+<p>For project-specific configuration, add to <code>.vscode/settings.json</code>:</p>
+<pre><code class="language-json">{
+  "mockforge.serverUrl": "http://localhost:3000",
+  "mockforge.autoConnect": true
+}
+</code></pre>
+<h2 id="feature-1-peek-mock-response"><a class="header" href="#feature-1-peek-mock-response">Feature 1: Peek Mock Response</a></h2>
+<p>The peek response feature shows mock responses when you hover over API endpoint references in your code.</p>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
+<ol>
+<li><strong>Hover over an endpoint</strong> in your code (JavaScript, TypeScript, or YAML)</li>
+<li><strong>See the mock response</strong> in a tooltip with headers and body</li>
+<li><strong>Click “Open in Playground”</strong> to test the endpoint interactively</li>
+</ol>
+<h3 id="supported-patterns"><a class="header" href="#supported-patterns">Supported Patterns</a></h3>
+<p>The extension detects endpoints in various patterns:</p>
+<p><strong>JavaScript/TypeScript:</strong></p>
+<pre><code class="language-typescript">// fetch() calls
+const response = await fetch('/api/users');
+
+// axios calls
+const data = await axios.get('/api/products');
+
+// http client calls
+const result = await http.get('/api/orders');
+</code></pre>
+<p><strong>YAML Config Files:</strong></p>
+<pre><code class="language-yaml"># mockforge.yaml
+responses:
+  - path: /api/users
+    method: GET
+</code></pre>
+<h3 id="example-usage"><a class="header" href="#example-usage">Example Usage</a></h3>
+<p><strong>Before (without extension):</strong></p>
+<ul>
+<li>You write: <code>fetch('/api/users')</code></li>
+<li>You have no idea what the response looks like</li>
+<li>You need to run the app or check documentation</li>
+</ul>
+<p><strong>After (with extension):</strong></p>
+<ul>
+<li>You write: <code>fetch('/api/users')</code></li>
+<li>You hover over the endpoint</li>
+<li>You see:
+<pre><code class="language-json">{
+  "users": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com"
+    }
+  ]
+}
+</code></pre>
+</li>
+<li>You click “Open in Playground” to test it</li>
+</ul>
+<h3 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h3>
+<p>Enable/disable peek response:</p>
+<pre><code class="language-json">{
+  "mockforge.inlinePreview.enabled": true
+}
+</code></pre>
+<h3 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h3>
+<p><strong>Preview not showing:</strong></p>
+<ol>
+<li>Ensure MockForge server is running</li>
+<li>Check that <code>mockforge.inlinePreview.enabled</code> is <code>true</code></li>
+<li>Verify the endpoint path matches a configured mock</li>
+<li>Check VS Code output panel for errors</li>
+</ol>
+<p><strong>Preview shows “No mock configured”:</strong></p>
+<ul>
+<li>The endpoint doesn’t have a mock configured</li>
+<li>Click “Open in Playground” to create one</li>
+<li>Or add a mock in <code>mockforge.yaml</code></li>
+</ul>
+<h2 id="feature-2-config-validation"><a class="header" href="#feature-2-config-validation">Feature 2: Config Validation</a></h2>
+<p>Get real-time validation for your <code>mockforge.yaml</code> files with inline error reporting.</p>
+<h3 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h3>
+<ol>
+<li><strong>Open <code>mockforge.yaml</code></strong> in VS Code</li>
+<li><strong>See inline errors</strong> for invalid configuration</li>
+<li><strong>Get helpful messages</strong> for missing fields, type mismatches, and invalid values</li>
+<li><strong>Auto-detect schema type</strong> based on file name and location</li>
+</ol>
+<h3 id="supported-config-types"><a class="header" href="#supported-config-types">Supported Config Types</a></h3>
+<p>The extension validates:</p>
+<ul>
+<li><strong>Main config</strong>: <code>mockforge.yaml</code>, <code>mockforge.yml</code>, <code>mockforge.json</code></li>
+<li><strong>Blueprint config</strong>: <code>blueprint.yaml</code></li>
+<li><strong>Reality config</strong>: Files in <code>reality/</code> directory or <code>reality*.yaml</code></li>
+<li><strong>Persona config</strong>: Files in <code>personas/</code> directory</li>
+</ul>
+<h3 id="example-validation"><a class="header" href="#example-validation">Example Validation</a></h3>
+<p><strong>Invalid Configuration:</strong></p>
+<pre><code class="language-yaml"># mockforge.yaml
+reality:
+  level: invalid_level  # ❌ Error shown here
+</code></pre>
+<p><strong>Error Message:</strong></p>
+<pre><code>Invalid reality level: invalid_level. Valid values: static, light, moderate, high, chaos
+</code></pre>
+<p><strong>Valid Configuration:</strong></p>
+<pre><code class="language-yaml"># mockforge.yaml
+reality:
+  level: moderate  # ✅ No errors
+</code></pre>
+<h3 id="schema-generation"><a class="header" href="#schema-generation">Schema Generation</a></h3>
+<p>The extension can auto-generate schemas:</p>
+<ol>
+<li>
+<p><strong>Run schema generation:</strong></p>
+<pre><code class="language-bash">mockforge schema generate
+</code></pre>
+</li>
+<li>
+<p><strong>Schemas are saved</strong> to <code>schemas/</code> directory</p>
+</li>
+<li>
+<p><strong>Extension auto-detects</strong> schemas in:</p>
+<ul>
+<li><code>schemas/</code> directory</li>
+<li><code>.mockforge/</code> directory</li>
+<li>Project root</li>
+</ul>
+</li>
+</ol>
+<h3 id="validation-features"><a class="header" href="#validation-features">Validation Features</a></h3>
+<ul>
+<li><strong>Real-time validation</strong>: Errors appear as you type</li>
+<li><strong>Accurate positions</strong>: Line and column numbers for errors</li>
+<li><strong>Helpful messages</strong>: Clear descriptions of what’s wrong</li>
+<li><strong>Auto-detection</strong>: Automatically detects schema type</li>
+<li><strong>Multiple schemas</strong>: Supports all MockForge config types</li>
+</ul>
+<h3 id="troubleshooting-1"><a class="header" href="#troubleshooting-1">Troubleshooting</a></h3>
+<p><strong>Validation not working:</strong></p>
+<ol>
+<li>Ensure you have a <code>mockforge.yaml</code> file open</li>
+<li>Check that schemas are available:
+<ul>
+<li>Look for <code>schemas/</code> directory</li>
+<li>Or run <code>mockforge schema generate</code></li>
+</ul>
+</li>
+<li>Check VS Code output panel for validation errors</li>
+</ol>
+<p><strong>Schema not found:</strong></p>
+<ul>
+<li>Run <code>mockforge schema generate</code> to create schemas</li>
+<li>Or manually place schemas in <code>schemas/</code> directory</li>
+</ul>
+<h2 id="feature-3-mocks-explorer"><a class="header" href="#feature-3-mocks-explorer">Feature 3: Mocks Explorer</a></h2>
+<p>Visual tree view of all your mocks with real-time WebSocket updates.</p>
+<h3 id="accessing-mocks-explorer"><a class="header" href="#accessing-mocks-explorer">Accessing Mocks Explorer</a></h3>
+<ol>
+<li><strong>Click MockForge icon</strong> in Activity Bar (left sidebar)</li>
+<li><strong>Open “Mocks Explorer”</strong> view</li>
+<li><strong>Browse all mocks</strong> in a tree view</li>
+</ol>
+<h3 id="features"><a class="header" href="#features">Features</a></h3>
+<ul>
+<li><strong>Color-coded by HTTP method</strong>: GET (blue), POST (green), PUT (orange), DELETE (red)</li>
+<li><strong>Real-time updates</strong>: Changes sync automatically via WebSocket</li>
+<li><strong>Context menu actions</strong>:
+<ul>
+<li>Edit Mock</li>
+<li>Delete Mock</li>
+<li>Toggle Mock (enable/disable)</li>
+<li>View Details</li>
+</ul>
+</li>
+</ul>
+<h3 id="using-mocks-explorer"><a class="header" href="#using-mocks-explorer">Using Mocks Explorer</a></h3>
+<p><strong>View Mocks:</strong></p>
+<ol>
+<li>Open Mocks Explorer</li>
+<li>Click on a mock to see details</li>
+<li>Expand folders to see grouped mocks</li>
+</ol>
+<p><strong>Edit Mock:</strong></p>
+<ol>
+<li>Right-click on a mock</li>
+<li>Select “Edit Mock”</li>
+<li>Modify JSON configuration</li>
+<li>Save to update</li>
+</ol>
+<p><strong>Toggle Mock:</strong></p>
+<ol>
+<li>Right-click on a mock</li>
+<li>Select “Toggle Mock”</li>
+<li>Mock is enabled/disabled</li>
+</ol>
+<p><strong>Delete Mock:</strong></p>
+<ol>
+<li>Right-click on a mock</li>
+<li>Select “Delete Mock”</li>
+<li>Confirm deletion</li>
+</ol>
+<h2 id="feature-4-playground-integration"><a class="header" href="#feature-4-playground-integration">Feature 4: Playground Integration</a></h2>
+<p>Quick access to MockForge Playground from hover tooltips and commands.</p>
+<h3 id="from-hover-tooltip"><a class="header" href="#from-hover-tooltip">From Hover Tooltip</a></h3>
+<ol>
+<li><strong>Hover over an endpoint</strong> in your code</li>
+<li><strong>See the tooltip</strong> with mock response</li>
+<li><strong>Click “Open in Playground”</strong> link</li>
+<li><strong>Playground opens</strong> in browser with endpoint pre-filled</li>
+</ol>
+<h3 id="from-command-palette"><a class="header" href="#from-command-palette">From Command Palette</a></h3>
+<ol>
+<li><strong>Open Command Palette</strong> (Ctrl+Shift+P / Cmd+Shift+P)</li>
+<li><strong>Type “MockForge: Open Playground”</strong></li>
+<li><strong>Enter endpoint details</strong> (method and path)</li>
+<li><strong>Playground opens</strong> in browser</li>
+</ol>
+<h3 id="playground-url-format"><a class="header" href="#playground-url-format">Playground URL Format</a></h3>
+<p>The extension constructs URLs like:</p>
+<pre><code>http://localhost:3000/admin/#/playground?method=GET&amp;path=/api/users
+</code></pre>
+<p>For standalone admin UI:</p>
+<pre><code>http://localhost:9080/#/playground?method=GET&amp;path=/api/users
+</code></pre>
+<h2 id="feature-5-server-control"><a class="header" href="#feature-5-server-control">Feature 5: Server Control</a></h2>
+<p>Monitor your MockForge server status and statistics.</p>
+<h3 id="accessing-server-control"><a class="header" href="#accessing-server-control">Accessing Server Control</a></h3>
+<ol>
+<li><strong>Click MockForge icon</strong> in Activity Bar</li>
+<li><strong>Open “Server Control”</strong> view</li>
+<li><strong>View server statistics</strong></li>
+</ol>
+<h3 id="information-displayed"><a class="header" href="#information-displayed">Information Displayed</a></h3>
+<ul>
+<li><strong>Connection status</strong>: Connected / Disconnected</li>
+<li><strong>Server version</strong>: MockForge version</li>
+<li><strong>Server port</strong>: Port number</li>
+<li><strong>Uptime</strong>: How long server has been running</li>
+<li><strong>Request count</strong>: Total requests processed</li>
+<li><strong>Active mocks</strong>: Number of active mocks</li>
+</ul>
+<h3 id="quick-actions"><a class="header" href="#quick-actions">Quick Actions</a></h3>
+<ul>
+<li><strong>Start Server</strong>: Start MockForge server</li>
+<li><strong>Stop Server</strong>: Stop MockForge server</li>
+<li><strong>Restart Server</strong>: Restart MockForge server</li>
+</ul>
+<h2 id="complete-workflow-example"><a class="header" href="#complete-workflow-example">Complete Workflow Example</a></h2>
+<p>Let’s walk through a complete workflow using all features:</p>
+<h3 id="1-install-extension"><a class="header" href="#1-install-extension">1. Install Extension</a></h3>
+<pre><code class="language-bash">code --install-extension saasy-solutions.mockforge-vscode
+</code></pre>
+<h3 id="2-start-mockforge-server"><a class="header" href="#2-start-mockforge-server">2. Start MockForge Server</a></h3>
+<pre><code class="language-bash">mockforge serve
+</code></pre>
+<h3 id="3-configure-extension"><a class="header" href="#3-configure-extension">3. Configure Extension</a></h3>
+<p>Add to <code>.vscode/settings.json</code>:</p>
+<pre><code class="language-json">{
+  "mockforge.serverUrl": "http://localhost:3000",
+  "mockforge.autoConnect": true,
+  "mockforge.inlinePreview.enabled": true
+}
+</code></pre>
+<h3 id="4-create-mock-config"><a class="header" href="#4-create-mock-config">4. Create Mock Config</a></h3>
+<p>Create <code>mockforge.yaml</code>:</p>
+<pre><code class="language-yaml">http:
+  port: 3000
+
+responses:
+  - path: /api/users
+    method: GET
+    body:
+      users:
+        - id: 1
+          name: "John Doe"
+          email: "john@example.com"
+        - id: 2
+          name: "Jane Smith"
+          email: "jane@example.com"
+</code></pre>
+<h3 id="5-use-peek-response"><a class="header" href="#5-use-peek-response">5. Use Peek Response</a></h3>
+<p>In your code:</p>
+<pre><code class="language-typescript">// Hover over this endpoint to see the mock response
+const response = await fetch('/api/users');
+</code></pre>
+<p><strong>Hover tooltip shows:</strong></p>
+<pre><code class="language-json">{
+  "users": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com"
+    },
+    {
+      "id": 2,
+      "name": "Jane Smith",
+      "email": "jane@example.com"
+    }
+  ]
+}
+</code></pre>
+<h3 id="6-open-in-playground"><a class="header" href="#6-open-in-playground">6. Open in Playground</a></h3>
+<p>Click “Open in Playground” in the hover tooltip to test the endpoint interactively.</p>
+<h3 id="7-validate-config"><a class="header" href="#7-validate-config">7. Validate Config</a></h3>
+<p>Edit <code>mockforge.yaml</code> and see real-time validation:</p>
+<pre><code class="language-yaml">reality:
+  level: moderate  # ✅ Valid
+</code></pre>
+<pre><code class="language-yaml">reality:
+  level: invalid  # ❌ Error: Invalid reality level
+</code></pre>
+<h3 id="8-manage-mocks"><a class="header" href="#8-manage-mocks">8. Manage Mocks</a></h3>
+<ul>
+<li>Open Mocks Explorer</li>
+<li>View all mocks</li>
+<li>Edit, delete, or toggle mocks</li>
+<li>See real-time updates</li>
+</ul>
+<h2 id="advanced-usage"><a class="header" href="#advanced-usage">Advanced Usage</a></h2>
+<h3 id="custom-server-url"><a class="header" href="#custom-server-url">Custom Server URL</a></h3>
+<p>For different environments:</p>
+<pre><code class="language-json">{
+  "mockforge.serverUrl": "http://localhost:3001"
+}
+</code></pre>
+<h3 id="disable-auto-connect"><a class="header" href="#disable-auto-connect">Disable Auto-Connect</a></h3>
+<p>If you want to connect manually:</p>
+<pre><code class="language-json">{
+  "mockforge.autoConnect": false
+}
+</code></pre>
+<h3 id="disable-notifications"><a class="header" href="#disable-notifications">Disable Notifications</a></h3>
+<p>To reduce notification noise:</p>
+<pre><code class="language-json">{
+  "mockforge.showNotifications": false
+}
+</code></pre>
+<h3 id="disable-peek-response"><a class="header" href="#disable-peek-response">Disable Peek Response</a></h3>
+<p>If you don’t want inline previews:</p>
+<pre><code class="language-json">{
+  "mockforge.inlinePreview.enabled": false
+}
+</code></pre>
+<h2 id="troubleshooting-2"><a class="header" href="#troubleshooting-2">Troubleshooting</a></h2>
+<h3 id="extension-not-connecting"><a class="header" href="#extension-not-connecting">Extension Not Connecting</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>Mocks Explorer shows “Disconnected”</li>
+<li>Peek response doesn’t work</li>
+<li>Server Control shows disconnected</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>Check that MockForge server is running</li>
+<li>Verify <code>mockforge.serverUrl</code> setting is correct</li>
+<li>Check VS Code output panel for connection errors</li>
+<li>Try restarting the extension: Command Palette → “MockForge: Restart Extension”</li>
+</ol>
+<h3 id="validation-not-working"><a class="header" href="#validation-not-working">Validation Not Working</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>No inline errors in <code>mockforge.yaml</code></li>
+<li>Validation errors not showing</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>Ensure you have a <code>mockforge.yaml</code> file open</li>
+<li>Check that schemas are available:
+<ul>
+<li>Look for <code>schemas/</code> directory</li>
+<li>Or run <code>mockforge schema generate</code></li>
+</ul>
+</li>
+<li>Check VS Code output panel for validation errors</li>
+<li>Try reloading the window: Command Palette → “Developer: Reload Window”</li>
+</ol>
+<h3 id="peek-response-not-showing"><a class="header" href="#peek-response-not-showing">Peek Response Not Showing</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>Hovering over endpoints doesn’t show tooltip</li>
+<li>Tooltip shows “No mock configured”</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>Ensure <code>mockforge.inlinePreview.enabled</code> is <code>true</code></li>
+<li>Check that MockForge server is connected</li>
+<li>Verify the endpoint path matches a configured mock</li>
+<li>Try hovering over different endpoint patterns</li>
+<li>Check VS Code output panel for errors</li>
+</ol>
+<h3 id="schema-not-found"><a class="header" href="#schema-not-found">Schema Not Found</a></h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>Validation says “Schema not available”</li>
+<li>Auto-detection fails</li>
+</ul>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li>Run <code>mockforge schema generate</code> to create schemas</li>
+<li>Ensure schemas are in <code>schemas/</code> directory</li>
+<li>Check that schema file names match expected patterns</li>
+<li>Verify schema JSON is valid</li>
+</ol>
+<h2 id="keyboard-shortcuts"><a class="header" href="#keyboard-shortcuts">Keyboard Shortcuts</a></h2>
+<p>The extension doesn’t define custom keyboard shortcuts by default, but you can add them:</p>
+<pre><code class="language-json">{
+  "key": "ctrl+shift+m",
+  "command": "mockforge.refreshMocks"
+}
+</code></pre>
+<h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
+<p>All extension commands are available via Command Palette (Ctrl+Shift+P / Cmd+Shift+P):</p>
+<ul>
+<li><code>MockForge: Refresh Mocks</code> - Refresh mocks list</li>
+<li><code>MockForge: Create Mock</code> - Create a new mock</li>
+<li><code>MockForge: Open Playground</code> - Open playground in browser</li>
+<li><code>MockForge: Show Logs</code> - Show extension logs</li>
+<li><code>MockForge: Restart Extension</code> - Restart the extension</li>
+</ul>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-keep-server-running"><a class="header" href="#1-keep-server-running">1. Keep Server Running</a></h3>
+<p>For best experience, keep MockForge server running while developing.</p>
+<h3 id="2-generate-schemas"><a class="header" href="#2-generate-schemas">2. Generate Schemas</a></h3>
+<p>Run <code>mockforge schema generate</code> to enable config validation.</p>
+<h3 id="3-use-workspace-settings"><a class="header" href="#3-use-workspace-settings">3. Use Workspace Settings</a></h3>
+<p>Configure extension per-project in <code>.vscode/settings.json</code>.</p>
+<h3 id="4-enable-auto-connect"><a class="header" href="#4-enable-auto-connect">4. Enable Auto-Connect</a></h3>
+<p>Set <code>mockforge.autoConnect: true</code> for seamless workflow.</p>
+<h3 id="5-check-output-panel"><a class="header" href="#5-check-output-panel">5. Check Output Panel</a></h3>
+<p>If something doesn’t work, check VS Code output panel for errors.</p>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="../user-guide/ide-integration.html">IDE Integration Guide</a> - Detailed feature reference</li>
+<li><a href="../../vscode-extension/README.html">VS Code Extension README</a> - Extension documentation</li>
+<li><a href="../user-guide/configuration/files.html">Configuration Files</a> - Config file format</li>
+<li><a href="../getting-started/getting-started.html">Getting Started</a> - MockForge basics</li>
+</ul>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ol>
+<li><strong>Install the extension</strong> and configure it</li>
+<li><strong>Start MockForge server</strong> and connect</li>
+<li><strong>Try peek response</strong> by hovering over endpoints</li>
+<li><strong>Validate your config</strong> by editing <code>mockforge.yaml</code></li>
+<li><strong>Explore Mocks Explorer</strong> to manage your mocks</li>
+<li><strong>Use Playground</strong> to test endpoints interactively</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../tutorials/plugin-starter.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../tutorials/add-custom-plugin.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../tutorials/plugin-starter.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../tutorials/add-custom-plugin.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

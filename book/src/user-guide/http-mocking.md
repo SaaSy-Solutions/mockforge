@@ -448,6 +448,90 @@ echo "API tests completed!"
 
 **Port conflicts**: Change default ports with `--http-port` option
 
+## Advanced Behavior and Simulation
+
+MockForge supports advanced behavior simulation features for realistic API testing:
+
+### Record & Playback
+
+Automatically record API interactions and convert them to replayable fixtures:
+
+```bash
+# Record requests while proxying
+mockforge serve --spec api-spec.json --proxy --record
+
+# Convert recordings to stub mappings
+mockforge recorder convert --input recordings.db --output fixtures/
+```
+
+### Stateful Behavior
+
+Simulate stateful APIs where responses change based on previous requests:
+
+```yaml
+core:
+  stateful:
+    enabled: true
+    state_machines:
+      - name: "order_workflow"
+        resource_id_extract:
+          type: "path_param"
+          param: "order_id"
+        transitions:
+          - method: "POST"
+            path_pattern: "/api/orders"
+            from_state: "initial"
+            to_state: "pending"
+```
+
+### Per-Route Fault Injection
+
+Configure fault injection on specific routes:
+
+```yaml
+core:
+  routes:
+    - path: "/api/payments/process"
+      method: "POST"
+      fault_injection:
+        enabled: true
+        probability: 0.05
+        fault_types:
+          - type: "http_error"
+            status_code: 503
+```
+
+### Per-Route Latency
+
+Simulate network conditions per route:
+
+```yaml
+core:
+  routes:
+    - path: "/api/search"
+      method: "GET"
+      latency:
+        enabled: true
+        distribution: "normal"
+        mean_ms: 500.0
+        std_dev_ms: 100.0
+```
+
+### Conditional Proxying
+
+Proxy requests conditionally based on request attributes:
+
+```yaml
+core:
+  proxy:
+    rules:
+      - pattern: "/api/admin/*"
+        upstream_url: "https://admin-api.example.com"
+        condition: "$.user.role == 'admin'"
+```
+
+For detailed documentation on these features, see [Advanced Behavior and Simulation](../../../docs/ADVANCED_BEHAVIOR_SIMULATION.md).
+
 For more advanced HTTP mocking features, see the following guides:
 - [OpenAPI Integration](http-mocking/openapi.md) - Advanced OpenAPI features
 - [Custom Responses](http-mocking/custom-responses.md) - Complex response scenarios

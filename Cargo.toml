@@ -1,18 +1,21 @@
 [workspace]
 members = [
-    "crates/mockforge-cli",
+    "crates/mockforge-core",
     "crates/mockforge-http",
     "crates/mockforge-mqtt",
     "crates/mockforge-ws",
     "crates/mockforge-grpc",
     "crates/mockforge-graphql",
     "crates/mockforge-data",
+    "crates/mockforge-collab",
     "crates/mockforge-plugin-core",
     "crates/mockforge-plugin-loader",
     "crates/mockforge-plugin-sdk",
     "crates/mockforge-plugin-cli",
     "crates/mockforge-plugin-registry",
+    "crates/mockforge-scenarios",
     "crates/mockforge-ui",
+    "crates/mockforge-cli",
     "crates/mockforge-observability",
     "crates/mockforge-tracing",
     "crates/mockforge-recorder",
@@ -21,22 +24,34 @@ members = [
     "crates/mockforge-bench",
     "crates/mockforge-test",
     "crates/mockforge-smtp",
+    "crates/mockforge-tcp",
     "crates/mockforge-ftp",
     "crates/mockforge-amqp",
     "crates/mockforge-kafka",
     "examples/plugins/response-graphql",
     "examples/test-integration",
-    "test_openapi_demo"
-]
+    "test_openapi_demo",
+    "crates/mockforge-analytics",
+    "crates/mockforge-sdk",
+    "crates/mockforge-tunnel",
+    "crates/mockforge-vbr",
+    "crates/mockforge-schema",
+    "crates/mockforge-runtime-daemon",
+    "crates/mockforge-pipelines",
+    "crates/mockforge-federation",
+    "desktop-app",
+    "tests",  # Integration tests package
+    "crates/mockforge-template-expansion",
+    "crates/mockforge-world-state",
+    "crates/mockforge-performance"]
 exclude = [
     "crates/mockforge-registry-server",
-    "temp-publish"
-  ]
+]
 resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.1.3"
+version = "0.3.3"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -78,6 +93,7 @@ cargo = { level = "warn", priority = -1 }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
+toml = "0.8"
 
 # Async runtime
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs"] }
@@ -89,7 +105,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 
 # HTTP/web framework
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["ws", "multipart"] }
 hyper = { version = "1.0", features = ["full"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "cors", "trace", "compression-full"] }

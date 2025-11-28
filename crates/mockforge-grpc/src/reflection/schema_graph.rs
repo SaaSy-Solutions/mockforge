@@ -135,7 +135,9 @@ struct ForeignKeyPattern {
     /// How to extract entity name from field name
     entity_extraction: EntityExtractionMethod,
     /// Confidence score for this pattern
-    #[allow(dead_code)] // Used in future relationship analysis
+    ///
+    /// Confidence score indicates how reliable this pattern is for detecting relationships.
+    /// Higher scores (closer to 1.0) indicate more reliable patterns.
     confidence: f64,
 }
 
@@ -145,10 +147,14 @@ enum EntityExtractionMethod {
     /// Remove suffix (user_id -> user)
     RemoveSuffix(String),
     /// Direct mapping
-    #[allow(dead_code)] // Used in future entity extraction
+    ///
+    /// TODO: Use when direct entity name mapping without transformation is needed
+    #[allow(dead_code)] // TODO: Remove when entity extraction feature is implemented
     Direct,
     /// Custom transform function
-    #[allow(dead_code)] // Used in future entity extraction
+    ///
+    /// TODO: Use for custom entity name transformation functions
+    #[allow(dead_code)] // TODO: Remove when custom entity extraction is implemented
     Custom(fn(&str) -> Option<String>),
 }
 
@@ -335,10 +341,14 @@ impl ProtoSchemaGraphExtractor {
                 if let Some(target) = &field.foreign_key_target {
                     // Check if target entity exists
                     if all_entities.contains_key(target) {
+                        // Calculate confidence score based on pattern match and entity existence
+                        let confidence =
+                            self.calculate_confidence_score(field, target, all_entities);
+
                         mappings.push(ForeignKeyMapping {
                             field_name: field.name.clone(),
                             target_entity: target.clone(),
-                            confidence: 0.9, // High confidence for detected patterns
+                            confidence,
                             detection_method: ForeignKeyDetectionMethod::NamingConvention,
                         });
                     }
@@ -347,6 +357,43 @@ impl ProtoSchemaGraphExtractor {
         }
 
         Ok(mappings)
+    }
+
+    /// Calculate confidence score for a detected relationship
+    ///
+    /// Confidence is calculated based on:
+    /// - Pattern match quality (higher for common patterns like _id)
+    /// - Entity existence validation (target entity exists)
+    /// - Field type compatibility (message type matches entity name)
+    /// - Naming convention strength (more specific patterns score higher)
+    fn calculate_confidence_score(
+        &self,
+        field: &FieldInfo,
+        target_entity: &str,
+        all_entities: &HashMap<String, EntityNode>,
+    ) -> f64 {
+        let mut confidence = 0.5; // Base confidence
+
+        // Find matching pattern to get pattern-specific confidence
+        for pattern in &self.foreign_key_patterns {
+            if pattern.pattern.is_match(&field.name) {
+                confidence = pattern.confidence;
+                break;
+            }
+        }
+
+        // Boost confidence if target entity exists and matches naming convention
+        if all_entities.contains_key(target_entity) {
+            confidence += 0.1; // +10% for entity existence
+        }
+
+        // Boost confidence if field type suggests a relationship
+        if field.field_type.contains("message") || field.field_type.contains("Message") {
+            confidence += 0.1; // +10% for message type
+        }
+
+        // Cap confidence at 1.0
+        confidence.min(1.0)
     }
 
     /// Extract relationships from an entity

@@ -1,12 +1,16 @@
 # Multi-stage Docker build for MockForge
 # Stage 1: Build the Rust application
+# Use rust:1.90-slim (Trixie/testing-based) which has GLIBC 2.39+ required by native dependencies
 FROM rust:1.90-slim AS builder
 
-# Install required dependencies for building
+# Install required dependencies for building (including C++ for Kafka support)
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     protobuf-compiler \
+    build-essential \
+    g++ \
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
@@ -15,8 +19,12 @@ WORKDIR /app
 # Copy the workspace configuration files
 COPY Cargo.toml Cargo.lock ./
 
-# Remove test_openapi_demo from workspace members for Docker build
-RUN sed -i '/"test_openapi_demo"/d' Cargo.toml
+# Remove test_openapi_demo, tests, and desktop-app from workspace members for Docker build
+# Handle both quoted and unquoted formats, with/without trailing commas
+RUN sed -i '/\s*"test_openapi_demo"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"tests"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"desktop-app"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/# Integration tests package/d' Cargo.toml
 
 # Copy the crates directory
 COPY crates/ ./crates/
@@ -30,12 +38,14 @@ COPY config.example.yaml ./
 RUN cargo build --release --package mockforge-cli
 
 # Stage 2: Create the runtime image
+# Use debian:trixie-slim to match builder's GLIBC version (2.39+)
 FROM debian:trixie-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
+    libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
@@ -68,6 +78,11 @@ EXPOSE 3000 3001 50051 9080
 ENV MOCKFORGE_LATENCY_ENABLED=true
 ENV MOCKFORGE_FAILURES_ENABLED=false
 ENV MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+# Mark that we're running in Docker (for Admin UI host detection)
+ENV DOCKER_CONTAINER=true
+# Default Admin UI to be accessible from outside container
+ENV MOCKFORGE_ADMIN_HOST=0.0.0.0
 
 # Default command
-CMD ["mockforge", "serve", "--admin"]
+# Use full path to ensure binary is found regardless of PATH
+CMD ["/usr/local/bin/mockforge", "serve", "--admin"]

@@ -8,6 +8,8 @@
 //! - Large OpenAPI spec parsing
 //! - Bulk data generation
 //! - Deep template rendering
+
+#![allow(missing_docs)]
 //!
 //! These benchmarks use smaller sample sizes to reduce overhead while still
 //! providing meaningful memory usage insights.
@@ -15,7 +17,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mockforge_core::openapi_routes::create_registry_from_json;
 use mockforge_core::templating::expand_str;
-use mockforge_core::validation::validate_json_schema;
+use mockforge_core::validation::{validate_json_schema, ValidationResult, Validator};
 use serde_json::json;
 
 /// Benchmark template rendering with different payload sizes
@@ -52,7 +54,7 @@ fn bench_template_rendering(c: &mut Criterion) {
 fn bench_json_validation(c: &mut Criterion) {
     let mut group = c.benchmark_group("json_validation");
 
-    // Simple schema
+    // Simple schema - pre-compile validator to avoid recompilation overhead
     let simple_schema = json!({
         "type": "object",
         "properties": {
@@ -60,15 +62,21 @@ fn bench_json_validation(c: &mut Criterion) {
         }
     });
     let simple_data = json!({"name": "test"});
+    // Pre-compile validator once to measure actual validation performance
+    let simple_validator = Validator::from_json_schema(&simple_schema).unwrap();
 
     group.bench_function("simple", |b| {
         b.iter(|| {
-            let result = validate_json_schema(black_box(&simple_data), black_box(&simple_schema));
+            // Use pre-compiled validator to avoid schema compilation overhead
+            let result = match simple_validator.validate(black_box(&simple_data)) {
+                Ok(_) => ValidationResult::success(),
+                Err(e) => ValidationResult::failure(vec![e.to_string()]),
+            };
             black_box(result)
         });
     });
 
-    // Complex schema with nested objects
+    // Complex schema with nested objects - pre-compile validator
     let complex_schema = json!({
         "type": "object",
         "properties": {
@@ -91,10 +99,16 @@ fn bench_json_validation(c: &mut Criterion) {
             "age": 30
         }
     });
+    // Pre-compile validator once to measure actual validation performance
+    let complex_validator = Validator::from_json_schema(&complex_schema).unwrap();
 
     group.bench_function("complex", |b| {
         b.iter(|| {
-            let result = validate_json_schema(black_box(&complex_data), black_box(&complex_schema));
+            // Use pre-compiled validator to avoid schema compilation overhead
+            let result = match complex_validator.validate(black_box(&complex_data)) {
+                Ok(_) => ValidationResult::success(),
+                Err(e) => ValidationResult::failure(vec![e.to_string()]),
+            };
             black_box(result)
         });
     });
@@ -141,11 +155,16 @@ fn bench_openapi_parsing(c: &mut Criterion) {
         }
     });
 
+    // Use iter_with_setup to avoid cloning in the hot loop
+    // Clone is done once in setup, not on every iteration
     group.bench_function("small_spec", |b| {
-        b.iter(|| {
-            let result = create_registry_from_json(black_box(small_spec.clone()));
-            black_box(result)
-        });
+        b.iter_with_setup(
+            || small_spec.clone(),
+            |spec| {
+                let result = create_registry_from_json(black_box(spec));
+                black_box(result)
+            },
+        );
     });
 
     // Medium spec with multiple paths
@@ -187,11 +206,16 @@ fn bench_openapi_parsing(c: &mut Criterion) {
         "paths": paths
     });
 
+    // Use iter_with_setup to avoid cloning in the hot loop
+    // Clone is done once in setup, not on every iteration
     group.bench_function("medium_spec_10_paths", |b| {
-        b.iter(|| {
-            let result = create_registry_from_json(black_box(medium_spec.clone()));
-            black_box(result)
-        });
+        b.iter_with_setup(
+            || medium_spec.clone(),
+            |spec| {
+                let result = create_registry_from_json(black_box(spec));
+                black_box(result)
+            },
+        );
     });
 
     group.finish();
@@ -351,12 +375,19 @@ fn bench_memory_usage(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory");
     group.sample_size(10);
 
+    // Pre-create the large spec once to avoid variance from JSON construction
+    // This ensures we're measuring parsing/route generation, not JSON creation
+    let large_spec = create_large_openapi_spec();
+
     // Benchmark large OpenAPI spec parsing
     group.bench_function("large_spec_parsing", |b| {
-        b.iter_with_setup(create_large_openapi_spec, |spec| {
-            let result = create_registry_from_json(black_box(spec));
-            black_box(result)
-        });
+        b.iter_with_setup(
+            || large_spec.clone(), // Clone the pre-created spec (more predictable than recreating)
+            |spec| {
+                let result = create_registry_from_json(black_box(spec));
+                black_box(result)
+            },
+        );
     });
 
     // Benchmark deep template rendering
@@ -433,6 +464,7 @@ fn bench_memory_usage(c: &mut Criterion) {
     group.finish();
 }
 
+// Benchmark group for core functionality
 criterion_group!(
     benches,
     bench_template_rendering,

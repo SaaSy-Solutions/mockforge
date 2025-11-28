@@ -48,11 +48,15 @@ import type {
   FileContentRequest,
   FileContentResponse,
   SaveFileRequest,
+  GraphData,
   EncryptionStatus,
   AutoEncryptionConfig,
   SecurityCheckResult,
   FixtureInfo,
-  PluginListResponse
+  PluginListResponse,
+  VerificationRequest,
+  VerificationCount,
+  VerificationResult
 } from '../types';
 
 import {
@@ -81,10 +85,21 @@ export type { CreateRequestRequest, CreateRequestResponse, ExecuteRequestRequest
 const API_BASE = '/__mockforge/chains';
 const WORKSPACE_API_BASE = '/__mockforge/workspaces';
 
+// Import authenticated fetch
+import { authenticatedFetch } from '../utils/apiClient';
+
 class ApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      // Handle 401/403 errors
+      if (response.status === 401) {
+        // Token expired or invalid - auth store will handle refresh/logout
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -115,6 +130,250 @@ class ApiService {
 
   async getChain(chainId: string): Promise<ChainDefinition> {
     return this.fetchJson(`${API_BASE}/${chainId}`) as Promise<ChainDefinition>;
+  }
+
+  async getGraph(): Promise<GraphData> {
+    const response = await this.fetchJson('/__mockforge/graph') as { data: GraphData; success: boolean };
+    // Handle ApiResponse wrapper
+    if (response.success && response.data) {
+      return response.data;
+    }
+    // Fallback: assume response is GraphData directly
+    return response as unknown as GraphData;
+  }
+
+  // State Machine API methods
+  async getStateMachines(): Promise<{ state_machines: Array<{ resource_type: string; state_count: number; transition_count: number; sub_scenario_count: number; has_visual_layout: boolean }>; total: number }> {
+    return this.fetchJson('/__mockforge/api/state-machines') as Promise<{ state_machines: Array<{ resource_type: string; state_count: number; transition_count: number; sub_scenario_count: number; has_visual_layout: boolean }>; total: number }>;
+  }
+
+  async getStateMachine(resourceType: string): Promise<{ state_machine: unknown; visual_layout?: unknown }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/${encodeURIComponent(resourceType)}`) as Promise<{ state_machine: unknown; visual_layout?: unknown }>;
+  }
+
+  async createStateMachine(stateMachine: unknown, visualLayout?: unknown): Promise<{ state_machine: unknown; visual_layout?: unknown }> {
+    return this.fetchJson('/__mockforge/api/state-machines', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state_machine: stateMachine, visual_layout: visualLayout }),
+    }) as Promise<{ state_machine: unknown; visual_layout?: unknown }>;
+  }
+
+  async updateStateMachine(resourceType: string, stateMachine: unknown, visualLayout?: unknown): Promise<{ state_machine: unknown; visual_layout?: unknown }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/${encodeURIComponent(resourceType)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state_machine: stateMachine, visual_layout: visualLayout }),
+    }) as Promise<{ state_machine: unknown; visual_layout?: unknown }>;
+  }
+
+  async deleteStateMachine(resourceType: string): Promise<void> {
+    await this.fetchJson(`/__mockforge/api/state-machines/${encodeURIComponent(resourceType)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getStateInstances(): Promise<{ instances: Array<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }>; total: number }> {
+    return this.fetchJson('/__mockforge/api/state-machines/instances') as Promise<{ instances: Array<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }>; total: number }>;
+  }
+
+  async getStateInstance(resourceId: string): Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/instances/${encodeURIComponent(resourceId)}`) as Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }>;
+  }
+
+  async createStateInstance(resourceId: string, resourceType: string): Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }> {
+    return this.fetchJson('/__mockforge/api/state-machines/instances', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_id: resourceId, resource_type: resourceType }),
+    }) as Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }>;
+  }
+
+  async executeTransition(resourceId: string, toState: string, context?: Record<string, unknown>): Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/instances/${encodeURIComponent(resourceId)}/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource_id: resourceId, to_state: toState, context }),
+    }) as Promise<{ resource_id: string; current_state: string; resource_type: string; history_count: number; state_data: Record<string, unknown> }>;
+  }
+
+  async getNextStates(resourceId: string): Promise<{ next_states: string[] }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/instances/${encodeURIComponent(resourceId)}/next-states`) as Promise<{ next_states: string[] }>;
+  }
+
+  async getCurrentState(resourceId: string): Promise<{ resource_id: string; current_state: string }> {
+    return this.fetchJson(`/__mockforge/api/state-machines/instances/${encodeURIComponent(resourceId)}/state`) as Promise<{ resource_id: string; current_state: string }>;
+  }
+
+  async exportStateMachines(): Promise<{ state_machines: unknown[]; visual_layouts: Record<string, unknown> }> {
+    return this.fetchJson('/__mockforge/api/state-machines/export') as Promise<{ state_machines: unknown[]; visual_layouts: Record<string, unknown> }>;
+  }
+
+  // MockAI OpenAPI Generation API methods
+  async generateOpenApiFromTraffic(request: {
+    database_path?: string;
+    since?: string;
+    until?: string;
+    path_pattern?: string;
+    min_confidence?: number;
+  }): Promise<{
+    spec: unknown;
+    metadata: {
+      requests_analyzed: number;
+      paths_inferred: number;
+      path_confidence: Record<string, { value: number; reason: string }>;
+      generated_at: string;
+      duration_ms: number;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/api/mockai/generate-openapi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as Promise<{
+      spec: unknown;
+      metadata: {
+        requests_analyzed: number;
+        paths_inferred: number;
+        path_confidence: Record<string, { value: number; reason: string }>;
+        generated_at: string;
+        duration_ms: number;
+      };
+    }>;
+  }
+
+  // MockAI Rule Explanations API methods
+  async listRuleExplanations(filters?: {
+    rule_type?: string;
+    min_confidence?: number;
+  }): Promise<{
+    explanations: Array<{
+      rule_id: string;
+      rule_type: string;
+      confidence: number;
+      source_examples: string[];
+      reasoning: string;
+      pattern_matches: Array<{
+        pattern: string;
+        match_count: number;
+        example_ids: string[];
+      }>;
+      generated_at: string;
+    }>;
+    total: number;
+  }> {
+    const params = new URLSearchParams();
+    if (filters?.rule_type) {
+      params.append('rule_type', filters.rule_type);
+    }
+    if (filters?.min_confidence !== undefined) {
+      params.append('min_confidence', filters.min_confidence.toString());
+    }
+    const queryString = params.toString();
+    const url = `/__mockforge/api/mockai/rules/explanations${queryString ? `?${queryString}` : ''}`;
+    return this.fetchJson(url) as Promise<{
+      explanations: Array<{
+        rule_id: string;
+        rule_type: string;
+        confidence: number;
+        source_examples: string[];
+        reasoning: string;
+        pattern_matches: Array<{
+          pattern: string;
+          match_count: number;
+          example_ids: string[];
+        }>;
+        generated_at: string;
+      }>;
+      total: number;
+    }>;
+  }
+
+  async getRuleExplanation(ruleId: string): Promise<{
+    explanation: {
+      rule_id: string;
+      rule_type: string;
+      confidence: number;
+      source_examples: string[];
+      reasoning: string;
+      pattern_matches: Array<{
+        pattern: string;
+        match_count: number;
+        example_ids: string[];
+      }>;
+      generated_at: string;
+    };
+  }> {
+    return this.fetchJson(
+      `/__mockforge/api/mockai/rules/${encodeURIComponent(ruleId)}/explanation`
+    ) as Promise<{
+      explanation: {
+        rule_id: string;
+        rule_type: string;
+        confidence: number;
+        source_examples: string[];
+        reasoning: string;
+        pattern_matches: Array<{
+          pattern: string;
+          match_count: number;
+          example_ids: string[];
+        }>;
+        generated_at: string;
+      };
+    }>;
+  }
+
+  // MockAI Learn from Examples API method
+  async learnFromExamples(request: {
+    examples: Array<{
+      request: unknown;
+      response: unknown;
+    }>;
+    config?: unknown;
+  }): Promise<{
+    success: boolean;
+    rules_generated: {
+      consistency_rules: number;
+      schemas: number;
+      state_machines: number;
+      system_prompt: boolean;
+    };
+    explanations: Array<{
+      rule_id: string;
+      rule_type: string;
+      confidence: number;
+      reasoning: string;
+    }>;
+    total_explanations: number;
+  }> {
+    return this.fetchJson('/__mockforge/api/mockai/learn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as Promise<{
+      success: boolean;
+      rules_generated: {
+        consistency_rules: number;
+        schemas: number;
+        state_machines: number;
+        system_prompt: boolean;
+      };
+      explanations: Array<{
+        rule_id: string;
+        rule_type: string;
+        confidence: number;
+        reasoning: string;
+      }>;
+      total_explanations: number;
+    }>;
+  }
+
+  async importStateMachines(data: { state_machines: unknown[]; visual_layouts: Record<string, unknown> }): Promise<void> {
+    await this.fetchJson('/__mockforge/api/state-machines/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
   }
 
   async createChain(definition: string): Promise<ChainCreationResponse> {
@@ -433,8 +692,14 @@ class ApiService {
 
 class ImportApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -514,8 +779,14 @@ class FixturesApiService {
   }
 
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -564,8 +835,14 @@ class FixturesApiService {
   }
 
   async downloadFixture(fixtureId: string): Promise<Blob> {
-    const response = await fetch(`/__mockforge/fixtures/${fixtureId}/download`);
+    const response = await authenticatedFetch(`/__mockforge/fixtures/${fixtureId}/download`);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.blob();
@@ -596,8 +873,14 @@ class FixturesApiService {
 
 class DashboardApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -636,13 +919,20 @@ class DashboardApiService {
 
 class ServerApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
     return json.data || json;
   }
+
 
   async getServerInfo(): Promise<ServerInfo> {
     return this.fetchJson('/__mockforge/server-info') as Promise<ServerInfo>;
@@ -663,8 +953,14 @@ class ServerApiService {
 
 class RoutesApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -683,8 +979,14 @@ class LogsApiService {
   }
 
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -742,8 +1044,14 @@ class MetricsApiService {
   }
 
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -757,8 +1065,14 @@ class MetricsApiService {
 
 class ConfigApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -796,8 +1110,14 @@ class ConfigApiService {
 
 class ValidationApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -819,8 +1139,14 @@ class ValidationApiService {
 
 class EnvApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -842,8 +1168,14 @@ class EnvApiService {
 
 class FilesApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -869,8 +1201,14 @@ class FilesApiService {
 
 class SmokeTestsApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -888,10 +1226,735 @@ class SmokeTestsApiService {
   }
 }
 
+class ChaosApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await authenticatedFetch(url, options);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  /**
+   * Get current chaos configuration
+   */
+  async getChaosConfig(): Promise<any> {
+    return this.fetchJson('/api/chaos/config') as Promise<any>;
+  }
+
+  /**
+   * Get current chaos status
+   */
+  async getChaosStatus(): Promise<any> {
+    return this.fetchJson('/api/chaos/status') as Promise<any>;
+  }
+
+  /**
+   * Update latency configuration
+   */
+  async updateChaosLatency(config: any): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/config/latency', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Update fault injection configuration
+   */
+  async updateChaosFaults(config: any): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/config/faults', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Update traffic shaping configuration
+   */
+  async updateChaosTraffic(config: any): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/config/traffic', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Enable chaos engineering
+   */
+  async enableChaos(): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/enable', {
+      method: 'POST',
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Disable chaos engineering
+   */
+  async disableChaos(): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/disable', {
+      method: 'POST',
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Reset chaos configuration to defaults
+   */
+  async resetChaos(): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/reset', {
+      method: 'POST',
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Get latency metrics (time-series data)
+   */
+  async getLatencyMetrics(): Promise<{ samples: Array<{ timestamp: number; latency_ms: number }> }> {
+    return this.fetchJson('/api/chaos/metrics/latency') as Promise<{ samples: Array<{ timestamp: number; latency_ms: number }> }>;
+  }
+
+  /**
+   * Get latency statistics
+   */
+  async getLatencyStats(): Promise<{
+    count: number;
+    min_ms: number;
+    max_ms: number;
+    avg_ms: number;
+    p50_ms: number;
+    p95_ms: number;
+    p99_ms: number;
+  }> {
+    return this.fetchJson('/api/chaos/metrics/latency/stats') as Promise<{
+      count: number;
+      min_ms: number;
+      max_ms: number;
+      avg_ms: number;
+      p50_ms: number;
+      p95_ms: number;
+      p99_ms: number;
+    }>;
+  }
+
+  /**
+   * List all network profiles (built-in + custom)
+   */
+  async getNetworkProfiles(): Promise<Array<{
+    name: string;
+    description: string;
+    chaos_config: any;
+    tags: string[];
+    builtin: boolean;
+  }>> {
+    return this.fetchJson('/api/chaos/profiles') as Promise<Array<{
+      name: string;
+      description: string;
+      chaos_config: any;
+      tags: string[];
+      builtin: boolean;
+    }>>;
+  }
+
+  /**
+   * Get a specific network profile by name
+   */
+  async getNetworkProfile(name: string): Promise<{
+    name: string;
+    description: string;
+    chaos_config: any;
+    tags: string[];
+    builtin: boolean;
+  }> {
+    return this.fetchJson(`/api/chaos/profiles/${encodeURIComponent(name)}`) as Promise<{
+      name: string;
+      description: string;
+      chaos_config: any;
+      tags: string[];
+      builtin: boolean;
+    }>;
+  }
+
+  /**
+   * Apply a network profile
+   */
+  async applyNetworkProfile(name: string): Promise<{ message: string }> {
+    return this.fetchJson(`/api/chaos/profiles/${encodeURIComponent(name)}/apply`, {
+      method: 'POST',
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Create a custom network profile
+   */
+  async createNetworkProfile(profile: {
+    name: string;
+    description: string;
+    chaos_config: any;
+    tags?: string[];
+  }): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Delete a custom network profile
+   */
+  async deleteNetworkProfile(name: string): Promise<{ message: string }> {
+    return this.fetchJson(`/api/chaos/profiles/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Export a network profile (JSON or YAML)
+   */
+  async exportNetworkProfile(name: string, format: 'json' | 'yaml' = 'json'): Promise<any> {
+    const response = await authenticatedFetch(`/api/chaos/profiles/${encodeURIComponent(name)}/export?format=${format}`);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    if (format === 'yaml') {
+      return response.text();
+    }
+    return response.json();
+  }
+
+  /**
+   * Import a network profile from JSON or YAML
+   */
+  async importNetworkProfile(content: string, format: 'json' | 'yaml'): Promise<{ message: string }> {
+    return this.fetchJson('/api/chaos/profiles/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, format }),
+    }) as Promise<{ message: string }>;
+  }
+
+  /**
+   * Update error pattern configuration
+   */
+  async updateErrorPattern(pattern: {
+    type: 'burst' | 'random' | 'sequential';
+    count?: number;
+    interval_ms?: number;
+    probability?: number;
+    sequence?: number[];
+  }): Promise<{ message: string }> {
+    // Get current fault config, update pattern, then save
+    const currentConfig = await this.getChaosConfig();
+    const faultConfig = currentConfig.fault_injection || {};
+    faultConfig.error_pattern = pattern;
+
+    return this.updateChaosFaults(faultConfig);
+  }
+}
+
+/**
+ * Time Travel API Service
+ * Handles all time travel and temporal simulation operations
+ */
+class TimeTravelApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await authenticatedFetch(url, options);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  // Time Travel Status
+  async getStatus(): Promise<{
+    enabled: boolean;
+    current_time?: string;
+    scale_factor: number;
+    real_time: string;
+  }> {
+    return this.fetchJson('/__mockforge/time-travel/status') as Promise<{
+      enabled: boolean;
+      current_time?: string;
+      scale_factor: number;
+      real_time: string;
+    }>;
+  }
+
+  async enable(time?: string, scale?: number): Promise<{
+    success: boolean;
+    status: {
+      enabled: boolean;
+      current_time?: string;
+      scale_factor: number;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/time-travel/enable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time, scale }),
+    }) as Promise<{
+      success: boolean;
+      status: {
+        enabled: boolean;
+        current_time?: string;
+        scale_factor: number;
+      };
+    }>;
+  }
+
+  async disable(): Promise<{ success: boolean }> {
+    return this.fetchJson('/__mockforge/time-travel/disable', {
+      method: 'POST',
+    }) as Promise<{ success: boolean }>;
+  }
+
+  async advance(duration: string): Promise<{
+    success: boolean;
+    status: {
+      enabled: boolean;
+      current_time?: string;
+      scale_factor: number;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/time-travel/advance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duration }),
+    }) as Promise<{
+      success: boolean;
+      status: {
+        enabled: boolean;
+        current_time?: string;
+        scale_factor: number;
+      };
+    }>;
+  }
+
+  async setTime(time: string): Promise<{
+    success: boolean;
+    status: {
+      enabled: boolean;
+      current_time?: string;
+      scale_factor: number;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/time-travel/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time }),
+    }) as Promise<{
+      success: boolean;
+      status: {
+        enabled: boolean;
+        current_time?: string;
+        scale_factor: number;
+      };
+    }>;
+  }
+
+  async setScale(scale: number): Promise<{ success: boolean }> {
+    return this.fetchJson('/__mockforge/time-travel/scale', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scale }),
+    }) as Promise<{ success: boolean }>;
+  }
+
+  async reset(): Promise<{ success: boolean }> {
+    return this.fetchJson('/__mockforge/time-travel/reset', {
+      method: 'POST',
+    }) as Promise<{ success: boolean }>;
+  }
+
+  // Cron Jobs
+  async listCronJobs(): Promise<{ success: boolean; jobs: unknown[] }> {
+    return this.fetchJson('/__mockforge/time-travel/cron') as Promise<{
+      success: boolean;
+      jobs: unknown[];
+    }>;
+  }
+
+  async getCronJob(id: string): Promise<{ success: boolean; job: unknown }> {
+    return this.fetchJson(`/__mockforge/time-travel/cron/${id}`) as Promise<{
+      success: boolean;
+      job: unknown;
+    }>;
+  }
+
+  async createCronJob(job: {
+    id: string;
+    name: string;
+    schedule: string;
+    description?: string;
+    action_type: string;
+    action_metadata: unknown;
+  }): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson('/__mockforge/time-travel/cron', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(job),
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  async deleteCronJob(id: string): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson(`/__mockforge/time-travel/cron/${id}`, {
+      method: 'DELETE',
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  async setCronJobEnabled(id: string, enabled: boolean): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.fetchJson(`/__mockforge/time-travel/cron/${id}/enable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  // Mutation Rules
+  async listMutationRules(): Promise<{ success: boolean; rules: unknown[] }> {
+    return this.fetchJson('/__mockforge/time-travel/mutations') as Promise<{
+      success: boolean;
+      rules: unknown[];
+    }>;
+  }
+
+  async getMutationRule(id: string): Promise<{ success: boolean; rule: unknown }> {
+    return this.fetchJson(`/__mockforge/time-travel/mutations/${id}`) as Promise<{
+      success: boolean;
+      rule: unknown;
+    }>;
+  }
+
+  async createMutationRule(rule: {
+    id: string;
+    entity_name: string;
+    trigger: unknown;
+    operation: unknown;
+    description?: string;
+    condition?: string;
+  }): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson('/__mockforge/time-travel/mutations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rule),
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  async deleteMutationRule(id: string): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson(`/__mockforge/time-travel/mutations/${id}`, {
+      method: 'DELETE',
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  async setMutationRuleEnabled(id: string, enabled: boolean): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.fetchJson(`/__mockforge/time-travel/mutations/${id}/enable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+}
+
+/**
+ * Reality Slider API Service
+ * Handles reality level management and preset operations
+ */
+class RealityApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await authenticatedFetch(url, options);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  /**
+   * Get current reality level and configuration
+   */
+  async getRealityLevel(): Promise<{
+    level: number;
+    level_name: string;
+    description: string;
+    chaos: {
+      enabled: boolean;
+      error_rate: number;
+      delay_rate: number;
+    };
+    latency: {
+      base_ms: number;
+      jitter_ms: number;
+    };
+    mockai: {
+      enabled: boolean;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/reality/level') as Promise<{
+      level: number;
+      level_name: string;
+      description: string;
+      chaos: {
+        enabled: boolean;
+        error_rate: number;
+        delay_rate: number;
+      };
+      latency: {
+        base_ms: number;
+        jitter_ms: number;
+      };
+      mockai: {
+        enabled: boolean;
+      };
+    }>;
+  }
+
+  /**
+   * Set reality level (1-5)
+   */
+  async setRealityLevel(level: number): Promise<{
+    level: number;
+    level_name: string;
+    description: string;
+    chaos: {
+      enabled: boolean;
+      error_rate: number;
+      delay_rate: number;
+    };
+    latency: {
+      base_ms: number;
+      jitter_ms: number;
+    };
+    mockai: {
+      enabled: boolean;
+    };
+  }> {
+    return this.fetchJson('/__mockforge/reality/level', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level }),
+    }) as Promise<{
+      level: number;
+      level_name: string;
+      description: string;
+      chaos: {
+        enabled: boolean;
+        error_rate: number;
+        delay_rate: number;
+      };
+      latency: {
+        base_ms: number;
+        jitter_ms: number;
+      };
+      mockai: {
+        enabled: boolean;
+      };
+    }>;
+  }
+
+  /**
+   * List all available reality presets
+   */
+  async listPresets(): Promise<Array<{
+    id: string;
+    path: string;
+    name: string;
+  }>> {
+    return this.fetchJson('/__mockforge/reality/presets') as Promise<Array<{
+      id: string;
+      path: string;
+      name: string;
+    }>>;
+  }
+
+  /**
+   * Import a reality preset
+   */
+  async importPreset(path: string): Promise<{
+    name: string;
+    description?: string;
+    level: number;
+    level_name: string;
+  }> {
+    return this.fetchJson('/__mockforge/reality/presets/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    }) as Promise<{
+      name: string;
+      description?: string;
+      level: number;
+      level_name: string;
+    }>;
+  }
+
+  /**
+   * Export current reality configuration as a preset
+   */
+  async exportPreset(name: string, description?: string): Promise<{
+    name: string;
+    description?: string;
+    path: string;
+    level: number;
+  }> {
+    return this.fetchJson('/__mockforge/reality/presets/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description }),
+    }) as Promise<{
+      name: string;
+      description?: string;
+      path: string;
+      level: number;
+    }>;
+  }
+}
+
+class ConsistencyApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await authenticatedFetch(url, options);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  /**
+   * List all available lifecycle presets
+   */
+  async listLifecyclePresets(): Promise<{
+    presets: Array<{
+      name: string;
+      id: string;
+      description: string;
+    }>;
+  }> {
+    return this.fetchJson('/api/v1/consistency/lifecycle-presets') as Promise<{
+      presets: Array<{
+        name: string;
+        id: string;
+        description: string;
+      }>;
+    }>;
+  }
+
+  /**
+   * Get details of a specific lifecycle preset
+   */
+  async getLifecyclePresetDetails(presetName: string): Promise<{
+    preset: {
+      name: string;
+      id: string;
+      description: string;
+    };
+    initial_state: string;
+    states: Array<{
+      from: string;
+      to: string;
+      after_days: number | null;
+      condition: string | null;
+    }>;
+    affected_endpoints: string[];
+  }> {
+    return this.fetchJson(`/api/v1/consistency/lifecycle-presets/${encodeURIComponent(presetName)}`) as Promise<{
+      preset: {
+        name: string;
+        id: string;
+        description: string;
+      };
+      initial_state: string;
+      states: Array<{
+        from: string;
+        to: string;
+        after_days: number | null;
+        condition: string | null;
+      }>;
+      affected_endpoints: string[];
+    }>;
+  }
+
+  /**
+   * Apply a lifecycle preset to a persona
+   */
+  async applyLifecyclePreset(
+    workspace: string,
+    personaId: string,
+    preset: string
+  ): Promise<{
+    success: boolean;
+    workspace: string;
+    persona_id: string;
+    preset: string;
+    lifecycle_state: string;
+  }> {
+    return this.fetchJson(`/api/v1/consistency/lifecycle-presets/apply?workspace=${encodeURIComponent(workspace)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ persona_id: personaId, preset }),
+    }) as Promise<{
+      success: boolean;
+      workspace: string;
+      persona_id: string;
+      preset: string;
+      lifecycle_state: string;
+    }>;
+  }
+}
+
 class PluginsApiService {
   private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
-    const response = await fetch(url, options);
+    const response = await authenticatedFetch(url, options);
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const json = await response.json();
@@ -948,9 +2011,722 @@ class PluginsApiService {
   }
 }
 
+class VerificationApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await authenticatedFetch(url, options);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  async verify(pattern: VerificationRequest, expected: VerificationCount): Promise<VerificationResult> {
+    return this.fetchJson('/__mockforge/verification/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pattern, expected }),
+    }) as Promise<VerificationResult>;
+  }
+
+  async count(pattern: VerificationRequest): Promise<{ count: number }> {
+    return this.fetchJson('/__mockforge/verification/count', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pattern }),
+    }) as Promise<{ count: number }>;
+  }
+
+  async verifySequence(patterns: VerificationRequest[]): Promise<VerificationResult> {
+    return this.fetchJson('/__mockforge/verification/sequence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patterns }),
+    }) as Promise<VerificationResult>;
+  }
+
+  async verifyNever(pattern: VerificationRequest): Promise<VerificationResult> {
+    return this.fetchJson('/__mockforge/verification/never', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pattern),
+    }) as Promise<VerificationResult>;
+  }
+
+  async verifyAtLeast(pattern: VerificationRequest, min: number): Promise<VerificationResult> {
+    return this.fetchJson('/__mockforge/verification/at-least', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pattern, min }),
+    }) as Promise<VerificationResult>;
+  }
+}
+
+// Contract Diff API types
+export interface CapturedRequest {
+  id?: string;
+  method: string;
+  path: string;
+  source: string;
+  captured_at?: string;
+  analyzed?: boolean;
+  query_params?: Record<string, string>;
+  headers?: Record<string, string>;
+  body?: unknown;
+  status_code?: number;
+  response_body?: unknown;
+}
+
+export interface ContractDiffResult {
+  matches: boolean;
+  confidence: number;
+  mismatches: Mismatch[];
+  recommendations: Recommendation[];
+  corrections: CorrectionProposal[];
+  metadata?: {
+    contract_format?: string;
+    analyzed_at?: string;
+  };
+}
+
+export interface Mismatch {
+  path: string;
+  description: string;
+  mismatch_type: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  confidence: number;
+  expected?: string;
+  actual?: string;
+  context?: {
+    is_additive?: boolean;
+    is_breaking?: boolean;
+    change_category?: string;
+    schema_format?: string;
+    service?: string;
+    method?: string;
+    field_name?: string;
+    old_type?: string;
+    new_type?: string;
+    [key: string]: any;
+  };
+}
+
+export interface Recommendation {
+  recommendation: string;
+  suggested_fix?: string;
+  confidence: number;
+}
+
+export interface CorrectionProposal {
+  description: string;
+  path: string;
+  operation: 'add' | 'remove' | 'replace';
+  value?: unknown;
+  confidence: number;
+}
+
+export interface CaptureStatistics {
+  total_captures: number;
+  analyzed_captures: number;
+  sources: Record<string, number>;
+  methods: Record<string, number>;
+}
+
+export interface AnalyzeRequestPayload {
+  spec_path?: string;
+  spec_content?: string;
+  contract_id?: string;
+  config?: {
+    llm_provider?: string;
+    llm_model?: string;
+    confidence_threshold?: number;
+  };
+}
+
+class ContractDiffApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await authenticatedFetch(url, options);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      const errorText = await response.text();
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error || errorMessage;
+      } catch {
+        // Not JSON, use default message
+      }
+      throw new Error(errorMessage);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  async uploadRequest(request: Omit<CapturedRequest, 'id' | 'captured_at' | 'analyzed'>): Promise<{ capture_id: string; message: string }> {
+    const response = await authenticatedFetch('/__mockforge/contract-diff/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json.error || `HTTP error! status: ${response.status}`);
+    }
+    return json;
+  }
+
+  async getCapturedRequests(params?: {
+    source?: string;
+    method?: string;
+    path_pattern?: string;
+    analyzed?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ count: number; captures: CapturedRequest[] }> {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const url = `/__mockforge/contract-diff/captures${queryParams.toString() ? `?${queryParams}` : ''}`;
+    return this.fetchJson(url) as Promise<{ count: number; captures: CapturedRequest[] }>;
+  }
+
+  async getCapturedRequest(id: string): Promise<{ capture: CapturedRequest }> {
+    return this.fetchJson(`/__mockforge/contract-diff/captures/${id}`) as Promise<{ capture: CapturedRequest }>;
+  }
+
+  async analyzeCapturedRequest(id: string, payload: AnalyzeRequestPayload): Promise<{ analysis_result_id: string; result: ContractDiffResult }> {
+    return this.fetchJson(`/__mockforge/contract-diff/captures/${id}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }) as Promise<{ analysis_result_id: string; result: ContractDiffResult }>;
+  }
+
+  async getStatistics(): Promise<{ statistics: CaptureStatistics }> {
+    return this.fetchJson('/__mockforge/contract-diff/statistics') as Promise<{ statistics: CaptureStatistics }>;
+  }
+
+  async generatePatchFile(id: string, payload: AnalyzeRequestPayload): Promise<{ patch_file: unknown; corrections_count: number }> {
+    return this.fetchJson(`/__mockforge/contract-diff/captures/${id}/patch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }) as Promise<{ patch_file: unknown; corrections_count: number }>;
+  }
+}
+
+// Proxy replacement rules API types
+export interface ProxyRule {
+  id: number;
+  pattern: string;
+  type: 'request' | 'response';
+  status_codes: number[];
+  body_transforms: Array<{
+    path: string;
+    replace: string;
+    operation: 'replace' | 'add' | 'remove';
+  }>;
+  enabled: boolean;
+}
+
+export interface ProxyRuleRequest {
+  pattern: string;
+  type: 'request' | 'response';
+  status_codes?: number[];
+  body_transforms: Array<{
+    path: string;
+    replace: string;
+    operation?: 'replace' | 'add' | 'remove';
+  }>;
+  enabled?: boolean;
+}
+
+export interface ProxyRulesResponse {
+  rules: ProxyRule[];
+}
+
+export interface ProxyInspectResponse {
+  requests: Array<{
+    id: string;
+    timestamp: string;
+    method: string;
+    url: string;
+    headers: Record<string, string>;
+    body?: string;
+  }>;
+  responses: Array<{
+    id: string;
+    timestamp: string;
+    status_code: number;
+    headers: Record<string, string>;
+    body?: string;
+  }>;
+  limit: number;
+  message?: string;
+}
+
+class ProxyApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error || errorMessage;
+      } catch {
+        // Not JSON, use default message
+      }
+      throw new Error(errorMessage);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  async getProxyRules(): Promise<ProxyRulesResponse> {
+    return this.fetchJson('/__mockforge/api/proxy/rules') as Promise<ProxyRulesResponse>;
+  }
+
+  async getProxyRule(id: number): Promise<ProxyRule> {
+    return this.fetchJson(`/__mockforge/api/proxy/rules/${id}`) as Promise<ProxyRule>;
+  }
+
+  async createProxyRule(rule: ProxyRuleRequest): Promise<{ id: number; message: string }> {
+    return this.fetchJson('/__mockforge/api/proxy/rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rule),
+    }) as Promise<{ id: number; message: string }>;
+  }
+
+  async updateProxyRule(id: number, rule: ProxyRuleRequest): Promise<{ id: number; message: string }> {
+    return this.fetchJson(`/__mockforge/api/proxy/rules/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rule),
+    }) as Promise<{ id: number; message: string }>;
+  }
+
+  async deleteProxyRule(id: number): Promise<{ id: number; message: string }> {
+    return this.fetchJson(`/__mockforge/api/proxy/rules/${id}`, {
+      method: 'DELETE',
+    }) as Promise<{ id: number; message: string }>;
+  }
+
+  async getProxyInspect(limit?: number): Promise<ProxyInspectResponse> {
+    const url = limit ? `/__mockforge/api/proxy/inspect?limit=${limit}` : '/__mockforge/api/proxy/inspect';
+    return this.fetchJson(url) as Promise<ProxyInspectResponse>;
+  }
+
+  // ==================== PLAYGROUND API METHODS ====================
+
+  /**
+   * List available endpoints for playground
+   */
+  async listPlaygroundEndpoints(workspaceId?: string): Promise<{
+    protocol: string;
+    method: string;
+    path: string;
+    description?: string;
+    enabled: boolean;
+  }[]> {
+    const url = workspaceId
+      ? `/?workspace_id=${encodeURIComponent(workspaceId)}`
+      : '';
+    return this.fetchJson(`/__mockforge/playground/endpoints${url}`) as Promise<{
+      protocol: string;
+      method: string;
+      path: string;
+      description?: string;
+      enabled: boolean;
+    }[]>;
+  }
+
+  /**
+   * Execute a REST request
+   */
+  async executeRestRequest(request: {
+    method: string;
+    path: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+    base_url?: string;
+    use_mockai?: boolean;
+    workspace_id?: string;
+  }): Promise<{
+    status_code: number;
+    headers: Record<string, string>;
+    body: unknown;
+    response_time_ms: number;
+    request_id: string;
+    error?: string;
+  }> {
+    return this.fetchJson('/__mockforge/playground/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as Promise<{
+      status_code: number;
+      headers: Record<string, string>;
+      body: unknown;
+      response_time_ms: number;
+      request_id: string;
+      error?: string;
+    }>;
+  }
+
+  /**
+   * Execute a GraphQL query
+   */
+  async executeGraphQLQuery(request: {
+    query: string;
+    variables?: Record<string, unknown>;
+    operation_name?: string;
+    base_url?: string;
+    workspace_id?: string;
+  }): Promise<{
+    status_code: number;
+    headers: Record<string, string>;
+    body: unknown;
+    response_time_ms: number;
+    request_id: string;
+    error?: string;
+  }> {
+    return this.fetchJson('/__mockforge/playground/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as Promise<{
+      status_code: number;
+      headers: Record<string, string>;
+      body: unknown;
+      response_time_ms: number;
+      request_id: string;
+      error?: string;
+    }>;
+  }
+
+  /**
+   * Perform GraphQL introspection
+   */
+  async graphQLIntrospect(): Promise<{
+    schema: unknown;
+    query_types: string[];
+    mutation_types: string[];
+    subscription_types: string[];
+  }> {
+    return this.fetchJson('/__mockforge/playground/graphql/introspect') as Promise<{
+      schema: unknown;
+      query_types: string[];
+      mutation_types: string[];
+      subscription_types: string[];
+    }>;
+  }
+
+  /**
+   * Get request history
+   */
+  async getPlaygroundHistory(params?: {
+    limit?: number;
+    protocol?: string;
+    workspace_id?: string;
+  }): Promise<{
+    id: string;
+    protocol: string;
+    method: string;
+    path: string;
+    status_code: number;
+    response_time_ms: number;
+    timestamp: string;
+    request_headers?: Record<string, string>;
+    request_body?: unknown;
+    graphql_query?: string;
+    graphql_variables?: Record<string, unknown>;
+  }[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
+    if (params?.protocol) {
+      queryParams.append('protocol', params.protocol);
+    }
+    if (params?.workspace_id) {
+      queryParams.append('workspace_id', params.workspace_id);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/playground/history?${queryParams.toString()}`
+      : '/__mockforge/playground/history';
+    return this.fetchJson(url) as Promise<{
+      id: string;
+      protocol: string;
+      method: string;
+      path: string;
+      status_code: number;
+      response_time_ms: number;
+      timestamp: string;
+      request_headers?: Record<string, string>;
+      request_body?: unknown;
+      graphql_query?: string;
+      graphql_variables?: Record<string, unknown>;
+    }[]>;
+  }
+
+  /**
+   * Replay a request from history
+   */
+  async replayRequest(requestId: string): Promise<{
+    status_code: number;
+    headers: Record<string, string>;
+    body: unknown;
+    response_time_ms: number;
+    request_id: string;
+    error?: string;
+  }> {
+    return this.fetchJson(`/__mockforge/playground/history/${requestId}/replay`, {
+      method: 'POST',
+    }) as Promise<{
+      status_code: number;
+      headers: Record<string, string>;
+      body: unknown;
+      response_time_ms: number;
+      request_id: string;
+      error?: string;
+    }>;
+  }
+
+  /**
+   * Generate code snippets
+   */
+  async generateCodeSnippet(request: {
+    protocol: string;
+    method?: string;
+    path: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+    graphql_query?: string;
+    graphql_variables?: Record<string, unknown>;
+    base_url: string;
+  }): Promise<{
+    snippets: Record<string, string>;
+  }> {
+    return this.fetchJson('/__mockforge/playground/snippets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as Promise<{
+      snippets: Record<string, string>;
+    }>;
+  }
+
+  // ==================== BEHAVIORAL CLONING API METHODS ====================
+
+  /**
+   * List all recorded flows
+   */
+  async getFlows(params?: { limit?: number; db_path?: string }): Promise<{
+    flows: import('../types').Flow[];
+    total: number;
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows?${queryParams.toString()}`
+      : '/__mockforge/flows';
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: { flows: import('../types').Flow[]; total: number } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch flows');
+    }
+    return response.data;
+  }
+
+  /**
+   * Get flow details with timeline
+   */
+  async getFlow(flowId: string, params?: { db_path?: string }): Promise<import('../types').Flow> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows/${flowId}?${queryParams.toString()}`
+      : `/__mockforge/flows/${flowId}`;
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: import('../types').Flow | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch flow');
+    }
+    return response.data;
+  }
+
+  /**
+   * Tag a flow
+   */
+  async tagFlow(
+    flowId: string,
+    request: import('../types').TagFlowRequest,
+    params?: { db_path?: string }
+  ): Promise<{ message: string; flow_id: string }> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows/${flowId}/tag?${queryParams.toString()}`
+      : `/__mockforge/flows/${flowId}/tag`;
+    const response = await this.fetchJson(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as {
+      success: boolean;
+      data: { message: string; flow_id: string } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to tag flow');
+    }
+    return response.data;
+  }
+
+  /**
+   * Compile flow to scenario
+   */
+  async compileFlow(
+    flowId: string,
+    request: import('../types').CompileFlowRequest,
+    params?: { db_path?: string }
+  ): Promise<import('../types').CompileFlowResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/flows/${flowId}/compile?${queryParams.toString()}`
+      : `/__mockforge/flows/${flowId}/compile`;
+    const response = await this.fetchJson(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }) as {
+      success: boolean;
+      data: import('../types').CompileFlowResponse | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to compile flow');
+    }
+    return response.data;
+  }
+
+  /**
+   * List all scenarios
+   */
+  async getScenarios(params?: { limit?: number; db_path?: string }): Promise<{
+    scenarios: import('../types').Scenario[];
+    total: number;
+  }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) {
+      queryParams.append('limit', params.limit.toString());
+    }
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/scenarios?${queryParams.toString()}`
+      : '/__mockforge/scenarios';
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: { scenarios: import('../types').Scenario[]; total: number } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch scenarios');
+    }
+    return response.data;
+  }
+
+  /**
+   * Get scenario details
+   */
+  async getScenario(scenarioId: string, params?: { db_path?: string }): Promise<import('../types').ScenarioDetail> {
+    const queryParams = new URLSearchParams();
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = queryParams.toString()
+      ? `/__mockforge/scenarios/${scenarioId}?${queryParams.toString()}`
+      : `/__mockforge/scenarios/${scenarioId}`;
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: import('../types').ScenarioDetail | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch scenario');
+    }
+    return response.data;
+  }
+
+  /**
+   * Export scenario
+   */
+  async exportScenario(
+    scenarioId: string,
+    format: 'yaml' | 'json' = 'yaml',
+    params?: { db_path?: string }
+  ): Promise<string> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('format', format);
+    if (params?.db_path) {
+      queryParams.append('db_path', params.db_path);
+    }
+    const url = `/__mockforge/scenarios/${scenarioId}/export?${queryParams.toString()}`;
+    const response = await this.fetchJson(url) as {
+      success: boolean;
+      data: { content: string } | null;
+      error: string | null;
+    };
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to export scenario');
+    }
+    return response.data.content;
+  }
+}
+
 export const apiService = new ApiService();
 export const importApi = new ImportApiService();
 export const fixturesApi = new FixturesApiService();
+export const proxyApi = new ProxyApiService();
 
 // Admin API services
 export const dashboardApi = new DashboardApiService();
@@ -964,6 +2740,13 @@ export const envApi = new EnvApiService();
 export const filesApi = new FilesApiService();
 export const smokeTestsApi = new SmokeTestsApiService();
 export const pluginsApi = new PluginsApiService();
+export const chaosApi = new ChaosApiService();
+export const timeTravelApi = new TimeTravelApiService();
+export const realityApi = new RealityApiService();
+export const consistencyApi = new ConsistencyApiService();
+export const verificationApi = new VerificationApiService();
+export const contractDiffApi = new ContractDiffApiService();
+export type { ProxyRule, ProxyRuleRequest, ProxyRulesResponse, ProxyInspectResponse };
 
 // Debug: Log to verify services are created
 logger.info('API Services initialized', {
@@ -982,6 +2765,8 @@ logger.info('API Services initialized', {
   filesApi: !!filesApi,
   smokeTestsApi: !!smokeTestsApi,
   pluginsApi: !!pluginsApi,
+  chaosApi: !!chaosApi,
+  timeTravelApi: !!timeTravelApi,
 });
 
 // Type exports for backwards compatibility

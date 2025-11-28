@@ -31,7 +31,11 @@ impl AiResponseHandler {
         // Initialize intelligent generator if configured
         let intelligent_generator = if let Some(config) = intelligent_config {
             debug!("Initializing intelligent mock generator with mode: {:?}", config.mode);
-            Some(IntelligentMockGenerator::new(config)?)
+            Some(IntelligentMockGenerator::new(config).map_err(|e| {
+                mockforge_core::Error::Config {
+                    message: format!("Failed to initialize intelligent generator: {}", e),
+                }
+            })?)
         } else {
             None
         };
@@ -39,7 +43,10 @@ impl AiResponseHandler {
         // Initialize drift engine if configured
         let drift_engine = if let Some(config) = drift_config {
             debug!("Initializing data drift engine");
-            let engine = DataDriftEngine::new(config)?;
+            let engine =
+                DataDriftEngine::new(config).map_err(|e| mockforge_core::Error::Config {
+                    message: format!("Failed to initialize drift engine: {}", e),
+                })?;
             Some(Arc::new(RwLock::new(engine)))
         } else {
             None

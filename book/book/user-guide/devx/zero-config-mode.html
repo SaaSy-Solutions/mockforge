@@ -1,0 +1,506 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Zero-Config Mode - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/devx/zero-config-mode.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="zero-config-mode-runtime-daemon"><a class="header" href="#zero-config-mode-runtime-daemon">Zero-Config Mode (Runtime Daemon)</a></h1>
+<p><strong>Pillars:</strong> [DevX]</p>
+<p>Zero-Config Mode provides the “invisible mock server” experience. When you hit an endpoint that doesn’t exist, MockForge automatically creates a mock, generates types, creates client stubs, and sets up scenarios—all without manual configuration.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>The Runtime Daemon is a background process that:</p>
+<ul>
+<li><strong>Detects</strong> when you hit an endpoint that doesn’t exist (404)</li>
+<li><strong>Automatically creates</strong> a mock endpoint</li>
+<li><strong>Generates types</strong> (TypeScript, JSON Schema)</li>
+<li><strong>Generates client stubs</strong> (React, Vue, etc.)</li>
+<li><strong>Updates OpenAPI schema</strong></li>
+<li><strong>Creates example responses</strong></li>
+<li><strong>Sets up scenarios</strong></li>
+</ul>
+<p>This is “mock server in your shadow”—an AI-assisted backend-on-demand.</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="enable-zero-config-mode"><a class="header" href="#enable-zero-config-mode">Enable Zero-Config Mode</a></h3>
+<pre><code class="language-bash"># Start MockForge with runtime daemon
+mockforge serve --runtime-daemon
+
+# Or via environment variable
+MOCKFORGE_RUNTIME_DAEMON_ENABLED=true mockforge serve
+</code></pre>
+<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
+<pre><code class="language-yaml"># mockforge.yaml
+runtime_daemon:
+  enabled: true
+  auto_create_on_404: true
+  ai_generation: true  # Use AI to generate intelligent responses
+  generate_types: true  # Generate TypeScript/JSON Schema
+  generate_client_stubs: true  # Generate client code
+  update_openapi: true  # Update OpenAPI schema
+  create_scenario: true  # Create scenarios automatically
+  exclude_patterns:
+    - "/health"
+    - "/metrics"
+    - "/__mockforge/*"
+</code></pre>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<h3 id="1-detection"><a class="header" href="#1-detection">1. Detection</a></h3>
+<p>When a request hits a non-existent endpoint (404), the daemon detects it:</p>
+<pre><code>GET /api/users/123 → 404 Not Found
+→ Runtime Daemon detects 404
+→ Analyzes request (method, path, headers, body)
+</code></pre>
+<h3 id="2-auto-generation"><a class="header" href="#2-auto-generation">2. Auto-Generation</a></h3>
+<p>The daemon automatically:</p>
+<ol>
+<li>
+<p><strong>Creates Mock Endpoint</strong></p>
+<ul>
+<li>Analyzes request to infer response structure</li>
+<li>Uses AI to generate intelligent response</li>
+<li>Sets appropriate status code</li>
+</ul>
+</li>
+<li>
+<p><strong>Generates Types</strong> (if enabled)</p>
+<ul>
+<li>TypeScript types</li>
+<li>JSON Schema</li>
+<li>Saved to <code>generated/types/</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Generates Client Stubs</strong> (if enabled)</p>
+<ul>
+<li>React hooks</li>
+<li>Vue composables</li>
+<li>Angular services</li>
+<li>Saved to <code>generated/clients/</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Updates OpenAPI Schema</strong> (if enabled)</p>
+<ul>
+<li>Adds endpoint to OpenAPI spec</li>
+<li>Infers request/response schemas</li>
+<li>Updates <code>openapi.json</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Creates Scenario</strong> (if enabled)</p>
+<ul>
+<li>Basic scenario for the endpoint</li>
+<li>Includes example request/response</li>
+<li>Saved to <code>scenarios/</code></li>
+</ul>
+</li>
+</ol>
+<h3 id="3-response"><a class="header" href="#3-response">3. Response</a></h3>
+<p>The next request to the same endpoint gets the auto-generated mock:</p>
+<pre><code>GET /api/users/123 → 200 OK
+{
+  "id": "123",
+  "name": "John Doe",
+  "email": "john@example.com"
+}
+</code></pre>
+<h2 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h2>
+<h3 id="auto-create-on-404"><a class="header" href="#auto-create-on-404">Auto-Create on 404</a></h3>
+<pre><code class="language-yaml">runtime_daemon:
+  auto_create_on_404: true  # Create mocks automatically
+</code></pre>
+<h3 id="ai-generation"><a class="header" href="#ai-generation">AI Generation</a></h3>
+<pre><code class="language-yaml">runtime_daemon:
+  ai_generation: true  # Use AI for intelligent responses
+</code></pre>
+<p>When enabled, AI generates realistic responses based on:</p>
+<ul>
+<li>Endpoint path patterns</li>
+<li>Request body structure</li>
+<li>Domain context</li>
+<li>Existing mocks</li>
+</ul>
+<h3 id="type-generation"><a class="header" href="#type-generation">Type Generation</a></h3>
+<pre><code class="language-yaml">runtime_daemon:
+  generate_types: true
+  types_output_dir: "./generated/types"
+</code></pre>
+<p>Generates:</p>
+<ul>
+<li>TypeScript types</li>
+<li>JSON Schema</li>
+<li>Go types</li>
+<li>Rust types</li>
+</ul>
+<h3 id="client-stub-generation"><a class="header" href="#client-stub-generation">Client Stub Generation</a></h3>
+<pre><code class="language-yaml">runtime_daemon:
+  generate_client_stubs: true
+  clients_output_dir: "./generated/clients"
+  client_frameworks:
+    - react
+    - vue
+    - angular
+</code></pre>
+<h3 id="openapi-updates"><a class="header" href="#openapi-updates">OpenAPI Updates</a></h3>
+<pre><code class="language-yaml">runtime_daemon:
+  update_openapi: true
+  openapi_path: "./openapi.json"
+</code></pre>
+<p>Automatically updates OpenAPI spec with new endpoints.</p>
+<h3 id="scenario-creation"><a class="header" href="#scenario-creation">Scenario Creation</a></h3>
+<pre><code class="language-yaml">runtime_daemon:
+  create_scenario: true
+  scenarios_output_dir: "./scenarios"
+</code></pre>
+<p>Creates basic scenarios for auto-generated endpoints.</p>
+<h2 id="example-workflow"><a class="header" href="#example-workflow">Example Workflow</a></h2>
+<h3 id="1-start-development"><a class="header" href="#1-start-development">1. Start Development</a></h3>
+<pre><code class="language-bash"># Start MockForge with runtime daemon
+mockforge serve --runtime-daemon
+</code></pre>
+<h3 id="2-make-request"><a class="header" href="#2-make-request">2. Make Request</a></h3>
+<pre><code class="language-bash"># Frontend makes request to non-existent endpoint
+curl http://localhost:3000/api/products/123
+# → 404 Not Found
+</code></pre>
+<h3 id="3-auto-generation"><a class="header" href="#3-auto-generation">3. Auto-Generation</a></h3>
+<p>The daemon automatically:</p>
+<ul>
+<li>Creates mock for <code>/api/products/{id}</code></li>
+<li>Generates TypeScript types</li>
+<li>Creates React hook</li>
+<li>Updates OpenAPI spec</li>
+<li>Creates scenario</li>
+</ul>
+<h3 id="4-use-generated-code"><a class="header" href="#4-use-generated-code">4. Use Generated Code</a></h3>
+<pre><code class="language-typescript">// Generated React hook
+import { useProduct } from './generated/clients/react';
+
+function ProductPage({ id }) {
+  const { data, loading } = useProduct(id);
+  // ...
+}
+</code></pre>
+<h2 id="excluding-patterns"><a class="header" href="#excluding-patterns">Excluding Patterns</a></h2>
+<p>Exclude certain paths from auto-generation:</p>
+<pre><code class="language-yaml">runtime_daemon:
+  exclude_patterns:
+    - "/health"
+    - "/metrics"
+    - "/__mockforge/*"
+    - "/api/internal/*"
+</code></pre>
+<h2 id="workspace-integration"><a class="header" href="#workspace-integration">Workspace Integration</a></h2>
+<p>The daemon saves generated artifacts to your workspace:</p>
+<pre><code>workspace/
+├── mocks/
+│   └── auto-generated/
+│       └── api-products-{id}.yaml
+├── generated/
+│   ├── types/
+│   │   └── Product.ts
+│   └── clients/
+│       └── react/
+│           └── useProduct.ts
+├── scenarios/
+│   └── auto-products-{id}.yaml
+└── openapi.json  # Updated automatically
+</code></pre>
+<h2 id="ai-powered-generation"><a class="header" href="#ai-powered-generation">AI-Powered Generation</a></h2>
+<p>When AI generation is enabled, the daemon uses AI to create intelligent responses:</p>
+<h3 id="request-analysis"><a class="header" href="#request-analysis">Request Analysis</a></h3>
+<pre><code class="language-bash">POST /api/orders
+{
+  "product_id": "123",
+  "quantity": 2
+}
+</code></pre>
+<h3 id="ai-generated-response"><a class="header" href="#ai-generated-response">AI-Generated Response</a></h3>
+<pre><code class="language-json">{
+  "id": "order-456",
+  "product_id": "123",
+  "quantity": 2,
+  "status": "pending",
+  "total": 99.98,
+  "created_at": "2025-01-27T10:00:00Z"
+}
+</code></pre>
+<p>The AI infers:</p>
+<ul>
+<li>Order structure from request</li>
+<li>Realistic IDs and timestamps</li>
+<li>Calculated fields (total)</li>
+<li>Appropriate status values</li>
+</ul>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Start with AI Generation</strong>: Let AI create intelligent responses</li>
+<li><strong>Review Generated Mocks</strong>: Check auto-generated mocks for accuracy</li>
+<li><strong>Refine Over Time</strong>: Update mocks as you learn more about the API</li>
+<li><strong>Version Control</strong>: Commit generated artifacts to Git</li>
+<li><strong>Exclude Internal Endpoints</strong>: Don’t auto-generate for internal APIs</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="mocks-not-created"><a class="header" href="#mocks-not-created">Mocks Not Created</a></h3>
+<ul>
+<li>Check <code>auto_create_on_404</code> is enabled</li>
+<li>Verify endpoint isn’t in <code>exclude_patterns</code></li>
+<li>Check daemon is running: <code>mockforge serve --runtime-daemon</code></li>
+</ul>
+<h3 id="generated-code-issues"><a class="header" href="#generated-code-issues">Generated Code Issues</a></h3>
+<ul>
+<li>Review generated types for accuracy</li>
+<li>Update OpenAPI spec manually if needed</li>
+<li>Regenerate: <code>mockforge generate --from-openapi openapi.json</code></li>
+</ul>
+<h3 id="ai-generation-quality"><a class="header" href="#ai-generation-quality">AI Generation Quality</a></h3>
+<ul>
+<li>Provide more context in existing mocks</li>
+<li>Use domain-specific reality profiles</li>
+<li>Adjust AI model/temperature settings</li>
+</ul>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="forgeconnect-sdk.html">ForgeConnect SDK</a> - Browser integration</li>
+<li><a href="devtools-integration.html">DevTools Integration</a> - Browser DevTools</li>
+<li><a href="scenario-marketplace.html">Scenario Marketplace</a> - Sharing scenarios</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../user-guide/contracts/threat-modeling.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../user-guide/devx/mock-oriented-development.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../user-guide/contracts/threat-modeling.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../user-guide/devx/mock-oriented-development.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../../ace.js"></script>
+        <script src="../../mode-rust.js"></script>
+        <script src="../../editor.js"></script>
+        <script src="../../theme-dawn.js"></script>
+        <script src="../../theme-tomorrow_night.js"></script>
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

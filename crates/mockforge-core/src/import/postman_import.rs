@@ -10,8 +10,11 @@ use std::collections::HashMap;
 /// Postman collection structure
 #[derive(Debug, Deserialize)]
 pub struct PostmanCollection {
+    /// Collection metadata
     pub info: CollectionInfo,
+    /// Array of collection items (requests or folders)
     pub item: Vec<CollectionItem>,
+    /// Collection-level variables
     #[serde(default)]
     pub variable: Vec<Variable>,
 }
@@ -19,31 +22,43 @@ pub struct PostmanCollection {
 /// Collection metadata
 #[derive(Debug, Deserialize)]
 pub struct CollectionInfo {
+    /// Postman collection ID
     #[serde(rename = "_postman_id")]
     pub postman_id: Option<String>,
+    /// Collection name
     pub name: String,
+    /// Optional collection description
     pub description: Option<String>,
+    /// Postman schema URL
     pub schema: Option<String>,
 }
 
 /// Collection item (can be a request or a folder)
 #[derive(Debug, Deserialize)]
 pub struct CollectionItem {
+    /// Item name
     pub name: String,
+    /// Child items (for folders)
     #[serde(default)]
     pub item: Vec<CollectionItem>, // For folders
+    /// Request data (None if this is a folder)
     pub request: Option<PostmanRequest>,
 }
 
 /// Postman request structure
 #[derive(Debug, Deserialize)]
 pub struct PostmanRequest {
+    /// HTTP method (GET, POST, PUT, etc.)
     pub method: String,
+    /// Request headers
     #[serde(default)]
     pub header: Vec<Header>,
+    /// Request URL (can be string or structured)
     pub url: UrlOrString,
+    /// Optional request body
     #[serde(default)]
     pub body: Option<RequestBody>,
+    /// Optional authentication configuration
     pub auth: Option<Auth>,
 }
 
@@ -51,19 +66,27 @@ pub struct PostmanRequest {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum UrlOrString {
+    /// Simple string URL
     String(String),
+    /// Structured URL with components
     Structured(StructuredUrl),
 }
 
 /// Structured URL with host, path, query, etc.
 #[derive(Debug, Deserialize)]
 pub struct StructuredUrl {
+    /// Raw URL string
     pub raw: Option<String>,
+    /// URL protocol (http, https, etc.)
     pub protocol: Option<String>,
+    /// URL host parts
     pub host: Option<Vec<String>>,
+    /// URL path segments
     pub path: Option<Vec<StringOrVariable>>,
+    /// Query parameters
     #[serde(default)]
     pub query: Vec<QueryParam>,
+    /// URL variables
     #[serde(default)]
     pub variable: Vec<Variable>,
 }
@@ -72,61 +95,82 @@ pub struct StructuredUrl {
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum StringOrVariable {
+    /// Plain string value
     String(String),
+    /// Variable reference
     Variable(Variable),
 }
 
 /// Query parameter
 #[derive(Debug, Deserialize)]
 pub struct QueryParam {
+    /// Parameter key
     pub key: Option<String>,
+    /// Parameter value
     pub value: Option<String>,
+    /// Optional parameter description
     pub description: Option<String>,
+    /// Whether this parameter is disabled
     #[serde(default)]
     pub disabled: bool,
 }
 
-/// Header
+/// HTTP header entry
 #[derive(Debug, Deserialize)]
 pub struct Header {
+    /// Header name
     pub key: String,
+    /// Header value
     pub value: String,
+    /// Whether this header is disabled
     #[serde(default)]
     pub disabled: bool,
 }
 
-/// Request body
+/// Request body structure
 #[derive(Debug, Deserialize)]
 pub struct RequestBody {
+    /// Body mode (raw, urlencoded, formdata, etc.)
     pub mode: String,
+    /// Raw body content (for raw mode)
     pub raw: Option<String>,
+    /// URL-encoded form parameters
     pub urlencoded: Option<Vec<FormParam>>,
+    /// Form data parameters
     pub formdata: Option<Vec<FormParam>>,
 }
 
-/// Form parameter
+/// Form parameter entry
 #[derive(Debug, Deserialize)]
 pub struct FormParam {
+    /// Parameter key
     pub key: String,
+    /// Parameter value
     pub value: String,
+    /// Parameter type (text, file, etc.)
     #[serde(rename = "type")]
     pub param_type: Option<String>,
 }
 
-/// Authentication
+/// Authentication configuration
 #[derive(Debug, Deserialize)]
 pub struct Auth {
+    /// Authentication type (bearer, basic, etc.)
     #[serde(rename = "type")]
     pub auth_type: String,
+    /// Authentication configuration (type-specific)
     #[serde(flatten)]
     pub config: Value,
 }
 
-/// Variable
+/// Postman variable definition
 #[derive(Debug, Deserialize)]
 pub struct Variable {
+    /// Variable name
     pub key: String,
+    /// Variable value
     pub value: Option<String>,
+    /// Variable type (string, number, etc.)
     #[serde(rename = "type")]
     pub var_type: Option<String>,
 }
@@ -134,25 +178,36 @@ pub struct Variable {
 /// MockForge route structure for import
 #[derive(Debug, Serialize)]
 pub struct MockForgeRoute {
+    /// HTTP method
     pub method: String,
+    /// Request path
     pub path: String,
+    /// Request headers
     pub headers: HashMap<String, String>,
+    /// Optional request body
     pub body: Option<String>,
+    /// Mock response for this route
     pub response: MockForgeResponse,
 }
 
 /// MockForge response structure
 #[derive(Debug, Serialize)]
 pub struct MockForgeResponse {
+    /// HTTP status code
     pub status: u16,
+    /// Response headers
     pub headers: HashMap<String, String>,
+    /// Response body
     pub body: Value,
 }
 
-/// Import result
+/// Result of importing a Postman collection
 pub struct ImportResult {
+    /// Converted routes from the collection
     pub routes: Vec<MockForgeRoute>,
+    /// Extracted variables from the collection
     pub variables: HashMap<String, String>,
+    /// Warnings encountered during import
     pub warnings: Vec<String>,
 }
 

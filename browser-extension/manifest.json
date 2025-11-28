@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "ForgeConnect - MockForge Browser Extension",
+  "version": "0.1.0",
+  "description": "Create and manage MockForge mocks directly from your browser",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "webRequest",
+    "webRequestBlocking"
+  ],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content-script.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "devtools_page": "src/devtools/devtools.html",
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/injector/injector.js", "src/preview/mock-sw.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

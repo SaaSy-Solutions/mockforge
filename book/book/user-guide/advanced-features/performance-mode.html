@@ -1,0 +1,427 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Performance Mode - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/user-guide/advanced-features/performance-mode.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="performance-mode-load-simulation"><a class="header" href="#performance-mode-load-simulation">Performance Mode (Load Simulation)</a></h1>
+<p><strong>Pillars:</strong> [DevX]</p>
+<p>Performance Mode provides lightweight load simulation for running scenarios at N RPS, simulating bottlenecks, recording latencies, and observing how responses change under load. This is NOT true load testing—it’s realistic behavior simulation under stress testing conditions.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Performance Mode enables:</p>
+<ul>
+<li><strong>Run scenarios at n RPS</strong>: Control request rate</li>
+<li><strong>Simulate bottlenecks</strong>: Add artificial delays</li>
+<li><strong>Record latencies</strong>: Track response times</li>
+<li><strong>Observe behavior changes</strong>: See how responses change under load</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="start-performance-mode"><a class="header" href="#start-performance-mode">Start Performance Mode</a></h3>
+<pre><code class="language-bash"># Start performance mode
+mockforge performance start --rps 100
+
+# Start with bottlenecks
+mockforge performance start \
+  --rps 100 \
+  --bottleneck checkout:500ms \
+  --bottleneck payments:1000ms
+</code></pre>
+<h3 id="via-api"><a class="header" href="#via-api">Via API</a></h3>
+<pre><code class="language-bash"># Start performance mode
+POST /api/performance/start
+{
+  "initial_rps": 100,
+  "rps_profile": "constant",
+  "bottlenecks": [
+    {
+      "endpoint": "/api/checkout/*",
+      "delay_ms": 500
+    }
+  ]
+}
+</code></pre>
+<h2 id="rps-profiles"><a class="header" href="#rps-profiles">RPS Profiles</a></h2>
+<h3 id="constant-rps"><a class="header" href="#constant-rps">Constant RPS</a></h3>
+<p>Maintain constant requests per second:</p>
+<pre><code class="language-yaml">rps_profile:
+  type: constant
+  rps: 100
+</code></pre>
+<h3 id="ramp-profile"><a class="header" href="#ramp-profile">Ramp Profile</a></h3>
+<p>Gradually increase RPS:</p>
+<pre><code class="language-yaml">rps_profile:
+  type: ramp
+  start_rps: 10
+  end_rps: 100
+  duration_seconds: 60
+</code></pre>
+<h3 id="spike-profile"><a class="header" href="#spike-profile">Spike Profile</a></h3>
+<p>Sudden spike in RPS:</p>
+<pre><code class="language-yaml">rps_profile:
+  type: spike
+  base_rps: 50
+  spike_rps: 200
+  spike_duration_seconds: 10
+  spike_interval_seconds: 60
+</code></pre>
+<h2 id="bottleneck-simulation"><a class="header" href="#bottleneck-simulation">Bottleneck Simulation</a></h2>
+<h3 id="endpoint-bottlenecks"><a class="header" href="#endpoint-bottlenecks">Endpoint Bottlenecks</a></h3>
+<p>Add delays to specific endpoints:</p>
+<pre><code class="language-yaml">bottlenecks:
+  - endpoint: "/api/checkout/*"
+    delay_ms: 500
+    probability: 1.0  # Always delay
+  - endpoint: "/api/payments/*"
+    delay_ms: 1000
+    probability: 0.5  # 50% chance
+</code></pre>
+<h3 id="database-bottlenecks"><a class="header" href="#database-bottlenecks">Database Bottlenecks</a></h3>
+<p>Simulate database slowdowns:</p>
+<pre><code class="language-yaml">bottlenecks:
+  - type: database
+    delay_ms: 200
+    probability: 0.3
+</code></pre>
+<h3 id="network-bottlenecks"><a class="header" href="#network-bottlenecks">Network Bottlenecks</a></h3>
+<p>Simulate network conditions:</p>
+<pre><code class="language-yaml">bottlenecks:
+  - type: network
+    latency_ms: 100
+    packet_loss: 0.01
+</code></pre>
+<h2 id="latency-recording"><a class="header" href="#latency-recording">Latency Recording</a></h2>
+<h3 id="automatic-recording"><a class="header" href="#automatic-recording">Automatic Recording</a></h3>
+<p>Latencies are automatically recorded:</p>
+<pre><code class="language-json">{
+  "endpoint": "/api/users/{id}",
+  "method": "GET",
+  "latency_ms": 150,
+  "status_code": 200,
+  "timestamp": "2025-01-27T10:00:00Z"
+}
+</code></pre>
+<h3 id="latency-analysis"><a class="header" href="#latency-analysis">Latency Analysis</a></h3>
+<p>Analyze recorded latencies:</p>
+<pre><code class="language-bash"># Get latency statistics
+GET /api/performance/snapshot
+
+# Response:
+{
+  "stats": {
+    "mean_latency_ms": 150,
+    "p50_latency_ms": 140,
+    "p95_latency_ms": 250,
+    "p99_latency_ms": 400,
+    "max_latency_ms": 500
+  }
+}
+</code></pre>
+<h2 id="response-changes-under-load"><a class="header" href="#response-changes-under-load">Response Changes Under Load</a></h2>
+<h3 id="behavioral-economics-integration"><a class="header" href="#behavioral-economics-integration">Behavioral Economics Integration</a></h3>
+<p>Responses may change under load due to behavioral economics:</p>
+<pre><code class="language-yaml"># Under normal load
+GET /api/checkout → 200 OK, conversion: 90%
+
+# Under high load (latency &gt; 400ms)
+GET /api/checkout → 200 OK, conversion: 70%  # 20% drop
+</code></pre>
+<h3 id="error-rate-increases"><a class="header" href="#error-rate-increases">Error Rate Increases</a></h3>
+<p>Error rates may increase under load:</p>
+<pre><code class="language-yaml"># Normal load
+Error rate: 1%
+
+# High load
+Error rate: 5%  # Increased errors
+</code></pre>
+<h2 id="usage-examples"><a class="header" href="#usage-examples">Usage Examples</a></h2>
+<h3 id="example-1-constant-load"><a class="header" href="#example-1-constant-load">Example 1: Constant Load</a></h3>
+<pre><code class="language-bash"># Run at constant 100 RPS
+mockforge performance start --rps 100
+
+# Monitor
+GET /api/performance/snapshot
+</code></pre>
+<h3 id="example-2-ramp-load"><a class="header" href="#example-2-ramp-load">Example 2: Ramp Load</a></h3>
+<pre><code class="language-bash"># Ramp from 10 to 100 RPS over 60 seconds
+mockforge performance start \
+  --rps-profile ramp \
+  --start-rps 10 \
+  --end-rps 100 \
+  --duration 60
+</code></pre>
+<h3 id="example-3-with-bottlenecks"><a class="header" href="#example-3-with-bottlenecks">Example 3: With Bottlenecks</a></h3>
+<pre><code class="language-bash"># Run with checkout bottleneck
+mockforge performance start \
+  --rps 100 \
+  --bottleneck "/api/checkout/*:500ms"
+</code></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="performance-mode-config"><a class="header" href="#performance-mode-config">Performance Mode Config</a></h3>
+<pre><code class="language-yaml"># mockforge.yaml
+performance:
+  enabled: true
+  default_rps: 100
+  max_latency_samples: 10000
+  max_latency_age_seconds: 300
+</code></pre>
+<h3 id="rps-controller"><a class="header" href="#rps-controller">RPS Controller</a></h3>
+<pre><code class="language-yaml">performance:
+  rps_controller:
+    type: token_bucket
+    capacity: 1000
+    refill_rate: 100  # per second
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<ol>
+<li><strong>Start Low</strong>: Begin with low RPS and increase gradually</li>
+<li><strong>Monitor Latencies</strong>: Watch latency percentiles</li>
+<li><strong>Test Bottlenecks</strong>: Simulate realistic bottlenecks</li>
+<li><strong>Observe Behavior</strong>: Watch how responses change</li>
+<li><strong>Not True Load Testing</strong>: This is simulation, not production load testing</li>
+</ol>
+<h2 id="related-documentation"><a class="header" href="#related-documentation">Related Documentation</a></h2>
+<ul>
+<li><a href="behavioral-economics.html">Behavioral Economics Engine</a> - Behavior under load</li>
+<li><a href="chaos-lab.html">Chaos Lab</a> - Chaos engineering</li>
+<li><a href="reality-slider.html">Reality Slider</a> - Reality levels</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../user-guide/advanced-features/world-state-engine.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../user-guide/advanced-features/drift-learning.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../user-guide/advanced-features/world-state-engine.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../user-guide/advanced-features/drift-learning.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../../ace.js"></script>
+        <script src="../../mode-rust.js"></script>
+        <script src="../../editor.js"></script>
+        <script src="../../theme-dawn.js"></script>
+        <script src="../../theme-tomorrow_night.js"></script>
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

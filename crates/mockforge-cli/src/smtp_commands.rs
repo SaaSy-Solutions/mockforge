@@ -88,7 +88,7 @@ async fn handle_mailbox_list() -> Result<(), Box<dyn std::error::Error + Send + 
                     println!("📭 Mailbox is empty");
                 } else {
                     println!("📬 Found {} emails:", emails.len());
-                    println!("{:<5} {:<30} {:<50} {}", "ID", "From", "Subject", "Received");
+                    println!("{:<5} {:<30} {:<50} Received", "ID", "From", "Subject");
                     println!("{}", "-".repeat(100));
 
                     for email in emails {
@@ -303,7 +303,7 @@ async fn handle_mailbox_search(
                     println!("🔍 No emails found matching the criteria");
                 } else {
                     println!("🔍 Found {} emails:", emails.len());
-                    println!("{:<5} {:<30} {:<50} {}", "ID", "From", "Subject", "Received");
+                    println!("{:<5} {:<30} {:<50} Received", "ID", "From", "Subject");
                     println!("{}", "-".repeat(100));
 
                     for email in emails {
@@ -598,7 +598,7 @@ async fn handle_fixtures_list() -> Result<(), Box<dyn std::error::Error + Send +
                     println!("📋 No fixtures loaded");
                 } else {
                     println!("📋 Found {} fixtures:", fixtures.len());
-                    println!("{:<20} {:<50} {}", "Identifier", "Name", "Description");
+                    println!("{:<20} {:<50} Description", "Identifier", "Name");
                     println!("{}", "-".repeat(100));
 
                     for fixture in fixtures {

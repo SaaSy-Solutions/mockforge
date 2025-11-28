@@ -1,3 +1,8 @@
+//! Debug tests for WebSocket proxy functionality.
+//!
+//! These tests verify WebSocket proxy behavior including connection handling,
+//! message forwarding, and debugging capabilities.
+
 use futures_util::{SinkExt, StreamExt};
 use mockforge_core::ws_proxy::{WsProxyConfig, WsProxyHandler};
 use tokio_tungstenite::tungstenite::protocol::Message;

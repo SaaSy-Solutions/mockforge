@@ -1,3 +1,5 @@
+//! Pillars: [Contracts]
+//!
 //! JSON schema diff utilities for 422 responses.
 //!
 //! This module provides comprehensive schema validation diffing capabilities
@@ -7,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+/// Enhanced validation error with detailed schema information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationError {
     /// JSON path to the field with validation issue
@@ -15,14 +18,15 @@ pub struct ValidationError {
     pub expected: String,
     /// What was actually found in the request
     pub found: String,
-    /// Human-readable error message
+    /// Human-readable error message explaining the validation failure
     pub message: Option<String>,
-    /// Error classification for client handling
+    /// Error classification for client handling (e.g., "type_mismatch", "required_missing")
     pub error_type: String,
-    /// Additional context about the expected schema
+    /// Additional context about the expected schema constraints
     pub schema_info: Option<SchemaInfo>,
 }
 
+/// Detailed schema constraint information for validation errors
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaInfo {
     /// Expected data type
@@ -48,6 +52,13 @@ pub struct SchemaInfo {
 }
 
 impl ValidationError {
+    /// Create a new validation error
+    ///
+    /// # Arguments
+    /// * `path` - JSON path to the field with validation issue
+    /// * `expected` - Expected schema constraint or value type
+    /// * `found` - What was actually found in the request
+    /// * `error_type` - Error classification (e.g., "type_mismatch", "required_missing")
     pub fn new(path: String, expected: String, found: String, error_type: &str) -> Self {
         Self {
             path,
@@ -59,23 +70,31 @@ impl ValidationError {
         }
     }
 
+    /// Add a human-readable error message
     pub fn with_message(mut self, message: String) -> Self {
         self.message = Some(message);
         self
     }
 
+    /// Add detailed schema constraint information
     pub fn with_schema_info(mut self, schema_info: SchemaInfo) -> Self {
         self.schema_info = Some(schema_info);
         self
     }
 }
 
-// Keep the old FieldError for backward compatibility
+/// Legacy field error structure for backward compatibility
+///
+/// This struct is kept for compatibility but new code should use `ValidationError`.
 #[derive(Debug, Clone)]
 pub struct FieldError {
+    /// JSON path to the field with validation issue
     pub path: String,
+    /// Expected value type or format
     pub expected: String,
+    /// Actual value found
     pub found: String,
+    /// Optional error message
     pub message: Option<String>,
 }
 
@@ -90,6 +109,17 @@ impl From<ValidationError> for FieldError {
     }
 }
 
+/// Compute the difference between expected schema and actual JSON value
+///
+/// This function recursively walks through the expected schema structure and compares it
+/// with the actual value, identifying missing fields, type mismatches, and other validation issues.
+///
+/// # Arguments
+/// * `expected_schema` - Expected JSON schema or structure
+/// * `actual` - Actual JSON value to validate
+///
+/// # Returns
+/// Vector of field errors describing validation issues found
 pub fn diff(expected_schema: &Value, actual: &Value) -> Vec<FieldError> {
     let mut out = Vec::new();
     walk(expected_schema, actual, "", &mut out);
@@ -147,6 +177,13 @@ fn type_of(v: &Value) -> String {
     }
 }
 
+/// Convert validation errors to 422 JSON response format
+///
+/// # Arguments
+/// * `errors` - Vector of field validation errors
+///
+/// # Returns
+/// JSON value with error details formatted for HTTP 422 response
 pub fn to_422_json(errors: Vec<FieldError>) -> Value {
     json!({
         "error": "Schema validation failed",
@@ -334,6 +371,18 @@ fn validation_walk(expected: &Value, actual: &Value, path: &str, out: &mut Vec<V
 }
 
 /// Generate enhanced 422 error response with detailed schema information
+///
+/// This function creates a comprehensive validation error response that includes:
+/// - Detailed error information for each field
+/// - Schema constraints that were violated
+/// - Helpful tips for fixing validation issues
+/// - Timestamp for error tracking
+///
+/// # Arguments
+/// * `errors` - Vector of enhanced validation errors with schema context
+///
+/// # Returns
+/// JSON value formatted for HTTP 422 response with enhanced error details
 pub fn to_enhanced_422_json(errors: Vec<ValidationError>) -> Value {
     json!({
         "error": "Schema validation failed",

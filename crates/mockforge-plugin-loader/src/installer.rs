@@ -23,14 +23,18 @@ pub enum PluginSource {
     Local(PathBuf),
     /// HTTP/HTTPS URL
     Url {
+        /// URL to download the plugin from
         url: String,
+        /// Optional SHA-256 checksum for verification
         checksum: Option<String>,
     },
     /// Git repository
     Git(GitPluginSource),
     /// Plugin registry (future)
     Registry {
+        /// Plugin name in the registry
         name: String,
+        /// Optional version string (defaults to latest)
         version: Option<String>,
     },
 }

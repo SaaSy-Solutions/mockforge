@@ -1,0 +1,25 @@
+[package]
+name = "mockforge-route-chaos"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Send-safe route chaos injection (fault injection and latency) isolated from mockforge-core to avoid Send issues"
+
+[dependencies]
+mockforge-core = { path = "../mockforge-core" }
+axum = { workspace = true }
+async-trait = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

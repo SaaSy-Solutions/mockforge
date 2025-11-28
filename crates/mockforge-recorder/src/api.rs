@@ -8,6 +8,9 @@ use crate::{
     query::{execute_query, QueryFilter, QueryResult},
     recorder::Recorder,
     replay::ReplayEngine,
+    stub_mapping::{StubFormat, StubMappingConverter},
+    sync::{SyncConfig, SyncService, SyncStatus},
+    sync_snapshots::EndpointTimeline,
     test_generation::{LlmConfig, TestFormat, TestGenerationConfig, TestGenerator},
 };
 use axum::{
@@ -25,11 +28,18 @@ use tracing::{debug, error};
 #[derive(Clone)]
 pub struct ApiState {
     pub recorder: Arc<Recorder>,
+    pub sync_service: Option<Arc<SyncService>>,
 }
 
 /// Create the management API router
-pub fn create_api_router(recorder: Arc<Recorder>) -> Router {
-    let state = ApiState { recorder };
+pub fn create_api_router(
+    recorder: Arc<Recorder>,
+    sync_service: Option<Arc<SyncService>>,
+) -> Router {
+    let state = ApiState {
+        recorder,
+        sync_service,
+    };
 
     Router::new()
         // Query endpoints
@@ -61,6 +71,22 @@ pub fn create_api_router(recorder: Arc<Recorder>) -> Router {
         .route("/api/recorder/workflows", post(create_workflow))
         .route("/api/recorder/workflows/:id", get(get_workflow))
         .route("/api/recorder/workflows/:id/generate", post(generate_integration_test))
+
+        // Sync endpoints
+        .route("/api/recorder/sync/status", get(get_sync_status))
+        .route("/api/recorder/sync/config", get(get_sync_config))
+        .route("/api/recorder/sync/config", post(update_sync_config))
+        .route("/api/recorder/sync/now", post(sync_now))
+        .route("/api/recorder/sync/changes", get(get_sync_changes))
+
+        // Sync snapshot endpoints (Shadow Snapshot Mode)
+        .route("/api/recorder/sync/snapshots", get(list_snapshots))
+        .route("/api/recorder/sync/snapshots/:endpoint", get(get_endpoint_timeline))
+        .route("/api/recorder/sync/snapshots/cycle/:cycle_id", get(get_snapshots_by_cycle))
+
+        // Stub mapping conversion endpoints
+        .route("/api/recorder/convert/:id", post(convert_to_stub))
+        .route("/api/recorder/convert/batch", post(convert_batch))
 
         .with_state(state)
 }
@@ -552,5 +578,300 @@ async fn generate_integration_test(
         "format": request.format,
         "test_code": test_code,
         "message": "Integration test generated successfully"
+    })))
+}
+
+// Sync endpoints
+
+/// Get sync status
+async fn get_sync_status(State(state): State<ApiState>) -> Result<Json<SyncStatus>, ApiError> {
+    let sync_service = state
+        .sync_service
+        .ok_or_else(|| ApiError::NotFound("Sync service not available".to_string()))?;
+
+    let status = sync_service.get_status().await;
+    Ok(Json(status))
+}
+
+/// Get sync configuration
+async fn get_sync_config(State(state): State<ApiState>) -> Result<Json<SyncConfig>, ApiError> {
+    let sync_service = state
+        .sync_service
+        .ok_or_else(|| ApiError::NotFound("Sync service not available".to_string()))?;
+
+    let config = sync_service.get_config().await;
+    Ok(Json(config))
+}
+
+/// Update sync configuration
+async fn update_sync_config(
+    State(state): State<ApiState>,
+    Json(config): Json<SyncConfig>,
+) -> Result<Json<SyncConfig>, ApiError> {
+    let sync_service = state
+        .sync_service
+        .ok_or_else(|| ApiError::NotFound("Sync service not available".to_string()))?;
+
+    sync_service.update_config(config.clone()).await;
+    Ok(Json(config))
+}
+
+/// Trigger sync now
+async fn sync_now(State(state): State<ApiState>) -> Result<Json<serde_json::Value>, ApiError> {
+    let sync_service = state
+        .sync_service
+        .ok_or_else(|| ApiError::NotFound("Sync service not available".to_string()))?;
+
+    match sync_service.sync_now().await {
+        Ok((changes, updated)) => Ok(Json(serde_json::json!({
+            "success": true,
+            "changes_detected": changes.len(),
+            "fixtures_updated": updated,
+            "changes": changes,
+            "message": format!("Sync complete: {} changes detected, {} fixtures updated", changes.len(), updated)
+        }))),
+        Err(e) => Err(ApiError::Recorder(e)),
+    }
+}
+
+/// Get sync changes (from last sync)
+async fn get_sync_changes(
+    State(state): State<ApiState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let sync_service = state
+        .sync_service
+        .ok_or_else(|| ApiError::NotFound("Sync service not available".to_string()))?;
+
+    let status = sync_service.get_status().await;
+
+    Ok(Json(serde_json::json!({
+        "last_sync": status.last_sync,
+        "last_changes_detected": status.last_changes_detected,
+        "last_fixtures_updated": status.last_fixtures_updated,
+        "last_error": status.last_error,
+        "total_syncs": status.total_syncs,
+        "is_running": status.is_running,
+    })))
+}
+
+/// Convert a single recording to stub mapping
+#[derive(Debug, Deserialize)]
+struct ConvertRequest {
+    format: Option<String>, // "yaml" or "json"
+    detect_dynamic_values: Option<bool>,
+}
+
+async fn convert_to_stub(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(req): Json<ConvertRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let exchange = state
+        .recorder
+        .database()
+        .get_exchange(&id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("Request {} not found", id)))?;
+
+    let detect_dynamic = req.detect_dynamic_values.unwrap_or(true);
+    let converter = StubMappingConverter::new(detect_dynamic);
+    let stub = converter.convert(&exchange)?;
+
+    let format = match req.format.as_deref() {
+        Some("json") => StubFormat::Json,
+        Some("yaml") | None => StubFormat::Yaml,
+        _ => StubFormat::Yaml,
+    };
+
+    let content = converter.to_string(&stub, format)?;
+
+    Ok(Json(serde_json::json!({
+        "request_id": id,
+        "format": match format {
+            StubFormat::Yaml => "yaml",
+            StubFormat::Json => "json",
+        },
+        "stub": stub,
+        "content": content,
+    })))
+}
+
+/// Convert multiple recordings to stub mappings
+#[derive(Debug, Deserialize)]
+struct BatchConvertRequest {
+    request_ids: Vec<String>,
+    format: Option<String>,
+    detect_dynamic_values: Option<bool>,
+    deduplicate: Option<bool>,
+}
+
+async fn convert_batch(
+    State(state): State<ApiState>,
+    Json(req): Json<BatchConvertRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let detect_dynamic = req.detect_dynamic_values.unwrap_or(true);
+    let converter = StubMappingConverter::new(detect_dynamic);
+
+    let format = match req.format.as_deref() {
+        Some("json") => StubFormat::Json,
+        Some("yaml") | None => StubFormat::Yaml,
+        _ => StubFormat::Yaml,
+    };
+
+    let mut stubs = Vec::new();
+    let mut errors = Vec::new();
+
+    for request_id in &req.request_ids {
+        match state.recorder.database().get_exchange(request_id).await {
+            Ok(Some(exchange)) => match converter.convert(&exchange) {
+                Ok(stub) => {
+                    let content = converter.to_string(&stub, format)?;
+                    stubs.push(serde_json::json!({
+                        "request_id": request_id,
+                        "stub": stub,
+                        "content": content,
+                    }));
+                }
+                Err(e) => {
+                    errors.push(format!("Failed to convert {}: {}", request_id, e));
+                }
+            },
+            Ok(None) => {
+                errors.push(format!("Request {} not found", request_id));
+            }
+            Err(e) => {
+                errors.push(format!("Database error for {}: {}", request_id, e));
+            }
+        }
+    }
+
+    // Deduplicate if requested
+    if req.deduplicate.unwrap_or(false) {
+        // Simple deduplication based on identifier
+        let mut seen = std::collections::HashSet::new();
+        stubs.retain(|stub| {
+            if let Some(id) = stub.get("stub").and_then(|s| s.get("identifier")) {
+                if let Some(id_str) = id.as_str() {
+                    return seen.insert(id_str.to_string());
+                }
+            }
+            true
+        });
+    }
+
+    Ok(Json(serde_json::json!({
+        "total": req.request_ids.len(),
+        "converted": stubs.len(),
+        "errors": errors.len(),
+        "stubs": stubs,
+        "errors_list": errors,
+    })))
+}
+
+/// List all snapshots
+#[derive(Debug, Deserialize)]
+struct SnapshotListParams {
+    limit: Option<i32>,
+    offset: Option<i32>,
+}
+
+async fn list_snapshots(
+    State(state): State<ApiState>,
+    Query(params): Query<SnapshotListParams>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let limit = params.limit.unwrap_or(100);
+    let database = state.recorder.database();
+
+    // Get all unique endpoints to list snapshots
+    // For simplicity, we'll get snapshots for all endpoints
+    // In a real implementation, you might want to paginate differently
+    let snapshots = database.get_snapshots_for_endpoint("", None, Some(limit)).await?;
+
+    Ok(Json(serde_json::json!({
+        "snapshots": snapshots,
+        "total": snapshots.len(),
+    })))
+}
+
+/// Get timeline for a specific endpoint
+#[derive(Debug, Deserialize)]
+struct TimelineParams {
+    method: Option<String>,
+    limit: Option<i32>,
+}
+
+async fn get_endpoint_timeline(
+    State(state): State<ApiState>,
+    Path(endpoint): Path<String>,
+    Query(params): Query<TimelineParams>,
+) -> Result<Json<EndpointTimeline>, ApiError> {
+    let database = state.recorder.database();
+    let limit = params.limit.unwrap_or(100);
+
+    // Axum automatically URL-decodes path parameters
+    let snapshots = database
+        .get_snapshots_for_endpoint(&endpoint, params.method.as_deref(), Some(limit))
+        .await?;
+
+    // Build timeline data
+    let mut response_time_trends = Vec::new();
+    let mut status_code_history = Vec::new();
+    let mut error_patterns = std::collections::HashMap::new();
+
+    for snapshot in &snapshots {
+        response_time_trends.push((
+            snapshot.timestamp,
+            snapshot.response_time_after.or(snapshot.response_time_before),
+        ));
+        status_code_history.push((snapshot.timestamp, snapshot.after.status_code));
+
+        // Track error patterns
+        if snapshot.after.status_code >= 400 {
+            let key = format!("{}", snapshot.after.status_code);
+            let pattern =
+                error_patterns
+                    .entry(key)
+                    .or_insert_with(|| crate::sync_snapshots::ErrorPattern {
+                        status_code: snapshot.after.status_code,
+                        message_pattern: None,
+                        occurrences: 0,
+                        first_seen: snapshot.timestamp,
+                        last_seen: snapshot.timestamp,
+                    });
+            pattern.occurrences += 1;
+            if snapshot.timestamp < pattern.first_seen {
+                pattern.first_seen = snapshot.timestamp;
+            }
+            if snapshot.timestamp > pattern.last_seen {
+                pattern.last_seen = snapshot.timestamp;
+            }
+        }
+    }
+
+    let timeline = EndpointTimeline {
+        endpoint,
+        method: params.method.unwrap_or_else(|| "ALL".to_string()),
+        snapshots,
+        response_time_trends,
+        status_code_history,
+        error_patterns: error_patterns.into_values().collect(),
+    };
+
+    Ok(Json(timeline))
+}
+
+/// Get snapshots by sync cycle ID
+async fn get_snapshots_by_cycle(
+    State(state): State<ApiState>,
+    Path(cycle_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let database = state.recorder.database();
+
+    let snapshots = database.get_snapshots_by_cycle(&cycle_id).await?;
+
+    Ok(Json(serde_json::json!({
+        "sync_cycle_id": cycle_id,
+        "snapshots": snapshots,
+        "total": snapshots.len(),
     })))
 }

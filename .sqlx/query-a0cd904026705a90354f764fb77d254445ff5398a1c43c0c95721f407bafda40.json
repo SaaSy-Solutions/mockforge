@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO workspaces (id, name, description, owner_id, config, version, created_at, updated_at, is_archived)\n            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "a0cd904026705a90354f764fb77d254445ff5398a1c43c0c95721f407bafda40"
+}

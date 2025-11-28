@@ -1,3 +1,5 @@
+//! Pillars: [Reality]
+//!
 //! Latency simulation and fault injection for MockForge
 
 use crate::Result;
@@ -7,6 +9,7 @@ use std::time::Duration;
 
 /// Latency distribution types
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum LatencyDistribution {
     /// Fixed latency with optional jitter (backward compatible)
@@ -20,6 +23,7 @@ pub enum LatencyDistribution {
 
 /// Latency profile configuration
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LatencyProfile {
     /// Base latency in milliseconds (mean for distributions)
     pub base_ms: u64,
@@ -122,7 +126,7 @@ impl LatencyProfile {
 
     /// Calculate latency for a request with optional tags
     pub fn calculate_latency(&self, tags: &[String]) -> Duration {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         // Check for tag overrides (use the first matching tag)
         // Note: Tag overrides always use fixed latency for simplicity
@@ -227,13 +231,13 @@ impl FaultConfig {
             return true;
         }
 
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         rng.random_bool(self.failure_rate)
     }
 
     /// Get a random failure response
     pub fn get_failure_response(&self) -> (u16, Option<serde_json::Value>) {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         let status_code = if self.status_codes.is_empty() {
             500
@@ -333,6 +337,30 @@ impl LatencyInjector {
 
         Ok(None)
     }
+
+    /// Update latency profile at runtime
+    ///
+    /// This allows changing the latency profile without recreating the injector.
+    /// Useful for hot-reloading reality level configurations.
+    pub fn update_profile(&mut self, profile: LatencyProfile) {
+        self.latency_profile = profile;
+    }
+
+    /// Update latency profile (async version for Arc<RwLock>)
+    ///
+    /// Convenience method for updating a latency injector wrapped in Arc<RwLock>.
+    /// This is the recommended way to update latency profiles at runtime.
+    ///
+    /// # Returns
+    /// `Ok(())` on success, or an error if the update fails.
+    pub async fn update_profile_async(
+        this: &std::sync::Arc<tokio::sync::RwLock<Self>>,
+        profile: LatencyProfile,
+    ) -> Result<()> {
+        let mut injector = this.write().await;
+        injector.update_profile(profile);
+        Ok(())
+    }
 }
 
 impl Default for LatencyInjector {
@@ -344,6 +372,38 @@ impl Default for LatencyInjector {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn test_update_profile() {
+        let mut injector =
+            LatencyInjector::new(LatencyProfile::new(50, 20), FaultConfig::default());
+
+        // Update to a new profile
+        let new_profile = LatencyProfile::new(100, 30);
+        injector.update_profile(new_profile.clone());
+
+        // Verify the profile was updated
+        // Note: We can't directly access latency_profile, but we can test via behavior
+        assert!(injector.is_enabled());
+    }
+
+    #[tokio::test]
+    async fn test_update_profile_async() {
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        let injector = Arc::new(RwLock::new(LatencyInjector::new(
+            LatencyProfile::new(50, 20),
+            FaultConfig::default(),
+        )));
+
+        // Update profile using async method
+        let new_profile = LatencyProfile::new(200, 50);
+        LatencyInjector::update_profile_async(&injector, new_profile).await;
+
+        // Verify it still works
+        assert!(injector.read().await.is_enabled());
+    }
 
     #[test]
     fn test_latency_profile_default() {

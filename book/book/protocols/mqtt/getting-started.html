@@ -1,0 +1,471 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>MQTT - MockForge Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive mocking framework for APIs, gRPC, and WebSockets">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../../custom.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">MockForge Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/SaaSy-Solutions/mockforge/edit/main/src/protocols/mqtt/getting-started.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="getting-started-with-mqtt"><a class="header" href="#getting-started-with-mqtt">Getting Started with MQTT</a></h1>
+<p>MockForge includes a fully functional MQTT (Message Queuing Telemetry Transport) broker for testing IoT and pub/sub workflows in your applications. This guide will help you get started quickly.</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="1-enable-mqtt-in-configuration"><a class="header" href="#1-enable-mqtt-in-configuration">1. Enable MQTT in Configuration</a></h3>
+<p>Create a configuration file or modify your existing <code>config.yaml</code>:</p>
+<pre><code class="language-yaml">mqtt:
+  enabled: true
+  port: 1883
+  host: "0.0.0.0"
+  max_connections: 1000
+  max_packet_size: 1048576  # 1MB
+  keep_alive_secs: 60
+</code></pre>
+<h3 id="2-start-the-server"><a class="header" href="#2-start-the-server">2. Start the Server</a></h3>
+<pre><code class="language-bash">mockforge serve --config config.yaml
+</code></pre>
+<p>You should see:</p>
+<pre><code>📡 MQTT broker listening on localhost:1883
+</code></pre>
+<h3 id="3-connect-and-publish-a-test-message"><a class="header" href="#3-connect-and-publish-a-test-message">3. Connect and Publish a Test Message</a></h3>
+<p>Using the <code>mosquitto</code> command-line tools:</p>
+<pre><code class="language-bash"># Install mosquitto clients (Ubuntu/Debian)
+sudo apt install mosquitto-clients
+
+# Or on macOS
+brew install mosquitto
+
+# Publish a test message
+mosquitto_pub -h localhost -p 1883 -t "sensors/temperature" -m "25.5" -q 1
+
+# Subscribe to receive messages
+mosquitto_sub -h localhost -p 1883 -t "sensors/temperature" -q 1
+</code></pre>
+<h3 id="4-verify-message-handling"><a class="header" href="#4-verify-message-handling">4. Verify Message Handling</a></h3>
+<p>Messages are processed according to your fixtures configuration. Check server logs for routing information and fixture matching.</p>
+<h2 id="using-command-line-tools"><a class="header" href="#using-command-line-tools">Using Command-Line Tools</a></h2>
+<h3 id="mosquitto_pub"><a class="header" href="#mosquitto_pub">mosquitto_pub</a></h3>
+<p>Publish messages to topics:</p>
+<pre><code class="language-bash"># Simple publish
+mosquitto_pub -h localhost -p 1883 -t "sensors/temp/room1" -m "23.5"
+
+# With QoS 1 (at least once delivery)
+mosquitto_pub -h localhost -p 1883 -t "devices/status" -m "online" -q 1
+
+# With retained message
+mosquitto_pub -h localhost -p 1883 -t "config/max_temp" -m "30.0" -r
+
+# JSON payload
+mosquitto_pub -h localhost -p 1883 -t "sensors/data" -m '{"temperature": 22.1, "humidity": 65}'
+</code></pre>
+<h3 id="mosquitto_sub"><a class="header" href="#mosquitto_sub">mosquitto_sub</a></h3>
+<p>Subscribe to topics:</p>
+<pre><code class="language-bash"># Subscribe to specific topic
+mosquitto_sub -h localhost -p 1883 -t "sensors/temp/room1"
+
+# Subscribe with wildcards
+mosquitto_sub -h localhost -p 1883 -t "sensors/temp/+"
+mosquitto_sub -h localhost -p 1883 -t "devices/#"
+
+# Subscribe to all topics (for debugging)
+mosquitto_sub -h localhost -p 1883 -t "#"
+</code></pre>
+<h3 id="mqtt-cli-commands"><a class="header" href="#mqtt-cli-commands">MQTT CLI Commands</a></h3>
+<p>MockForge provides MQTT-specific CLI commands:</p>
+<pre><code class="language-bash"># List active topics
+mockforge mqtt topics
+
+# List connected clients
+mockforge mqtt clients
+
+# Publish a message
+mockforge mqtt publish sensors/temperature 25.5 --qos 1
+
+# Subscribe to topics
+mockforge mqtt subscribe "sensors/#" --qos 0
+</code></pre>
+<h2 id="supported-mqtt-features"><a class="header" href="#supported-mqtt-features">Supported MQTT Features</a></h2>
+<p>MockForge MQTT broker implements MQTT 3.1.1 and 5.0 specifications with the following features:</p>
+<h3 id="quality-of-service-qos-levels"><a class="header" href="#quality-of-service-qos-levels">Quality of Service (QoS) Levels</a></h3>
+<ul>
+<li><strong>QoS 0</strong> - At most once delivery (fire and forget)</li>
+<li><strong>QoS 1</strong> - At least once delivery (acknowledged delivery)</li>
+<li><strong>QoS 2</strong> - Exactly once delivery (assured delivery)</li>
+</ul>
+<h3 id="topic-management"><a class="header" href="#topic-management">Topic Management</a></h3>
+<ul>
+<li><strong>Single-level wildcards</strong> (<code>+</code>) - Match one topic level</li>
+<li><strong>Multi-level wildcards</strong> (<code>#</code>) - Match multiple topic levels</li>
+<li><strong>Retained messages</strong> - Store last message per topic</li>
+<li><strong>Clean sessions</strong> - Persistent vs ephemeral subscriptions</li>
+</ul>
+<h3 id="connection-management"><a class="header" href="#connection-management">Connection Management</a></h3>
+<ul>
+<li><strong>Keep-alive handling</strong> - Automatic client timeout</li>
+<li><strong>Will messages</strong> - Last-will-and-testament</li>
+<li><strong>Session persistence</strong> - Restore subscriptions on reconnect</li>
+</ul>
+<h2 id="basic-configuration-options"><a class="header" href="#basic-configuration-options">Basic Configuration Options</a></h2>
+<pre><code class="language-yaml">mqtt:
+  enabled: true              # Enable/disable MQTT broker
+  port: 1883                 # Port (1883 for MQTT, 8883 for MQTT over TLS)
+  host: "0.0.0.0"            # Bind address
+  max_connections: 1000      # Maximum concurrent connections
+  max_packet_size: 1048576   # Maximum packet size (1MB)
+  keep_alive_secs: 60        # Default keep-alive timeout
+
+  # Advanced options
+  max_inflight_messages: 20  # Maximum QoS 1/2 messages in flight
+  max_queued_messages: 100   # Maximum queued messages per client
+</code></pre>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
+<p>Override configuration with environment variables:</p>
+<pre><code class="language-bash">export MOCKFORGE_MQTT_ENABLED=true
+export MOCKFORGE_MQTT_PORT=1883
+export MOCKFORGE_MQTT_HOST=0.0.0.0
+export MOCKFORGE_MQTT_MAX_CONNECTIONS=1000
+
+mockforge serve
+</code></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li><a href="./configuration.html">Configuration Reference</a> - Detailed configuration options</li>
+<li><a href="./fixtures.html">Fixtures</a> - Create MQTT scenarios and mock responses</li>
+<li><a href="./examples.html">Examples</a> - Real-world usage examples</li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="connection-refused"><a class="header" href="#connection-refused">Connection Refused</a></h3>
+<p><strong>Problem</strong>: Cannot connect to MQTT broker</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Verify MQTT is enabled: <code>mqtt.enabled: true</code></li>
+<li>Check the port isn’t in use: <code>lsof -i :1883</code></li>
+<li>Ensure server is running: Look for “MQTT broker listening” in logs</li>
+</ol>
+<h3 id="messages-not-received"><a class="header" href="#messages-not-received">Messages Not Received</a></h3>
+<p><strong>Problem</strong>: Messages published but not received by subscribers</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Check topic matching patterns</li>
+<li>Verify QoS levels are compatible</li>
+<li>Check for retained message conflicts</li>
+<li>Review server logs for routing information</li>
+</ol>
+<h3 id="wildcard-issues"><a class="header" href="#wildcard-issues">Wildcard Issues</a></h3>
+<p><strong>Problem</strong>: Wildcard subscriptions not working as expected</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li><code>+</code> matches exactly one level: <code>sensors/+/temperature</code></li>
+<li><code>#</code> matches multiple levels: <code>devices/#</code></li>
+<li>Wildcards only work in subscriptions, not publications</li>
+</ol>
+<h2 id="common-use-cases"><a class="header" href="#common-use-cases">Common Use Cases</a></h2>
+<h3 id="iot-device-simulation"><a class="header" href="#iot-device-simulation">IoT Device Simulation</a></h3>
+<pre><code class="language-python"># Simulate multiple IoT sensors
+import paho.mqtt.client as mqtt
+import time
+import random
+
+def simulate_sensor(sensor_id, topic_prefix):
+    client = mqtt.Client(f"sensor_{sensor_id}")
+    client.connect("localhost", 1883, 60)
+
+    while True:
+        temperature = 20 + random.uniform(-5, 5)
+        payload = f'{{"sensor_id": "{sensor_id}", "temperature": {temperature:.1f}}}'
+
+        client.publish(f"{topic_prefix}/temperature", payload, qos=1)
+        time.sleep(5)
+
+# Start multiple sensors
+for i in range(3):
+    simulate_sensor(f"sensor_{i}", f"sensors/room{i}")
+</code></pre>
+<h3 id="testing-mqtt-applications"><a class="header" href="#testing-mqtt-applications">Testing MQTT Applications</a></h3>
+<pre><code class="language-javascript">// In your test suite (Node.js with mqtt.js)
+const mqtt = require('mqtt');
+
+describe('Temperature Monitoring', () =&gt; {
+  let client;
+
+  beforeAll(() =&gt; {
+    client = mqtt.connect('mqtt://localhost:1883');
+  });
+
+  afterAll(() =&gt; {
+    client.end();
+  });
+
+  test('receives temperature updates', (done) =&gt; {
+    client.subscribe('sensors/temperature/+', { qos: 1 });
+
+    client.on('message', (topic, message) =&gt; {
+      const data = JSON.parse(message.toString());
+      expect(data).toHaveProperty('sensor_id');
+      expect(data).toHaveProperty('temperature');
+      expect(data.temperature).toBeGreaterThan(-50);
+      expect(data.temperature).toBeLessThan(100);
+      done();
+    });
+
+    // Trigger temperature reading in your app
+    // Your app should publish to sensors/temperature/+
+  });
+});
+</code></pre>
+<h3 id="cicd-integration"><a class="header" href="#cicd-integration">CI/CD Integration</a></h3>
+<pre><code class="language-yaml"># .github/workflows/test.yml
+- name: Start MockForge MQTT
+  run: |
+    mockforge serve --mqtt --mqtt-port 1883 &amp;
+    sleep 2
+
+- name: Run MQTT tests
+  env:
+    MQTT_HOST: localhost
+    MQTT_PORT: 1883
+  run: npm test
+</code></pre>
+<h2 id="whats-next"><a class="header" href="#whats-next">What’s Next?</a></h2>
+<p>Now that you have a basic MQTT broker running, explore:</p>
+<ol>
+<li><strong><a href="./fixtures.html">Fixtures</a></strong> - Define MQTT message patterns and mock responses</li>
+<li><strong><a href="./configuration.html">Configuration</a></strong> - Fine-tune broker behavior</li>
+<li><strong><a href="./examples.html">Examples</a></strong> - See real-world implementations</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../tutorials/add-custom-plugin.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../protocols/mqtt/configuration.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../tutorials/add-custom-plugin.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../protocols/mqtt/configuration.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+        <script>
+            window.playground_line_numbers = true;
+        </script>
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../../ace.js"></script>
+        <script src="../../mode-rust.js"></script>
+        <script src="../../editor.js"></script>
+        <script src="../../theme-dawn.js"></script>
+        <script src="../../theme-tomorrow_night.js"></script>
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../../custom.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

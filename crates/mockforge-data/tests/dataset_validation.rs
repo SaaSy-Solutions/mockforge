@@ -1,3 +1,8 @@
+//! Tests for dataset validation functionality.
+//!
+//! These tests verify that datasets are correctly validated against their
+//! schema definitions and that field constraints are properly enforced.
+
 use mockforge_data::{Dataset, FieldDefinition, SchemaDefinition};
 use serde_json::json;
 

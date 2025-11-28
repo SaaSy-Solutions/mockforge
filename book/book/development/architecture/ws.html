@@ -183,6 +183,385 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="websocket-crate"><a class="header" href="#websocket-crate">WebSocket Crate</a></h1>
+<p>The <code>mockforge-ws</code> crate provides comprehensive WebSocket protocol support for MockForge, featuring replay capabilities, proxy functionality, and AI-powered event generation. It enables realistic WebSocket interaction simulation for testing and development.</p>
+<h2 id="architecture-overview"><a class="header" href="#architecture-overview">Architecture Overview</a></h2>
+<pre><code class="language-mermaid">graph TD
+    A[WebSocket Server] --&gt; B[Connection Handler]
+    B --&gt; C{Operation Mode}
+    C --&gt; D[Replay Mode]
+    C --&gt; E[Proxy Mode]
+    C --&gt; F[Interactive Mode]
+    C --&gt; G[AI Event Mode]
+
+    D --&gt; H[Replay File Parser]
+    H --&gt; I[JSONL Processor]
+    I --&gt; J[Template Expansion]
+
+    E --&gt; K[Proxy Handler]
+    K --&gt; L[Upstream Connection]
+    L --&gt; M[Message Forwarding]
+
+    F --&gt; N[Message Router]
+    N --&gt; O[Pattern Matching]
+    O --&gt; P[Response Generation]
+
+    G --&gt; Q[AI Event Generator]
+    Q --&gt; R[LLM Integration]
+    R --&gt; S[Event Stream]
+</code></pre>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="connection-management"><a class="header" href="#connection-management">Connection Management</a></h3>
+<h4 id="websocket-router"><a class="header" href="#websocket-router">WebSocket Router</a></h4>
+<p>The crate provides multiple router configurations for different use cases:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Basic WebSocket router
+let app = router();
+
+// With latency simulation
+let latency_injector = LatencyInjector::new(profile, Default::default());
+let app = router_with_latency(latency_injector);
+
+// With proxy support
+let proxy_handler = WsProxyHandler::new(proxy_config);
+let app = router_with_proxy(proxy_handler);
+<span class="boring">}</span></code></pre></pre>
+<h4 id="connection-lifecycle"><a class="header" href="#connection-lifecycle">Connection Lifecycle</a></h4>
+<ul>
+<li><strong>Establishment</strong>: Connection tracking and metrics collection</li>
+<li><strong>Message Handling</strong>: Bidirectional message processing</li>
+<li><strong>Error Handling</strong>: Graceful error recovery and logging</li>
+<li><strong>Termination</strong>: Connection cleanup and statistics recording</li>
+</ul>
+<h3 id="operational-modes"><a class="header" href="#operational-modes">Operational Modes</a></h3>
+<h4 id="1-replay-mode"><a class="header" href="#1-replay-mode">1. Replay Mode</a></h4>
+<p>Scripted message playback from JSONL files:</p>
+<pre><code class="language-json">{"ts":0,"dir":"out","text":"HELLO {{uuid}}","waitFor":"^CLIENT_READY$"}
+{"ts":10,"dir":"out","text":"{\"type\":\"welcome\",\"sessionId\":\"{{uuid}}\"}"}
+{"ts":20,"dir":"out","text":"{\"data\":{{randInt 1 100}}}","waitFor":"^ACK$"}
+</code></pre>
+<p><strong>Features:</strong></p>
+<ul>
+<li>Timestamp-based message sequencing</li>
+<li>Template expansion (<code>{{uuid}}</code>, <code>{{now}}</code>, <code>{{randInt min max}}</code>)</li>
+<li>Conditional waiting with regex/JSONPath patterns</li>
+<li>Deterministic replay for testing</li>
+</ul>
+<h4 id="2-proxy-mode"><a class="header" href="#2-proxy-mode">2. Proxy Mode</a></h4>
+<p>Forward messages to upstream WebSocket servers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let proxy_config = WsProxyConfig {
+    upstream_url: "wss://api.example.com/ws".to_string(),
+    should_proxy: true,
+    message_transform: Some(transform_fn),
+};
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Features:</strong></p>
+<ul>
+<li>Transparent message forwarding</li>
+<li>Optional message transformation</li>
+<li>Connection pooling and reuse</li>
+<li>Error handling and fallback</li>
+</ul>
+<h4 id="3-interactive-mode"><a class="header" href="#3-interactive-mode">3. Interactive Mode</a></h4>
+<p>Dynamic responses based on client messages:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Echo mode (default)
+while let Some(msg) = socket.recv().await {
+    if let Ok(Message::Text(text)) = msg {
+        let response = format!("echo: {}", text);
+        socket.send(Message::Text(response.into())).await?;
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Features:</strong></p>
+<ul>
+<li>Pattern-based response matching</li>
+<li>JSONPath query support</li>
+<li>State-aware conversations</li>
+<li>Custom response logic</li>
+</ul>
+<h4 id="4-ai-event-mode"><a class="header" href="#4-ai-event-mode">4. AI Event Mode</a></h4>
+<p>LLM-powered event stream generation:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let ai_config = WebSocketAiConfig {
+    enabled: true,
+    narrative: "Simulate 5 minutes of live stock market trading".to_string(),
+    event_count: 20,
+    replay: Some(ReplayAugmentationConfig {
+        provider: "openai".to_string(),
+        model: "gpt-3.5-turbo".to_string(),
+        ..Default::default()
+    }),
+};
+
+let generator = AiEventGenerator::new(ai_config);
+generator.stream_events(socket, Some(20)).await;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="message-processing"><a class="header" href="#message-processing">Message Processing</a></h3>
+<h4 id="template-expansion"><a class="header" href="#template-expansion">Template Expansion</a></h4>
+<p>Rich templating system for dynamic content:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// UUID generation
+"session_{{uuid}}" → "session_550e8400-e29b-41d4-a716-446655440000"
+
+// Timestamp manipulation
+"{{now}}" → "2024-01-15T10:30:00Z"
+"{{now+1h}}" → "2024-01-15T11:30:00Z"
+
+// Random values
+"{{randInt 1 100}}" → "42"
+<span class="boring">}</span></code></pre></pre>
+<h4 id="jsonpath-matching"><a class="header" href="#jsonpath-matching">JSONPath Matching</a></h4>
+<p>Sophisticated message pattern matching:</p>
+<pre><code class="language-json">// Wait for specific message types
+{"waitFor": "$.type", "text": "Type received: {{$.type}}"}
+
+// Match nested object properties
+{"waitFor": "$.user.id", "text": "User {{$.user.name}} authenticated"}
+
+// Array element matching
+{"waitFor": "$.items[0].status", "text": "First item status: {{$.items[0].status}}"}
+</code></pre>
+<h3 id="ai-integration"><a class="header" href="#ai-integration">AI Integration</a></h3>
+<h4 id="event-generation"><a class="header" href="#event-generation">Event Generation</a></h4>
+<p>Narrative-driven event stream creation:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct AiEventGenerator {
+    engine: Arc&lt;RwLock&lt;ReplayAugmentationEngine&gt;&gt;,
+}
+
+impl AiEventGenerator {
+    pub async fn stream_events(&amp;self, socket: WebSocket, max_events: Option&lt;usize&gt;) {
+        // Generate contextual events based on narrative
+        let events = self.engine.write().await.generate_stream().await?;
+        // Stream events to client with configurable rate
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="replay-augmentation"><a class="header" href="#replay-augmentation">Replay Augmentation</a></h4>
+<p>Enhance existing replay files with AI-generated content:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let augmentation_config = ReplayAugmentationConfig {
+    narrative: "Add realistic user interactions to chat replay".to_string(),
+    augmentation_points: vec!["user_message".to_string()],
+    provider: "openai".to_string(),
+    model: "gpt-4".to_string(),
+};
+<span class="boring">}</span></code></pre></pre>
+<h3 id="observability"><a class="header" href="#observability">Observability</a></h3>
+<h4 id="metrics-collection"><a class="header" href="#metrics-collection">Metrics Collection</a></h4>
+<p>Comprehensive WebSocket metrics:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let registry = get_global_registry();
+registry.record_ws_connection_established();
+registry.record_ws_message_received();
+registry.record_ws_message_sent();
+registry.record_ws_connection_closed(duration, status);
+<span class="boring">}</span></code></pre></pre>
+<h4 id="tracing-integration"><a class="header" href="#tracing-integration">Tracing Integration</a></h4>
+<p>Distributed tracing for WebSocket connections:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let span = create_ws_connection_span(&amp;request);
+let _guard = span.enter();
+// Connection handling with tracing context
+record_ws_message_success(&amp;span, message_size);
+<span class="boring">}</span></code></pre></pre>
+<h4 id="logging"><a class="header" href="#logging">Logging</a></h4>
+<p>Structured logging for connection lifecycle and message flow:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>info!("WebSocket connection established from {}", peer_addr);
+debug!("Received message: {} bytes", message.len());
+error!("WebSocket error: {}", error);
+<span class="boring">}</span></code></pre></pre>
+<h3 id="performance-features"><a class="header" href="#performance-features">Performance Features</a></h3>
+<h4 id="connection-pooling"><a class="header" href="#connection-pooling">Connection Pooling</a></h4>
+<p>Efficient management of upstream connections in proxy mode:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Connection reuse for proxy operations
+let connection = pool.get_connection(upstream_url).await?;
+connection.forward_message(message).await?;
+<span class="boring">}</span></code></pre></pre>
+<h4 id="message-buffering"><a class="header" href="#message-buffering">Message Buffering</a></h4>
+<p>Optimized message processing with buffering:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Stream processing for large message volumes
+while let Some(batch) = message_buffer.next_batch().await {
+    for message in batch {
+        process_message(message).await?;
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="rate-limiting"><a class="header" href="#rate-limiting">Rate Limiting</a></h4>
+<p>Configurable message rate limits:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let rate_limiter = RateLimiter::new(1000, Duration::from_secs(60)); // 1000 msg/min
+if rate_limiter.check_limit().await {
+    process_message(message).await?;
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<h3 id="websocket-server-config"><a class="header" href="#websocket-server-config">WebSocket Server Config</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct WsConfig {
+    pub port: u16,
+    pub max_connections: usize,
+    pub max_message_size: usize,
+    pub heartbeat_interval: Duration,
+    pub replay_file: Option&lt;PathBuf&gt;,
+    pub proxy_config: Option&lt;WsProxyConfig&gt;,
+    pub ai_config: Option&lt;WebSocketAiConfig&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="proxy-configuration"><a class="header" href="#proxy-configuration">Proxy Configuration</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct WsProxyConfig {
+    pub upstream_url: String,
+    pub should_proxy: bool,
+    pub message_transform: Option&lt;TransformFn&gt;,
+    pub connection_pool_size: usize,
+    pub retry_attempts: u32,
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="ai-configuration"><a class="header" href="#ai-configuration">AI Configuration</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct WebSocketAiConfig {
+    pub enabled: bool,
+    pub narrative: String,
+    pub event_count: usize,
+    pub events_per_second: f64,
+    pub replay: Option&lt;ReplayAugmentationConfig&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="testing-support"><a class="header" href="#testing-support">Testing Support</a></h2>
+<h3 id="integration-tests"><a class="header" href="#integration-tests">Integration Tests</a></h3>
+<p>End-to-end WebSocket testing:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[tokio::test]
+async fn test_websocket_replay() {
+    // Start WebSocket server with replay file
+    let server = TestServer::new(router()).await;
+
+    // Connect test client
+    let (ws_stream, _) = connect_async(server.url()).await?;
+
+    // Verify replay sequence
+    let msg = ws_stream.next().await.unwrap()?;
+    assert_eq!(msg, Message::Text("HELLO test-session".into()));
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="replay-file-validation"><a class="header" href="#replay-file-validation">Replay File Validation</a></h3>
+<p>Automated validation of replay configurations:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn test_replay_file_parsing() {
+    let replay_data = r#"{"ts":0,"text":"hello","waitFor":"ready"}"#;
+    let entry: ReplayEntry = serde_json::from_str(replay_data)?;
+    assert_eq!(entry.ts, 0);
+    assert_eq!(entry.text, "hello");
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="connection-errors"><a class="header" href="#connection-errors">Connection Errors</a></h3>
+<p>Graceful handling of connection failures:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>match socket.recv().await {
+    Ok(Some(Message::Close(frame))) =&gt; {
+        info!("Client closed connection: {:?}", frame);
+        break;
+    }
+    Err(e) =&gt; {
+        error!("WebSocket error: {}", e);
+        record_ws_error();
+        break;
+    }
+    _ =&gt; continue,
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="message-processing-errors"><a class="header" href="#message-processing-errors">Message Processing Errors</a></h3>
+<p>Robust message parsing and transformation:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>match serde_json::from_str::&lt;Value&gt;(&amp;text) {
+    Ok(json) =&gt; process_json_message(json).await,
+    Err(e) =&gt; {
+        warn!("Invalid JSON message: {}", e);
+        send_error_response("Invalid JSON format").await?;
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="usage-examples"><a class="header" href="#usage-examples">Usage Examples</a></h2>
+<h3 id="basic-websocket-server"><a class="header" href="#basic-websocket-server">Basic WebSocket Server</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_ws::start_with_latency;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Start with default latency profile
+    start_with_latency(3001, Some(LatencyProfile::normal())).await?;
+    Ok(())
+}</code></pre></pre>
+<h3 id="replay-mode"><a class="header" href="#replay-mode">Replay Mode</a></h3>
+<pre><code class="language-bash"># Set environment variable for replay file
+export MOCKFORGE_WS_REPLAY_FILE=./replay.jsonl
+
+# Start server
+mockforge serve --ws-port 3001
+</code></pre>
+<h3 id="proxy-mode"><a class="header" href="#proxy-mode">Proxy Mode</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_ws::router_with_proxy;
+use mockforge_core::{WsProxyConfig, WsProxyHandler};
+
+let proxy_config = WsProxyConfig {
+    upstream_url: "wss://api.example.com/ws".to_string(),
+    should_proxy: true,
+};
+
+let proxy = WsProxyHandler::new(proxy_config);
+let app = router_with_proxy(proxy);
+<span class="boring">}</span></code></pre></pre>
+<h3 id="ai-event-generation"><a class="header" href="#ai-event-generation">AI Event Generation</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_ws::{AiEventGenerator, WebSocketAiConfig};
+
+let config = WebSocketAiConfig {
+    enabled: true,
+    narrative: "Simulate real-time chat conversation".to_string(),
+    event_count: 50,
+    events_per_second: 2.0,
+};
+
+let generator = AiEventGenerator::new(config)?;
+generator.stream_events_with_rate(socket, None, 2.0).await;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="future-enhancements"><a class="header" href="#future-enhancements">Future Enhancements</a></h2>
+<ul>
+<li><strong>Advanced Pattern Matching</strong>: Complex event correlation and state machines</li>
+<li><strong>Load Testing</strong>: Built-in WebSocket load testing capabilities</li>
+<li><strong>Recording Mode</strong>: Capture live WebSocket interactions for replay</li>
+<li><strong>Clustering</strong>: Distributed WebSocket session management</li>
+<li><strong>Protocol Extensions</strong>: Support for custom WebSocket subprotocols</li>
+</ul>
 
                     </main>
 

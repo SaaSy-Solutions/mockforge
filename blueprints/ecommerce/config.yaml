@@ -1,0 +1,138 @@
+# E-commerce Configuration
+# Complete setup for e-commerce applications with carts, orders, and fulfillment
+
+# HTTP Server
+http:
+  port: 3000
+  host: "0.0.0.0"
+  enabled: true
+  cors_enabled: true
+  openapi_spec: "openapi.yaml"
+
+# WebSocket Server (for real-time order updates)
+websocket:
+  port: 3001
+  host: "0.0.0.0"
+  enabled: true
+
+# Admin UI
+admin:
+  enabled: true
+  port: 9080
+  host: "127.0.0.1"
+
+# Reality Configuration
+reality:
+  level: high
+  enabled: true
+
+# Reality Continuum
+reality_continuum:
+  enabled: true
+  default_ratio: 0.4  # 40% reality, 60% mock
+  route_rules:
+    - pattern: "/api/products/*"
+      ratio: 0.5  # Product catalog uses 50% real data
+    - pattern: "/api/orders/*"
+      ratio: 0.6  # Orders use 60% real data for realistic state transitions
+    - pattern: "/api/payments/*"
+      ratio: 0.2  # Payments mostly mock (safer)
+
+# Consistency Engine with Personas
+consistency:
+  persona_graphs:
+    enabled: true
+
+  personas:
+    premium_customer:
+      id: "user:premium-cust-001"
+      name: "Premium Customer"
+      domain: "ecommerce"
+      traits:
+        membership_tier: "premium"
+        total_orders: 45
+        total_spent: "5420.50"
+        average_order_value: "120.45"
+        favorite_categories: ["electronics", "home"]
+        shipping_preference: "express"
+      lifecycle:
+        preset: "subscription"
+        initial_state: "active"
+
+    regular_customer:
+      id: "user:regular-cust-001"
+      name: "Regular Customer"
+      domain: "ecommerce"
+      traits:
+        membership_tier: "standard"
+        total_orders: 12
+        total_spent: "890.25"
+        average_order_value: "74.19"
+        favorite_categories: ["clothing", "books"]
+        shipping_preference: "standard"
+      lifecycle:
+        preset: "subscription"
+        initial_state: "active"
+
+    vip_customer:
+      id: "user:vip-cust-001"
+      name: "VIP Customer"
+      domain: "ecommerce"
+      traits:
+        membership_tier: "vip"
+        total_orders: 120
+        total_spent: "15230.75"
+        average_order_value: "126.92"
+        favorite_categories: ["luxury", "electronics"]
+        shipping_preference: "overnight"
+        vip_benefits:
+          - free_shipping
+          - early_access
+          - exclusive_discounts
+      lifecycle:
+        preset: "subscription"
+        initial_state: "active"
+
+# Drift Budget
+drift_budget:
+  enabled: true
+  default_budget:
+    max_breaking_changes: 0
+    max_non_breaking_changes: 5
+  per_endpoint_budgets:
+    "POST /api/orders":
+      max_breaking_changes: 0
+      max_non_breaking_changes: 2
+    "POST /api/payments/process":
+      max_breaking_changes: 0
+      max_non_breaking_changes: 1
+
+# Chaos Configuration
+core:
+  failures_enabled: true
+  failure_config:
+    global_error_rate: 0.02
+    tag_configs:
+      payments:
+        error_rate: 0.05  # 5% payment failures
+        status_codes: [402, 503]
+        error_message: "Payment processing temporarily unavailable"
+      inventory:
+        error_rate: 0.03  # 3% inventory errors
+        status_codes: [409, 503]
+        error_message: "Inventory check failed"
+      shipping:
+        error_rate: 0.02  # 2% shipping errors
+        status_codes: [503, 504]
+        error_message: "Shipping service temporarily unavailable"
+
+# Logging
+logging:
+  level: "info"
+  json_format: false
+
+# Observability
+observability:
+  prometheus:
+    enabled: true
+    port: 9090

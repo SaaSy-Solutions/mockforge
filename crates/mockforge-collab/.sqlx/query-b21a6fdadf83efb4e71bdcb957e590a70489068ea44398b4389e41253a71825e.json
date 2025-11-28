@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE workspaces\n            SET name = ?, description = ?, config = ?, version = ?, updated_at = ?\n            WHERE id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "b21a6fdadf83efb4e71bdcb957e590a70489068ea44398b4389e41253a71825e"
+}

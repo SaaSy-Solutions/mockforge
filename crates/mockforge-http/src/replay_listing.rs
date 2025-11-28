@@ -2,23 +2,45 @@
 use globwalk::GlobWalkerBuilder;
 use serde::Serialize;
 
+/// A single replay fixture item
 #[derive(Debug, Serialize)]
 pub struct ReplayItem {
+    /// Protocol name (http, grpc, ws)
     pub protocol: String,
+    /// OpenAPI operation ID
     pub operation_id: String,
+    /// Timestamp when the fixture was saved
     pub saved_at: String,
+    /// File system path to the fixture file
     pub path: String,
 }
 
+/// List all replay fixtures from the fixtures root directory
+///
+/// # Arguments
+/// * `fixtures_root` - Root directory containing protocol subdirectories (http, grpc, ws)
+///
+/// # Returns
+/// Vector of replay items sorted by timestamp (newest first)
 pub fn list_all(fixtures_root: &str) -> anyhow::Result<Vec<ReplayItem>> {
+    use std::path::Path;
+
+    let fixtures_path = Path::new(fixtures_root);
     let mut out = Vec::new();
+
     for proto in ["http", "grpc", "ws"] {
-        let pat = format!("{root}/{proto}/**/*.json", root = fixtures_root, proto = proto);
-        for entry in GlobWalkerBuilder::from_patterns(".", &[&pat]).build()? {
+        // Use the fixtures_root as the base directory for globbing
+        let proto_pattern = format!("{proto}/**/*.json");
+        for entry in GlobWalkerBuilder::from_patterns(fixtures_path, &[&proto_pattern]).build()? {
             let p = entry?.path().to_path_buf();
             if p.extension().map(|e| e == "json").unwrap_or(false) {
-                let comps: Vec<_> =
-                    p.components().map(|c| c.as_os_str().to_string_lossy().to_string()).collect();
+                // Get relative path from fixtures_root for consistent path handling
+                let relative_path = p.strip_prefix(fixtures_path).unwrap_or(&p).to_path_buf();
+
+                let comps: Vec<_> = relative_path
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().to_string())
+                    .collect();
                 let len = comps.len();
                 let (op_id, ts) = if len >= 2 {
                     (comps[len - 2].clone(), comps[len - 1].replace(".json", ""))
@@ -84,7 +106,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires filesystem globbing setup"]
     fn test_list_all_with_http_fixtures() {
         let temp_dir = TempDir::new().unwrap();
 
@@ -94,14 +115,8 @@ mod tests {
         create_fixture_file(&temp_path, "http", "getUser", "2024-01-02T12:00:00").unwrap();
         create_fixture_file(&temp_path, "http", "createUser", "2024-01-03T12:00:00").unwrap();
 
-        // Change to temp directory temporarily
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&temp_path).unwrap();
-
-        let result = list_all(".");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let fixtures_root = temp_path.to_str().unwrap();
+        let result = list_all(fixtures_root);
 
         assert!(result.is_ok());
         let items = result.unwrap();
@@ -111,7 +126,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires filesystem globbing setup"]
     fn test_list_all_with_multiple_protocols() {
         let temp_dir = TempDir::new().unwrap();
 
@@ -121,14 +135,8 @@ mod tests {
         create_fixture_file(&temp_path, "grpc", "GetUser", "2024-01-02T12:00:00").unwrap();
         create_fixture_file(&temp_path, "ws", "subscribe", "2024-01-03T12:00:00").unwrap();
 
-        // Change to temp directory temporarily
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&temp_path).unwrap();
-
-        let result = list_all(".");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let fixtures_root = temp_path.to_str().unwrap();
+        let result = list_all(fixtures_root);
 
         assert!(result.is_ok());
         let items = result.unwrap();
@@ -142,7 +150,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires filesystem globbing setup"]
     fn test_list_all_sorted_by_timestamp() {
         let temp_dir = TempDir::new().unwrap();
 
@@ -152,14 +159,8 @@ mod tests {
         create_fixture_file(&temp_path, "http", "op2", "2024-01-03T12:00:00").unwrap();
         create_fixture_file(&temp_path, "http", "op3", "2024-01-02T12:00:00").unwrap();
 
-        // Change to temp directory temporarily
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&temp_path).unwrap();
-
-        let result = list_all(".");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let fixtures_root = temp_path.to_str().unwrap();
+        let result = list_all(fixtures_root);
 
         assert!(result.is_ok());
         let items = result.unwrap();
@@ -171,7 +172,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires filesystem globbing setup"]
     fn test_list_all_ignores_non_json_files() {
         let temp_dir = TempDir::new().unwrap();
 
@@ -183,14 +183,8 @@ mod tests {
         fs::create_dir_all(&txt_path).unwrap();
         fs::write(txt_path.join("data.txt"), "not json").unwrap();
 
-        // Change to temp directory temporarily
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&temp_path).unwrap();
-
-        let result = list_all(".");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let fixtures_root = temp_path.to_str().unwrap();
+        let result = list_all(fixtures_root);
 
         assert!(result.is_ok());
         let items = result.unwrap();
@@ -201,21 +195,14 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires filesystem globbing setup"]
     fn test_list_all_extracts_operation_id() {
         let temp_dir = TempDir::new().unwrap();
 
         let temp_path = temp_dir.path().to_path_buf();
         create_fixture_file(&temp_path, "http", "getUserById", "2024-01-01T12:00:00").unwrap();
 
-        // Change to temp directory temporarily
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&temp_path).unwrap();
-
-        let result = list_all(".");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let fixtures_root = temp_path.to_str().unwrap();
+        let result = list_all(fixtures_root);
 
         assert!(result.is_ok());
         let items = result.unwrap();
@@ -225,21 +212,14 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires filesystem globbing setup"]
     fn test_list_all_extracts_timestamp_without_extension() {
         let temp_dir = TempDir::new().unwrap();
 
         let temp_path = temp_dir.path().to_path_buf();
         create_fixture_file(&temp_path, "http", "getUser", "2024-01-01T12:00:00").unwrap();
 
-        // Change to temp directory temporarily
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&temp_path).unwrap();
-
-        let result = list_all(".");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let fixtures_root = temp_path.to_str().unwrap();
+        let result = list_all(fixtures_root);
 
         assert!(result.is_ok());
         let items = result.unwrap();

@@ -273,11 +273,57 @@ request:
 | `sign(data, key)` | Sign data with private key | `{{sign(payload, 'private-key')}}` |
 | `verify(data, signature, key)` | Verify signature with public key | `{{verify(data, sig, 'public-key')}}` |
 
+## Mutual TLS (mTLS)
+
+MockForge supports **Mutual TLS (mTLS)** for enhanced security, requiring both server and client certificates for authentication.
+
+### Quick Start
+
+Enable mTLS in your configuration:
+
+```yaml
+http:
+  tls:
+    enabled: true
+    cert_file: "./certs/server.crt"
+    key_file: "./certs/server.key"
+    ca_file: "./certs/ca.crt"           # CA certificate for client verification
+    require_client_cert: true            # Enable mTLS
+```
+
+### Client Configuration
+
+Clients must provide a certificate signed by the CA:
+
+```bash
+# Using cURL
+curl --cert client.crt --key client.key --cacert ca.crt \
+  https://localhost:3000/api/endpoint
+```
+
+### Certificate Generation
+
+For development, use `mkcert`:
+
+```bash
+# Install mkcert
+brew install mkcert
+mkcert -install
+
+# Generate certificates
+mkcert localhost 127.0.0.1 ::1
+mkcert -client localhost 127.0.0.1 ::1
+```
+
+For production, use OpenSSL or a trusted Certificate Authority.
+
+**Full Documentation:** See [mTLS Configuration Guide](../../docs/mTLS_CONFIGURATION.md) for complete setup instructions, certificate generation, client examples, and troubleshooting.
+
 ## Authentication & Authorization
 
 ### Admin UI Authentication
 
-MockForge Admin UI v2 includes role-based authentication:
+MockForge Admin UI v2 includes **complete role-based authentication** with JWT-based authentication:
 
 ```yaml
 admin:
@@ -306,8 +352,11 @@ admin:
 
 | Role | Permissions |
 |------|------------|
-| **Admin** | Full access to all features |
-| **Viewer** | Read-only access to dashboard, logs, metrics |
+| **Admin** | Full access to all features (workspace management, member management, all editing) |
+| **Editor** | Create, edit, and delete mocks; view history; cannot manage workspace settings |
+| **Viewer** | Read-only access to dashboard, logs, metrics, and mocks |
+
+**Full Documentation:** See [RBAC Guide](../../docs/RBAC_GUIDE.md) for complete role and permission details.
 
 ### Custom Authentication
 
@@ -532,6 +581,18 @@ Features for data protection compliance:
 - **Access Controls**: Role-based access and audit trails
 - **Data Minimization**: Only collect and store necessary data
 - **Right to Deletion**: Secure data deletion capabilities
+
+## Audit Logging
+
+MockForge provides comprehensive audit logging for security and compliance:
+
+- **Authentication Audit Logs**: Track all authentication attempts (success/failure)
+- **Request Logs**: Full request/response logging with metadata
+- **Collaboration History**: Git-style version control for workspace changes
+- **Configuration Changes**: Track all configuration modifications
+- **Plugin Activity**: Monitor plugin execution and security events
+
+**Full Documentation:** See [Audit Trails Guide](../../docs/AUDIT_TRAILS.md) for complete audit logging configuration and usage.
 
 ## Troubleshooting Security
 

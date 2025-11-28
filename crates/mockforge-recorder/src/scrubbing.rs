@@ -369,10 +369,10 @@ impl Scrubber {
                     target,
                 } = rule
                 {
-                    if *target == ScrubTarget::Headers || *target == ScrubTarget::All {
-                        if key.eq_ignore_ascii_case(field) {
-                            *value = replacement.clone();
-                        }
+                    if (*target == ScrubTarget::Headers || *target == ScrubTarget::All)
+                        && key.eq_ignore_ascii_case(field)
+                    {
+                        *value = replacement.clone();
                     }
                 }
             }
@@ -522,20 +522,11 @@ impl Scrubber {
 }
 
 /// Handles filtering of which requests to capture
+#[derive(Default)]
 pub struct CaptureFilter {
     config: CaptureFilterConfig,
     path_patterns: Vec<Regex>,
     exclude_patterns: Vec<Regex>,
-}
-
-impl Default for CaptureFilter {
-    fn default() -> Self {
-        Self {
-            config: CaptureFilterConfig::default(),
-            path_patterns: Vec::new(),
-            exclude_patterns: Vec::new(),
-        }
-    }
 }
 
 impl CaptureFilter {
@@ -646,11 +637,11 @@ impl CaptureFilter {
         }
 
         // Check method filter
-        if !self.config.methods.is_empty() {
-            if !self.config.methods.iter().any(|m| m.eq_ignore_ascii_case(method)) {
-                debug!("Skipping capture: method {} not in filter", method);
-                return false;
-            }
+        if !self.config.methods.is_empty()
+            && !self.config.methods.iter().any(|m| m.eq_ignore_ascii_case(method))
+        {
+            debug!("Skipping capture: method {} not in filter", method);
+            return false;
         }
 
         // Check exclude patterns

@@ -25,29 +25,32 @@ pub use streaming::{
     StreamingProtocolRegistry,
 };
 
-/// Protocol type enumeration
+/// Protocol type enumeration for multi-protocol support
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum Protocol {
-    /// HTTP/REST protocol
+    /// HTTP/REST protocol for RESTful APIs
     Http,
-    /// GraphQL protocol
+    /// GraphQL protocol for GraphQL APIs
     GraphQL,
-    /// gRPC protocol
+    /// gRPC protocol for gRPC services
     Grpc,
-    /// WebSocket protocol
+    /// WebSocket protocol for real-time bidirectional communication
     WebSocket,
-    /// SMTP/Email protocol
+    /// SMTP/Email protocol for email communication
     Smtp,
-    /// MQTT protocol (IoT messaging)
+    /// MQTT protocol for IoT messaging and pub/sub
     Mqtt,
-    /// FTP protocol (file transfer)
+    /// FTP protocol for file transfer operations
     Ftp,
-    /// Kafka protocol (event streaming)
+    /// Kafka protocol for distributed event streaming
     Kafka,
-    /// RabbitMQ/AMQP protocol (message queuing)
+    /// RabbitMQ/AMQP protocol for message queuing
     RabbitMq,
-    /// AMQP protocol (advanced message queuing)
+    /// AMQP protocol for advanced message queuing scenarios
     Amqp,
+    /// TCP protocol for raw TCP connections
+    Tcp,
 }
 
 impl fmt::Display for Protocol {
@@ -63,6 +66,7 @@ impl fmt::Display for Protocol {
             Protocol::Kafka => write!(f, "Kafka"),
             Protocol::RabbitMq => write!(f, "RabbitMQ"),
             Protocol::Amqp => write!(f, "AMQP"),
+            Protocol::Tcp => write!(f, "TCP"),
         }
     }
 }
@@ -170,6 +174,8 @@ pub enum ResponseStatus {
     AmqpStatus(u16),
     /// FTP status code
     FtpStatus(u16),
+    /// TCP status (true = success, false = error/close)
+    TcpStatus(bool),
 }
 
 impl ResponseStatus {
@@ -185,6 +191,7 @@ impl ResponseStatus {
             ResponseStatus::KafkaStatus(code) => *code == 0, // Kafka OK = 0
             ResponseStatus::AmqpStatus(code) => (200..300).contains(code), // AMQP success codes
             ResponseStatus::FtpStatus(code) => (200..300).contains(code), // FTP success codes
+            ResponseStatus::TcpStatus(success) => *success,  // TCP success flag
         }
     }
 
@@ -197,6 +204,7 @@ impl ResponseStatus {
             ResponseStatus::KafkaStatus(code) => Some(*code as i32),
             ResponseStatus::AmqpStatus(code) => Some(*code as i32),
             ResponseStatus::FtpStatus(code) => Some(*code as i32),
+            ResponseStatus::TcpStatus(_) => None, // TCP uses boolean status
             ResponseStatus::GraphQLStatus(_)
             | ResponseStatus::WebSocketStatus(_)
             | ResponseStatus::MqttStatus(_) => None,
@@ -427,7 +435,12 @@ pub enum FixtureStatus {
     /// Generic success/failure
     Generic(bool),
     /// Custom status with code and message
-    Custom { code: i32, message: String },
+    Custom {
+        /// Custom status code
+        code: i32,
+        /// Custom status message
+        message: String,
+    },
 }
 
 fn default_true() -> bool {
@@ -689,8 +702,9 @@ impl UnifiedFixture {
     }
 }
 
-/// Middleware chain for composing multiple middleware
+/// Middleware chain for composing and executing multiple middleware in sequence
 pub struct MiddlewareChain {
+    /// Ordered list of middleware to execute
     middleware: Vec<Arc<dyn ProtocolMiddleware>>,
 }
 
@@ -755,6 +769,7 @@ mod tests {
         assert_eq!(Protocol::Kafka.to_string(), "Kafka");
         assert_eq!(Protocol::RabbitMq.to_string(), "RabbitMQ");
         assert_eq!(Protocol::Amqp.to_string(), "AMQP");
+        assert_eq!(Protocol::Tcp.to_string(), "TCP");
     }
 
     #[test]

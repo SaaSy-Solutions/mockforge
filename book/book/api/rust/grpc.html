@@ -183,6 +183,526 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="grpc-module"><a class="header" href="#grpc-module">gRPC Module</a></h1>
+<p>The <code>mockforge_grpc</code> crate provides dynamic gRPC service discovery and mocking with HTTP bridge capabilities.</p>
+<h2 id="modules"><a class="header" href="#modules">Modules</a></h2>
+<h3 id="core-functions"><a class="header" href="#core-functions">Core Functions</a></h3>
+<h4 id="start"><a class="header" href="#start"><code>start</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn start(port: u16) -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt;
+<span class="boring">}</span></code></pre></pre>
+<p>Starts a gRPC server with default configuration on the specified port.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>port</code>: Port number to bind the gRPC server to</li>
+</ul>
+<p><strong>Returns:</strong> <code>Result&lt;(), Error&gt;</code> indicating server startup success</p>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust">use mockforge_grpc::start;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    start(50051).await?;
+    Ok(())
+}</code></pre></pre>
+<h4 id="start_with_config"><a class="header" href="#start_with_config"><code>start_with_config</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn start_with_config(
+    port: u16,
+    latency_profile: Option&lt;LatencyProfile&gt;,
+    config: DynamicGrpcConfig,
+) -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt;
+<span class="boring">}</span></code></pre></pre>
+<p>Starts a gRPC server with custom configuration and optional latency simulation.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>port</code>: Port number to bind the gRPC server to</li>
+<li><code>latency_profile</code>: Optional latency injection profile</li>
+<li><code>config</code>: Dynamic gRPC configuration</li>
+</ul>
+<p><strong>Returns:</strong> <code>Result&lt;(), Error&gt;</code> indicating server startup success</p>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_grpc::{start_with_config, DynamicGrpcConfig};
+use mockforge_core::LatencyProfile;
+
+let config = DynamicGrpcConfig {
+    proto_dir: "./proto".to_string(),
+    enable_reflection: true,
+    ..Default::default()
+};
+
+start_with_config(50051, Some(LatencyProfile::normal()), config).await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="configuration-types"><a class="header" href="#configuration-types">Configuration Types</a></h3>
+<h4 id="dynamicgrpcconfig"><a class="header" href="#dynamicgrpcconfig"><code>DynamicGrpcConfig</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct DynamicGrpcConfig {
+    pub proto_dir: String,
+    pub enable_reflection: bool,
+    pub excluded_services: Vec&lt;String&gt;,
+    pub http_bridge: Option&lt;HttpBridgeConfig&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Configuration for dynamic gRPC service discovery.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>proto_dir</code>: Directory containing <code>.proto</code> files (default: “proto”)</li>
+<li><code>enable_reflection</code>: Whether to enable gRPC reflection (default: false)</li>
+<li><code>excluded_services</code>: List of services to exclude from discovery</li>
+<li><code>http_bridge</code>: Optional HTTP bridge configuration</li>
+</ul>
+<p><strong>Methods:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl DynamicGrpcConfig {
+    pub fn default() -&gt; Self
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let config = DynamicGrpcConfig {
+    proto_dir: "./my-protos".to_string(),
+    enable_reflection: true,
+    excluded_services: vec!["HealthService".to_string()],
+    http_bridge: Some(HttpBridgeConfig {
+        enabled: true,
+        port: 8080,
+        generate_openapi: true,
+    }),
+};
+<span class="boring">}</span></code></pre></pre>
+<h4 id="httpbridgeconfig"><a class="header" href="#httpbridgeconfig"><code>HttpBridgeConfig</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct HttpBridgeConfig {
+    pub enabled: bool,
+    pub port: u16,
+    pub generate_openapi: bool,
+    pub cors_enabled: bool,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Configuration for HTTP bridge functionality.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>enabled</code>: Whether HTTP bridge is enabled (default: true)</li>
+<li><code>port</code>: HTTP server port (default: 8080)</li>
+<li><code>generate_openapi</code>: Whether to generate OpenAPI specs (default: true)</li>
+<li><code>cors_enabled</code>: Whether CORS is enabled (default: false)</li>
+</ul>
+<p><strong>Methods:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl HttpBridgeConfig {
+    pub fn default() -&gt; Self
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="service-registry"><a class="header" href="#service-registry">Service Registry</a></h3>
+<h4 id="serviceregistry"><a class="header" href="#serviceregistry"><code>ServiceRegistry</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ServiceRegistry { /* fields omitted */ }
+<span class="boring">}</span></code></pre></pre>
+<p>Registry containing discovered gRPC services.</p>
+<p><strong>Methods:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl ServiceRegistry {
+    pub fn new() -&gt; Self
+    pub fn with_descriptor_pool(descriptor_pool: DescriptorPool) -&gt; Self
+    pub fn descriptor_pool(&amp;self) -&gt; &amp;DescriptorPool
+    pub fn register(&amp;mut self, name: String, service: DynamicGrpcService)
+    pub fn get(&amp;self, name: &amp;str) -&gt; Option&lt;&amp;Arc&lt;DynamicGrpcService&gt;&gt;
+    pub fn service_names(&amp;self) -&gt; Vec&lt;String&gt;
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_grpc::ServiceRegistry;
+
+let mut registry = ServiceRegistry::new();
+registry.register("MyService".to_string(), dynamic_service);
+println!("Registered services: {:?}", registry.service_names());
+<span class="boring">}</span></code></pre></pre>
+<h3 id="dynamic-service-types"><a class="header" href="#dynamic-service-types">Dynamic Service Types</a></h3>
+<h4 id="dynamicgrpcservice"><a class="header" href="#dynamicgrpcservice"><code>DynamicGrpcService</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct DynamicGrpcService { /* fields omitted */ }
+<span class="boring">}</span></code></pre></pre>
+<p>Dynamically generated gRPC service implementation.</p>
+<p><strong>Methods:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl DynamicGrpcService {
+    pub fn new(
+        proto_service: ProtoService,
+        config: Option&lt;ServiceConfig&gt;,
+    ) -&gt; Self
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="protoservice"><a class="header" href="#protoservice"><code>ProtoService</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ProtoService {
+    pub name: String,
+    pub methods: HashMap&lt;String, ProtoMethod&gt;,
+    pub package: String,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Parsed protobuf service definition.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>name</code>: Service name</li>
+<li><code>methods</code>: Map of method names to method definitions</li>
+<li><code>package</code>: Protobuf package name</li>
+</ul>
+<h4 id="protomethod"><a class="header" href="#protomethod"><code>ProtoMethod</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ProtoMethod {
+    pub name: String,
+    pub input_type: String,
+    pub output_type: String,
+    pub is_client_streaming: bool,
+    pub is_server_streaming: bool,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Parsed protobuf method definition.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>name</code>: Method name</li>
+<li><code>input_type</code>: Input message type name</li>
+<li><code>output_type</code>: Output message type name</li>
+<li><code>is_client_streaming</code>: Whether method accepts client streaming</li>
+<li><code>is_server_streaming</code>: Whether method returns server streaming</li>
+</ul>
+<h3 id="mock-response-types"><a class="header" href="#mock-response-types">Mock Response Types</a></h3>
+<h4 id="mockresponse"><a class="header" href="#mockresponse"><code>MockResponse</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum MockResponse {
+    Unary(Value),
+    ServerStream(Vec&lt;Value&gt;),
+    ClientStream(Value),
+    BidiStream(Vec&lt;Value&gt;),
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Mock response types for different gRPC method patterns.</p>
+<p><strong>Variants:</strong></p>
+<ul>
+<li><code>Unary(Value)</code>: Single request-response</li>
+<li><code>ServerStream(Vec&lt;Value&gt;)</code>: Server streaming response</li>
+<li><code>ClientStream(Value)</code>: Client streaming response</li>
+<li><code>BidiStream(Vec&lt;Value&gt;)</code>: Bidirectional streaming</li>
+</ul>
+<h3 id="reflection-types"><a class="header" href="#reflection-types">Reflection Types</a></h3>
+<h4 id="mockreflectionproxy"><a class="header" href="#mockreflectionproxy"><code>MockReflectionProxy</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct MockReflectionProxy { /* fields omitted */ }
+<span class="boring">}</span></code></pre></pre>
+<p>Proxy for gRPC reflection protocol.</p>
+<p><strong>Methods:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl MockReflectionProxy {
+    pub async fn new(
+        config: ProxyConfig,
+        registry: Arc&lt;ServiceRegistry&gt;,
+    ) -&gt; Result&lt;Self&gt;
+}
+<span class="boring">}</span></code></pre></pre>
+<h4 id="reflectionproxy"><a class="header" href="#reflectionproxy"><code>ReflectionProxy</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait ReflectionProxy {
+    fn list_services(&amp;self) -&gt; Vec&lt;String&gt;;
+    fn get_service_descriptor(&amp;self, service_name: &amp;str) -&gt; Option&lt;&amp;prost_reflect::ServiceDescriptor&gt;;
+    fn get_method_descriptor(&amp;self, service_name: &amp;str, method_name: &amp;str) -&gt; Option&lt;&amp;prost_reflect::MethodDescriptor&gt;;
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Trait for gRPC reflection functionality.</p>
+<h4 id="proxyconfig"><a class="header" href="#proxyconfig"><code>ProxyConfig</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ProxyConfig {
+    pub max_message_size: usize,
+    pub connection_timeout: Duration,
+    pub request_timeout: Duration,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Configuration for reflection proxy.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>max_message_size</code>: Maximum message size in bytes (default: 4MB)</li>
+<li><code>connection_timeout</code>: Connection timeout duration</li>
+<li><code>request_timeout</code>: Request timeout duration</li>
+</ul>
+<h3 id="proto-parser"><a class="header" href="#proto-parser">Proto Parser</a></h3>
+<h4 id="protoparser"><a class="header" href="#protoparser"><code>ProtoParser</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ProtoParser { /* fields omitted */ }
+<span class="boring">}</span></code></pre></pre>
+<p>Parser for protobuf files.</p>
+<p><strong>Methods:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl ProtoParser {
+    pub fn new() -&gt; Self
+    pub async fn parse_directory(&amp;mut self, dir: &amp;str) -&gt; Result&lt;()&gt;
+    pub fn services(&amp;self) -&gt; &amp;HashMap&lt;String, ProtoService&gt;
+    pub fn into_pool(self) -&gt; DescriptorPool
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_grpc::dynamic::proto_parser::ProtoParser;
+
+let mut parser = ProtoParser::new();
+parser.parse_directory("./proto").await?;
+let services = parser.services();
+println!("Found {} services", services.len());
+<span class="boring">}</span></code></pre></pre>
+<h3 id="discovery-functions"><a class="header" href="#discovery-functions">Discovery Functions</a></h3>
+<h4 id="discover_services"><a class="header" href="#discover_services"><code>discover_services</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub async fn discover_services(
+    config: &amp;DynamicGrpcConfig,
+) -&gt; Result&lt;ServiceRegistry, Box&lt;dyn std::error::Error + Send + Sync&gt;&gt;
+<span class="boring">}</span></code></pre></pre>
+<p>Discovers and registers gRPC services from proto files.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>config</code>: Discovery configuration</li>
+</ul>
+<p><strong>Returns:</strong> <code>Result&lt;ServiceRegistry, Error&gt;</code> with discovered services</p>
+<p><strong>Example:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use mockforge_grpc::{discover_services, DynamicGrpcConfig};
+
+let config = DynamicGrpcConfig {
+    proto_dir: "./proto".to_string(),
+    ..Default::default()
+};
+
+let registry = discover_services(&amp;config).await?;
+println!("Discovered services: {:?}", registry.service_names());
+<span class="boring">}</span></code></pre></pre>
+<h3 id="generated-types"><a class="header" href="#generated-types">Generated Types</a></h3>
+<h4 id="greeter-service"><a class="header" href="#greeter-service"><code>Greeter</code> Service</a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub mod generated {
+    pub mod greeter_server {
+        pub trait Greeter: Send + Sync + 'static {
+            type SayHelloStreamStream: Stream&lt;Item = Result&lt;HelloReply, Status&gt;&gt; + Send + 'static;
+
+            async fn say_hello(
+                &amp;self,
+                request: Request&lt;HelloRequest&gt;,
+            ) -&gt; Result&lt;Response&lt;HelloReply&gt;, Status&gt;;
+
+            async fn say_hello_stream(
+                &amp;self,
+                request: Request&lt;HelloRequest&gt;,
+            ) -&gt; Result&lt;Response&lt;Self::SayHelloStreamStream&gt;, Status&gt;;
+
+            async fn say_hello_client_stream(
+                &amp;self,
+                request: Request&lt;Streaming&lt;HelloRequest&gt;&gt;,
+            ) -&gt; Result&lt;Response&lt;HelloReply&gt;, Status&gt;;
+
+            async fn chat(
+                &amp;self,
+                request: Request&lt;Streaming&lt;HelloRequest&gt;&gt;,
+            ) -&gt; Result&lt;Response&lt;Self::ChatStream&gt;, Status&gt;;
+        }
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Generated gRPC service trait with all streaming patterns.</p>
+<h3 id="message-types"><a class="header" href="#message-types">Message Types</a></h3>
+<h4 id="hellorequest"><a class="header" href="#hellorequest"><code>HelloRequest</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct HelloRequest {
+    pub name: String,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Request message for greeting service.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>name</code>: Name to greet</li>
+</ul>
+<h4 id="helloreply"><a class="header" href="#helloreply"><code>HelloReply</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct HelloReply {
+    pub message: String,
+    pub metadata: Option&lt;HashMap&lt;String, String&gt;&gt;,
+    pub items: Vec&lt;String&gt;,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Response message for greeting service.</p>
+<p><strong>Fields:</strong></p>
+<ul>
+<li><code>message</code>: Greeting message</li>
+<li><code>metadata</code>: Optional metadata map</li>
+<li><code>items</code>: Optional list of items</li>
+</ul>
+<h3 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h3>
+<p>All functions return <code>Result&lt;T, Box&lt;dyn std::error::Error + Send + Sync&gt;&gt;</code>. Common errors include:</p>
+<ul>
+<li>File I/O errors (proto file reading)</li>
+<li>Protobuf parsing errors</li>
+<li>Server binding errors</li>
+<li>Reflection setup errors</li>
+<li>HTTP bridge configuration errors</li>
+</ul>
+<h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
+<ul>
+<li><code>DEFAULT_MAX_MESSAGE_SIZE</code>: Default maximum message size (4MB)</li>
+</ul>
+<h3 id="feature-flags"><a class="header" href="#feature-flags">Feature Flags</a></h3>
+<ul>
+<li><code>data-faker</code>: Enables advanced data synthesis features</li>
+</ul>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<h3 id="basic-grpc-server"><a class="header" href="#basic-grpc-server">Basic gRPC Server</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_grpc::start;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    // Starts server on port 50051 with default config
+    // Automatically discovers services from ./proto directory
+    start(50051).await?;
+    Ok(())
+}</code></pre></pre>
+<h3 id="server-with-reflection"><a class="header" href="#server-with-reflection">Server with Reflection</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_grpc::{start_with_config, DynamicGrpcConfig};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    let config = DynamicGrpcConfig {
+        proto_dir: "./proto".to_string(),
+        enable_reflection: true,  // Enable gRPC reflection
+        ..Default::default()
+    };
+
+    start_with_config(50051, None, config).await?;
+
+    // Now you can use grpcurl:
+    // grpcurl -plaintext localhost:50051 list
+    // grpcurl -plaintext localhost:50051 describe MyService
+    Ok(())
+}</code></pre></pre>
+<h3 id="server-with-http-bridge"><a class="header" href="#server-with-http-bridge">Server with HTTP Bridge</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_grpc::{start_with_config, DynamicGrpcConfig};
+use mockforge_grpc::dynamic::http_bridge::HttpBridgeConfig;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    let config = DynamicGrpcConfig {
+        proto_dir: "./proto".to_string(),
+        http_bridge: Some(HttpBridgeConfig {
+            enabled: true,
+            port: 8080,
+            generate_openapi: true,
+        }),
+        ..Default::default()
+    };
+
+    start_with_config(50051, None, config).await?;
+
+    // gRPC available on localhost:50051
+    // REST API available on localhost:8080
+    // OpenAPI docs at http://localhost:8080/api/docs
+    Ok(())
+}</code></pre></pre>
+<h3 id="manual-service-discovery"><a class="header" href="#manual-service-discovery">Manual Service Discovery</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_grpc::{discover_services, DynamicGrpcConfig};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    let config = DynamicGrpcConfig {
+        proto_dir: "./proto".to_string(),
+        excluded_services: vec!["HealthService".to_string()],
+        ..Default::default()
+    };
+
+    let registry = discover_services(&amp;config).await?;
+
+    println!("Discovered services:");
+    for service_name in registry.service_names() {
+        println!("  - {}", service_name);
+    }
+
+    // Access service descriptors
+    if let Some(descriptor) = registry.descriptor_pool().get_service_by_name("MyService") {
+        println!("Service methods:");
+        for method in descriptor.methods() {
+            println!("  - {}", method.name());
+        }
+    }
+
+    Ok(())
+}</code></pre></pre>
+<h3 id="custom-service-implementation"><a class="header" href="#custom-service-implementation">Custom Service Implementation</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_grpc::dynamic::service_generator::DynamicGrpcService;
+use mockforge_grpc::dynamic::proto_parser::{ProtoParser, ProtoService};
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    // Parse proto files
+    let mut parser = ProtoParser::new();
+    parser.parse_directory("./proto").await?;
+
+    // Get a specific service
+    if let Some(proto_service) = parser.services().get("MyService") {
+        // Create dynamic service
+        let dynamic_service = DynamicGrpcService::new(proto_service.clone(), None);
+
+        // The service will automatically handle all RPC methods
+        // with mock responses based on the protobuf definitions
+    }
+
+    Ok(())
+}</code></pre></pre>
+<h3 id="using-grpc-reflection"><a class="header" href="#using-grpc-reflection">Using gRPC Reflection</a></h3>
+<pre><pre class="playground"><code class="language-rust">use mockforge_grpc::reflection::{MockReflectionProxy, ProxyConfig};
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error + Send + Sync&gt;&gt; {
+    let config = DynamicGrpcConfig {
+        proto_dir: "./proto".to_string(),
+        enable_reflection: true,
+        ..Default::default()
+    };
+
+    let registry = discover_services(&amp;config).await?;
+    let registry_arc = Arc::new(registry);
+
+    let proxy_config = ProxyConfig::default();
+    let reflection_proxy = MockReflectionProxy::new(proxy_config, registry_arc).await?;
+
+    // The reflection proxy enables:
+    // - Service listing: reflection_proxy.list_services()
+    // - Service descriptors: reflection_proxy.get_service_descriptor("MyService")
+    // - Method descriptors: reflection_proxy.get_method_descriptor("MyService", "MyMethod")
+
+    Ok(())
+}</code></pre></pre>
 
                     </main>
 

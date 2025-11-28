@@ -10,93 +10,136 @@ use std::collections::HashMap;
 /// Insomnia export structure
 #[derive(Debug, Deserialize)]
 pub struct InsomniaExport {
+    /// Export format version
     #[serde(rename = "__export_format")]
     pub export_format: Option<i32>,
+    /// Export type identifier
     #[serde(rename = "_type")]
     pub export_type: Option<String>,
+    /// Array of resources (requests, environments, folders, etc.)
     pub resources: Vec<InsomniaResource>,
 }
 
-/// Generic Insomnia resource
+/// Generic Insomnia resource (request, folder, environment, etc.)
 #[derive(Debug, Deserialize)]
 pub struct InsomniaResource {
+    /// Unique resource identifier
     #[serde(rename = "_id")]
     pub id: String,
+    /// Resource type (request, folder, environment, etc.)
     #[serde(rename = "_type")]
     pub resource_type: String,
+    /// Parent resource ID (for nested resources)
     pub parent_id: Option<String>,
+    /// Resource name
     pub name: Option<String>,
+    /// Request URL (for request resources)
     pub url: Option<String>,
+    /// HTTP method (for request resources)
     pub method: Option<String>,
+    /// Request headers (for request resources)
     pub headers: Option<Vec<InsomniaHeader>>,
+    /// Request body (for request resources)
     pub body: Option<InsomniaBody>,
+    /// Authentication configuration (for request resources)
     pub authentication: Option<InsomniaAuth>,
+    /// Query/form parameters (for request resources)
     pub parameters: Option<Vec<InsomniaParameter>>,
-    pub data: Option<Value>,         // For environment data
-    pub environment: Option<String>, // Environment name
+    /// Environment variable data (for environment resources)
+    pub data: Option<Value>,
+    /// Environment name (for environment resources)
+    pub environment: Option<String>,
 }
 
-/// Insomnia header
+/// Insomnia header entry
 #[derive(Debug, Deserialize)]
 pub struct InsomniaHeader {
+    /// Header name
     pub name: String,
+    /// Header value
     pub value: String,
+    /// Whether this header is disabled
     pub disabled: Option<bool>,
 }
 
-/// Insomnia request body
+/// Insomnia request body structure
 #[derive(Debug, Deserialize)]
 pub struct InsomniaBody {
+    /// MIME type of the body
     pub mime_type: Option<String>,
+    /// Raw body text
     pub text: Option<String>,
+    /// Form data parameters (for form-data bodies)
     pub params: Option<Vec<InsomniaParameter>>,
 }
 
 /// Insomnia parameter (query params, form data, etc.)
 #[derive(Debug, Deserialize)]
 pub struct InsomniaParameter {
+    /// Parameter name
     pub name: String,
+    /// Parameter value
     pub value: String,
+    /// Whether this parameter is disabled
     pub disabled: Option<bool>,
 }
 
-/// Insomnia authentication
+/// Insomnia authentication configuration
 #[derive(Debug, Deserialize)]
 pub struct InsomniaAuth {
+    /// Authentication type (bearer, basic, apikey, etc.)
     #[serde(rename = "type")]
     pub auth_type: String,
+    /// Whether authentication is disabled
     pub disabled: Option<bool>,
+    /// Username (for basic auth)
     pub username: Option<String>,
+    /// Password (for basic auth)
     pub password: Option<String>,
+    /// Bearer token (for bearer auth)
     pub token: Option<String>,
+    /// Token prefix (for bearer auth)
     pub prefix: Option<String>,
+    /// API key name (for apikey auth)
     pub key: Option<String>,
+    /// API key value (for apikey auth)
     pub value: Option<String>,
 }
 
 /// MockForge route structure for import
 #[derive(Debug, Serialize)]
 pub struct MockForgeRoute {
+    /// HTTP method
     pub method: String,
+    /// Request path
     pub path: String,
+    /// Request headers
     pub headers: HashMap<String, String>,
+    /// Optional request body
     pub body: Option<String>,
+    /// Mock response for this route
     pub response: MockForgeResponse,
 }
 
 /// MockForge response structure
 #[derive(Debug, Serialize)]
 pub struct MockForgeResponse {
+    /// HTTP status code
     pub status: u16,
+    /// Response headers
     pub headers: HashMap<String, String>,
+    /// Response body
     pub body: Value,
 }
 
-/// Import result for Insomnia exports
+/// Result of importing an Insomnia export
 #[derive(Debug)]
 pub struct InsomniaImportResult {
+    /// Converted routes from Insomnia requests
     pub routes: Vec<MockForgeRoute>,
+    /// Extracted environment variables
     pub variables: HashMap<String, String>,
+    /// Warnings encountered during import
     pub warnings: Vec<String>,
 }
 

@@ -4,16 +4,15 @@
 //! throughout MockForge, including AES-GCM and ChaCha20-Poly1305 implementations.
 
 use crate::encryption::errors::{EncryptionError, EncryptionResult};
-#[allow(deprecated)]
 use aes_gcm::{
-    aead::{generic_array::GenericArray, Aead, KeyInit},
+    aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
 use base64::{engine::general_purpose, Engine as _};
 use chacha20poly1305::{ChaCha20Poly1305, Key as ChaChaKey};
-use rand::{rng, Rng};
+use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{convert::TryInto, fmt};
 
 /// Supported encryption algorithms
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -70,7 +69,7 @@ impl EncryptionKey {
         };
 
         let mut key = vec![0u8; key_len];
-        let mut rng = rng();
+        let mut rng = thread_rng();
         rng.fill(&mut key[..]);
 
         Self::new(key, algorithm)
@@ -215,12 +214,20 @@ impl EncryptionEngine {
     ) -> EncryptionResult<EncryptedData> {
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12]; // 96 bits
-        let mut rng = rng();
+        let mut rng = thread_rng();
         rng.fill(&mut nonce_bytes);
 
         let nonce = Nonce::from_slice(&nonce_bytes);
-        let cipher_key = GenericArray::from_slice(key.as_bytes());
-        let cipher = Aes256Gcm::new(cipher_key);
+
+        // Convert key bytes to fixed-size array for Aes256Gcm::new()
+        // We validate key length in EncryptionKey::new(), so this is safe
+        let key_bytes = key.as_bytes();
+        let key_array: [u8; 32] = key_bytes.try_into().map_err(|_| {
+            EncryptionError::invalid_key(
+                "Key length mismatch during encryption (expected 32 bytes)".to_string(),
+            )
+        })?;
+        let cipher = Aes256Gcm::new(&key_array.into());
 
         // Encrypt the plaintext
         let ciphertext = match aad {
@@ -260,8 +267,16 @@ impl EncryptionEngine {
         let ciphertext = encrypted_data.ciphertext_bytes()?;
 
         let nonce = Nonce::from_slice(&nonce_bytes);
-        let cipher_key = GenericArray::from_slice(key.as_bytes());
-        let cipher = Aes256Gcm::new(cipher_key);
+
+        // Convert key bytes to fixed-size array for Aes256Gcm::new()
+        // We validate key length in EncryptionKey::new(), so this is safe
+        let key_bytes = key.as_bytes();
+        let key_array: [u8; 32] = key_bytes.try_into().map_err(|_| {
+            EncryptionError::invalid_key(
+                "Key length mismatch during decryption (expected 32 bytes)".to_string(),
+            )
+        })?;
+        let cipher = Aes256Gcm::new(&key_array.into());
 
         let plaintext = match encrypted_data.aad_bytes() {
             Some(Ok(aad)) => cipher.decrypt(
@@ -302,7 +317,7 @@ impl EncryptionEngine {
     ) -> EncryptionResult<EncryptedData> {
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12]; // 96 bits
-        let mut rng = rng();
+        let mut rng = thread_rng();
         rng.fill(&mut nonce_bytes);
 
         let nonce = chacha20poly1305::Nonce::from_slice(&nonce_bytes);
@@ -440,7 +455,7 @@ pub mod utils {
         };
 
         let mut nonce = vec![0u8; nonce_len];
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         rng.fill(&mut nonce[..]);
 
         Ok(nonce)

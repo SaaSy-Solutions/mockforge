@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   mockforge:
+    image: mockforge:latest
     build:
       context: .
       dockerfile: Dockerfile

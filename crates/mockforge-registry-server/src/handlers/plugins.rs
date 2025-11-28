@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{Plugin, PluginVersion, PluginWithVersions, User},
+    models::{Plugin, PluginVersion, User},
     AppState,
 };
 
@@ -20,6 +20,7 @@ pub async fn search_plugins(
     State(state): State<AppState>,
     Json(query): Json<SearchQuery>,
 ) -> ApiResult<Json<SearchResults>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
     let pool = state.db.pool();
 
     // Map sort order
@@ -43,11 +44,14 @@ pub async fn search_plugins(
         PluginCategory::Other => "other",
     });
 
-    let limit = query.per_page as i64;
-    let offset = (query.page * query.per_page) as i64;
+    // Validate and limit pagination parameters
+    let per_page = query.per_page.min(100).max(1); // Max 100 items per page
+    let page = query.page;
+    let limit = per_page as i64;
+    let offset = (page * per_page) as i64;
 
     // Search plugins
-    let plugins = Plugin::search(
+    let plugins = match Plugin::search(
         pool,
         query.query.as_deref(),
         category_str,
@@ -57,7 +61,13 @@ pub async fn search_plugins(
         offset,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    {
+        Ok(plugins) => plugins,
+        Err(e) => {
+            metrics.record_search_error("database_error");
+            return Err(ApiError::Database(e));
+        }
+    };
 
     // Convert to registry entries
     let mut entries = Vec::new();
@@ -93,16 +103,24 @@ pub async fn search_plugins(
         let author = User::find_by_id(pool, plugin.author_id)
             .await
             .map_err(|e| ApiError::Database(e))?
-            .unwrap_or_else(|| User {
-                id: plugin.author_id,
-                username: "Unknown".to_string(),
-                email: String::new(),
-                password_hash: String::new(),
-                api_token: None,
-                is_verified: false,
-                is_admin: false,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
+            .unwrap_or_else(|| {
+                // Create a minimal user struct for display purposes
+                // This should not happen in production, but handle gracefully
+                User {
+                    id: plugin.author_id,
+                    username: "Unknown".to_string(),
+                    email: String::new(),
+                    password_hash: String::new(),
+                    api_token: None,
+                    is_verified: false,
+                    is_admin: false,
+                    two_factor_enabled: false,
+                    two_factor_secret: None,
+                    two_factor_backup_codes: None,
+                    two_factor_verified_at: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }
             });
 
         entries.push(RegistryEntry {
@@ -118,7 +136,7 @@ pub async fn search_plugins(
             tags,
             category,
             downloads: plugin.downloads_total as u64,
-            rating: plugin.rating_avg.to_string().parse().unwrap_or(0.0),
+            rating: plugin.rating_avg,
             reviews_count: plugin.rating_count as u32,
             repository: plugin.repository,
             homepage: plugin.homepage,
@@ -134,9 +152,12 @@ pub async fn search_plugins(
     let results = SearchResults {
         plugins: entries,
         total,
-        page: query.page,
-        per_page: query.per_page,
+        page,
+        per_page,
     };
+
+    // Record metrics
+    metrics.record_search_success();
 
     Ok(Json(results))
 }
@@ -145,6 +166,7 @@ pub async fn get_plugin(
     State(state): State<AppState>,
     Path(name): Path<String>,
 ) -> ApiResult<Json<RegistryEntry>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
     let pool = state.db.pool();
 
     let plugin = Plugin::find_by_name(pool, &name)
@@ -191,6 +213,10 @@ pub async fn get_plugin(
             api_token: None,
             is_verified: false,
             is_admin: false,
+            two_factor_enabled: false,
+            two_factor_secret: None,
+            two_factor_backup_codes: None,
+            two_factor_verified_at: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         });
@@ -217,6 +243,9 @@ pub async fn get_plugin(
         updated_at: plugin.updated_at.to_rfc3339(),
     };
 
+    // Record metrics
+    metrics.record_download_success();
+
     Ok(Json(entry))
 }
 
@@ -224,6 +253,7 @@ pub async fn get_version(
     State(state): State<AppState>,
     Path((name, version)): Path<(String, String)>,
 ) -> ApiResult<Json<VersionEntry>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
     let pool = state.db.pool();
 
     let plugin = Plugin::find_by_name(pool, &name)
@@ -251,6 +281,9 @@ pub async fn get_version(
         min_mockforge_version: plugin_version.min_mockforge_version,
         dependencies,
     };
+
+    // Record metrics
+    metrics.record_download_success();
 
     Ok(Json(entry))
 }
@@ -283,6 +316,7 @@ pub async fn publish_plugin(
     State(state): State<AppState>,
     Json(request): Json<PublishRequest>,
 ) -> ApiResult<Json<PublishResponse>> {
+    let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
     let pool = state.db.pool();
 
     // Check if plugin exists
@@ -312,9 +346,33 @@ pub async fn publish_plugin(
         .map_err(|e| ApiError::Database(e))?
     };
 
+    // Validate input fields
+    crate::validation::validate_name(&request.name)?;
+    crate::validation::validate_version(&request.version)?;
+    crate::validation::validate_checksum(&request.checksum)?;
+
+    // Validate base64 encoding
+    crate::validation::validate_base64(&request.wasm_data)?;
+
     // Decode WASM data
     let wasm_bytes = base64::decode(&request.wasm_data)
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64: {}", e)))?;
+
+    // Validate WASM file
+    crate::validation::validate_wasm_file(&wasm_bytes, request.file_size as u64)?;
+
+    // Verify checksum matches uploaded data
+    use sha2::{Sha256, Digest};
+    let mut hasher = Sha256::new();
+    hasher.update(&wasm_bytes);
+    let calculated_checksum = hex::encode(hasher.finalize());
+
+    if calculated_checksum != request.checksum {
+        return Err(ApiError::InvalidRequest(format!(
+            "Checksum mismatch: expected {}, got {}",
+            request.checksum, calculated_checksum
+        )));
+    }
 
     // Upload to S3
     let download_url = state
@@ -344,6 +402,9 @@ pub async fn publish_plugin(
                 .map_err(|e| ApiError::Database(e))?;
         }
     }
+
+    // Record metrics
+    metrics.record_publish_success();
 
     Ok(Json(PublishResponse {
         success: true,

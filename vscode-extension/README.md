@@ -10,6 +10,9 @@ Control and visualize your MockForge API mocks directly from Visual Studio Code.
 - **Export/Import**: Export mocks to JSON/YAML and import them back
 - **Server Control**: Monitor server status, stats, and configuration
 - **Quick Actions**: Context menu actions for common tasks
+- **Peek Mock Response**: Hover over API endpoint references in your code to see mock responses inline
+- **Config Validation**: Real-time validation of `mockforge.yaml` files with inline error reporting
+- **Playground Integration**: Quick access to MockForge Playground from hover tooltips
 
 ## Installation
 
@@ -22,6 +25,7 @@ Control and visualize your MockForge API mocks directly from Visual Studio Code.
 - `mockforge.serverUrl`: MockForge server URL (default: `http://localhost:3000`)
 - `mockforge.autoConnect`: Automatically connect on startup (default: `true`)
 - `mockforge.showNotifications`: Show notifications for mock changes (default: `true`)
+- `mockforge.inlinePreview.enabled`: Enable inline preview of mock responses when hovering (default: `true`)
 
 ## Usage
 
@@ -64,6 +68,23 @@ View server statistics in the "Server Control" panel:
 - Uptime and request count
 - Active mocks count
 
+### Peek Mock Response
+
+Hover over API endpoint references in your code to see mock responses:
+- Works with `fetch()`, `axios`, and other HTTP client calls
+- Shows mock response headers and body
+- Click "Open in Playground" to test the endpoint interactively
+- Automatically detects endpoints in JavaScript, TypeScript, and YAML files
+
+### Config Validation
+
+Get real-time validation for your `mockforge.yaml` files:
+- Inline error reporting with accurate line/column positions
+- Validates against JSON Schema generated from MockForge config types
+- Supports main config, reality config, persona config, and blueprint config
+- Auto-detects schema type based on file name and location
+- Shows helpful error messages for missing fields, type mismatches, and invalid values
+
 ## Requirements
 
 - MockForge server running (v0.1.0 or higher)
@@ -71,18 +92,11 @@ View server statistics in the "Server Control" panel:
 
 ## Known Issues
 
-- WebSocket reconnection not yet implemented
-- Large mock lists may slow down the tree view
+- Large mock lists may slow down the tree view (performance optimizations with caching and debouncing are in place)
 
 ## Release Notes
 
-### 0.1.0
-
-- Initial release
-- Basic mock management
-- WebSocket live updates
-- Export/import functionality
-- Server monitoring
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
 ## Contributing
 

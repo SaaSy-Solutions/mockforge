@@ -44,6 +44,10 @@ change_block = os.environ["CHANGE_BLOCK"]
 
 stub = """## [Unreleased]\n\n### Added\n\n- Nothing yet.\n\n### Changed\n\n- Nothing yet.\n\n### Deprecated\n\n- Nothing yet.\n\n### Removed\n\n- Nothing yet.\n\n### Fixed\n\n- Nothing yet.\n\n### Security\n\n- Nothing yet.\n\n"""
 
+# NOTE: Remember to tag changelog entries with pillars!
+# Format: - **[Pillar] Feature description** or - **[Pillar1][Pillar2] Feature description**
+# Pillars: [Reality], [Contracts], [DevX], [Cloud], [AI]
+# See docs/PILLARS.md for pillar definitions and examples.
 section = f"## [{version}] - {date}\n\n### Changes\n\n{change_block}\n\n"
 
 for path_str in ("CHANGELOG.md", "book/src/reference/changelog.md"):

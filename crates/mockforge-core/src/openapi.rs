@@ -9,6 +9,8 @@
 
 // Re-export sub-modules for backward compatibility
 pub mod response;
+pub mod response_selection;
+pub mod response_trace;
 pub mod route;
 pub mod schema;
 pub mod spec;
@@ -16,21 +18,27 @@ pub mod validation;
 
 // Re-export commonly used types (avoiding conflicts)
 pub use response::*;
+pub use response_selection::*;
 pub use route::*;
 pub use schema::*;
 pub use spec::*;
 pub use validation::*;
 
-/// Stub OpenApiOperation for compilation
+/// Wrapper for OpenAPI operation with enhanced metadata
 #[derive(Debug, Clone)]
 pub struct OpenApiOperation {
+    /// HTTP method (GET, POST, PUT, etc.)
     pub method: String,
+    /// API path (e.g., "/api/users/{id}")
     pub path: String,
+    /// OpenAPI operation specification
     pub operation: openapiv3::Operation,
+    /// Security requirements for this operation
     pub security: Option<Vec<openapiv3::SecurityRequirement>>,
 }
 
 impl OpenApiOperation {
+    /// Create a new OpenAPI operation wrapper
     pub fn new(method: String, path: String, operation: openapiv3::Operation) -> Self {
         Self {
             method,
@@ -40,6 +48,7 @@ impl OpenApiOperation {
         }
     }
 
+    /// Create an operation from an OpenAPI operation reference
     pub fn from_operation(
         method: &str,
         path: String,

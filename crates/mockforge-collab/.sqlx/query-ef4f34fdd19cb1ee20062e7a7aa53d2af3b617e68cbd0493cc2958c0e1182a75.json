@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id FROM workspace_state_snapshots\n            WHERE workspace_id = ? AND state_hash = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ef4f34fdd19cb1ee20062e7a7aa53d2af3b617e68cbd0493cc2958c0e1182a75"
+}

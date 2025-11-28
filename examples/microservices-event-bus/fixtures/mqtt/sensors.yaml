@@ -1,0 +1,95 @@
+# MQTT Fixtures for Warehouse Sensors
+
+# Temperature Sensors
+- identifier: "warehouse-temperature"
+  pattern: "warehouse/sensors/temperature/+"
+  qos: 1
+  retained: true
+  payload:
+    sensor_id: "temp-{{pathParam 1}}"
+    temperature: "{{faker.float 18.0 30.0 | round 1}}"
+    unit: "celsius"
+    zone: "{{pathParam 1}}"
+    battery_level: "{{faker.int 60 100}}"
+    signal_strength: "{{faker.int -80 -30}}"
+    timestamp: "{{now}}"
+    status: "active"
+  auto_publish:
+    enabled: true
+    interval_ms: 5000  # Every 5 seconds
+    topics:
+      - "warehouse/sensors/temperature/zone-1"
+      - "warehouse/sensors/temperature/zone-2"
+      - "warehouse/sensors/temperature/zone-3"
+
+# Humidity Sensors
+- identifier: "warehouse-humidity"
+  pattern: "warehouse/sensors/humidity/+"
+  qos: 1
+  retained: true
+  payload:
+    sensor_id: "humid-{{pathParam 1}}"
+    humidity: "{{faker.float 30.0 70.0 | round 1}}"
+    unit: "percent"
+    zone: "{{pathParam 1}}"
+    battery_level: "{{faker.int 60 100}}"
+    timestamp: "{{now}}"
+    status: "active"
+  auto_publish:
+    enabled: true
+    interval_ms: 10000  # Every 10 seconds
+    topics:
+      - "warehouse/sensors/humidity/zone-1"
+      - "warehouse/sensors/humidity/zone-2"
+
+# Critical Alerts
+- identifier: "critical-alerts"
+  pattern: "alerts/critical"
+  qos: 2  # Exactly once
+  retained: false
+  payload:
+    alert_id: "{{uuid}}"
+    type: "{{faker.randomChoice ['temperature_high', 'temperature_low', 'humidity_high', 'humidity_low']}}"
+    severity: "CRITICAL"
+    zone: "{{faker.randomChoice ['zone-1', 'zone-2', 'zone-3']}}"
+    sensor_id: "{{faker.randomChoice ['temp-zone-1', 'temp-zone-2', 'humid-zone-1']}}"
+    value: "{{faker.float 35.0 45.0}}"
+    threshold: 30.0
+    message: "Temperature exceeded safe threshold"
+    timestamp: "{{now}}"
+    acknowledged: false
+  auto_publish:
+    enabled: true
+    interval_ms: 60000  # Every minute
+    probability: 0.1  # 10% chance
+
+# Dashboard Updates
+- identifier: "dashboard-updates"
+  pattern: "dashboard/updates"
+  qos: 0  # Fire and forget
+  retained: true
+  payload:
+    metrics:
+      total_sensors: 5
+      active_sensors: "{{faker.int 4 5}}"
+      avg_temperature: "{{faker.float 20.0 25.0 | round 1}}"
+      avg_humidity: "{{faker.float 45.0 55.0 | round 1}}"
+      alerts_count: "{{faker.int 0 5}}"
+    last_updated: "{{now}}"
+  auto_publish:
+    enabled: true
+    interval_ms: 15000  # Every 15 seconds
+
+# Inventory Realtime Updates (cross-protocol integration)
+- identifier: "inventory-realtime"
+  pattern: "inventory/updates/+"
+  qos: 1
+  retained: false
+  payload:
+    product_id: "{{pathParam 1}}"
+    quantity: "{{faker.int 0 1000}}"
+    location: "{{faker.randomChoice ['Aisle A1', 'Aisle B3', 'Aisle C2']}}"
+    last_movement: "{{now}}"
+    status: "{{faker.randomChoice ['in_stock', 'low_stock', 'out_of_stock']}}"
+  auto_publish:
+    enabled: false  # Triggered by Kafka events

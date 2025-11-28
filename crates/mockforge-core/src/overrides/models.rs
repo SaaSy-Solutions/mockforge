@@ -10,16 +10,20 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// Override rule configuration
+/// Configuration for a single override rule
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OverrideRule {
-    /// Target selectors: "operation:opId", "tag:Tag", "regex:pattern", or "path:pattern"
+    /// Target selectors for matching operations:
+    /// - "operation:opId" - match by operation ID
+    /// - "tag:Tag" - match by OpenAPI tag
+    /// - "regex:pattern" - match path by regex pattern
+    /// - "path:pattern" - match path by literal pattern
     pub targets: Vec<String>,
-    /// JSON patch operations to apply
+    /// JSON patch operations to apply when this rule matches
     pub patch: Vec<PatchOp>,
-    /// Optional condition expression
+    /// Optional condition expression (JSONPath/XPath) that must evaluate to true
     pub when: Option<String>,
-    /// Override mode: "replace" (default) or "merge"
+    /// Override mode for applying patches: "replace" (default) or "merge"
     #[serde(default = "default_mode")]
     pub mode: OverrideMode,
     /// Whether to apply post-templating expansion after patching
@@ -38,24 +42,40 @@ pub enum OverrideMode {
     Merge,
 }
 
-/// JSON patch operation
+/// JSON patch operation (RFC 6902 format)
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "op")]
 pub enum PatchOp {
+    /// Add a new value at the specified path
     #[serde(rename = "add")]
-    Add { path: String, value: Value },
+    Add {
+        /// JSON pointer path to add the value
+        path: String,
+        /// Value to add
+        value: Value,
+    },
+    /// Replace the value at the specified path
     #[serde(rename = "replace")]
-    Replace { path: String, value: Value },
+    Replace {
+        /// JSON pointer path to replace
+        path: String,
+        /// New value
+        value: Value,
+    },
+    /// Remove the value at the specified path
     #[serde(rename = "remove")]
-    Remove { path: String },
+    Remove {
+        /// JSON pointer path to remove
+        path: String,
+    },
 }
 
-/// Container for override rules with caching
+/// Container for override rules with performance optimizations
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct Overrides {
-    /// Loaded override rules
+    /// Loaded override rules to apply to responses
     pub rules: Vec<OverrideRule>,
-    /// Compiled regex patterns for performance
+    /// Compiled regex patterns for performance (cached compilation)
     #[serde(skip)]
     pub regex_cache: HashMap<String, regex::Regex>,
 }

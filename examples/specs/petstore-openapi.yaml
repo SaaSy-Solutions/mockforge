@@ -1,0 +1,387 @@
+openapi: 3.0.3
+info:
+  title: Pet Store API
+  version: 1.0.0
+  description: A sample Pet Store API to demonstrate OpenAPI schema-driven mock generation
+servers:
+  - url: https://petstore.example.com/api/v1
+    description: Production server
+  - url: https://dev.petstore.example.com/api/v1
+    description: Development server
+
+paths:
+  /pets:
+    get:
+      summary: List all pets
+      operationId: listPets
+      tags:
+        - pets
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of pets to return
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: tag
+          in: query
+          description: Filter pets by tag
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A paginated list of pets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Pet'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+              examples:
+                example1:
+                  value:
+                    data:
+                      - id: 1
+                        name: Fluffy
+                        species: cat
+                        breed: Persian
+                        age: 3
+                        tags:
+                          - fluffy
+                          - friendly
+                      - id: 2
+                        name: Buddy
+                        species: dog
+                        breed: Golden Retriever
+                        age: 5
+                        tags:
+                          - playful
+                          - loyal
+                    pagination:
+                      offset: 0
+                      limit: 20
+                      total: 2
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Create a pet
+      operationId: createPet
+      tags:
+        - pets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPet'
+            examples:
+              example1:
+                value:
+                  name: Max
+                  species: dog
+                  breed: Labrador
+                  age: 2
+                  tags:
+                    - energetic
+                    - friendly
+      responses:
+        '201':
+          description: Pet created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+              examples:
+                example1:
+                  value:
+                    id: 3
+                    name: Max
+                    species: dog
+                    breed: Labrador
+                    age: 2
+                    tags:
+                      - energetic
+                      - friendly
+                    createdAt: '2025-10-22T12:00:00Z'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /pets/{petId}:
+    get:
+      summary: Get a pet by ID
+      operationId: getPetById
+      tags:
+        - pets
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: The ID of the pet to retrieve
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Pet details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        '404':
+          description: Pet not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update a pet
+      operationId: updatePet
+      tags:
+        - pets
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: The ID of the pet to update
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPet'
+      responses:
+        '200':
+          description: Pet updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        '404':
+          description: Pet not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete a pet
+      operationId: deletePet
+      tags:
+        - pets
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: The ID of the pet to delete
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Pet deleted successfully
+        '404':
+          description: Pet not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /pets/search:
+    get:
+      summary: Search pets by name
+      operationId: searchPets
+      tags:
+        - pets
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query
+          schema:
+            type: string
+            minLength: 1
+        - name: species
+          in: query
+          required: false
+          description: Filter by species
+          schema:
+            type: string
+            enum:
+              - dog
+              - cat
+              - bird
+              - fish
+              - reptile
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pet'
+
+components:
+  schemas:
+    Pet:
+      type: object
+      required:
+        - id
+        - name
+        - species
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the pet
+          example: 1
+        name:
+          type: string
+          description: Name of the pet
+          minLength: 1
+          maxLength: 100
+          example: Fluffy
+        species:
+          type: string
+          description: Species of the pet
+          enum:
+            - dog
+            - cat
+            - bird
+            - fish
+            - reptile
+          example: cat
+        breed:
+          type: string
+          description: Breed of the pet
+          example: Persian
+        age:
+          type: integer
+          format: int32
+          description: Age of the pet in years
+          minimum: 0
+          maximum: 50
+          example: 3
+        tags:
+          type: array
+          description: Tags associated with the pet
+          items:
+            type: string
+          example:
+            - fluffy
+            - friendly
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the pet was added
+          example: '2025-10-22T12:00:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the pet was last updated
+          example: '2025-10-22T12:00:00Z'
+
+    NewPet:
+      type: object
+      required:
+        - name
+        - species
+      properties:
+        name:
+          type: string
+          description: Name of the pet
+          minLength: 1
+          maxLength: 100
+        species:
+          type: string
+          description: Species of the pet
+          enum:
+            - dog
+            - cat
+            - bird
+            - fish
+            - reptile
+        breed:
+          type: string
+          description: Breed of the pet
+        age:
+          type: integer
+          format: int32
+          description: Age of the pet in years
+          minimum: 0
+          maximum: 50
+        tags:
+          type: array
+          description: Tags associated with the pet
+          items:
+            type: string
+
+    Pagination:
+      type: object
+      required:
+        - offset
+        - limit
+        - total
+      properties:
+        offset:
+          type: integer
+          format: int32
+          description: Number of items skipped
+          minimum: 0
+          example: 0
+        limit:
+          type: integer
+          format: int32
+          description: Maximum number of items returned
+          minimum: 1
+          maximum: 100
+          example: 20
+        total:
+          type: integer
+          format: int64
+          description: Total number of items available
+          minimum: 0
+          example: 100
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code
+          example: INVALID_INPUT
+        message:
+          type: string
+          description: Human-readable error message
+          example: The provided input is invalid
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true

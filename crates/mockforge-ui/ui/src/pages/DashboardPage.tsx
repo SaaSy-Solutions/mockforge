@@ -1,8 +1,10 @@
-import { logger } from '@/utils/logger';
-import React, { useMemo } from 'react';
 import { ServerTable } from '../components/dashboard/ServerTable';
 import { RequestLog } from '../components/dashboard/RequestLog';
 import { LatencyHistogram } from '../components/metrics/LatencyHistogram';
+import { TimeTravelWidget } from '../components/time-travel/TimeTravelWidget';
+import { RealitySlider } from '../components/reality/RealitySlider';
+import { RealityIndicator } from '../components/reality/RealityIndicator';
+import { useRealityShortcuts } from '../hooks/useRealityShortcuts';
 import type { LatencyMetrics, LogEntry } from '../types';
 import { useDashboard, useLogs } from '../hooks/useApi';
 import {
@@ -40,70 +42,76 @@ function isLogEntry(obj: unknown): obj is LogEntry {
   );
 }
 
+function computeFailureCounters(logs: unknown): { total2xx: number; total4xx: number; total5xx: number } {
+  if (!logs || !Array.isArray(logs)) return { total2xx: 0, total4xx: 0, total5xx: 0 };
+
+  const validLogs = logs.filter(isLogEntry);
+  return validLogs.reduce((acc: { total2xx: number; total4xx: number; total5xx: number }, log) => {
+    const code = log.status_code;
+    if (code >= 500) acc.total5xx++;
+    else if (code >= 400) acc.total4xx++;
+    else if (code >= 200) acc.total2xx++;
+    return acc;
+  }, { total2xx: 0, total4xx: 0, total5xx: 0 });
+}
+
+function computeLatencyMetrics(logs: unknown) {
+  if (!logs || !Array.isArray(logs)) return [];
+
+  const logEntries = logs.filter(isLogEntry);
+  const responseTimes = logEntries
+    .map(log => log.response_time_ms)
+    .filter((time): time is number => time !== undefined);
+
+  if (responseTimes.length === 0) return [];
+
+  // Calculate statistics
+  const sorted = [...responseTimes].sort((a, b) => a - b);
+  const sum = responseTimes.reduce((acc, time) => acc + time, 0);
+  const avg = sum / responseTimes.length;
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  const p50 = sorted[Math.floor(sorted.length * 0.5)];
+  const p95 = sorted[Math.floor(sorted.length * 0.95)];
+  const p99 = sorted[Math.floor(sorted.length * 0.99)];
+
+  // Build histogram
+  const latencyData = responseTimes.reduce((acc: Record<string, number>, time) => {
+    const rounded = Math.floor(time / 10) * 10;
+    const range = `${rounded}-${rounded + 9}`;
+    acc[range] = (acc[range] || 0) + 1;
+    return acc;
+  }, {});
+
+  return [{
+    service: 'MockForge',
+    route: 'api/*',
+    avg_response_time: avg,
+    min_response_time: min,
+    max_response_time: max,
+    p50_response_time: p50,
+    p95_response_time: p95,
+    p99_response_time: p99,
+    total_requests: logEntries.length,
+    histogram: Object.entries(latencyData)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+      .map(([range, count]) => ({ range, count: count as number }))
+      .slice(0, 20) // Limit to first 20 ranges
+  }];
+}
+
 export function DashboardPage() {
-  const { data: dashboard, isLoading, error } = useDashboard();
+  // All hooks must be called unconditionally and in the same order every render
+  const { data: dashboard, isLoading, error, isFetching } = useDashboard();
   // Refetch logs every 3 seconds for dashboard metrics to stay in sync with SSE updates
   const { data: logs } = useLogs({ limit: 100, refetchInterval: 3000 });
 
-  // Calculate failure counters
-  const failureCounters = useMemo(() => {
-    if (!logs || !Array.isArray(logs)) return { total2xx: 0, total4xx: 0, total5xx: 0 };
+  // Enable keyboard shortcuts for reality level changes
+  // This hook must be called unconditionally before any early returns
+  useRealityShortcuts();
 
-    const validLogs = logs.filter(isLogEntry);
-    return validLogs.reduce((acc: { total2xx: number; total4xx: number; total5xx: number }, log) => {
-      const code = log.status_code;
-      if (code >= 500) acc.total5xx++;
-      else if (code >= 400) acc.total4xx++;
-      else if (code >= 200) acc.total2xx++;
-      return acc;
-    }, { total2xx: 0, total4xx: 0, total5xx: 0 });
-  }, [logs]);
-
-  // Calculate latency metrics from logs
-  const latencyMetrics = useMemo(() => {
-    if (!logs || !Array.isArray(logs)) return [];
-
-    const logEntries = logs.filter(isLogEntry);
-    const responseTimes = logEntries
-      .map(log => log.response_time_ms)
-      .filter((time): time is number => time !== undefined);
-
-    if (responseTimes.length === 0) return [];
-
-    // Calculate statistics
-    const sorted = [...responseTimes].sort((a, b) => a - b);
-    const sum = responseTimes.reduce((acc, time) => acc + time, 0);
-    const avg = sum / responseTimes.length;
-    const min = sorted[0];
-    const max = sorted[sorted.length - 1];
-    const p50 = sorted[Math.floor(sorted.length * 0.5)];
-    const p95 = sorted[Math.floor(sorted.length * 0.95)];
-    const p99 = sorted[Math.floor(sorted.length * 0.99)];
-
-    // Build histogram
-    const latencyData = responseTimes.reduce((acc: Record<string, number>, time) => {
-      const rounded = Math.floor(time / 10) * 10;
-      const range = `${rounded}-${rounded + 9}`;
-      acc[range] = (acc[range] || 0) + 1;
-      return acc;
-    }, {});
-
-    return [{
-      service: 'MockForge',
-      route: 'api/*',
-      avg_response_time: avg,
-      min_response_time: min,
-      max_response_time: max,
-      p50_response_time: p50,
-      p95_response_time: p95,
-      p99_response_time: p99,
-      total_requests: logEntries.length,
-      histogram: Object.entries(latencyData)
-        .sort(([a], [b]) => parseInt(a) - parseInt(b))
-        .map(([range, count]) => ({ range, count: count as number }))
-        .slice(0, 20) // Limit to first 20 ranges
-    }];
-  }, [logs]);
+  const failureCounters = computeFailureCounters(logs);
+  const latencyMetrics = computeLatencyMetrics(logs);
 
   if (isLoading) {
     return (
@@ -160,12 +168,41 @@ export function DashboardPage() {
         title="Dashboard"
         subtitle="Real-time system overview and performance metrics"
         className="space-section"
+        action={<RealityIndicator />}
       />
+
+      {/* Reality Slider and Time Travel Widget */}
+      <Section
+        title="Environment Control"
+        subtitle="Adjust realism and temporal simulation for testing"
+        className="space-section section-breathing"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 grid-gap-lg">
+          <RealitySlider />
+          <TimeTravelWidget />
+        </div>
+      </Section>
+
+      <div className="divider-accent my-12"></div>
 
       <Section
         title="System Metrics"
         subtitle="Current system performance indicators"
         className="space-section section-breathing"
+        action={
+          <div className="flex items-center gap-2 text-sm">
+            <div className="relative flex items-center gap-2 text-green-600 dark:text-green-400">
+              <div className="relative">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping opacity-75" />
+              </div>
+              <span className="font-medium">Live</span>
+              {isFetching && (
+                <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(updating...)</span>
+              )}
+            </div>
+          </div>
+        }
       >
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 grid-gap-lg">
           <MetricCard
