@@ -365,7 +365,7 @@ jobs:
         mv bom.xml dist/${{ matrix.name }}-sbom.xml
 
     - name: Upload binary artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: mockforge-${{ matrix.name }}
         path: |
