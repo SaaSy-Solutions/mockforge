@@ -64,4 +64,4 @@ name = "advanced_data_synthesis"
 path = "examples/advanced-data-synthesis.rs"
 
 [dev-dependencies]
-opentelemetry_sdk = "0.21"
+opentelemetry_sdk = "0.31"
