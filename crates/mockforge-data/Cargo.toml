@@ -35,7 +35,7 @@ async-trait = "0.1"
 hex = "0.4"
 
 # For vector operations and similarity calculations
-ndarray = "0.16"
+ndarray = "0.17"
 ndarray-stats = "0.5"
 
 # For mock server functionality
