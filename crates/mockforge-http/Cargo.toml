@@ -71,7 +71,7 @@ mockforge-mqtt = { version = "0.3.0", optional = true }
 mockforge-kafka = { version = "0.3.3", path = "../mockforge-kafka", optional = true }
 mockforge-runtime-daemon = { version = "0.3.3", path = "../mockforge-runtime-daemon", optional = true }
 opentelemetry = "0.21"
-rustls = "0.21"
+rustls = "0.23"
 rustls-pemfile = "1.0"
 tokio-rustls = "0.24"
 
