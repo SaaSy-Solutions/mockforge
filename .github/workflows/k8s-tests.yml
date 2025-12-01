@@ -34,7 +34,7 @@ jobs:
           unset KUBECONFIG
           find k8s -name '*.yaml' -o -name '*.yml' | while read file; do
             echo "Validating $file"
-            kubectl --dry-run=client --server-side=false apply -f "$file" || exit 1
+            kubectl --dry-run=client --validate=false apply -f "$file" || exit 1
           done
 
       - name: Run kubeval
