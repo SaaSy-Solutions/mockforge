@@ -102,9 +102,13 @@ impl K6ScriptGenerator {
             .map(|(idx, template)| {
                 let display_name = template.operation.display_name();
                 let sanitized_name = Self::sanitize_js_identifier(&display_name);
+                // metric_name must also be sanitized for k6 metric name validation
+                // k6 metric names must only contain ASCII letters, numbers, or underscores
+                let metric_name = sanitized_name.clone();
                 json!({
                     "index": idx,
                     "name": sanitized_name,  // Use sanitized name for variable names
+                    "metric_name": metric_name,  // Use sanitized name for metric name strings (k6 validation)
                     "display_name": display_name,  // Keep original for comments/display
                     "method": template.operation.method.to_uppercase(),
                     "path": template.generate_path(),
@@ -144,6 +148,117 @@ impl K6ScriptGenerator {
         }
 
         json!(headers)
+    }
+
+    /// Validate the generated k6 script for common issues
+    ///
+    /// Checks for:
+    /// - Invalid metric names (contains dots or special characters)
+    /// - Invalid JavaScript variable names
+    /// - Missing required k6 imports
+    ///
+    /// Returns a list of validation errors, empty if all checks pass.
+    pub fn validate_script(script: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        // Check for required k6 imports
+        if !script.contains("import http from 'k6/http'") {
+            errors.push("Missing required import: 'k6/http'".to_string());
+        }
+        if !script.contains("import { check") && !script.contains("import {check") {
+            errors.push("Missing required import: 'check' from 'k6'".to_string());
+        }
+        if !script.contains("import { Rate, Trend") && !script.contains("import {Rate, Trend") {
+            errors.push("Missing required import: 'Rate, Trend' from 'k6/metrics'".to_string());
+        }
+
+        // Check for invalid metric names in Trend/Rate constructors
+        // k6 metric names must only contain ASCII letters, numbers, or underscores
+        // and start with a letter or underscore
+        let lines: Vec<&str> = script.lines().collect();
+        for (line_num, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+
+            // Check for Trend/Rate constructors with invalid metric names
+            if trimmed.contains("new Trend(") || trimmed.contains("new Rate(") {
+                // Extract the metric name from the string literal
+                // Pattern: new Trend('metric_name') or new Rate("metric_name")
+                if let Some(start) = trimmed.find('\'') {
+                    if let Some(end) = trimmed[start + 1..].find('\'') {
+                        let metric_name = &trimmed[start + 1..start + 1 + end];
+                        if !Self::is_valid_k6_metric_name(metric_name) {
+                            errors.push(format!(
+                                "Line {}: Invalid k6 metric name '{}'. Metric names must only contain ASCII letters, numbers, or underscores and start with a letter or underscore.",
+                                line_num + 1,
+                                metric_name
+                            ));
+                        }
+                    }
+                } else if let Some(start) = trimmed.find('"') {
+                    if let Some(end) = trimmed[start + 1..].find('"') {
+                        let metric_name = &trimmed[start + 1..start + 1 + end];
+                        if !Self::is_valid_k6_metric_name(metric_name) {
+                            errors.push(format!(
+                                "Line {}: Invalid k6 metric name '{}'. Metric names must only contain ASCII letters, numbers, or underscores and start with a letter or underscore.",
+                                line_num + 1,
+                                metric_name
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // Check for invalid JavaScript variable names (containing dots)
+            if trimmed.starts_with("const ") || trimmed.starts_with("let ") {
+                if let Some(equals_pos) = trimmed.find('=') {
+                    let var_decl = &trimmed[..equals_pos];
+                    // Check if variable name contains a dot (invalid identifier)
+                    // But exclude string literals
+                    if var_decl.contains('.')
+                        && !var_decl.contains("'")
+                        && !var_decl.contains("\"")
+                        && !var_decl.trim().starts_with("//") {
+                        errors.push(format!(
+                            "Line {}: Invalid JavaScript variable name with dot: {}. Variable names cannot contain dots.",
+                            line_num + 1,
+                            var_decl.trim()
+                        ));
+                    }
+                }
+            }
+        }
+
+        errors
+    }
+
+    /// Check if a string is a valid k6 metric name
+    ///
+    /// k6 metric names must:
+    /// - Only contain ASCII letters, numbers, or underscores
+    /// - Start with a letter or underscore (not a number)
+    /// - Be at most 128 characters
+    fn is_valid_k6_metric_name(name: &str) -> bool {
+        if name.is_empty() || name.len() > 128 {
+            return false;
+        }
+
+        let mut chars = name.chars();
+
+        // First character must be a letter or underscore
+        if let Some(first) = chars.next() {
+            if !first.is_ascii_alphabetic() && first != '_' {
+                return false;
+            }
+        }
+
+        // Remaining characters must be alphanumeric or underscore
+        for ch in chars {
+            if !ch.is_ascii_alphanumeric() && ch != '_' {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
@@ -287,16 +402,21 @@ mod tests {
             "Script should not contain variable names with dots - this would cause 'Unexpected token .' error"
         );
 
-        // Verify metric name strings CAN contain dots (they're just strings, not identifiers)
+        // Verify metric name strings are sanitized (no dots) - k6 requires valid metric names
+        // Metric names must only contain ASCII letters, numbers, or underscores
         assert!(
-            script.contains("'billing.subscriptions.v1_latency'"),
-            "Metric name strings can contain dots (they're string literals)"
+            script.contains("'billing_subscriptions_v1_latency'"),
+            "Metric name strings should be sanitized (no dots) - k6 validation requires valid metric names"
+        );
+        assert!(
+            script.contains("'billing_subscriptions_v1_errors'"),
+            "Metric name strings should be sanitized (no dots) - k6 validation requires valid metric names"
         );
 
-        // Verify the original display name is still used in comments and strings
+        // Verify the original display name is still used in comments and strings (for readability)
         assert!(
             script.contains("billing.subscriptions.v1"),
-            "Script should contain original name in comments/strings"
+            "Script should contain original name in comments/strings for readability"
         );
 
         // Most importantly: verify the variable usage doesn't have dots
@@ -308,5 +428,105 @@ mod tests {
             script.contains("billing_subscriptions_v1_errors.add"),
             "Variable usage should use sanitized name"
         );
+    }
+
+    #[test]
+    fn test_validate_script_valid() {
+        let valid_script = r#"
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate, Trend } from 'k6/metrics';
+
+const test_latency = new Trend('test_latency');
+const test_errors = new Rate('test_errors');
+
+export default function() {
+    const res = http.get('https://example.com');
+    test_latency.add(res.timings.duration);
+    test_errors.add(res.status !== 200);
+}
+"#;
+
+        let errors = K6ScriptGenerator::validate_script(valid_script);
+        assert!(errors.is_empty(), "Valid script should have no validation errors");
+    }
+
+    #[test]
+    fn test_validate_script_invalid_metric_name() {
+        let invalid_script = r#"
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate, Trend } from 'k6/metrics';
+
+const test_latency = new Trend('test.latency');
+const test_errors = new Rate('test_errors');
+
+export default function() {
+    const res = http.get('https://example.com');
+    test_latency.add(res.timings.duration);
+}
+"#;
+
+        let errors = K6ScriptGenerator::validate_script(invalid_script);
+        assert!(!errors.is_empty(), "Script with invalid metric name should have validation errors");
+        assert!(
+            errors.iter().any(|e| e.contains("Invalid k6 metric name")),
+            "Should detect invalid metric name with dot"
+        );
+    }
+
+    #[test]
+    fn test_validate_script_missing_imports() {
+        let invalid_script = r#"
+const test_latency = new Trend('test_latency');
+export default function() {}
+"#;
+
+        let errors = K6ScriptGenerator::validate_script(invalid_script);
+        assert!(!errors.is_empty(), "Script missing imports should have validation errors");
+    }
+
+    #[test]
+    fn test_validate_script_metric_name_validation() {
+        // Test that validate_script correctly identifies invalid metric names
+        // Valid metric names should pass
+        let valid_script = r#"
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate, Trend } from 'k6/metrics';
+const test_latency = new Trend('test_latency');
+const test_errors = new Rate('test_errors');
+export default function() {}
+"#;
+        let errors = K6ScriptGenerator::validate_script(valid_script);
+        assert!(errors.is_empty(), "Valid metric names should pass validation");
+
+        // Invalid metric names should fail
+        let invalid_cases = vec![
+            ("test.latency", "dot in metric name"),
+            ("123test", "starts with number"),
+            ("test-latency", "hyphen in metric name"),
+            ("test@latency", "special character"),
+        ];
+
+        for (invalid_name, description) in invalid_cases {
+            let script = format!(
+                r#"
+import http from 'k6/http';
+import {{ check, sleep }} from 'k6';
+import {{ Rate, Trend }} from 'k6/metrics';
+const test_latency = new Trend('{}');
+export default function() {{}}
+"#,
+                invalid_name
+            );
+            let errors = K6ScriptGenerator::validate_script(&script);
+            assert!(
+                !errors.is_empty(),
+                "Metric name '{}' ({}) should fail validation",
+                invalid_name,
+                description
+            );
+        }
     }
 }

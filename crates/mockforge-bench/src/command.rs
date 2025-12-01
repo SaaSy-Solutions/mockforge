@@ -102,6 +102,21 @@ impl BenchCommand {
         let script = generator.generate()?;
         TerminalReporter::print_success("k6 script generated");
 
+        // Validate the generated script
+        TerminalReporter::print_progress("Validating k6 script...");
+        let validation_errors = K6ScriptGenerator::validate_script(&script);
+        if !validation_errors.is_empty() {
+            TerminalReporter::print_error("Script validation failed");
+            for error in &validation_errors {
+                eprintln!("  {}", error);
+            }
+            return Err(BenchError::Other(format!(
+                "Generated k6 script has {} validation error(s). Please check the output above.",
+                validation_errors.len()
+            )));
+        }
+        TerminalReporter::print_success("Script validation passed");
+
         // Write script to file
         let script_path = if let Some(output) = &self.script_output {
             output.clone()

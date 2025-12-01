@@ -4,8 +4,8 @@ import { Rate, Trend, Counter } from 'k6/metrics';
 
 // Custom metrics per operation
 {{#each operations}}
-const {{this.name}}_latency = new Trend('{{this.display_name}}_latency');
-const {{this.name}}_errors = new Rate('{{this.display_name}}_errors');
+const {{this.name}}_latency = new Trend('{{this.metric_name}}_latency');
+const {{this.name}}_errors = new Rate('{{this.metric_name}}_errors');
 {{/each}}
 
 // Test configuration
