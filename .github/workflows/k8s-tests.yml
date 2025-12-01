@@ -30,11 +30,11 @@ jobs:
 
       - name: Validate YAML syntax
         run: |
-          # Unset KUBECONFIG to ensure --dry-run=client doesn't try to connect
-          unset KUBECONFIG
+          # Use --kubeconfig=/dev/null to prevent kubectl from trying to connect to a server
+          # This is necessary because --dry-run=client still tries to validate CRDs against API server
           find k8s -name '*.yaml' -o -name '*.yml' | while read file; do
             echo "Validating $file"
-            kubectl --dry-run=client --validate=false apply -f "$file" || exit 1
+            kubectl --dry-run=client --kubeconfig=/dev/null --validate=false apply -f "$file" || exit 1
           done
 
       - name: Run kubeval
