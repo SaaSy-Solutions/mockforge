@@ -3,8 +3,18 @@ name: Integration Tests
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/integration-tests.yml'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/integration-tests.yml'
   workflow_dispatch:
 
 env:

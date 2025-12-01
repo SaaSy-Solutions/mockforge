@@ -3,8 +3,17 @@ name: Load Testing & Performance Regression
 on:
   pull_request:
     branches: [main, develop]
+    paths:
+      - 'crates/**'
+      - 'tests/load/**'
+      - 'Cargo.toml'
+      - '.github/workflows/load-testing.yml'
   push:
     branches: [main]
+    paths:
+      - 'crates/**'
+      - 'tests/load/**'
+      - 'Cargo.toml'
   schedule:
     # Run extended load tests nightly
     - cron: '0 2 * * *'

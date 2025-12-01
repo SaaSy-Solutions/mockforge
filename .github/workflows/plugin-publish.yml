@@ -34,15 +34,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
-          override: true
+          components: clippy
 
-      - name: Install MockForge CLI
+      - name: Build MockForge CLI
         run: |
-          cargo install mockforge-cli --locked
+          cargo build --release --package mockforge-cli
 
       - name: Read plugin manifest
         id: manifest
@@ -55,7 +53,7 @@ jobs:
 
       - name: Validate manifest
         run: |
-          mockforge plugin validate
+          ./target/release/mockforge plugin validate
 
       - name: Run tests
         run: |
@@ -79,13 +77,10 @@ jobs:
           override: true
 
       - name: Run Clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+        run: cargo clippy --all-features -- -D warnings
 
       - name: Run cargo-audit
-        uses: actions-rs/audit-check@v1
+        uses: rustsec/audit-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -130,10 +125,7 @@ jobs:
           override: true
 
       - name: Build plugin
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package plugin
         run: |
@@ -165,15 +157,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
-          override: true
+          components: clippy
 
-      - name: Install MockForge CLI
+      - name: Build MockForge CLI
         run: |
-          cargo install mockforge-cli --locked
+          cargo build --release --package mockforge-cli
 
       - name: Download artifacts
         uses: actions/download-artifact@v5
@@ -182,11 +172,11 @@ jobs:
 
       - name: Login to registry
         run: |
-          mockforge plugin registry login --token "${{ secrets.MOCKFORGE_REGISTRY_TOKEN }}"
+          ./target/release/mockforge plugin registry login --token "${{ secrets.MOCKFORGE_REGISTRY_TOKEN }}"
 
       - name: Publish plugin
         run: |
-          mockforge plugin registry publish
+          ./target/release/mockforge plugin registry publish
         env:
           MOCKFORGE_REGISTRY_TOKEN: ${{ secrets.MOCKFORGE_REGISTRY_TOKEN }}
 
@@ -221,19 +211,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
-          override: true
+          components: clippy
 
-      - name: Install MockForge CLI
+      - name: Build MockForge CLI
         run: |
-          cargo install mockforge-cli --locked
+          cargo build --release --package mockforge-cli
 
       - name: Dry run publish
         run: |
-          mockforge plugin registry publish --dry-run
+          ./target/release/mockforge plugin registry publish --dry-run
 
       - name: Summary
         run: |

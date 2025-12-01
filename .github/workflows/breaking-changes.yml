@@ -28,15 +28,15 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install MockForge
+      - name: Build MockForge
         working-directory: pr-branch
-        run: cargo install --path crates/mockforge-cli
+        run: cargo build --release --bin mockforge
 
       - name: Compare API specs
         id: compare
         working-directory: pr-branch
         run: |
-          mockforge-cli compare \
+          ./target/release/mockforge compare \
             --old ../main-branch/specs/api.yaml \
             --new specs/api.yaml \
             --output breaking-changes.md \
