@@ -194,7 +194,7 @@ jobs:
     - name: Install Rust toolchain (MSRV)
       uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: "1.82"  # MSRV updated for ICU crates
+        toolchain: "1.75"  # MSRV - updated to support modern dependencies (tokio 1.0+, axum 0.8+, etc.)
 
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
