@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-ftp"
-version = "0.3.3"
+version = "0.3.5"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ keywords = ["ftp", "file-transfer", "mock", "testing"]
 categories = ["development-tools::testing", "network-programming"]
 
 [dependencies]
-mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.5", path = "../mockforge-core" }
 libunftp = "0.21"
 tokio = { workspace = true }
  serde = { workspace = true }
@@ -35,7 +35,7 @@ name = "ftp_benchmarks"
 harness = false
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
 tempfile = "3"
 suppaftp = "5.3"  # FTP client for testing
 criterion = { version = "0.5", features = ["html_reports"] }

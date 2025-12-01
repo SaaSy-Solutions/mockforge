@@ -483,6 +483,8 @@ mod tests {
         let latency_tracker = Arc::new(LatencyMetricsTracker::new());
         let config_arc = Arc::new(RwLock::new(config));
         let middleware = ChaosMiddleware::new(config_arc, latency_tracker);
+        // Initialize middleware from config to sync injectors with actual config
+        middleware.init_from_config().await;
         assert!(middleware.latency_injector.read().await.is_enabled());
     }
 

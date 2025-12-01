@@ -3,7 +3,7 @@
 use crate::faker::EnhancedFaker;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 
 /// Field definition for data generation
@@ -103,22 +103,32 @@ impl FieldDefinition {
 
         let actual_type = match value {
             Value::String(_) => "string",
-            Value::Number(_) => match expected_type {
-                "integer" => "integer",
-                _ => "number",
-            },
+            Value::Number(num) => {
+                // Check if the number can be represented as an integer
+                if num.is_i64() || num.is_u64() {
+                    "integer"
+                } else {
+                    "number"
+                }
+            }
             Value::Bool(_) => "boolean",
             Value::Object(_) => "object",
             Value::Array(_) => "array",
             Value::Null => "null",
         };
 
-        // Use expected_type directly - all expected values should match actual values
-        let normalized_expected = expected_type;
+        // Normalize expected type for comparison (int/integer are equivalent)
+        let normalized_expected = match expected_type {
+            "int" | "integer" => "integer",
+            "float" | "number" => "number",
+            other => other,
+        };
 
         if normalized_expected != actual_type
             && !(normalized_expected == "number" && actual_type == "integer")
             && !(normalized_expected == "float" && actual_type == "number")
+            && !(normalized_expected == "integer" && actual_type == "integer")
+            && !(normalized_expected == "int" && actual_type == "integer")
             && !(normalized_expected == "uuid" && actual_type == "string")
             && !(normalized_expected == "email" && actual_type == "string")
             && !(normalized_expected == "name" && actual_type == "string")
@@ -320,6 +330,55 @@ impl SchemaDefinition {
                     }
                     if let Some(max_length) = prop_def.get("maxLength") {
                         field = field.with_constraint("maxLength".to_string(), max_length.clone());
+                    }
+                    // Handle enum values
+                    if let Some(enum_vals) = prop_def.get("enum") {
+                        if let Some(_enum_arr) = enum_vals.as_array() {
+                            field = field.with_constraint("enum".to_string(), enum_vals.clone());
+                        }
+                    }
+                    // Handle array items type
+                    if field.field_type == "array" {
+                        if let Some(items) = prop_def.get("items") {
+                            // Store the full items schema for complex types (objects, nested arrays)
+                            if items.is_object() {
+                                field =
+                                    field.with_constraint("itemsSchema".to_string(), items.clone());
+                                // Also store the type for simple types
+                                if let Some(items_type) = items.get("type") {
+                                    if let Some(items_type_str) = items_type.as_str() {
+                                        field = field.with_constraint(
+                                            "itemsType".to_string(),
+                                            json!(items_type_str),
+                                        );
+                                    }
+                                }
+                            } else if let Some(items_type) = items.as_str() {
+                                // Simple type string
+                                field = field
+                                    .with_constraint("itemsType".to_string(), json!(items_type));
+                            }
+                        }
+                    }
+                    // Handle nested object properties
+                    if field.field_type == "object" {
+                        if let Some(properties) = prop_def.get("properties") {
+                            // Store the nested properties schema in constraints
+                            field =
+                                field.with_constraint("properties".to_string(), properties.clone());
+                            // Also store required fields if present
+                            if let Some(required) = prop_def.get("required") {
+                                field =
+                                    field.with_constraint("required".to_string(), required.clone());
+                            }
+                        }
+                    }
+                    // Handle array size constraints
+                    if let Some(min_items) = prop_def.get("minItems") {
+                        field = field.with_constraint("minItems".to_string(), min_items.clone());
+                    }
+                    if let Some(max_items) = prop_def.get("maxItems") {
+                        field = field.with_constraint("maxItems".to_string(), max_items.clone());
                     }
 
                     schema = schema.with_field(field);

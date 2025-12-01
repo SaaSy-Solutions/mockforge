@@ -176,7 +176,7 @@ impl BackstoryGenerator {
                 required_traits: vec!["account_type".to_string(), "transaction_frequency".to_string()],
             },
             BackstoryTemplate {
-                template: "A {spending_level} spending customer with {account_age} account history. Primary currency: {preferred_currency}.".to_string(),
+                template: "A {spending_level} spending customer with {account_type} {account_age} account history. Primary currency: {preferred_currency}.".to_string(),
                 required_traits: vec!["spending_level".to_string(), "account_age".to_string()],
             },
         ];

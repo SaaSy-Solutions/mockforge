@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-observability"
-version = "0.3.3"
+version = "0.3.5"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -8,14 +8,14 @@ description = "Observability features for MockForge including Prometheus metrics
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false  # Internal observability component
+publish = true  # Internal observability component
 
 [dependencies]
 # Prometheus metrics (updated to 0.14+ to fix protobuf vulnerability RUSTSEC-2024-0437)
 prometheus = { version = "0.14", features = ["process"] }
 
 # Async runtime
-tokio = { version = "1.35", features = ["full"] }
+tokio = { version = "1.48", features = ["full"] }
 
 # HTTP server for metrics endpoint
 axum = "0.8"
@@ -37,7 +37,7 @@ sysinfo = { version = "0.37", optional = true }
 tracing-opentelemetry = { version = "0.22", optional = true }
 
 # MockForge tracing integration (optional)
-mockforge-tracing = { version = "0.3.0", optional = true }
+mockforge-tracing = { version = "0.3.5", path = "../mockforge-tracing", optional = true }
 
 [features]
 default = ["sysinfo"]

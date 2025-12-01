@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-registry-server"
-version = "0.1.0"
+version = "0.3.5"
 edition = "2021"
 resolver = "2"
 authors = ["MockForge Contributors"]
@@ -10,7 +10,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 # Web framework
 axum = { version = "0.8", features = ["ws", "multipart", "macros"] }
-tokio = { version = "1.35", features = ["full"] }
+tokio = { version = "1.48", features = ["full"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-full"] }
 
@@ -37,7 +37,7 @@ aws-config = "1.1"
 anyhow = "1.0"
 thiserror = "1.0"
 async-trait = "0.1"
-uuid = { version = "1.6", features = ["v4", "serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -71,9 +71,9 @@ x509-parser = "0.17"
 rustls-pemfile = "2.0"
 
 # Internal dependencies
-mockforge-analytics = "0.3.0"
+mockforge-analytics = { version = "0.3.5", path = "../mockforge-analytics" }
 mockforge-collab = "^0.3.0"
-mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.5", path = "../mockforge-core" }
 mockforge-plugin-registry = "0.2.9"
 mockforge-observability = "0.2.9"
 
@@ -81,11 +81,11 @@ mockforge-observability = "0.2.9"
 prometheus = { version = "0.14", features = ["process"] }
 
 # HTTP client for Fly.io API
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"

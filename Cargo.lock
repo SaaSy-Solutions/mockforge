@@ -6131,15 +6131,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
@@ -7058,14 +7049,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-amqp"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
  "criterion",
  "futures",
  "lapin",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "regex",
  "serde",
  "serde_json",
@@ -7077,7 +7068,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-analytics"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7098,15 +7089,15 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "colored 2.2.0",
  "handlebars 6.3.2",
  "indicatif",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.3",
- "mockforge-recorder 0.3.4",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
+ "mockforge-recorder 0.3.5",
  "mockito",
  "openapiv3",
  "reqwest 0.12.24",
@@ -7158,7 +7149,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7169,9 +7160,9 @@ dependencies = [
  "governor 0.8.1",
  "http 1.4.0",
  "http-body-util",
- "mockforge-core 0.3.3",
- "mockforge-recorder 0.3.3",
- "mockforge-tracing 0.3.4",
+ "mockforge-core 0.3.5",
+ "mockforge-recorder 0.3.5",
+ "mockforge-tracing 0.3.5",
  "nonzero_ext",
  "once_cell",
  "parking_lot",
@@ -7179,7 +7170,7 @@ dependencies = [
  "prometheus",
  "rand 0.9.2",
  "redis",
- "reqwest 0.11.27",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -7193,44 +7184,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-chaos"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "369c459124abdde89fb7ea0b08031525db75d7a5a1292af89933ba7ed0af30f0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.8.7",
- "bincode",
- "chrono",
- "futures",
- "governor 0.6.3",
- "http 1.4.0",
- "http-body-util",
- "mockforge-core 0.3.4",
- "mockforge-recorder 0.3.4",
- "mockforge-tracing 0.3.4",
- "nonzero_ext",
- "once_cell",
- "parking_lot",
- "printpdf",
- "prometheus",
- "rand 0.9.2",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "thiserror 2.0.17",
- "tokio",
- "tokio-tungstenite 0.28.0",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "mockforge-cli"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -7253,29 +7208,29 @@ dependencies = [
  "lapin",
  "mockforge-amqp",
  "mockforge-bench",
- "mockforge-chaos 0.3.3",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.3",
+ "mockforge-chaos 0.3.5",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
  "mockforge-ftp",
- "mockforge-graphql 0.3.3",
- "mockforge-grpc 0.3.3",
- "mockforge-http 0.3.3",
+ "mockforge-graphql",
+ "mockforge-grpc",
+ "mockforge-http",
  "mockforge-kafka",
  "mockforge-mqtt",
- "mockforge-observability 0.3.3",
+ "mockforge-observability",
  "mockforge-pipelines",
- "mockforge-plugin-core 0.3.3",
- "mockforge-plugin-loader 0.3.3",
- "mockforge-recorder 0.3.3",
- "mockforge-scenarios 0.3.3",
+ "mockforge-plugin-core 0.3.5",
+ "mockforge-plugin-loader",
+ "mockforge-recorder 0.3.5",
+ "mockforge-scenarios",
  "mockforge-schema",
  "mockforge-smtp",
  "mockforge-tcp",
- "mockforge-tracing 0.3.3",
+ "mockforge-tracing 0.3.5",
  "mockforge-tunnel",
  "mockforge-ui",
  "mockforge-vbr",
- "mockforge-ws 0.3.3",
+ "mockforge-ws",
  "openapiv3",
  "predicates",
  "rdkafka",
@@ -7291,7 +7246,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-opentelemetry 0.22.0",
+ "tracing-opentelemetry",
  "tracing-subscriber",
  "url",
  "urlencoding",
@@ -7302,7 +7257,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-collab"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "argon2",
@@ -7320,7 +7275,7 @@ dependencies = [
  "google-cloud-storage",
  "hyper 1.8.1",
  "jsonwebtoken 9.3.1",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "mockforge-pipelines",
  "parking_lot",
  "serde",
@@ -7397,7 +7352,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-core"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -7423,8 +7378,8 @@ dependencies = [
  "jsonptr 0.7.1",
  "jsonschema",
  "jsonwebtoken 9.3.1",
- "mockforge-data 0.3.3",
- "mockforge-template-expansion 0.3.3",
+ "mockforge-data",
+ "mockforge-template-expansion",
  "notify 8.2.0",
  "once_cell",
  "openapiv3",
@@ -7459,66 +7414,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-core"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a6afe76f45b6e3d372561ab1bdf898538191a7740a23227538fe1c5bf366d7b"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "argon2",
- "async-trait",
- "axum 0.8.7",
- "base32",
- "base64 0.22.1",
- "blake3 1.8.2",
- "bytes",
- "chacha20poly1305",
- "chrono",
- "cron",
- "dirs 5.0.1",
- "futures",
- "globwalk",
- "hex",
- "hmac",
- "indexmap 2.12.1",
- "json-patch 4.1.0",
- "jsonpath",
- "jsonptr 0.7.1",
- "jsonschema",
- "jsonwebtoken 9.3.1",
- "mockforge-data 0.3.4",
- "notify 8.2.0",
- "once_cell",
- "openapiv3",
- "pbkdf2",
- "prost 0.14.1",
- "prost-reflect 0.16.2",
- "prost-types 0.14.1",
- "rand 0.9.2",
- "regex",
- "reqwest 0.12.24",
- "roxmltree",
- "rquickjs",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tokio-tungstenite 0.28.0",
- "toml 0.8.23",
- "tracing",
- "url",
- "urlencoding",
- "uuid",
- "windows 0.62.2",
-]
-
-[[package]]
 name = "mockforge-data"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7549,50 +7446,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-data"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3eae90c65027c46cb622a2f1d988a585647ad8cbc2fdb288a9617c5f8b5c613"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.8.7",
- "chrono",
- "fake",
- "fastrand 2.3.0",
- "hex",
- "itertools 0.14.0",
- "jsonschema",
- "ndarray 0.16.1",
- "ndarray-stats",
- "openapiv3",
- "rand 0.9.2",
- "regex",
- "reqwest 0.12.24",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.17",
- "tokio",
- "tower 0.5.2",
- "tower-http",
- "tracing",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "mockforge-desktop"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "axum 0.8.7",
  "dirs 5.0.1",
  "futures",
- "mockforge-core 0.3.3",
- "mockforge-grpc 0.3.3",
- "mockforge-http 0.3.3",
- "mockforge-ws 0.3.3",
+ "mockforge-core 0.3.5",
+ "mockforge-grpc",
+ "mockforge-http",
+ "mockforge-ws",
  "reqwest 0.12.24",
  "serde",
  "serde_json",
@@ -7610,13 +7474,13 @@ dependencies = [
 
 [[package]]
 name = "mockforge-federation"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
  "futures",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "parking_lot",
  "reqwest 0.12.24",
  "serde",
@@ -7633,7 +7497,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ftp"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7643,7 +7507,7 @@ dependencies = [
  "handlebars 6.3.2",
  "libunftp",
  "mime_guess",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "rand 0.9.2",
  "regex",
  "serde",
@@ -7659,7 +7523,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-graphql"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -7667,14 +7531,14 @@ dependencies = [
  "async-trait",
  "axum 0.8.7",
  "indexmap 2.12.1",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.4",
- "mockforge-observability 0.3.4",
- "mockforge-tracing 0.3.3",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
+ "mockforge-observability",
+ "mockforge-tracing 0.3.5",
  "notify 7.0.0",
  "once_cell",
- "opentelemetry 0.21.0",
- "opentelemetry_sdk 0.21.2",
+ "opentelemetry 0.22.0",
+ "opentelemetry_sdk 0.22.1",
  "parking_lot",
  "rand 0.9.2",
  "regex",
@@ -7689,38 +7553,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-graphql"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e8ef71cff3a24820b5a6d2c8ea73446888c33f047c554355d4b98c988a6f031"
-dependencies = [
- "anyhow",
- "async-graphql",
- "async-graphql-axum",
- "async-trait",
- "axum 0.8.7",
- "indexmap 2.12.1",
- "mockforge-core 0.3.4",
- "mockforge-data 0.3.4",
- "mockforge-observability 0.3.4",
- "mockforge-tracing 0.3.4",
- "notify 7.0.0",
- "once_cell",
- "opentelemetry 0.22.0",
- "parking_lot",
- "rand 0.9.2",
- "regex",
- "reqwest 0.12.24",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "mockforge-grpc"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "axum 0.8.7",
  "base64 0.22.1",
@@ -7729,54 +7563,13 @@ dependencies = [
  "futures",
  "futures-util",
  "http 1.4.0",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.4",
- "mockforge-observability 0.3.4",
- "mockforge-tracing 0.3.3",
- "once_cell",
- "opentelemetry 0.21.0",
- "opentelemetry_sdk 0.21.2",
- "prost 0.14.1",
- "prost-reflect 0.14.7",
- "prost-types 0.14.1",
- "rand 0.9.2",
- "regex",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tokio-stream",
- "tonic 0.14.2",
- "tonic-health",
- "tonic-prost",
- "tonic-prost-build",
- "tonic-reflection",
- "tower 0.5.2",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "mockforge-grpc"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00a09d81068c323421e6eb0b89b9fefc376b9b5d1395362c962cb64e4b16af23"
-dependencies = [
- "axum 0.8.7",
- "base64 0.22.1",
- "chrono",
- "fake",
- "futures",
- "futures-util",
- "http 1.4.0",
- "mockforge-core 0.3.4",
- "mockforge-data 0.3.4",
- "mockforge-observability 0.3.4",
- "mockforge-tracing 0.3.4",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
+ "mockforge-observability",
+ "mockforge-tracing 0.3.5",
  "once_cell",
  "opentelemetry 0.22.0",
+ "opentelemetry_sdk 0.22.1",
  "prost 0.14.1",
  "prost-reflect 0.14.7",
  "prost-types 0.14.1",
@@ -7801,7 +7594,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-http"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7821,25 +7614,25 @@ dependencies = [
  "jsonpath",
  "jsonwebtoken 9.3.1",
  "mime_guess",
- "mockforge-chaos 0.3.3",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.3",
+ "mockforge-chaos 0.3.5",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
  "mockforge-mqtt",
- "mockforge-observability 0.3.3",
- "mockforge-performance 0.3.3",
- "mockforge-plugin-core 0.3.4",
- "mockforge-recorder 0.3.3",
- "mockforge-route-chaos 0.3.3",
- "mockforge-scenarios 0.3.3",
+ "mockforge-observability",
+ "mockforge-performance",
+ "mockforge-plugin-core 0.3.5",
+ "mockforge-recorder 0.3.5",
+ "mockforge-route-chaos",
+ "mockforge-scenarios",
  "mockforge-smtp",
- "mockforge-template-expansion 0.3.3",
- "mockforge-tracing 0.3.3",
- "mockforge-world-state 0.3.3",
- "mockforge-ws 0.3.4",
+ "mockforge-template-expansion",
+ "mockforge-tracing 0.3.5",
+ "mockforge-world-state",
+ "mockforge-ws",
  "oauth2",
  "once_cell",
- "opentelemetry 0.21.0",
- "opentelemetry_sdk 0.21.2",
+ "opentelemetry 0.22.0",
+ "opentelemetry_sdk 0.22.1",
  "rand 0.9.2",
  "regex",
  "reqwest 0.12.24",
@@ -7866,79 +7659,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-http"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2beea60620338119e7359704f15e3fcbce125d4970186710132f4a421e14e1a4"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.8.7",
- "base64 0.22.1",
- "chrono",
- "dashmap 6.1.0",
- "futures",
- "futures-util",
- "glob",
- "globwalk",
- "governor 0.8.1",
- "hex",
- "http 1.4.0",
- "hyper 1.8.1",
- "itertools 0.14.0",
- "json-patch 4.1.0",
- "jsonpath",
- "jsonwebtoken 9.3.1",
- "mime_guess",
- "mockforge-chaos 0.3.4",
- "mockforge-core 0.3.4",
- "mockforge-data 0.3.4",
- "mockforge-observability 0.3.4",
- "mockforge-performance 0.3.4",
- "mockforge-route-chaos 0.3.4",
- "mockforge-scenarios 0.3.4",
- "mockforge-template-expansion 0.3.4",
- "mockforge-tracing 0.3.4",
- "mockforge-world-state 0.3.4",
- "oauth2",
- "opentelemetry 0.22.0",
- "rand 0.9.2",
- "regex",
- "reqwest 0.12.24",
- "ring",
- "roxmltree",
- "rustls 0.21.12",
- "rustls-pemfile 1.0.4",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "thiserror 2.0.17",
- "tokio",
- "tokio-rustls 0.24.1",
- "tokio-stream",
- "tower 0.5.2",
- "tower-http",
- "tracing",
- "url",
- "urlencoding",
- "uuid",
-]
-
-[[package]]
 name = "mockforge-integration-tests"
 version = "0.1.0"
 dependencies = [
  "axum 0.8.7",
  "chrono",
  "futures-util",
- "mockforge-chaos 0.3.3",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.3",
- "mockforge-http 0.3.3",
- "mockforge-recorder 0.3.3",
- "mockforge-route-chaos 0.3.3",
- "mockforge-scenarios 0.3.3",
+ "mockforge-chaos 0.3.5",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
+ "mockforge-http",
+ "mockforge-recorder 0.3.5",
+ "mockforge-route-chaos",
+ "mockforge-scenarios",
  "mockforge-test",
  "mockforge-vbr",
  "reqwest 0.12.24",
@@ -7954,13 +7687,13 @@ dependencies = [
 
 [[package]]
 name = "mockforge-kafka"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
  "criterion",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "rand 0.9.2",
  "rdkafka",
  "regex",
@@ -7976,13 +7709,13 @@ dependencies = [
 
 [[package]]
 name = "mockforge-mqtt"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
  "criterion",
  "futures",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "regex",
  "rumqttc",
  "serde",
@@ -7997,77 +7730,42 @@ dependencies = [
 
 [[package]]
 name = "mockforge-observability"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "axum 0.8.7",
- "mockforge-tracing 0.3.4",
+ "mockforge-tracing 0.3.5",
  "once_cell",
  "prometheus",
  "serde",
  "serde_json",
- "sysinfo 0.37.2",
+ "sysinfo",
  "tokio",
  "tokio-test",
  "tracing",
  "tracing-appender",
- "tracing-opentelemetry 0.22.0",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "mockforge-observability"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0baf879c912d20f141492e245819d505b971782e2e5010d7fb268c5c5fd558f"
-dependencies = [
- "axum 0.8.7",
- "once_cell",
- "prometheus",
- "serde",
- "serde_json",
- "sysinfo 0.32.1",
- "tokio",
- "tracing",
- "tracing-appender",
+ "tracing-opentelemetry",
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "mockforge-performance"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "serde",
  "serde_json",
  "tokio",
  "tokio-test",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "mockforge-performance"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69be0dfae145f889dbb6c2f5b22ed61481c8fc1e36b981544bbf6b107f680fc4"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "mockforge-core 0.3.4",
- "serde",
- "serde_json",
- "tokio",
  "tracing",
  "uuid",
 ]
 
 [[package]]
 name = "mockforge-pipelines"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8075,7 +7773,7 @@ dependencies = [
  "futures",
  "handlebars 5.1.2",
  "lettre",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "once_cell",
  "parking_lot",
  "reqwest 0.12.24",
@@ -8093,7 +7791,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-cli"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8145,7 +7843,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-core"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8173,38 +7871,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-plugin-core"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98d2d77cd8bdc275abb37008f214910a5ce1d16240cff7d08bb6fe08ac2c197d"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.8.7",
- "base64 0.22.1",
- "chrono",
- "handlebars 4.5.0",
- "hyper 1.8.1",
- "rand 0.9.2",
- "regex",
- "semver",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "url",
- "urlencoding",
- "uuid",
- "wasmtime",
- "wasmtime-wasi",
- "wit-bindgen",
-]
-
-[[package]]
 name = "mockforge-plugin-loader"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8215,7 +7883,7 @@ dependencies = [
  "git2",
  "hex",
  "indicatif",
- "mockforge-plugin-core 0.3.3",
+ "mockforge-plugin-core 0.3.5",
  "rand 0.9.2",
  "regex",
  "reqwest 0.12.24",
@@ -8241,73 +7909,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-plugin-loader"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d10dca69493d0d20f14bcfeae09cfe9a0fdae9acba173093a875c0790e9ab78c"
+name = "mockforge-plugin-registry"
+version = "0.3.5"
 dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.22.1",
  "chrono",
  "dirs 5.0.1",
- "flate2",
- "git2",
- "hex",
- "indicatif",
- "mockforge-plugin-core 0.3.4",
- "rand 0.9.2",
- "regex",
  "reqwest 0.12.24",
- "ring",
- "serde",
- "serde_json",
- "serde_yaml",
- "shellexpand",
- "tar",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "url",
- "urlencoding",
- "uuid",
- "wasmparser 0.239.0",
- "wasmtime",
- "wasmtime-wasi",
- "wit-bindgen",
- "zip 2.4.2",
-]
-
-[[package]]
-name = "mockforge-plugin-registry"
-version = "0.3.3"
-dependencies = [
- "chrono",
- "dirs 5.0.1",
- "reqwest 0.11.27",
  "semver",
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "toml 0.8.23",
- "uuid",
-]
-
-[[package]]
-name = "mockforge-plugin-registry"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30f17f58c2b20c78ef1cfb5941bded49cf3dc1f80a17be95e453de7d5a6c5522"
-dependencies = [
- "chrono",
- "dirs 5.0.1",
- "reqwest 0.11.27",
- "semver",
- "serde",
- "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "toml 0.8.23",
@@ -8323,7 +7934,7 @@ dependencies = [
  "chrono",
  "graphql-parser",
  "http 1.4.0",
- "mockforge-plugin-core 0.3.3",
+ "mockforge-plugin-core 0.3.5",
  "rand 0.9.2",
  "regex",
  "serde",
@@ -8335,7 +7946,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-sdk"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8390,7 +8001,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-recorder"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8401,7 +8012,7 @@ dependencies = [
  "har",
  "http 1.4.0",
  "http-body-util",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "once_cell",
  "regex",
  "reqwest 0.12.24",
@@ -8419,39 +8030,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-recorder"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d64bd089f3e6ed04cdebff6b606b498621e0db6346e199bbfeb7c73002b7113b"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.8.7",
- "base64 0.22.1",
- "chrono",
- "futures",
- "har",
- "http 1.4.0",
- "http-body-util",
- "mockforge-core 0.3.4",
- "once_cell",
- "regex",
- "reqwest 0.12.24",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "serde_yaml",
- "similar",
- "sqlx",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "mockforge-reporting"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8471,26 +8051,11 @@ dependencies = [
 
 [[package]]
 name = "mockforge-route-chaos"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "async-trait",
  "axum 0.8.7",
- "mockforge-core 0.3.3",
- "rand 0.9.2",
- "regex",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "mockforge-route-chaos"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de957fe9a9c6592af8bce7b359e2e037048e5a5d49e5955a9daa6193088892fb"
-dependencies = [
- "async-trait",
- "axum 0.8.7",
- "mockforge-core 0.3.4",
+ "mockforge-core 0.3.5",
  "rand 0.9.2",
  "regex",
  "tokio",
@@ -8499,13 +8064,13 @@ dependencies = [
 
 [[package]]
 name = "mockforge-runtime-daemon"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "axum 0.8.7",
  "chrono",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.3",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
  "reqwest 0.12.24",
  "serde",
  "serde_json",
@@ -8519,7 +8084,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-scenarios"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8528,10 +8093,10 @@ dependencies = [
  "git2",
  "hex",
  "indicatif",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.3",
- "mockforge-plugin-loader 0.3.3",
- "mockforge-plugin-registry 0.3.3",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
+ "mockforge-plugin-loader",
+ "mockforge-plugin-registry",
  "regex",
  "reqwest 0.12.24",
  "ring",
@@ -8552,46 +8117,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-scenarios"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6a2f0c50317d18064dcda8afb30856fabdaccdbd68598dc436e6f2a1acf6dab"
-dependencies = [
- "anyhow",
- "chrono",
- "dirs 5.0.1",
- "flate2",
- "git2",
- "hex",
- "indicatif",
- "mockforge-core 0.3.4",
- "mockforge-data 0.3.4",
- "mockforge-plugin-loader 0.3.4",
- "mockforge-plugin-registry 0.3.4",
- "regex",
- "reqwest 0.12.24",
- "ring",
- "semver",
- "serde",
- "serde_json",
- "serde_yaml",
- "shellexpand",
- "tar",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "url",
- "uuid",
- "zip 2.4.2",
-]
-
-[[package]]
 name = "mockforge-schema"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "jsonschema",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "schemars 0.8.22",
  "serde_json",
  "serde_yaml",
@@ -8599,18 +8129,18 @@ dependencies = [
 
 [[package]]
 name = "mockforge-sdk"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "axum 0.8.7",
  "libc",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.3",
- "mockforge-graphql 0.3.4",
- "mockforge-grpc 0.3.4",
- "mockforge-http 0.3.4",
- "mockforge-observability 0.3.4",
- "mockforge-ws 0.3.4",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
+ "mockforge-graphql",
+ "mockforge-grpc",
+ "mockforge-http",
+ "mockforge-observability",
+ "mockforge-ws",
  "reqwest 0.12.24",
  "serde",
  "serde_json",
@@ -8624,14 +8154,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-smtp"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
  "criterion",
  "mail-parser",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "regex",
  "rustls 0.23.35",
  "rustls-pemfile 1.0.4",
@@ -8648,7 +8178,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tcp"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8656,7 +8186,7 @@ dependencies = [
  "bytes",
  "criterion",
  "hex",
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "regex",
  "rustls 0.23.35",
  "rustls-pemfile 1.0.4",
@@ -8672,31 +8202,22 @@ dependencies = [
 
 [[package]]
 name = "mockforge-template-expansion"
-version = "0.3.3"
-dependencies = [
- "serde_json",
-]
-
-[[package]]
-name = "mockforge-template-expansion"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d06fc9d27253047435355e4fb736214f44e0a6688bf17f529fb589cc6daa219"
+version = "0.3.5"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mockforge-test"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "assert_cmd",
  "async-trait",
  "futures",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.4",
- "mockforge-http 0.3.4",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
+ "mockforge-http",
  "openapiv3",
  "parking_lot",
  "predicates",
@@ -8740,51 +8261,31 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "tracing-opentelemetry 0.22.0",
+ "tracing-opentelemetry",
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "mockforge-tracing"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "axum 0.8.7",
- "http 1.4.0",
- "opentelemetry 0.21.0",
- "opentelemetry-jaeger 0.20.0",
- "opentelemetry-otlp 0.14.0",
- "opentelemetry-semantic-conventions 0.13.0",
- "opentelemetry_sdk 0.21.2",
- "thiserror 1.0.69",
- "tokio",
- "tokio-test",
- "tracing",
- "tracing-opentelemetry 0.21.0",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "mockforge-tracing"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f4558603ce5a6673b3cc6656d0f66c36ae30752b744b76b0903c9e2777189b3"
-dependencies = [
  "http 1.4.0",
  "opentelemetry 0.22.0",
  "opentelemetry-jaeger 0.21.0",
  "opentelemetry-otlp 0.15.0",
- "opentelemetry-semantic-conventions 0.13.0",
  "opentelemetry_sdk 0.22.1",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-test",
  "tracing",
- "tracing-opentelemetry 0.22.0",
+ "tracing-opentelemetry",
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "mockforge-tunnel"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8814,7 +8315,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ui"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "axum 0.8.7",
@@ -8829,23 +8330,23 @@ dependencies = [
  "jsonwebtoken 9.3.1",
  "mime_guess",
  "mockforge-analytics",
- "mockforge-chaos 0.3.3",
+ "mockforge-chaos 0.3.5",
  "mockforge-collab",
- "mockforge-core 0.3.3",
- "mockforge-grpc 0.3.4",
- "mockforge-http 0.3.3",
- "mockforge-plugin-core 0.3.3",
- "mockforge-plugin-loader 0.3.4",
- "mockforge-recorder 0.3.3",
+ "mockforge-core 0.3.5",
+ "mockforge-grpc",
+ "mockforge-http",
+ "mockforge-plugin-core 0.3.5",
+ "mockforge-plugin-loader",
+ "mockforge-recorder 0.3.5",
  "mockforge-vbr",
- "mockforge-ws 0.3.4",
+ "mockforge-ws",
  "once_cell",
  "reqwest 0.12.24",
  "serde",
  "serde_json",
  "serde_yaml",
  "sqlx",
- "sysinfo 0.37.2",
+ "sysinfo",
  "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
@@ -8859,7 +8360,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-vbr"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8868,9 +8369,9 @@ dependencies = [
  "chrono",
  "jsonpath",
  "jsonwebtoken 9.3.1",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.3",
- "mockforge-http 0.3.3",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
+ "mockforge-http",
  "openapiv3",
  "rand 0.9.2",
  "regex",
@@ -8891,32 +8392,13 @@ dependencies = [
 
 [[package]]
 name = "mockforge-world-state"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.3",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "mockforge-world-state"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c738bf39424bf9e644a00d7ae5eba96cc7fa8812ce861a35cfda74dd6236e70"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "mockforge-core 0.3.4",
- "mockforge-data 0.3.4",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
@@ -8927,7 +8409,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ws"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "async-trait",
  "axum 0.8.7",
@@ -8936,44 +8418,18 @@ dependencies = [
  "futures",
  "futures-util",
  "jsonpath",
- "mockforge-core 0.3.3",
- "mockforge-data 0.3.3",
- "mockforge-observability 0.3.4",
- "mockforge-tracing 0.3.3",
- "opentelemetry 0.21.0",
- "opentelemetry_sdk 0.21.2",
+ "mockforge-core 0.3.5",
+ "mockforge-data",
+ "mockforge-observability",
+ "mockforge-tracing 0.3.5",
+ "opentelemetry 0.22.0",
+ "opentelemetry_sdk 0.22.1",
  "regex",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
  "tokio",
  "tokio-tungstenite 0.28.0",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "mockforge-ws"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1837221ededc0411d15577897bfb7eca89e6b8975d9cd150199a52d43a0089ba"
-dependencies = [
- "async-trait",
- "axum 0.8.7",
- "chrono",
- "fastrand 2.3.0",
- "futures",
- "jsonpath",
- "mockforge-core 0.3.4",
- "mockforge-data 0.3.4",
- "mockforge-observability 0.3.4",
- "mockforge-tracing 0.3.4",
- "opentelemetry 0.22.0",
- "regex",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
  "tracing",
  "uuid",
 ]
@@ -9080,21 +8536,6 @@ dependencies = [
  "num-complex",
  "num-integer",
  "num-traits",
- "rawpointer",
-]
-
-[[package]]
-name = "ndarray"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "882ed72dce9365842bf196bdeedf5055305f11fc8c03dee7bb0194a6cad34841"
-dependencies = [
- "matrixmultiply",
- "num-complex",
- "num-integer",
- "num-traits",
- "portable-atomic",
- "portable-atomic-util",
  "rawpointer",
 ]
 
@@ -9812,16 +9253,6 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
-dependencies = [
- "opentelemetry_api",
- "opentelemetry_sdk 0.20.0",
-]
-
-[[package]]
-name = "opentelemetry"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e32339a5dc40459130b3bd269e9892439f55b33e772d2a9d402a789baaf4e8a"
@@ -9967,42 +9398,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e62e29dfe041afb8ed2a6c9737ab57db4907285d999ef8ad3a59092a36bdc846"
 
 [[package]]
-name = "opentelemetry_api"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a81f725323db1b1206ca3da8bb19874bbd3f57c3bcd59471bfb04525b265b9b"
-dependencies = [
- "futures-channel",
- "futures-util",
- "indexmap 1.9.3",
- "js-sys",
- "once_cell",
- "pin-project-lite",
- "thiserror 1.0.69",
- "urlencoding",
-]
-
-[[package]]
-name = "opentelemetry_sdk"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa8e705a0612d48139799fcbaba0d4a90f06277153e43dd2bdc16c6f0edd8026"
-dependencies = [
- "async-trait",
- "crossbeam-channel",
- "futures-channel",
- "futures-executor",
- "futures-util",
- "once_cell",
- "opentelemetry_api",
- "ordered-float 3.9.2",
- "percent-encoding",
- "rand 0.8.5",
- "regex",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "opentelemetry_sdk"
 version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10056,15 +9451,6 @@ name = "ordered-float"
 version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68f19d67e5a2795c94e73e0bb1cc1a7edeb2e28efd39e2e1c9b7a40c1108b11c"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "ordered-float"
-version = "3.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1e1c390732d15f1d48471625cd92d154e66db2c56645e29a9cd26f4699f72dc"
 dependencies = [
  "num-traits",
 ]
@@ -11134,7 +10520,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote 1.0.42",
  "syn 2.0.111",
@@ -13467,20 +12853,6 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.32.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c33cd241af0f2e9e3b5c32163b873b29956890b5342e6745b917ce9d490f4af"
-dependencies = [
- "core-foundation-sys",
- "libc",
- "memchr",
- "ntapi",
- "rayon",
- "windows 0.57.0",
-]
-
-[[package]]
-name = "sysinfo"
 version = "0.37.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16607d5caffd1c07ce073528f9ed972d88db15dd44023fa57142963be3feb11f"
@@ -13957,7 +13329,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 name = "test-openapi"
 version = "0.2.0"
 dependencies = [
- "mockforge-core 0.3.3",
+ "mockforge-core 0.3.5",
  "serde_json",
  "tokio",
 ]
@@ -14679,17 +14051,6 @@ dependencies = [
 
 [[package]]
 name = "tracing-log"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f751112709b4e791d8ce53e32c4ed2d353565a795ce84da2285393f41557bdf2"
-dependencies = [
- "log",
- "once_cell",
- "tracing-core",
-]
-
-[[package]]
-name = "tracing-log"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
@@ -14697,22 +14058,6 @@ dependencies = [
  "log",
  "once_cell",
  "tracing-core",
-]
-
-[[package]]
-name = "tracing-opentelemetry"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75327c6b667828ddc28f5e3f169036cb793c3f588d83bf0f262a7f062ffed3c8"
-dependencies = [
- "once_cell",
- "opentelemetry 0.20.0",
- "opentelemetry_sdk 0.20.0",
- "smallvec",
- "tracing",
- "tracing-core",
- "tracing-log 0.1.4",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -14728,7 +14073,7 @@ dependencies = [
  "smallvec",
  "tracing",
  "tracing-core",
- "tracing-log 0.2.0",
+ "tracing-log",
  "tracing-subscriber",
  "web-time 0.2.4",
 ]
@@ -14760,7 +14105,7 @@ dependencies = [
  "thread_local",
  "tracing",
  "tracing-core",
- "tracing-log 0.2.0",
+ "tracing-log",
  "tracing-serde",
 ]
 
@@ -16033,16 +15378,6 @@ dependencies = [
 
 [[package]]
 name = "windows"
-version = "0.57.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12342cb4d8e3b046f3d80effd474a7a02447231330ef77d71daa6fbc40681143"
-dependencies = [
- "windows-core 0.57.0",
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows"
 version = "0.61.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9babd3a767a4c1aef6900409f85f5d53ce2544ccdfaa86dad48c91782c6d6893"
@@ -16106,24 +15441,12 @@ dependencies = [
 
 [[package]]
 name = "windows-core"
-version = "0.57.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2ed2439a290666cd67ecce2b0ffaad89c2a56b976b736e6ece670297897832d"
-dependencies = [
- "windows-implement 0.57.0",
- "windows-interface 0.57.0",
- "windows-result 0.1.2",
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-core"
 version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0fdd3ddb90610c7638aa2b3a3ab2904fb9e5cdbecc643ddb3647212781c4ae3"
 dependencies = [
  "windows-implement 0.60.2",
- "windows-interface 0.59.3",
+ "windows-interface",
  "windows-link 0.1.3",
  "windows-result 0.3.4",
  "windows-strings 0.4.2",
@@ -16136,7 +15459,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8e83a14d34d0623b51dce9581199302a221863196a1dde71a7663a4c2be9deb"
 dependencies = [
  "windows-implement 0.60.2",
- "windows-interface 0.59.3",
+ "windows-interface",
  "windows-link 0.2.1",
  "windows-result 0.4.1",
  "windows-strings 0.5.1",
@@ -16176,31 +15499,9 @@ dependencies = [
 
 [[package]]
 name = "windows-implement"
-version = "0.57.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9107ddc059d5b6fbfbffdfa7a7fe3e22a226def0b2608f72e9d552763d3e1ad7"
-dependencies = [
- "proc-macro2",
- "quote 1.0.42",
- "syn 2.0.111",
-]
-
-[[package]]
-name = "windows-implement"
 version = "0.60.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
-dependencies = [
- "proc-macro2",
- "quote 1.0.42",
- "syn 2.0.111",
-]
-
-[[package]]
-name = "windows-interface"
-version = "0.57.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29bee4b38ea3cde66011baa44dba677c432a78593e202392d1e9070cf2a7fca7"
 dependencies = [
  "proc-macro2",
  "quote 1.0.42",

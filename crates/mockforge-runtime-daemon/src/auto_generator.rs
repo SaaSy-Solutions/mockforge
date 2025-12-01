@@ -346,9 +346,34 @@ impl AutoGenerator {
         // Extract entity type from path (e.g., /api/users -> "user")
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
-        if let Some(last_part) = parts.last() {
+        // Skip common API prefixes like "api", "v1", "v2", etc.
+        let skip_prefixes = ["api", "v1", "v2", "v3", "v4", "v5"];
+        let meaningful_parts: Vec<&str> = parts
+            .iter()
+            .skip_while(|part| skip_prefixes.contains(&part.to_lowercase().as_str()))
+            .copied()
+            .collect();
+
+        if meaningful_parts.is_empty() {
+            return "resource".to_string();
+        }
+
+        // If the last part is numeric (like an ID), use the second-to-last part instead
+        let candidate = if let Some(last_part) = meaningful_parts.last() {
+            // Check if last part is numeric (ID parameter)
+            if last_part.parse::<u64>().is_ok() || last_part.parse::<i64>().is_ok() {
+                // Use the second-to-last part if available
+                meaningful_parts.get(meaningful_parts.len().saturating_sub(2))
+            } else {
+                Some(last_part)
+            }
+        } else {
+            None
+        };
+
+        if let Some(part) = candidate {
             // Remove common prefixes and pluralization
-            let entity = last_part
+            let entity = part
                 .trim_end_matches('s') // Remove plural 's'
                 .to_lowercase();
 
