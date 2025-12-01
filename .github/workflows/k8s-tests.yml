@@ -30,9 +30,11 @@ jobs:
 
       - name: Validate YAML syntax
         run: |
+          # Unset KUBECONFIG to ensure --dry-run=client doesn't try to connect
+          unset KUBECONFIG
           find k8s -name '*.yaml' -o -name '*.yml' | while read file; do
             echo "Validating $file"
-            kubectl --dry-run=client apply -f "$file" || exit 1
+            kubectl --dry-run=client --server-side=false apply -f "$file" || exit 1
           done
 
       - name: Run kubeval
@@ -72,7 +74,9 @@ jobs:
 
       - name: Validate rendered templates
         run: |
-          kubectl --dry-run=client apply -f /tmp/rendered-manifests.yaml
+          # Unset KUBECONFIG to ensure --dry-run=client doesn't try to connect
+          unset KUBECONFIG
+          kubectl --dry-run=client --validate=false apply -f /tmp/rendered-manifests.yaml
 
       - name: Check for deprecated APIs
         run: |

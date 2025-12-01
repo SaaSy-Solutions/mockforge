@@ -35,7 +35,7 @@ COPY proto/ ./proto/
 COPY config.example.yaml ./
 
 # Build the application in release mode
-RUN cargo build --release --package mockforge-cli
+RUN cargo build --release --bin mockforge
 
 # Stage 2: Create the runtime image
 # Use debian:trixie-slim to match builder's GLIBC version (2.39+)

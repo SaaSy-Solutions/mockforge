@@ -1,23 +1,7 @@
-[files]
-extend-exclude = [
-  "target/**",
-  "book/book/**",
-]
-
-[default]
-extend-ignore-re = [
-  # Allow templating tokens like Nd/Nh/Nm/Ns in docs and code
-  'now[±+-](Nd|Nh|Nm|Ns)',
-]
+# Typos configuration for MockForge
+# Allows common technical acronyms and terms
 
 [default.extend-words]
-Nd = "Nd"
-Nh = "Nh"
-Nm = "Nm"
-Ns = "Ns"
-typ = "typ"
-ot = "ot"
-wrk = "wrk"
-mdbook = "mdbook"
-mathjax = "mathjax"
-rustup = "rustup"
+# Technical acronyms
+RTO = "RTO"  # Recovery Time Objective
+RPO = "RPO"  # Recovery Point Objective
