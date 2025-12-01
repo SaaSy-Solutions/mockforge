@@ -32,7 +32,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-mockforge-smtp = { version = "0.2.0", path = "../mockforge-smtp", optional = true }
+mockforge-smtp = { version = "0.3.3", path = "../mockforge-smtp", optional = true }
 async-trait = { workspace = true }
 glob = { workspace = true }
 globwalk = { workspace = true }
