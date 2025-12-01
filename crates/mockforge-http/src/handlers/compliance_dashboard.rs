@@ -242,13 +242,26 @@ pub async fn get_compliance_status(
     let mut by_area = serde_json::Map::new();
     for (category, effectiveness) in &dashboard.control_effectiveness {
         let category_name = match category {
-            mockforge_core::security::compliance_dashboard::ControlCategory::AccessControl => "access_control",
-            mockforge_core::security::compliance_dashboard::ControlCategory::Encryption => "encryption",
-            mockforge_core::security::compliance_dashboard::ControlCategory::Monitoring => "monitoring",
-            mockforge_core::security::compliance_dashboard::ControlCategory::ChangeManagement => "change_management",
-            mockforge_core::security::compliance_dashboard::ControlCategory::IncidentResponse => "incident_response",
+            mockforge_core::security::compliance_dashboard::ControlCategory::AccessControl => {
+                "access_control"
+            }
+            mockforge_core::security::compliance_dashboard::ControlCategory::Encryption => {
+                "encryption"
+            }
+            mockforge_core::security::compliance_dashboard::ControlCategory::Monitoring => {
+                "monitoring"
+            }
+            mockforge_core::security::compliance_dashboard::ControlCategory::ChangeManagement => {
+                "change_management"
+            }
+            mockforge_core::security::compliance_dashboard::ControlCategory::IncidentResponse => {
+                "incident_response"
+            }
         };
-        by_area.insert(category_name.to_string(), serde_json::Value::Number(effectiveness.effectiveness.into()));
+        by_area.insert(
+            category_name.to_string(),
+            serde_json::Value::Number(effectiveness.effectiveness.into()),
+        );
     }
 
     Ok(Json(serde_json::json!({
@@ -276,7 +289,8 @@ pub async fn get_compliance_report(
     })?;
 
     // Extract report period from query or use provided period
-    let report_period = params.get("month")
+    let report_period = params
+        .get("month")
         .or_else(|| params.get("period"))
         .cloned()
         .unwrap_or_else(|| {
@@ -307,38 +321,61 @@ pub async fn get_compliance_report(
 
     // Add generic recommendations if no gaps
     if recommendations.is_empty() {
-        if dashboard.control_effectiveness.get(&mockforge_core::security::compliance_dashboard::ControlCategory::ChangeManagement)
+        if dashboard
+            .control_effectiveness
+            .get(&mockforge_core::security::compliance_dashboard::ControlCategory::ChangeManagement)
             .map(|e| e.effectiveness < 95)
-            .unwrap_or(false) {
+            .unwrap_or(false)
+        {
             recommendations.push("Enhance change management procedures".to_string());
         }
-        if dashboard.control_effectiveness.get(&mockforge_core::security::compliance_dashboard::ControlCategory::IncidentResponse)
+        if dashboard
+            .control_effectiveness
+            .get(&mockforge_core::security::compliance_dashboard::ControlCategory::IncidentResponse)
             .map(|e| e.effectiveness < 95)
-            .unwrap_or(false) {
+            .unwrap_or(false)
+        {
             recommendations.push("Improve incident response time".to_string());
         }
     }
 
     // Format gaps for report
-    let gaps_summary: Vec<serde_json::Value> = all_gaps.iter().take(10).map(|gap| {
-        serde_json::json!({
-            "id": gap.gap_id,
-            "severity": format!("{:?}", gap.severity).to_lowercase(),
-            "remediation_status": format!("{:?}", gap.status).to_lowercase()
+    let gaps_summary: Vec<serde_json::Value> = all_gaps
+        .iter()
+        .take(10)
+        .map(|gap| {
+            serde_json::json!({
+                "id": gap.gap_id,
+                "severity": format!("{:?}", gap.severity).to_lowercase(),
+                "remediation_status": format!("{:?}", gap.status).to_lowercase()
+            })
         })
-    }).collect();
+        .collect();
 
     // Format control effectiveness
     let mut control_effectiveness = serde_json::Map::new();
     for (category, effectiveness) in &dashboard.control_effectiveness {
         let category_name = match category {
-            mockforge_core::security::compliance_dashboard::ControlCategory::AccessControl => "access_control",
-            mockforge_core::security::compliance_dashboard::ControlCategory::Encryption => "encryption",
-            mockforge_core::security::compliance_dashboard::ControlCategory::Monitoring => "monitoring",
-            mockforge_core::security::compliance_dashboard::ControlCategory::ChangeManagement => "change_management",
-            mockforge_core::security::compliance_dashboard::ControlCategory::IncidentResponse => "incident_response",
+            mockforge_core::security::compliance_dashboard::ControlCategory::AccessControl => {
+                "access_control"
+            }
+            mockforge_core::security::compliance_dashboard::ControlCategory::Encryption => {
+                "encryption"
+            }
+            mockforge_core::security::compliance_dashboard::ControlCategory::Monitoring => {
+                "monitoring"
+            }
+            mockforge_core::security::compliance_dashboard::ControlCategory::ChangeManagement => {
+                "change_management"
+            }
+            mockforge_core::security::compliance_dashboard::ControlCategory::IncidentResponse => {
+                "incident_response"
+            }
         };
-        control_effectiveness.insert(category_name.to_string(), serde_json::Value::Number(effectiveness.effectiveness.into()));
+        control_effectiveness.insert(
+            category_name.to_string(),
+            serde_json::Value::Number(effectiveness.effectiveness.into()),
+        );
     }
 
     Ok(Json(serde_json::json!({

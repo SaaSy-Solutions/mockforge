@@ -2506,7 +2506,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 consistency_engine: Some(consistency_engine.clone()),
                 workspace_persistence: None, // Can be initialized later if workspace persistence is available
                 vbr_engine: None, // Can be initialized when VBR engine is available in server state
-                recorder: None, // Can be initialized when Recorder is available in server state
+                recorder: None,   // Can be initialized when Recorder is available in server state
             };
 
             app = app.merge(snapshot_router(snapshot_state));

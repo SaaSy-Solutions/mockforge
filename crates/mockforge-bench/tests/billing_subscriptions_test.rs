@@ -20,11 +20,7 @@ async fn test_billing_subscriptions_spec_generation() {
         .join("fixtures")
         .join("billing_subscriptions_v1.json");
 
-    assert!(
-        spec_path.exists(),
-        "Test fixture file should exist at: {}",
-        spec_path.display()
-    );
+    assert!(spec_path.exists(), "Test fixture file should exist at: {}", spec_path.display());
 
     // Parse the OpenAPI spec
     let parser = SpecParser::from_file(&spec_path)
@@ -75,9 +71,7 @@ async fn test_billing_subscriptions_spec_generation() {
 
     // Generate the k6 script
     let generator = K6ScriptGenerator::new(config, templates);
-    let script = generator
-        .generate()
-        .expect("Should generate k6 script without errors");
+    let script = generator.generate().expect("Should generate k6 script without errors");
 
     // Verify the script doesn't contain invalid JavaScript identifiers with dots
     // Check for variable declarations that would cause "Unexpected token ." errors
@@ -105,7 +99,8 @@ async fn test_billing_subscriptions_spec_generation() {
             if let Some(method_pos) = line.find(".add") {
                 let var_usage = &line[..method_pos];
                 // Check if it contains a dot (invalid identifier)
-                if var_usage.contains('.') && !var_usage.contains("'") && !var_usage.contains("\"") {
+                if var_usage.contains('.') && !var_usage.contains("'") && !var_usage.contains("\"")
+                {
                     invalid_variables.push((line_num + 1, line.to_string()));
                 }
             }
@@ -123,7 +118,6 @@ async fn test_billing_subscriptions_spec_generation() {
                 .join("\n")
         );
     }
-
 
     // Verify that ALL operations with special chars (dots/hyphens) appear in the script
     // with properly sanitized variable names
@@ -211,7 +205,8 @@ async fn test_billing_subscriptions_spec_generation() {
                 if var_usage.contains('.')
                     && !var_usage.contains("'")
                     && !var_usage.contains("\"")
-                    && !var_usage.trim().starts_with("//") {
+                    && !var_usage.trim().starts_with("//")
+                {
                     invalid_declarations.push((line_num + 1, line.to_string()));
                 }
             }

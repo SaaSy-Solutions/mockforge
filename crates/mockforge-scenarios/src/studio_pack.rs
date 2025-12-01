@@ -11,12 +11,12 @@ use crate::domain_pack::{
 };
 use crate::error::{Result, ScenarioError};
 use crate::installer::{InstallOptions, ScenarioInstaller};
-use mockforge_data::domains::Domain;
-use mockforge_data::PersonaProfile;
-use mockforge_data::PersonaRegistry;
 use mockforge_core::consistency::ConsistencyEngine;
 use mockforge_core::contract_drift::{DriftBudgetConfig, DriftBudgetEngine};
 use mockforge_core::reality_continuum::{ContinuumConfig, RealityContinuumEngine};
+use mockforge_data::domains::Domain;
+use mockforge_data::PersonaProfile;
+use mockforge_data::PersonaRegistry;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -289,15 +289,11 @@ impl StudioPackInstaller {
             let persona = registry.get_or_create_persona(studio_persona.id.clone(), domain);
 
             // Update the persona with all details from the studio pack
-            let traits: std::collections::HashMap<String, String> = studio_persona
-                .traits
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect();
+            let traits: std::collections::HashMap<String, String> =
+                studio_persona.traits.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
-            let relationships: std::collections::HashMap<String, Vec<String>> = studio_persona
-                .relationships
-                .clone();
+            let relationships: std::collections::HashMap<String, Vec<String>> =
+                studio_persona.relationships.clone();
 
             registry
                 .update_persona_full(
@@ -338,16 +334,10 @@ impl StudioPackInstaller {
         if let (Some(ref engine), Some(ws_id)) = (&self.consistency_engine, workspace_id) {
             // The chaos rule config is stored as JSON, which matches ChaosScenario type
             let chaos_scenario = chaos_rule.chaos_config.clone();
-            engine
-                .activate_chaos_rule(ws_id, chaos_scenario)
-                .await
-                .map_err(|e| {
-                    ScenarioError::Generic(format!("Failed to activate chaos rule: {}", e))
-                })?;
-            info!(
-                "Activated chaos rule: {} for workspace: {}",
-                chaos_rule.name, ws_id
-            );
+            engine.activate_chaos_rule(ws_id, chaos_scenario).await.map_err(|e| {
+                ScenarioError::Generic(format!("Failed to activate chaos rule: {}", e))
+            })?;
+            info!("Activated chaos rule: {} for workspace: {}", chaos_rule.name, ws_id);
         } else {
             info!(
                 "Chaos rule {} validated (consistency engine not available, skipping activation)",
@@ -365,15 +355,10 @@ impl StudioPackInstaller {
         workspace_id: Option<&str>,
     ) -> Result<()> {
         // Deserialize drift budget config
-        let drift_config: DriftBudgetConfig = serde_json::from_value(
-            contract_diff.drift_budget.clone(),
-        )
-        .map_err(|e| {
-            ScenarioError::Generic(format!(
-                "Failed to deserialize DriftBudgetConfig: {}",
-                e
-            ))
-        })?;
+        let drift_config: DriftBudgetConfig =
+            serde_json::from_value(contract_diff.drift_budget.clone()).map_err(|e| {
+                ScenarioError::Generic(format!("Failed to deserialize DriftBudgetConfig: {}", e))
+            })?;
 
         // If drift budget engine is available, apply the configuration
         if let Some(ref engine) = self.drift_budget_engine {
@@ -384,31 +369,23 @@ impl StudioPackInstaller {
             // Merge per-workspace budgets if workspace_id is provided
             if let Some(ws_id) = workspace_id {
                 if let Some(budget) = drift_config.default_budget.clone() {
-                    current_config
-                        .per_workspace_budgets
-                        .insert(ws_id.to_string(), budget);
+                    current_config.per_workspace_budgets.insert(ws_id.to_string(), budget);
                 }
             }
 
             // Merge per-service budgets
             for (service, budget) in &drift_config.per_service_budgets {
-                current_config
-                    .per_service_budgets
-                    .insert(service.clone(), budget.clone());
+                current_config.per_service_budgets.insert(service.clone(), budget.clone());
             }
 
             // Merge per-tag budgets
             for (tag, budget) in &drift_config.per_tag_budgets {
-                current_config
-                    .per_tag_budgets
-                    .insert(tag.clone(), budget.clone());
+                current_config.per_tag_budgets.insert(tag.clone(), budget.clone());
             }
 
             // Merge per-endpoint budgets
             for (endpoint, budget) in &drift_config.per_endpoint_budgets {
-                current_config
-                    .per_endpoint_budgets
-                    .insert(endpoint.clone(), budget.clone());
+                current_config.per_endpoint_budgets.insert(endpoint.clone(), budget.clone());
             }
 
             // Update default budget if provided
@@ -442,15 +419,10 @@ impl StudioPackInstaller {
         _workspace_id: Option<&str>,
     ) -> Result<()> {
         // Deserialize continuum config
-        let continuum_config: ContinuumConfig = serde_json::from_value(
-            reality_blend.continuum_config.clone(),
-        )
-        .map_err(|e| {
-            ScenarioError::Generic(format!(
-                "Failed to deserialize ContinuumConfig: {}",
-                e
-            ))
-        })?;
+        let continuum_config: ContinuumConfig =
+            serde_json::from_value(reality_blend.continuum_config.clone()).map_err(|e| {
+                ScenarioError::Generic(format!("Failed to deserialize ContinuumConfig: {}", e))
+            })?;
 
         // If continuum engine is available, apply the configuration
         if let Some(ref engine) = self.continuum_engine {

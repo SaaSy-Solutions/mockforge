@@ -312,6 +312,8 @@ clean = true
     #[test]
     fn test_output_config_with_barrel_type() {
         let toml_str = r#"
+[input]
+
 [output]
 path = "./generated"
 barrel-type = "index"

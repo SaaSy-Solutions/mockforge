@@ -474,6 +474,7 @@ mod tests {
                 api_key: None,
                 temperature: 0.7,
                 max_tokens: 2000,
+                rules: crate::intelligent_behavior::types::BehaviorRules::default(),
             },
             ..Default::default()
         }

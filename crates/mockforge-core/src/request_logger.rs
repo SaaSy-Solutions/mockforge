@@ -526,6 +526,7 @@ mod tests {
             client_ip: Some("127.0.0.1".to_string()),
             user_agent: Some("test-agent".to_string()),
             headers: HashMap::new(),
+            query_params: HashMap::new(),
             response_size_bytes: 1024,
             error_message: None,
             metadata: HashMap::new(),

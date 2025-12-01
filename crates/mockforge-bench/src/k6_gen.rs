@@ -198,40 +198,22 @@ mod tests {
         );
 
         // Test other invalid characters
-        assert_eq!(
-            K6ScriptGenerator::sanitize_js_identifier("get user"),
-            "get_user"
-        );
+        assert_eq!(K6ScriptGenerator::sanitize_js_identifier("get user"), "get_user");
 
         // Test names starting with numbers
-        assert_eq!(
-            K6ScriptGenerator::sanitize_js_identifier("123invalid"),
-            "_123invalid"
-        );
+        assert_eq!(K6ScriptGenerator::sanitize_js_identifier("123invalid"), "_123invalid");
 
         // Test already valid identifiers
-        assert_eq!(
-            K6ScriptGenerator::sanitize_js_identifier("getUsers"),
-            "getUsers"
-        );
+        assert_eq!(K6ScriptGenerator::sanitize_js_identifier("getUsers"), "getUsers");
 
         // Test with multiple consecutive invalid chars
-        assert_eq!(
-            K6ScriptGenerator::sanitize_js_identifier("test...name"),
-            "test_name"
-        );
+        assert_eq!(K6ScriptGenerator::sanitize_js_identifier("test...name"), "test_name");
 
         // Test empty string (should return default)
-        assert_eq!(
-            K6ScriptGenerator::sanitize_js_identifier(""),
-            "operation"
-        );
+        assert_eq!(K6ScriptGenerator::sanitize_js_identifier(""), "operation");
 
         // Test with special characters
-        assert_eq!(
-            K6ScriptGenerator::sanitize_js_identifier("test@name#value"),
-            "test_name_value"
-        );
+        assert_eq!(K6ScriptGenerator::sanitize_js_identifier("test@name#value"), "test_name_value");
     }
 
     #[test]

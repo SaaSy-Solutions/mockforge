@@ -6841,15 +6841,6 @@ dependencies = [
 
 [[package]]
 name = "mail-parser"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93c3b9e5d8b17faf573330bbc43b37d6e918c0a3bf8a88e7d0a220ebc84af9fc"
-dependencies = [
- "encoding_rs",
-]
-
-[[package]]
-name = "mail-parser"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcf4390741c4e6fa330bdeccdfb580815dbb462952de91838b723357985119a3"
@@ -7270,7 +7261,7 @@ dependencies = [
  "mockforge-grpc 0.3.3",
  "mockforge-http 0.3.3",
  "mockforge-kafka",
- "mockforge-mqtt 0.3.3",
+ "mockforge-mqtt",
  "mockforge-observability 0.3.3",
  "mockforge-pipelines",
  "mockforge-plugin-core 0.3.3",
@@ -7278,7 +7269,7 @@ dependencies = [
  "mockforge-recorder 0.3.3",
  "mockforge-scenarios 0.3.3",
  "mockforge-schema",
- "mockforge-smtp 0.3.3",
+ "mockforge-smtp",
  "mockforge-tcp",
  "mockforge-tracing 0.3.3",
  "mockforge-tunnel",
@@ -7291,7 +7282,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.24",
  "ring",
- "rumqttc 0.25.1",
+ "rumqttc",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -7300,7 +7291,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-opentelemetry",
+ "tracing-opentelemetry 0.22.0",
  "tracing-subscriber",
  "url",
  "urlencoding",
@@ -7433,6 +7424,7 @@ dependencies = [
  "jsonschema",
  "jsonwebtoken 9.3.1",
  "mockforge-data 0.3.3",
+ "mockforge-template-expansion 0.3.3",
  "notify 8.2.0",
  "once_cell",
  "openapiv3",
@@ -7678,7 +7670,7 @@ dependencies = [
  "mockforge-core 0.3.3",
  "mockforge-data 0.3.4",
  "mockforge-observability 0.3.4",
- "mockforge-tracing 0.3.4",
+ "mockforge-tracing 0.3.3",
  "notify 7.0.0",
  "once_cell",
  "opentelemetry 0.21.0",
@@ -7740,7 +7732,7 @@ dependencies = [
  "mockforge-core 0.3.3",
  "mockforge-data 0.3.4",
  "mockforge-observability 0.3.4",
- "mockforge-tracing 0.3.4",
+ "mockforge-tracing 0.3.3",
  "once_cell",
  "opentelemetry 0.21.0",
  "opentelemetry_sdk 0.21.2",
@@ -7816,7 +7808,6 @@ dependencies = [
  "axum 0.8.7",
  "base64 0.22.1",
  "chrono",
- "dashmap 6.1.0",
  "futures",
  "futures-util",
  "glob",
@@ -7833,19 +7824,16 @@ dependencies = [
  "mockforge-chaos 0.3.3",
  "mockforge-core 0.3.3",
  "mockforge-data 0.3.3",
- "mockforge-kafka",
- "mockforge-mqtt 0.3.4",
- "mockforge-observability 0.3.4",
+ "mockforge-mqtt",
+ "mockforge-observability 0.3.3",
  "mockforge-performance 0.3.3",
- "mockforge-pipelines",
- "mockforge-plugin-core 0.3.3",
+ "mockforge-plugin-core 0.3.4",
  "mockforge-recorder 0.3.3",
  "mockforge-route-chaos 0.3.3",
- "mockforge-runtime-daemon",
  "mockforge-scenarios 0.3.3",
- "mockforge-smtp 0.3.4",
+ "mockforge-smtp",
  "mockforge-template-expansion 0.3.3",
- "mockforge-tracing 0.3.4",
+ "mockforge-tracing 0.3.3",
  "mockforge-world-state 0.3.3",
  "mockforge-ws 0.3.4",
  "oauth2",
@@ -7857,13 +7845,12 @@ dependencies = [
  "reqwest 0.12.24",
  "ring",
  "roxmltree",
- "rustls 0.23.35",
+ "rustls 0.21.12",
  "rustls-pemfile 1.0.4",
  "serde",
  "serde_json",
  "serde_yaml",
  "sha2",
- "sqlx",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
@@ -7950,6 +7937,7 @@ dependencies = [
  "mockforge-data 0.3.3",
  "mockforge-http 0.3.3",
  "mockforge-recorder 0.3.3",
+ "mockforge-route-chaos 0.3.3",
  "mockforge-scenarios 0.3.3",
  "mockforge-test",
  "mockforge-vbr",
@@ -7996,32 +7984,11 @@ dependencies = [
  "futures",
  "mockforge-core 0.3.3",
  "regex",
- "rumqttc 0.25.1",
+ "rumqttc",
  "serde",
  "serde_json",
  "serde_yaml",
  "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tokio-stream",
- "tracing",
-]
-
-[[package]]
-name = "mockforge-mqtt"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb72e1abf326754f299ef264d9c13093689ec6d4dcf1086964a908232dad45ab"
-dependencies = [
- "anyhow",
- "async-trait",
- "futures",
- "mockforge-core 0.3.4",
- "regex",
- "rumqttc 0.24.0",
- "serde",
- "serde_json",
- "serde_yaml",
  "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
@@ -8043,7 +8010,7 @@ dependencies = [
  "tokio-test",
  "tracing",
  "tracing-appender",
- "tracing-opentelemetry",
+ "tracing-opentelemetry 0.22.0",
  "tracing-subscriber",
 ]
 
@@ -8663,7 +8630,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "criterion",
- "mail-parser 0.11.1",
+ "mail-parser",
  "mockforge-core 0.3.3",
  "regex",
  "rustls 0.23.35",
@@ -8672,30 +8639,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tokio-rustls 0.24.1",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "mockforge-smtp"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54dcc817dd196e08fb562ecbe47aa23d400496627b272f30354a5992534b9885"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "mail-parser 0.9.4",
- "mockforge-core 0.3.4",
- "regex",
- "rustls 0.21.12",
- "rustls-pemfile 1.0.4",
- "serde",
- "serde_json",
- "serde_yaml",
  "thiserror 2.0.17",
  "tokio",
  "tokio-rustls 0.24.1",
@@ -8797,7 +8740,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "tracing-opentelemetry",
+ "tracing-opentelemetry 0.22.0",
  "tracing-subscriber",
 ]
 
@@ -8805,17 +8748,18 @@ dependencies = [
 name = "mockforge-tracing"
 version = "0.3.3"
 dependencies = [
+ "axum 0.8.7",
  "http 1.4.0",
- "opentelemetry 0.22.0",
- "opentelemetry-jaeger 0.21.0",
- "opentelemetry-otlp 0.15.0",
- "opentelemetry-semantic-conventions 0.31.0",
- "opentelemetry_sdk 0.31.0",
+ "opentelemetry 0.21.0",
+ "opentelemetry-jaeger 0.20.0",
+ "opentelemetry-otlp 0.14.0",
+ "opentelemetry-semantic-conventions 0.13.0",
+ "opentelemetry_sdk 0.21.2",
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
  "tracing",
- "tracing-opentelemetry",
+ "tracing-opentelemetry 0.21.0",
  "tracing-subscriber",
 ]
 
@@ -8834,7 +8778,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "tracing-opentelemetry",
+ "tracing-opentelemetry 0.22.0",
  "tracing-subscriber",
 ]
 
@@ -8995,7 +8939,7 @@ dependencies = [
  "mockforge-core 0.3.3",
  "mockforge-data 0.3.3",
  "mockforge-observability 0.3.4",
- "mockforge-tracing 0.3.4",
+ "mockforge-tracing 0.3.3",
  "opentelemetry 0.21.0",
  "opentelemetry_sdk 0.21.2",
  "regex",
@@ -9868,6 +9812,16 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
+dependencies = [
+ "opentelemetry_api",
+ "opentelemetry_sdk 0.20.0",
+]
+
+[[package]]
+name = "opentelemetry"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e32339a5dc40459130b3bd269e9892439f55b33e772d2a9d402a789baaf4e8a"
@@ -9895,20 +9849,6 @@ dependencies = [
  "pin-project-lite",
  "thiserror 1.0.69",
  "urlencoding",
-]
-
-[[package]]
-name = "opentelemetry"
-version = "0.31.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b84bcd6ae87133e903af7ef497404dda70c60d0ea14895fc8a5e6722754fc2a0"
-dependencies = [
- "futures-core",
- "futures-sink",
- "js-sys",
- "pin-project-lite",
- "thiserror 2.0.17",
- "tracing",
 ]
 
 [[package]]
@@ -10027,6 +9967,42 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e62e29dfe041afb8ed2a6c9737ab57db4907285d999ef8ad3a59092a36bdc846"
 
 [[package]]
+name = "opentelemetry_api"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a81f725323db1b1206ca3da8bb19874bbd3f57c3bcd59471bfb04525b265b9b"
+dependencies = [
+ "futures-channel",
+ "futures-util",
+ "indexmap 1.9.3",
+ "js-sys",
+ "once_cell",
+ "pin-project-lite",
+ "thiserror 1.0.69",
+ "urlencoding",
+]
+
+[[package]]
+name = "opentelemetry_sdk"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa8e705a0612d48139799fcbaba0d4a90f06277153e43dd2bdc16c6f0edd8026"
+dependencies = [
+ "async-trait",
+ "crossbeam-channel",
+ "futures-channel",
+ "futures-executor",
+ "futures-util",
+ "once_cell",
+ "opentelemetry_api",
+ "ordered-float 3.9.2",
+ "percent-encoding",
+ "rand 0.8.5",
+ "regex",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "opentelemetry_sdk"
 version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10070,23 +10046,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "opentelemetry_sdk"
-version = "0.31.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e14ae4f5991976fd48df6d843de219ca6d31b01daaab2dad5af2badeded372bd"
-dependencies = [
- "futures-channel",
- "futures-executor",
- "futures-util",
- "opentelemetry 0.31.0",
- "percent-encoding",
- "rand 0.9.2",
- "thiserror 2.0.17",
- "tokio",
- "tokio-stream",
-]
-
-[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10097,6 +10056,15 @@ name = "ordered-float"
 version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68f19d67e5a2795c94e73e0bb1cc1a7edeb2e28efd39e2e1c9b7a40c1108b11c"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "ordered-float"
+version = "3.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1e1c390732d15f1d48471625cd92d154e66db2c56645e29a9cd26f4699f72dc"
 dependencies = [
  "num-traits",
 ]
@@ -12134,24 +12102,6 @@ dependencies = [
 
 [[package]]
 name = "rumqttc"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1568e15fab2d546f940ed3a21f48bbbd1c494c90c99c4481339364a497f94a9"
-dependencies = [
- "bytes",
- "flume",
- "futures-util",
- "log",
- "rustls-native-certs 0.7.3",
- "rustls-pemfile 2.2.0",
- "rustls-webpki 0.102.8",
- "thiserror 1.0.69",
- "tokio",
- "tokio-rustls 0.25.0",
-]
-
-[[package]]
-name = "rumqttc"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0feff8d882bff0b2fddaf99355a10336d43dd3ed44204f85ece28cf9626ab519"
@@ -12277,20 +12227,6 @@ dependencies = [
  "ring",
  "rustls-webpki 0.101.7",
  "sct",
-]
-
-[[package]]
-name = "rustls"
-version = "0.22.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf4ef73721ac7bcd79b2b315da7779d8fc09718c6b3d2d1b2d94850eb8c18432"
-dependencies = [
- "log",
- "ring",
- "rustls-pki-types",
- "rustls-webpki 0.102.8",
- "subtle",
- "zeroize",
 ]
 
 [[package]]
@@ -14257,17 +14193,6 @@ dependencies = [
 
 [[package]]
 name = "tokio-rustls"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "775e0c0f0adb3a2f22a00c4745d728b479985fc15ee7ca6a2608388c5569860f"
-dependencies = [
- "rustls 0.22.4",
- "rustls-pki-types",
- "tokio",
-]
-
-[[package]]
-name = "tokio-rustls"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
@@ -14754,6 +14679,17 @@ dependencies = [
 
 [[package]]
 name = "tracing-log"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f751112709b4e791d8ce53e32c4ed2d353565a795ce84da2285393f41557bdf2"
+dependencies = [
+ "log",
+ "once_cell",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-log"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
@@ -14761,6 +14697,22 @@ dependencies = [
  "log",
  "once_cell",
  "tracing-core",
+]
+
+[[package]]
+name = "tracing-opentelemetry"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75327c6b667828ddc28f5e3f169036cb793c3f588d83bf0f262a7f062ffed3c8"
+dependencies = [
+ "once_cell",
+ "opentelemetry 0.20.0",
+ "opentelemetry_sdk 0.20.0",
+ "smallvec",
+ "tracing",
+ "tracing-core",
+ "tracing-log 0.1.4",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -14776,7 +14728,7 @@ dependencies = [
  "smallvec",
  "tracing",
  "tracing-core",
- "tracing-log",
+ "tracing-log 0.2.0",
  "tracing-subscriber",
  "web-time 0.2.4",
 ]
@@ -14808,7 +14760,7 @@ dependencies = [
  "thread_local",
  "tracing",
  "tracing-core",
- "tracing-log",
+ "tracing-log 0.2.0",
  "tracing-serde",
 ]
 

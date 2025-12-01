@@ -39,8 +39,8 @@ parking_lot = { workspace = true }
 # MockForge core
 mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
 mockforge-observability = "0.3.0"
-mockforge-tracing = "0.3.0"
-opentelemetry = "0.21"
+mockforge-tracing = { version = "0.3.3", path = "../mockforge-tracing" }
+opentelemetry = { version = "0.21", features = ["trace"] }
 
 # Optional data generation support
 mockforge-data = { version = "0.3.0", optional = true }
@@ -52,5 +52,5 @@ data-faker = ["mockforge-data"]
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true }
-opentelemetry_sdk = "0.31"
+opentelemetry_sdk = "0.21"
 tempfile = "3.8"

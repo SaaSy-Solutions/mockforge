@@ -46,7 +46,8 @@ pub struct AiStudioState {
     /// Workspace ID (optional, can be set per request)
     pub workspace_id: Option<String>,
     /// In-memory storage for generated systems (system_id -> GeneratedSystem)
-    pub system_storage: Arc<RwLock<HashMap<String, mockforge_core::ai_studio::system_generator::GeneratedSystem>>>,
+    pub system_storage:
+        Arc<RwLock<HashMap<String, mockforge_core::ai_studio::system_generator::GeneratedSystem>>>,
 }
 
 impl AiStudioState {
@@ -404,9 +405,7 @@ pub async fn freeze_artifacts_handler(
         frozen_paths.len()
     );
 
-    Ok(Json(FreezeArtifactsResponse {
-        frozen_paths,
-    }))
+    Ok(Json(FreezeArtifactsResponse { frozen_paths }))
 }
 
 /// Request body for create agent endpoint

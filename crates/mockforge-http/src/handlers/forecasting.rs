@@ -8,8 +8,8 @@ use axum::{
     response::Json,
 };
 use chrono::{DateTime, Utc};
-use mockforge_core::contract_drift::forecasting::{ChangeForecast, Forecaster};
 use mockforge_core::contract_drift::forecasting::types::SeasonalPattern;
+use mockforge_core::contract_drift::forecasting::{ChangeForecast, Forecaster};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -196,10 +196,7 @@ pub async fn list_forecasts(
     }
 
     let total = forecasts.len();
-    Ok(Json(ForecastListResponse {
-        forecasts,
-        total,
-    }))
+    Ok(Json(ForecastListResponse { forecasts, total }))
 }
 
 /// List forecasts (no database)

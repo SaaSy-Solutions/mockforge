@@ -546,10 +546,11 @@ pub async fn get_remediations(
     use sqlx::Row;
     let mut remediations = Vec::new();
     for row in rows {
-        let remediations_json: serde_json::Value = row.try_get("remediation_suggestions").map_err(|e| {
-            tracing::error!("Failed to get remediation_suggestions from row: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        let remediations_json: serde_json::Value =
+            row.try_get("remediation_suggestions").map_err(|e| {
+                tracing::error!("Failed to get remediation_suggestions from row: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
         if let serde_json::Value::Array(remediation_array) = remediations_json {
             for remediation in remediation_array {
                 remediations.push(remediation);

@@ -4,7 +4,7 @@
 //! Supports deep merging of JSON objects, combining arrays, and weighted selection
 //! for primitive values.
 
-use crate::reality_continuum::MergeStrategy;
+use super::config::MergeStrategy;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -56,7 +56,7 @@ impl ResponseBlender {
         mock: &Value,
         real: &Value,
         global_ratio: f64,
-        field_config: Option<&crate::reality_continuum::FieldRealityConfig>,
+        field_config: Option<&super::field_mixer::FieldRealityConfig>,
     ) -> Value {
         let global_ratio = global_ratio.clamp(0.0, 1.0);
 
@@ -90,7 +90,7 @@ impl ResponseBlender {
         mock: &Value,
         real: &Value,
         global_ratio: f64,
-        field_config: &crate::reality_continuum::FieldRealityConfig,
+        field_config: &super::field_mixer::FieldRealityConfig,
     ) -> Value {
         match (mock, real) {
             (Value::Object(mock_obj), Value::Object(real_obj)) => {

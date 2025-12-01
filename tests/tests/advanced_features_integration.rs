@@ -8,11 +8,11 @@ use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use mockforge_core::{
     conditions::ConditionContext,
     config::{RouteConfig, RouteFaultInjectionConfig, RouteFaultType, RouteLatencyConfig},
+    priority_handler::RouteChaosInjectorTrait,
     proxy::{
         conditional::{evaluate_proxy_condition, find_matching_rule},
         config::{ProxyConfig, ProxyRule},
     },
-    route_chaos::{RouteChaosInjector, RouteMatcher},
     stateful_handler::{
         ResourceIdExtract, StateResponse, StatefulConfig, StatefulResponseHandler,
         TransitionTrigger,
@@ -23,6 +23,7 @@ use mockforge_recorder::{
     models::{Protocol, RecordedExchange, RecordedRequest, RecordedResponse},
     StubFormat, StubMappingConverter,
 };
+use mockforge_route_chaos::{RouteChaosInjector, RouteMatcher};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;

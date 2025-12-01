@@ -236,8 +236,12 @@ fn evaluate_jsonpath(query: &str, context: &ConditionContext) -> Result<bool, Co
         let _query = query.replace("$.response.", "$.");
         (false, &context.response_body)
     } else {
-        // Default to response body if not specified
-        (false, &context.response_body)
+        // Default to response body if available, otherwise request body
+        if context.response_body.is_some() {
+            (false, &context.response_body)
+        } else {
+            (true, &context.request_body)
+        }
     };
 
     let Some(json_value) = json_value else {
@@ -374,25 +378,54 @@ fn evaluate_simple_condition(
     condition: &str,
     context: &ConditionContext,
 ) -> Result<bool, ConditionError> {
-    // Handle header conditions: header[name]=value
+    // Handle header conditions: header[name]=value or header[name]!=value
     if let Some(header_condition) = condition.strip_prefix("header[") {
-        if let Some((header_name, expected_value)) = header_condition.split_once("]=") {
-            let expected_value = expected_value.trim();
-            if let Some(actual_value) = context.headers.get(header_name) {
-                return Ok(actual_value == expected_value);
+        if let Some((header_name, rest)) = header_condition.split_once("]") {
+            // Headers are stored in lowercase in the context
+            let header_name_lower = header_name.to_lowercase();
+            let rest_trimmed = rest.trim();
+            // Check for != operator (with optional whitespace)
+            if let Some(expected_value) = rest_trimmed.strip_prefix("!=") {
+                let expected_value = expected_value.trim().trim_matches('\'').trim_matches('"');
+                if let Some(actual_value) = context.headers.get(&header_name_lower) {
+                    // Header exists: return true if actual value != expected value
+                    return Ok(actual_value != expected_value);
+                }
+                // Header doesn't exist: return true if checking != '' (empty string)
+                // because non-existent header is not equal to empty string
+                return Ok(expected_value.is_empty());
             }
-            return Ok(false);
+            // Check for = operator (with optional whitespace)
+            if let Some(expected_value) = rest_trimmed.strip_prefix("=") {
+                let expected_value = expected_value.trim().trim_matches('\'').trim_matches('"');
+                if let Some(actual_value) = context.headers.get(&header_name_lower) {
+                    return Ok(actual_value == expected_value);
+                }
+                return Ok(false);
+            }
         }
     }
 
-    // Handle query parameter conditions: query[name]=value
+    // Handle query parameter conditions: query[name]=value or query[name]==value
     if let Some(query_condition) = condition.strip_prefix("query[") {
-        if let Some((param_name, expected_value)) = query_condition.split_once("]=") {
-            let expected_value = expected_value.trim();
-            if let Some(actual_value) = context.query_params.get(param_name) {
-                return Ok(actual_value == expected_value);
+        if let Some((param_name, rest)) = query_condition.split_once("]") {
+            let rest_trimmed = rest.trim();
+            // Check for == operator (with optional whitespace and quotes)
+            if let Some(expected_value) = rest_trimmed.strip_prefix("==") {
+                let expected_value = expected_value.trim().trim_matches('\'').trim_matches('"');
+                if let Some(actual_value) = context.query_params.get(param_name) {
+                    return Ok(actual_value == expected_value);
+                }
+                return Ok(false);
             }
-            return Ok(false);
+            // Check for = operator (with optional whitespace)
+            if let Some(expected_value) = rest_trimmed.strip_prefix("=") {
+                let expected_value = expected_value.trim();
+                if let Some(actual_value) = context.query_params.get(param_name) {
+                    return Ok(actual_value == expected_value);
+                }
+                return Ok(false);
+            }
         }
     }
 

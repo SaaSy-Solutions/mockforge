@@ -8,7 +8,9 @@
 use crate::config::AnalyticsConfig;
 use crate::database::AnalyticsDatabase;
 use crate::error::Result;
-use crate::models::{AnalyticsFilter, DayMetricsAggregate, EndpointStats, HourMetricsAggregate, MetricsAggregate};
+use crate::models::{
+    AnalyticsFilter, DayMetricsAggregate, EndpointStats, HourMetricsAggregate, MetricsAggregate,
+};
 use chrono::{Timelike, Utc};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -491,7 +493,8 @@ impl MetricsAggregator {
             };
 
             // Max active connections
-            let active_connections_max = group.iter().filter_map(|a| a.active_connections_max).max();
+            let active_connections_max =
+                group.iter().filter_map(|a| a.active_connections_max).max();
 
             let day_agg = DayMetricsAggregate {
                 id: None,

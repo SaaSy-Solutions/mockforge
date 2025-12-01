@@ -2480,7 +2480,10 @@ async fn produce_kafka_message(
 
         // Get or create the topic
         let topic_entry = topics.entry(request.topic.clone()).or_insert_with(|| {
-            mockforge_kafka::topics::Topic::new(request.topic.clone(), mockforge_kafka::topics::TopicConfig::default())
+            mockforge_kafka::topics::Topic::new(
+                request.topic.clone(),
+                mockforge_kafka::topics::TopicConfig::default(),
+            )
         });
 
         // Determine partition

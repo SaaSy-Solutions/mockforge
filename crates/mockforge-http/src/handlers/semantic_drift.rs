@@ -22,9 +22,9 @@ use crate::database::Database;
 fn map_row_to_semantic_incident(
     row: &sqlx::postgres::PgRow,
 ) -> Result<SemanticIncident, sqlx::Error> {
-    use sqlx::Row;
     use mockforge_core::ai_contract_diff::semantic_analyzer::SemanticChangeType;
     use mockforge_core::incidents::types::{IncidentSeverity, IncidentStatus};
+    use sqlx::Row;
 
     let id: uuid::Uuid = row.try_get("id")?;
     let workspace_id: Option<uuid::Uuid> = row.try_get("workspace_id").ok();

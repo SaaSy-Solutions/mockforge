@@ -374,12 +374,7 @@ impl MutationAnalyzer {
 
     /// Determine change type between two values
     fn determine_change_type(&self, previous: &Value, current: &Value) -> ChangeType {
-        // Check for type change
-        if std::mem::discriminant(previous) != std::mem::discriminant(current) {
-            return ChangeType::TypeChanged;
-        }
-
-        // Check if previous was null/empty and current has value
+        // Check if previous was null/empty and current has value (Set takes precedence)
         if previous.is_null() || (previous.is_string() && previous.as_str() == Some("")) {
             return ChangeType::Set;
         }
@@ -387,6 +382,11 @@ impl MutationAnalyzer {
         // Check if current is null/empty
         if current.is_null() || (current.is_string() && current.as_str() == Some("")) {
             return ChangeType::Cleared;
+        }
+
+        // Check for type change (after null checks)
+        if std::mem::discriminant(previous) != std::mem::discriminant(current) {
+            return ChangeType::TypeChanged;
         }
 
         // Otherwise, it's a modification
@@ -418,13 +418,16 @@ impl MutationAnalyzer {
             return MutationType::Delete;
         }
 
-        // If only some fields changed, partial update
-        if !changed_fields.is_empty() && changed_fields.len() < 5 {
-            return MutationType::PartialUpdate;
-        }
-
-        // If many fields changed, full update
+        // If fields changed, determine if it's partial or full update
         if !changed_fields.is_empty() {
+            // If we have added or removed fields along with changes, it's a full update
+            if !added_fields.is_empty() || !removed_fields.is_empty() {
+                return MutationType::Update;
+            }
+            // If a significant portion of fields changed (more than half), it's a full update
+            // For now, treat any update with only changed fields (no adds/removes) as Update
+            // PartialUpdate would be for cases where we're updating a subset of a larger object
+            // Since we don't have the total field count here, default to Update
             return MutationType::Update;
         }
 

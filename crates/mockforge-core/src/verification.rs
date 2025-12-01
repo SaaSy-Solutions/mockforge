@@ -192,16 +192,16 @@ fn matches_path_pattern(path: &str, pattern: &str) -> bool {
         return true;
     }
 
-    // Try regex matching
+    // Try wildcard matching first (before regex, as wildcards are more specific)
+    if pattern.contains('*') {
+        return matches_wildcard_pattern(path, pattern);
+    }
+
+    // Try regex matching (only if no wildcards)
     if let Ok(re) = Regex::new(pattern) {
         if re.is_match(path) {
             return true;
         }
-    }
-
-    // Try wildcard matching
-    if pattern.contains('*') {
-        return matches_wildcard_pattern(path, pattern);
     }
 
     false
@@ -341,8 +341,10 @@ pub async fn verify_sequence(
     logger: &crate::request_logger::CentralizedRequestLogger,
     patterns: &[VerificationRequest],
 ) -> VerificationResult {
-    // Get all logs
-    let logs = logger.get_recent_logs(None).await;
+    // Get all logs (most recent first)
+    let mut logs = logger.get_recent_logs(None).await;
+    // Reverse to get chronological order (oldest first) for sequence verification
+    logs.reverse();
 
     // Find matches for each pattern in order
     let mut log_idx = 0;

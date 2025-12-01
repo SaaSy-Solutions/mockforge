@@ -311,7 +311,10 @@ impl BreakingChangeRule {
                 },
             ) => {
                 if *include_higher {
-                    mismatch.severity >= *severity
+                    // Reverse comparison: Critical < High < Medium < Low < Info in enum order
+                    // But we want Critical > High > Medium > Low > Info for severity
+                    // So we check if severity is <= mismatch.severity (reversed)
+                    mismatch.severity <= *severity
                 } else {
                     mismatch.severity == *severity
                 }

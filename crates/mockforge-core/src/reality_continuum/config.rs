@@ -52,7 +52,7 @@ pub struct ContinuumConfig {
     pub transition_mode: TransitionMode,
     /// Time schedule for time-based transitions (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub time_schedule: Option<crate::reality_continuum::TimeSchedule>,
+    pub time_schedule: Option<super::schedule::TimeSchedule>,
     /// Merge strategy for blending responses
     #[serde(default)]
     pub merge_strategy: MergeStrategy,
@@ -64,7 +64,7 @@ pub struct ContinuumConfig {
     pub groups: HashMap<String, f64>,
     /// Field-level reality mixing configuration
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub field_mixing: Option<crate::reality_continuum::FieldRealityConfig>,
+    pub field_mixing: Option<super::field_mixer::FieldRealityConfig>,
     /// Cross-protocol state sharing configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cross_protocol_state: Option<CrossProtocolStateConfig>,
@@ -119,7 +119,7 @@ impl ContinuumConfig {
     }
 
     /// Set the time schedule
-    pub fn with_time_schedule(mut self, schedule: crate::reality_continuum::TimeSchedule) -> Self {
+    pub fn with_time_schedule(mut self, schedule: super::schedule::TimeSchedule) -> Self {
         self.time_schedule = Some(schedule);
         self
     }
@@ -260,9 +260,17 @@ impl ContinuumRule {
         // Simple pattern matching - supports wildcards
         if self.pattern.ends_with("/*") {
             let prefix = &self.pattern[..self.pattern.len() - 2];
-            path.starts_with(prefix)
+            // For wildcard patterns, path must start with prefix and have at least one more segment
+            if path.starts_with(prefix) {
+                let remaining = &path[prefix.len()..];
+                // Must have at least one segment after the prefix (not just a trailing slash)
+                !remaining.is_empty() && remaining != "/"
+            } else {
+                false
+            }
         } else {
-            path == self.pattern || path.starts_with(&self.pattern)
+            // Exact match only - no prefix matching for non-wildcard patterns
+            path == self.pattern
         }
     }
 }

@@ -61,7 +61,9 @@ fn default_workspace() -> String {
 }
 
 /// Extract VBR state from VBR engine if available
-async fn extract_vbr_state(vbr_engine: &Option<Arc<dyn std::any::Any + Send + Sync>>) -> Option<serde_json::Value> {
+async fn extract_vbr_state(
+    vbr_engine: &Option<Arc<dyn std::any::Any + Send + Sync>>,
+) -> Option<serde_json::Value> {
     if let Some(engine) = vbr_engine {
         // Try to downcast to VbrEngine and extract state
         // Since we can't directly downcast to VbrEngine (it's in a different crate),
@@ -75,7 +77,9 @@ async fn extract_vbr_state(vbr_engine: &Option<Arc<dyn std::any::Any + Send + Sy
 }
 
 /// Extract Recorder state from Recorder if available
-async fn extract_recorder_state(recorder: &Option<Arc<dyn std::any::Any + Send + Sync>>) -> Option<serde_json::Value> {
+async fn extract_recorder_state(
+    recorder: &Option<Arc<dyn std::any::Any + Send + Sync>>,
+) -> Option<serde_json::Value> {
     if let Some(rec) = recorder {
         // Try to extract recorder state
         // Since we can't directly downcast to RecorderDatabase (it's in a different crate),

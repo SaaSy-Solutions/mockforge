@@ -52,14 +52,20 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = "0.3.3"
-mockforge-data = "0.3.3"
-mockforge-observability = "0.3.3"
-mockforge-recorder = "0.3.3"
+mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.3", path = "../mockforge-data" }
+mockforge-observability = { version = "0.3.3", path = "../mockforge-observability" }
+mockforge-recorder = { version = "0.3.3", path = "../mockforge-recorder" }
 mockforge-scenarios = { path = "../mockforge-scenarios", version = "0.3.3" }
-mockforge-tracing = "0.3.3"
+mockforge-tracing = { version = "0.3.3", path = "../mockforge-tracing" }
+opentelemetry = { version = "0.21", features = ["trace"] }
 mockforge-mqtt = { version = "0.3.3", path = "../mockforge-mqtt", optional = true }
-opentelemetry = "0.21"
+mockforge-chaos = { version = "0.3.3", path = "../mockforge-chaos" }
+mockforge-performance = { version = "0.3.3", path = "../mockforge-performance" }
+mockforge-world-state = { version = "0.3.3", path = "../mockforge-world-state" }
+mockforge-template-expansion = { version = "0.3.3", path = "../mockforge-template-expansion" }
+mockforge-route-chaos = { version = "0.3.3", path = "../mockforge-route-chaos" }
+futures-util = "0.3"
 rustls = "0.21"
 rustls-pemfile = "1.0"
 tokio-rustls = "0.24"
@@ -81,6 +87,6 @@ tokio-tungstenite = "0.28"
 futures-util = "0.3"
 mockforge-ws = "0.3.3"
 mockforge-plugin-core = "0.3.3"
-opentelemetry_sdk = "0.31"
+opentelemetry_sdk = "0.21"
 uuid = { version = "1", features = ["v4"] }
 once_cell = { workspace = true }

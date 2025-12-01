@@ -10,6 +10,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use futures_util::StreamExt;
 use mockforge_world_state::{
     model::{StateLayer, WorldStateSnapshot},
     WorldStateEngine, WorldStateQuery,
@@ -267,7 +268,7 @@ async fn handle_world_state_stream(
     state: WorldStateState,
 ) {
     use axum::extract::ws::Message;
-    use futures_util::{SinkExt, StreamExt};
+    use futures_util::SinkExt;
     use tokio::time::{interval, Duration};
 
     // Send initial snapshot
@@ -334,7 +335,7 @@ async fn handle_world_state_stream(
 pub fn world_state_router() -> Router<WorldStateState> {
     Router::new()
         .route("/snapshot", get(get_current_snapshot))
-        .route("/snapshot/:id", get(get_snapshot))
+        .route("/snapshot/{id}", get(get_snapshot))
         .route("/graph", get(get_world_state_graph))
         .route("/layers", get(get_layers))
         .route("/query", post(query_world_state))

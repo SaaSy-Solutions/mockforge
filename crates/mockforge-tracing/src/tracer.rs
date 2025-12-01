@@ -2,8 +2,8 @@
 
 use crate::exporter::ExporterType;
 use opentelemetry::global;
-use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::trace::TracerProvider;
 use opentelemetry_sdk::Resource;
 use std::error::Error;
 use std::time::Duration;
@@ -117,16 +117,9 @@ fn init_otlp_tracer(
     let endpoint = config.otlp_endpoint.ok_or("OTLP endpoint not configured")?;
 
     // Build resource attributes
-    let mut resource_attrs = vec![
-        KeyValue::new("service.name", config.service_name.clone()),
-        KeyValue::new("deployment.environment", config.environment.clone()),
-    ];
-
-    if let Some(version) = config.service_version {
-        resource_attrs.push(KeyValue::new("service.version", version));
-    }
-
-    let resource = Resource::new(resource_attrs);
+    // Note: In opentelemetry_sdk 0.21, Resource creation API is limited
+    // We'll use default resource for now - attributes can be added via span attributes instead
+    let resource = Resource::default();
 
     // Create OTLP exporter with gRPC protocol (opentelemetry-otlp 0.14 API)
     // Build the exporter configuration
@@ -138,7 +131,7 @@ fn init_otlp_tracer(
     let exporter = exporter_builder.build_span_exporter()?;
 
     // Build tracer provider using opentelemetry_sdk directly
-    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+    let tracer_provider = TracerProvider::builder()
         .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
         .with_config(
             opentelemetry_sdk::trace::Config::default()

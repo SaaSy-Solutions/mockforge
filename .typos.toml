@@ -5,3 +5,12 @@
 # Technical acronyms
 RTO = "RTO"  # Recovery Time Objective
 RPO = "RPO"  # Recovery Point Objective
+HELO = "HELO"  # SMTP command (not HELLO)
+mosquitto = "mosquitto"  # MQTT broker name (not mosquito)
+ORU = "ORU"  # HL7 message type
+Plattform = "Plattform"  # German word for platform
+sur = "sur"  # French preposition (part of "sur notre plateforme")
+
+[default.exclude]
+# Exclude generated files
+"**/book/book/searchindex.js" = true
