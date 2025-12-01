@@ -32,9 +32,11 @@ jobs:
         run: |
           # Skip CRDs in kubectl validation as they require API server connection
           # CRDs are validated by kubeval and kubeconform steps below
+          export KUBECONFIG=/dev/null
+          unset KUBECONFIG
           find k8s -name '*.yaml' -o -name '*.yml' | grep -v '/crd/' | while read file; do
             echo "Validating $file"
-            kubectl --dry-run=client --kubeconfig=/dev/null --validate=false apply -f "$file" || exit 1
+            kubectl --dry-run=client --server-side=false --validate=false apply -f "$file" || exit 1
           done
           echo "Skipped CRD files (validated by kubeval/kubeconform)"
 
@@ -77,7 +79,8 @@ jobs:
         run: |
           # Unset KUBECONFIG to ensure --dry-run=client doesn't try to connect
           unset KUBECONFIG
-          kubectl --dry-run=client --validate=false apply -f /tmp/rendered-manifests.yaml
+          export KUBECONFIG=/dev/null
+          kubectl --dry-run=client --server-side=false --validate=false apply -f /tmp/rendered-manifests.yaml
 
       - name: Check for deprecated APIs
         run: |
@@ -129,17 +132,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Create kind config file
+        run: |
+          mkdir -p .github/workflows
+          cat > .github/workflows/kind-config.yaml <<EOF
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+          - role: control-plane
+          - role: worker
+          - role: worker
+          EOF
+
       - name: Create KinD cluster
         uses: helm/kind-action@v1
         with:
           cluster_name: mockforge-test
-          config: |
-            kind: Cluster
-            apiVersion: kind.x-k8s.io/v1alpha4
-            nodes:
-            - role: control-plane
-            - role: worker
-            - role: worker
+          config_file: .github/workflows/kind-config.yaml
 
       - name: Install cert-manager
         run: |
@@ -188,10 +197,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Create kind config file
+        run: |
+          mkdir -p .github/workflows
+          cat > .github/workflows/kind-config-integration.yaml <<EOF
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+          - role: control-plane
+          EOF
+
       - name: Create KinD cluster
         uses: helm/kind-action@v1
         with:
           cluster_name: mockforge-integration
+          config_file: .github/workflows/kind-config-integration.yaml
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
@@ -260,8 +280,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Create kind config file
+        run: |
+          mkdir -p .github/workflows
+          cat > .github/workflows/kind-config-chaos.yaml <<EOF
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+          - role: control-plane
+          EOF
+
       - name: Create KinD cluster
         uses: helm/kind-action@v1
+        with:
+          config_file: .github/workflows/kind-config-chaos.yaml
 
       - name: Install Chaos Mesh
         run: |

@@ -45,6 +45,22 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
+      - name: Install protoc (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install protobuf
+
+      - name: Install protoc (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco install protoc -y
+
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
