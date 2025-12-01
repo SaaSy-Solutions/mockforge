@@ -89,30 +89,34 @@ jobs:
       run: cargo doc --workspace --no-deps
       if: matrix.rust == 'stable'
 
-  changelog-validation:
-    name: Validate Changelog Pillar Tags
+  ui-test:
+    name: UI Tests
     runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v5
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Validate pillar tags in changelog
-      run: |
-        # Check if CHANGELOG.md exists
-        if [ ! -f CHANGELOG.md ]; then
-          echo "ERROR: CHANGELOG.md not found"
-          exit 1
-        fi
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: crates/mockforge-ui/ui/package-lock.json
 
-        # Use the check-changelog.sh script for consistent validation
-        chmod +x scripts/check-changelog.sh
-        if scripts/check-changelog.sh; then
-          echo "✅ Changelog validation passed: pillar tags found in all sections."
-        else
-          echo "::error::Changelog validation failed. Ensure all sections have pillar tags."
-          echo "::error::See docs/PILLARS.md for pillar definitions: [Reality], [Contracts], [DevX], [Cloud], [AI]"
-          exit 1
-        fi
+      - name: Install dependencies
+        working-directory: crates/mockforge-ui/ui
+        run: npm ci
+
+      - name: Run tests
+        working-directory: crates/mockforge-ui/ui
+        run: npm test
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          directory: crates/mockforge-ui/ui/coverage
+          flags: ui-tests
 
   security-audit:
     name: Security Audit

@@ -3,7 +3,7 @@
 //! Custom React Flow node component for representing delay steps in a flow.
 
 import React from 'react';
-import { Handle, Position, NodeProps } from 'react-flow-renderer';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Clock } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -53,4 +53,3 @@ export function DelayNode({ data, selected }: NodeProps<DelayNodeData>) {
     </div>
   );
 }
-

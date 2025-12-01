@@ -4,7 +4,7 @@
 //! Supports editing state labels and marking initial/final states.
 
 import React, { useState } from 'react';
-import { Handle, Position, NodeProps } from 'react-flow-renderer';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Input } from '../ui/input';
 import { Circle, CheckCircle2 } from 'lucide-react';

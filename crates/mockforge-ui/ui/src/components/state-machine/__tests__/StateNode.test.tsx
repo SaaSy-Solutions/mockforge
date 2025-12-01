@@ -5,7 +5,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { StateNode } from '../StateNode';
-import type { NodeProps } from 'react-flow-renderer';
+import type { NodeProps } from '@xyflow/react';
 
 describe('StateNode', () => {
   const defaultProps: NodeProps = {

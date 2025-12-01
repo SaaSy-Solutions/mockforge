@@ -76,3 +76,47 @@ jobs:
             target/test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protoc (protobuf compiler)
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build MockForge
+        run: |
+          cargo build --release --bin mockforge
+
+      - name: Run E2E tests
+        run: |
+          cargo test --package mockforge-integration-tests --test http_e2e_tests --release
+          cargo test --package mockforge-integration-tests --test websocket_e2e_tests --release
+          cargo test --package mockforge-integration-tests --test grpc_e2e_tests --release
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: e2e-test-results
+          path: target/test-results/
+          retention-days: 7

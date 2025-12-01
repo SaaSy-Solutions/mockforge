@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Handle, Position, NodeProps } from 'react-flow-renderer';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 
 interface WorldStateNodeData {
   label: string;

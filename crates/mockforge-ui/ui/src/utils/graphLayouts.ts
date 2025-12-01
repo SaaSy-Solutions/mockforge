@@ -1,4 +1,4 @@
-import { Node, Edge } from 'react-flow-renderer';
+import { Node, Edge } from '@xyflow/react';
 import type { GraphData } from '../types/graph';
 
 export type LayoutType = 'hierarchical' | 'force-directed' | 'grid' | 'circular';

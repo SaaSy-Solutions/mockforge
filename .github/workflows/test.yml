@@ -60,36 +60,6 @@ jobs:
       - name: Run doctests
         run: cargo test --doc --all-features --workspace
 
-  ui-test:
-    name: UI Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: crates/mockforge-ui/ui/package-lock.json
-
-      - name: Install dependencies
-        working-directory: crates/mockforge-ui/ui
-        run: npm ci
-
-      - name: Run tests
-        working-directory: crates/mockforge-ui/ui
-        run: npm test
-
-      - name: Upload coverage
-        if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
-        uses: codecov/codecov-action@v4
-        with:
-          directory: crates/mockforge-ui/ui/coverage
-          flags: ui-tests
-
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
