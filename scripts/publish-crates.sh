@@ -237,7 +237,14 @@ print(' '.join(set(dependents)))
             local dep_cargo_toml="crates/$dep_crate_dir/Cargo.toml"
             if [ -f "$dep_cargo_toml" ]; then
                 # Convert back to version dependency (remove path)
-                sed -i "s|, path = \"../$crate_name\"||g" "$dep_cargo_toml"
+                # Handle both table form and short form
+                if grep -q "$crate_name = { version = \"$WORKSPACE_VERSION\", path = \"../$crate_name\" }" "$dep_cargo_toml"; then
+                    # Was short form, convert back to short form
+                    sed -i "s|$crate_name = { version = \"$WORKSPACE_VERSION\", path = \"../$crate_name\" }|$crate_name = \"$WORKSPACE_VERSION\"|g" "$dep_cargo_toml"
+                else
+                    # Was table form, just remove path
+                    sed -i "s|, path = \"../$crate_name\"||g" "$dep_cargo_toml"
+                fi
             fi
         done
         if [ -n "$modified_crates" ]; then
