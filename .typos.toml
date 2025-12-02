@@ -23,8 +23,11 @@ Ns = "Ns"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Seconds)
 
 [files]
 extend-exclude = [
-  "**/book/book/searchindex.js",     # Generated search index
-  "**/book/book/ace.js",             # Third-party code editor library
-  "**/book/book/highlight.js",       # Third-party syntax highlighting library
-  "**/book/book/elasticlunr.min.js"  # Third-party search library (minified)
+  "**/book/book/searchindex.js",           # Generated search index
+  "**/book/book/ace.js",                   # Third-party code editor library
+  "**/book/book/highlight.js",             # Third-party syntax highlighting library
+  "**/book/book/elasticlunr.min.js",       # Third-party search library (minified)
+  "**/book/book/FontAwesome/**",          # Third-party FontAwesome library (CSS, fonts, SVG)
+  "**/book/book/*.min.js",                 # All minified JavaScript files
+  "**/book/book/*.min.css"                 # All minified CSS files
 ]
