@@ -31,7 +31,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # System metrics collection
-sysinfo = { version = "0.36", optional = true }  # Pinned to 0.36 to avoid edition2024 requirement
+sysinfo = { version = "0.37", optional = true }
 
 # OpenTelemetry tracing (optional)
 tracing-opentelemetry = { version = "0.22", optional = true }

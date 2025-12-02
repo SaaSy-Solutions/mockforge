@@ -58,7 +58,7 @@ impl PluginTemplateEngine {
     }
 
     /// Extract tokens that can be resolved by plugins
-    pub async fn extract_resolveable_tokens(&self, template: &str) -> Vec<String> {
+    pub async fn extract_resolvable_tokens(&self, template: &str) -> Vec<String> {
         self.integration.extract_tokens(template).await
     }
 
@@ -157,7 +157,7 @@ mod tests {
         engine.load_standard_resolvers().await.unwrap();
 
         let template = "Hello {{time:iso8601}} and {{uuid:v4}} with {{unknown:token}}";
-        let tokens = engine.extract_resolveable_tokens(template).await;
+        let tokens = engine.extract_resolvable_tokens(template).await;
 
         // Should extract "{{time:iso8601}}" and "{{uuid:v4}}" but not "{{unknown:token}}"
         assert!(tokens.contains(&"{{time:iso8601}}".to_string()));

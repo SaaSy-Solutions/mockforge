@@ -22,4 +22,4 @@ Nm = "Nm"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Minutes)
 Ns = "Ns"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Seconds)
 
 [files]
-extend-exclude = ["**/book/book/searchindex.js"]
+extend-exclude = ["**/book/book/searchindex.js", "**/book/book/ace.js"]  # ace.js is a third-party library file
