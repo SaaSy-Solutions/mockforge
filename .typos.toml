@@ -10,6 +10,16 @@ mosquitto = "mosquitto"  # MQTT broker name (not mosquito)
 ORU = "ORU"  # HL7 message type
 Plattform = "Plattform"  # German word for platform
 sur = "sur"  # French preposition (part of "sur notre plateforme")
+OT = "OT"  # Operational Transform (collaborative editing algorithm)
+CRDT = "CRDT"  # Conflict-free Replicated Data Type
+ba = "ba"  # Valid in hex strings (trace IDs, etc.)
+hel = "hel"  # Part of data center codes (hel1 = Helsinki)
+hel1 = "hel1"  # Data center code (Helsinki)
+wrk = "wrk"  # Load testing tool (https://github.com/wg/wrk)
+Nd = "Nd"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Days)
+Nh = "Nh"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Hours)
+Nm = "Nm"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Minutes)
+Ns = "Ns"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Seconds)
 
 [files]
 extend-exclude = ["**/book/book/searchindex.js"]

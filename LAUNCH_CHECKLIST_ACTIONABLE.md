@@ -102,7 +102,7 @@
    # - ash = Ashburn, Virginia, US (recommended for US users)
    # - nbg1 = Nuremberg, Germany, EU
    # - fsn1 = Falkenstein, Germany, EU
-   # - hel1 = Helsinki, Finland, EU
+   # - hel1 = Helsinki, Finland, EU (hel1 is a data center code, not a typo)
 
    # Or use web console:
    # 1. Go to Hetzner Cloud Console

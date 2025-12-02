@@ -223,13 +223,15 @@ jobs:
         # Temporarily remove mockforge-graphql from workspace for MSRV check
         # (mockforge-graphql requires async-graphql 7.0 which needs edition2024/unstable features)
         # This prevents Cargo from trying to parse async-graphql manifests
-        sed -i '/mockforge-graphql/d' Cargo.toml
-        # Also remove optional mockforge-graphql dependencies and graphql features from other crates
-        sed -i '/mockforge-graphql.*optional/d' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
-        sed -i '/graphql.*=.*mockforge-graphql/d' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
+        sed -i '/"crates\/mockforge-graphql",/d' Cargo.toml
+        # Also remove optional mockforge-graphql dependencies from other crates
+        sed -i '/mockforge-graphql = { version = "0.3.5", path = "..\/mockforge-graphql", optional = true }/d' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
         # Remove "graphql" from default features (but keep other features)
         sed -i 's/"graphql",//g' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
         sed -i 's/, "graphql"//g' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
+        sed -i 's/"graphql"//g' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
+        # Remove graphql feature definitions
+        sed -i '/^graphql = \["mockforge-graphql"\]/d' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
         # Regenerate Cargo.lock without async-graphql dependencies
         cargo generate-lockfile
         cargo check --workspace
