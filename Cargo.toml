@@ -28,6 +28,7 @@ members = [
     "crates/mockforge-template-expansion",
     "crates/mockforge-performance",
     "crates/mockforge-pipelines",
+    "crates/mockforge-collab",
     "examples/plugins/response-graphql",
     "examples/test-integration",
     "test_openapi_demo",
