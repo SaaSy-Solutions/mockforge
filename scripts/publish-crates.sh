@@ -683,6 +683,10 @@ main() {
     publish_crate "mockforge-analytics"
     wait_for_processing
 
+    convert_crate_dependencies "mockforge-pipelines"
+    publish_crate "mockforge-pipelines"
+    wait_for_processing
+
     convert_crate_dependencies "mockforge-collab"
     publish_crate "mockforge-collab"
     wait_for_processing
