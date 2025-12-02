@@ -246,8 +246,10 @@ jobs:
           sed -i '/^parking_lot = "0.12"$/a base64ct = "= 1.7"  # Pinned for MSRV compatibility' Cargo.toml
         fi
         # Regenerate Cargo.lock without async-graphql and sysinfo dependencies
-        # Use cargo update to ensure base64ct is pinned correctly
-        cargo update -p base64ct --precise 1.7.3 || cargo generate-lockfile
+        # First generate lockfile with the constraint, then update to precise version
+        cargo generate-lockfile
+        # Update base64ct to precise version 1.7.3 to ensure we don't get 1.8+
+        cargo update -p base64ct --precise 1.7.3 2>&1 || echo "base64ct update skipped (may not be in lockfile yet)"
         # Check workspace (sysinfo feature disabled, so it won't be resolved)
         cargo check --workspace
         # Restore files
