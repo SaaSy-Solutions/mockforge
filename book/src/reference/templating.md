@@ -12,7 +12,7 @@ MockForge supports lightweight templating across HTTP responses, overrides, and 
 ## Time Tokens
 
 - `{{now}}` — RFC3339 timestamp.
-- `{{now±Nd|Nh|Nm|Ns}}` — Offset from now by Days/Hours/Minutes/Seconds.
+- `{{now±And|Nh|Nm|Ns}}` — Offset from now by Days/Hours/Minutes/Seconds.
   - Examples: `{{now+2h}}`, `{{now-30m}}`, `{{now+10s}}`, `{{now-1d}}`.
 
 ## Random Tokens

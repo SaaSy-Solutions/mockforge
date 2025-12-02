@@ -22,7 +22,7 @@ This document verifies MockForge's coverage of response configuration and dynami
 | **Handlebars-style syntax** | ✅ **YES** | - `{{variable}}` template syntax<br>- Request data access: `{{request.body.field}}`, `{{request.path.param}}`, `{{request.query.param}}`<br>- Conditional logic support (planned: `{{#if}}`, `{{#each}}`) |
 | **Request data injection** | ✅ **YES** | - Access request body fields: `{{request.body.fieldName}}`<br>- Path parameters: `{{request.path.id}}`<br>- Query parameters: `{{request.query.limit}}`<br>- Headers: `{{request.header.name}}` |
 | **Random values** | ✅ **YES** | - `{{uuid}}` - UUID v4 generation<br>- `{{rand.int}}` - Random integer [0, 1_000_000]<br>- `{{rand.float}}` - Random float [0, 1)<br>- `{{randInt a b}}` - Random integer range<br>- `{{randFloat a b}}` - Random float range |
-| **Timestamps** | ✅ **YES** | - `{{now}}` - Current timestamp (RFC3339)<br>- `{{now±Nd\|Nh\|Nm\|Ns}}` - Offset timestamps (e.g., `{{now+2h}}`, `{{now-30m}}`)<br>- Virtual clock support for time-travel testing |
+| **Timestamps** | ✅ **YES** | - `{{now}}` - Current timestamp (RFC3339)<br>- `{{now±And\|Nh\|Nm\|Ns}}` - Offset timestamps (e.g., `{{now+2h}}`, `{{now-30m}}`)<br>- Virtual clock support for time-travel testing |
 | **State variables** | ✅ **YES** | - Chain context variables: `{{chain.variableName}}`<br>- Environment variables: `{{env.VAR_NAME}}`<br>- Response chaining: `{{response(chainId, requestId).field}}` |
 | **Faker data** | ✅ **YES** | - `{{faker.email}}`, `{{faker.name}}`, `{{faker.uuid}}`<br>- Extended faker (when enabled): `{{faker.address}}`, `{{faker.phone}}`, `{{faker.company}}`, `{{faker.url}}`, `{{faker.ip}}`<br>- Can be disabled via `MOCKFORGE_FAKE_TOKENS=false` for determinism |
 

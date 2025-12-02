@@ -11,6 +11,5 @@ ORU = "ORU"  # HL7 message type
 Plattform = "Plattform"  # German word for platform
 sur = "sur"  # French preposition (part of "sur notre plateforme")
 
-[default.exclude]
-# Exclude generated files
-"**/book/book/searchindex.js" = true
+[files]
+extend-exclude = ["**/book/book/searchindex.js"]

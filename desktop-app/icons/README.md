@@ -46,7 +46,7 @@ sips -z 512 512 icon-512.png --out icon.iconset/icon_512x512.png
 sips -z 1024 1024 icon-512.png --out icon.iconset/icon_512x512@2x.png
 iconutil -c icns icon.iconset -o icon.icns
 
-# Create Linux PNGs
+# Create Linux ONGs
 convert icon-512.png -resize 32x32 32x32.png
 convert icon-512.png -resize 128x128 128x128.png
 convert icon-512.png -resize 256x256 128x128@2x.png

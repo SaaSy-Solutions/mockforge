@@ -6,7 +6,7 @@ Comprehensive load testing infrastructure for MockForge using industry-standard 
 
 This directory contains load testing scripts and configurations for testing MockForge's performance under various load conditions across all supported protocols:
 
-- **HTTP/REST**: Using k6 and wrk
+- **HTTP/REST**: Using k6 and work
 - **WebSocket**: Using k6 with WebSocket support
 - **gRPC**: Using k6 with gRPC support
 
@@ -18,7 +18,7 @@ tests/load/
 ├── websocket_load.js         # k6 WebSocket stress test
 ├── grpc_load.js              # k6 gRPC load test
 ├── marketplace_load.js       # k6 marketplace load test (plugins, templates, scenarios)
-├── wrk_http.lua              # wrk Lua script for HTTP testing
+├── work_http.lua              # work Lua script for HTTP testing
 ├── run_http_load.sh          # HTTP load test runner
 ├── run_websocket_load.sh     # WebSocket load test runner
 ├── run_grpc_load.sh          # gRPC load test runner
@@ -50,16 +50,16 @@ tests/load/
    choco install k6
    ```
 
-2. **wrk** (optional, for HTTP load testing)
+2. **work** (optional, for HTTP load testing)
    ```bash
    # macOS
-   brew install wrk
+   brew install work
 
    # Linux
    git clone https://github.com/wg/wrk.git
-   cd wrk
+   cd work
    make
-   sudo cp wrk /usr/local/bin/
+   sudo cp work /usr/local/bin/
 
    # Windows
    # Build from source or use WSL
@@ -107,9 +107,9 @@ TOOL=k6 \
 ./tests/load/run_http_load.sh
 ```
 
-#### HTTP Load Test (wrk)
+#### HTTP Load Test (work)
 ```bash
-TOOL=wrk \
+TOOL=work \
 DURATION=60s \
 CONNECTIONS=200 \
 THREADS=8 \
@@ -218,9 +218,9 @@ Tests all gRPC call types:
 - 99% of requests < 1000ms
 - Error rate < 5%
 
-### wrk HTTP Test (`wrk_http.lua`)
+### work HTTP Test (`work_http.lua`)
 
-Advanced wrk load test with:
+Advanced work load test with:
 
 1. **Mixed request types** - GET (60%), POST (20%), GET by ID (15%), DELETE (5%)
 2. **Dynamic payloads** - Randomized test data
@@ -236,9 +236,9 @@ All load test scripts support the following environment variables:
 #### HTTP Load Tests
 - `BASE_URL` - HTTP server URL (default: `http://localhost:8080`)
 - `DURATION` - Test duration (default: `60s`)
-- `CONNECTIONS` - Number of connections for wrk (default: `100`)
-- `THREADS` - Number of threads for wrk (default: `4`)
-- `TOOL` - Load testing tool: `k6` or `wrk` (default: `k6`)
+- `CONNECTIONS` - Number of connections for work (default: `100`)
+- `THREADS` - Number of threads for work (default: `4`)
+- `TOOL` - Load testing tool: `k6` or `work` (default: `k6`)
 
 #### WebSocket Load Tests
 - `BASE_URL` - WebSocket server URL (default: `ws://localhost:8080`)
@@ -291,7 +291,7 @@ results/
 │   ├── k6-websocket-summary.json # k6 WebSocket summary
 │   ├── k6-grpc-results.json      # k6 gRPC raw results
 │   ├── k6-grpc-summary.json      # k6 gRPC summary
-│   └── wrk-http-results.txt      # wrk results
+│   └── work-http-results.txt      # work results
 └── ...
 ```
 
@@ -320,15 +320,15 @@ cat tests/load/results/k6-http-summary.json | jq '.metrics.http_req_duration.val
 cat tests/load/results/k6-http-summary.json | jq '.metrics.http_req_failed.values.rate'
 ```
 
-#### wrk Results
+#### work Results
 
-wrk provides:
+work provides:
 - Requests per second
 - Transfer rate
 - Latency distribution
 - Status code distribution
 
-Results are saved in `wrk-http-results.txt`.
+Results are saved in `work-http-results.txt`.
 
 ### Performance Baselines
 
@@ -496,7 +496,7 @@ When adding new load tests:
 ## References
 
 - [k6 Documentation](https://k6.io/docs/)
-- [wrk Documentation](https://github.com/wg/wrk)
+- [work Documentation](https://github.com/wg/wrk)
 - [Load Testing Best Practices](https://k6.io/docs/testing-guides/test-types/)
 - [Performance Testing Types](https://k6.io/docs/test-types/introduction/)
 

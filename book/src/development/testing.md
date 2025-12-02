@@ -169,8 +169,8 @@ mod e2e_tests {
 # Using hey for HTTP load testing
 hey -n 1000 -c 10 http://localhost:3000/users
 
-# Using wrk for more detailed benchmarking
-wrk -t 4 -c 100 -d 30s http://localhost:3000/users
+# Using work for more detailed benchmarking
+work -t 4 -c 100 -d 30s http://localhost:3000/users
 ```
 
 ### Benchmarking

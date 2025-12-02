@@ -111,7 +111,7 @@ QUICK_MODE=true ./tests/load/run_all_load_tests.sh
 
 ### Load Test Types
 
-- **HTTP Load Tests**: k6 and wrk-based HTTP/REST API testing
+- **HTTP Load Tests**: k6 and work-based HTTP/REST API testing
 - **WebSocket Load Tests**: k6-based WebSocket connection and message testing
 - **gRPC Load Tests**: k6-based gRPC unary and streaming RPC testing
 
@@ -124,8 +124,8 @@ Install load testing tools:
 brew install k6  # macOS
 # See tests/load/README.md for other platforms
 
-# wrk (optional, for HTTP)
-brew install wrk  # macOS
+# work (optional, for HTTP)
+brew install work  # macOS
 ```
 
 For detailed documentation, configuration, and best practices, see [`tests/load/README.md`](load/README.md).

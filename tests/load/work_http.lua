@@ -1,4 +1,4 @@
--- wrk Lua script for HTTP load testing
+-- work Lua script for HTTP load testing
 -- This script provides advanced request generation and result processing
 
 -- Global variables
@@ -38,7 +38,7 @@ function request()
     -- 60% GET requests
     path = "/api/users?limit=10&offset=" .. math.random(0, 100)
     method = "GET"
-    return wrk.format(method, path, headers, nil)
+    return work.format(method, path, headers, nil)
   elseif rand <= 80 then
     -- 20% POST requests
     path = "/api/users"
@@ -49,17 +49,17 @@ function request()
       "age": %d
     }]], math.random(1, 10000), math.random(1, 10000), math.random(18, 65))
     headers["Content-Type"] = "application/json"
-    return wrk.format(method, path, headers, body)
+    return work.format(method, path, headers, body)
   elseif rand <= 95 then
     -- 15% GET by ID
     path = "/api/users/" .. math.random(1, 1000)
     method = "GET"
-    return wrk.format(method, path, headers, nil)
+    return work.format(method, path, headers, nil)
   else
     -- 5% DELETE requests
     path = "/api/users/" .. math.random(1, 1000)
     method = "DELETE"
-    return wrk.format(method, path, headers, nil)
+    return work.format(method, path, headers, nil)
   end
 end
 

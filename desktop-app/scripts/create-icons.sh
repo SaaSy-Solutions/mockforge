@@ -29,7 +29,7 @@ if ! command -v convert &> /dev/null; then
     exit 1
 fi
 
-# Generate Linux PNGs
+# Generate Linux ONGs
 echo "Creating Linux icons..."
 convert "$SOURCE_IMAGE" -resize 32x32 "$ICON_DIR/32x32.png"
 convert "$SOURCE_IMAGE" -resize 128x128 "$ICON_DIR/128x128.png"
