@@ -242,8 +242,8 @@ jobs:
         # base64ct is pulled in via argon2 (used by mockforge-collab and mockforge-core)
         # Use [patch.crates-io] to override base64ct version for MSRV compatibility
         if ! grep -q '\[patch.crates-io\]' Cargo.toml; then
-          # Add patch section before [workspace] section
-          sed -i '/^\[workspace\]/i [patch.crates-io]\nbase64ct = "= 1.7.3"\n' Cargo.toml
+          # Add patch section before [workspace] section using a temporary file
+          awk '/^\[workspace\]/ {print "[patch.crates-io]"; print "base64ct = \"= 1.7.3\""; print ""} {print}' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
         elif ! grep -q 'base64ct = "= 1.7.3"' Cargo.toml; then
           # Add base64ct to existing patch section
           sed -i '/^\[patch.crates-io\]/a base64ct = "= 1.7.3"' Cargo.toml
