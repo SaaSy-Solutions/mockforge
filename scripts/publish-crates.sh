@@ -278,7 +278,7 @@ convert_crate_dependencies() {
         # Build list of crates that will be published in this batch
         # For Phase 1, include all Phase 1 crates; for Phase 2, include all Phase 1 + Phase 2 crates
         local published_crates=""
-        local phase1_crates="mockforge-core mockforge-data mockforge-plugin-core mockforge-observability mockforge-tracing mockforge-plugin-sdk mockforge-recorder mockforge-plugin-registry mockforge-chaos mockforge-reporting mockforge-analytics mockforge-collab"
+        local phase1_crates="mockforge-template-expansion mockforge-core mockforge-data mockforge-plugin-core mockforge-observability mockforge-tracing mockforge-plugin-sdk mockforge-recorder mockforge-plugin-registry mockforge-chaos mockforge-reporting mockforge-analytics mockforge-collab"
         local phase2_crates="mockforge-plugin-loader mockforge-schema mockforge-mqtt mockforge-scenarios mockforge-smtp mockforge-ws mockforge-http mockforge-grpc mockforge-graphql mockforge-amqp mockforge-kafka mockforge-ftp mockforge-tcp mockforge-sdk mockforge-bench mockforge-test mockforge-vbr mockforge-tunnel mockforge-ui mockforge-cli"
 
         # Check which phase we're in based on the crate being published
@@ -350,6 +350,7 @@ targets = [
     ("mockforge-cli", "../mockforge-cli"),
     ("mockforge-scenarios", "../mockforge-scenarios"),
     ("mockforge-schema", "../mockforge-schema"),
+    ("mockforge-template-expansion", "../mockforge-template-expansion"),
 ]
 
 for name, rel in targets:
