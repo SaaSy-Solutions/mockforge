@@ -165,6 +165,46 @@ publish_crate() {
         no_verify_flag=""  # Don't use --no-verify for dry runs, we want to see verification errors
     fi
 
+    # Temporarily remove dependent crates from workspace to avoid dependency resolution issues
+    # This is needed because Cargo resolves workspace dependencies even with --no-verify
+    local temp_workspace_modified=false
+    local removed_crates=""
+    if [ "$DRY_RUN" = "false" ]; then
+        # Find crates that depend on this crate and temporarily remove them from workspace
+        # We need to do this before cargo publish to avoid dependency resolution errors
+        local dependent_crates=$(cargo metadata --format-version 1 --no-deps 2>/dev/null | \
+            python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+target_name = '$crate_name'
+dependents = []
+for pkg in data.get('packages', []):
+    pkg_name = pkg.get('name', '')
+    if pkg_name == target_name:
+        continue
+    for dep in pkg.get('dependencies', []):
+        if dep.get('name') == target_name:
+            # Extract crate directory name from manifest path
+            manifest = pkg.get('manifest_path', '')
+            if 'crates/' in manifest:
+                crate_dir = manifest.split('crates/')[1].split('/')[0]
+                dependents.append(crate_dir)
+            break
+print(' '.join(set(dependents)))
+" 2>/dev/null || echo "")
+
+        if [ -n "$dependent_crates" ]; then
+            for dep_crate in $dependent_crates; do
+                # Remove from workspace temporarily
+                if grep -q "\"crates/$dep_crate\"," Cargo.toml; then
+                    sed -i "/\"crates\/$dep_crate\",/d" Cargo.toml
+                    removed_crates="$removed_crates $dep_crate"
+                    temp_workspace_modified=true
+                fi
+            done
+        fi
+    fi
+
     if [ -n "$publish_env" ]; then
         if env $publish_env cargo publish -p "$crate_name" $dry_run_flag $no_verify_flag --allow-dirty; then
             print_success "Successfully published $crate_name"
@@ -188,6 +228,20 @@ publish_crate() {
             else
                 handle_publish_error "$crate_name" "$dry_run_flag"
             fi
+        fi
+    fi
+
+    # Restore dependent crates' dependencies if we modified them
+    if [ "$temp_deps_modified" = "true" ]; then
+        for dep_crate_dir in $modified_crates; do
+            local dep_cargo_toml="crates/$dep_crate_dir/Cargo.toml"
+            if [ -f "$dep_cargo_toml" ]; then
+                # Convert back to version dependency (remove path)
+                sed -i "s|, path = \"../$crate_name\"||g" "$dep_cargo_toml"
+            fi
+        done
+        if [ -n "$modified_crates" ]; then
+            print_status "Restored dependencies in: $modified_crates"
         fi
     fi
 }
