@@ -619,12 +619,17 @@ main() {
     # Phase 1: Publish base crates (no internal dependencies)
     print_status "Phase 1: Publishing base crates..."
 
-    # Publish mockforge-data first (it depends on mockforge-core 0.1.3, already published)
+    # Publish mockforge-template-expansion first (no internal dependencies)
+    convert_crate_dependencies "mockforge-template-expansion"
+    publish_crate "mockforge-template-expansion"
+    wait_for_processing
+
+    # Publish mockforge-data (it depends on mockforge-core 0.1.3, already published)
     convert_crate_dependencies "mockforge-data"
     publish_crate "mockforge-data"
     wait_for_processing
 
-    # Convert dependencies for mockforge-core (can now reference mockforge-data 0.3.0)
+    # Convert dependencies for mockforge-core (can now reference mockforge-data 0.3.5 and mockforge-template-expansion 0.3.5)
     convert_crate_dependencies "mockforge-core"
     publish_crate "mockforge-core"
     wait_for_processing
