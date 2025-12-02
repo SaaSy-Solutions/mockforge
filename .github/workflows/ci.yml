@@ -240,16 +240,16 @@ jobs:
         sed -i 's/default = \["sysinfo"\]/default = []/' crates/mockforge-observability/Cargo.toml
         # Pin base64ct to 1.7 to avoid edition2024 requirement (1.8+ requires unstable features)
         # base64ct is pulled in via argon2 (used by mockforge-collab and mockforge-core)
-        # Add to workspace dependencies section if not already present
-        if ! grep -q 'base64ct = "= 1.7"' Cargo.toml; then
-          # Find the line with parking_lot and add base64ct after it with exact version constraint
-          sed -i '/^parking_lot = "0.12"$/a base64ct = "= 1.7"  # Pinned for MSRV compatibility' Cargo.toml
+        # Use [patch.crates-io] to override base64ct version for MSRV compatibility
+        if ! grep -q '\[patch.crates-io\]' Cargo.toml; then
+          # Add patch section before [workspace] section
+          sed -i '/^\[workspace\]/i [patch.crates-io]\nbase64ct = "= 1.7.3"\n' Cargo.toml
+        elif ! grep -q 'base64ct = "= 1.7.3"' Cargo.toml; then
+          # Add base64ct to existing patch section
+          sed -i '/^\[patch.crates-io\]/a base64ct = "= 1.7.3"' Cargo.toml
         fi
         # Regenerate Cargo.lock without async-graphql and sysinfo dependencies
-        # First generate lockfile with the constraint, then update to precise version
         cargo generate-lockfile
-        # Update base64ct to precise version 1.7.3 to ensure we don't get 1.8+
-        cargo update -p base64ct --precise 1.7.3 2>&1 || echo "base64ct update skipped (may not be in lockfile yet)"
         # Check workspace (sysinfo feature disabled, so it won't be resolved)
         cargo check --workspace
         # Restore files
