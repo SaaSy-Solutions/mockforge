@@ -236,12 +236,14 @@ jobs:
         # (sysinfo 0.37 requires edition2024 which is unstable)
         # Remove sysinfo from default features so Cargo doesn't try to resolve it
         sed -i 's/default = \["sysinfo"\]/default = []/' crates/mockforge-observability/Cargo.toml
+        # Also remove sysinfo dependency from mockforge-ui (it uses sysinfo directly)
+        sed -i '/sysinfo = { workspace = true }/d' crates/mockforge-ui/Cargo.toml
         # Regenerate Cargo.lock without async-graphql and sysinfo dependencies
         cargo generate-lockfile
         # Check workspace (sysinfo feature disabled, so it won't be resolved)
         cargo check --workspace
         # Restore files
-        git checkout Cargo.toml Cargo.lock crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml crates/mockforge-observability/Cargo.toml
+        git checkout Cargo.toml Cargo.lock crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml crates/mockforge-observability/Cargo.toml crates/mockforge-ui/Cargo.toml
 
   typos:
     name: Spell Check
