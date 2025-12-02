@@ -240,8 +240,10 @@ jobs:
         sed -i 's/default = \["sysinfo"\]/default = []/' crates/mockforge-observability/Cargo.toml
         # Pin base64ct to 1.7 to avoid edition2024 requirement (1.8+ requires unstable features)
         # base64ct is pulled in via argon2 (used by mockforge-collab and mockforge-core)
+        # Add to workspace dependencies section if not already present
         if ! grep -q 'base64ct = "1.7"' Cargo.toml; then
-          sed -i '/^parking_lot = "0.12"/a base64ct = "1.7"  # Pinned for MSRV compatibility' Cargo.toml
+          # Find the line with parking_lot and add base64ct after it
+          sed -i '/^parking_lot = "0.12"$/a base64ct = "1.7"  # Pinned for MSRV compatibility' Cargo.toml
         fi
         # Regenerate Cargo.lock without async-graphql and sysinfo dependencies
         cargo generate-lockfile
