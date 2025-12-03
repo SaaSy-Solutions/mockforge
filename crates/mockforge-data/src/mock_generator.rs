@@ -211,14 +211,91 @@ impl MockDataGenerator {
         }
 
         // Generate mock responses for each endpoint
+        // Parse paths directly from the JSON spec since parse_openapi_spec doesn't parse them
         let mut mock_responses = HashMap::new();
-        for (path, path_item) in &openapi_spec.paths {
-            for (method, operation) in path_item.operations() {
-                let endpoint_key = format!("{} {}", method.to_uppercase(), path);
+        if let Some(paths) = spec.get("paths") {
+            if let Some(paths_obj) = paths.as_object() {
+                for (path, path_item) in paths_obj {
+                    if let Some(path_obj) = path_item.as_object() {
+                        for (method, operation) in path_obj {
+                            if let Some(op_obj) = operation.as_object() {
+                                let endpoint_key = format!("{} {}", method.to_uppercase(), path);
 
-                // Generate mock response for this endpoint
-                if let Some(response_data) = self.generate_endpoint_response(operation)? {
-                    mock_responses.insert(endpoint_key, response_data);
+                                // Extract response schema from the operation
+                                if let Some(responses) = op_obj.get("responses") {
+                                    if let Some(resp_obj) = responses.as_object() {
+                                        // Look for 200, 201, or any 2xx response
+                                        let mut response_schema = None;
+
+                                        // Try 200 first
+                                        if let Some(response) = resp_obj.get("200") {
+                                            response_schema = self
+                                                .extract_response_schema_from_json(response)
+                                                .ok()
+                                                .flatten();
+                                        }
+
+                                        // Try 201 if 200 not found
+                                        if response_schema.is_none() {
+                                            if let Some(response) = resp_obj.get("201") {
+                                                response_schema = self
+                                                    .extract_response_schema_from_json(response)
+                                                    .ok()
+                                                    .flatten();
+                                            }
+                                        }
+
+                                        // Try any 2xx if still not found
+                                        if response_schema.is_none() {
+                                            for (status_code, response) in resp_obj {
+                                                if let Ok(code) = status_code.parse::<u16>() {
+                                                    if code >= 200 && code < 300 {
+                                                        if let Some(schema) = self
+                                                            .extract_response_schema_from_json(
+                                                                response,
+                                                            )
+                                                            .ok()
+                                                            .flatten()
+                                                        {
+                                                            response_schema = Some(schema);
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Generate mock response if we found a schema
+                                        if let Some(schema) = response_schema {
+                                            // Resolve $ref if present
+                                            let resolved_schema = if let Some(ref_path) =
+                                                schema.get("$ref").and_then(|r| r.as_str())
+                                            {
+                                                self.resolve_schema_ref(spec, ref_path)?
+                                            } else {
+                                                Some(schema)
+                                            };
+
+                                            if let Some(resolved) = resolved_schema {
+                                                if let Ok(mock_data) =
+                                                    self.generate_from_json_schema(&resolved)
+                                                {
+                                                    mock_responses.insert(
+                                                        endpoint_key,
+                                                        MockResponse {
+                                                            status: 200,
+                                                            headers: HashMap::new(),
+                                                            body: mock_data,
+                                                        },
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -322,6 +399,47 @@ impl MockDataGenerator {
         Ok(None)
     }
 
+    /// Extract schema from an OpenAPI response (JSON format)
+    fn extract_response_schema_from_json(&self, response: &Value) -> Result<Option<Value>> {
+        // Check for content -> application/json -> schema
+        if let Some(content) = response.get("content") {
+            if let Some(json_content) = content.get("application/json") {
+                if let Some(schema) = json_content.get("schema") {
+                    // Handle $ref references
+                    if let Some(ref_path) = schema.get("$ref").and_then(|r| r.as_str()) {
+                        // Extract schema name from $ref (e.g., "#/components/schemas/User" -> "User")
+                        if let Some(schema_name) = ref_path.split('/').last() {
+                            // We'll need to resolve this from components, but for now return the ref
+                            // The caller should handle resolving from components
+                            return Ok(Some(json!({
+                                "$ref": ref_path,
+                                "schema_name": schema_name
+                            })));
+                        }
+                    }
+                    return Ok(Some(schema.clone()));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// Resolve a $ref reference to an actual schema
+    fn resolve_schema_ref(&self, spec: &Value, ref_path: &str) -> Result<Option<Value>> {
+        // Handle #/components/schemas/Name format
+        if ref_path.starts_with("#/components/schemas/") {
+            let schema_name = ref_path.strip_prefix("#/components/schemas/").unwrap();
+            if let Some(components) = spec.get("components") {
+                if let Some(schemas) = components.get("schemas") {
+                    if let Some(schema) = schemas.get(schema_name) {
+                        return Ok(Some(schema.clone()));
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
     /// Extract schema from an OpenAPI response
     fn extract_response_schema(
         &self,
@@ -363,10 +481,35 @@ impl MockDataGenerator {
         }
 
         // Use field name patterns for intelligent mapping
+        // Find the longest matching pattern to prioritize more specific matches
+        // Also prioritize certain patterns (like "email" over "address")
+        let mut best_match: Option<(&String, &String)> = None;
+        let priority_patterns = ["email", "mail"]; // Patterns that should take precedence
+
         for (pattern, faker_type) in &self.field_patterns {
             if field_name.contains(pattern) {
-                return faker_type.clone();
+                // Check if this is a priority pattern
+                let is_priority = priority_patterns.contains(&pattern.as_str());
+
+                if let Some((best_pattern, best_faker_type)) = best_match {
+                    let best_is_priority = priority_patterns.contains(&best_pattern.as_str());
+
+                    // Priority patterns always win, or longer patterns win
+                    if is_priority && !best_is_priority {
+                        best_match = Some((pattern, faker_type));
+                    } else if !is_priority && best_is_priority {
+                        // Keep the priority match
+                    } else if pattern.len() > best_pattern.len() {
+                        best_match = Some((pattern, faker_type));
+                    }
+                } else {
+                    best_match = Some((pattern, faker_type));
+                }
             }
+        }
+
+        if let Some((_, faker_type)) = best_match {
+            return faker_type.clone();
         }
 
         // Fall back to field type
@@ -385,11 +528,99 @@ impl MockDataGenerator {
             return Ok(self.faker.generate_by_type(template));
         }
 
+        // Handle array generation specially
+        if field.field_type == "array" {
+            return self.generate_array_value(field);
+        }
+
+        // Handle nested object generation specially
+        if field.field_type == "object" {
+            if field.constraints.contains_key("properties") {
+                return self.generate_object_value(field);
+            }
+        }
+
         // Generate based on determined faker type
         let value = self.faker.generate_by_type(faker_type);
 
         // Apply constraints if present
         self.apply_constraints(&value, field)
+    }
+
+    /// Generate an array value for a field
+    fn generate_array_value(&mut self, field: &FieldDefinition) -> Result<Value> {
+        // Determine array size from constraints or use defaults
+        let min_items =
+            field.constraints.get("minItems").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+        let max_items = field
+            .constraints
+            .get("maxItems")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(self.config.max_array_size as u64) as usize;
+
+        // Use default array size if no constraints
+        let array_size = if min_items > 0 || max_items < self.config.max_array_size {
+            // Use a size within the constraints
+            let size = if min_items > 0 {
+                min_items.max(self.config.default_array_size)
+            } else {
+                self.config.default_array_size
+            };
+            size.min(max_items.max(min_items))
+        } else {
+            self.config.default_array_size
+        };
+
+        // Generate array of items
+        let mut array = Vec::new();
+
+        // Check if we have a full items schema (for objects, nested arrays, etc.)
+        if let Some(items_schema) = field.constraints.get("itemsSchema") {
+            // Generate items from the schema recursively
+            let items_schema_def = SchemaDefinition::from_json_schema(items_schema)?;
+            for _ in 0..array_size {
+                let item = self.generate_schema_data(&items_schema_def)?;
+                array.push(item);
+            }
+        } else {
+            // Simple type - use faker
+            let items_type =
+                field.constraints.get("itemsType").and_then(|v| v.as_str()).unwrap_or("string");
+
+            for _ in 0..array_size {
+                let item = self.faker.generate_by_type(items_type);
+                array.push(item);
+            }
+        }
+
+        Ok(Value::Array(array))
+    }
+
+    /// Generate an object value for a field with nested properties
+    fn generate_object_value(&mut self, field: &FieldDefinition) -> Result<Value> {
+        // Get nested properties from constraints
+        let properties = field
+            .constraints
+            .get("properties")
+            .ok_or_else(|| Error::generic("Object field missing properties constraint"))?;
+
+        // Get required fields if present
+        let required_fields: Vec<String> = field
+            .constraints
+            .get("required")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+            .unwrap_or_default();
+
+        // Create a nested schema from the properties
+        let nested_schema = SchemaDefinition::from_json_schema(&json!({
+            "type": "object",
+            "properties": properties,
+            "required": required_fields
+        }))?;
+
+        // Generate the nested object recursively
+        self.generate_schema_data(&nested_schema)
     }
 
     /// Generate data with explicit persona support
@@ -502,10 +733,18 @@ impl MockDataGenerator {
 
         // Apply numeric constraints
         if let Value::Number(num) = value {
+            // Check if field type is integer to preserve integer type when applying constraints
+            let is_integer_field = field.field_type == "int" || field.field_type == "integer";
+
             if let Some(minimum) = field.constraints.get("minimum") {
                 if let Some(min_val) = minimum.as_f64() {
                     if num.as_f64().unwrap_or(0.0) < min_val {
-                        constrained_value = json!(min_val);
+                        // Preserve integer type if field is integer
+                        if is_integer_field {
+                            constrained_value = json!(min_val as i64);
+                        } else {
+                            constrained_value = json!(min_val);
+                        }
                     }
                 }
             }
@@ -513,7 +752,12 @@ impl MockDataGenerator {
             if let Some(maximum) = field.constraints.get("maximum") {
                 if let Some(max_val) = maximum.as_f64() {
                     if num.as_f64().unwrap_or(0.0) > max_val {
-                        constrained_value = json!(max_val);
+                        // Preserve integer type if field is integer
+                        if is_integer_field {
+                            constrained_value = json!(max_val as i64);
+                        } else {
+                            constrained_value = json!(max_val);
+                        }
                     }
                 }
             }

@@ -198,7 +198,7 @@ MockForge provides **complete coverage** of all WireMock features across all cat
 
 | WireMock Feature | MockForge Status | Implementation Details |
 |------------------|------------------|----------------------|
-| Dynamic responses with templating (e.g., Handlebars) | ✅ **YES** | - `{{variable}}` template syntax (Handlebars-style)<br>- Request data access: `{{request.body.field}}`, `{{request.path.param}}`, `{{request.query.param}}`<br>- Random values: `{{uuid}}`, `{{rand.int}}`, `{{rand.float}}`<br>- Timestamps: `{{now}}`, `{{now±Nd\|Nh\|Nm\|Ns}}`<br>- Faker data: `{{faker.email}}`, `{{faker.name}}`, etc.<br>- State variables: `{{chain.variableName}}`, `{{env.VAR_NAME}}` |
+| Dynamic responses with templating (e.g., Handlebars) | ✅ **YES** | - `{{variable}}` template syntax (Handlebars-style)<br>- Request data access: `{{request.body.field}}`, `{{request.path.param}}`, `{{request.query.param}}`<br>- Random values: `{{uuid}}`, `{{rand.int}}`, `{{rand.float}}`<br>- Timestamps: `{{now}}`, `{{now±And\|Nh\|Nm\|Ns}}`<br>- Faker data: `{{faker.email}}`, `{{faker.name}}`, etc.<br>- State variables: `{{chain.variableName}}`, `{{env.VAR_NAME}}` |
 | Vary returned content based on input request or state | ✅ **YES** | - Request data injection from body, path, query, headers<br>- Chain context variables for multi-step workflows<br>- Environment variables<br>- Response chaining: `{{response(chainId, requestId).field}}` |
 
 **Evidence:**

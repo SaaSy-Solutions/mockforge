@@ -22,12 +22,12 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install MockForge
-        run: cargo install --path crates/mockforge-cli
+      - name: Build MockForge
+        run: cargo build --release --bin mockforge
 
       - name: Start MockForge server
         run: |
-          mockforge-cli serve \
+          ./target/release/mockforge serve \
             --http-port 3000 \
             --spec specs/api.yaml &
           echo $! > mockforge.pid
@@ -39,7 +39,7 @@ jobs:
       - name: Validate contract against live API
         id: validate
         run: |
-          mockforge-cli validate \
+          ./target/release/mockforge validate \
             --spec specs/api.yaml \
             --endpoint http://localhost:3000 \
             --output report.md \

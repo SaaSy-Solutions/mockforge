@@ -67,25 +67,29 @@ impl PipelineStepExecutor for CreatePRStep {
                 })
         };
 
-        let title = get_config_value("title")
-            .ok_or_else(|| anyhow::anyhow!("Missing 'title' in step config or pipeline defaults"))?;
+        let title = get_config_value("title").ok_or_else(|| {
+            anyhow::anyhow!("Missing 'title' in step config or pipeline defaults")
+        })?;
 
         let body = get_config_value("body").unwrap_or_default();
 
-        let branch = get_config_value("branch")
-            .ok_or_else(|| anyhow::anyhow!("Missing 'branch' in step config or pipeline defaults"))?;
+        let branch = get_config_value("branch").ok_or_else(|| {
+            anyhow::anyhow!("Missing 'branch' in step config or pipeline defaults")
+        })?;
 
         // Get PR provider and credentials from config (with defaults)
         let provider = get_config_value("provider").unwrap_or_else(|| "github".to_string());
 
-        let owner = get_config_value("owner")
-            .ok_or_else(|| anyhow::anyhow!("Missing 'owner' in step config or pipeline defaults"))?;
+        let owner = get_config_value("owner").ok_or_else(|| {
+            anyhow::anyhow!("Missing 'owner' in step config or pipeline defaults")
+        })?;
 
         let repo = get_config_value("repo")
             .ok_or_else(|| anyhow::anyhow!("Missing 'repo' in step config or pipeline defaults"))?;
 
-        let token = get_config_value("token")
-            .ok_or_else(|| anyhow::anyhow!("Missing 'token' in step config or pipeline defaults"))?;
+        let token = get_config_value("token").ok_or_else(|| {
+            anyhow::anyhow!("Missing 'token' in step config or pipeline defaults")
+        })?;
 
         let base_branch = get_config_value("base_branch").unwrap_or_else(|| "main".to_string());
 

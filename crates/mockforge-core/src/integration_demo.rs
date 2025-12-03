@@ -144,7 +144,7 @@ Path: {{request:/api/users}}
         let example_template = r#"The time is {{time:iso8601}}, user is {{env:USER}}, and ID is {{uuid}}.
 Business context: {{company:name}} running from {{unknown:path}}.";
 "#;
-        let extractable_tokens = self.engine.extract_resolveable_tokens(example_template).await;
+        let extractable_tokens = self.engine.extract_resolvable_tokens(example_template).await;
         println!("Template:\n{}\nExtractable tokens: {:?}", example_template, extractable_tokens);
 
         // Demo 7: Resolution statistics
@@ -220,7 +220,7 @@ Environment: {{env:USER}}@{{env:HOSTNAME}}
         ];
 
         for template in error_templates {
-            let tokens = self.engine.extract_resolveable_tokens(template).await;
+            let tokens = self.engine.extract_resolvable_tokens(template).await;
             println!("Template: {}", template);
             println!("  Extracted tokens: {:?}", tokens);
 

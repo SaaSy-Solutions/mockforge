@@ -190,7 +190,24 @@ pub fn expand_prompt_template(_template: &str, _context: &RequestContext) -> Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mockforge_template_expansion::{
+        expand_prompt_template, RequestContext as TemplateRequestContext,
+    };
     use serde_json::json;
+
+    // Helper to convert core RequestContext to template expansion RequestContext
+    fn to_template_context(context: &RequestContext) -> TemplateRequestContext {
+        TemplateRequestContext {
+            method: context.method.clone(),
+            path: context.path.clone(),
+            path_params: context.path_params.clone(),
+            query_params: context.query_params.clone(),
+            headers: context.headers.clone(),
+            body: context.body.clone(),
+            multipart_fields: context.multipart_fields.clone(),
+            multipart_files: context.multipart_files.clone(),
+        }
+    }
 
     #[test]
     fn test_ai_response_config_default() {
@@ -234,7 +251,8 @@ mod tests {
     fn test_expand_prompt_template_basic() {
         let context = RequestContext::new("GET".to_string(), "/users".to_string());
         let template = "Method: {{method}}, Path: {{path}}";
-        let expanded = expand_prompt_template(template, &context);
+        let template_context = to_template_context(&context);
+        let expanded = expand_prompt_template(template, &template_context);
         assert_eq!(expanded, "Method: GET, Path: /users");
     }
 
@@ -247,7 +265,8 @@ mod tests {
         let context = RequestContext::new("POST".to_string(), "/chat".to_string()).with_body(body);
 
         let template = "User {{body.user}} says: {{body.message}}";
-        let expanded = expand_prompt_template(template, &context);
+        let template_context = to_template_context(&context);
+        let expanded = expand_prompt_template(template, &template_context);
         assert_eq!(expanded, "User Alice says: Hello");
     }
 
@@ -261,7 +280,8 @@ mod tests {
             .with_path_params(path_params);
 
         let template = "Get user {{path.id}} with name {{path.name}}";
-        let expanded = expand_prompt_template(template, &context);
+        let template_context = to_template_context(&context);
+        let expanded = expand_prompt_template(template, &template_context);
         assert_eq!(expanded, "Get user 456 with name test");
     }
 
@@ -275,7 +295,8 @@ mod tests {
             .with_query_params(query_params);
 
         let template = "Search for {{query.search}} with limit {{query.limit}}";
-        let expanded = expand_prompt_template(template, &context);
+        let template_context = to_template_context(&context);
+        let expanded = expand_prompt_template(template, &template_context);
         assert_eq!(expanded, "Search for term with limit 10");
     }
 
@@ -288,7 +309,8 @@ mod tests {
             RequestContext::new("GET".to_string(), "/api".to_string()).with_headers(headers);
 
         let template = "Request from {{headers.user-agent}}";
-        let expanded = expand_prompt_template(template, &context);
+        let template_context = to_template_context(&context);
+        let expanded = expand_prompt_template(template, &template_context);
         assert_eq!(expanded, "Request from TestClient/1.0");
     }
 
@@ -308,7 +330,8 @@ mod tests {
             .with_body(body);
 
         let template = "{{method}} item {{path.id}} with action {{body.action}} and value {{body.value}} in format {{query.format}}";
-        let expanded = expand_prompt_template(template, &context);
+        let template_context = to_template_context(&context);
+        let expanded = expand_prompt_template(template, &template_context);
         assert_eq!(expanded, "PUT item 789 with action update and value 42 in format json");
     }
 }

@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn test_query_param_condition() {
-        let rule = create_test_rule("/api/users", Some("query[env] == 'production'"));
+        let rule = create_test_rule("/api/users", Some("query[env]=production"));
         let method = Method::GET;
         let uri = Uri::from_static("/api/users?env=production");
         let headers = HeaderMap::new();

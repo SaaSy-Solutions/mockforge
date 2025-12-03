@@ -48,37 +48,37 @@ pub fn create_router(state: ApiState) -> Router {
         // Workspaces
         .route("/workspaces", post(create_workspace))
         .route("/workspaces", get(list_workspaces))
-        .route("/workspaces/:id", get(get_workspace))
-        .route("/workspaces/:id", put(update_workspace))
-        .route("/workspaces/:id", delete(delete_workspace))
+        .route("/workspaces/{id}", get(get_workspace))
+        .route("/workspaces/{id}", put(update_workspace))
+        .route("/workspaces/{id}", delete(delete_workspace))
         // Members
-        .route("/workspaces/:id/members", post(add_member))
-        .route("/workspaces/:id/members/:user_id", delete(remove_member))
-        .route("/workspaces/:id/members/:user_id/role", put(change_role))
-        .route("/workspaces/:id/members", get(list_members))
+        .route("/workspaces/{id}/members", post(add_member))
+        .route("/workspaces/{id}/members/{user_id}", delete(remove_member))
+        .route("/workspaces/{id}/members/{user_id}/role", put(change_role))
+        .route("/workspaces/{id}/members", get(list_members))
         // Version Control - Commits
-        .route("/workspaces/:id/commits", post(create_commit))
-        .route("/workspaces/:id/commits", get(list_commits))
-        .route("/workspaces/:id/commits/:commit_id", get(get_commit))
-        .route("/workspaces/:id/restore/:commit_id", post(restore_to_commit))
+        .route("/workspaces/{id}/commits", post(create_commit))
+        .route("/workspaces/{id}/commits", get(list_commits))
+        .route("/workspaces/{id}/commits/{commit_id}", get(get_commit))
+        .route("/workspaces/{id}/restore/{commit_id}", post(restore_to_commit))
         // Version Control - Snapshots
-        .route("/workspaces/:id/snapshots", post(create_snapshot))
-        .route("/workspaces/:id/snapshots", get(list_snapshots))
-        .route("/workspaces/:id/snapshots/:name", get(get_snapshot))
+        .route("/workspaces/{id}/snapshots", post(create_snapshot))
+        .route("/workspaces/{id}/snapshots", get(list_snapshots))
+        .route("/workspaces/{id}/snapshots/{name}", get(get_snapshot))
         // Fork and Merge
-        .route("/workspaces/:id/fork", post(fork_workspace))
-        .route("/workspaces/:id/forks", get(list_forks))
-        .route("/workspaces/:id/merge", post(merge_workspaces))
-        .route("/workspaces/:id/merges", get(list_merges))
+        .route("/workspaces/{id}/fork", post(fork_workspace))
+        .route("/workspaces/{id}/forks", get(list_forks))
+        .route("/workspaces/{id}/merge", post(merge_workspaces))
+        .route("/workspaces/{id}/merges", get(list_merges))
         // Backup and Restore
-        .route("/workspaces/:id/backup", post(create_backup))
-        .route("/workspaces/:id/backups", get(list_backups))
-        .route("/workspaces/:id/backups/:backup_id", delete(delete_backup))
-        .route("/workspaces/:id/restore", post(restore_workspace))
+        .route("/workspaces/{id}/backup", post(create_backup))
+        .route("/workspaces/{id}/backups", get(list_backups))
+        .route("/workspaces/{id}/backups/{backup_id}", delete(delete_backup))
+        .route("/workspaces/{id}/restore", post(restore_workspace))
         // State Management
-        .route("/workspaces/:id/state", get(get_workspace_state))
-        .route("/workspaces/:id/state", post(update_workspace_state))
-        .route("/workspaces/:id/state/history", get(get_state_history))
+        .route("/workspaces/{id}/state", get(get_workspace_state))
+        .route("/workspaces/{id}/state", post(update_workspace_state))
+        .route("/workspaces/{id}/state/history", get(get_state_history))
         .route_layer(middleware::from_fn_with_state(
             state.auth.clone(),
             auth_middleware,
@@ -1045,22 +1045,56 @@ async fn get_state_history(
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_router_creation() {
+    #[tokio::test]
+    async fn test_router_creation() {
         // Just ensure router can be created
+        use crate::core_bridge::CoreBridge;
         use crate::events::EventBus;
+        use sqlx::SqlitePool;
+        use tempfile::TempDir;
+
+        // Create temporary directory for test workspace and backup
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let workspace_dir = temp_dir.path().join("workspaces");
+        let backup_dir = temp_dir.path().join("backups");
+        std::fs::create_dir_all(&workspace_dir).expect("Failed to create workspace dir");
+        std::fs::create_dir_all(&backup_dir).expect("Failed to create backup dir");
+
+        // Use in-memory database for testing
+        let db = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("Failed to create database pool");
+
+        // Run migrations
+        sqlx::migrate!("./migrations").run(&db).await.expect("Failed to run migrations");
+
+        // Create CoreBridge
+        let core_bridge = Arc::new(CoreBridge::new(&workspace_dir));
+
+        // Create services
+        let auth = Arc::new(AuthService::new("test-secret-key".to_string()));
+        let user = Arc::new(UserService::new(db.clone(), auth.clone()));
+        let workspace =
+            Arc::new(WorkspaceService::with_core_bridge(db.clone(), core_bridge.clone()));
+        let history = Arc::new(VersionControl::new(db.clone()));
+        let merge = Arc::new(MergeService::new(db.clone()));
+        let backup = Arc::new(BackupService::new(
+            db.clone(),
+            Some(backup_dir.to_string_lossy().to_string()),
+            core_bridge.clone(),
+            workspace.clone(),
+        ));
         let event_bus = Arc::new(EventBus::new(100));
+        let sync = Arc::new(SyncEngine::new(event_bus));
+
         let state = ApiState {
-            auth: Arc::new(AuthService::new("test".to_string())),
-            user: Arc::new(UserService::new(
-                todo!(),
-                Arc::new(AuthService::new("test".to_string())),
-            )),
-            workspace: Arc::new(WorkspaceService::new(todo!())),
-            history: Arc::new(VersionControl::new(todo!())),
-            merge: Arc::new(MergeService::new(todo!())),
-            backup: Arc::new(BackupService::new(todo!(), None, todo!(), todo!())),
-            sync: Arc::new(SyncEngine::new(event_bus)),
+            auth,
+            user,
+            workspace,
+            history,
+            merge,
+            backup,
+            sync,
         };
         let _router = create_router(state);
     }

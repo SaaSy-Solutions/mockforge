@@ -18,6 +18,7 @@ mockforge-data = { path = "../crates/mockforge-data" }
 mockforge-recorder = { path = "../crates/mockforge-recorder" }
 mockforge-chaos = { path = "../crates/mockforge-chaos" }
 mockforge-scenarios = { path = "../crates/mockforge-scenarios" }
+mockforge-route-chaos = { path = "../crates/mockforge-route-chaos" }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -12,19 +12,21 @@ publish = true  # Internal tracing component
 
 [dependencies]
 # OpenTelemetry core
-opentelemetry = { version = "0.21", features = ["trace"] }
-opentelemetry_sdk = { version = "0.31", features = ["trace", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.14", features = ["trace", "grpc-tonic"] }
-opentelemetry-jaeger = { version = "0.20", features = ["rt-tokio"] }
-opentelemetry-semantic-conventions = "0.13"
+# Using 0.22 for compatibility - opentelemetry-jaeger 0.21 requires opentelemetry 0.22
+# TODO: Migrate to 0.31 once the API is stabilized and all dependencies support it
+opentelemetry = { version = "0.22", features = ["trace"] }
+opentelemetry_sdk = { version = "0.22", features = ["trace", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.15", features = ["trace", "grpc-tonic"] }
+opentelemetry-jaeger = { version = "0.21", features = ["rt-tokio"] }
 
 # Tracing integration
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# tracing-opentelemetry 0.22 is compatible with opentelemetry 0.22
 tracing-opentelemetry = "0.22"
 
 # Async runtime
-tokio = { version = "1.35", features = ["full"] }
+tokio = { version = "1.48", features = ["full"] }
 
 # HTTP headers for context propagation
 http = "1.0"

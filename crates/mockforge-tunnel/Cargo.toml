@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-tunnel"
-version = "0.3.3"
+version = "0.3.5"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ description = "Tunneling service for exposing local MockForge servers via public
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false
+publish = true
 
 [[bin]]
 name = "tunnel-server"

@@ -1730,7 +1730,7 @@ You can control request/response validation via CLI, environment, or config.
   - When true, mock responses (including media-level `example` bodies) expand tokens:
     - `{{uuid}}` → random UUID v4
     - `{{now}}` → RFC3339 timestamp
-    - `{{now±Nd|Nh|Nm|Ns}}` → timestamp offset by days/hours/minutes/seconds, e.g., `{{now+2h}}`, `{{now-30m}}`
+    - `{{now±And|Nh|Nm|Ns}}` → timestamp offset by days/hours/minutes/seconds, e.g., `{{now+2h}}`, `{{now-30m}}`
     - `{{rand.int}}` → random integer
     - `{{rand.float}}` → random float
   - Also supports ranged and faker tokens when enabled:

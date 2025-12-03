@@ -10,7 +10,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
-use tokio_rustls::TlsAcceptor;
+use tokio_rustls::{rustls, TlsAcceptor};
 use tracing::{debug, error, info, warn};
 
 /// SMTP server
@@ -60,7 +60,8 @@ impl SmtpServer {
         let cert_file = File::open(cert_path)?;
         let mut cert_reader = BufReader::new(cert_file);
         let certs: Vec<Vec<u8>> = certs(&mut cert_reader)?;
-        let certs = certs.into_iter().map(rustls::Certificate).collect();
+        // Use rustls types from tokio-rustls for compatibility
+        let certs: Vec<rustls::Certificate> = certs.into_iter().map(rustls::Certificate).collect();
 
         // Load private key
         let key_file = File::open(key_path)?;
@@ -71,6 +72,7 @@ impl SmtpServer {
             return Err(mockforge_core::Error::generic("No private keys found"));
         }
 
+        // Use rustls from tokio-rustls which has compatible API
         let mut server_config = rustls::ServerConfig::builder()
             .with_safe_defaults()
             .with_no_client_auth()

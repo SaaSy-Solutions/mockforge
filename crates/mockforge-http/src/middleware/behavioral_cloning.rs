@@ -163,8 +163,8 @@ pub async fn behavioral_cloning_middleware(req: Request<Body>, next: Next) -> Re
 
             // Apply error pattern body if sample responses are available
             if !pattern.sample_responses.is_empty() {
-                use axum::body::HttpBody;
                 use axum::body::Body;
+                use axum::body::HttpBody;
 
                 // Pick a random sample response (or first one)
                 let sample_idx = if pattern.sample_responses.len() > 1 {

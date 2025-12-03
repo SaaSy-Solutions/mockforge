@@ -3,7 +3,7 @@
 //! Custom React Flow node component for representing conditional branching steps in a flow.
 
 import React from 'react';
-import { Handle, Position, NodeProps } from 'react-flow-renderer';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { GitBranch } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -71,4 +71,3 @@ export function ConditionNode({ data, selected }: NodeProps<ConditionNodeData>) 
     </div>
   );
 }
-

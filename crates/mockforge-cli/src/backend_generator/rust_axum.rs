@@ -346,7 +346,14 @@ async fn health_check() -> impl IntoResponse {{
     (StatusCode::OK, "OK")
 }}
 "#,
-        app_name, spec.spec.info.title, spec.spec.info.version, port, handler_count, addr_str, spec.spec.info.title, spec.spec.info.version
+        app_name,
+        spec.spec.info.title,
+        spec.spec.info.version,
+        port,
+        handler_count,
+        addr_str,
+        spec.spec.info.title,
+        spec.spec.info.version
     );
 
     todos.push(TodoItem {

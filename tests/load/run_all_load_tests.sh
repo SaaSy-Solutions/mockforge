@@ -86,11 +86,11 @@ run_test "HTTP Load Test (k6)" \
     "DURATION=$HTTP_DURATION" \
     "TOOL=k6"
 
-run_test "HTTP Load Test (wrk)" \
+run_test "HTTP Load Test (work)" \
     "tests/load/run_http_load.sh" \
     "BASE_URL=$BASE_URL" \
     "DURATION=$HTTP_DURATION" \
-    "TOOL=wrk" \
+    "TOOL=work" \
     "CONNECTIONS=100" \
     "THREADS=4"
 

@@ -44,8 +44,8 @@ vi.mock('../../hooks/useHistory', () => ({
 }));
 
 // Mock React Flow
-vi.mock('react-flow-renderer', async () => {
-  const actual = await vi.importActual('react-flow-renderer');
+vi.mock('@xyflow/react', async () => {
+  const actual = await vi.importActual('@xyflow/react');
   return {
     ...actual,
     ReactFlow: ({ children }: any) => <div data-testid="react-flow">{children}</div>,

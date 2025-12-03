@@ -5,7 +5,7 @@
   "__export_source": "insomnia.desktop.app:2025.0.0",
   "resources": [
     {
-      "_id": "wrk_mockforge_sample",
+      "_id": "work_mockforge_sample",
       "_type": "workspace",
       "name": "MockForge Sample",
       "scope": "collection"
@@ -13,7 +13,7 @@
     {
       "_id": "fld_root",
       "_type": "request_group",
-      "parentId": "wrk_mockforge_sample",
+      "parentId": "work_mockforge_sample",
       "name": "Sample"
     },
     {

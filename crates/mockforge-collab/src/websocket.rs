@@ -45,9 +45,7 @@ pub async fn ws_handler(
         })
         .or_else(|| {
             // Fallback: try to get from user_id param (for development)
-            params
-                .get("user_id")
-                .and_then(|id| Uuid::parse_str(id).ok())
+            params.get("user_id").and_then(|id| Uuid::parse_str(id).ok())
         });
 
     ws.on_upgrade(move |socket| handle_socket(socket, state, user_id))
@@ -59,11 +57,7 @@ async fn handle_socket(socket: WebSocket, state: WsState, user_id: Option<Uuid>)
 
     // Generate client ID
     let client_id = Uuid::new_v4();
-    tracing::info!(
-        "WebSocket client connected: {} (user: {:?})",
-        client_id,
-        user_id
-    );
+    tracing::info!("WebSocket client connected: {} (user: {:?})", client_id, user_id);
 
     // Track subscribed workspaces
     let mut subscriptions: Vec<Uuid> = Vec::new();

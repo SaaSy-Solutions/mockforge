@@ -3,7 +3,7 @@
 //! Custom React Flow node component for representing parallel execution steps in a flow.
 
 import React from 'react';
-import { Handle, Position, NodeProps } from 'react-flow-renderer';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Layers } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -64,4 +64,3 @@ export function ParallelNode({ data, selected }: NodeProps<ParallelNodeData>) {
     </div>
   );
 }
-

@@ -9,7 +9,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { X } from 'lucide-react';
-import { Node } from 'react-flow-renderer';
+import { Node } from '@xyflow/react';
 import { ApiCallNodeData } from './ApiCallNode';
 import { ConditionNodeData } from './ConditionNode';
 import { DelayNodeData } from './DelayNode';
@@ -363,4 +363,3 @@ export function FlowPropertiesPanel({
 
   return null;
 }
-

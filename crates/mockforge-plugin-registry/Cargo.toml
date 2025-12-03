@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-plugin-registry"
-version = "0.3.3"
+version = "0.3.5"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -10,11 +10,11 @@ homepage.workspace = true
 documentation.workspace = true
 keywords = ["plugin", "registry", "mockforge", "discovery"]
 categories = ["development-tools"]
-publish = false  # Internal plugin registry component
+publish = true  # Internal plugin registry component
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.48", features = ["full"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -22,7 +22,7 @@ serde_json = "1.0"
 toml = "0.8"
 
 # HTTP client
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
 
 # Error handling
 thiserror = "1.0"

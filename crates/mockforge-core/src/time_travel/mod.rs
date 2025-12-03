@@ -613,8 +613,7 @@ impl TimeTravelManager {
 
         let scheduler = Arc::new(ResponseScheduler::new(clock.clone()));
         let cron_scheduler = Arc::new(
-            cron::CronScheduler::new(clock.clone())
-                .with_response_scheduler(scheduler.clone())
+            cron::CronScheduler::new(clock.clone()).with_response_scheduler(scheduler.clone()),
         );
 
         Self {

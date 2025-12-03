@@ -198,7 +198,13 @@ impl MockServer {
         let response = next.run(request).await;
 
         let duration = start.elapsed();
-        info!("Request completed: {} {} - Status: {} - Duration: {:?}", method, uri, response.status(), duration);
+        info!(
+            "Request completed: {} {} - Status: {} - Duration: {:?}",
+            method,
+            uri,
+            response.status(),
+            duration
+        );
 
         response
     }

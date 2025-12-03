@@ -1,7 +1,13 @@
 [package]
 name = "mockforge-k8s-operator"
-version = "0.1.0"
+version = "0.3.5"
 edition = "2021"
+authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
+license = "MIT OR Apache-2.0"
+description = "Kubernetes operator for MockForge - manage mock services as Kubernetes resources"
+repository = "https://github.com/SaaSy-Solutions/mockforge"
+homepage = "https://mockforge.dev"
+documentation = "https://docs.rs/mockforge"
 
 [dependencies]
 # Kubernetes client
@@ -9,7 +15,7 @@ kube = { version = "0.87", features = ["runtime", "derive", "client"] }
 k8s-openapi = { version = "0.20", features = ["v1_28"] }
 
 # Async runtime
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.48", features = ["full"] }
 futures = "0.3"
 
 # Serialization

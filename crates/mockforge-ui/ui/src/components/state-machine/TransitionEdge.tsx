@@ -4,7 +4,7 @@
 //! Displays condition expressions and supports editing.
 
 import React from 'react';
-import { EdgeProps, getBezierPath } from 'react-flow-renderer';
+import { EdgeProps, getBezierPath } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { cn } from '@/utils/cn';
 

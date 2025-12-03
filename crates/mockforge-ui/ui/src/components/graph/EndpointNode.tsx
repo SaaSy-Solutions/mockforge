@@ -1,5 +1,5 @@
 import React from 'react';
-import { Handle, Position, NodeProps } from 'react-flow-renderer';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Server, Zap, Globe, MessageSquare, Database, Mail, Radio } from 'lucide-react';
 import type { GraphNode } from '../../types/graph';

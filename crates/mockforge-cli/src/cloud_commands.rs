@@ -968,7 +968,7 @@ async fn handle_cloud_workspace_link(
     } else {
         // Create default sync config
         use mockforge_core::workspace::sync::{
-            ConflictResolutionStrategy, SyncDirectoryStructure, SyncDirection,
+            ConflictResolutionStrategy, SyncDirection, SyncDirectoryStructure,
         };
         SyncConfig {
             enabled: true,
@@ -995,8 +995,8 @@ async fn handle_cloud_workspace_link(
     };
 
     // Save updated config
-    let updated_config = serde_yaml::to_string(&sync_config)
-        .context("Failed to serialize sync config")?;
+    let updated_config =
+        serde_yaml::to_string(&sync_config).context("Failed to serialize sync config")?;
     tokio::fs::write(&sync_config_path, updated_config)
         .await
         .context("Failed to write sync config")?;

@@ -653,12 +653,19 @@ impl RuleGenerator {
 
     /// Extract resource name from path
     fn extract_resource_name(&self, path: &str) -> String {
-        // Extract last meaningful segment
-        path.split('/')
-            .filter(|s| !s.is_empty() && !s.starts_with('{'))
-            .next_back()
-            .unwrap_or("Resource")
-            .to_string()
+        // Extract last meaningful segment, skipping numeric IDs
+        let segments: Vec<&str> =
+            path.split('/').filter(|s| !s.is_empty() && !s.starts_with('{')).collect();
+
+        // Find the last non-numeric segment (resource name, not ID)
+        for segment in segments.iter().rev() {
+            if !segment.chars().all(|c| c.is_ascii_digit()) {
+                return segment.to_string();
+            }
+        }
+
+        // Fallback to last segment if all are numeric
+        segments.last().map(|s| s.to_string()).unwrap_or_else(|| "Resource".to_string())
     }
 
     /// Infer state machines from examples

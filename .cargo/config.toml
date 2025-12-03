@@ -1,16 +1,20 @@
 # Cargo configuration for MockForge
 # This file helps with sqlx offline mode for mockforge-collab
+#
+# IMPORTANT FOR PUBLISHING:
+# - Published crates from crates.io will include the .sqlx/ directory
+# - The build.rs script automatically enables SQLX_OFFLINE=true when .sqlx exists
+# - No DATABASE_URL is needed for published crates
+# - This config is only for local development when regenerating query cache
 
 [env]
-# Set DATABASE_URL for sqlx compile-time query checking
-# Using SQLite for development - can be overridden with environment variable
-# Note: The database file will be created automatically if it doesn't exist
-DATABASE_URL = { value = "sqlite:///home/rclanan/dev/projects/work/mockforge/crates/mockforge-collab/compile-check.db" }
+# DATABASE_URL for local development only (commented out for publishing)
+# Uncomment this line only when you need to regenerate .sqlx query cache locally
+# DATABASE_URL = { value = "sqlite:///home/rclanan/dev/projects/work/mockforge/crates/mockforge-collab/compile-check.db" }
 
 # Enable sqlx offline mode to avoid database connection requirements during compilation
-# Set this to true if you don't have a database connection available
+# The build.rs script automatically enables this when .sqlx directory exists
 # SQLX_OFFLINE = "true"
-# Note: Disabled for now - using DATABASE_URL instead for compile-time checking
 
 # Note: If you need to update sqlx query metadata, run:
 # cd crates/mockforge-collab && cargo sqlx prepare --database-url postgresql://user:pass@localhost/dbname

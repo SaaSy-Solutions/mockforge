@@ -3,7 +3,7 @@
 //! Custom React Flow node component for representing API call steps in a flow.
 
 import React from 'react';
-import { Handle, Position, NodeProps } from 'react-flow-renderer';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Globe } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -79,4 +79,3 @@ export function ApiCallNode({ data, selected }: NodeProps<ApiCallNodeData>) {
     </div>
   );
 }
-

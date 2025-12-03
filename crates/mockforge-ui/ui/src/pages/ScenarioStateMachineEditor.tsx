@@ -18,7 +18,7 @@ import ReactFlow, {
   NodeTypes,
   ReactFlowInstance,
   MarkerType,
-} from 'react-flow-renderer';
+} from '@xyflow/react';
 import { Loader2, Save, Download, Upload, Undo2, Redo2, Play, Square, Plus, Trash2, Database, Layers } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/button';

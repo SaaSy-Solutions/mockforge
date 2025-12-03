@@ -17,7 +17,7 @@ import ReactFlow, {
   NodeTypes,
   ReactFlowInstance,
   MarkerType,
-} from 'react-flow-renderer';
+} from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -170,7 +170,7 @@ export function ScenarioStudioPage() {
     // Convert flow steps to React Flow nodes
     const flowNodes: Node[] = flow.steps.map((step, index) => {
       const position = step.position || { x: (index % 5) * 250 + 100, y: Math.floor(index / 5) * 150 + 100 };
-      
+
       let nodeData: any = {
         id: step.id,
         name: step.name,
@@ -331,7 +331,7 @@ export function ScenarioStudioPage() {
         const updatedFlow = await response.json();
         setSelectedFlow(updatedFlow);
         setFlows(flows.map((f) => (f.id === updatedFlow.id ? updatedFlow : f)));
-        
+
         // Broadcast update via WebSocket
         if (connected) {
           sendMessage({

@@ -3,9 +3,9 @@
 //! Manages blend ratios for gradually transitioning from mock to real data sources.
 //! Supports time-based progression, manual configuration, and per-route/group/global settings.
 
-use crate::reality_continuum::{
-    ContinuumConfig, ContinuumRule, ResponseBlender, TimeSchedule, TransitionMode,
-};
+use super::blender::ResponseBlender;
+use super::config::{ContinuumConfig, ContinuumRule, TransitionMode};
+use super::schedule::TimeSchedule;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -79,20 +79,11 @@ impl RealityContinuumEngine {
 
         let config = self.config.read().await;
 
-        // Check route-specific rules
+        // Check route-specific rules, but prioritize group-level overrides
         for rule in &config.routes {
             if rule.matches_path(path) {
-                debug!("Using route rule for {}: {}", path, rule.ratio);
-                return rule.ratio;
-            }
-        }
-
-        // Check group-level overrides (if path belongs to a group)
-        // Note: This requires integration with proxy config to determine groups
-        // For now, we'll check if any route rule has a group and matches
-        for rule in &config.routes {
-            if let Some(ref group) = rule.group {
-                if rule.matches_path(path) {
+                // If this route has a group and the group has a ratio, use the group ratio
+                if let Some(ref group) = rule.group {
                     if let Some(&group_ratio) = config.groups.get(group) {
                         debug!(
                             "Using group override for {} (group {}): {}",
@@ -101,6 +92,9 @@ impl RealityContinuumEngine {
                         return group_ratio;
                     }
                 }
+                // Otherwise, use the route ratio
+                debug!("Using route rule for {}: {}", path, rule.ratio);
+                return rule.ratio;
             }
         }
 

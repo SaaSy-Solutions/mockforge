@@ -143,35 +143,48 @@ fn convert_schema_to_vbr(
                 }
                 ReferenceOr::Reference { reference } => {
                     // Resolve schema reference
-                    if let Some(resolved_schema) = resolve_schema_reference(reference, all_schemas) {
+                    if let Some(resolved_schema) = resolve_schema_reference(reference, all_schemas)
+                    {
                         // Recursively convert the resolved schema
-                        match convert_field_to_definition(field_name, &resolved_schema, &obj_type.required) {
+                        match convert_field_to_definition(
+                            field_name,
+                            &resolved_schema,
+                            &obj_type.required,
+                        ) {
                             Ok(field_def) => {
                                 fields.push(field_def.clone());
 
                                 // Auto-detect primary key
                                 if is_primary_key_field(field_name, &field_def) {
                                     primary_key.push(field_name.clone());
-                                    if primary_key.len() == 1 && !auto_generation.contains_key(field_name) {
-                                        auto_generation.insert(field_name.clone(), AutoGenerationRule::Uuid);
+                                    if primary_key.len() == 1
+                                        && !auto_generation.contains_key(field_name)
+                                    {
+                                        auto_generation
+                                            .insert(field_name.clone(), AutoGenerationRule::Uuid);
                                     }
                                 }
 
                                 // Auto-detect auto-generation rules
-                                if let Some(rule) = detect_auto_generation(field_name, &resolved_schema) {
+                                if let Some(rule) =
+                                    detect_auto_generation(field_name, &resolved_schema)
+                                {
                                     auto_generation.insert(field_name.clone(), rule);
                                 }
                             }
                             Err(e) => {
                                 // If conversion fails, fall back to string type
-                                let field_def = FieldDefinition::new(field_name.clone(), "string".to_string()).optional();
+                                let field_def =
+                                    FieldDefinition::new(field_name.clone(), "string".to_string())
+                                        .optional();
                                 fields.push(field_def);
                             }
                         }
                     } else {
                         // Reference not found, treat as string
                         let field_def =
-                            FieldDefinition::new(field_name.clone(), "string".to_string()).optional();
+                            FieldDefinition::new(field_name.clone(), "string".to_string())
+                                .optional();
                         fields.push(field_def);
                     }
                 }

@@ -12,7 +12,7 @@ import ReactFlow, {
   useEdgesState,
   NodeTypes,
   ReactFlowInstance,
-} from 'react-flow-renderer';
+} from '@xyflow/react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import { apiService } from '../services/api';

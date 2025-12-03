@@ -221,21 +221,29 @@ impl EntityInference {
 
     /// Infer primary key field
     fn infer_primary_key(schema: &Value) -> Option<String> {
-        if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
-            // Common primary key patterns
-            let primary_key_candidates = ["id", "uuid", "_id", "key", "identifier"];
+        // Handle both nested structure (with "properties") and flat structure
+        let properties = if let Some(props) = schema.get("properties").and_then(|p| p.as_object()) {
+            props
+        } else if let Some(obj) = schema.as_object() {
+            // Flat structure - treat the object itself as properties
+            obj
+        } else {
+            return None;
+        };
 
-            for candidate in &primary_key_candidates {
-                if properties.contains_key(*candidate) {
-                    return Some(candidate.to_string());
-                }
+        // Common primary key patterns
+        let primary_key_candidates = ["id", "uuid", "_id", "key", "identifier"];
+
+        for candidate in &primary_key_candidates {
+            if properties.contains_key(*candidate) {
+                return Some(candidate.to_string());
             }
+        }
 
-            // Check for fields ending in "_id" or "Id"
-            for key in properties.keys() {
-                if key.to_lowercase().ends_with("_id") || key.to_lowercase().ends_with("id") {
-                    return Some(key.clone());
-                }
+        // Check for fields ending in "_id" or "Id"
+        for key in properties.keys() {
+            if key.to_lowercase().ends_with("_id") || key.to_lowercase().ends_with("id") {
+                return Some(key.clone());
             }
         }
 

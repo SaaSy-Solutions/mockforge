@@ -165,6 +165,46 @@ publish_crate() {
         no_verify_flag=""  # Don't use --no-verify for dry runs, we want to see verification errors
     fi
 
+    # Temporarily remove dependent crates from workspace to avoid dependency resolution issues
+    # This is needed because Cargo resolves workspace dependencies even with --no-verify
+    local temp_workspace_modified=false
+    local removed_crates=""
+    if [ "$DRY_RUN" = "false" ]; then
+        # Find crates that depend on this crate and temporarily remove them from workspace
+        # We need to do this before cargo publish to avoid dependency resolution errors
+        local dependent_crates=$(cargo metadata --format-version 1 --no-deps 2>/dev/null | \
+            python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+target_name = '$crate_name'
+dependents = []
+for pkg in data.get('packages', []):
+    pkg_name = pkg.get('name', '')
+    if pkg_name == target_name:
+        continue
+    for dep in pkg.get('dependencies', []):
+        if dep.get('name') == target_name:
+            # Extract crate directory name from manifest path
+            manifest = pkg.get('manifest_path', '')
+            if 'crates/' in manifest:
+                crate_dir = manifest.split('crates/')[1].split('/')[0]
+                dependents.append(crate_dir)
+            break
+print(' '.join(set(dependents)))
+" 2>/dev/null || echo "")
+
+        if [ -n "$dependent_crates" ]; then
+            for dep_crate in $dependent_crates; do
+                # Remove from workspace temporarily
+                if grep -q "\"crates/$dep_crate\"," Cargo.toml; then
+                    sed -i "/\"crates\/$dep_crate\",/d" Cargo.toml
+                    removed_crates="$removed_crates $dep_crate"
+                    temp_workspace_modified=true
+                fi
+            done
+        fi
+    fi
+
     if [ -n "$publish_env" ]; then
         if env $publish_env cargo publish -p "$crate_name" $dry_run_flag $no_verify_flag --allow-dirty; then
             print_success "Successfully published $crate_name"
@@ -188,6 +228,27 @@ publish_crate() {
             else
                 handle_publish_error "$crate_name" "$dry_run_flag"
             fi
+        fi
+    fi
+
+    # Restore dependent crates' dependencies if we modified them
+    if [ "$temp_deps_modified" = "true" ]; then
+        for dep_crate_dir in $modified_crates; do
+            local dep_cargo_toml="crates/$dep_crate_dir/Cargo.toml"
+            if [ -f "$dep_cargo_toml" ]; then
+                # Convert back to version dependency (remove path)
+                # Handle both table form and short form
+                if grep -q "$crate_name = { version = \"$WORKSPACE_VERSION\", path = \"../$crate_name\" }" "$dep_cargo_toml"; then
+                    # Was short form, convert back to short form
+                    sed -i "s|$crate_name = { version = \"$WORKSPACE_VERSION\", path = \"../$crate_name\" }|$crate_name = \"$WORKSPACE_VERSION\"|g" "$dep_cargo_toml"
+                else
+                    # Was table form, just remove path
+                    sed -i "s|, path = \"../$crate_name\"||g" "$dep_cargo_toml"
+                fi
+            fi
+        done
+        if [ -n "$modified_crates" ]; then
+            print_status "Restored dependencies in: $modified_crates"
         fi
     fi
 }
@@ -224,8 +285,8 @@ convert_crate_dependencies() {
         # Build list of crates that will be published in this batch
         # For Phase 1, include all Phase 1 crates; for Phase 2, include all Phase 1 + Phase 2 crates
         local published_crates=""
-        local phase1_crates="mockforge-core mockforge-data mockforge-plugin-core mockforge-observability mockforge-tracing mockforge-plugin-sdk mockforge-recorder mockforge-plugin-registry mockforge-chaos mockforge-reporting mockforge-analytics mockforge-collab"
-        local phase2_crates="mockforge-plugin-loader mockforge-schema mockforge-mqtt mockforge-scenarios mockforge-smtp mockforge-ws mockforge-http mockforge-grpc mockforge-graphql mockforge-amqp mockforge-kafka mockforge-ftp mockforge-tcp mockforge-sdk mockforge-bench mockforge-test mockforge-vbr mockforge-tunnel mockforge-ui mockforge-cli"
+        local phase1_crates="mockforge-template-expansion mockforge-core mockforge-data mockforge-plugin-core mockforge-observability mockforge-tracing mockforge-plugin-sdk mockforge-recorder mockforge-plugin-registry mockforge-chaos mockforge-reporting mockforge-analytics mockforge-pipelines mockforge-collab"
+        local phase2_crates="mockforge-performance mockforge-route-chaos mockforge-plugin-loader mockforge-schema mockforge-mqtt mockforge-scenarios mockforge-smtp mockforge-ws mockforge-http mockforge-grpc mockforge-graphql mockforge-amqp mockforge-kafka mockforge-ftp mockforge-tcp mockforge-sdk mockforge-bench mockforge-test mockforge-vbr mockforge-tunnel mockforge-ui mockforge-cli"
 
         # Check which phase we're in based on the crate being published
         local all_crates="$phase1_crates $phase2_crates"
@@ -296,6 +357,8 @@ targets = [
     ("mockforge-cli", "../mockforge-cli"),
     ("mockforge-scenarios", "../mockforge-scenarios"),
     ("mockforge-schema", "../mockforge-schema"),
+    ("mockforge-template-expansion", "../mockforge-template-expansion"),
+    ("mockforge-route-chaos", "../mockforge-route-chaos"),
 ]
 
 for name, rel in targets:
@@ -564,12 +627,17 @@ main() {
     # Phase 1: Publish base crates (no internal dependencies)
     print_status "Phase 1: Publishing base crates..."
 
-    # Publish mockforge-data first (it depends on mockforge-core 0.1.3, already published)
+    # Publish mockforge-template-expansion first (no internal dependencies)
+    convert_crate_dependencies "mockforge-template-expansion"
+    publish_crate "mockforge-template-expansion"
+    wait_for_processing
+
+    # Publish mockforge-data (it depends on mockforge-core 0.1.3, already published)
     convert_crate_dependencies "mockforge-data"
     publish_crate "mockforge-data"
     wait_for_processing
 
-    # Convert dependencies for mockforge-core (can now reference mockforge-data 0.3.0)
+    # Convert dependencies for mockforge-core (can now reference mockforge-data 0.3.5 and mockforge-template-expansion 0.3.5)
     convert_crate_dependencies "mockforge-core"
     publish_crate "mockforge-core"
     wait_for_processing
@@ -616,12 +684,31 @@ main() {
     publish_crate "mockforge-analytics"
     wait_for_processing
 
+    convert_crate_dependencies "mockforge-pipelines"
+    publish_crate "mockforge-pipelines"
+    wait_for_processing
+
     convert_crate_dependencies "mockforge-collab"
     publish_crate "mockforge-collab"
     wait_for_processing
 
     # Phase 2: Publish remaining dependent crates
     print_status "Phase 2: Publishing remaining dependent crates..."
+
+    # Publish mockforge-performance first (required by mockforge-http)
+    convert_crate_dependencies "mockforge-performance"
+    publish_crate "mockforge-performance"
+    wait_for_processing
+
+    # Publish mockforge-route-chaos (required by mockforge-http)
+    convert_crate_dependencies "mockforge-route-chaos"
+    publish_crate "mockforge-route-chaos"
+    wait_for_processing
+
+    # Publish mockforge-world-state (required by mockforge-http)
+    convert_crate_dependencies "mockforge-world-state"
+    publish_crate "mockforge-world-state"
+    wait_for_processing
 
     # Publish plugin system crates
     convert_crate_dependencies "mockforge-plugin-loader"

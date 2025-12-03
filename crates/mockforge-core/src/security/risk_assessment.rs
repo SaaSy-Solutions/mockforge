@@ -391,10 +391,7 @@ impl RiskAssessmentEngine {
         // Find max risk ID to set counter
         let max_id = risks
             .keys()
-            .filter_map(|id| {
-                id.strip_prefix("RISK-")
-                    .and_then(|num| num.parse::<u64>().ok())
-            })
+            .filter_map(|id| id.strip_prefix("RISK-").and_then(|num| num.parse::<u64>().ok()))
             .max()
             .unwrap_or(0);
 

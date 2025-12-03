@@ -5586,7 +5586,7 @@
             }
           },
           "type": {
-            "title": "Fullfillment Type",
+            "title": "Fulfillment Type",
             "description": "A classification for the method of purchase fulfillment (e.g shipping, in-store pickup, etc). Either `type` or `options` may be present, but not both.",
             "type": "string",
             "minLength": 1,

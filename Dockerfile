@@ -34,8 +34,26 @@ COPY examples/ ./examples/
 COPY proto/ ./proto/
 COPY config.example.yaml ./
 
+# Create placeholder UI files if they don't exist (UI build requires Node.js which we don't install in Docker)
+RUN mkdir -p crates/mockforge-ui/ui/dist/assets && \
+    if [ ! -f crates/mockforge-ui/ui/dist/index.html ]; then \
+      echo '<!DOCTYPE html><html><head><title>MockForge Admin</title></head><body><h1>MockForge Admin UI</h1><p>UI build required. Run: cd crates/mockforge-ui && bash build_ui.sh</p></body></html>' > crates/mockforge-ui/ui/dist/index.html; \
+    fi && \
+    if [ ! -f crates/mockforge-ui/ui/dist/assets/index.css ]; then \
+      echo '/* MockForge Admin UI CSS - build required */' > crates/mockforge-ui/ui/dist/assets/index.css; \
+    fi && \
+    if [ ! -f crates/mockforge-ui/ui/dist/assets/index.js ]; then \
+      echo '// MockForge Admin UI JS - build required' > crates/mockforge-ui/ui/dist/assets/index.js; \
+    fi && \
+    if [ ! -f crates/mockforge-ui/ui/dist/pwa-manifest.json ]; then \
+      echo '{}' > crates/mockforge-ui/ui/dist/pwa-manifest.json; \
+    fi && \
+    if [ ! -f crates/mockforge-ui/ui/dist/sw.js ]; then \
+      echo '// Service Worker placeholder' > crates/mockforge-ui/ui/dist/sw.js; \
+    fi
+
 # Build the application in release mode
-RUN cargo build --release --package mockforge-cli
+RUN cargo build --release --bin mockforge
 
 # Stage 2: Create the runtime image
 # Use debian:trixie-slim to match builder's GLIBC version (2.39+)

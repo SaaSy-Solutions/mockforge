@@ -779,10 +779,10 @@ aria-label="Show hidden lines"></button>';
     });
 })();
 
-(function controllMenu() {
+(function controlMenu() {
     const menu = document.getElementById('menu-bar');
 
-    (function controllPosition() {
+    (function controlPosition() {
         let scrollTop = document.scrollingElement.scrollTop;
         let prevScrollTop = scrollTop;
         const minMenuY = -menu.clientHeight - 50;
@@ -825,7 +825,7 @@ aria-label="Show hidden lines"></button>';
             prevScrollTop = scrollTop;
         }, { passive: true });
     })();
-    (function controllBorder() {
+    (function controlBorder() {
         function updateBorder() {
             if (menu.offsetTop === 0) {
                 menu.classList.remove('bordered');

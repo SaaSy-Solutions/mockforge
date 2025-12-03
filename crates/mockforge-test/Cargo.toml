@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-test"
-version = "0.3.3"
+version = "0.3.5"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -10,13 +10,13 @@ documentation.workspace = true
 description = "Test utilities for MockForge - easy integration with Playwright and Vitest"
 keywords = ["mock", "testing", "playwright", "vitest", "test-utilities"]
 categories = ["development-tools", "development-tools::testing"]
-publish = false
+publish = true
 
 [dependencies]
 # Core MockForge dependencies
-mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
-mockforge-http = "0.3.0"
-mockforge-data = { version = "0.3.0", optional = true }
+mockforge-core = "0.3.5"
+mockforge-http = "0.3.5"
+mockforge-data = { version = "0.3.5", optional = true }
 
 # Async runtime
 tokio = { workspace = true }

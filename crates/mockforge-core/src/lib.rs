@@ -403,9 +403,9 @@ pub use request_fingerprint::{
     RequestFingerprint, RequestHandlerResult, ResponsePriority, ResponseSource,
 };
 pub use request_logger::{
-    create_http_log_entry_with_query,
-    create_grpc_log_entry, create_http_log_entry, create_websocket_log_entry, get_global_logger,
-    init_global_logger, log_request_global, CentralizedRequestLogger, RequestLogEntry,
+    create_grpc_log_entry, create_http_log_entry, create_http_log_entry_with_query,
+    create_websocket_log_entry, get_global_logger, init_global_logger, log_request_global,
+    CentralizedRequestLogger, RequestLogEntry,
 };
 // Route chaos types moved to mockforge-route-chaos crate
 // Import directly: use mockforge_route_chaos::{RouteChaosInjector, RouteFaultResponse, RouteMatcher};

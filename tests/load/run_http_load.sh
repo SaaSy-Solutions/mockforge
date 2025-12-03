@@ -52,21 +52,21 @@ if [ "$TOOL" == "k6" ]; then
         -e BASE_URL="$BASE_URL" \
         tests/load/http_load.js
 
-elif [ "$TOOL" == "wrk" ]; then
-    echo -e "${YELLOW}Running wrk load test...${NC}"
+elif [ "$TOOL" == "work" ]; then
+    echo -e "${YELLOW}Running work load test...${NC}"
 
-    # Check if wrk is installed
-    if ! command -v wrk &> /dev/null; then
-        echo -e "${RED}Error: wrk is not installed${NC}"
-        echo "Install wrk: https://github.com/wg/wrk"
+    # Check if work is installed
+    if ! command -v work &> /dev/null; then
+        echo -e "${RED}Error: work is not installed${NC}"
+        echo "Install work: https://github.com/wg/wrk"
         exit 1
     fi
 
     # Create results directory
     mkdir -p tests/load/results
 
-    # Run wrk test
-    wrk -t"$THREADS" \
+    # Run work test
+    work -t"$THREADS" \
         -c"$CONNECTIONS" \
         -d"$DURATION" \
         -s tests/load/wrk_http.lua \
@@ -76,7 +76,7 @@ elif [ "$TOOL" == "wrk" ]; then
 
 else
     echo -e "${RED}Error: Unknown tool '$TOOL'${NC}"
-    echo "Supported tools: k6, wrk"
+    echo "Supported tools: k6, work"
     exit 1
 fi
 

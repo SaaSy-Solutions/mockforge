@@ -1,23 +1,35 @@
-[files]
-extend-exclude = [
-  "target/**",
-  "book/book/**",
-]
-
-[default]
-extend-ignore-re = [
-  # Allow templating tokens like Nd/Nh/Nm/Ns in docs and code
-  'now[±+-](Nd|Nh|Nm|Ns)',
-]
+# Typos configuration for MockForge
+# Allows common technical acronyms and terms
 
 [default.extend-words]
-Nd = "Nd"
-Nh = "Nh"
-Nm = "Nm"
-Ns = "Ns"
-typ = "typ"
-ot = "ot"
-wrk = "wrk"
-mdbook = "mdbook"
-mathjax = "mathjax"
-rustup = "rustup"
+# Technical acronyms
+RTO = "RTO"  # Recovery Time Objective
+RPO = "RPO"  # Recovery Point Objective
+HELO = "HELO"  # SMTP command (not HELLO)
+mosquitto = "mosquitto"  # MQTT broker name (not mosquito)
+ORU = "ORU"  # HL7 message type
+Plattform = "Plattform"  # German word for platform
+sur = "sur"  # French preposition (part of "sur notre plateforme")
+OT = "OT"  # Operational Transform (collaborative editing algorithm)
+CRDT = "CRDT"  # Conflict-free Replicated Data Type
+ba = "ba"  # Valid in hex strings (trace IDs, etc.)
+hel = "hel"  # Part of data center codes (hel1 = Helsinki)
+hel1 = "hel1"  # Data center code (Helsinki)
+wrk = "wrk"  # Load testing tool (https://github.com/wg/wrk)
+Nd = "Nd"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Days)
+Nh = "Nh"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Hours)
+Nm = "Nm"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Minutes)
+Ns = "Ns"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Seconds)
+abd = "abd"  # Part of git commit hashes (e.g., abd3306)
+existant = "existant"  # CSS variable name (--sidebar-non-existant) - consistently used in book CSS
+
+[files]
+extend-exclude = [
+  "**/book/book/searchindex.js",           # Generated search index
+  "**/book/book/ace.js",                   # Third-party code editor library
+  "**/book/book/highlight.js",             # Third-party syntax highlighting library
+  "**/book/book/elasticlunr.min.js",       # Third-party search library (minified)
+  "**/book/book/FontAwesome/**",          # Third-party FontAwesome library (CSS, fonts, SVG)
+  "**/book/book/*.min.js",                 # All minified JavaScript files
+  "**/book/book/*.min.css"                 # All minified CSS files
+]

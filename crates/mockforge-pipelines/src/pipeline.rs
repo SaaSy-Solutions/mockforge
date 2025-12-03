@@ -406,7 +406,7 @@ impl PipelineExecutor {
             step_name: step.name.clone(),
             workspace_id: pipeline.workspace_id,
             pipeline_id: Some(pipeline.id),
-            pipeline_defaults: pipeline_defaults,
+            pipeline_defaults,
         };
 
         // Execute with timeout if specified

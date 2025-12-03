@@ -105,10 +105,10 @@ impl TimeSchedule {
         let curved_progress = match self.curve {
             TransitionCurve::Linear => progress,
             TransitionCurve::Exponential => {
-                // Exponential: e^(k * progress) - 1 / (e^k - 1)
-                // Using k=2 for moderate exponential curve
+                // Exponential: (e^(k * progress) - 1) / (e^k - 1)
+                // Using k=2 for moderate exponential curve (slow start, fast end)
                 let k = 2.0;
-                (progress * k).exp() - 1.0 / (k.exp() - 1.0)
+                ((progress * k).exp() - 1.0) / (k.exp() - 1.0)
             }
             TransitionCurve::Sigmoid => {
                 // Sigmoid: 1 / (1 + e^(-k * (progress - 0.5)))

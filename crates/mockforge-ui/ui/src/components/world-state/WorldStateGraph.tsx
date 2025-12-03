@@ -16,7 +16,7 @@ import ReactFlow, {
   addEdge,
   useNodesState,
   useEdgesState,
-} from 'react-flow-renderer';
+} from '@xyflow/react';
 import type { WorldStateNode, WorldStateEdge } from '../../hooks/useWorldState';
 import { WorldStateNodeComponent } from './WorldStateNode';
 import { applyLayout } from '../../utils/graphLayouts';

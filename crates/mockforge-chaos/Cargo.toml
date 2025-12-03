@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-chaos"
-version = "0.3.3"
+version = "0.3.5"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ description = "Chaos engineering features for MockForge - fault injection and re
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false  # Internal chaos testing component
+publish = true  # Internal chaos testing component
 
 [dependencies]
 # Async runtime
@@ -46,7 +46,7 @@ governor = "0.8"
 nonzero_ext = "0.3"
 
 # HTTP client for health checks
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
 
 # Cryptography
 sha2 = "0.10"
@@ -58,13 +58,13 @@ bincode = "1.3"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], optional = true }
 
 # Tracing
-mockforge-tracing = "0.3.0"
+mockforge-tracing = "0.3.5"
 
 # Recorder
-mockforge-recorder = { version = "0.3.3", path = "../mockforge-recorder" }
+mockforge-recorder = "0.3.5"
 
 # Core (for MockAI integration)
-mockforge-core = { version = "0.3.3", path = "../mockforge-core" }
+mockforge-core = "0.3.5"
 
 # PDF generation
 printpdf = "0.7"
@@ -77,5 +77,5 @@ default = []
 distributed = ["redis"]
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "test-util"] }
+tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "test-util"] }
 tempfile = "3.8"

@@ -10,6 +10,7 @@
 
 use std::fmt;
 use std::io::{self, Write};
+use std::path::PathBuf;
 
 /// Speech-to-text errors
 #[derive(Debug)]

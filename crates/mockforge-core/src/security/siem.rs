@@ -754,7 +754,8 @@ impl SplunkTransport {
         if let Some(ref st) = self.source_type {
             splunk_event["sourcetype"] = serde_json::Value::String(st.clone());
         } else {
-            splunk_event["sourcetype"] = serde_json::Value::String("mockforge:security".to_string());
+            splunk_event["sourcetype"] =
+                serde_json::Value::String("mockforge:security".to_string());
         }
 
         Ok(splunk_event)
@@ -785,10 +786,8 @@ impl SiemTransport for SplunkTransport {
                     } else {
                         let status = response.status();
                         let body = response.text().await.unwrap_or_default();
-                        last_error = Some(Error::Generic(format!(
-                            "Splunk HTTP error {}: {}",
-                            status, body
-                        )));
+                        last_error =
+                            Some(Error::Generic(format!("Splunk HTTP error {}: {}", status, body)));
                     }
                 }
                 Err(e) => {
@@ -877,11 +876,8 @@ impl SiemTransport for DatadogTransport {
 
         let mut last_error = None;
         for attempt in 0..=self.retry.max_attempts {
-            let mut request = self
-                .client
-                .post(&url)
-                .header("DD-API-KEY", &self.api_key)
-                .json(&datadog_event);
+            let mut request =
+                self.client.post(&url).header("DD-API-KEY", &self.api_key).json(&datadog_event);
 
             if let Some(ref app_key) = self.app_key {
                 request = request.header("DD-APPLICATION-KEY", app_key);
@@ -1097,15 +1093,11 @@ impl AzureTransport {
 
         type HmacSha256 = Hmac<Sha256>;
 
-        let string_to_sign = format!(
-            "{}\n{}\n{}\n{}\n{}",
-            method, content_length, content_type, date, resource
-        );
+        let string_to_sign =
+            format!("{}\n{}\n{}\n{}\n{}", method, content_length, content_type, date, resource);
 
         let mut mac = HmacSha256::new_from_slice(
-            base64::decode(&self.shared_key)
-                .unwrap_or_default()
-                .as_slice(),
+            base64::decode(&self.shared_key).unwrap_or_default().as_slice(),
         )
         .expect("HMAC can take key of any size");
 
@@ -1130,13 +1122,8 @@ impl SiemTransport for AzureTransport {
         let method = "POST";
         let resource = format!("/api/logs?api-version=2016-04-01");
 
-        let signature = self.generate_signature(
-            &date,
-            content_length,
-            method,
-            content_type,
-            &resource,
-        );
+        let signature =
+            self.generate_signature(&date, content_length, method, content_type, &resource);
 
         let mut last_error = None;
         for attempt in 0..=self.retry.max_attempts {
@@ -1173,7 +1160,8 @@ impl SiemTransport for AzureTransport {
                     }
                 }
                 Err(e) => {
-                    last_error = Some(Error::Generic(format!("Azure Monitor request failed: {}", e)));
+                    last_error =
+                        Some(Error::Generic(format!("Azure Monitor request failed: {}", e)));
                 }
             }
 

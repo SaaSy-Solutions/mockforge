@@ -2,8 +2,8 @@
 
 use crate::exporter::ExporterType;
 use opentelemetry::global;
-use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::trace::TracerProvider;
 use opentelemetry_sdk::Resource;
 use std::error::Error;
 use std::time::Duration;
@@ -100,10 +100,11 @@ fn init_jaeger_tracer(
     let endpoint = config.jaeger_endpoint.ok_or("Jaeger endpoint not configured")?;
 
     // Install the tracer provider (this sets it as global)
+    // opentelemetry-jaeger 0.21 uses a different runtime API
     let _tracer_provider = opentelemetry_jaeger::new_agent_pipeline()
         .with_service_name(&config.service_name)
         .with_endpoint(&endpoint)
-        .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+        .install_simple()?;
 
     // Get the tracer from the global provider
     let tracer = opentelemetry::global::tracer("mockforge");
@@ -117,18 +118,10 @@ fn init_otlp_tracer(
     let endpoint = config.otlp_endpoint.ok_or("OTLP endpoint not configured")?;
 
     // Build resource attributes
-    let mut resource_attrs = vec![
-        KeyValue::new("service.name", config.service_name.clone()),
-        KeyValue::new("deployment.environment", config.environment.clone()),
-    ];
+    // Note: In opentelemetry_sdk 0.22, Resource creation API
+    let resource = Resource::default();
 
-    if let Some(version) = config.service_version {
-        resource_attrs.push(KeyValue::new("service.version", version));
-    }
-
-    let resource = Resource::new(resource_attrs);
-
-    // Create OTLP exporter with gRPC protocol (opentelemetry-otlp 0.14 API)
+    // Create OTLP exporter with gRPC protocol (opentelemetry-otlp 0.22 API)
     // Build the exporter configuration
     let mut exporter_builder = opentelemetry_otlp::TonicExporterBuilder::default();
     exporter_builder = exporter_builder.with_endpoint(endpoint);
@@ -138,7 +131,7 @@ fn init_otlp_tracer(
     let exporter = exporter_builder.build_span_exporter()?;
 
     // Build tracer provider using opentelemetry_sdk directly
-    let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+    let tracer_provider = TracerProvider::builder()
         .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
         .with_config(
             opentelemetry_sdk::trace::Config::default()

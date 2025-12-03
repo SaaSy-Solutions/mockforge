@@ -770,9 +770,8 @@ impl PriorityHttpHandler {
                 let now = std::time::Instant::now();
 
                 // Get or create metrics entry for this endpoint
-                let (request_count, error_count, last_request_time) = metrics
-                    .entry(endpoint.clone())
-                    .or_insert_with(|| (0, 0, now));
+                let (request_count, error_count, last_request_time) =
+                    metrics.entry(endpoint.clone()).or_insert_with(|| (0, 0, now));
 
                 // Increment request count
                 *request_count += 1;

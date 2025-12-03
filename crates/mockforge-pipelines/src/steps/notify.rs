@@ -82,8 +82,7 @@ impl NotifyStep {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'smtp.host' in config"))?;
 
-        let smtp_port =
-            smtp_config.get("port").and_then(|v| v.as_u64()).unwrap_or(587) as u16;
+        let smtp_port = smtp_config.get("port").and_then(|v| v.as_u64()).unwrap_or(587) as u16;
 
         let smtp_username = smtp_config.get("username").and_then(|v| v.as_str());
         let smtp_password = smtp_config.get("password").and_then(|v| v.as_str());
@@ -107,9 +106,7 @@ impl NotifyStep {
         let to_mailboxes = to_mailboxes?;
 
         // Build email message
-        let mut email_builder = Message::builder()
-            .from(from.clone())
-            .subject(subject);
+        let mut email_builder = Message::builder().from(from.clone()).subject(subject);
 
         // Add recipients
         for to_mailbox in &to_mailboxes {

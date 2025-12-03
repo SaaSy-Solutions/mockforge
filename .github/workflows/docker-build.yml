@@ -58,11 +58,11 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
+            type=ref,event=pr,prefix=pr-
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix={{branch}}-,format=long,enable={{is_default_branch}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
@@ -82,23 +82,26 @@ jobs:
             BUILD_DATE=${{ steps.meta.outputs.created }}
 
       - name: Run Trivy vulnerability scanner
+        id: trivy
+        if: steps.build-and-push.outcome == 'success'
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tags }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: steps.build-and-push.outcome == 'success' && steps.trivy.outcome == 'success'
         with:
           sarif_file: 'trivy-results.sarif'
 
       - name: Generate SBOM
+        if: steps.build-and-push.outcome == 'success'
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
           format: cyclonedx-json
           output-file: sbom.json
 
