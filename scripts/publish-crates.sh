@@ -705,6 +705,11 @@ main() {
     publish_crate "mockforge-route-chaos"
     wait_for_processing
 
+    # Publish mockforge-world-state (required by mockforge-http)
+    convert_crate_dependencies "mockforge-world-state"
+    publish_crate "mockforge-world-state"
+    wait_for_processing
+
     # Publish plugin system crates
     convert_crate_dependencies "mockforge-plugin-loader"
     publish_crate "mockforge-plugin-loader"
