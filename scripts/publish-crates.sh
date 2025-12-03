@@ -700,6 +700,11 @@ main() {
     publish_crate "mockforge-performance"
     wait_for_processing
 
+    # Publish mockforge-route-chaos (required by mockforge-http)
+    convert_crate_dependencies "mockforge-route-chaos"
+    publish_crate "mockforge-route-chaos"
+    wait_for_processing
+
     # Publish plugin system crates
     convert_crate_dependencies "mockforge-plugin-loader"
     publish_crate "mockforge-plugin-loader"
