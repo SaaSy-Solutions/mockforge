@@ -1663,13 +1663,16 @@ Benchmarks are run automatically in CI/CD:
 
 View the latest benchmark results in our [GitHub Actions](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/benchmarks.yml).
 
+📊 **For detailed performance characteristics and current benchmark results, see [Performance Benchmarks Documentation](docs/PERFORMANCE_BENCHMARKS.md).**
+
 ## 📚 Documentation
 
 - [User Guide](https://docs.mockforge.dev/) - Complete documentation
 - [API Reference](https://docs.rs/mockforge) - Rust API documentation
 - [Contributing](CONTRIBUTING.md) - How to contribute
 - [Changelog](CHANGELOG.md) - Release notes
-- [Benchmarks](https://github.com/SaaSy-Solutions/mockforge/tree/main/benches) - Performance benchmarks
+- [Performance Benchmarks](docs/PERFORMANCE_BENCHMARKS.md) - Detailed benchmark results and performance characteristics
+- [Performance Monitoring](docs/PERFORMANCE_MONITORING.md) - Automated performance tracking system
 
 ## 💬 Getting Help & Support
 

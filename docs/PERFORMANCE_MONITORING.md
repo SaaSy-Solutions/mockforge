@@ -264,6 +264,7 @@ git commit -m "chore: update benchmark baseline"
 
 ## Resources
 
+- [Performance Benchmarks](PERFORMANCE_BENCHMARKS.md) - Detailed benchmark results and performance characteristics
 - [Criterion.rs Documentation](https://bheisler.github.io/criterion.rs/book/)
 - [Performance Testing Best Practices](https://rust-lang.github.io/rustc-guide/profiling.html)
 - [GitHub Actions Artifacts](https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts)

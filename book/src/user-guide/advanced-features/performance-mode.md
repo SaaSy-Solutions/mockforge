@@ -250,4 +250,5 @@ performance:
 - [Behavioral Economics Engine](behavioral-economics.md) - Behavior under load
 - [Chaos Lab](chaos-lab.md) - Chaos engineering
 - [Reality Slider](reality-slider.md) - Reality levels
+- [Performance Benchmarks](../../../../docs/PERFORMANCE_BENCHMARKS.md) - Detailed benchmark results and performance characteristics
 
