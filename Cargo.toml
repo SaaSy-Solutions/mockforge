@@ -27,6 +27,7 @@ members = [
     "crates/mockforge-schema",
     "crates/mockforge-template-expansion",
     "crates/mockforge-performance",
+    "crates/mockforge-route-chaos",
     "crates/mockforge-pipelines",
     "crates/mockforge-collab",
     "examples/plugins/response-graphql",
