@@ -6,7 +6,11 @@ use crate::{OperatorError, Result};
 use futures::StreamExt;
 use kube::{
     api::ListParams,
-    runtime::{controller::{Action, Controller as KubeController}, watcher::Config},
+    runtime::{
+        controller::{Action, Controller as KubeController},
+        utils::WatchStreamExt,
+        watcher::Config,
+    },
     Api, Client, ResourceExt,
 };
 use std::sync::Arc;
@@ -24,10 +28,7 @@ impl Controller {
     pub fn new(client: Client) -> Self {
         let reconciler = Arc::new(Reconciler::new(client.clone()));
 
-        Self {
-            client,
-            reconciler,
-        }
+        Self { client, reconciler }
     }
 
     /// Run the controller
@@ -49,9 +50,7 @@ impl Controller {
             .run(
                 move |orchestration, _ctx| {
                     let reconciler = reconciler.clone();
-                    async move {
-                        Self::reconcile(orchestration, reconciler).await
-                    }
+                    async move { Self::reconcile(orchestration, reconciler).await }
                 },
                 |_orchestration, error, _ctx| {
                     error!("Reconciliation error: {:?}", error);
@@ -104,8 +103,9 @@ impl Controller {
             Api::all(self.client.clone())
         };
 
-        let lp = ListParams::default();
-        let mut stream = kube::runtime::watcher(api, Config::default().any_semantic()).applied_objects();
+        let stream =
+            kube::runtime::watcher(api, Config::default().any_semantic()).applied_objects();
+        let mut stream = Box::pin(stream);
 
         info!("Watching for ChaosOrchestration resources...");
 

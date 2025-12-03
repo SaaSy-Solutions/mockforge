@@ -8221,6 +8221,7 @@ dependencies = [
  "kube",
  "mockforge-chaos 0.2.9",
  "prometheus",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "serde_yaml",

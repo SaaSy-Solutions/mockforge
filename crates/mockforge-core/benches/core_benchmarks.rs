@@ -24,9 +24,9 @@ use serde_json::json;
 fn bench_template_rendering(c: &mut Criterion) {
     let mut group = c.benchmark_group("template_rendering");
 
-    // Simple template
+    // Simple template with recognized token ({{uuid}} is a built-in token)
     group.bench_function("simple", |b| {
-        let template = "Hello {{name}}!";
+        let template = "Hello {{uuid}}!";
         b.iter(|| expand_str(black_box(template)));
     });
 
@@ -243,13 +243,21 @@ fn bench_data_generation(c: &mut Criterion) {
         rows: 1,
         ..Default::default()
     };
-    let generator = DataGenerator::new(schema, config).unwrap();
 
+    // Use iter_with_setup to create a fresh generator for each iteration
+    // This ensures we're measuring actual data generation, not just reference checks
     group.bench_function("generate_single_record", |b| {
-        b.iter(|| {
-            // Note: This is async, so we'll just benchmark the sync parts
-            black_box(&generator)
-        });
+        b.iter_with_setup(
+            || {
+                // Setup: Create a new generator for each iteration
+                DataGenerator::new(schema.clone(), config.clone()).unwrap()
+            },
+            |mut generator| {
+                // Benchmark: Actually generate a single record
+                let result = generator.generate_single().unwrap();
+                black_box(result)
+            },
+        );
     });
 
     group.finish();
@@ -257,15 +265,48 @@ fn bench_data_generation(c: &mut Criterion) {
 
 /// Benchmark encryption/decryption
 fn bench_encryption(c: &mut Criterion) {
-    // Note: Encryption benchmarks temporarily disabled due to API changes
-    // This can be re-enabled once the encryption API is stabilized
+    use mockforge_core::encryption::{EncryptionAlgorithm, EncryptionKey};
+    use rand::{thread_rng, Rng};
+
     let mut group = c.benchmark_group("encryption");
 
-    group.bench_function("placeholder", |b| {
-        b.iter(|| {
-            // Placeholder benchmark - replace with actual encryption tests
-            black_box("encryption benchmark placeholder")
-        });
+    // Benchmark AES-256-GCM encryption/decryption
+    group.bench_function("aes256_gcm", |b| {
+        b.iter_with_setup(
+            || {
+                // Setup: Generate a random 32-byte key for AES-256-GCM
+                let mut key_bytes = [0u8; 32];
+                thread_rng().fill(&mut key_bytes);
+                EncryptionKey::new(EncryptionAlgorithm::Aes256Gcm, key_bytes.to_vec()).unwrap()
+            },
+            |key| {
+                // Benchmark: Encrypt and decrypt a test string
+                let plaintext = "benchmark test data for encryption performance testing";
+                let encrypted = key.encrypt(plaintext, None).unwrap();
+                let decrypted = key.decrypt(&encrypted, None).unwrap();
+                black_box(decrypted)
+            },
+        );
+    });
+
+    // Benchmark ChaCha20-Poly1305 encryption/decryption
+    group.bench_function("chacha20_poly1305", |b| {
+        b.iter_with_setup(
+            || {
+                // Setup: Generate a random 32-byte key for ChaCha20-Poly1305
+                let mut key_bytes = [0u8; 32];
+                thread_rng().fill(&mut key_bytes);
+                EncryptionKey::new(EncryptionAlgorithm::ChaCha20Poly1305, key_bytes.to_vec())
+                    .unwrap()
+            },
+            |key| {
+                // Benchmark: Encrypt and decrypt a test string
+                let plaintext = "benchmark test data for encryption performance testing";
+                let encrypted = key.encrypt(plaintext, None).unwrap();
+                let decrypted = key.decrypt(&encrypted, None).unwrap();
+                black_box(decrypted)
+            },
+        );
     });
 
     group.finish();

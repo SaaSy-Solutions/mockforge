@@ -1,14 +1,18 @@
 //! Reconciler for ChaosOrchestration resources
 
-use crate::crd::{ChaosOrchestration, ChaosOrchestrationStatus, OrchestrationPhase, ConditionStatus};
+use crate::crd::{
+    ChaosOrchestration, ChaosOrchestrationStatus, ConditionStatus, OrchestrationPhase,
+};
 use crate::{OperatorError, Result};
-use kube::{Api, Client, ResourceExt};
 use kube::api::{Patch, PatchParams};
-use tracing::{debug, info, warn, error};
+use kube::{Api, Client, ResourceExt};
+use mockforge_chaos::{
+    ChaosConfig, ChaosScenario, OrchestratedScenario, ScenarioOrchestrator, ScenarioStep,
+};
 use serde_json::json;
-use mockforge_chaos::{ScenarioOrchestrator, OrchestratedScenario, ScenarioStep, ChaosScenario, ChaosConfig};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{debug, error, info, warn};
 
 /// Reconciler for ChaosOrchestration resources
 pub struct Reconciler {
@@ -26,7 +30,11 @@ impl Reconciler {
     }
 
     /// Reconcile a ChaosOrchestration resource
-    pub async fn reconcile(&self, orchestration: Arc<ChaosOrchestration>, namespace: &str) -> Result<()> {
+    pub async fn reconcile(
+        &self,
+        orchestration: Arc<ChaosOrchestration>,
+        namespace: &str,
+    ) -> Result<()> {
         let name = orchestration.name_any();
         info!("Reconciling ChaosOrchestration: {}/{}", namespace, name);
 
@@ -89,7 +97,8 @@ impl Reconciler {
                     phase: Some(OrchestrationPhase::Failed),
                     ..Default::default()
                 },
-            ).await?;
+            )
+            .await?;
 
             return Err(OperatorError::Orchestration(e));
         }
@@ -224,7 +233,10 @@ impl Reconciler {
     }
 
     /// Convert CRD spec to OrchestratedScenario
-    fn crd_to_orchestrated(&self, spec: &crate::crd::ChaosOrchestrationSpec) -> Result<OrchestratedScenario> {
+    fn crd_to_orchestrated(
+        &self,
+        spec: &crate::crd::ChaosOrchestrationSpec,
+    ) -> Result<OrchestratedScenario> {
         let mut orchestrated = OrchestratedScenario::new(&spec.name);
 
         if let Some(desc) = &spec.description {
@@ -268,8 +280,11 @@ impl Reconciler {
         if let Some(latency) = parameters.get("latency_ms") {
             if let Some(latency_val) = latency.as_u64() {
                 config.latency = Some(mockforge_chaos::LatencyConfig {
-                    min_ms: latency_val,
-                    max_ms: latency_val,
+                    enabled: true,
+                    fixed_delay_ms: Some(latency_val),
+                    random_delay_range_ms: None,
+                    jitter_percent: 0.0,
+                    probability: 1.0,
                 });
             }
         }
@@ -277,7 +292,18 @@ impl Reconciler {
         if let Some(error_rate) = parameters.get("error_rate") {
             if let Some(rate) = error_rate.as_f64() {
                 config.fault_injection = Some(mockforge_chaos::FaultInjectionConfig {
-                    error_rate: rate,
+                    enabled: true,
+                    http_error_probability: rate,
+                    http_errors: vec![500, 502, 503],
+                    connection_errors: false,
+                    connection_error_probability: 0.0,
+                    timeout_errors: false,
+                    timeout_ms: 0,
+                    timeout_probability: 0.0,
+                    partial_responses: false,
+                    partial_response_probability: 0.0,
+                    payload_corruption: false,
+                    payload_corruption_probability: 0.0,
                     ..Default::default()
                 });
             }
@@ -297,11 +323,7 @@ impl Reconciler {
             "status": status
         });
 
-        api.patch_status(
-            name,
-            &PatchParams::default(),
-            &Patch::Merge(&patch),
-        ).await?;
+        api.patch_status(name, &PatchParams::default(), &Patch::Merge(&patch)).await?;
 
         debug!("Updated status for {}: {:?}", name, status.phase);
 

@@ -1,10 +1,10 @@
 //! Custom Resource Definitions for Chaos Orchestrations
 
+use chrono::{DateTime, Utc};
 use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// ChaosOrchestration CRD
 #[derive(CustomResource, Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -159,10 +159,12 @@ pub struct ChaosOrchestrationStatus {
 
     /// Execution start time
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<String>")]
     pub start_time: Option<DateTime<Utc>>,
 
     /// Execution end time
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<String>")]
     pub end_time: Option<DateTime<Utc>>,
 
     /// Failed steps
@@ -171,6 +173,7 @@ pub struct ChaosOrchestrationStatus {
 
     /// Last scheduled time (for cron)
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<String>")]
     pub last_scheduled_time: Option<DateTime<Utc>>,
 
     /// Status conditions
@@ -200,6 +203,7 @@ pub struct Condition {
     pub status: ConditionStatus,
 
     /// Last transition time
+    #[schemars(with = "String")]
     pub last_transition_time: DateTime<Utc>,
 
     /// Reason for the condition
@@ -285,6 +289,7 @@ pub struct ChaosScenarioStatus {
 
     /// When the scenario was applied
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<String>")]
     pub applied_at: Option<DateTime<Utc>>,
 
     /// Affected pods
@@ -311,7 +316,13 @@ impl Default for ChaosOrchestrationStatus {
 
 impl ChaosOrchestrationStatus {
     /// Add a condition to the status
-    pub fn add_condition(&mut self, condition_type: String, status: ConditionStatus, reason: Option<String>, message: Option<String>) {
+    pub fn add_condition(
+        &mut self,
+        condition_type: String,
+        status: ConditionStatus,
+        reason: Option<String>,
+        message: Option<String>,
+    ) {
         // Remove existing condition of same type
         self.conditions.retain(|c| c.condition_type != condition_type);
 

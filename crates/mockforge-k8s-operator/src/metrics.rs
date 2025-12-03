@@ -82,18 +82,12 @@ impl OperatorMetrics {
         )?;
 
         let orchestration_step = IntGaugeVec::new(
-            Opts::new(
-                "mockforge_orchestration_step",
-                "Current step of orchestration",
-            ),
+            Opts::new("mockforge_orchestration_step", "Current step of orchestration"),
             &["namespace", "name"],
         )?;
 
         let failed_steps_total = IntCounterVec::new(
-            Opts::new(
-                "mockforge_orchestration_failed_steps_total",
-                "Total number of failed steps",
-            ),
+            Opts::new("mockforge_orchestration_failed_steps_total", "Total number of failed steps"),
             &["namespace", "name", "step"],
         )?;
 
@@ -107,10 +101,7 @@ impl OperatorMetrics {
         )?;
 
         let crd_events_total = IntCounterVec::new(
-            Opts::new(
-                "mockforge_operator_crd_events_total",
-                "Total number of CRD events",
-            ),
+            Opts::new("mockforge_operator_crd_events_total", "Total number of CRD events"),
             &["event_type", "resource_type"],
         )?;
 
@@ -140,9 +131,7 @@ impl OperatorMetrics {
 
     /// Record reconciliation
     pub fn record_reconciliation(&self, namespace: &str, name: &str) {
-        self.reconciliations_total
-            .with_label_values(&[namespace, name])
-            .inc();
+        self.reconciliations_total.with_label_values(&[namespace, name]).inc();
     }
 
     /// Record reconciliation error
@@ -154,29 +143,21 @@ impl OperatorMetrics {
 
     /// Record CRD event
     pub fn record_crd_event(&self, event_type: &str, resource_type: &str) {
-        self.crd_events_total
-            .with_label_values(&[event_type, resource_type])
-            .inc();
+        self.crd_events_total.with_label_values(&[event_type, resource_type]).inc();
     }
 
     /// Update orchestration progress
     pub fn update_orchestration_progress(&self, namespace: &str, name: &str, progress: f64) {
-        self.orchestration_progress
-            .with_label_values(&[namespace, name])
-            .set(progress);
+        self.orchestration_progress.with_label_values(&[namespace, name]).set(progress);
     }
 
     /// Update orchestration step
     pub fn update_orchestration_step(&self, namespace: &str, name: &str, step: u32) {
-        self.orchestration_step
-            .with_label_values(&[namespace, name])
-            .set(step as i64);
+        self.orchestration_step.with_label_values(&[namespace, name]).set(step as i64);
     }
 
     /// Record failed step
     pub fn record_failed_step(&self, namespace: &str, name: &str, step: &str) {
-        self.failed_steps_total
-            .with_label_values(&[namespace, name, step])
-            .inc();
+        self.failed_steps_total.with_label_values(&[namespace, name, step]).inc();
     }
 }

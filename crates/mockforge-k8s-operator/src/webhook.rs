@@ -1,10 +1,31 @@
 //! Admission webhook for validating and mutating ChaosOrchestration resources
 
-use crate::crd::{ChaosOrchestration, ChaosOrchestrationSpec, OrchestrationPhase};
-use k8s_openapi::api::admission::v1::{AdmissionRequest, AdmissionResponse, AdmissionReview};
+use crate::crd::{ChaosOrchestration, ChaosOrchestrationSpec};
+// Note: k8s-openapi doesn't include admission API types, so we define them manually
+// These match the Kubernetes admission webhook API v1
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{debug, info, warn};
+use tracing::info;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdmissionReview {
+    pub request: Option<AdmissionRequest>,
+    pub response: Option<AdmissionResponse>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdmissionRequest {
+    pub uid: String,
+    pub operation: String,
+    pub object: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AdmissionResponse {
+    pub uid: String,
+    pub allowed: bool,
+    pub status: Option<k8s_openapi::apimachinery::pkg::apis::meta::v1::Status>,
+}
 
 /// Webhook handler
 pub struct WebhookHandler;
@@ -20,9 +41,8 @@ impl WebhookHandler {
         &self,
         review: AdmissionReview,
     ) -> Result<AdmissionReview, String> {
-        let request = review
-            .request
-            .ok_or_else(|| "Missing request in AdmissionReview".to_string())?;
+        let request =
+            review.request.ok_or_else(|| "Missing request in AdmissionReview".to_string())?;
 
         let response = match request.operation.as_str() {
             "CREATE" | "UPDATE" => self.validate_orchestration(&request).await,

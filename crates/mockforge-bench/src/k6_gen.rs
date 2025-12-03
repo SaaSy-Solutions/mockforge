@@ -217,7 +217,8 @@ impl K6ScriptGenerator {
                     if var_decl.contains('.')
                         && !var_decl.contains("'")
                         && !var_decl.contains("\"")
-                        && !var_decl.trim().starts_with("//") {
+                        && !var_decl.trim().starts_with("//")
+                    {
                         errors.push(format!(
                             "Line {}: Invalid JavaScript variable name with dot: {}. Variable names cannot contain dots.",
                             line_num + 1,
@@ -450,7 +451,10 @@ export default function() {
 "#;
 
         let errors = K6ScriptGenerator::validate_script(invalid_script);
-        assert!(!errors.is_empty(), "Script with invalid metric name should have validation errors");
+        assert!(
+            !errors.is_empty(),
+            "Script with invalid metric name should have validation errors"
+        );
         assert!(
             errors.iter().any(|e| e.contains("Invalid k6 metric name")),
             "Should detect invalid metric name with dot"

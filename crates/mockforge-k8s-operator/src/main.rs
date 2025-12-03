@@ -1,8 +1,8 @@
 //! MockForge Kubernetes Operator Main Entry Point
 
-use mockforge_k8s_operator::Controller;
 use kube::Client;
-use tracing::{info, error};
+use mockforge_k8s_operator::Controller;
+use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
