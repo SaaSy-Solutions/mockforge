@@ -8,7 +8,7 @@ description = "Performance Mode - Lightweight load simulation with RPS control a
 repository = "https://github.com/SaaSy-Solutions/mockforge"
 homepage = "https://mockforge.dev"
 documentation = "https://docs.rs/mockforge-performance"
-keywords = ["mock", "api", "performance", "load", "simulation", "rps"]
+keywords = ["mock", "api", "performance", "load", "simulation"]
 categories = ["development-tools", "api-bindings"]
 
 [dependencies]
