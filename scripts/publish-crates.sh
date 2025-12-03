@@ -286,7 +286,7 @@ convert_crate_dependencies() {
         # For Phase 1, include all Phase 1 crates; for Phase 2, include all Phase 1 + Phase 2 crates
         local published_crates=""
         local phase1_crates="mockforge-template-expansion mockforge-core mockforge-data mockforge-plugin-core mockforge-observability mockforge-tracing mockforge-plugin-sdk mockforge-recorder mockforge-plugin-registry mockforge-chaos mockforge-reporting mockforge-analytics mockforge-pipelines mockforge-collab"
-        local phase2_crates="mockforge-plugin-loader mockforge-schema mockforge-mqtt mockforge-scenarios mockforge-smtp mockforge-ws mockforge-http mockforge-grpc mockforge-graphql mockforge-amqp mockforge-kafka mockforge-ftp mockforge-tcp mockforge-sdk mockforge-bench mockforge-test mockforge-vbr mockforge-tunnel mockforge-ui mockforge-cli"
+        local phase2_crates="mockforge-performance mockforge-plugin-loader mockforge-schema mockforge-mqtt mockforge-scenarios mockforge-smtp mockforge-ws mockforge-http mockforge-grpc mockforge-graphql mockforge-amqp mockforge-kafka mockforge-ftp mockforge-tcp mockforge-sdk mockforge-bench mockforge-test mockforge-vbr mockforge-tunnel mockforge-ui mockforge-cli"
 
         # Check which phase we're in based on the crate being published
         local all_crates="$phase1_crates $phase2_crates"
@@ -693,6 +693,11 @@ main() {
 
     # Phase 2: Publish remaining dependent crates
     print_status "Phase 2: Publishing remaining dependent crates..."
+
+    # Publish mockforge-performance first (required by mockforge-http)
+    convert_crate_dependencies "mockforge-performance"
+    publish_crate "mockforge-performance"
+    wait_for_processing
 
     # Publish plugin system crates
     convert_crate_dependencies "mockforge-plugin-loader"
