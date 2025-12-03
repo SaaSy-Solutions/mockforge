@@ -34,6 +34,7 @@ members = [
     "crates/mockforge-sdk",
     "crates/mockforge-http",
     "crates/mockforge-ui",
+    "crates/mockforge-cli",
     "crates/mockforge-k8s-operator",
     "examples/plugins/response-graphql",
     "examples/test-integration",

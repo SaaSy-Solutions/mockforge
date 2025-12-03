@@ -2,6 +2,12 @@
 name = "mockforge-k8s-operator"
 version = "0.3.5"
 edition = "2021"
+authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
+license = "MIT OR Apache-2.0"
+description = "Kubernetes operator for MockForge - manage mock services as Kubernetes resources"
+repository = "https://github.com/SaaSy-Solutions/mockforge"
+homepage = "https://mockforge.dev"
+documentation = "https://docs.rs/mockforge"
 
 [dependencies]
 # Kubernetes client
