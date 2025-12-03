@@ -358,6 +358,7 @@ targets = [
     ("mockforge-scenarios", "../mockforge-scenarios"),
     ("mockforge-schema", "../mockforge-schema"),
     ("mockforge-template-expansion", "../mockforge-template-expansion"),
+    ("mockforge-route-chaos", "../mockforge-route-chaos"),
 ]
 
 for name, rel in targets:
