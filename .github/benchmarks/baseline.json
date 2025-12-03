@@ -1,11 +1,4 @@
 {
-  "data_generation/generate_single_record/change": {
-    "change": {
-      "mean": 0.0016616943907632464,
-      "stddev": 0,
-      "unit": "ns"
-    }
-  },
   "data_generation/generate_single_record": {
     "current": {
       "mean": 0.3370177581553876,
@@ -15,13 +8,6 @@
     "new": {
       "mean": 0.3370177581553876,
       "stddev": 0.011266461483391004,
-      "unit": "ns"
-    }
-  },
-  "encryption/placeholder/change": {
-    "change": {
-      "mean": 0.0031875946014781054,
-      "stddev": 0,
       "unit": "ns"
     }
   },
@@ -37,13 +23,6 @@
       "unit": "ns"
     }
   },
-  "json_validation/complex/change": {
-    "change": {
-      "mean": 0.01027099956873867,
-      "stddev": 0,
-      "unit": "ns"
-    }
-  },
   "json_validation/complex": {
     "current": {
       "mean": 642.6694240259305,
@@ -53,13 +32,6 @@
     "new": {
       "mean": 642.6694240259305,
       "stddev": 20.404951337241467,
-      "unit": "ns"
-    }
-  },
-  "json_validation/simple/change": {
-    "change": {
-      "mean": 0.02171447099153867,
-      "stddev": 0,
       "unit": "ns"
     }
   },
@@ -75,13 +47,6 @@
       "unit": "ns"
     }
   },
-  "memory/deep_template_rendering/change": {
-    "change": {
-      "mean": 0.006944445579776026,
-      "stddev": 0,
-      "unit": "ns"
-    }
-  },
   "memory/deep_template_rendering": {
     "current": {
       "mean": 1545.4203614377116,
@@ -91,13 +56,6 @@
     "new": {
       "mean": 1545.4203614377116,
       "stddev": 19.573218694525973,
-      "unit": "ns"
-    }
-  },
-  "memory/large_data_validation/change": {
-    "change": {
-      "mean": 0.008940612760981015,
-      "stddev": 0,
       "unit": "ns"
     }
   },
@@ -113,13 +71,6 @@
       "unit": "ns"
     }
   },
-  "memory/large_spec_parsing/change": {
-    "change": {
-      "mean": 0.04895205017003268,
-      "stddev": 0,
-      "unit": "ns"
-    }
-  },
   "memory/large_spec_parsing": {
     "current": {
       "mean": 7428151.466212121,
@@ -129,13 +80,6 @@
     "new": {
       "mean": 7428151.466212121,
       "stddev": 78266.39743181561,
-      "unit": "ns"
-    }
-  },
-  "openapi_parsing/medium_spec_10_paths/change": {
-    "change": {
-      "mean": 0.005870072763208833,
-      "stddev": 0,
       "unit": "ns"
     }
   },
@@ -151,13 +95,6 @@
       "unit": "ns"
     }
   },
-  "openapi_parsing/small_spec/change": {
-    "change": {
-      "mean": -0.004563358701589526,
-      "stddev": 0,
-      "unit": "ns"
-    }
-  },
   "openapi_parsing/small_spec": {
     "current": {
       "mean": 23019.52600862458,
@@ -167,13 +104,6 @@
     "new": {
       "mean": 23019.52600862458,
       "stddev": 397.4912129066706,
-      "unit": "ns"
-    }
-  },
-  "template_rendering/arrays/change": {
-    "change": {
-      "mean": -0.01588815859596371,
-      "stddev": 0,
       "unit": "ns"
     }
   },
@@ -189,13 +119,6 @@
       "unit": "ns"
     }
   },
-  "template_rendering/complex/change": {
-    "change": {
-      "mean": -0.05896816856760878,
-      "stddev": 0,
-      "unit": "ns"
-    }
-  },
   "template_rendering/complex": {
     "current": {
       "mean": 356.66277182825775,
@@ -205,13 +128,6 @@
     "new": {
       "mean": 356.66277182825775,
       "stddev": 2.1220741348572014,
-      "unit": "ns"
-    }
-  },
-  "template_rendering/simple/change": {
-    "change": {
-      "mean": -0.003345804379169204,
-      "stddev": 0,
       "unit": "ns"
     }
   },

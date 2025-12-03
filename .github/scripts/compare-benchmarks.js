@@ -33,12 +33,21 @@ function parseCriterionResults(criterionPath) {
             const fullPath = path.join(dir, entry.name);
 
             if (entry.isDirectory()) {
+                // Skip "change" directories - these contain comparison artifacts, not benchmark results
+                if (entry.name === 'change') {
+                    continue;
+                }
                 walkDir(fullPath, prefix ? `${prefix}/${entry.name}` : entry.name);
             } else if (entry.name === 'estimates.json') {
                 // Read and parse estimates.json (actual timing data)
                 try {
                     const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
                     const benchName = prefix.replace(/\/(new|base|current|main)$/, '');
+
+                    // Skip if this is a "change" entry (shouldn't happen due to directory skip, but double-check)
+                    if (benchName.includes('/change')) {
+                        continue;
+                    }
 
                     if (!results[benchName]) {
                         results[benchName] = {};
@@ -47,6 +56,12 @@ function parseCriterionResults(criterionPath) {
                     // Extract mean time estimate
                     if (data.mean && data.mean.point_estimate) {
                         const dirType = path.basename(path.dirname(fullPath));
+
+                        // Skip "change" directory type - these are comparison artifacts, not benchmark results
+                        if (dirType === 'change') {
+                            continue;
+                        }
+
                         results[benchName][dirType] = {
                             mean: data.mean.point_estimate,
                             stddev: data.std_dev ? data.std_dev.point_estimate : 0,
