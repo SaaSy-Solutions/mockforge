@@ -8,7 +8,7 @@ description = "Tunneling service for exposing local MockForge servers via public
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false
+publish = true
 
 [[bin]]
 name = "tunnel-server"

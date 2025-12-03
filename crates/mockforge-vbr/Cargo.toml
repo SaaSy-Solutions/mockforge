@@ -12,9 +12,9 @@ publish = true
 
 [dependencies]
 # Core dependencies
-mockforge-core = { version = "0.3.5", path = "../mockforge-core" }
-mockforge-data = { version = "0.3.5", path = "../mockforge-data" }
-mockforge-http = { version = "0.3.5", path = "../mockforge-http" }
+mockforge-core = "0.3.5"
+mockforge-data = "0.3.5"
+mockforge-http = "0.3.5"
 
 # OpenAPI support
 openapiv3 = { workspace = true }

@@ -71,9 +71,9 @@ x509-parser = "0.17"
 rustls-pemfile = "2.0"
 
 # Internal dependencies
-mockforge-analytics = { version = "0.3.5", path = "../mockforge-analytics" }
+mockforge-analytics = "0.3.5"
 mockforge-collab = "^0.3.0"
-mockforge-core = { version = "0.3.5", path = "../mockforge-core" }
+mockforge-core = "0.3.5"
 mockforge-plugin-registry = "0.2.9"
 mockforge-observability = "0.2.9"
 

@@ -30,8 +30,8 @@ chrono = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
 
 # MockForge dependencies
-mockforge-core = { version = "0.3.5", path = "../mockforge-core", features = ["data"] }
-mockforge-data = { version = "0.3.5", path = "../mockforge-data" }
+mockforge-core = { version = "0.3.5", features = ["data"] }
+mockforge-data = "0.3.5"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "test-util"] }
