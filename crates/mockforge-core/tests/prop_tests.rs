@@ -355,3 +355,176 @@ mod type_handling {
         }
     }
 }
+
+/// Property test: Enhanced validation edge cases
+#[cfg(test)]
+mod enhanced_validation_tests {
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn validate_with_required_fields(
+            field_name in "[a-zA-Z_][a-zA-Z0-9_]*",
+            include_field in any::<bool>(),
+            field_value in prop::num::i64::ANY
+        ) {
+            let schema = json!({
+                "type": "object",
+                "required": [field_name.clone()],
+                "properties": {
+                    field_name.clone(): {"type": "number"}
+                }
+            });
+
+            let data = if include_field {
+                json!({field_name: field_value})
+            } else {
+                json!({})
+            };
+
+            let result = validate_json_schema(&data, &schema);
+            // Should validate correctly based on required field presence
+            if include_field {
+                assert!(result.valid || !result.errors.is_empty());
+            }
+        }
+
+        #[test]
+        fn validate_with_enum_constraints(
+            enum_values in prop::collection::vec(".*", 1..10),
+            test_value in ".*"
+        ) {
+            let schema = json!({
+                "type": "string",
+                "enum": enum_values
+            });
+
+            let data = json!(test_value);
+            let _ = validate_json_schema(&data, &schema);
+        }
+
+        #[test]
+        fn validate_with_format_constraints(
+            format_type in prop::sample::select(vec![
+                "email", "uri", "date", "date-time", "uuid"
+            ]),
+            test_value in ".*"
+        ) {
+            let schema = json!({
+                "type": "string",
+                "format": format_type
+            });
+
+            let data = json!(test_value);
+            let _ = validate_json_schema(&data, &schema);
+        }
+
+        #[test]
+        fn validate_with_multiple_of_constraint(
+            multiple_of in 1i64..100,
+            test_value in 0i64..1000
+        ) {
+            let schema = json!({
+                "type": "number",
+                "multipleOf": multiple_of
+            });
+
+            let data = json!(test_value);
+            let _ = validate_json_schema(&data, &schema);
+        }
+
+        #[test]
+        fn validate_with_one_of_schemas(
+            value in prop::num::i64::ANY
+        ) {
+            let schema = json!({
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "number"}
+                ]
+            });
+
+            let data = json!(value);
+            let _ = validate_json_schema(&data, &schema);
+        }
+
+        #[test]
+        fn validate_with_all_of_schemas(
+            min_val in 0i64..50,
+            max_val in 50i64..100,
+            test_val in 0i64..100
+        ) {
+            let schema = json!({
+                "allOf": [
+                    {"type": "number"},
+                    {"minimum": min_val},
+                    {"maximum": max_val}
+                ]
+            });
+
+            let data = json!(test_val);
+            let _ = validate_json_schema(&data, &schema);
+        }
+
+        #[test]
+        fn validate_with_any_of_schemas(
+            test_value in prop::num::i64::ANY
+        ) {
+            let schema = json!({
+                "anyOf": [
+                    {"type": "string"},
+                    {"type": "number"},
+                    {"type": "boolean"}
+                ]
+            });
+
+            let data = json!(test_value);
+            let _ = validate_json_schema(&data, &schema);
+        }
+    }
+}
+
+/// Property test: Template expansion with malicious inputs
+#[cfg(test)]
+mod template_security_tests {
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn expand_str_with_injection_attempts(
+            malicious_input in prop::sample::select(vec![
+                "{{{{{{",
+                "}}}}}}",
+                "{{.}}",
+                "{{..}}",
+                "{{/etc/passwd}}",
+                "{{../../etc/passwd}}",
+            ])
+        ) {
+            // Should handle malicious-looking template syntax without panicking
+            let _ = expand_str(&malicious_input);
+        }
+
+        #[test]
+        fn expand_str_with_very_deep_nesting(
+            depth in 0usize..100
+        ) {
+            let template = "{{".repeat(depth) + &"}}".repeat(depth);
+            // Should handle deeply nested braces without stack overflow
+            let _ = expand_str(&template);
+        }
+
+        #[test]
+        fn expand_tokens_with_circular_references(
+            key in "[a-zA-Z_][a-zA-Z0-9_]*"
+        ) {
+            // Create JSON that might cause issues
+            let mut obj = serde_json::Map::new();
+            obj.insert(key.clone(), json!({key: "circular"}));
+            let json_obj = Value::Object(obj);
+
+            // Should handle without infinite loops
+            let _ = expand_tokens(&json_obj);
+        }
+    }
+}

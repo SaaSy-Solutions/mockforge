@@ -12,6 +12,7 @@ publish = true  # UI component used by mockforge-cli
 include = [
     "src/**/*",
     "ui/dist/**/*",
+    "ui/public/*.png",
     "build.rs",
     "build_ui.sh",
     "Cargo.toml",

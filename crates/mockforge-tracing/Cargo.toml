@@ -13,7 +13,7 @@ publish = true  # Internal tracing component
 [dependencies]
 # OpenTelemetry core
 # Using 0.22 for compatibility - opentelemetry-jaeger 0.21 requires opentelemetry 0.22
-# TODO: Migrate to 0.31 once the API is stabilized and all dependencies support it
+# Note: Future migration to 0.31 planned once the API is stabilized and all dependencies support it
 opentelemetry = { version = "0.22", features = ["trace"] }
 opentelemetry_sdk = { version = "0.22", features = ["trace", "rt-tokio"] }
 opentelemetry-otlp = { version = "0.15", features = ["trace", "grpc-tonic"] }

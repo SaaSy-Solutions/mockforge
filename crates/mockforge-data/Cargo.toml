@@ -52,6 +52,8 @@ default = []
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+proptest = "1.8.0"
+tokio = { workspace = true, features = ["macros", "test-util"] }
 
 [[bench]]
 name = "token_resolver_bench"

@@ -159,7 +159,43 @@ fn main() {
 
         fs::write(&dest_path, format!("{}\n\n{}\n\n{}", css_content, js_content, asset_map))
             .unwrap();
-    } else {
+    }
+
+    // Generate embedded icon/logo assets if they exist
+    let icon_assets_path = Path::new(&out_dir).join("icon_assets.rs");
+    let mut icon_assets = String::from("// Embedded icon/logo assets\n");
+
+    // Check for each icon file and embed if it exists
+    let icon_files = vec![
+        ("ICON_DEFAULT", "mockforge-icon.png"),
+        ("ICON_32", "mockforge-icon-32.png"),
+        ("ICON_48", "mockforge-icon-48.png"),
+        ("LOGO_40", "mockforge-logo-40.png"),
+        ("LOGO_80", "mockforge-logo-80.png"),
+    ];
+
+    for (const_name, filename) in icon_files {
+        let icon_path = ui_public_path.join(filename);
+        if icon_path.exists() {
+            // Embed the file using include_bytes with path relative to crate root
+            // This works both in development and when published (since files are in include list)
+            icon_assets.push_str(&format!(
+                "pub const {}: &[u8] = include_bytes!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/ui/public/{}\"));\n",
+                const_name,
+                filename
+            ));
+        } else {
+            // Create empty placeholder if file doesn't exist
+            icon_assets.push_str(&format!(
+                "pub const {}: &[u8] = &[];\n",
+                const_name
+            ));
+        }
+    }
+
+    fs::write(&icon_assets_path, icon_assets).unwrap();
+
+    if !assets_dir.exists() {
         // UI not built, create dummy functions
         let content = "
             pub fn get_admin_css() -> &'static str { \"\" }

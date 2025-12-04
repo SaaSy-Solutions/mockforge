@@ -2273,15 +2273,16 @@ async fn get_kafka_stats(State(state): State<ManagementState>) -> impl IntoRespo
         let consumer_groups = broker.consumer_groups.read().await;
 
         let total_partitions: usize = topics.values().map(|t| t.partitions.len()).sum();
-        // Note: Metrics access removed as metrics field is private
-        // TODO: Add public method to KafkaMockBroker to access metrics if needed
+
+        // Get metrics snapshot for message counts
+        let metrics_snapshot = broker.metrics().snapshot();
 
         let stats = KafkaBrokerStats {
             topics: topics.len(),
             partitions: total_partitions,
             consumer_groups: consumer_groups.groups().len(),
-            messages_produced: 0, // Metrics not accessible
-            messages_consumed: 0, // Metrics not accessible
+            messages_produced: metrics_snapshot.messages_produced_total,
+            messages_consumed: metrics_snapshot.messages_consumed_total,
         };
 
         Json(stats).into_response()
@@ -2524,8 +2525,10 @@ async fn produce_kafka_message(
         // Produce to partition
         match topic_entry.produce(partition_id, message).await {
             Ok(offset) => {
-                // Note: Metrics recording removed as metrics field is private
-                // TODO: Add public method to KafkaMockBroker to record metrics if needed
+                // Record metrics for successful message production
+                if let Some(broker) = &state.kafka_broker {
+                    broker.metrics().record_messages_produced(1);
+                }
 
                 // Emit message event for real-time monitoring
                 #[cfg(feature = "kafka")]
@@ -2648,8 +2651,10 @@ async fn produce_kafka_batch(
             // Produce to partition
             match topic_entry.produce(partition_id, message).await {
                 Ok(offset) => {
-                    // Note: Metrics recording removed as metrics field is private
-                    // TODO: Add public method to KafkaMockBroker to record metrics if needed
+                    // Record metrics for successful message production
+                    if let Some(broker) = &state.kafka_broker {
+                        broker.metrics().record_messages_produced(1);
+                    }
 
                     // Emit message event
                     let event = MessageEvent::Kafka(KafkaMessageEvent {

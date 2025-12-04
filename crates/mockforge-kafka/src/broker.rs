@@ -421,6 +421,28 @@ impl KafkaMockBroker {
         consumer_groups.reset_offsets(group_id, topic, to, &topics).await;
         Ok(())
     }
+
+    /// Get a reference to the metrics collector
+    ///
+    /// This method provides access to the Kafka metrics for monitoring and statistics.
+    /// The metrics are thread-safe and can be accessed concurrently.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use mockforge_kafka::KafkaMockBroker;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let broker = KafkaMockBroker::new(Default::default()).await?;
+    /// let metrics = broker.metrics();
+    /// let snapshot = metrics.snapshot();
+    /// println!("Messages produced: {}", snapshot.messages_produced_total);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn metrics(&self) -> &Arc<KafkaMetrics> {
+        &self.metrics
+    }
 }
 
 /// Record represents a Kafka message record
