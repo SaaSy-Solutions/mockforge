@@ -538,12 +538,14 @@ for name, rel in targets:
     # and table form: name = { version = "version", optional = true, ... }
     # First, handle table form (with version but no path)
     # Match table form that has version but doesn't have path
+    # Use a more flexible pattern that handles nested braces
     table_pattern = rf'{name}\s*=\s*\{{([^}}]*version\s*=\s*"{re.escape(version)}"[^}}]*)\}}'
     def replace_table(match):
+        full_match = match.group(0)
         dep_content = match.group(1)
         # Only replace if path is not already present
-        if 'path =' in dep_content:
-            return match.group(0)  # Already has path, don't change
+        if 'path =' in dep_content or 'path=' in dep_content:
+            return full_match  # Already has path, don't change
         
         # Extract optional flag and features if present
         is_optional = re.search(r'optional\s*=\s*true', dep_content) is not None
@@ -559,10 +561,37 @@ for name, rel in targets:
         
         return f'{name} = {{ {", ".join(parts)} }}'
     
+    # Try the pattern match
     new_text = re.sub(table_pattern, replace_table, text)
     if new_text != text:
         text = new_text
         changed = True
+    else:
+        # Fallback: try a simpler pattern that matches any table form with this version
+        # This handles cases where the pattern might not match due to formatting
+        simple_table_pattern = rf'{name}\s*=\s*\{{[^}}]*version\s*=\s*"{re.escape(version)}"[^}}]*\}}'
+        if re.search(simple_table_pattern, text) and 'path =' not in text[text.find(f'{name} ='):text.find(f'{name} =')+200] if f'{name} =' in text else False:
+            # Manually find and replace
+            def manual_replace(m):
+                full = m.group(0)
+                if 'path =' in full or 'path=' in full:
+                    return full
+                # Extract optional
+                opt_match = re.search(r'optional\s*=\s*true', full)
+                is_opt = opt_match is not None
+                # Extract features
+                feat_match = re.search(r'features\s*=\s*(\[[^\]]*\])', full)
+                feat = feat_match.group(0) if feat_match else None
+                parts = [f'version = "{version}"', f'path = "{rel}"']
+                if is_opt:
+                    parts.append('optional = true')
+                if feat:
+                    parts.append(feat)
+                return f'{name} = {{ {", ".join(parts)} }}'
+            new_text = re.sub(simple_table_pattern, manual_replace, text)
+            if new_text != text:
+                text = new_text
+                changed = True
     
     # Then handle simple form: name = "version"
     simple_pattern = rf'{name}\s*=\s*"{re.escape(version)}"'
