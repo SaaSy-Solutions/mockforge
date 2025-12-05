@@ -1,49 +1,69 @@
 [workspace]
 members = [
-    "crates/mockforge-data",
+    # Core crates
     "crates/mockforge-core",
+    "crates/mockforge-data",
+    "crates/mockforge-template-expansion",
+
+    # Plugin system
     "crates/mockforge-plugin-core",
     "crates/mockforge-plugin-cli",
-    "crates/mockforge-plugin-sdk",
     "crates/mockforge-plugin-loader",
     "crates/mockforge-plugin-registry",
-    "crates/mockforge-tracing",
+    "crates/mockforge-plugin-sdk",
+
+    # Observability & tracing
     "crates/mockforge-observability",
-    "crates/mockforge-recorder",
-    "crates/mockforge-chaos",
-    "crates/mockforge-reporting",
+    "crates/mockforge-tracing",
     "crates/mockforge-analytics",
+    "crates/mockforge-recorder",
+    "crates/mockforge-reporting",
+
+    # Protocol implementations
+    "crates/mockforge-http",
     "crates/mockforge-grpc",
-    "crates/mockforge-ws",
     "crates/mockforge-graphql",
+    "crates/mockforge-ws",
     "crates/mockforge-mqtt",
     "crates/mockforge-smtp",
     "crates/mockforge-amqp",
     "crates/mockforge-kafka",
     "crates/mockforge-ftp",
     "crates/mockforge-tcp",
+
+    # Testing & utilities
+    "crates/mockforge-test",
     "crates/mockforge-bench",
-    "crates/mockforge-tunnel",
-    "crates/mockforge-schema",
-    "crates/mockforge-template-expansion",
-    "crates/mockforge-performance",
+    "crates/mockforge-chaos",
     "crates/mockforge-route-chaos",
-    "crates/mockforge-world-state",
+    "crates/mockforge-scenarios",
+    "crates/mockforge-schema",
+
+    # Infrastructure
+    "crates/mockforge-tunnel",
+    "crates/mockforge-vbr",
     "crates/mockforge-pipelines",
-    "crates/mockforge-collab",
+    "crates/mockforge-performance",
+    "crates/mockforge-world-state",
+
+    # Main user-facing crates
     "crates/mockforge-sdk",
-    "crates/mockforge-http",
     "crates/mockforge-ui",
     "crates/mockforge-cli",
-    "crates/mockforge-k8s-operator",
+
+    # Examples and tests
     "examples/plugins/response-graphql",
     "examples/test-integration",
     "test_openapi_demo",
     "desktop-app",
-    "tests",  # Integration tests package
+    "tests",
 ]
 exclude = [
-    # mockforge-registry-server is excluded as it's a server application, not a library crate
+    # These are server applications, not library crates
+    "crates/mockforge-registry-server",
+    "crates/mockforge-k8s-operator",
+    "crates/mockforge-federation",
+    "crates/mockforge-runtime-daemon",
 ]
 resolver = "2"
 
