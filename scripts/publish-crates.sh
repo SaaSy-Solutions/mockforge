@@ -534,9 +534,35 @@ targets = [
 ]
 
 for name, rel in targets:
+    # Match both simple form: name = "version"
+    # and table form: name = { version = "version", optional = true, ... }
+    # First, handle table form (with version but no path)
+    table_pattern = rf'{name}\s*=\s*\{{([^}}]*version\s*=\s*"{re.escape(version)}"[^}}]*)\}}'
+    def replace_table(match):
+        dep_content = match.group(1)
+        # Extract optional flag and features if present
+        is_optional = re.search(r'optional\s*=\s*true', dep_content) is not None
+        features_match = re.search(r'features\s*=\s*(\[[^\]]*\])', dep_content)
+        features = features_match.group(0) if features_match else None
+        
+        # Build replacement with path
+        parts = [f'version = "{version}"', f'path = "{rel}"']
+        if is_optional:
+            parts.append('optional = true')
+        if features:
+            parts.append(features)
+        
+        return f'{name} = {{ {", ".join(parts)} }}'
+    
+    new_text = re.sub(table_pattern, replace_table, text)
+    if new_text != text:
+        text = new_text
+        changed = True
+    
+    # Then handle simple form: name = "version"
+    simple_pattern = rf'{name}\s*=\s*"{re.escape(version)}"'
     replacement = f'{name} = {{ version = "{version}", path = "{rel}" }}'
-    pattern = rf'{name}\s*=\s*"{version}"'
-    new_text, count = re.subn(pattern, replacement, text)
+    new_text, count = re.subn(simple_pattern, replacement, text)
     if count:
         text = new_text
         changed = True
@@ -640,6 +666,11 @@ main() {
         convert_dependencies
         exit 0
     fi
+
+    # Restore all dependencies to path dependencies before starting
+    # This ensures a clean state and prevents dependency resolution errors
+    print_status "Restoring all dependencies to path dependencies for clean publish state..."
+    restore_dependencies
 
     # Check for crates.io token if not in dry-run mode
     # Note: cargo publish can also use credentials from `cargo login`, so we only warn
