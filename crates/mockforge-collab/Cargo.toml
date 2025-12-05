@@ -19,7 +19,7 @@ workspace = true
 [dependencies]
 # Core dependencies
 mockforge-core = "0.3.6"
-mockforge-pipelines = { version = "0.3.6", path = "../mockforge-pipelines", optional = true }
+mockforge-pipelines = { version = "0.3.6", optional = true }
 
 # Serialization
 serde = { workspace = true }
