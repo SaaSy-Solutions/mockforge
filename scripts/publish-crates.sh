@@ -298,17 +298,10 @@ convert_crate_dependencies() {
         fi
 
         for dep_crate in $all_crates; do
-            # Include if already published
+            # Only include if already published on crates.io
+            # This prevents converting dependencies to versions that don't exist yet
             if crate_version_published "$dep_crate" "$WORKSPACE_VERSION"; then
                 published_crates="$published_crates $dep_crate"
-            elif [[ "$current_phase" == "phase1" ]] && [[ " $phase1_crates " =~ " $dep_crate " ]]; then
-                # Phase 1 crates can reference each other even if not yet published
-                published_crates="$published_crates $dep_crate"
-            elif [[ "$current_phase" == "phase2" ]]; then
-                # Phase 2 crates can reference Phase 1 crates (already published) and other Phase 2 crates
-                if [[ " $phase1_crates " =~ " $dep_crate " ]] || [[ " $phase2_crates " =~ " $dep_crate " ]]; then
-                    published_crates="$published_crates $dep_crate"
-                fi
             fi
         done
 
