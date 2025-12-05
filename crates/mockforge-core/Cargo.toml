@@ -82,7 +82,7 @@ tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
 criterion = { workspace = true }
 proptest = "1.8.0"
-mockforge = "0.3.6"
+mockforge = { version = "0.3.6", path = "../mockforge-cli" }
 
 [[bench]]
 name = "core_benchmarks"
