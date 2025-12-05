@@ -450,7 +450,11 @@ restore_dependencies() {
     print_status "Restoring path dependencies for development..."
 
     local crates_to_restore=(
+        "mockforge-core"
         "mockforge-data"
+        "mockforge-template-expansion"
+        "mockforge-plugin-core"
+        "mockforge-plugin-sdk"
         "mockforge-observability"
         "mockforge-tracing"
         "mockforge-recorder"
