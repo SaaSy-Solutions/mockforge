@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-cli"
-version = "0.3.5"
+version = "0.3.6"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -23,31 +23,31 @@ tokio-util = "0.7"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-opentelemetry = "0.22"
-mockforge-core = "0.3.5"
-mockforge-http = { version = "0.3.5", optional = true }
-mockforge-ws = { version = "0.3.5", optional = true }
-mockforge-grpc = { version = "0.3.5", optional = true }
-mockforge-graphql = { version = "0.3.5", optional = true }
-mockforge-smtp = { version = "0.3.5", optional = true }
-mockforge-mqtt = { version = "0.3.5", optional = true }
-mockforge-data = "0.3.5"
-mockforge-ui = "0.3.5"
-mockforge-observability = "0.3.5"
-mockforge-tracing = "0.3.5"
-mockforge-recorder = "0.3.5"
-mockforge-bench = "0.3.5"
-mockforge-ftp = { version = "0.3.5", optional = true }
-mockforge-kafka = { version = "0.3.5", optional = true }
-mockforge-amqp = { version = "0.3.5", optional = true }
-mockforge-tcp = { version = "0.3.5", optional = true }
-mockforge-tunnel = "0.3.5"
-mockforge-vbr = "0.3.5"
-mockforge-plugin-core = "0.3.5"
-mockforge-plugin-loader = "0.3.5"
-mockforge-scenarios = { version = "0.3.5", features = ["studio-packs"] }
-mockforge-chaos = "0.3.5"
-mockforge-schema = "0.3.5"
-mockforge-pipelines = { version = "0.3.5", path = "../mockforge-pipelines", optional = true }
+mockforge-core = "0.3.6"
+mockforge-http = { version = "0.3.6", optional = true }
+mockforge-ws = { version = "0.3.6", optional = true }
+mockforge-grpc = { version = "0.3.6", optional = true }
+mockforge-graphql = { version = "0.3.6", optional = true }
+mockforge-smtp = { version = "0.3.6", optional = true }
+mockforge-mqtt = { version = "0.3.6", optional = true }
+mockforge-data = "0.3.6"
+mockforge-ui = "0.3.6"
+mockforge-observability = "0.3.6"
+mockforge-tracing = "0.3.6"
+mockforge-recorder = "0.3.6"
+mockforge-bench = "0.3.6"
+mockforge-ftp = { version = "0.3.6", optional = true }
+mockforge-kafka = { version = "0.3.6", optional = true }
+mockforge-amqp = { version = "0.3.6", optional = true }
+mockforge-tcp = { version = "0.3.6", optional = true }
+mockforge-tunnel = "0.3.6"
+mockforge-vbr = "0.3.6"
+mockforge-plugin-core = "0.3.6"
+mockforge-plugin-loader = "0.3.6"
+mockforge-scenarios = { version = "0.3.6", features = ["studio-packs"] }
+mockforge-chaos = "0.3.6"
+mockforge-schema = "0.3.6"
+mockforge-pipelines = { version = "0.3.6", path = "../mockforge-pipelines", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"

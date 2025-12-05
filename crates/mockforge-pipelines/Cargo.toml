@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-pipelines"
-version = "0.3.5"
+version = "0.3.6"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -17,7 +17,7 @@ workspace = true
 
 [dependencies]
 # Core dependencies
-mockforge-core = "0.3.5"
+mockforge-core = "0.3.6"
 
 # Serialization
 serde = { workspace = true }

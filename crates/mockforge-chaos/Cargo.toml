@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-chaos"
-version = "0.3.5"
+version = "0.3.6"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -58,13 +58,13 @@ bincode = "1.3"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], optional = true }
 
 # Tracing
-mockforge-tracing = "0.3.5"
+mockforge-tracing = "0.3.6"
 
 # Recorder
-mockforge-recorder = "0.3.5"
+mockforge-recorder = "0.3.6"
 
 # Core (for MockAI integration)
-mockforge-core = "0.3.5"
+mockforge-core = "0.3.6"
 
 # PDF generation
 printpdf = "0.7"

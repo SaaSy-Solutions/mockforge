@@ -13,7 +13,7 @@ categories.workspace = true
 description = "Send-safe route chaos injection (fault injection and latency) isolated from mockforge-core to avoid Send issues"
 
 [dependencies]
-mockforge-core = "0.3.5"
+mockforge-core = "0.3.6"
 axum = { workspace = true }
 async-trait = { workspace = true }
 rand = { workspace = true }

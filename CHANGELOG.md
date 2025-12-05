@@ -18,15 +18,27 @@
 
 ### Fixed
 
-- **[DevX] k6 script generation with operation IDs containing dots/hyphens** (#79)
-  - Fixed "Unexpected token ." error when OpenAPI operation IDs contain dots (e.g., `plans.create`) or hyphens (e.g., `plans.update-pricing-schemes`)
-  - Added JavaScript identifier sanitization to replace invalid characters with underscores
-  - All operations are now properly included in generated k6 scripts with valid JavaScript identifiers
-  - Added comprehensive tests including integration test with full billing subscriptions spec
+- Nothing yet.
 
 ### Security
 
 - Nothing yet.
+
+## [0.3.6] - 2025-11-25
+
+### Fixed
+
+- **[DevX] k6 script generation with operation IDs containing dots/hyphens** (#79)
+  - Fixed "Unexpected token ." error when OpenAPI operation IDs contain dots (e.g., `plans.create`) or hyphens (e.g., `plans.update-pricing-schemes`)
+  - Changed `is_alphanumeric()` to `is_ascii_alphanumeric()` in JavaScript identifier sanitization to ensure ASCII-only identifiers
+  - All operations are now properly included in generated k6 scripts with valid JavaScript identifiers
+  - Added comprehensive tests including integration test with full billing subscriptions spec
+
+- **[DevX] UI icon embedding for published crates**
+  - Fixed build failures when installing `mockforge-cli` from crates.io due to missing icon files
+  - Updated `build.rs` to read icon files at build time and embed them as byte array literals
+  - Replaced `include_bytes!` with `CARGO_MANIFEST_DIR` approach that failed in published crates
+  - Icons are now properly embedded and work both in development and when installing from crates.io
 
 ## [0.3.0] - 2025-11-17
 

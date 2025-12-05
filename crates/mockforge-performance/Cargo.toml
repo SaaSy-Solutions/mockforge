@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-performance"
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -20,7 +20,7 @@ tokio = { workspace = true, features = ["sync", "time"] }
 tracing = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-mockforge-core = "0.3.5"
+mockforge-core = "0.3.6"
 
 [dev-dependencies]
 tokio-test = "0.4"
