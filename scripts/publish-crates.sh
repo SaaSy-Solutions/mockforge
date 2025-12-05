@@ -537,9 +537,14 @@ for name, rel in targets:
     # Match both simple form: name = "version"
     # and table form: name = { version = "version", optional = true, ... }
     # First, handle table form (with version but no path)
+    # Match table form that has version but doesn't have path
     table_pattern = rf'{name}\s*=\s*\{{([^}}]*version\s*=\s*"{re.escape(version)}"[^}}]*)\}}'
     def replace_table(match):
         dep_content = match.group(1)
+        # Only replace if path is not already present
+        if 'path =' in dep_content:
+            return match.group(0)  # Already has path, don't change
+        
         # Extract optional flag and features if present
         is_optional = re.search(r'optional\s*=\s*true', dep_content) is not None
         features_match = re.search(r'features\s*=\s*(\[[^\]]*\])', dep_content)
