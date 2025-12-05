@@ -499,6 +499,7 @@ text = path.read_text()
 changed = False
 
 targets = [
+    ("mockforge", "../mockforge-cli"),  # mockforge-cli publishes as "mockforge"
     ("mockforge-core", "../mockforge-core"),
     ("mockforge-data", "../mockforge-data"),
     ("mockforge-plugin-core", "../mockforge-plugin-core"),
