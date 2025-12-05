@@ -177,19 +177,33 @@ fn main() {
     for (const_name, filename) in icon_files {
         let icon_path = ui_public_path.join(filename);
         if icon_path.exists() {
-            // Embed the file using include_bytes with path relative to crate root
-            // This works both in development and when published (since files are in include list)
-            icon_assets.push_str(&format!(
-                "pub const {}: &[u8] = include_bytes!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/ui/public/{}\"));\n",
-                const_name,
-                filename
-            ));
+            // Read the file contents and embed as byte array literal
+            // This works both in development and when published from crates.io
+            match fs::read(&icon_path) {
+                Ok(bytes) => {
+                    // Format bytes as a byte array literal
+                    let mut byte_array = String::from("&[");
+                    for (i, byte) in bytes.iter().enumerate() {
+                        if i > 0 {
+                            byte_array.push_str(", ");
+                        }
+                        if i % 20 == 0 && i > 0 {
+                            byte_array.push_str("\n        ");
+                        }
+                        byte_array.push_str(&format!("0x{:02X}", byte));
+                    }
+                    byte_array.push_str("]");
+                    icon_assets
+                        .push_str(&format!("pub const {}: &[u8] = {};\n", const_name, byte_array));
+                }
+                Err(_) => {
+                    // If reading fails, create empty placeholder
+                    icon_assets.push_str(&format!("pub const {}: &[u8] = &[];\n", const_name));
+                }
+            }
         } else {
             // Create empty placeholder if file doesn't exist
-            icon_assets.push_str(&format!(
-                "pub const {}: &[u8] = &[];\n",
-                const_name
-            ));
+            icon_assets.push_str(&format!("pub const {}: &[u8] = &[];\n", const_name));
         }
     }
 

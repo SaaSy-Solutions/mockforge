@@ -66,7 +66,7 @@ impl K6ScriptGenerator {
         }
 
         for ch in chars {
-            if ch.is_alphanumeric() || ch == '_' {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
                 result.push(ch);
             } else {
                 // Replace invalid characters with underscore
