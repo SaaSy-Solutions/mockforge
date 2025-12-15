@@ -226,8 +226,8 @@ impl PriorityHttpHandler {
         } else {
             normalized_path
         };
-        let normalized_uri = normalized_uri_str.parse::<axum::http::Uri>()
-            .unwrap_or_else(|_| uri.clone());
+        let normalized_uri =
+            normalized_uri_str.parse::<axum::http::Uri>().unwrap_or_else(|_| uri.clone());
 
         let fingerprint = RequestFingerprint::new(method.clone(), &normalized_uri, headers, body);
 
@@ -1016,7 +1016,10 @@ mod tests {
 
         // Test with_behavioral_economics_engine
         let behavioral_engine = Arc::new(RwLock::new(
-            BehavioralEconomicsEngine::new(crate::behavioral_economics::config::BehavioralEconomicsConfig::default()).unwrap(),
+            BehavioralEconomicsEngine::new(
+                crate::behavioral_economics::config::BehavioralEconomicsConfig::default(),
+            )
+            .unwrap(),
         ));
         let handler = handler.with_behavioral_economics_engine(behavioral_engine);
         assert!(handler.behavioral_economics_engine.is_some());
@@ -1127,9 +1130,8 @@ mod tests {
             None,
         );
 
-        let response = generator
-            .generate_mock_response(&fingerprint, &HeaderMap::new(), None)
-            .unwrap();
+        let response =
+            generator.generate_mock_response(&fingerprint, &HeaderMap::new(), None).unwrap();
 
         assert!(response.is_some());
         let mock_response = response.unwrap();
@@ -1321,7 +1323,11 @@ paths:
                 tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
                 Ok(())
             }
-            fn get_fault_response(&self, _method: &Method, _uri: &Uri) -> Option<RouteFaultResponse> {
+            fn get_fault_response(
+                &self,
+                _method: &Method,
+                _uri: &Uri,
+            ) -> Option<RouteFaultResponse> {
                 None
             }
         }
@@ -1401,7 +1407,8 @@ paths:
         let record_replay = RecordReplayHandler::new(fixtures_dir.clone(), false, true, true);
 
         // Need a mock generator as fallback since record is last in chain
-        let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "test"}"#.to_string()));
+        let mock_generator =
+            Box::new(SimpleMockGenerator::new(200, r#"{"message": "test"}"#.to_string()));
         let handler = PriorityHttpHandler::new(record_replay, None, None, Some(mock_generator));
 
         let method = Method::POST; // POST should be recorded
@@ -1422,7 +1429,8 @@ paths:
         let temp_dir = TempDir::new().unwrap();
         let fixtures_dir = temp_dir.path().to_path_buf();
         let record_replay = RecordReplayHandler::new(fixtures_dir.clone(), true, true, false);
-        let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "test"}"#.to_string()));
+        let mock_generator =
+            Box::new(SimpleMockGenerator::new(200, r#"{"message": "test"}"#.to_string()));
 
         let be_config = crate::behavioral_economics::config::BehavioralEconomicsConfig::default();
         let be_engine = Arc::new(RwLock::new(BehavioralEconomicsEngine::new(be_config).unwrap()));
@@ -1545,13 +1553,18 @@ paths:
             async fn inject_latency(&self, _method: &Method, _uri: &Uri) -> Result<()> {
                 Err(Error::generic("Latency injection failed".to_string()))
             }
-            fn get_fault_response(&self, _method: &Method, _uri: &Uri) -> Option<RouteFaultResponse> {
+            fn get_fault_response(
+                &self,
+                _method: &Method,
+                _uri: &Uri,
+            ) -> Option<RouteFaultResponse> {
                 None
             }
         }
 
         let route_chaos = Arc::new(ErrorLatencyInjector);
-        let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "test"}"#.to_string()));
+        let mock_generator =
+            Box::new(SimpleMockGenerator::new(200, r#"{"message": "test"}"#.to_string()));
         let handler = PriorityHttpHandler::new(record_replay, None, None, Some(mock_generator))
             .with_route_chaos_injector(route_chaos);
 
@@ -1646,13 +1659,7 @@ paths:
         let fingerprint = RequestFingerprint::new(method.clone(), &uri, &headers, None);
         record_replay
             .record_handler()
-            .record_request(
-                &fingerprint,
-                200,
-                &headers,
-                r#"<xml>test</xml>"#,
-                None,
-            )
+            .record_request(&fingerprint, 200, &headers, r#"<xml>test</xml>"#, None)
             .await
             .unwrap();
 
@@ -1671,7 +1678,8 @@ paths:
         let record_replay = RecordReplayHandler::new(fixtures_dir.clone(), true, true, false);
 
         // Create proxy config with Mock migration mode (lines 402-410)
-        let mut proxy_config = crate::proxy::config::ProxyConfig::new("http://localhost:8080".to_string());
+        let mut proxy_config =
+            crate::proxy::config::ProxyConfig::new("http://localhost:8080".to_string());
         proxy_config.migration_enabled = true;
         proxy_config.rules.push(crate::proxy::config::ProxyRule {
             path_pattern: "/api/*".to_string(),
@@ -1685,9 +1693,15 @@ paths:
         });
 
         let proxy_handler = ProxyHandler::new(proxy_config);
-        let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock"}"#.to_string()));
+        let mock_generator =
+            Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock"}"#.to_string()));
 
-        let handler = PriorityHttpHandler::new(record_replay, None, Some(proxy_handler), Some(mock_generator));
+        let handler = PriorityHttpHandler::new(
+            record_replay,
+            None,
+            Some(proxy_handler),
+            Some(mock_generator),
+        );
 
         let method = Method::GET;
         let uri = Uri::from_static("/api/test");
@@ -1706,14 +1720,21 @@ paths:
         let record_replay = RecordReplayHandler::new(fixtures_dir.clone(), true, true, false);
 
         // Create proxy config with migration disabled (lines 402-406)
-        let mut proxy_config = crate::proxy::config::ProxyConfig::new("http://localhost:8080".to_string());
+        let mut proxy_config =
+            crate::proxy::config::ProxyConfig::new("http://localhost:8080".to_string());
         proxy_config.migration_enabled = false; // Migration disabled
         proxy_config.enabled = false; // Also disable proxy to avoid network calls
 
         let proxy_handler = ProxyHandler::new(proxy_config);
-        let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock"}"#.to_string()));
+        let mock_generator =
+            Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock"}"#.to_string()));
 
-        let handler = PriorityHttpHandler::new(record_replay, None, Some(proxy_handler), Some(mock_generator));
+        let handler = PriorityHttpHandler::new(
+            record_replay,
+            None,
+            Some(proxy_handler),
+            Some(mock_generator),
+        );
 
         let method = Method::GET;
         let uri = Uri::from_static("/api/test");
@@ -1734,7 +1755,8 @@ paths:
         // Create continuum engine (lines 393-397)
         let continuum_config = crate::reality_continuum::config::ContinuumConfig::new();
         let continuum_engine = Arc::new(RealityContinuumEngine::new(continuum_config));
-        let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock"}"#.to_string()));
+        let mock_generator =
+            Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock"}"#.to_string()));
 
         let handler = PriorityHttpHandler::new(record_replay, None, None, Some(mock_generator))
             .with_continuum_engine(continuum_engine);
@@ -1771,7 +1793,8 @@ paths:
         }
 
         let scenario_replay = Arc::new(ErrorScenarioReplay);
-        let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock"}"#.to_string()));
+        let mock_generator =
+            Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock"}"#.to_string()));
         let handler = PriorityHttpHandler::new(record_replay, None, None, Some(mock_generator))
             .with_behavioral_scenario_replay(scenario_replay);
 
@@ -1842,12 +1865,15 @@ paths:
 
         // Add a stateful config for /api/orders/{order_id}
         let mut state_responses = HashMap::new();
-        state_responses.insert("initial".to_string(), crate::stateful_handler::StateResponse {
-            status_code: 200,
-            headers: HashMap::new(),
-            body_template: r#"{"status": "initial", "order_id": "123"}"#.to_string(),
-            content_type: "application/json".to_string(),
-        });
+        state_responses.insert(
+            "initial".to_string(),
+            crate::stateful_handler::StateResponse {
+                status_code: 200,
+                headers: HashMap::new(),
+                body_template: r#"{"status": "initial", "order_id": "123"}"#.to_string(),
+                content_type: "application/json".to_string(),
+            },
+        );
 
         let config = crate::stateful_handler::StatefulConfig {
             resource_id_extract: crate::stateful_handler::ResourceIdExtract::PathParam {
@@ -1903,7 +1929,8 @@ paths:
         let record_replay = RecordReplayHandler::new(fixtures_dir.clone(), true, true, false);
 
         // Create proxy config with Mock migration mode
-        let mut proxy_config = crate::proxy::config::ProxyConfig::new("http://localhost:8080".to_string());
+        let mut proxy_config =
+            crate::proxy::config::ProxyConfig::new("http://localhost:8080".to_string());
         proxy_config.migration_enabled = true;
         proxy_config.rules.push(crate::proxy::config::ProxyRule {
             path_pattern: "/api/*".to_string(),
@@ -1918,9 +1945,17 @@ paths:
         proxy_config.enabled = false; // Disable proxy to avoid network calls
 
         let proxy_handler = ProxyHandler::new(proxy_config);
-        let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock with migration"}"#.to_string()));
+        let mock_generator = Box::new(SimpleMockGenerator::new(
+            200,
+            r#"{"message": "mock with migration"}"#.to_string(),
+        ));
 
-        let handler = PriorityHttpHandler::new(record_replay, None, Some(proxy_handler), Some(mock_generator));
+        let handler = PriorityHttpHandler::new(
+            record_replay,
+            None,
+            Some(proxy_handler),
+            Some(mock_generator),
+        );
 
         let method = Method::GET;
         let uri = Uri::from_static("/api/test");

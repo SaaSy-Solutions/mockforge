@@ -481,7 +481,7 @@ mod tests {
         let mut env = Environment::new("Dev".to_string());
         env.set_variable("API_URL".to_string(), "http://localhost".to_string());
         let id = manager.add_environment(env);
-        
+
         assert_eq!(manager.active_environment_id, Some(id.clone()));
         assert!(manager.get_environment(&id).unwrap().active);
     }
@@ -492,10 +492,10 @@ mod tests {
         let mut manager = EnvironmentManager::new();
         let env1 = Environment::new("Dev".to_string());
         let env2 = Environment::new("Prod".to_string());
-        
+
         let id1 = manager.add_environment(env1);
         let id2 = manager.add_environment(env2);
-        
+
         assert_eq!(manager.active_environment_id, Some(id1.clone()));
         assert!(manager.get_environment(&id1).unwrap().active);
         assert!(!manager.get_environment(&id2).unwrap().active);
@@ -506,7 +506,7 @@ mod tests {
         let mut manager = EnvironmentManager::new();
         let env = Environment::new("Test".to_string());
         let id = manager.add_environment(env);
-        
+
         assert!(manager.get_environment(&id).is_some());
         assert_eq!(manager.get_environment(&id).unwrap().name, "Test");
         assert!(manager.get_environment(&"nonexistent".to_string()).is_none());
@@ -517,12 +517,15 @@ mod tests {
         let mut manager = EnvironmentManager::new();
         let env = Environment::new("Test".to_string());
         let id = manager.add_environment(env);
-        
+
         if let Some(env_mut) = manager.get_environment_mut(&id) {
             env_mut.set_variable("KEY".to_string(), "VALUE".to_string());
         }
-        
-        assert_eq!(manager.get_environment(&id).unwrap().get_variable("KEY"), Some(&"VALUE".to_string()));
+
+        assert_eq!(
+            manager.get_environment(&id).unwrap().get_variable("KEY"),
+            Some(&"VALUE".to_string())
+        );
     }
 
     #[test]
@@ -531,10 +534,10 @@ mod tests {
         let mut manager = EnvironmentManager::new();
         let env1 = Environment::new("Dev".to_string());
         let env2 = Environment::new("Prod".to_string());
-        
+
         let id1 = manager.add_environment(env1);
         let id2 = manager.add_environment(env2);
-        
+
         let removed = manager.remove_environment(&id2).unwrap();
         assert_eq!(removed.name, "Prod");
         assert!(manager.get_environment(&id2).is_none());
@@ -547,10 +550,10 @@ mod tests {
         let mut manager = EnvironmentManager::new();
         let env1 = Environment::new("Dev".to_string());
         let env2 = Environment::new("Prod".to_string());
-        
+
         let id1 = manager.add_environment(env1);
         let id2 = manager.add_environment(env2);
-        
+
         // Remove active environment
         let removed = manager.remove_environment(&id1).unwrap();
         assert_eq!(removed.name, "Dev");
@@ -571,7 +574,7 @@ mod tests {
         let mut manager = EnvironmentManager::new();
         manager.add_environment(Environment::new("Dev".to_string()));
         manager.add_environment(Environment::new("Prod".to_string()));
-        
+
         let all = manager.get_all_environments();
         assert_eq!(all.len(), 2);
     }
@@ -581,7 +584,7 @@ mod tests {
         let mut manager = EnvironmentManager::new();
         let env = Environment::new("Dev".to_string());
         let id = manager.add_environment(env);
-        
+
         let active = manager.get_active_environment();
         assert!(active.is_some());
         assert_eq!(active.unwrap().id, id);
@@ -599,13 +602,13 @@ mod tests {
         let mut manager = EnvironmentManager::new();
         let env1 = Environment::new("Dev".to_string());
         let env2 = Environment::new("Prod".to_string());
-        
+
         let id1 = manager.add_environment(env1);
         let id2 = manager.add_environment(env2);
-        
+
         // Set second as active
         manager.set_active_environment(id2.clone()).unwrap();
-        
+
         assert_eq!(manager.active_environment_id, Some(id2.clone()));
         assert!(!manager.get_environment(&id1).unwrap().active);
         assert!(manager.get_environment(&id2).unwrap().active);
@@ -635,7 +638,7 @@ mod tests {
         let mut env = Environment::new("Test".to_string());
         env.set_variable("VAR".to_string(), "value".to_string());
         manager.add_environment(env);
-        
+
         // Note: parse_variable_name doesn't require closing }}, it parses until invalid char or end
         // So "{{VAR" actually successfully parses VAR and substitutes it
         let result = manager.substitute_variables("Text {{VAR");
@@ -650,7 +653,7 @@ mod tests {
         let mut env = Environment::new("Test".to_string());
         env.set_variable("VAR".to_string(), "value".to_string());
         manager.add_environment(env);
-        
+
         // Invalid character in variable name
         let result = manager.substitute_variables("{{VAR@INVALID}}");
         assert!(result.value.contains("{{"));
@@ -663,7 +666,7 @@ mod tests {
         let mut env = Environment::new("Test".to_string());
         env.set_variable("VAR".to_string(), "value".to_string());
         manager.add_environment(env);
-        
+
         let result = manager.substitute_variables("{{}}");
         assert!(result.value.contains("{{"));
     }
@@ -674,7 +677,7 @@ mod tests {
         let manager = EnvironmentManager::new();
         let mut env = Environment::new("   ".to_string()); // Whitespace only
         env.set_variable("VAR".to_string(), "value".to_string());
-        
+
         let result = manager.validate_environment(&env);
         assert!(!result.is_valid);
         assert!(result.errors.contains(&"Environment name cannot be empty".to_string()));
@@ -687,7 +690,7 @@ mod tests {
         let mut env = Environment::new("Test".to_string());
         env.set_variable("VAR".to_string(), "value1".to_string());
         env.set_variable("VAR".to_string(), "value2".to_string()); // Duplicate
-        
+
         let result = manager.validate_environment(&env);
         // Note: HashMap doesn't allow duplicates, so this test may not trigger the error path
         // But we can test empty key validation
@@ -700,7 +703,7 @@ mod tests {
         let manager = EnvironmentManager::new();
         let mut env = Environment::new("Test".to_string());
         env.set_variable("   ".to_string(), "value".to_string()); // Empty key
-        
+
         let result = manager.validate_environment(&env);
         assert!(!result.is_valid);
         assert!(result.errors.iter().any(|e| e.contains("empty")));
@@ -712,7 +715,7 @@ mod tests {
         let manager = EnvironmentManager::new();
         let mut env = Environment::new("Test".to_string());
         env.set_variable("VAR".to_string(), "   ".to_string()); // Empty value
-        
+
         let result = manager.validate_environment(&env);
         assert!(result.is_valid); // Warnings don't make it invalid
         assert!(result.warnings.iter().any(|w| w.contains("empty value")));
@@ -725,7 +728,7 @@ mod tests {
         let mut env = Environment::new("Test".to_string());
         env.set_variable("VAR1".to_string(), "value1".to_string());
         env.set_variable("VAR2".to_string(), "value2".to_string());
-        
+
         let result = manager.validate_environment(&env);
         assert!(result.is_valid);
         assert!(result.errors.is_empty());
@@ -738,7 +741,7 @@ mod tests {
         let mut env = Environment::new("Test".to_string());
         env.set_variable("VAR".to_string(), "value".to_string());
         let id = manager.add_environment(env);
-        
+
         let result = manager.export_environment(&id, EnvironmentExportFormat::Json);
         assert!(result.is_ok());
         assert!(result.unwrap().contains("Test"));
@@ -750,7 +753,7 @@ mod tests {
         let mut manager = EnvironmentManager::new();
         let env = Environment::new("Test".to_string());
         let id = manager.add_environment(env);
-        
+
         let result = manager.export_environment(&id, EnvironmentExportFormat::Yaml);
         assert!(result.is_ok());
     }
@@ -763,7 +766,7 @@ mod tests {
         env.set_variable("VAR1".to_string(), "value1".to_string());
         env.set_variable("VAR2".to_string(), "value2".to_string());
         let id = manager.add_environment(env);
-        
+
         let result = manager.export_environment(&id, EnvironmentExportFormat::DotEnv);
         assert!(result.is_ok());
         let content = result.unwrap();
@@ -778,9 +781,10 @@ mod tests {
         let mut env = Environment::new("Test".to_string());
         env.set_variable("VAR".to_string(), "value".to_string());
         let id = manager.add_environment(env);
-        
+
         let template = "Config: {{VAR}}";
-        let result = manager.export_environment(&id, EnvironmentExportFormat::Custom(template.to_string()));
+        let result =
+            manager.export_environment(&id, EnvironmentExportFormat::Custom(template.to_string()));
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Config: value");
     }
@@ -788,7 +792,8 @@ mod tests {
     #[test]
     fn test_export_environment_not_found() {
         let manager = EnvironmentManager::new();
-        let result = manager.export_environment(&"nonexistent".to_string(), EnvironmentExportFormat::Json);
+        let result =
+            manager.export_environment(&"nonexistent".to_string(), EnvironmentExportFormat::Json);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("not found"));
     }
@@ -799,7 +804,7 @@ mod tests {
         let mut manager = EnvironmentManager::new();
         let env = Environment::new("Test".to_string());
         let json = serde_json::to_string(&env).unwrap();
-        
+
         let result = manager.import_environment(&json);
         assert!(result.is_ok());
         assert_eq!(manager.get_all_environments().len(), 1);
@@ -820,10 +825,10 @@ mod tests {
         env1.set_variable("VAR1".to_string(), "value1".to_string());
         let mut env2 = Environment::new("Prod".to_string());
         env2.set_variable("VAR2".to_string(), "value2".to_string());
-        
+
         manager.add_environment(env1);
         manager.add_environment(env2);
-        
+
         let stats = manager.get_stats();
         assert_eq!(stats.total_environments, 2);
         assert_eq!(stats.total_variables, 2);
@@ -837,7 +842,7 @@ mod tests {
         manager.add_environment(Environment::new("Development".to_string()));
         manager.add_environment(Environment::new("Production".to_string()));
         manager.add_environment(Environment::new("Staging".to_string()));
-        
+
         let results = manager.find_environments_by_name("dev");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "Development");
@@ -851,10 +856,10 @@ mod tests {
         env1.set_variable("VAR1".to_string(), "value1".to_string());
         let mut env2 = Environment::new("Prod".to_string());
         env2.set_variable("VAR2".to_string(), "value2".to_string());
-        
+
         manager.add_environment(env1);
         manager.add_environment(env2);
-        
+
         let all_vars = manager.get_all_variables();
         assert_eq!(all_vars.len(), 2);
         assert_eq!(all_vars.get("VAR1"), Some(&"value1".to_string()));
@@ -868,9 +873,9 @@ mod tests {
         let mut env = Environment::new("Source".to_string());
         env.set_variable("VAR".to_string(), "value".to_string());
         let source_id = manager.add_environment(env);
-        
+
         let cloned_id = manager.clone_environment(&source_id, "Cloned".to_string()).unwrap();
-        
+
         assert_ne!(cloned_id, source_id);
         let cloned = manager.get_environment(&cloned_id).unwrap();
         assert_eq!(cloned.name, "Cloned");
@@ -893,13 +898,13 @@ mod tests {
         env1.set_variable("VAR1".to_string(), "value1".to_string());
         let mut env2 = Environment::new("Prod".to_string());
         env2.set_variable("VAR2".to_string(), "value2".to_string());
-        
+
         let id1 = manager.add_environment(env1);
         let id2 = manager.add_environment(env2);
-        
+
         let merged_id = manager.merge_environments(&[id1, id2], "Merged".to_string()).unwrap();
         let merged = manager.get_environment(&merged_id).unwrap();
-        
+
         assert_eq!(merged.name, "Merged");
         assert_eq!(merged.get_variable("VAR1"), Some(&"value1".to_string()));
         assert_eq!(merged.get_variable("VAR2"), Some(&"value2".to_string()));
@@ -918,7 +923,7 @@ mod tests {
         assert!(EnvironmentValidator::validate_variable_name("VALID_NAME").is_ok());
         assert!(EnvironmentValidator::validate_variable_name("VALID_NAME_123").is_ok());
         assert!(EnvironmentValidator::validate_variable_name("valid-name").is_ok());
-        
+
         assert!(EnvironmentValidator::validate_variable_name("").is_err());
         assert!(EnvironmentValidator::validate_variable_name("INVALID@NAME").is_err());
         assert!(EnvironmentValidator::validate_variable_name("-INVALID").is_err());
@@ -930,7 +935,7 @@ mod tests {
         // Test validate_variable_value (lines 423-429)
         assert!(EnvironmentValidator::validate_variable_value("valid value").is_ok());
         assert!(EnvironmentValidator::validate_variable_value("").is_ok());
-        
+
         let mut invalid_value = String::from("valid");
         invalid_value.push('\0');
         assert!(EnvironmentValidator::validate_variable_value(&invalid_value).is_err());

@@ -32,7 +32,7 @@ fn test_bandwidth_config_tag_override() {
     let config = BandwidthConfig::new(1000, 500)
         .with_tag_override("premium".to_string(), 5000)
         .with_tag_override("basic".to_string(), 100);
-    
+
     assert_eq!(config.tag_overrides.len(), 2);
     assert_eq!(config.tag_overrides.get("premium"), Some(&5000));
     assert_eq!(config.tag_overrides.get("basic"), Some(&100));
@@ -48,9 +48,8 @@ fn test_bandwidth_config_get_effective_limit_no_tags() {
 /// Test BandwidthConfig get_effective_limit with matching tag
 #[test]
 fn test_bandwidth_config_get_effective_limit_with_tag() {
-    let config = BandwidthConfig::new(1000, 500)
-        .with_tag_override("premium".to_string(), 5000);
-    
+    let config = BandwidthConfig::new(1000, 500).with_tag_override("premium".to_string(), 5000);
+
     assert_eq!(config.get_effective_limit(&["premium".to_string()]), 5000);
     assert_eq!(config.get_effective_limit(&["basic".to_string()]), 1000);
 }
@@ -61,7 +60,7 @@ fn test_bandwidth_config_get_effective_limit_multiple_tags() {
     let config = BandwidthConfig::new(1000, 500)
         .with_tag_override("premium".to_string(), 5000)
         .with_tag_override("vip".to_string(), 10000);
-    
+
     // Should use first matching tag
     assert_eq!(config.get_effective_limit(&["premium".to_string(), "vip".to_string()]), 5000);
     assert_eq!(config.get_effective_limit(&["vip".to_string(), "premium".to_string()]), 10000);
@@ -115,10 +114,10 @@ fn test_burst_loss_config_tag_override() {
         loss_rate_during_burst: 0.8,
         recovery_time_ms: 120000,
     };
-    
+
     let config = BurstLossConfig::new(0.1, 5000, 0.5, 30000)
         .with_tag_override("critical".to_string(), override_config.clone());
-    
+
     assert_eq!(config.tag_overrides.len(), 1);
     let stored = config.tag_overrides.get("critical").unwrap();
     assert_eq!(stored.burst_probability, override_config.burst_probability);
@@ -132,7 +131,7 @@ fn test_burst_loss_config_tag_override() {
 fn test_burst_loss_config_effective_config_no_tags() {
     let config = BurstLossConfig::new(0.1, 5000, 0.5, 30000);
     let effective = config.effective_config(&[]);
-    
+
     assert_eq!(effective.burst_probability, 0.1);
     assert_eq!(effective.burst_duration_ms, 5000);
     assert_eq!(effective.loss_rate_during_burst, 0.5);
@@ -148,12 +147,12 @@ fn test_burst_loss_config_effective_config_with_tag() {
         loss_rate_during_burst: 0.8,
         recovery_time_ms: 120000,
     };
-    
+
     let config = BurstLossConfig::new(0.1, 5000, 0.5, 30000)
         .with_tag_override("critical".to_string(), override_config);
-    
+
     let effective = config.effective_config(&["critical".to_string()]);
-    
+
     assert_eq!(effective.burst_probability, 0.3);
     assert_eq!(effective.burst_duration_ms, 20000);
     assert_eq!(effective.loss_rate_during_burst, 0.8);
@@ -169,18 +168,18 @@ fn test_burst_loss_config_effective_config_multiple_tags() {
         loss_rate_during_burst: 0.8,
         recovery_time_ms: 120000,
     };
-    
+
     let override_config2 = BurstLossOverride {
         burst_probability: 0.5,
         burst_duration_ms: 30000,
         loss_rate_during_burst: 0.9,
         recovery_time_ms: 180000,
     };
-    
+
     let config = BurstLossConfig::new(0.1, 5000, 0.5, 30000)
         .with_tag_override("tag1".to_string(), override_config1)
         .with_tag_override("tag2".to_string(), override_config2);
-    
+
     // Should use first matching tag
     let effective = config.effective_config(&["tag1".to_string(), "tag2".to_string()]);
     assert_eq!(effective.burst_probability, 0.3);
@@ -244,18 +243,18 @@ fn test_burst_loss_config_overwrite_tag_override() {
         loss_rate_during_burst: 0.5,
         recovery_time_ms: 30000,
     };
-    
+
     let override2 = BurstLossOverride {
         burst_probability: 0.2,
         burst_duration_ms: 10000,
         loss_rate_during_burst: 0.6,
         recovery_time_ms: 60000,
     };
-    
+
     let config = BurstLossConfig::new(0.1, 5000, 0.5, 30000)
         .with_tag_override("tag".to_string(), override1)
         .with_tag_override("tag".to_string(), override2);
-    
+
     // Should have the last override
     let effective = config.effective_config(&["tag".to_string()]);
     assert_eq!(effective.burst_probability, 0.2);
@@ -268,7 +267,7 @@ fn test_bandwidth_config_multiple_tag_overrides() {
         .with_tag_override("tag1".to_string(), 2000)
         .with_tag_override("tag2".to_string(), 3000)
         .with_tag_override("tag3".to_string(), 4000);
-    
+
     assert_eq!(config.tag_overrides.len(), 3);
     assert_eq!(config.get_effective_limit(&["tag1".to_string()]), 2000);
     assert_eq!(config.get_effective_limit(&["tag2".to_string()]), 3000);
@@ -281,7 +280,7 @@ fn test_bandwidth_config_overwrite_tag_override() {
     let config = BandwidthConfig::new(1000, 500)
         .with_tag_override("tag".to_string(), 2000)
         .with_tag_override("tag".to_string(), 3000);
-    
+
     assert_eq!(config.tag_overrides.len(), 1);
     assert_eq!(config.get_effective_limit(&["tag".to_string()]), 3000);
 }
@@ -295,10 +294,10 @@ fn test_burst_loss_override_edge_values() {
         loss_rate_during_burst: 0.0,
         recovery_time_ms: 0,
     };
-    
+
     let config = BurstLossConfig::new(0.1, 5000, 0.5, 30000)
         .with_tag_override("edge".to_string(), override_config);
-    
+
     let effective = config.effective_config(&["edge".to_string()]);
     assert_eq!(effective.burst_probability, 0.0);
     assert_eq!(effective.burst_duration_ms, 0);
@@ -315,14 +314,13 @@ fn test_burst_loss_override_max_values() {
         loss_rate_during_burst: 1.0,
         recovery_time_ms: u64::MAX,
     };
-    
+
     let config = BurstLossConfig::new(0.1, 5000, 0.5, 30000)
         .with_tag_override("max".to_string(), override_config);
-    
+
     let effective = config.effective_config(&["max".to_string()]);
     assert_eq!(effective.burst_probability, 1.0);
     assert_eq!(effective.burst_duration_ms, u64::MAX);
     assert_eq!(effective.loss_rate_during_burst, 1.0);
     assert_eq!(effective.recovery_time_ms, u64::MAX);
 }
-

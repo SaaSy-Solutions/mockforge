@@ -692,7 +692,7 @@ mod tests {
 
         storage.store_key(&key_id, &encrypted_key).unwrap();
         assert!(storage.key_exists(&key_id));
-        
+
         let retrieved = storage.retrieve_key(&key_id).unwrap();
         assert_eq!(retrieved, encrypted_key);
     }
@@ -702,7 +702,7 @@ mod tests {
         let mut storage = MemoryKeyStorage::new();
         let key_id = "test-key".to_string();
         storage.store_key(&key_id, b"data".as_slice()).unwrap();
-        
+
         storage.delete_key(&key_id).unwrap();
         assert!(!storage.key_exists(&key_id));
     }
@@ -712,7 +712,7 @@ mod tests {
         let mut storage = MemoryKeyStorage::new();
         storage.store_key(&"key1".to_string(), b"data1".as_slice()).unwrap();
         storage.store_key(&"key2".to_string(), b"data2".as_slice()).unwrap();
-        
+
         let keys = storage.list_keys();
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"key1".to_string()));

@@ -114,7 +114,7 @@ calculate_priority_score() {
     local priority="$1"
     local coverage="$2"
     local threshold="$3"
-    
+
     # Priority weight
     local priority_weight=0
     case "$priority" in
@@ -122,13 +122,13 @@ calculate_priority_score() {
         medium) priority_weight=50 ;;
         low) priority_weight=25 ;;
     esac
-    
+
     # Coverage gap weight (larger gap = higher priority)
     local coverage_gap=$(echo "$threshold - $coverage" | bc -l 2>/dev/null || echo "0")
     if (( $(echo "$coverage_gap < 0" | bc -l 2>/dev/null || echo "1") )); then
         coverage_gap=0
     fi
-    
+
     # Calculate score: priority_weight * (1 + coverage_gap/10)
     local score=$(echo "$priority_weight * (1 + $coverage_gap / 10)" | bc -l 2>/dev/null || echo "$priority_weight")
     echo "$score"
@@ -152,7 +152,7 @@ THRESHOLD=$(jq -r '.threshold // 80' "$BASELINE_FILE" 2>/dev/null || echo "80")
 
 # Build prioritized list - handle missing fields gracefully
 PRIORITIZED=$(jq -r --arg threshold "$THRESHOLD" '
-    (.crates // [])[]? | 
+    (.crates // [])[]? |
     select(.status == "below_threshold" or .status == "no_tests" or .status == "error" or .status == "compilation_error") |
     {
         name: (.name // "unknown"),
@@ -199,7 +199,7 @@ echo "Top 10 Priority Crates:"
 echo "======================="
 echo ""
 
-echo "$PRIORITIZED_WITH_SCORES" | jq -r '.[:10][] | 
+echo "$PRIORITIZED_WITH_SCORES" | jq -r '.[:10][] |
     "\(.priority_score | floor)|\(.priority)|\(.name)|\(.coverage_percent | tostring)|\(.coverage_gap | tostring)"
 ' | while IFS='|' read -r score priority name coverage gap; do
     printf "  %6.0f  %-6s  %-40s  %6s%%  (gap: %6s%%)\n" "$score" "$priority" "$name" "$coverage" "$gap"
@@ -212,4 +212,3 @@ echo "Use this list to:"
 echo "  1. Focus on high-priority crates first"
 echo "  2. Track coverage improvement progress"
 echo "  3. Plan coverage improvement sprints"
-

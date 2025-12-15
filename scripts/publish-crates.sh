@@ -557,21 +557,21 @@ for name, rel in targets:
         # Only replace if path is not already present
         if 'path =' in dep_content or 'path=' in dep_content:
             return full_match  # Already has path, don't change
-        
+
         # Extract optional flag and features if present
         is_optional = re.search(r'optional\s*=\s*true', dep_content) is not None
         features_match = re.search(r'features\s*=\s*(\[[^\]]*\])', dep_content)
         features = features_match.group(0) if features_match else None
-        
+
         # Build replacement with path
         parts = [f'version = "{version}"', f'path = "{rel}"']
         if is_optional:
             parts.append('optional = true')
         if features:
             parts.append(features)
-        
+
         return f'{name} = {{ {", ".join(parts)} }}'
-    
+
     # Try the pattern match
     new_text = re.sub(table_pattern, replace_table, text)
     if new_text != text:
@@ -603,7 +603,7 @@ for name, rel in targets:
             if new_text != text:
                 text = new_text
                 changed = True
-    
+
     # Then handle simple form: name = "version"
     simple_pattern = rf'{name}\s*=\s*"{re.escape(version)}"'
     replacement = f'{name} = {{ version = "{version}", path = "{rel}" }}'

@@ -1587,7 +1587,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
         if !route_configs.is_empty() {
             // Convert to the type expected by RouteChaosInjector
             // Note: Both use the same mockforge-core, but we need to ensure type compatibility
-            let route_configs_converted: Vec<mockforge_core::config::RouteConfig> = route_configs.iter().cloned().collect();
+            let route_configs_converted: Vec<mockforge_core::config::RouteConfig> =
+                route_configs.iter().cloned().collect();
             match mockforge_route_chaos::RouteChaosInjector::new(route_configs_converted) {
                 Ok(injector) => {
                     info!(
@@ -1596,7 +1597,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
                     );
                     // RouteChaosInjector implements RouteChaosInjectorTrait, so we can cast it
                     // The trait is implemented in mockforge-route-chaos/src/lib.rs
-                    Some(std::sync::Arc::new(injector) as std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>)
+                    Some(std::sync::Arc::new(injector)
+                        as std::sync::Arc<
+                            dyn mockforge_core::priority_handler::RouteChaosInjectorTrait,
+                        >)
                 }
                 Err(e) => {
                     warn!(

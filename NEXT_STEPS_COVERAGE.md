@@ -152,10 +152,10 @@ mod tests {
     fn test_function_success() {
         // Arrange
         let input = create_test_input();
-        
+
         // Act
         let result = function_under_test(input);
-        
+
         // Assert
         assert!(result.is_ok());
     }
@@ -164,10 +164,10 @@ mod tests {
     fn test_function_error_case() {
         // Arrange
         let invalid_input = create_invalid_input();
-        
+
         // Act
         let result = function_under_test(invalid_input);
-        
+
         // Assert
         assert!(result.is_err());
         // Check error type/message
@@ -247,6 +247,5 @@ cargo llvm-cov --package mockforge-core --all-features
 
 ---
 
-**Last Updated**: 2025-12-06  
+**Last Updated**: 2025-12-06
 **Status**: Ready for coverage measurement and test improvement
-

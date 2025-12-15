@@ -518,7 +518,7 @@ mod tests {
         let mut registry = WorkspaceRegistry::new();
         let workspace = Workspace::new("Test Workspace".to_string());
         let id = workspace.id.clone();
-        
+
         let result = registry.add_workspace(workspace);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), id);
@@ -533,7 +533,7 @@ mod tests {
         // Note: get_config() returns default, so we'll test the limit check path
         let workspace1 = Workspace::new("Workspace 1".to_string());
         registry.add_workspace(workspace1).unwrap();
-        
+
         // The default config has no limit, so this should succeed
         let workspace2 = Workspace::new("Workspace 2".to_string());
         let result = registry.add_workspace(workspace2);
@@ -547,7 +547,7 @@ mod tests {
         let workspace = Workspace::new("Test".to_string());
         let id = workspace.id.clone();
         registry.add_workspace(workspace).unwrap();
-        
+
         assert!(registry.get_workspace(&id).is_some());
         assert_eq!(registry.get_workspace(&id).unwrap().name, "Test");
         assert!(registry.get_workspace(&"nonexistent".to_string()).is_none());
@@ -560,11 +560,11 @@ mod tests {
         let workspace = Workspace::new("Test".to_string());
         let id = workspace.id.clone();
         registry.add_workspace(workspace).unwrap();
-        
+
         if let Some(ws) = registry.get_workspace_mut(&id) {
             ws.name = "Updated".to_string();
         }
-        
+
         assert_eq!(registry.get_workspace(&id).unwrap().name, "Updated");
     }
 
@@ -575,7 +575,7 @@ mod tests {
         let workspace = Workspace::new("Test".to_string());
         let id = workspace.id.clone();
         registry.add_workspace(workspace).unwrap();
-        
+
         let removed = registry.remove_workspace(&id).unwrap();
         assert_eq!(removed.name, "Test");
         assert!(registry.get_workspace(&id).is_none());
@@ -587,14 +587,14 @@ mod tests {
         let mut registry = WorkspaceRegistry::new();
         let workspace1 = Workspace::new("Workspace 1".to_string());
         let workspace2 = Workspace::new("Workspace 2".to_string());
-        
+
         let id1 = workspace1.id.clone();
         let id2 = workspace2.id.clone();
-        
+
         registry.add_workspace(workspace1).unwrap();
         registry.add_workspace(workspace2).unwrap();
         registry.set_active_workspace(id1.clone()).unwrap();
-        
+
         registry.remove_workspace(&id1).unwrap();
         // Active workspace should be updated to the next available
         assert_eq!(registry.active_workspace_id, Some(id2));
@@ -614,7 +614,7 @@ mod tests {
         let mut registry = WorkspaceRegistry::new();
         registry.add_workspace(Workspace::new("Workspace 1".to_string())).unwrap();
         registry.add_workspace(Workspace::new("Workspace 2".to_string())).unwrap();
-        
+
         let all = registry.get_all_workspaces();
         assert_eq!(all.len(), 2);
     }
@@ -624,7 +624,7 @@ mod tests {
         // Test get_all_workspaces_mut() (lines 141-143)
         let mut registry = WorkspaceRegistry::new();
         registry.add_workspace(Workspace::new("Workspace 1".to_string())).unwrap();
-        
+
         let mut all = registry.get_all_workspaces_mut();
         assert_eq!(all.len(), 1);
         all[0].name = "Updated".to_string();
@@ -637,7 +637,7 @@ mod tests {
         let workspace = Workspace::new("Test".to_string());
         let id = workspace.id.clone();
         registry.add_workspace(workspace).unwrap();
-        
+
         registry.set_active_workspace(id.clone()).unwrap();
         assert_eq!(registry.active_workspace_id, Some(id));
     }
@@ -658,7 +658,7 @@ mod tests {
         let id = workspace.id.clone();
         registry.add_workspace(workspace).unwrap();
         registry.set_active_workspace(id).unwrap();
-        
+
         let active = registry.get_active_workspace();
         assert!(active.is_some());
         assert_eq!(active.unwrap().name, "Test");
@@ -678,11 +678,11 @@ mod tests {
         let id = workspace.id.clone();
         registry.add_workspace(workspace).unwrap();
         registry.set_active_workspace(id).unwrap();
-        
+
         if let Some(ws) = registry.get_active_workspace_mut() {
             ws.name = "Updated".to_string();
         }
-        
+
         assert_eq!(registry.get_active_workspace().unwrap().name, "Updated");
     }
 
@@ -692,7 +692,7 @@ mod tests {
         let mut registry = WorkspaceRegistry::new();
         let env = Environment::new("Dev".to_string());
         let id = env.id.clone();
-        
+
         let result_id = registry.add_environment(env);
         assert_eq!(result_id, id);
         assert_eq!(registry.environments.len(), 1);
@@ -705,7 +705,7 @@ mod tests {
         let env = Environment::new("Dev".to_string());
         let id = env.id.clone();
         registry.add_environment(env);
-        
+
         assert!(registry.get_environment(&id).is_some());
         assert_eq!(registry.get_environment(&id).unwrap().name, "Dev");
         assert!(registry.get_environment(&"nonexistent".to_string()).is_none());
@@ -718,7 +718,7 @@ mod tests {
         let mut env = Environment::new("Dev".to_string());
         env.active = true;
         registry.add_environment(env);
-        
+
         let active = registry.get_active_environment();
         assert!(active.is_some());
         assert_eq!(active.unwrap().name, "Dev");
@@ -730,15 +730,15 @@ mod tests {
         let mut registry = WorkspaceRegistry::new();
         let env1 = Environment::new("Dev".to_string());
         let env2 = Environment::new("Prod".to_string());
-        
+
         let id1 = env1.id.clone();
         let id2 = env2.id.clone();
-        
+
         registry.add_environment(env1);
         registry.add_environment(env2);
-        
+
         registry.set_active_environment(id2.clone()).unwrap();
-        
+
         assert!(!registry.get_environment(&id1).unwrap().active);
         assert!(registry.get_environment(&id2).unwrap().active);
     }
@@ -758,15 +758,16 @@ mod tests {
         let mut workspace = Workspace::new("Test".to_string());
         let folder = Folder::new("Folder".to_string());
         let request = MockRequest::new("Request".to_string(), HttpMethod::GET, "/test".to_string());
-        let response = crate::workspace::core::MockResponse::new(200, "OK".to_string(), "{}".to_string());
-        
+        let response =
+            crate::workspace::core::MockResponse::new(200, "OK".to_string(), "{}".to_string());
+
         workspace.add_folder(folder);
         workspace.add_request(request);
         workspace.requests[0].add_response(response);
-        
+
         registry.add_workspace(workspace).unwrap();
         registry.add_environment(Environment::new("Dev".to_string()));
-        
+
         let stats = registry.get_stats();
         assert_eq!(stats.total_workspaces, 1);
         assert_eq!(stats.total_folders, 1);
@@ -800,7 +801,7 @@ mod tests {
         let request_id = request.id.clone();
         workspace.add_request(request);
         registry.add_workspace(workspace).unwrap();
-        
+
         let found = registry.find_request(&request_id);
         assert!(found.is_some());
         assert_eq!(found.unwrap().name, "Request");
@@ -817,7 +818,7 @@ mod tests {
         folder.add_request(request);
         workspace.add_folder(folder);
         registry.add_workspace(workspace).unwrap();
-        
+
         let found = registry.find_request(&request_id);
         assert!(found.is_some());
         assert_eq!(found.unwrap().name, "Request");
@@ -838,7 +839,7 @@ mod tests {
         let folder_id = folder.id.clone();
         workspace.add_folder(folder);
         registry.add_workspace(workspace).unwrap();
-        
+
         let found = registry.find_folder(&folder_id);
         assert!(found.is_some());
         assert_eq!(found.unwrap().name, "Folder");
@@ -855,7 +856,7 @@ mod tests {
         parent_folder.add_folder(child_folder);
         workspace.add_folder(parent_folder);
         registry.add_workspace(workspace).unwrap();
-        
+
         let found = registry.find_folder(&child_id);
         assert!(found.is_some());
         assert_eq!(found.unwrap().name, "Child");
@@ -874,7 +875,7 @@ mod tests {
         let workspace = Workspace::new("Test".to_string());
         let id = workspace.id.clone();
         registry.add_workspace(workspace).unwrap();
-        
+
         let json = registry.export_workspace(&id).unwrap();
         assert!(json.contains("Test"));
         assert!(json.contains(&id));
@@ -894,7 +895,7 @@ mod tests {
         let mut registry = WorkspaceRegistry::new();
         let workspace = Workspace::new("Test".to_string());
         let json = serde_json::to_string(&workspace).unwrap();
-        
+
         let result = registry.import_workspace(&json);
         assert!(result.is_ok());
         assert_eq!(registry.workspaces.len(), 1);
@@ -912,10 +913,14 @@ mod tests {
         // Test search_requests() (lines 365-390)
         let mut registry = WorkspaceRegistry::new();
         let mut workspace = Workspace::new("Test".to_string());
-        let request = MockRequest::new("Searchable Request".to_string(), HttpMethod::GET, "/test".to_string());
+        let request = MockRequest::new(
+            "Searchable Request".to_string(),
+            HttpMethod::GET,
+            "/test".to_string(),
+        );
         workspace.add_request(request);
         registry.add_workspace(workspace).unwrap();
-        
+
         let results = registry.search_requests("Searchable");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "Searchable Request");
@@ -926,10 +931,11 @@ mod tests {
         // Test search_requests() by URL (lines 373)
         let mut registry = WorkspaceRegistry::new();
         let mut workspace = Workspace::new("Test".to_string());
-        let request = MockRequest::new("Request".to_string(), HttpMethod::GET, "/api/users".to_string());
+        let request =
+            MockRequest::new("Request".to_string(), HttpMethod::GET, "/api/users".to_string());
         workspace.add_request(request);
         registry.add_workspace(workspace).unwrap();
-        
+
         let results = registry.search_requests("users");
         assert_eq!(results.len(), 1);
     }
@@ -940,11 +946,12 @@ mod tests {
         let mut registry = WorkspaceRegistry::new();
         let mut workspace = Workspace::new("Test".to_string());
         let mut folder = Folder::new("Folder".to_string());
-        let request = MockRequest::new("Folder Request".to_string(), HttpMethod::GET, "/test".to_string());
+        let request =
+            MockRequest::new("Folder Request".to_string(), HttpMethod::GET, "/test".to_string());
         folder.add_request(request);
         workspace.add_folder(folder);
         registry.add_workspace(workspace).unwrap();
-        
+
         let results = registry.search_requests("Folder");
         assert_eq!(results.len(), 1);
     }
@@ -954,11 +961,12 @@ mod tests {
         // Test get_requests_by_tag() functionality
         let mut registry = WorkspaceRegistry::new();
         let mut workspace = Workspace::new("Test".to_string());
-        let mut request = MockRequest::new("Request".to_string(), HttpMethod::GET, "/test".to_string());
+        let mut request =
+            MockRequest::new("Request".to_string(), HttpMethod::GET, "/test".to_string());
         request.tags.push("api".to_string());
         workspace.add_request(request);
         registry.add_workspace(workspace).unwrap();
-        
+
         // Note: get_requests_by_tag is not in the visible code, but we can test search
         let results = registry.search_requests("Request");
         assert_eq!(results.len(), 1);
@@ -969,11 +977,13 @@ mod tests {
         // Test update_route_registry() indirectly through add_workspace (lines 103, 218-240)
         let mut registry = WorkspaceRegistry::new();
         let mut workspace = Workspace::new("Test".to_string());
-        let mut request = MockRequest::new("Request".to_string(), HttpMethod::GET, "/test".to_string());
-        let response = crate::workspace::core::MockResponse::new(200, "OK".to_string(), "{}".to_string());
+        let mut request =
+            MockRequest::new("Request".to_string(), HttpMethod::GET, "/test".to_string());
+        let response =
+            crate::workspace::core::MockResponse::new(200, "OK".to_string(), "{}".to_string());
         request.add_response(response);
         workspace.add_request(request);
-        
+
         registry.add_workspace(workspace).unwrap();
         // Route registry should be updated
         let route_registry = registry.get_route_registry();

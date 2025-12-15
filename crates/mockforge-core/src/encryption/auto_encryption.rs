@@ -736,7 +736,8 @@ mod tests {
     fn test_request_context_new() {
         let mut headers = HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
-        let context = RequestContext::new("POST".to_string(), "/api/test".to_string(), headers.clone());
+        let context =
+            RequestContext::new("POST".to_string(), "/api/test".to_string(), headers.clone());
 
         assert_eq!(context.method, "POST");
         assert_eq!(context.path, "/api/test");
@@ -815,7 +816,10 @@ mod tests {
         }
 
         match header_exists {
-            RuleCondition::HeaderExists { name, value_pattern } => {
+            RuleCondition::HeaderExists {
+                name,
+                value_pattern,
+            } => {
                 assert_eq!(name, "Authorization");
                 assert!(value_pattern.is_none());
             }
@@ -833,7 +837,9 @@ mod tests {
         }
 
         match content_type_matches {
-            RuleCondition::ContentTypeMatches { pattern } => assert_eq!(pattern, "application/json"),
+            RuleCondition::ContentTypeMatches { pattern } => {
+                assert_eq!(pattern, "application/json")
+            }
             _ => panic!("Wrong variant"),
         }
     }

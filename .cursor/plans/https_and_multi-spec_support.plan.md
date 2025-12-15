@@ -17,7 +17,7 @@ flowchart TD
     Config --> Validate[Validate Certificates]
     Validate --> Load[Load TLS Acceptor]
     Load --> Serve[Serve with axum-server]
-    
+
     Config -->|No TLS| HTTP[HTTP Server]
     Load -->|TLS Enabled| HTTPS[HTTPS Server]
     Load -->|mTLS Enabled| mTLS[mTLS Server]
@@ -94,12 +94,12 @@ async fn serve_with_tls(
     tls_config: &mockforge_core::config::HttpTlsConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let acceptor = tls::load_tls_acceptor(tls_config)?;
-    
+
     // Use axum-server for native TLS support
     axum_server::bind_rustls(addr, acceptor)
         .serve(app.into_make_service())
         .await?;
-    
+
     Ok(())
 }
 ```
@@ -195,7 +195,7 @@ Modify `OpenApiRouteRegistry` to support:
 
 **New approach**:
 - When `--api-versioning=none`: Merge all specs into single registry, build single router
-- When `--api-versioning=info` or `path-prefix`: 
+- When `--api-versioning=info` or `path-prefix`:
   - Create separate registries per API version group
   - Build separate routers per group
   - Apply path prefixes (e.g., `/v1`, `/v2`) when `path-prefix` mode

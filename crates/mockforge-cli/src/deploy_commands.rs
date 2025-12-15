@@ -345,70 +345,70 @@ async fn deploy_mock_api(
     // Call handle_serve with minimal parameters, using config defaults
     // The config file we saved contains all the deceptive deploy settings
     handle_serve(
-        Some(effective_config_path.clone()), // config_path
-        None,                                // profile
-        None,                                // http_port (use config)
-        None,                                // ws_port (use config)
-        None,                                // grpc_port (use config)
-        None,                                // smtp_port
-        None,                                // tcp_port
-        server_config.admin.enabled,         // admin
-        None,                                // admin_port (use config)
-        false,                               // metrics
-        None,                                // metrics_port
-        false,                               // tracing
-        "mockforge".to_string(),             // tracing_service_name
-        "production".to_string(),            // tracing_environment
-        String::new(),                       // jaeger_endpoint
-        1.0,                                 // tracing_sampling_rate
-        false,                               // recorder
-        String::new(),                       // recorder_db
-        false,                               // recorder_no_api
-        None,                                // recorder_api_port
-        0,                                   // recorder_max_requests
-        0,                                   // recorder_retention_days
-        false,                               // chaos
-        None,                                // chaos_scenario
-        None,                                // chaos_latency_ms
-        None,                                // chaos_latency_range
-        0.0,                                 // chaos_latency_probability
-        None,                                // chaos_http_errors
-        0.0,                                 // chaos_http_error_probability
-        None,                                // chaos_rate_limit
-        None,                                // chaos_bandwidth_limit
-        None,                                // chaos_packet_loss
+        Some(effective_config_path.clone()),       // config_path
+        None,                                      // profile
+        None,                                      // http_port (use config)
+        None,                                      // ws_port (use config)
+        None,                                      // grpc_port (use config)
+        None,                                      // smtp_port
+        None,                                      // tcp_port
+        server_config.admin.enabled,               // admin
+        None,                                      // admin_port (use config)
+        false,                                     // metrics
+        None,                                      // metrics_port
+        false,                                     // tracing
+        "mockforge".to_string(),                   // tracing_service_name
+        "production".to_string(),                  // tracing_environment
+        String::new(),                             // jaeger_endpoint
+        1.0,                                       // tracing_sampling_rate
+        false,                                     // recorder
+        String::new(),                             // recorder_db
+        false,                                     // recorder_no_api
+        None,                                      // recorder_api_port
+        0,                                         // recorder_max_requests
+        0,                                         // recorder_retention_days
+        false,                                     // chaos
+        None,                                      // chaos_scenario
+        None,                                      // chaos_latency_ms
+        None,                                      // chaos_latency_range
+        0.0,                                       // chaos_latency_probability
+        None,                                      // chaos_http_errors
+        0.0,                                       // chaos_http_error_probability
+        None,                                      // chaos_rate_limit
+        None,                                      // chaos_bandwidth_limit
+        None,                                      // chaos_packet_loss
         spec_path_for_serve.into_iter().collect(), // spec
-        None,                                // spec_dir
-        "overwrite".to_string(),             // merge_conflicts
-        "none".to_string(),                  // api_versioning
-        false,                               // tls_enabled
-        None,                                // tls_cert
-        None,                                // tls_key
-        None,                                // tls_ca
-        "1.2".to_string(),                   // tls_min_version
-        "off".to_string(),                   // mtls
-        None,                                // ws_replay_file
-        None,                                // graphql
-        None,                                // graphql_port
-        None,                                // graphql_upstream
-        false,                               // traffic_shaping
-        0,                                   // bandwidth_limit
-        0,                                   // burst_size
-        None,                                // network_profile
-        false,                               // chaos_random
-        0.0,                                 // chaos_random_error_rate
-        0.0,                                 // chaos_random_delay_rate
-        0,                                   // chaos_random_min_delay
-        0,                                   // chaos_random_max_delay
-        None,                                // chaos_profile
-        false,                               // ai_enabled
-        None,                                // reality_level
-        None,                                // rag_provider
-        None,                                // rag_model
-        None,                                // rag_api_key
-        false,                               // dry_run
-        false,                               // progress
-        false,                               // verbose
+        None,                                      // spec_dir
+        "overwrite".to_string(),                   // merge_conflicts
+        "none".to_string(),                        // api_versioning
+        false,                                     // tls_enabled
+        None,                                      // tls_cert
+        None,                                      // tls_key
+        None,                                      // tls_ca
+        "1.2".to_string(),                         // tls_min_version
+        "off".to_string(),                         // mtls
+        None,                                      // ws_replay_file
+        None,                                      // graphql
+        None,                                      // graphql_port
+        None,                                      // graphql_upstream
+        false,                                     // traffic_shaping
+        0,                                         // bandwidth_limit
+        0,                                         // burst_size
+        None,                                      // network_profile
+        false,                                     // chaos_random
+        0.0,                                       // chaos_random_error_rate
+        0.0,                                       // chaos_random_delay_rate
+        0,                                         // chaos_random_min_delay
+        0,                                         // chaos_random_max_delay
+        None,                                      // chaos_profile
+        false,                                     // ai_enabled
+        None,                                      // reality_level
+        None,                                      // rag_provider
+        None,                                      // rag_model
+        None,                                      // rag_api_key
+        false,                                     // dry_run
+        false,                                     // progress
+        false,                                     // verbose
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to start server: {}", e))?;

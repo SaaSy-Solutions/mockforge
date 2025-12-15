@@ -1558,8 +1558,10 @@ mod tests {
         let mut response = MockResponse::default();
         response.status_code = 404;
         response.body = Some("Not Found".to_string());
-        response.headers.insert("Content-Type".to_string(), "application/json".to_string());
-        
+        response
+            .headers
+            .insert("Content-Type".to_string(), "application/json".to_string());
+
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("404"));
     }
@@ -1671,7 +1673,7 @@ mod tests {
         let workspace = Workspace::new("Test".to_string());
         let id = registry.add_workspace(workspace).unwrap();
         registry.set_active_workspace(Some(id.clone())).unwrap();
-        
+
         assert_eq!(registry.get_active_workspace_id(), Some(id.as_str()));
     }
 
@@ -1682,10 +1684,10 @@ mod tests {
         ws1.order = 2;
         let mut ws2 = Workspace::new("Second".to_string());
         ws2.order = 1;
-        
+
         registry.add_workspace(ws1).unwrap();
         registry.add_workspace(ws2).unwrap();
-        
+
         let ordered = registry.get_workspaces_ordered();
         assert_eq!(ordered.len(), 2);
         assert_eq!(ordered[0].name, "Second"); // Lower order first
@@ -1697,9 +1699,9 @@ mod tests {
         let mut registry = WorkspaceRegistry::new();
         let id1 = registry.add_workspace(Workspace::new("First".to_string())).unwrap();
         let id2 = registry.add_workspace(Workspace::new("Second".to_string())).unwrap();
-        
+
         registry.update_workspaces_order(vec![id2.clone(), id1.clone()]).unwrap();
-        
+
         let ordered = registry.get_workspaces_ordered();
         assert_eq!(ordered[0].id, id2);
         assert_eq!(ordered[1].id, id1);
@@ -1709,7 +1711,7 @@ mod tests {
     fn test_workspace_registry_update_workspaces_order_invalid_id() {
         let mut registry = WorkspaceRegistry::new();
         let id1 = registry.add_workspace(Workspace::new("First".to_string())).unwrap();
-        
+
         let result = registry.update_workspaces_order(vec![id1, "invalid-id".to_string()]);
         assert!(result.is_err());
     }
@@ -1727,7 +1729,7 @@ mod tests {
         let id = registry.add_workspace(Workspace::new("Test".to_string())).unwrap();
         registry.set_active_workspace(Some(id.clone())).unwrap();
         registry.remove_workspace(&id).unwrap();
-        
+
         assert!(registry.get_active_workspace().is_none());
     }
 

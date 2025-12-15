@@ -73,10 +73,10 @@ mod tests {
     fn test_process_data_valid_input() {
         // Arrange
         let input = "valid input";
-        
+
         // Act
         let result = process_data(input);
-        
+
         // Assert
         assert!(result.is_ok());
     }
@@ -85,10 +85,10 @@ mod tests {
     fn test_process_data_invalid_input() {
         // Arrange
         let input = "";
-        
+
         // Act
         let result = process_data(input);
-        
+
         // Assert
         assert!(result.is_err());
     }
@@ -160,7 +160,7 @@ fn test_function_error_conditions() {
     // Test invalid inputs
     assert!(function("").is_err());
     assert!(function("invalid").is_err());
-    
+
     // Test edge cases
     assert!(function(&"a".repeat(10000)).is_err());
 }
@@ -175,14 +175,14 @@ Test boundary conditions and edge cases:
 fn test_edge_cases() {
     // Empty input
     assert_eq!(process(""), Ok(""));
-    
+
     // Single item
     assert_eq!(process("a"), Ok("a"));
-    
+
     // Maximum size
     let large_input = "x".repeat(1000000);
     assert!(process(&large_input).is_ok());
-    
+
     // Unicode
     assert_eq!(process("🚀"), Ok("🚀"));
 }
@@ -316,7 +316,7 @@ Use embedded/test servers for protocol testing:
 async fn test_with_mock_server() {
     let server = MockKafkaServer::new().await;
     let client = KafkaClient::new(server.addr()).await.unwrap();
-    
+
     // Test with mock server
 }
 ```
@@ -414,4 +414,3 @@ Track coverage over time:
 - [Testing Guidelines](../book/src/contributing/testing.md) - Comprehensive testing guide
 - [Coverage Configuration](../coverage.toml) - Coverage thresholds and settings
 - [Coverage Dashboard](../docs/COVERAGE.md) - Current coverage status
-

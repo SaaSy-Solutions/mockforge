@@ -5,8 +5,8 @@
 
 use mockforge_core::conditions::{evaluate_condition, ConditionContext};
 use mockforge_core::routing::{HttpMethod, Route, RouteRegistry};
-use mockforge_core::validation::validate_json_schema;
 use mockforge_core::templating::expand_str;
+use mockforge_core::validation::validate_json_schema;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -43,13 +43,7 @@ mod malformed_input_tests {
 
         // Malformed logical operators
         let malformed = vec![
-            "AND(",
-            "OR(",
-            "NOT(",
-            "AND())",
-            "OR(,)",
-            "AND(OR(",
-            "NOT(NOT(",
+            "AND(", "OR(", "NOT(", "AND())", "OR(,)", "AND(OR(", "NOT(NOT(",
         ];
 
         for condition in malformed {
@@ -71,9 +65,9 @@ mod malformed_input_tests {
             "//",
             "/api//users",
             "/api/users/",
-            "api/users", // Missing leading slash
+            "api/users",             // Missing leading slash
             "/api/users?query=test", // Query string in path
-            "/api/users#fragment", // Fragment in path
+            "/api/users#fragment",   // Fragment in path
         ];
 
         for path in malformed_paths {
@@ -159,10 +153,7 @@ mod large_payload_tests {
         // Create a very large schema with many fields
         let mut properties = serde_json::Map::new();
         for i in 0..10_000 {
-            properties.insert(
-                format!("field_{}", i),
-                json!({"type": "string"}),
-            );
+            properties.insert(format!("field_{}", i), json!({"type": "string"}));
         }
 
         let large_schema = json!({
@@ -195,7 +186,7 @@ mod invalid_utf8_tests {
         // Create invalid UTF-8 sequences
         let invalid_utf8 = vec![
             &[0xFF, 0xFE, 0xFD][..],
-            &[0xC0, 0x80][..], // Overlong encoding
+            &[0xC0, 0x80][..],       // Overlong encoding
             &[0xE0, 0x80, 0x80][..], // Overlong encoding
         ];
 
@@ -220,8 +211,8 @@ mod invalid_utf8_tests {
 
         // Valid but unusual UTF-8 sequences
         let test_cases = vec![
-            json!({"field": "\u{0000}"}), // Null byte
-            json!({"field": "\u{FFFD}"}), // Replacement character
+            json!({"field": "\u{0000}"}),  // Null byte
+            json!({"field": "\u{FFFD}"}),  // Replacement character
             json!({"field": "\u{1F4A9}"}), // Emoji
         ];
 
@@ -256,10 +247,7 @@ mod resource_exhaustion_tests {
 
         // Add many routes
         for i in 0..10_000 {
-            let route = Route::new(
-                HttpMethod::GET,
-                format!("/api/route_{}", i),
-            );
+            let route = Route::new(HttpMethod::GET, format!("/api/route_{}", i));
             let _ = registry.add_http_route(route);
         }
 
@@ -352,11 +340,7 @@ mod edge_case_tests {
 
     #[test]
     fn template_expansion_with_empty_context() {
-        let templates = vec![
-            "{{field}}",
-            "{{nested.field}}",
-            "{{array.0}}",
-        ];
+        let templates = vec!["{{field}}", "{{nested.field}}", "{{array.0}}"];
 
         for template in templates {
             // Should handle missing context gracefully
@@ -382,10 +366,7 @@ mod concurrent_access_tests {
             let handle = thread::spawn(move || {
                 for j in 0..100 {
                     let mut reg = RouteRegistry::new();
-                    let route = Route::new(
-                        HttpMethod::GET,
-                        format!("/api/route_{}_{}", i, j),
-                    );
+                    let route = Route::new(HttpMethod::GET, format!("/api/route_{}_{}", i, j));
                     let _ = reg.add_http_route(route);
                 }
             });

@@ -276,7 +276,8 @@ impl OpenApiRouteRegistry {
                     }
 
                     // Normalize the path to match fixture normalization
-                    let normalized_request_path = crate::CustomFixtureLoader::normalize_path(&request_path);
+                    let normalized_request_path =
+                        crate::CustomFixtureLoader::normalize_path(&request_path);
 
                     // Build query string
                     let query_string =
@@ -744,7 +745,8 @@ impl OpenApiRouteRegistry {
                     );
 
                     // Normalize the path to match fixture normalization
-                    let normalized_request_path = crate::CustomFixtureLoader::normalize_path(&request_path);
+                    let normalized_request_path =
+                        crate::CustomFixtureLoader::normalize_path(&request_path);
 
                     tracing::info!(
                         "[FIXTURE DEBUG] Path normalization: original='{}', normalized='{}'",
@@ -836,10 +838,7 @@ impl OpenApiRouteRegistry {
                                 .unwrap_or(axum::http::StatusCode::OK);
 
                             // Return as tuple (StatusCode, Json) to match handler signature
-                            return (
-                                status,
-                                axum::Json(json_value),
-                            );
+                            return (status, axum::Json(json_value));
                         } else {
                             tracing::warn!(
                                 "[FIXTURE DEBUG] ❌ No fixture match found for {} {} (fingerprint.path='{}', normalized='{}')",
@@ -850,10 +849,7 @@ impl OpenApiRouteRegistry {
                             );
                         }
                     } else {
-                        tracing::warn!(
-                            "[FIXTURE DEBUG] Failed to parse URI: '{}'",
-                            uri_str
-                        );
+                        tracing::warn!("[FIXTURE DEBUG] Failed to parse URI: '{}'", uri_str);
                     }
                 } else {
                     tracing::warn!(
@@ -1564,14 +1560,17 @@ impl OpenApiRouteRegistry {
                         let query_string = if query.0.is_empty() {
                             String::new()
                         } else {
-                            query.0.iter()
+                            query
+                                .0
+                                .iter()
                                 .map(|(k, v)| format!("{}={}", k, v))
                                 .collect::<Vec<_>>()
                                 .join("&")
                         };
 
                         // Normalize the path to match fixture normalization
-                        let normalized_request_path = crate::CustomFixtureLoader::normalize_path(&route.path);
+                        let normalized_request_path =
+                            crate::CustomFixtureLoader::normalize_path(&route.path);
 
                         tracing::info!(
                             "[FIXTURE DEBUG] Path normalization: original='{}', normalized='{}'",
@@ -1597,9 +1596,8 @@ impl OpenApiRouteRegistry {
                                 Method::from_bytes(route.method.as_bytes()).unwrap_or(Method::GET);
 
                             // Convert body to bytes for fingerprint
-                            let body_bytes = body.as_ref().map(|Json(b)| {
-                                serde_json::to_vec(b).ok()
-                            }).flatten();
+                            let body_bytes =
+                                body.as_ref().map(|Json(b)| serde_json::to_vec(b).ok()).flatten();
                             let body_slice = body_bytes.as_deref();
 
                             let fingerprint =
@@ -1651,14 +1649,12 @@ impl OpenApiRouteRegistry {
                                         .unwrap_or_else(|_| serde_json::json!({}));
 
                                 // Build response with status and JSON body
-                                let status = axum::http::StatusCode::from_u16(custom_fixture.status)
-                                    .unwrap_or(axum::http::StatusCode::OK);
+                                let status =
+                                    axum::http::StatusCode::from_u16(custom_fixture.status)
+                                        .unwrap_or(axum::http::StatusCode::OK);
 
                                 // Return as tuple (StatusCode, Json) to match handler signature
-                                return (
-                                    status,
-                                    axum::Json(json_value),
-                                );
+                                return (status, axum::Json(json_value));
                             } else {
                                 tracing::warn!(
                                     "[FIXTURE DEBUG] ❌ No fixture match found for {} {} (fingerprint.path='{}', normalized='{}')",
@@ -1669,10 +1665,7 @@ impl OpenApiRouteRegistry {
                                 );
                             }
                         } else {
-                            tracing::warn!(
-                                "[FIXTURE DEBUG] Failed to parse URI: '{}'",
-                                uri_str
-                            );
+                            tracing::warn!("[FIXTURE DEBUG] Failed to parse URI: '{}'", uri_str);
                         }
                     } else {
                         tracing::warn!(
@@ -3070,10 +3063,8 @@ mod tests {
         let original_routes_len = registry.routes().len();
 
         // Test with_custom_fixture_loader
-        let custom_loader = Arc::new(crate::CustomFixtureLoader::new(
-            temp_dir.path().to_path_buf(),
-            true,
-        ));
+        let custom_loader =
+            Arc::new(crate::CustomFixtureLoader::new(temp_dir.path().to_path_buf(), true));
         let registry_with_loader = registry.with_custom_fixture_loader(custom_loader);
 
         // Verify the loader was set (we can't directly access it, but we can test it doesn't panic)
@@ -3408,14 +3399,8 @@ mod tests {
         };
 
         assert_eq!(options.overrides.len(), 2);
-        assert!(matches!(
-            options.overrides.get("operation1"),
-            Some(ValidationMode::Disabled)
-        ));
-        assert!(matches!(
-            options.overrides.get("operation2"),
-            Some(ValidationMode::Warn)
-        ));
+        assert!(matches!(options.overrides.get("operation1"), Some(ValidationMode::Disabled)));
+        assert!(matches!(options.overrides.get("operation2"), Some(ValidationMode::Warn)));
     }
 
     #[test]

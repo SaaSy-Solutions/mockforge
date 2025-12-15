@@ -15,8 +15,9 @@ fn create_test_handler() -> PriorityHttpHandler {
     let temp_dir = TempDir::new().unwrap();
     let fixtures_dir = temp_dir.path().to_path_buf();
     let record_replay = RecordReplayHandler::new(fixtures_dir, true, true, false);
-    let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock response"}"#.to_string()));
-    
+    let mock_generator =
+        Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock response"}"#.to_string()));
+
     PriorityHttpHandler::new(
         record_replay,
         None, // No failure injection
@@ -29,13 +30,13 @@ fn create_test_handler() -> PriorityHttpHandler {
 #[tokio::test]
 async fn test_priority_handler_empty_state() {
     let handler = create_test_handler();
-    
+
     let method = Method::GET;
     let uri = Uri::from_static("/api/test");
     let headers = HeaderMap::new();
-    
+
     let result = handler.process_request(&method, &uri, &headers, None).await;
-    
+
     // Should return a mock response (lowest priority)
     assert!(result.is_ok());
     let response = result.unwrap();
@@ -46,12 +47,12 @@ async fn test_priority_handler_empty_state() {
 #[tokio::test]
 async fn test_priority_handler_invalid_uri() {
     let handler = create_test_handler();
-    
+
     let method = Method::GET;
     // This should still work - URI parsing happens before handler
     let uri = Uri::from_static("/api/test");
     let headers = HeaderMap::new();
-    
+
     let result = handler.process_request(&method, &uri, &headers, None).await;
     assert!(result.is_ok());
 }
@@ -60,11 +61,11 @@ async fn test_priority_handler_invalid_uri() {
 #[tokio::test]
 async fn test_priority_handler_empty_body() {
     let handler = create_test_handler();
-    
+
     let method = Method::POST;
     let uri = Uri::from_static("/api/test");
     let headers = HeaderMap::new();
-    
+
     let result = handler.process_request(&method, &uri, &headers, Some(&[])).await;
     assert!(result.is_ok());
 }
@@ -73,12 +74,12 @@ async fn test_priority_handler_empty_body() {
 #[tokio::test]
 async fn test_priority_handler_large_body() {
     let handler = create_test_handler();
-    
+
     let method = Method::POST;
     let uri = Uri::from_static("/api/test");
     let headers = HeaderMap::new();
     let large_body = vec![0u8; 10000]; // 10KB body
-    
+
     let result = handler.process_request(&method, &uri, &headers, Some(&large_body)).await;
     assert!(result.is_ok());
 }
@@ -92,20 +93,20 @@ fn test_request_fingerprint_edge_cases() {
     let headers = HeaderMap::new();
     let fingerprint = RequestFingerprint::new(method.clone(), &uri, &headers, None);
     assert_eq!(fingerprint.path, "/");
-    
+
     // Test with query parameters
     let uri = Uri::from_static("/api/test?a=1&b=2");
     let fingerprint = RequestFingerprint::new(method.clone(), &uri, &headers, None);
     assert_eq!(fingerprint.path, "/api/test");
     assert!(fingerprint.query.contains("a=1"));
     assert!(fingerprint.query.contains("b=2"));
-    
+
     // Test with body hash
     let body = b"test body";
     let fingerprint1 = RequestFingerprint::new(method.clone(), &uri, &headers, Some(body));
     let fingerprint2 = RequestFingerprint::new(method.clone(), &uri, &headers, Some(body));
     assert_eq!(fingerprint1.body_hash, fingerprint2.body_hash);
-    
+
     // Test with different bodies
     let body2 = b"different body";
     let fingerprint3 = RequestFingerprint::new(method, &uri, &headers, Some(body2));
@@ -117,12 +118,12 @@ fn test_request_fingerprint_edge_cases() {
 fn test_request_fingerprint_special_characters() {
     let method = Method::GET;
     let headers = HeaderMap::new();
-    
+
     // Test with encoded path
     let uri = Uri::from_static("/api/test%20path");
     let fingerprint = RequestFingerprint::new(method.clone(), &uri, &headers, None);
     assert_eq!(fingerprint.path, "/api/test%20path");
-    
+
     // Test with query parameters containing special chars
     let uri = Uri::from_static("/api/test?param=value%20with%20spaces");
     let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
@@ -134,7 +135,7 @@ fn test_request_fingerprint_special_characters() {
 fn test_request_fingerprint_all_methods() {
     let headers = HeaderMap::new();
     let uri = Uri::from_static("/api/test");
-    
+
     let methods = vec![
         Method::GET,
         Method::POST,
@@ -144,7 +145,7 @@ fn test_request_fingerprint_all_methods() {
         Method::HEAD,
         Method::OPTIONS,
     ];
-    
+
     for method in methods {
         let method_str = method.to_string();
         let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
@@ -156,7 +157,7 @@ fn test_request_fingerprint_all_methods() {
 #[test]
 fn test_request_fingerprint_tags() {
     let headers = HeaderMap::new();
-    
+
     // Test simple path
     let method = Method::GET;
     let uri = Uri::from_static("/api/users");
@@ -165,7 +166,7 @@ fn test_request_fingerprint_tags() {
     assert!(tags.contains(&"api".to_string()));
     assert!(tags.contains(&"users".to_string()));
     assert!(tags.contains(&"get".to_string()));
-    
+
     // Test path with parameters
     let method = Method::GET;
     let uri = Uri::from_static("/api/users/{id}/posts");
@@ -186,10 +187,10 @@ fn test_request_fingerprint_display() {
     let mut headers = HeaderMap::new();
     headers.insert("authorization", "Bearer token123".parse().unwrap());
     headers.insert("content-type", "application/json".parse().unwrap());
-    
+
     let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
     let display = fingerprint.to_string();
-    
+
     // Should contain method, path, and query
     assert!(display.contains("POST"));
     assert!(display.contains("/api/test"));
@@ -205,10 +206,10 @@ fn test_request_fingerprint_hash_consistency() {
     let method = Method::GET;
     let uri = Uri::from_static("/api/test");
     let headers = HeaderMap::new();
-    
+
     let fingerprint1 = RequestFingerprint::new(method.clone(), &uri, &headers, None);
     let fingerprint2 = RequestFingerprint::new(method, &uri, &headers, None);
-    
+
     // Same fingerprint should produce same hash
     assert_eq!(fingerprint1.to_hash(), fingerprint2.to_hash());
 }
@@ -217,26 +218,22 @@ fn test_request_fingerprint_hash_consistency() {
 #[tokio::test]
 async fn test_priority_handler_custom_fixture_no_match() {
     use mockforge_core::CustomFixtureLoader;
-    
+
     let temp_dir = TempDir::new().unwrap();
     let fixtures_dir = temp_dir.path().to_path_buf();
     let record_replay = RecordReplayHandler::new(fixtures_dir.clone(), true, true, false);
-    let mock_generator = Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock response"}"#.to_string()));
-    
+    let mock_generator =
+        Box::new(SimpleMockGenerator::new(200, r#"{"message": "mock response"}"#.to_string()));
+
     let loader = Arc::new(CustomFixtureLoader::new(fixtures_dir, true));
-    
-    let handler = PriorityHttpHandler::new(
-        record_replay,
-        None,
-        None,
-        Some(mock_generator),
-    )
-    .with_custom_fixture_loader(loader);
-    
+
+    let handler = PriorityHttpHandler::new(record_replay, None, None, Some(mock_generator))
+        .with_custom_fixture_loader(loader);
+
     let method = Method::GET;
     let uri = Uri::from_static("/api/nonexistent");
     let headers = HeaderMap::new();
-    
+
     // Should fall through to next priority (mock)
     let result = handler.process_request(&method, &uri, &headers, None).await;
     assert!(result.is_ok());
@@ -249,14 +246,14 @@ async fn test_priority_handler_custom_fixture_no_match() {
 #[tokio::test]
 async fn test_priority_handler_error_recovery() {
     let handler = create_test_handler();
-    
+
     let method = Method::GET;
     let uri = Uri::from_static("/api/test");
     let mut headers = HeaderMap::new();
-    
+
     // Add header with unusual but valid characters (HeaderMap rejects newlines)
     headers.insert("x-custom", "value-with-special-chars-!@#$%".parse().unwrap());
-    
+
     let result = handler.process_request(&method, &uri, &headers, None).await;
     // Should still succeed, handling various header values gracefully
     assert!(result.is_ok());
@@ -267,7 +264,7 @@ async fn test_priority_handler_error_recovery() {
 fn test_request_fingerprint_unicode() {
     let method = Method::GET;
     let headers = HeaderMap::new();
-    
+
     // Test with unicode characters (should be URL encoded in real usage)
     let uri = Uri::from_static("/api/test%E2%98%BA"); // ☺ encoded
     let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
@@ -280,7 +277,7 @@ fn test_request_fingerprint_empty_query() {
     let method = Method::GET;
     let uri = Uri::from_static("/api/test");
     let headers = HeaderMap::new();
-    
+
     let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
     assert_eq!(fingerprint.query, "");
 }
@@ -291,7 +288,7 @@ fn test_request_fingerprint_duplicate_query() {
     let method = Method::GET;
     let uri = Uri::from_static("/api/test?param=1&param=2");
     let headers = HeaderMap::new();
-    
+
     let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
     // Query should be sorted
     assert!(fingerprint.query.contains("param=1"));
@@ -302,14 +299,14 @@ fn test_request_fingerprint_duplicate_query() {
 #[tokio::test]
 async fn test_priority_handler_minimal_config() {
     let handler = create_test_handler();
-    
+
     let method = Method::GET;
     let uri = Uri::from_static("/api/test");
     let headers = HeaderMap::new();
-    
+
     let result = handler.process_request(&method, &uri, &headers, None).await;
     assert!(result.is_ok());
-    
+
     let response = result.unwrap();
     // Should default to mock response
     assert_eq!(response.source.priority, mockforge_core::ResponsePriority::Mock);
@@ -320,18 +317,18 @@ async fn test_priority_handler_minimal_config() {
 fn test_request_fingerprint_header_combinations() {
     let method = Method::GET;
     let uri = Uri::from_static("/api/test");
-    
+
     // Test with no headers
     let headers = HeaderMap::new();
     let fingerprint = RequestFingerprint::new(method.clone(), &uri, &headers, None);
     assert!(fingerprint.headers.is_empty());
-    
+
     // Test with important headers
     let mut headers = HeaderMap::new();
     headers.insert("authorization", "Bearer token".parse().unwrap());
     headers.insert("content-type", "application/json".parse().unwrap());
     headers.insert("accept", "application/json".parse().unwrap());
-    
+
     let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
     assert_eq!(fingerprint.headers.len(), 3);
     assert_eq!(fingerprint.headers.get("authorization"), Some(&"Bearer token".to_string()));
@@ -345,10 +342,10 @@ fn test_request_fingerprint_non_important_headers() {
     let method = Method::GET;
     let uri = Uri::from_static("/api/test");
     let mut headers = HeaderMap::new();
-    
+
     // Add non-important header
     headers.insert("x-custom-header", "custom-value".parse().unwrap());
-    
+
     let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
     // Non-important headers should not be included
     assert!(!fingerprint.headers.contains_key("x-custom-header"));
@@ -360,13 +357,15 @@ fn test_request_fingerprint_invalid_header_values() {
     let method = Method::GET;
     let uri = Uri::from_static("/api/test");
     let mut headers = HeaderMap::new();
-    
+
     // Test with valid but unusual header values (HeaderMap rejects newlines, so use other special chars)
     headers.insert("authorization", "Bearer token-with-special!@#chars".parse().unwrap());
-    
+
     let fingerprint = RequestFingerprint::new(method, &uri, &headers, None);
     // Should include the header
     assert!(fingerprint.headers.contains_key("authorization"));
-    assert_eq!(fingerprint.headers.get("authorization"), Some(&"Bearer token-with-special!@#chars".to_string()));
+    assert_eq!(
+        fingerprint.headers.get("authorization"),
+        Some(&"Bearer token-with-special!@#chars".to_string())
+    );
 }
-

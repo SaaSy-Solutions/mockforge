@@ -56,15 +56,17 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
         ))
     })?;
     let mut key_reader = BufReader::new(key_file);
-    let pkcs8_keys: Vec<rustls::pki_types::PrivatePkcs8KeyDer<'static>> = pkcs8_private_keys(&mut key_reader)
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| {
-            mockforge_core::Error::generic(format!(
-                "Failed to parse private key file {}: {}",
-                config.key_file, e
-            ))
-        })?;
-    let mut keys: Vec<rustls::pki_types::PrivateKeyDer<'static>> = pkcs8_keys.into_iter()
+    let pkcs8_keys: Vec<rustls::pki_types::PrivatePkcs8KeyDer<'static>> =
+        pkcs8_private_keys(&mut key_reader)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| {
+                mockforge_core::Error::generic(format!(
+                    "Failed to parse private key file {}: {}",
+                    config.key_file, e
+                ))
+            })?;
+    let mut keys: Vec<rustls::pki_types::PrivateKeyDer<'static>> = pkcs8_keys
+        .into_iter()
         .map(|k| rustls::pki_types::PrivateKeyDer::Pkcs8(k))
         .collect();
 
@@ -98,14 +100,15 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     ))
                 })?;
                 let mut ca_reader = BufReader::new(ca_file);
-                let ca_certs: Vec<rustls::pki_types::CertificateDer<'static>> = certs(&mut ca_reader)
-                    .collect::<std::result::Result<Vec<_>, _>>()
-                    .map_err(|e| {
-                        mockforge_core::Error::generic(format!(
-                            "Failed to parse CA certificate file {}: {}",
-                            ca_file_path, e
-                        ))
-                    })?;
+                let ca_certs: Vec<rustls::pki_types::CertificateDer<'static>> =
+                    certs(&mut ca_reader).collect::<std::result::Result<Vec<_>, _>>().map_err(
+                        |e| {
+                            mockforge_core::Error::generic(format!(
+                                "Failed to parse CA certificate file {}: {}",
+                                ca_file_path, e
+                            ))
+                        },
+                    )?;
 
                 let mut root_store = rustls::RootCertStore::empty();
                 for cert in &ca_certs {
@@ -117,9 +120,15 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     })?;
                 }
 
-                let client_verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
-                    .build()
-                    .map_err(|e| mockforge_core::Error::generic(format!("Failed to build client verifier: {}", e)))?;
+                let client_verifier =
+                    rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
+                        .build()
+                        .map_err(|e| {
+                            mockforge_core::Error::generic(format!(
+                                "Failed to build client verifier: {}",
+                                e
+                            ))
+                        })?;
 
                 let key = keys.remove(0);
 
@@ -128,7 +137,10 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     .with_client_cert_verifier(client_verifier.into())
                     .with_single_cert(server_certs, key)
                     .map_err(|e| {
-                        mockforge_core::Error::generic(format!("TLS config error (mTLS required): {}", e))
+                        mockforge_core::Error::generic(format!(
+                            "TLS config error (mTLS required): {}",
+                            e
+                        ))
                     })?
             } else {
                 return Err(mockforge_core::Error::generic(
@@ -147,14 +159,15 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     ))
                 })?;
                 let mut ca_reader = BufReader::new(ca_file);
-                let ca_certs: Vec<rustls::pki_types::CertificateDer<'static>> = certs(&mut ca_reader)
-                    .collect::<std::result::Result<Vec<_>, _>>()
-                    .map_err(|e| {
-                        mockforge_core::Error::generic(format!(
-                            "Failed to parse CA certificate file {}: {}",
-                            ca_file_path, e
-                        ))
-                    })?;
+                let ca_certs: Vec<rustls::pki_types::CertificateDer<'static>> =
+                    certs(&mut ca_reader).collect::<std::result::Result<Vec<_>, _>>().map_err(
+                        |e| {
+                            mockforge_core::Error::generic(format!(
+                                "Failed to parse CA certificate file {}: {}",
+                                ca_file_path, e
+                            ))
+                        },
+                    )?;
 
                 let mut root_store = rustls::RootCertStore::empty();
                 for cert in &ca_certs {
@@ -166,9 +179,15 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     })?;
                 }
 
-                let client_verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
-                    .build()
-                    .map_err(|e| mockforge_core::Error::generic(format!("Failed to build client verifier: {}", e)))?;
+                let client_verifier =
+                    rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
+                        .build()
+                        .map_err(|e| {
+                            mockforge_core::Error::generic(format!(
+                                "Failed to build client verifier: {}",
+                                e
+                            ))
+                        })?;
 
                 let key = keys.remove(0);
 
@@ -181,7 +200,10 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     .with_client_cert_verifier(client_verifier.into())
                     .with_single_cert(server_certs, key)
                     .map_err(|e| {
-                        mockforge_core::Error::generic(format!("TLS config error (mTLS optional): {}", e))
+                        mockforge_core::Error::generic(format!(
+                            "TLS config error (mTLS optional): {}",
+                            e
+                        ))
                     })?
             } else {
                 // Optional mTLS without CA: just standard TLS
@@ -190,7 +212,9 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                 rustls::server::ServerConfig::builder()
                     .with_no_client_auth()
                     .with_single_cert(server_certs, key)
-                    .map_err(|e| mockforge_core::Error::generic(format!("TLS config error: {}", e)))?
+                    .map_err(|e| {
+                        mockforge_core::Error::generic(format!("TLS config error: {}", e))
+                    })?
             }
         }
         _ => {
@@ -232,7 +256,8 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
 /// directly for use with axum-server's RustlsConfig.
 pub fn load_tls_server_config(
     config: &HttpTlsConfig,
-) -> std::result::Result<Arc<rustls::server::ServerConfig>, Box<dyn std::error::Error + Send + Sync>> {
+) -> std::result::Result<Arc<rustls::server::ServerConfig>, Box<dyn std::error::Error + Send + Sync>>
+{
     use rustls_pemfile::{certs, pkcs8_private_keys};
     use std::fs::File;
     use std::io::BufReader;
@@ -244,43 +269,27 @@ pub fn load_tls_server_config(
     );
 
     // Load certificate chain
-    let cert_file = File::open(&config.cert_file).map_err(|e| {
-        format!(
-            "Failed to open certificate file {}: {}",
-            config.cert_file, e
-        )
-    })?;
+    let cert_file = File::open(&config.cert_file)
+        .map_err(|e| format!("Failed to open certificate file {}: {}", config.cert_file, e))?;
     let mut cert_reader = BufReader::new(cert_file);
     let server_certs: Vec<rustls::pki_types::CertificateDer<'static>> = certs(&mut cert_reader)
         .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| {
-            format!(
-                "Failed to parse certificate file {}: {}",
-                config.cert_file, e
-            )
-        })?;
+        .map_err(|e| format!("Failed to parse certificate file {}: {}", config.cert_file, e))?;
 
     if server_certs.is_empty() {
         return Err(format!("No certificates found in {}", config.cert_file).into());
     }
 
     // Load private key
-    let key_file = File::open(&config.key_file).map_err(|e| {
-        format!(
-            "Failed to open private key file {}: {}",
-            config.key_file, e
-        )
-    })?;
+    let key_file = File::open(&config.key_file)
+        .map_err(|e| format!("Failed to open private key file {}: {}", config.key_file, e))?;
     let mut key_reader = BufReader::new(key_file);
-    let pkcs8_keys: Vec<rustls::pki_types::PrivatePkcs8KeyDer<'static>> = pkcs8_private_keys(&mut key_reader)
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| {
-            format!(
-                "Failed to parse private key file {}: {}",
-                config.key_file, e
-            )
-        })?;
-    let mut keys: Vec<rustls::pki_types::PrivateKeyDer<'static>> = pkcs8_keys.into_iter()
+    let pkcs8_keys: Vec<rustls::pki_types::PrivatePkcs8KeyDer<'static>> =
+        pkcs8_private_keys(&mut key_reader)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to parse private key file {}: {}", config.key_file, e))?;
+    let mut keys: Vec<rustls::pki_types::PrivateKeyDer<'static>> = pkcs8_keys
+        .into_iter()
         .map(|k| rustls::pki_types::PrivateKeyDer::Pkcs8(k))
         .collect();
 
@@ -304,11 +313,10 @@ pub fn load_tls_server_config(
                     format!("Failed to open CA certificate file {}: {}", ca_file_path, e)
                 })?;
                 let mut ca_reader = BufReader::new(ca_file);
-                let ca_certs: Vec<rustls::pki_types::CertificateDer<'static>> = certs(&mut ca_reader)
-                    .collect::<std::result::Result<Vec<_>, _>>()
-                    .map_err(|e| {
-                        format!("Failed to parse CA certificate file {}: {}", ca_file_path, e)
-                    })?;
+                let ca_certs: Vec<rustls::pki_types::CertificateDer<'static>> =
+                    certs(&mut ca_reader).collect::<std::result::Result<Vec<_>, _>>().map_err(
+                        |e| format!("Failed to parse CA certificate file {}: {}", ca_file_path, e),
+                    )?;
 
                 let mut root_store = rustls::RootCertStore::empty();
                 for cert in &ca_certs {
@@ -317,9 +325,10 @@ pub fn load_tls_server_config(
                     })?;
                 }
 
-                let client_verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
-                    .build()
-                    .map_err(|e| format!("Failed to build client verifier: {}", e))?;
+                let client_verifier =
+                    rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
+                        .build()
+                        .map_err(|e| format!("Failed to build client verifier: {}", e))?;
 
                 let key = keys.remove(0);
 
@@ -337,11 +346,10 @@ pub fn load_tls_server_config(
                     format!("Failed to open CA certificate file {}: {}", ca_file_path, e)
                 })?;
                 let mut ca_reader = BufReader::new(ca_file);
-                let ca_certs: Vec<rustls::pki_types::CertificateDer<'static>> = certs(&mut ca_reader)
-                    .collect::<std::result::Result<Vec<_>, _>>()
-                    .map_err(|e| {
-                        format!("Failed to parse CA certificate file {}: {}", ca_file_path, e)
-                    })?;
+                let ca_certs: Vec<rustls::pki_types::CertificateDer<'static>> =
+                    certs(&mut ca_reader).collect::<std::result::Result<Vec<_>, _>>().map_err(
+                        |e| format!("Failed to parse CA certificate file {}: {}", ca_file_path, e),
+                    )?;
 
                 let mut root_store = rustls::RootCertStore::empty();
                 for cert in &ca_certs {
@@ -350,9 +358,10 @@ pub fn load_tls_server_config(
                     })?;
                 }
 
-                let client_verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
-                    .build()
-                    .map_err(|e| format!("Failed to build client verifier: {}", e))?;
+                let client_verifier =
+                    rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
+                        .build()
+                        .map_err(|e| format!("Failed to build client verifier: {}", e))?;
 
                 let key = keys.remove(0);
 

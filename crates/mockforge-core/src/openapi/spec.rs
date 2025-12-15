@@ -51,38 +51,41 @@ impl OpenApiSpec {
         // Check if this is a Swagger 2.0 spec and convert if necessary
         let (raw_document, spec) = if swagger_convert::is_swagger_2(&raw_json) {
             tracing::info!("Detected Swagger 2.0 specification, converting to OpenAPI 3.0");
-            let converted = swagger_convert::convert_swagger_to_openapi3(&raw_json)
-                .map_err(|e| Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e)))?;
-            let spec: OpenAPI = serde_json::from_value(converted.clone())
-                .map_err(|e| Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e)))?;
+            let converted =
+                swagger_convert::convert_swagger_to_openapi3(&raw_json).map_err(|e| {
+                    Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e))
+                })?;
+            let spec: OpenAPI = serde_json::from_value(converted.clone()).map_err(|e| {
+                Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e))
+            })?;
             (converted, spec)
         } else {
-            let spec: OpenAPI = serde_json::from_value(raw_json.clone())
-                .map_err(|e| {
-                    // Enhanced error reporting for debugging missing field errors
-                    let error_str = format!("{}", e);
-                    let mut error_msg = format!("Failed to read OpenAPI spec: {}", e);
+            let spec: OpenAPI = serde_json::from_value(raw_json.clone()).map_err(|e| {
+                // Enhanced error reporting for debugging missing field errors
+                let error_str = format!("{}", e);
+                let mut error_msg = format!("Failed to read OpenAPI spec: {}", e);
 
-                    // If it's a missing field error, add diagnostic information
-                    if error_str.contains("missing field") {
-                        tracing::error!("OpenAPI deserialization error: {}", error_str);
+                // If it's a missing field error, add diagnostic information
+                if error_str.contains("missing field") {
+                    tracing::error!("OpenAPI deserialization error: {}", error_str);
 
-                        // Add context about the spec structure
-                        if let Some(info) = raw_json.get("info") {
-                            if let Some(info_obj) = info.as_object() {
-                                let has_desc = info_obj.contains_key("description");
-                                error_msg.push_str(&format!(" | Info.description present: {}", has_desc));
-                            }
-                        }
-                        if let Some(servers) = raw_json.get("servers") {
-                            if let Some(servers_arr) = servers.as_array() {
-                                error_msg.push_str(&format!(" | Servers count: {}", servers_arr.len()));
-                            }
+                    // Add context about the spec structure
+                    if let Some(info) = raw_json.get("info") {
+                        if let Some(info_obj) = info.as_object() {
+                            let has_desc = info_obj.contains_key("description");
+                            error_msg
+                                .push_str(&format!(" | Info.description present: {}", has_desc));
                         }
                     }
+                    if let Some(servers) = raw_json.get("servers") {
+                        if let Some(servers_arr) = servers.as_array() {
+                            error_msg.push_str(&format!(" | Servers count: {}", servers_arr.len()));
+                        }
+                    }
+                }
 
-                    Error::generic(error_msg)
-                })?;
+                Error::generic(error_msg)
+            })?;
             (raw_json, spec)
         };
 
@@ -111,10 +114,13 @@ impl OpenApiSpec {
 
         // Check if this is a Swagger 2.0 spec and convert if necessary
         let (raw_document, spec) = if swagger_convert::is_swagger_2(&raw_json) {
-            let converted = swagger_convert::convert_swagger_to_openapi3(&raw_json)
-                .map_err(|e| Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e)))?;
-            let spec: OpenAPI = serde_json::from_value(converted.clone())
-                .map_err(|e| Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e)))?;
+            let converted =
+                swagger_convert::convert_swagger_to_openapi3(&raw_json).map_err(|e| {
+                    Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e))
+                })?;
+            let spec: OpenAPI = serde_json::from_value(converted.clone()).map_err(|e| {
+                Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e))
+            })?;
             (converted, spec)
         } else {
             let spec: OpenAPI = serde_json::from_value(raw_json.clone())
@@ -136,10 +142,12 @@ impl OpenApiSpec {
     pub fn from_json(json: serde_json::Value) -> Result<Self> {
         // Check if this is a Swagger 2.0 spec and convert if necessary
         let (raw_document, spec) = if swagger_convert::is_swagger_2(&json) {
-            let converted = swagger_convert::convert_swagger_to_openapi3(&json)
-                .map_err(|e| Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e)))?;
-            let spec: OpenAPI = serde_json::from_value(converted.clone())
-                .map_err(|e| Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e)))?;
+            let converted = swagger_convert::convert_swagger_to_openapi3(&json).map_err(|e| {
+                Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e))
+            })?;
+            let spec: OpenAPI = serde_json::from_value(converted.clone()).map_err(|e| {
+                Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e))
+            })?;
             (converted, spec)
         } else {
             let json_for_doc = json.clone();

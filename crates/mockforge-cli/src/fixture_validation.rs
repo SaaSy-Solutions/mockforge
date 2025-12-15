@@ -30,9 +30,9 @@ pub enum FixtureFormat {
 
 /// Validate a single fixture file
 pub async fn validate_file(file_path: &Path) -> Result<ValidationResult> {
-    let content = fs::read_to_string(file_path).await.with_context(|| {
-        format!("Failed to read fixture file: {}", file_path.display())
-    })?;
+    let content = fs::read_to_string(file_path)
+        .await
+        .with_context(|| format!("Failed to read fixture file: {}", file_path.display()))?;
 
     // Check if it's a template file
     if should_skip_file(&content) {
@@ -49,7 +49,7 @@ pub async fn validate_file(file_path: &Path) -> Result<ValidationResult> {
         Ok(mut fixture) => {
             // Normalize path
             fixture.path = normalize_path(&fixture.path);
-            
+
             // Validate
             match validate_fixture(&fixture, file_path) {
                 Ok(_) => Ok(ValidationResult {
@@ -69,32 +69,28 @@ pub async fn validate_file(file_path: &Path) -> Result<ValidationResult> {
         Err(_) => {
             // Try nested format
             match serde_json::from_str::<NestedFixture>(&content) {
-                Ok(nested) => {
-                    match convert_nested_to_flat(nested) {
-                        Ok(fixture) => {
-                            match validate_fixture(&fixture, file_path) {
-                                Ok(_) => Ok(ValidationResult {
-                                    file: file_path.to_path_buf(),
-                                    valid: true,
-                                    error: None,
-                                    format: FixtureFormat::Nested,
-                                }),
-                                Err(e) => Ok(ValidationResult {
-                                    file: file_path.to_path_buf(),
-                                    valid: false,
-                                    error: Some(e.to_string()),
-                                    format: FixtureFormat::Nested,
-                                }),
-                            }
-                        }
+                Ok(nested) => match convert_nested_to_flat(nested) {
+                    Ok(fixture) => match validate_fixture(&fixture, file_path) {
+                        Ok(_) => Ok(ValidationResult {
+                            file: file_path.to_path_buf(),
+                            valid: true,
+                            error: None,
+                            format: FixtureFormat::Nested,
+                        }),
                         Err(e) => Ok(ValidationResult {
                             file: file_path.to_path_buf(),
                             valid: false,
                             error: Some(e.to_string()),
                             format: FixtureFormat::Nested,
                         }),
-                    }
-                }
+                    },
+                    Err(e) => Ok(ValidationResult {
+                        file: file_path.to_path_buf(),
+                        valid: false,
+                        error: Some(e.to_string()),
+                        format: FixtureFormat::Nested,
+                    }),
+                },
                 Err(e) => Ok(ValidationResult {
                     file: file_path.to_path_buf(),
                     valid: false,
@@ -118,9 +114,9 @@ pub async fn validate_directory(dir_path: &Path) -> Result<Vec<ValidationResult>
         anyhow::bail!("Path is not a directory: {}", dir_path.display());
     }
 
-    let mut entries = fs::read_dir(dir_path).await.with_context(|| {
-        format!("Failed to read directory: {}", dir_path.display())
-    })?;
+    let mut entries = fs::read_dir(dir_path)
+        .await
+        .with_context(|| format!("Failed to read directory: {}", dir_path.display()))?;
 
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
@@ -139,56 +135,58 @@ fn should_skip_file(content: &str) -> bool {
     if content.contains("\"_comment\"") || content.contains("\"_usage\"") {
         return true;
     }
-    
+
     // Check if it's a scenario/config file (not a fixture)
     if content.contains("\"scenario\"") || content.contains("\"presentation_mode\"") {
         return true;
     }
-    
+
     false
 }
 
 fn normalize_path(path: &str) -> String {
     let mut normalized = path.trim().to_string();
-    
+
     // Strip query string if present (query strings are handled separately)
     if let Some(query_start) = normalized.find('?') {
         normalized = normalized[..query_start].to_string();
     }
-    
+
     // Collapse multiple slashes into one
     while normalized.contains("//") {
         normalized = normalized.replace("//", "/");
     }
-    
+
     // Remove trailing slash (except for root path)
     if normalized.len() > 1 && normalized.ends_with('/') {
         normalized.pop();
     }
-    
+
     // Ensure path starts with /
     if !normalized.starts_with('/') {
         normalized = format!("/{}", normalized);
     }
-    
+
     normalized
 }
 
 fn validate_fixture(fixture: &CustomFixture, file_path: &Path) -> Result<()> {
     use anyhow::bail;
-    
+
     // Check required fields
     if fixture.method.is_empty() {
         bail!("method is required and cannot be empty");
     }
-    
+
     if fixture.path.is_empty() {
         bail!("path is required and cannot be empty");
     }
 
     // Validate HTTP method
     let method_upper = fixture.method.to_uppercase();
-    let valid_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"];
+    let valid_methods = [
+        "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE",
+    ];
     if !valid_methods.contains(&method_upper.as_str()) {
         // Warn but don't fail
     }
@@ -203,14 +201,14 @@ fn validate_fixture(fixture: &CustomFixture, file_path: &Path) -> Result<()> {
 
 fn convert_nested_to_flat(nested: NestedFixture) -> Result<CustomFixture> {
     use anyhow::bail;
-    
-    let request = nested.request.ok_or_else(|| {
-        anyhow::anyhow!("Nested fixture missing 'request' object")
-    })?;
-    
-    let response = nested.response.ok_or_else(|| {
-        anyhow::anyhow!("Nested fixture missing 'response' object")
-    })?;
+
+    let request = nested
+        .request
+        .ok_or_else(|| anyhow::anyhow!("Nested fixture missing 'request' object"))?;
+
+    let response = nested
+        .response
+        .ok_or_else(|| anyhow::anyhow!("Nested fixture missing 'response' object"))?;
 
     Ok(CustomFixture {
         method: request.method,
@@ -282,5 +280,3 @@ pub fn print_results(results: &[ValidationResult], verbose: bool) {
         }
     }
 }
-
-

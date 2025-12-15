@@ -81,17 +81,17 @@ pub enum MergeConflictError {
 impl std::fmt::Display for MergeConflictError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MergeConflictError::RouteConflict { method, path, files } => {
+            MergeConflictError::RouteConflict {
+                method,
+                path,
+                files,
+            } => {
                 write!(
                     f,
                     "Conflict: {} {} defined in {}",
                     method,
                     path,
-                    files
-                        .iter()
-                        .map(|p| p.display().to_string())
-                        .collect::<Vec<_>>()
-                        .join(" and ")
+                    files.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(" and ")
                 )
             }
             MergeConflictError::ComponentConflict {
@@ -103,11 +103,7 @@ impl std::fmt::Display for MergeConflictError {
                     f,
                     "Conflict: components.{} defined differently in {}",
                     component_type,
-                    files
-                        .iter()
-                        .map(|p| p.display().to_string())
-                        .collect::<Vec<_>>()
-                        .join(" and ")
+                    files.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(" and ")
                 )
             }
         }
@@ -121,25 +117,17 @@ impl std::error::Error for MergeConflictError {}
 /// Discovers all `.json`, `.yaml`, `.yml` files recursively,
 /// sorts them lexicographically for deterministic ordering,
 /// and loads each spec.
-pub async fn load_specs_from_directory(
-    dir: &Path,
-) -> Result<Vec<(PathBuf, OpenApiSpec)>> {
+pub async fn load_specs_from_directory(dir: &Path) -> Result<Vec<(PathBuf, OpenApiSpec)>> {
     use globwalk::GlobWalkerBuilder;
 
     info!("Discovering OpenAPI specs in directory: {}", dir.display());
 
     if !dir.exists() {
-        return Err(Error::generic(format!(
-            "Directory does not exist: {}",
-            dir.display()
-        )));
+        return Err(Error::generic(format!("Directory does not exist: {}", dir.display())));
     }
 
     if !dir.is_dir() {
-        return Err(Error::generic(format!(
-            "Path is not a directory: {}",
-            dir.display()
-        )));
+        return Err(Error::generic(format!("Path is not a directory: {}", dir.display())));
     }
 
     // Discover all spec files
@@ -149,7 +137,8 @@ pub async fn load_specs_from_directory(
         .map_err(|e| Error::generic(format!("Failed to walk directory: {}", e)))?;
 
     for entry in walker {
-        let entry = entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+        let entry =
+            entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
         let path = entry.path();
         if path.is_file() {
             spec_files.push(path.to_path_buf());
@@ -186,9 +175,7 @@ pub async fn load_specs_from_directory(
 }
 
 /// Load OpenAPI specs from a list of file paths
-pub async fn load_specs_from_files(
-    files: Vec<PathBuf>,
-) -> Result<Vec<(PathBuf, OpenApiSpec)>> {
+pub async fn load_specs_from_files(files: Vec<PathBuf>) -> Result<Vec<(PathBuf, OpenApiSpec)>> {
     info!("Loading {} OpenAPI spec files", files.len());
 
     let mut specs = Vec::new();
@@ -230,16 +217,10 @@ pub fn group_specs_by_openapi_version(
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
-        groups
-            .entry(version.clone())
-            .or_insert_with(Vec::new)
-            .push((path, spec));
+        groups.entry(version.clone()).or_insert_with(Vec::new).push((path, spec));
     }
 
-    info!(
-        "Grouped specs into {} OpenAPI version groups",
-        groups.len()
-    );
+    info!("Grouped specs into {} OpenAPI version groups", groups.len());
     for (version, specs_in_group) in &groups {
         info!("  OpenAPI {}: {} specs", version, specs_in_group.len());
     }
@@ -267,10 +248,7 @@ pub fn group_specs_by_api_version(
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
-        groups
-            .entry(api_version.clone())
-            .or_insert_with(Vec::new)
-            .push((path, spec));
+        groups.entry(api_version.clone()).or_insert_with(Vec::new).push((path, spec));
     }
 
     info!("Grouped specs into {} API version groups", groups.len());
@@ -325,7 +303,16 @@ pub fn detect_conflicts(specs: &[(PathBuf, OpenApiSpec)]) -> Vec<Conflict> {
     }
 
     // Detect component conflicts
-    for component_type in &["schemas", "parameters", "responses", "requestBodies", "headers", "examples", "links", "callbacks"] {
+    for component_type in &[
+        "schemas",
+        "parameters",
+        "responses",
+        "requestBodies",
+        "headers",
+        "examples",
+        "links",
+        "callbacks",
+    ] {
         let mut components: HashMap<String, Vec<PathBuf>> = HashMap::new();
 
         for (path, spec) in specs {
@@ -337,10 +324,7 @@ pub fn detect_conflicts(specs: &[(PathBuf, OpenApiSpec)]) -> Vec<Conflict> {
             {
                 if let Some(components_map) = components_obj.as_object() {
                     for key in components_map.keys() {
-                        components
-                            .entry(key.clone())
-                            .or_insert_with(Vec::new)
-                            .push(path.clone());
+                        components.entry(key.clone()).or_insert_with(Vec::new).push(path.clone());
                     }
                 }
             }
@@ -415,7 +399,11 @@ pub fn merge_specs(
             if !conflicts.is_empty() {
                 // Return the first conflict as an error
                 match &conflicts[0] {
-                    Conflict::RouteConflict { method, path, files } => {
+                    Conflict::RouteConflict {
+                        method,
+                        path,
+                        files,
+                    } => {
                         return Err(MergeConflictError::RouteConflict {
                             method: method.clone(),
                             path: path.clone(),
@@ -440,7 +428,11 @@ pub fn merge_specs(
             // Log warnings for conflicts
             for conflict in &conflicts {
                 match conflict {
-                    Conflict::RouteConflict { method, path, files } => {
+                    Conflict::RouteConflict {
+                        method,
+                        path,
+                        files,
+                    } => {
                         warn!(
                             "Route conflict: {} {} defined in multiple files: {:?}. Using {} definition.",
                             method, path, files,
@@ -475,19 +467,16 @@ pub fn merge_specs(
         .unwrap_or_else(|| serde_json::json!({}));
 
     // Determine iteration order based on strategy
-    let specs_to_merge: Vec<&(PathBuf, OpenApiSpec)> = if conflict_strategy == ConflictStrategy::Last {
-        specs.iter().skip(1).collect()
-    } else {
-        specs.iter().skip(1).collect()
-    };
+    let specs_to_merge: Vec<&(PathBuf, OpenApiSpec)> =
+        if conflict_strategy == ConflictStrategy::Last {
+            specs.iter().skip(1).collect()
+        } else {
+            specs.iter().skip(1).collect()
+        };
 
     // Merge each subsequent spec
     for (file_path, spec) in specs_to_merge {
-        let spec_doc = spec
-            .raw_document
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| serde_json::json!({}));
+        let spec_doc = spec.raw_document.as_ref().cloned().unwrap_or_else(|| serde_json::json!({}));
 
         // Merge paths
         if let Some(paths) = spec_doc.get("paths").and_then(|p| p.as_object()) {
@@ -526,7 +515,9 @@ pub fn merge_specs(
                         if base_component_map.contains_key(key) {
                             // Check if identical
                             let existing = base_component_map.get(key).unwrap();
-                            if serde_json::to_string(existing).ok() != serde_json::to_string(value).ok() {
+                            if serde_json::to_string(existing).ok()
+                                != serde_json::to_string(value).ok()
+                            {
                                 // Different - handle based on strategy
                                 if conflict_strategy == ConflictStrategy::Last {
                                     base_component_map.insert(key.clone(), value.clone());
@@ -544,8 +535,8 @@ pub fn merge_specs(
     }
 
     // Re-parse the merged document
-    let merged_spec: openapiv3::OpenAPI = serde_json::from_value(base_doc.clone())
-        .map_err(|e| {
+    let merged_spec: openapiv3::OpenAPI =
+        serde_json::from_value(base_doc.clone()).map_err(|e| {
             MergeConflictError::ComponentConflict {
                 component_type: "parsing".to_string(),
                 key: format!("merge_error: {}", e),

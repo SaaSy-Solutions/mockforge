@@ -16,8 +16,8 @@ use crate::target_parser::TargetConfig;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::str::FromStr;
+use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinHandle;
 
@@ -242,7 +242,7 @@ impl ParallelExecutor {
             let max_error_rate = self.base_command.max_error_rate;
             let verbose = self.base_command.verbose;
             let skip_tls_verify = self.base_command.skip_tls_verify;
-            
+
             let templates = templates.clone();
             let base_headers = base_headers.clone();
             let scenario = scenario.clone();
@@ -416,9 +416,7 @@ impl ParallelExecutor {
 
         // Execute k6
         let executor = K6Executor::new()?;
-        let results = executor
-            .execute(&script_path, Some(&output_dir), verbose)
-            .await;
+        let results = executor.execute(&script_path, Some(&output_dir), verbose).await;
 
         match results {
             Ok(k6_results) => Ok(TargetResult {
@@ -530,22 +528,20 @@ mod tests {
 
     #[test]
     fn test_aggregated_metrics_error_rate_calculation() {
-        let results = vec![
-            TargetResult {
-                target_url: "http://api1.com".to_string(),
-                target_index: 0,
-                results: K6Results {
-                    total_requests: 1000,
-                    failed_requests: 50,
-                    avg_duration_ms: 100.0,
-                    p95_duration_ms: 200.0,
-                    p99_duration_ms: 300.0,
-                },
-                output_dir: PathBuf::from("output1"),
-                success: true,
-                error: None,
+        let results = vec![TargetResult {
+            target_url: "http://api1.com".to_string(),
+            target_index: 0,
+            results: K6Results {
+                total_requests: 1000,
+                failed_requests: 50,
+                avg_duration_ms: 100.0,
+                p95_duration_ms: 200.0,
+                p99_duration_ms: 300.0,
             },
-        ];
+            output_dir: PathBuf::from("output1"),
+            success: true,
+            error: None,
+        }];
 
         let metrics = AggregatedMetrics::from_results(&results);
         assert_eq!(metrics.error_rate, 5.0); // 50/1000 * 100

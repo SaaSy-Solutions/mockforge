@@ -1933,7 +1933,8 @@ mod tests {
 
         // Create a test workspace
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        let request = MockRequest::new(HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
+        let request =
+            MockRequest::new(HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
         workspace.add_request(request);
 
         // Save workspace

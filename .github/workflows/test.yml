@@ -135,22 +135,22 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
-            
+
             // Read coverage summary
             const summaryPath = path.join('coverage', 'summary.json');
             if (!fs.existsSync(summaryPath)) {
               console.log('Coverage summary not found');
               return;
             }
-            
+
             const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
-            
+
             // Build comment
             let comment = '## 📊 Test Coverage Report\n\n';
             comment += `**Generated:** ${new Date(summary.generated).toLocaleString()}\n\n`;
             comment += `**Threshold:** ${summary.threshold}%\n\n`;
             comment += `**Total Crates:** ${summary.total_crates}\n\n`;
-            
+
             const stats = summary.statistics;
             comment += '### Statistics\n\n';
             comment += `- ✅ Crates with coverage: ${stats.crates_with_coverage}\n`;
@@ -158,17 +158,17 @@ jobs:
             comment += `- ❌ Crates with no tests: ${stats.crates_no_tests}\n`;
             comment += `- 🔴 Crates with errors: ${stats.crates_errors}\n`;
             comment += `- 📈 Average coverage: ${stats.average_coverage.toFixed(2)}%\n\n`;
-            
+
             // List crates below threshold
-            const belowThreshold = summary.crates.filter(c => 
+            const belowThreshold = summary.crates.filter(c =>
               c.status === 'below_threshold' || c.status === 'no_tests' || c.status === 'error'
             );
-            
+
             if (belowThreshold.length > 0) {
               comment += '### ⚠️ Crates Below Threshold\n\n';
               comment += '| Crate | Coverage | Status |\n';
               comment += '|-------|---------|--------|\n';
-              
+
               belowThreshold.slice(0, 20).forEach(crate => {
                 const coverage = crate.coverage_percent?.toFixed(2) || '0.00';
                 const status = crate.status === 'no_tests' ? 'No Tests' :
@@ -176,20 +176,20 @@ jobs:
                               'Below Threshold';
                 comment += `| \`${crate.name}\` | ${coverage}% | ${status} |\n`;
               });
-              
+
               if (belowThreshold.length > 20) {
                 comment += `\n*... and ${belowThreshold.length - 20} more*\n`;
               }
-              
+
               comment += '\n';
             }
-            
+
             comment += '### 📁 Coverage Reports\n\n';
             comment += '- [JSON Summary](artifact://coverage-reports/summary.json)\n';
             comment += '- [CSV Summary](artifact://coverage-reports/summary.csv)\n';
             comment += '- [Text Summary](artifact://coverage-reports/summary.txt)\n';
             comment += '- Per-crate HTML reports available in artifacts\n';
-            
+
             // Post comment
             github.rest.issues.createComment({
               issue_number: context.issue.number,

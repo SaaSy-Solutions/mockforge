@@ -41,10 +41,10 @@ use tokio::time::{timeout, Duration};
 async fn test_kafka_connection_establishment() {
     // Arrange: Start test server
     let server = KafkaServer::new("localhost:9092").await.unwrap();
-    
+
     // Act: Connect client
     let client = server.connect().await.unwrap();
-    
+
     // Assert: Connection is established
     assert!(client.is_connected());
 }
@@ -53,10 +53,10 @@ async fn test_kafka_connection_establishment() {
 async fn test_kafka_connection_timeout() {
     // Arrange: Use invalid address
     let server = KafkaServer::new("invalid:9092");
-    
+
     // Act: Attempt connection with timeout
     let result = timeout(Duration::from_secs(2), server.connect()).await;
-    
+
     // Assert: Connection times out
     assert!(result.is_err() || result.unwrap().is_err());
 }
@@ -66,16 +66,16 @@ async fn test_kafka_connection_recovery() {
     // Arrange: Establish connection
     let server = KafkaServer::new("localhost:9092").await.unwrap();
     let mut client = server.connect().await.unwrap();
-    
+
     // Act: Simulate connection loss
     server.disconnect().await;
-    
+
     // Wait a bit
     tokio::time::sleep(Duration::from_millis(100)).await;
-    
+
     // Reconnect
     let result = client.reconnect().await;
-    
+
     // Assert: Reconnection succeeds
     assert!(result.is_ok());
 }
@@ -95,16 +95,16 @@ async fn test_kafka_message_send_receive() {
     // Arrange: Set up server and route
     let server = KafkaServer::new("localhost:9092").await.unwrap();
     let mut registry = RouteRegistry::new();
-    
+
     registry.add_route(create_test_route("test-topic")).unwrap();
-    
+
     // Act: Send message
     let message = KafkaMessage::new("test-topic", b"test payload");
     server.send(message).await.unwrap();
-    
+
     // Wait for processing
     tokio::time::sleep(Duration::from_millis(100)).await;
-    
+
     // Assert: Message was received and routed
     let received = server.receive("test-topic").await.unwrap();
     assert_eq!(received.payload(), b"test payload");
@@ -115,11 +115,11 @@ async fn test_kafka_message_serialization() {
     // Arrange: Create message with JSON payload
     let payload = serde_json::json!({"key": "value"});
     let message = KafkaMessage::new("test-topic", &payload.to_string());
-    
+
     // Act: Serialize and deserialize
     let serialized = message.serialize().unwrap();
     let deserialized = KafkaMessage::deserialize(&serialized).unwrap();
-    
+
     // Assert: Data is preserved
     assert_eq!(message.topic(), deserialized.topic());
     assert_eq!(message.payload(), deserialized.payload());
@@ -130,11 +130,11 @@ async fn test_kafka_large_message() {
     // Arrange: Create large message (1MB)
     let large_payload = vec![0u8; 1024 * 1024];
     let message = KafkaMessage::new("test-topic", &large_payload);
-    
+
     // Act: Send large message
     let server = KafkaServer::new("localhost:9092").await.unwrap();
     let result = server.send(message).await;
-    
+
     // Assert: Large message is handled
     assert!(result.is_ok());
 }
@@ -152,11 +152,11 @@ use mockforge_kafka::{KafkaServer, KafkaError};
 async fn test_kafka_invalid_topic() {
     // Arrange: Server without topic
     let server = KafkaServer::new("localhost:9092").await.unwrap();
-    
+
     // Act: Send to non-existent topic
     let message = KafkaMessage::new("non-existent", b"payload");
     let result = server.send(message).await;
-    
+
     // Assert: Error is returned
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), KafkaError::TopicNotFound));
@@ -167,14 +167,14 @@ async fn test_kafka_network_failure() {
     // Arrange: Start server then kill it
     let server = KafkaServer::new("localhost:9092").await.unwrap();
     let client = server.connect().await.unwrap();
-    
+
     // Act: Kill server
     server.shutdown().await;
-    
+
     // Try to send message
     let message = KafkaMessage::new("test-topic", b"payload");
     let result = client.send(message).await;
-    
+
     // Assert: Network error is detected
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), KafkaError::NetworkError));
@@ -187,10 +187,10 @@ async fn test_kafka_protocol_error() {
         .with_protocol_version(999)  // Invalid version
         .await
         .unwrap();
-    
+
     // Act: Attempt connection
     let result = server.connect().await;
-    
+
     // Assert: Protocol error is returned
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), KafkaError::ProtocolError));
@@ -216,16 +216,16 @@ async fn test_kafka_routing_integration() {
         create_test_response(),
     );
     registry.add_route(route).unwrap();
-    
+
     let server = KafkaServer::new("localhost:9092")
         .with_registry(registry)
         .await
         .unwrap();
-    
+
     // Act: Send message
     let message = KafkaMessage::new("test-topic", b"test");
     let response = server.send_and_wait(message).await.unwrap();
-    
+
     // Assert: Message was routed correctly
     assert_eq!(response.status(), 200);
     assert_eq!(response.body(), b"test response");
@@ -241,7 +241,7 @@ async fn test_kafka_cross_protocol_bridge() {
         create_kafka_bridge_response(),
     );
     registry.add_route(route).unwrap();
-    
+
     // Act: Send HTTP request that bridges to Kafka
     let client = reqwest::Client::new();
     let response = client
@@ -250,7 +250,7 @@ async fn test_kafka_cross_protocol_bridge() {
         .send()
         .await
         .unwrap();
-    
+
     // Assert: HTTP request was bridged to Kafka
     assert_eq!(response.status(), 200);
 }
@@ -394,7 +394,7 @@ impl MockKafkaServer {
         // Start embedded Kafka server
         // Return configured instance
     }
-    
+
     pub fn addr(&self) -> &str {
         &self.addr
     }
@@ -478,4 +478,3 @@ cargo test --package mockforge-kafka test_kafka_connection_establishment
 
 - [Testing Standards](TESTING_STANDARDS.md) - General testing guidelines
 - [Coverage Maintenance](COVERAGE_MAINTENANCE.md) - Coverage improvement process
-

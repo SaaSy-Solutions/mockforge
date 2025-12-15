@@ -986,7 +986,7 @@ mod tests {
             sample_counts: HashMap::new(),
             flows: vec![],
         };
-        
+
         assert_eq!(command.api_type, "e-commerce");
         assert_eq!(command.title, "Shop API");
         assert_eq!(command.description, "An e-commerce API");
@@ -1001,7 +1001,7 @@ mod tests {
             request_body: None,
             response: None,
         };
-        
+
         assert_eq!(endpoint.path, "/api/products");
         assert_eq!(endpoint.method, "GET");
         assert_eq!(endpoint.description, "Get all products");
@@ -1013,14 +1013,14 @@ mod tests {
             schema: Some(json!({"type": "object"})),
             required: vec!["name".to_string(), "price".to_string()],
         };
-        
+
         let response = ResponseRequirement {
             status: 201,
             schema: Some(json!({"type": "object"})),
             is_array: false,
             count: None,
         };
-        
+
         let endpoint = EndpointRequirement {
             path: "/api/products".to_string(),
             method: "POST".to_string(),
@@ -1028,7 +1028,7 @@ mod tests {
             request_body: Some(request_body),
             response: Some(response),
         };
-        
+
         assert!(endpoint.request_body.is_some());
         assert!(endpoint.response.is_some());
         assert_eq!(endpoint.response.unwrap().status, 201);
@@ -1040,7 +1040,7 @@ mod tests {
             schema: Some(json!({"type": "object", "properties": {"name": {"type": "string"}}})),
             required: vec!["name".to_string()],
         };
-        
+
         assert!(body.schema.is_some());
         assert_eq!(body.required.len(), 1);
     }
@@ -1053,7 +1053,7 @@ mod tests {
             is_array: true,
             count: Some(10),
         };
-        
+
         assert_eq!(response.status, 200);
         assert!(response.is_array);
         assert_eq!(response.count, Some(10));
@@ -1067,7 +1067,7 @@ mod tests {
             is_array: false,
             count: None,
         };
-        
+
         assert_eq!(response.status, 200);
     }
 
@@ -1079,12 +1079,12 @@ mod tests {
             description: "Product ID".to_string(),
             required: true,
         };
-        
+
         let model = ModelRequirement {
             name: "Product".to_string(),
             fields: vec![field],
         };
-        
+
         assert_eq!(model.name, "Product");
         assert_eq!(model.fields.len(), 1);
         assert_eq!(model.fields[0].name, "id");
@@ -1098,7 +1098,7 @@ mod tests {
             description: "Product name".to_string(),
             required: true,
         };
-        
+
         assert_eq!(field.name, "name");
         assert_eq!(field.r#type, "string");
         assert!(field.required);
@@ -1112,7 +1112,7 @@ mod tests {
             description: "".to_string(),
             required: default_true(),
         };
-        
+
         assert!(field.required);
     }
 
@@ -1123,7 +1123,7 @@ mod tests {
             to: "Category".to_string(),
             r#type: "many-to-one".to_string(),
         };
-        
+
         assert_eq!(relationship.from, "Product");
         assert_eq!(relationship.to, "Category");
         assert_eq!(relationship.r#type, "many-to-one");
@@ -1136,7 +1136,7 @@ mod tests {
             description: "Checkout flow".to_string(),
             steps: vec!["Add to cart".to_string(), "Payment".to_string()],
         };
-        
+
         assert_eq!(flow.name, "checkout");
         assert_eq!(flow.steps.len(), 2);
     }
@@ -1152,7 +1152,7 @@ mod tests {
             api_requirements: ApiRequirements::default(),
             behavioral_rules: vec![],
         };
-        
+
         assert_eq!(scenario.domain, "e-commerce");
         assert_eq!(scenario.title, "Shop Workspace");
     }
@@ -1164,7 +1164,7 @@ mod tests {
             description: "High latency on checkout".to_string(),
             config: json!({"delay_ms": 1000}),
         };
-        
+
         assert_eq!(chaos.r#type, "latency");
         assert_eq!(chaos.description, "High latency on checkout");
     }
@@ -1173,14 +1173,14 @@ mod tests {
     fn test_initial_data_requirements_creation() {
         let mut custom = HashMap::new();
         custom.insert("products".to_string(), 50);
-        
+
         let data = InitialDataRequirements {
             users: Some(100),
             disputes: Some(5),
             orders: Some(200),
             custom,
         };
-        
+
         assert_eq!(data.users, Some(100));
         assert_eq!(data.disputes, Some(5));
         assert_eq!(data.orders, Some(200));
@@ -1205,17 +1205,17 @@ mod tests {
             request_body: None,
             response: None,
         };
-        
+
         let model = ModelRequirement {
             name: "Product".to_string(),
             fields: vec![],
         };
-        
+
         let api_req = ApiRequirements {
             endpoints: vec![endpoint],
             models: vec![model],
         };
-        
+
         assert_eq!(api_req.endpoints.len(), 1);
         assert_eq!(api_req.models.len(), 1);
     }
@@ -1234,7 +1234,7 @@ mod tests {
             r#type: "latency".to_string(),
             config: json!({"delay_ms": 2000}),
         };
-        
+
         assert_eq!(rule.description, "Slow response on checkout");
         assert_eq!(rule.r#type, "latency");
     }
@@ -1250,7 +1250,7 @@ mod tests {
             reality_continuum: None,
             drift_budget: None,
         };
-        
+
         assert_eq!(creation.workspace_name, "New Workspace");
         assert_eq!(creation.workspace_description, "A new workspace");
         assert!(creation.entities.is_empty());
@@ -1264,7 +1264,7 @@ mod tests {
             endpoints: vec![],
             fields: vec![],
         };
-        
+
         assert_eq!(entity.name, "Product");
         assert_eq!(entity.description, "Product entity");
         assert!(entity.fields.is_empty());
@@ -1277,7 +1277,7 @@ mod tests {
             method: "GET".to_string(),
             description: "Get products".to_string(),
         };
-        
+
         assert_eq!(endpoint.path, "/api/products");
         assert_eq!(endpoint.method, "GET");
     }
@@ -1290,7 +1290,7 @@ mod tests {
             traits: HashMap::new(),
             relationships: vec![],
         };
-        
+
         assert_eq!(persona.name, "Customer");
         assert_eq!(persona.description, "Regular customer");
         assert!(persona.traits.is_empty());
@@ -1302,7 +1302,7 @@ mod tests {
             r#type: "one-to-many".to_string(),
             target_entity: "Order".to_string(),
         };
-        
+
         assert_eq!(relationship.r#type, "one-to-many");
         assert_eq!(relationship.target_entity, "Order");
     }
@@ -1316,7 +1316,7 @@ mod tests {
             transition_mode: "manual".to_string(),
             merge_strategy: "field_level".to_string(),
         };
-        
+
         assert_eq!(continuum.default_ratio, 0.2);
         assert!(continuum.enabled);
         assert_eq!(continuum.transition_mode, "manual");
@@ -1330,7 +1330,7 @@ mod tests {
             ratio: 0.5,
             description: "Catalog route".to_string(),
         };
-        
+
         assert_eq!(rule.pattern, "/api/catalog/*");
         assert_eq!(rule.ratio, 0.5);
     }
@@ -1338,11 +1338,14 @@ mod tests {
     #[test]
     fn test_parsed_drift_budget_creation() {
         let mut per_service_budgets = HashMap::new();
-        per_service_budgets.insert("catalog".to_string(), ParsedServiceBudget {
-            max_breaking_changes: 5,
-            max_non_breaking_changes: 20,
-        });
-        
+        per_service_budgets.insert(
+            "catalog".to_string(),
+            ParsedServiceBudget {
+                max_breaking_changes: 5,
+                max_non_breaking_changes: 20,
+            },
+        );
+
         let budget = ParsedDriftBudget {
             strictness: "moderate".to_string(),
             enabled: true,
@@ -1353,7 +1356,7 @@ mod tests {
             per_service_budgets,
             description: "Drift budget config".to_string(),
         };
-        
+
         assert_eq!(budget.strictness, "moderate");
         assert!(budget.enabled);
         assert_eq!(budget.max_breaking_changes, 10);
@@ -1367,7 +1370,7 @@ mod tests {
             max_breaking_changes: 3,
             max_non_breaking_changes: 15,
         };
-        
+
         assert_eq!(budget.max_breaking_changes, 3);
         assert_eq!(budget.max_non_breaking_changes, 15);
     }

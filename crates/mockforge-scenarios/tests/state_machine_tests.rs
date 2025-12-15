@@ -7,8 +7,8 @@
 //! - Invalid states
 //! - Concurrent state updates
 
-use mockforge_scenarios::state_machine::{ScenarioStateMachineManager, StateInstance};
 use mockforge_core::intelligent_behavior::rules::StateMachine;
+use mockforge_scenarios::state_machine::{ScenarioStateMachineManager, StateInstance};
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -31,11 +31,7 @@ async fn test_state_machine_creation() {
 
 #[tokio::test]
 async fn test_state_instance_creation() {
-    let instance = StateInstance::new(
-        "resource_123",
-        "order",
-        "initial",
-    );
+    let instance = StateInstance::new("resource_123", "order", "initial");
 
     assert_eq!(instance.resource_id, "resource_123");
     assert_eq!(instance.current_state, "initial");
@@ -46,11 +42,7 @@ async fn test_state_instance_creation() {
 
 #[tokio::test]
 async fn test_state_transition() {
-    let mut instance = StateInstance::new(
-        "resource_123",
-        "order",
-        "initial",
-    );
+    let mut instance = StateInstance::new("resource_123", "order", "initial");
 
     // Transition to new state
     instance.transition_to("processing".to_string(), None);
@@ -63,11 +55,7 @@ async fn test_state_transition() {
 
 #[tokio::test]
 async fn test_multiple_state_transitions() {
-    let mut instance = StateInstance::new(
-        "resource_123",
-        "order",
-        "pending",
-    );
+    let mut instance = StateInstance::new("resource_123", "order", "pending");
 
     // Multiple transitions
     instance.transition_to("processing".to_string(), None);
@@ -88,11 +76,7 @@ async fn test_multiple_state_transitions() {
 
 #[tokio::test]
 async fn test_state_data_persistence() {
-    let mut instance = StateInstance::new(
-        "resource_123",
-        "order",
-        "initial",
-    );
+    let mut instance = StateInstance::new("resource_123", "order", "initial");
 
     // Add state data
     instance.state_data.insert("order_id".to_string(), json!("12345"));
@@ -141,11 +125,7 @@ async fn test_state_machine_with_circular_transitions() {
 
 #[tokio::test]
 async fn test_state_instance_with_empty_history() {
-    let instance = StateInstance::new(
-        "resource_123",
-        "order",
-        "initial",
-    );
+    let instance = StateInstance::new("resource_123", "order", "initial");
 
     // New instance should have empty history
     assert!(instance.state_history.is_empty());
@@ -156,17 +136,9 @@ async fn test_state_instance_with_empty_history() {
 
 #[tokio::test]
 async fn test_state_instance_resource_type() {
-    let instance1 = StateInstance::new(
-        "resource_1",
-        "order",
-        "pending",
-    );
+    let instance1 = StateInstance::new("resource_1", "order", "pending");
 
-    let instance2 = StateInstance::new(
-        "resource_2",
-        "user",
-        "active",
-    );
+    let instance2 = StateInstance::new("resource_2", "user", "active");
 
     // Different resource types should be independent
     assert_eq!(instance1.resource_type, "order");
@@ -176,11 +148,7 @@ async fn test_state_instance_resource_type() {
 
 #[tokio::test]
 async fn test_state_transition_with_metadata() {
-    let mut instance = StateInstance::new(
-        "resource_123",
-        "order",
-        "initial",
-    );
+    let mut instance = StateInstance::new("resource_123", "order", "initial");
 
     // Transition with transition ID
     instance.transition_to("processing".to_string(), Some("transition_1".to_string()));
@@ -192,11 +160,8 @@ async fn test_state_transition_with_metadata() {
 
 #[tokio::test]
 async fn test_state_machine_initial_state_validation() {
-    let state_machine = StateMachine::new(
-        "test".to_string(),
-        vec!["start".to_string()],
-        "start".to_string(),
-    );
+    let state_machine =
+        StateMachine::new("test".to_string(), vec!["start".to_string()], "start".to_string());
 
     // Initial state should exist in states
     assert!(state_machine.states.contains(&state_machine.initial_state));
@@ -208,7 +173,11 @@ async fn test_state_machine_multiple_final_states() {
 
     let state_machine = StateMachine::new(
         "multi_final".to_string(),
-        vec!["start".to_string(), "success".to_string(), "failure".to_string()],
+        vec![
+            "start".to_string(),
+            "success".to_string(),
+            "failure".to_string(),
+        ],
         "start".to_string(),
     )
     .add_transitions(vec![
@@ -224,11 +193,7 @@ async fn test_state_machine_multiple_final_states() {
 #[tokio::test]
 async fn test_state_instance_concurrent_updates() {
     // Test that state instances can be cloned and modified independently
-    let instance1 = StateInstance::new(
-        "resource_1",
-        "order",
-        "initial",
-    );
+    let instance1 = StateInstance::new("resource_1", "order", "initial");
 
     let mut instance2 = instance1.clone();
     instance2.resource_id = "resource_2".to_string();
@@ -246,11 +211,8 @@ async fn test_state_history_timestamps() {
     use std::thread;
     use std::time::Duration;
 
-    let mut instance = StateInstance::new(
-        "resource_123".to_string(),
-        "state1".to_string(),
-        "order".to_string(),
-    );
+    let mut instance =
+        StateInstance::new("resource_123".to_string(), "state1".to_string(), "order".to_string());
 
     let timestamp1 = instance.state_history.last().map(|e| e.timestamp);
 

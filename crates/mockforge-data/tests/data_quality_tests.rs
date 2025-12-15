@@ -7,10 +7,10 @@
 //! - Data validation passes for generated data
 
 use mockforge_data::consistency::{ConsistencyStore, EntityType};
+use mockforge_data::domains::Domain;
 use mockforge_data::persona::{PersonaProfile, PersonaRegistry};
 use mockforge_data::schema::{Relationship, RelationshipType, SchemaDefinition};
 use mockforge_data::{MockDataGenerator, MockGeneratorConfig};
-use mockforge_data::domains::Domain;
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -20,10 +20,7 @@ mod persona_consistency_tests {
 
     #[test]
     fn persona_profile_creation() {
-        let persona = PersonaProfile::new(
-            "user_123".to_string(),
-            Domain::General,
-        );
+        let persona = PersonaProfile::new("user_123".to_string(), Domain::General);
 
         assert_eq!(persona.id, "user_123");
         assert_eq!(persona.domain, Domain::General);
@@ -140,10 +137,24 @@ mod relationship_coherence_tests {
     #[test]
     fn relationship_types() {
         let relationships = vec![
-            Relationship::new("user".to_string(), RelationshipType::OneToOne, "user_id".to_string()),
-            Relationship::new("items".to_string(), RelationshipType::OneToMany, "order_id".to_string()).optional(),
+            Relationship::new(
+                "user".to_string(),
+                RelationshipType::OneToOne,
+                "user_id".to_string(),
+            ),
+            Relationship::new(
+                "items".to_string(),
+                RelationshipType::OneToMany,
+                "order_id".to_string(),
+            )
+            .optional(),
             Relationship::new("org".to_string(), RelationshipType::ManyToOne, "org_id".to_string()),
-            Relationship::new("tags".to_string(), RelationshipType::ManyToMany, "tag_id".to_string()).optional(),
+            Relationship::new(
+                "tags".to_string(),
+                RelationshipType::ManyToMany,
+                "tag_id".to_string(),
+            )
+            .optional(),
         ];
 
         // All relationship types should be valid
@@ -163,10 +174,9 @@ mod relationship_coherence_tests {
             "owns_devices".to_string(),
             vec!["device_1".to_string(), "device_2".to_string()],
         );
-        persona.relationships.insert(
-            "belongs_to_org".to_string(),
-            vec!["org_1".to_string()],
-        );
+        persona
+            .relationships
+            .insert("belongs_to_org".to_string(), vec!["org_1".to_string()]);
 
         assert_eq!(persona.relationships.len(), 2);
         assert_eq!(persona.relationships.get("owns_devices").unwrap().len(), 2);
@@ -238,7 +248,7 @@ mod data_quality_tests {
     #[test]
     fn generated_data_required_fields() {
         let mut generator = MockDataGenerator::with_config(
-            MockGeneratorConfig::new().include_optional_fields(false)
+            MockGeneratorConfig::new().include_optional_fields(false),
         );
 
         let schema_json = json!({
@@ -274,7 +284,7 @@ mod data_quality_tests {
     #[test]
     fn generated_data_with_optional_fields() {
         let mut generator = MockDataGenerator::with_config(
-            MockGeneratorConfig::new().include_optional_fields(true)
+            MockGeneratorConfig::new().include_optional_fields(true),
         );
 
         let schema_json = json!({
@@ -427,7 +437,8 @@ mod data_coherence_tests {
         let device_id = format!("device:{}", user_id);
 
         let user_email = store.generate_consistent_value(user_id, "email", None).unwrap();
-        let device_owner = store.generate_consistent_value(&device_id, "owner_email", None).unwrap();
+        let device_owner =
+            store.generate_consistent_value(&device_id, "owner_email", None).unwrap();
 
         // Both should be valid values
         assert!(user_email.is_string());

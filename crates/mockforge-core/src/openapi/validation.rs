@@ -1050,14 +1050,9 @@ paths:
             .unwrap();
 
         // Status code 404 not defined in spec
-        let result = ResponseValidator::validate_response(
-            &spec,
-            operation,
-            404,
-            &HashMap::new(),
-            None,
-        )
-        .unwrap();
+        let result =
+            ResponseValidator::validate_response(&spec, operation, 404, &HashMap::new(), None)
+                .unwrap();
 
         // Should have error about missing status code
         assert!(!result.valid);
@@ -1094,14 +1089,9 @@ paths:
             .unwrap();
 
         // Status code 500 should use default response
-        let result = ResponseValidator::validate_response(
-            &spec,
-            operation,
-            500,
-            &HashMap::new(),
-            None,
-        )
-        .unwrap();
+        let result =
+            ResponseValidator::validate_response(&spec, operation, 500, &HashMap::new(), None)
+                .unwrap();
 
         // Should validate (using default response)
         assert!(result.valid || !result.errors.is_empty());

@@ -44,16 +44,10 @@ pub fn convert_swagger_to_openapi3(swagger: &Value) -> Result<Value, String> {
 
     // Convert paths
     if let Some(paths) = swagger.get("paths") {
-        let global_consumes = swagger
-            .get("consumes")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
-        let global_produces = swagger
-            .get("produces")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
+        let global_consumes =
+            swagger.get("consumes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+        let global_produces =
+            swagger.get("produces").and_then(|v| v.as_array()).cloned().unwrap_or_default();
 
         let converted_paths = convert_paths(paths, &global_consumes, &global_produces);
         openapi.insert("paths".to_string(), converted_paths);
@@ -93,10 +87,7 @@ pub fn convert_swagger_to_openapi3(swagger: &Value) -> Result<Value, String> {
 /// Convert Swagger 2.0 host/basePath/schemes to OpenAPI 3.0 servers
 fn convert_servers(swagger: &Value) -> Vec<Value> {
     let host = swagger.get("host").and_then(|v| v.as_str());
-    let base_path = swagger
-        .get("basePath")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let base_path = swagger.get("basePath").and_then(|v| v.as_str()).unwrap_or("");
     let schemes = swagger
         .get("schemes")
         .and_then(|v| v.as_array())
@@ -132,7 +123,8 @@ fn convert_paths(paths: &Value, global_consumes: &[Value], global_produces: &[Va
 
     for (path, path_item) in paths_obj {
         if let Some(path_item_obj) = path_item.as_object() {
-            let converted_path_item = convert_path_item(path_item_obj, global_consumes, global_produces);
+            let converted_path_item =
+                convert_path_item(path_item_obj, global_consumes, global_produces);
             converted.insert(path.clone(), Value::Object(converted_path_item));
         }
     }
@@ -554,9 +546,7 @@ fn convert_schema_refs(schema: &Value) -> Value {
             }
             Value::Object(converted)
         }
-        Value::Array(arr) => {
-            Value::Array(arr.iter().map(convert_schema_refs).collect())
-        }
+        Value::Array(arr) => Value::Array(arr.iter().map(convert_schema_refs).collect()),
         _ => schema.clone(),
     }
 }
@@ -593,14 +583,8 @@ mod tests {
 
     #[test]
     fn test_convert_ref() {
-        assert_eq!(
-            convert_ref("#/definitions/User"),
-            "#/components/schemas/User"
-        );
-        assert_eq!(
-            convert_ref("#/components/schemas/User"),
-            "#/components/schemas/User"
-        );
+        assert_eq!(convert_ref("#/definitions/User"), "#/components/schemas/User");
+        assert_eq!(convert_ref("#/components/schemas/User"), "#/components/schemas/User");
     }
 
     #[test]

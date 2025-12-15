@@ -1719,12 +1719,12 @@ mod tests {
     use super::*;
     use openapiv3::ReferenceOr;
     use serde_json::json;
-    
+
     // Mock AI generator for testing
     struct MockAiGenerator {
         response: Value,
     }
-    
+
     #[async_trait]
     impl AiGenerator for MockAiGenerator {
         async fn generate(&self, _prompt: &str, _config: &AiResponseConfig) -> Result<Value> {
@@ -1813,14 +1813,11 @@ components:
         let mock_generator = MockAiGenerator {
             response: json!({"message": "Generated response"}),
         };
-        
-        let result = ResponseGenerator::generate_ai_response(
-            &ai_config,
-            &context,
-            Some(&mock_generator),
-        )
-        .await;
-        
+
+        let result =
+            ResponseGenerator::generate_ai_response(&ai_config, &context, Some(&mock_generator))
+                .await;
+
         assert!(result.is_ok());
         let value = result.unwrap();
         assert_eq!(value["message"], "Generated response");
@@ -1848,14 +1845,9 @@ components:
             multipart_fields: HashMap::new(),
             multipart_files: HashMap::new(),
         };
-        
-        let result = ResponseGenerator::generate_ai_response(
-            &ai_config,
-            &context,
-            None,
-        )
-        .await;
-        
+
+        let result = ResponseGenerator::generate_ai_response(&ai_config, &context, None).await;
+
         assert!(result.is_ok());
         let value = result.unwrap();
         assert_eq!(value["ai_response"], "AI generation placeholder");
@@ -1885,14 +1877,9 @@ components:
             multipart_fields: HashMap::new(),
             multipart_files: HashMap::new(),
         };
-        
-        let result = ResponseGenerator::generate_ai_response(
-            &ai_config,
-            &context,
-            None,
-        )
-        .await;
-        
+
+        let result = ResponseGenerator::generate_ai_response(&ai_config, &context, None).await;
+
         assert!(result.is_err());
     }
 
@@ -2036,13 +2023,9 @@ components:
             .and_then(|p| p.get.as_ref())
             .unwrap();
 
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
 
         assert!(response.is_object());
     }
@@ -2084,13 +2067,9 @@ paths:
             .unwrap();
 
         // Use default response for 500 status
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            500,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 500, Some("application/json"))
+                .unwrap();
 
         assert!(response.is_object());
     }
@@ -2127,13 +2106,9 @@ paths:
             .and_then(|p| p.get.as_ref())
             .unwrap();
 
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
 
         assert_eq!(response["id"], 1);
         assert_eq!(response["name"], "Example User");
@@ -2178,13 +2153,9 @@ paths:
             .and_then(|p| p.get.as_ref())
             .unwrap();
 
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
 
         // Should use schema example if available
         assert!(response.is_object());
@@ -2230,13 +2201,9 @@ components:
             .and_then(|p| p.get.as_ref())
             .unwrap();
 
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
 
         assert!(response.is_object());
         assert!(response.get("id").is_some());
@@ -2281,13 +2248,9 @@ paths:
             .and_then(|p| p.get.as_ref())
             .unwrap();
 
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
 
         assert!(response.is_array());
     }
@@ -2327,23 +2290,15 @@ paths:
             .unwrap();
 
         // Test JSON content type
-        let json_response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let json_response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
         assert!(json_response.is_object());
 
         // Test text/plain content type
-        let text_response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("text/plain"),
-        )
-        .unwrap();
+        let text_response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("text/plain"))
+                .unwrap();
         assert!(text_response.is_string());
     }
 
@@ -2382,13 +2337,7 @@ paths:
             .unwrap();
 
         // No content type specified - should use first available
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            None,
-        )
-        .unwrap();
+        let response = ResponseGenerator::generate_response(&spec, operation, 200, None).unwrap();
 
         assert!(response.is_object());
     }
@@ -2420,13 +2369,7 @@ paths:
             .and_then(|p| p.delete.as_ref())
             .unwrap();
 
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            204,
-            None,
-        )
-        .unwrap();
+        let response = ResponseGenerator::generate_response(&spec, operation, 204, None).unwrap();
 
         // Should return empty object for no content
         assert!(response.is_object());
@@ -2524,13 +2467,9 @@ components:
             .and_then(|p| p.get.as_ref())
             .unwrap();
 
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
 
         // Should generate an array with items from referenced schema
         let arr = response.as_array().expect("response should be array");
@@ -2577,13 +2516,9 @@ components:
             .and_then(|p| p.get.as_ref())
             .unwrap();
 
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
 
         // Should generate an array with empty objects when reference not found
         let arr = response.as_array().expect("response should be array");
@@ -2630,13 +2565,9 @@ paths:
             .and_then(|p| p.get.as_ref())
             .unwrap();
 
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
 
         // Should generate an array using the example as template
         let arr = response.as_array().expect("response should be array");
@@ -2677,13 +2608,9 @@ components:
             .and_then(|p| p.get.as_ref())
             .unwrap();
 
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
 
         // Should return empty object when reference not found
         assert!(response.is_object());
@@ -2719,13 +2646,9 @@ paths:
             .unwrap();
 
         // Request status code 200 but only 404 is defined
-        let response = ResponseGenerator::generate_response(
-            &spec,
-            operation,
-            200,
-            Some("application/json"),
-        )
-        .unwrap();
+        let response =
+            ResponseGenerator::generate_response(&spec, operation, 200, Some("application/json"))
+                .unwrap();
 
         // Should return empty object when no response found
         assert!(response.is_object());

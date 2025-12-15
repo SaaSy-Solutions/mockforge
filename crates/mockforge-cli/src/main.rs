@@ -2890,9 +2890,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
             // Validate results_format
             if !matches!(results_format.as_str(), "per-target" | "aggregated" | "both") {
-                eprintln!(
-                    "Error: --results-format must be one of: per-target, aggregated, both"
-                );
+                eprintln!("Error: --results-format must be one of: per-target, aggregated, both");
                 std::process::exit(1);
             }
 
@@ -4311,10 +4309,12 @@ pub async fn handle_serve(
 
         // Load specs
         let specs = if !serve_args.spec.is_empty() {
-            load_specs_from_files(serve_args.spec.clone()).await
+            load_specs_from_files(serve_args.spec.clone())
+                .await
                 .map_err(|e| format!("Failed to load spec files: {}", e))?
         } else if let Some(ref spec_dir) = serve_args.spec_dir {
-            load_specs_from_directory(spec_dir).await
+            load_specs_from_directory(spec_dir)
+                .await
                 .map_err(|e| format!("Failed to load specs from directory: {}", e))?
         } else {
             Vec::new()
@@ -4365,13 +4365,14 @@ pub async fn handle_serve(
             if merged_specs.len() == 1 {
                 // Single merged spec - write to temp file
                 let merged = &merged_specs[0];
-                let merged_json = serde_json::to_string_pretty(
-                    merged.raw_document.as_ref().unwrap()
-                ).map_err(|e| format!("Failed to serialize merged spec: {}", e))?;
+                let merged_json =
+                    serde_json::to_string_pretty(merged.raw_document.as_ref().unwrap())
+                        .map_err(|e| format!("Failed to serialize merged spec: {}", e))?;
 
                 // Use persistent temp file (won't be deleted automatically)
                 let temp_dir = std::env::temp_dir();
-                let temp_path = temp_dir.join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
+                let temp_path =
+                    temp_dir.join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
                 std::fs::write(&temp_path, merged_json.as_bytes())
                     .map_err(|e| format!("Failed to write merged spec: {}", e))?;
 
@@ -4381,25 +4382,28 @@ pub async fn handle_serve(
             } else {
                 // Multiple merged specs - for now, merge them all
                 // TODO: Support path prefixes for different API versions
-                let all_specs: Vec<_> = merged_specs.into_iter()
-                    .map(|s| (PathBuf::from("merged"), s))
-                    .collect();
+                let all_specs: Vec<_> =
+                    merged_specs.into_iter().map(|s| (PathBuf::from("merged"), s)).collect();
                 match merge_specs(all_specs, conflict_strategy) {
                     Ok(final_merged) => {
                         let merged_json = serde_json::to_string_pretty(
-                            final_merged.raw_document.as_ref().unwrap()
-                        ).map_err(|e| format!("Failed to serialize final merged spec: {}", e))?;
+                            final_merged.raw_document.as_ref().unwrap(),
+                        )
+                        .map_err(|e| format!("Failed to serialize final merged spec: {}", e))?;
 
                         // Use persistent temp file (won't be deleted automatically)
                         let temp_dir = std::env::temp_dir();
-                        let temp_path = temp_dir.join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
+                        let temp_path = temp_dir
+                            .join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
                         std::fs::write(&temp_path, merged_json.as_bytes())
                             .map_err(|e| format!("Failed to write merged spec: {}", e))?;
 
                         Some(temp_path.to_string_lossy().to_string())
                     }
                     Err(e) => {
-                        return Err(format!("Failed to merge multiple API version specs: {}", e).into());
+                        return Err(
+                            format!("Failed to merge multiple API version specs: {}", e).into()
+                        );
                     }
                 }
             }
@@ -4616,30 +4620,20 @@ pub async fn handle_serve(
                 .as_ref()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|| {
-                    http_tls_config
-                        .as_ref()
-                        .map(|t| t.cert_file.clone())
-                        .unwrap_or_default()
+                    http_tls_config.as_ref().map(|t| t.cert_file.clone()).unwrap_or_default()
                 }),
             key_file: serve_args
                 .tls_key
                 .as_ref()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|| {
-                    http_tls_config
-                        .as_ref()
-                        .map(|t| t.key_file.clone())
-                        .unwrap_or_default()
+                    http_tls_config.as_ref().map(|t| t.key_file.clone()).unwrap_or_default()
                 }),
             ca_file: serve_args
                 .tls_ca
                 .as_ref()
                 .map(|p| p.to_string_lossy().to_string())
-                .or_else(|| {
-                    http_tls_config
-                        .as_ref()
-                        .and_then(|t| t.ca_file.clone())
-                }),
+                .or_else(|| http_tls_config.as_ref().and_then(|t| t.ca_file.clone())),
             min_version: serve_args.tls_min_version.clone(),
             cipher_suites: http_tls_config
                 .as_ref()

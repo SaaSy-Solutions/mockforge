@@ -3,7 +3,9 @@
 //! These tests cover error paths, edge cases, and boundary conditions
 //! for request logging functionality.
 
-use mockforge_core::request_logger::{DataSourceBreakdown, RealityContinuumType, RealityTraceMetadata};
+use mockforge_core::request_logger::{
+    DataSourceBreakdown, RealityContinuumType, RealityTraceMetadata,
+};
 
 /// Test RealityContinuumType from_blend_ratio
 #[test]
@@ -76,11 +78,12 @@ fn test_data_source_breakdown_normalize() {
         generator_percent: 50.0,
         upstream_percent: 50.0,
     };
-    
+
     breakdown.normalize();
-    
+
     // Should sum to 100.0
-    let total = breakdown.recorded_percent + breakdown.generator_percent + breakdown.upstream_percent;
+    let total =
+        breakdown.recorded_percent + breakdown.generator_percent + breakdown.upstream_percent;
     assert!((total - 100.0).abs() < 0.01);
 }
 
@@ -92,9 +95,9 @@ fn test_data_source_breakdown_normalize_zero_total() {
         generator_percent: 0.0,
         upstream_percent: 0.0,
     };
-    
+
     breakdown.normalize();
-    
+
     // Should remain zero
     assert_eq!(breakdown.recorded_percent, 0.0);
     assert_eq!(breakdown.generator_percent, 0.0);
@@ -109,11 +112,12 @@ fn test_data_source_breakdown_normalize_large_values() {
         generator_percent: 300.0,
         upstream_percent: 500.0,
     };
-    
+
     breakdown.normalize();
-    
+
     // Should sum to 100.0
-    let total = breakdown.recorded_percent + breakdown.generator_percent + breakdown.upstream_percent;
+    let total =
+        breakdown.recorded_percent + breakdown.generator_percent + breakdown.upstream_percent;
     assert!((total - 100.0).abs() < 0.01);
 }
 
@@ -150,15 +154,15 @@ fn test_data_source_breakdown_from_blend_ratio_edge_cases() {
     // Negative blend ratio (should still work)
     let breakdown = DataSourceBreakdown::from_blend_ratio(-0.5, 0.0);
     assert_eq!(breakdown.upstream_percent, -50.0);
-    
+
     // Blend ratio > 1.0
     let breakdown2 = DataSourceBreakdown::from_blend_ratio(1.5, 0.0);
     assert_eq!(breakdown2.upstream_percent, 150.0);
-    
+
     // Negative recorded ratio
     let breakdown3 = DataSourceBreakdown::from_blend_ratio(0.5, -0.2);
     assert_eq!(breakdown3.recorded_percent, -20.0);
-    
+
     // Recorded ratio > 1.0
     let breakdown4 = DataSourceBreakdown::from_blend_ratio(0.5, 1.5);
     assert_eq!(breakdown4.recorded_percent, 150.0);
@@ -172,24 +176,23 @@ fn test_data_source_breakdown_normalize_preserves_ratios() {
         generator_percent: 25.0,
         upstream_percent: 50.0,
     };
-    
+
     let original_ratios = (
         breakdown.recorded_percent / 100.0,
         breakdown.generator_percent / 100.0,
         breakdown.upstream_percent / 100.0,
     );
-    
+
     breakdown.normalize();
-    
+
     let normalized_ratios = (
         breakdown.recorded_percent / 100.0,
         breakdown.generator_percent / 100.0,
         breakdown.upstream_percent / 100.0,
     );
-    
+
     // Ratios should be preserved (approximately)
     assert!((original_ratios.0 - normalized_ratios.0).abs() < 0.01);
     assert!((original_ratios.1 - normalized_ratios.1).abs() < 0.01);
     assert!((original_ratios.2 - normalized_ratios.2).abs() < 0.01);
 }
-

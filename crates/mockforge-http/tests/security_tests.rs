@@ -382,11 +382,7 @@ async fn test_null_byte_injection() {
     let base_url = format!("http://{}", addr);
 
     // Null byte injection attempts
-    let null_byte_payloads = vec![
-        "test\u{0000}.txt",
-        "test%00.txt",
-        "\u{0000}test",
-    ];
+    let null_byte_payloads = vec!["test\u{0000}.txt", "test%00.txt", "\u{0000}test"];
 
     for payload in null_byte_payloads {
         let response = client

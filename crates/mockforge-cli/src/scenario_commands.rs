@@ -1274,7 +1274,8 @@ async fn apply_vbr_entities_from_scenario(
                 let entity = if let Some(ref state_machine) = entity_def.state_machine {
                     // Convert from mockforge_scenarios::StateMachine to mockforge_core::intelligent_behavior::rules::StateMachine
                     use mockforge_core::intelligent_behavior::rules::StateMachine as CoreStateMachine;
-                    let core_state_machine: CoreStateMachine = serde_json::from_value(serde_json::to_value(state_machine)?)?;
+                    let core_state_machine: CoreStateMachine =
+                        serde_json::from_value(serde_json::to_value(state_machine)?)?;
                     Entity::with_state_machine(
                         entity_def.name.clone(),
                         vbr_schema,

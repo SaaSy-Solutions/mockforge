@@ -273,10 +273,7 @@ impl BenchCommand {
         }
 
         println!("\nResults saved to: {}", self.output.display());
-        println!(
-            "  - Per-target results: {}",
-            self.output.join("target_*").display()
-        );
+        println!("  - Per-target results: {}", self.output.join("target_*").display());
         if self.results_format == "aggregated" || self.results_format == "both" {
             println!(
                 "  - Aggregated summary: {}",

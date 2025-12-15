@@ -29,7 +29,7 @@ if let Some(recorded_request) = self.record_replay.replay_handler().load_fixture
 #### Lines 301, 313, 318, 321-329: Behavioral Scenario Replay Edge Cases
 - Line 301: Timing delay application
 - Lines 313, 318, 321-329: Session ID extraction from cookies (not just headers)
-**Test Needed**: 
+**Test Needed**:
 - Test with session ID in cookies instead of headers
 - Test with timing delay
 - Test error handling in try_replay
@@ -56,7 +56,7 @@ This entire section has many uncovered lines:
 - **Lines 608-636**: Shadow mode comparison
 - **Lines 664-675**: Proxy error handling with migration modes
 
-**Test Needed**: 
+**Test Needed**:
 - Test proxy handler with continuum engine enabled
 - Test shadow mode
 - Test migration modes (Mock, Real)
@@ -132,7 +132,7 @@ Most uncovered lines are in:
 ## Estimated Coverage Impact
 
 - Phase 1: +0.5-1.0% coverage
-- Phase 2: +1.0-2.0% coverage  
+- Phase 2: +1.0-2.0% coverage
 - Phase 3: +2.0-3.0% coverage
 
 Total potential: +3.5-6.0% coverage (bringing us to ~51-54%)
@@ -142,4 +142,3 @@ Total potential: +3.5-6.0% coverage (bringing us to ~51-54%)
 1. Start with Phase 1 tests (quick wins)
 2. Measure coverage impact after each phase
 3. Continue iterating on highest-impact uncovered lines
-

@@ -788,7 +788,7 @@ mod tests {
             workspace_id: Some("workspace-123".to_string()),
             system_id: Some("system-456".to_string()),
         };
-        
+
         assert_eq!(request.description, "Test system");
         assert_eq!(request.output_formats.len(), 1);
         assert_eq!(request.workspace_id, Some("workspace-123".to_string()));
@@ -803,20 +803,23 @@ mod tests {
             workspace_id: None,
             system_id: None,
         };
-        
+
         assert!(request.output_formats.is_empty());
     }
 
     #[test]
     fn test_generated_system_creation() {
         let mut artifacts = HashMap::new();
-        artifacts.insert("openapi".to_string(), SystemArtifact {
-            artifact_type: "openapi".to_string(),
-            content: serde_json::json!({"openapi": "3.0.0"}),
-            format: "json".to_string(),
-            artifact_id: "artifact-1".to_string(),
-        });
-        
+        artifacts.insert(
+            "openapi".to_string(),
+            SystemArtifact {
+                artifact_type: "openapi".to_string(),
+                content: serde_json::json!({"openapi": "3.0.0"}),
+                format: "json".to_string(),
+                artifact_id: "artifact-1".to_string(),
+            },
+        );
+
         let system = GeneratedSystem {
             system_id: "system-123".to_string(),
             version: "v1".to_string(),
@@ -833,7 +836,7 @@ mod tests {
                 generated_at: "2024-01-01T00:00:00Z".to_string(),
             },
         };
-        
+
         assert_eq!(system.system_id, "system-123");
         assert_eq!(system.version, "v1");
         assert_eq!(system.artifacts.len(), 1);
@@ -848,7 +851,7 @@ mod tests {
             applied_artifacts: vec!["artifact-1".to_string(), "artifact-2".to_string()],
             frozen: true,
         };
-        
+
         assert_eq!(applied.system_id, "system-123");
         assert_eq!(applied.version, "v1");
         assert_eq!(applied.applied_artifacts.len(), 2);
@@ -863,7 +866,7 @@ mod tests {
             format: "yaml".to_string(),
             artifact_id: "artifact-123".to_string(),
         };
-        
+
         assert_eq!(artifact.artifact_type, "openapi");
         assert_eq!(artifact.format, "yaml");
         assert_eq!(artifact.artifact_id, "artifact-123");
@@ -873,12 +876,16 @@ mod tests {
     fn test_system_metadata_creation() {
         let metadata = SystemMetadata {
             description: "Ride-sharing app".to_string(),
-            entities: vec!["Driver".to_string(), "Rider".to_string(), "Trip".to_string()],
+            entities: vec![
+                "Driver".to_string(),
+                "Rider".to_string(),
+                "Trip".to_string(),
+            ],
             relationships: vec!["Driver has many Trips".to_string()],
             operations: vec!["create_trip".to_string(), "update_trip".to_string()],
             generated_at: "2024-01-01T00:00:00Z".to_string(),
         };
-        
+
         assert_eq!(metadata.description, "Ride-sharing app");
         assert_eq!(metadata.entities.len(), 3);
         assert_eq!(metadata.relationships.len(), 1);
@@ -1069,18 +1076,24 @@ mod tests {
     #[test]
     fn test_generated_system_with_all_fields() {
         let mut artifacts = HashMap::new();
-        artifacts.insert("openapi".to_string(), SystemArtifact {
-            artifact_type: "openapi".to_string(),
-            content: serde_json::json!({"openapi": "3.0.0"}),
-            format: "json".to_string(),
-            artifact_id: "artifact-1".to_string(),
-        });
-        artifacts.insert("personas".to_string(), SystemArtifact {
-            artifact_type: "personas".to_string(),
-            content: serde_json::json!({"personas": []}),
-            format: "json".to_string(),
-            artifact_id: "artifact-2".to_string(),
-        });
+        artifacts.insert(
+            "openapi".to_string(),
+            SystemArtifact {
+                artifact_type: "openapi".to_string(),
+                content: serde_json::json!({"openapi": "3.0.0"}),
+                format: "json".to_string(),
+                artifact_id: "artifact-1".to_string(),
+            },
+        );
+        artifacts.insert(
+            "personas".to_string(),
+            SystemArtifact {
+                artifact_type: "personas".to_string(),
+                content: serde_json::json!({"personas": []}),
+                format: "json".to_string(),
+                artifact_id: "artifact-2".to_string(),
+            },
+        );
 
         let system = GeneratedSystem {
             system_id: "system-123".to_string(),
@@ -1142,10 +1155,7 @@ mod tests {
                 "Order".to_string(),
                 "Product".to_string(),
             ],
-            relationships: vec![
-                "User-Order".to_string(),
-                "Order-Product".to_string(),
-            ],
+            relationships: vec!["User-Order".to_string(), "Order-Product".to_string()],
             operations: vec![
                 "GET /users".to_string(),
                 "POST /orders".to_string(),

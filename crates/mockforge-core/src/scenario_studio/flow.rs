@@ -686,7 +686,7 @@ mod tests {
     fn test_flow_step_result_creation() {
         let mut extracted = HashMap::new();
         extracted.insert("user_id".to_string(), json!("123"));
-        
+
         let result = FlowStepResult {
             step_id: "step-1".to_string(),
             success: true,
@@ -695,7 +695,7 @@ mod tests {
             duration_ms: 150,
             extracted_variables: extracted.clone(),
         };
-        
+
         assert_eq!(result.step_id, "step-1");
         assert!(result.success);
         assert!(result.response.is_some());
@@ -714,7 +714,7 @@ mod tests {
             duration_ms: 50,
             extracted_variables: HashMap::new(),
         };
-        
+
         assert!(!result.success);
         assert!(result.error.is_some());
         assert_eq!(result.error.unwrap(), "Request failed");
@@ -730,10 +730,10 @@ mod tests {
             duration_ms: 100,
             extracted_variables: HashMap::new(),
         };
-        
+
         let mut final_vars = HashMap::new();
         final_vars.insert("result".to_string(), json!("success"));
-        
+
         let result = FlowExecutionResult {
             flow_id: "flow-123".to_string(),
             success: true,
@@ -742,7 +742,7 @@ mod tests {
             total_duration_ms: 200,
             error: None,
         };
-        
+
         assert_eq!(result.flow_id, "flow-123");
         assert!(result.success);
         assert_eq!(result.step_results.len(), 1);
@@ -760,7 +760,7 @@ mod tests {
             duration_ms: 50,
             extracted_variables: HashMap::new(),
         };
-        
+
         let result = FlowExecutionResult {
             flow_id: "flow-456".to_string(),
             success: false,
@@ -769,7 +769,7 @@ mod tests {
             total_duration_ms: 100,
             error: Some("Flow execution failed".to_string()),
         };
-        
+
         assert!(!result.success);
         assert!(result.error.is_some());
     }
@@ -793,7 +793,7 @@ mod tests {
         let mut variables = HashMap::new();
         variables.insert("api_key".to_string(), json!("secret123"));
         variables.insert("base_url".to_string(), json!("https://api.example.com"));
-        
+
         let executor = FlowExecutor::with_variables(variables);
         // Just verify it can be created
         let _ = executor;
@@ -983,10 +983,7 @@ mod tests {
         };
 
         assert_eq!(result.extracted_variables.len(), 3);
-        assert_eq!(
-            result.extracted_variables.get("order_id"),
-            Some(&json!("order-123"))
-        );
+        assert_eq!(result.extracted_variables.get("order_id"), Some(&json!("order-123")));
     }
 
     #[test]

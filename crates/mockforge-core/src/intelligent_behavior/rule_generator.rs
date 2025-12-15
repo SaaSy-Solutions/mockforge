@@ -1016,10 +1016,10 @@ mod tests {
     fn test_example_pair_creation() {
         let mut query_params = HashMap::new();
         query_params.insert("page".to_string(), "1".to_string());
-        
+
         let mut headers = HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
-        
+
         let pair = ExamplePair {
             method: "GET".to_string(),
             path: "/api/users".to_string(),
@@ -1711,5 +1711,4 @@ mod tests {
         let debug_str = format!("{:?}", explanation);
         assert!(debug_str.contains("RuleExplanation"));
     }
-
 }

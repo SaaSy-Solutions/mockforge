@@ -46,4 +46,3 @@ rm -rf coverage/crates/mockforge-bench
 ✅ Fixed: Coverage calculation from LCOV format
 
 The script should now work correctly for all crates that compile successfully.
-

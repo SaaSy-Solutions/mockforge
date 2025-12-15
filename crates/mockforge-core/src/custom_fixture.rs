@@ -174,9 +174,9 @@ impl CustomFixtureLoader {
 
     /// Convert nested fixture format to flat format
     pub fn convert_nested_to_flat(nested: NestedFixture) -> Result<CustomFixture> {
-        let request = nested.request.ok_or_else(|| {
-            Error::generic("Nested fixture missing 'request' object".to_string())
-        })?;
+        let request = nested
+            .request
+            .ok_or_else(|| Error::generic("Nested fixture missing 'request' object".to_string()))?;
 
         let response = nested.response.ok_or_else(|| {
             Error::generic("Nested fixture missing 'response' object".to_string())
@@ -211,7 +211,9 @@ impl CustomFixtureLoader {
 
         // Validate HTTP method
         let method_upper = fixture.method.to_uppercase();
-        let valid_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"];
+        let valid_methods = [
+            "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE",
+        ];
         if !valid_methods.contains(&method_upper.as_str()) {
             tracing::warn!(
                 "Fixture {} uses non-standard HTTP method: {}",
@@ -385,11 +387,7 @@ impl CustomFixtureLoader {
 
         // Try exact match first (with normalized path)
         if let Some(fixture) = fixtures_by_method.get(&request_path) {
-            tracing::debug!(
-                "Found exact fixture match: {} {}",
-                method,
-                request_path
-            );
+            tracing::debug!("Found exact fixture match: {} {}", method, request_path);
             return Some(fixture);
         }
 
@@ -406,11 +404,7 @@ impl CustomFixtureLoader {
             }
         }
 
-        tracing::debug!(
-            "No fixture match found for: {} {}",
-            method,
-            request_path
-        );
+        tracing::debug!("No fixture match found for: {} {}", method, request_path);
         None
     }
 
@@ -426,14 +420,10 @@ impl CustomFixtureLoader {
 
         // Simple pattern matching without full regex (for performance)
         // Split both paths into segments
-        let pattern_segments: Vec<&str> = normalized_pattern
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .collect();
-        let request_segments: Vec<&str> = normalized_request
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .collect();
+        let pattern_segments: Vec<&str> =
+            normalized_pattern.split('/').filter(|s| !s.is_empty()).collect();
+        let request_segments: Vec<&str> =
+            normalized_request.split('/').filter(|s| !s.is_empty()).collect();
 
         if pattern_segments.len() != request_segments.len() {
             return false;
@@ -700,10 +690,7 @@ mod tests {
         assert_eq!(fixture.method, "POST");
         assert_eq!(fixture.path, "/api/auth/login");
         assert_eq!(fixture.status, 200);
-        assert_eq!(
-            fixture.headers.get("Content-Type"),
-            Some(&"application/json".to_string())
-        );
+        assert_eq!(fixture.headers.get("Content-Type"), Some(&"application/json".to_string()));
         assert!(fixture.response.get("access_token").is_some());
     }
 
@@ -854,7 +841,8 @@ mod tests {
         let flat = loader.load_fixture(&create_test_fingerprint("GET", "/api/v1/flat")).unwrap();
         assert_eq!(flat.response.get("type").and_then(|v| v.as_str()), Some("flat"));
 
-        let nested = loader.load_fixture(&create_test_fingerprint("GET", "/api/v1/nested")).unwrap();
+        let nested =
+            loader.load_fixture(&create_test_fingerprint("GET", "/api/v1/nested")).unwrap();
         assert_eq!(nested.response.get("type").and_then(|v| v.as_str()), Some("nested"));
     }
 
@@ -878,7 +866,9 @@ mod tests {
           "status": 999,
           "response": {}
         }"#;
-        fs::write(fixtures_dir.join("invalid-status.json"), invalid_status).await.unwrap();
+        fs::write(fixtures_dir.join("invalid-status.json"), invalid_status)
+            .await
+            .unwrap();
 
         // Load fixtures - should handle errors gracefully
         let mut loader = CustomFixtureLoader::new(fixtures_dir, true);

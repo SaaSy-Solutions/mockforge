@@ -5,8 +5,8 @@
 
 use mockforge_core::conditions::{evaluate_condition, ConditionContext};
 use mockforge_core::routing::{HttpMethod, Route, RouteRegistry};
-use mockforge_core::validation::validate_json_schema;
 use mockforge_core::templating::expand_str;
+use mockforge_core::validation::validate_json_schema;
 use serde_json::json;
 use std::time::Instant;
 
@@ -96,8 +96,7 @@ mod condition_evaluation_performance {
 
     #[test]
     fn condition_evaluation_simple() {
-        let context = ConditionContext::new()
-            .with_request_body(json!({"value": 42}));
+        let context = ConditionContext::new().with_request_body(json!({"value": 42}));
 
         let start = Instant::now();
         for _ in 0..1000 {
@@ -116,11 +115,10 @@ mod condition_evaluation_performance {
 
     #[test]
     fn condition_evaluation_complex() {
-        let context = ConditionContext::new()
-            .with_request_body(json!({
-                "user": {"id": 123, "name": "test"},
-                "items": [1, 2, 3, 4, 5]
-            }));
+        let context = ConditionContext::new().with_request_body(json!({
+            "user": {"id": 123, "name": "test"},
+            "items": [1, 2, 3, 4, 5]
+        }));
 
         let condition = "AND($.user.id == 123, $.items.length > 0)";
 
@@ -146,8 +144,7 @@ mod condition_evaluation_performance {
         let mut headers = HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
 
-        let context = ConditionContext::new()
-            .with_headers(headers);
+        let context = ConditionContext::new().with_headers(headers);
 
         let start = Instant::now();
         for _ in 0..1000 {
@@ -189,11 +186,7 @@ mod validation_performance {
 
         let avg_us = elapsed.as_micros() / 1000;
         // Allow more time for validation (100µs threshold)
-        assert!(
-            avg_us <= 100,
-            "Simple validation took {}µs, threshold is 100µs",
-            avg_us
-        );
+        assert!(avg_us <= 100, "Simple validation took {}µs, threshold is 100µs", avg_us);
     }
 
     #[test]
@@ -234,11 +227,7 @@ mod validation_performance {
 
         let avg_us = elapsed.as_micros() / 100;
         // Complex schemas may take longer (500µs threshold)
-        assert!(
-            avg_us <= 500,
-            "Complex validation took {}µs, threshold is 500µs",
-            avg_us
-        );
+        assert!(avg_us <= 500, "Complex validation took {}µs, threshold is 500µs", avg_us);
     }
 }
 
@@ -342,8 +331,7 @@ mod bulk_operations_performance {
 
     #[test]
     fn bulk_condition_evaluation() {
-        let context = ConditionContext::new()
-            .with_request_body(json!({"value": 42}));
+        let context = ConditionContext::new().with_request_body(json!({"value": 42}));
 
         let conditions = vec![
             "true",

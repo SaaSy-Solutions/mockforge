@@ -55,8 +55,7 @@ fn test_latency_profile_min_bound() {
 /// Test latency profile with tag overrides
 #[test]
 fn test_latency_profile_tag_overrides() {
-    let profile = LatencyProfile::new(100, 10)
-        .with_tag_override("critical".to_string(), 500);
+    let profile = LatencyProfile::new(100, 10).with_tag_override("critical".to_string(), 500);
 
     // Test with matching tag
     let latency_with_tag = profile.calculate_latency(&["critical".to_string()]);
@@ -257,7 +256,11 @@ fn test_failure_injector_probabilistic() {
 
     // Should be roughly 50% with tolerance
     let failure_rate = failures as f64 / iterations as f64;
-    assert!(failure_rate > 0.4 && failure_rate < 0.6, "Failure rate was {}, expected ~0.5", failure_rate);
+    assert!(
+        failure_rate > 0.4 && failure_rate < 0.6,
+        "Failure rate was {}, expected ~0.5",
+        failure_rate
+    );
 }
 
 /// Test failure injector with multiple tags and precedence
@@ -289,7 +292,8 @@ fn test_failure_injector_tag_precedence() {
     let injector = FailureInjector::new(Some(config), true);
 
     // First tag in the list should be used (implementation-dependent)
-    let response = injector.get_failure_response(&["critical".to_string(), "important".to_string()]);
+    let response =
+        injector.get_failure_response(&["critical".to_string(), "important".to_string()]);
     assert!(response.is_some());
     // Should use one of the tag configs
     let (status, _) = response.unwrap();
@@ -412,7 +416,11 @@ fn test_failure_injector_small_rate() {
 
     // Should be roughly 1% with tolerance
     let failure_rate = failures as f64 / iterations as f64;
-    assert!(failure_rate > 0.005 && failure_rate < 0.02, "Failure rate was {}, expected ~0.01", failure_rate);
+    assert!(
+        failure_rate > 0.005 && failure_rate < 0.02,
+        "Failure rate was {}, expected ~0.01",
+        failure_rate
+    );
 }
 
 /// Test failure injector with very high error rate (but not 100%)
@@ -435,6 +443,9 @@ fn test_failure_injector_high_rate() {
 
     // Should be roughly 99% with tolerance
     let failure_rate = failures as f64 / iterations as f64;
-    assert!(failure_rate > 0.95 && failure_rate < 1.0, "Failure rate was {}, expected ~0.99", failure_rate);
+    assert!(
+        failure_rate > 0.95 && failure_rate < 1.0,
+        "Failure rate was {}, expected ~0.99",
+        failure_rate
+    );
 }
-

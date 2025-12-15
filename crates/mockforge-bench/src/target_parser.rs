@@ -107,16 +107,12 @@ fn parse_json_targets(content: &str) -> Result<Vec<TargetConfig>> {
                     if let Ok(target) = serde_json::from_value::<JsonTarget>(item) {
                         Ok(match target {
                             JsonTarget::Simple(url) => TargetConfig::from_url(url),
-                            JsonTarget::Object { url, auth, headers } => TargetConfig {
-                                url,
-                                auth,
-                                headers,
-                            },
+                            JsonTarget::Object { url, auth, headers } => {
+                                TargetConfig { url, auth, headers }
+                            }
                         })
                     } else {
-                        Err(BenchError::Other(
-                            "Invalid target format in JSON array".to_string(),
-                        ))
+                        Err(BenchError::Other("Invalid target format in JSON array".to_string()))
                     }
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -130,23 +126,17 @@ fn parse_json_targets(content: &str) -> Result<Vec<TargetConfig>> {
                             if let Ok(target) = serde_json::from_value::<JsonTarget>(item.clone()) {
                                 Ok(match target {
                                     JsonTarget::Simple(url) => TargetConfig::from_url(url),
-                                    JsonTarget::Object { url, auth, headers } => TargetConfig {
-                                        url,
-                                        auth,
-                                        headers,
-                                    },
+                                    JsonTarget::Object { url, auth, headers } => {
+                                        TargetConfig { url, auth, headers }
+                                    }
                                 })
                             } else {
-                                Err(BenchError::Other(
-                                    "Invalid target format in JSON".to_string(),
-                                ))
+                                Err(BenchError::Other("Invalid target format in JSON".to_string()))
                             }
                         })
                         .collect::<Result<Vec<_>>>()?
                 } else {
-                    return Err(BenchError::Other(
-                        "Expected 'targets' to be an array".to_string(),
-                    ));
+                    return Err(BenchError::Other("Expected 'targets' to be an array".to_string()));
                 }
             } else {
                 return Err(BenchError::Other(
@@ -197,9 +187,7 @@ fn parse_text_targets(content: &str) -> Result<Vec<TargetConfig>> {
     }
 
     if targets.is_empty() {
-        return Err(BenchError::Other(
-            "No valid targets found in text file".to_string(),
-        ));
+        return Err(BenchError::Other("No valid targets found in text file".to_string()));
     }
 
     Ok(targets)

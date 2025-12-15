@@ -617,11 +617,8 @@ mod tests {
     #[test]
     fn test_workspace_add_request() {
         let mut workspace = Workspace::new("Test".to_string());
-        let request = MockRequest::new(
-            "Test Request".to_string(),
-            HttpMethod::GET,
-            "/api/test".to_string(),
-        );
+        let request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         workspace.add_request(request);
         assert_eq!(workspace.requests.len(), 1);
         assert_eq!(workspace.requests[0].name, "Test Request");
@@ -657,11 +654,8 @@ mod tests {
     #[test]
     fn test_folder_add_request() {
         let mut folder = Folder::new("Test".to_string());
-        let request = MockRequest::new(
-            "Test Request".to_string(),
-            HttpMethod::POST,
-            "/api/test".to_string(),
-        );
+        let request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::POST, "/api/test".to_string());
         folder.add_request(request);
         assert_eq!(folder.requests.len(), 1);
         assert_eq!(folder.requests[0].name, "Test Request");
@@ -671,25 +665,22 @@ mod tests {
     fn test_folder_get_inherited_headers() {
         let mut parent = Folder::new("Parent".to_string());
         parent.inheritance.headers.insert("X-Parent".to_string(), "value1".to_string());
-        
+
         let mut child = Folder::new("Child".to_string());
         child.parent_id = Some(parent.id.clone());
         child.inheritance.headers.insert("X-Child".to_string(), "value2".to_string());
-        
+
         let all_folders = vec![parent.clone(), child.clone()];
         let headers = child.get_inherited_headers(&all_folders);
-        
+
         assert_eq!(headers.get("X-Parent"), Some(&"value1".to_string()));
         assert_eq!(headers.get("X-Child"), Some(&"value2".to_string()));
     }
 
     #[test]
     fn test_mock_request_new() {
-        let request = MockRequest::new(
-            "Test Request".to_string(),
-            HttpMethod::GET,
-            "/api/test".to_string(),
-        );
+        let request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         assert_eq!(request.name, "Test Request");
         assert_eq!(request.method, HttpMethod::GET);
         assert_eq!(request.url, "/api/test");
@@ -698,11 +689,8 @@ mod tests {
 
     #[test]
     fn test_mock_request_touch() {
-        let mut request = MockRequest::new(
-            "Test".to_string(),
-            HttpMethod::GET,
-            "/api/test".to_string(),
-        );
+        let mut request =
+            MockRequest::new("Test".to_string(), HttpMethod::GET, "/api/test".to_string());
         let old_updated = request.updated_at;
         std::thread::sleep(std::time::Duration::from_millis(10));
         request.touch();
@@ -711,12 +699,10 @@ mod tests {
 
     #[test]
     fn test_mock_request_add_response() {
-        let mut request = MockRequest::new(
-            "Test".to_string(),
-            HttpMethod::GET,
-            "/api/test".to_string(),
-        );
-        let response = MockResponse::new(200, "Success".to_string(), r#"{"status": "ok"}"#.to_string());
+        let mut request =
+            MockRequest::new("Test".to_string(), HttpMethod::GET, "/api/test".to_string());
+        let response =
+            MockResponse::new(200, "Success".to_string(), r#"{"status": "ok"}"#.to_string());
         request.add_response(response);
         assert_eq!(request.responses.len(), 1);
         assert_eq!(request.responses[0].status_code, 200);
@@ -724,19 +710,17 @@ mod tests {
 
     #[test]
     fn test_mock_request_active_response() {
-        let mut request = MockRequest::new(
-            "Test".to_string(),
-            HttpMethod::GET,
-            "/api/test".to_string(),
-        );
+        let mut request =
+            MockRequest::new("Test".to_string(), HttpMethod::GET, "/api/test".to_string());
         let mut response1 = MockResponse::new(200, "Success".to_string(), "ok".to_string());
         response1.active = false;
-        let mut response2 = MockResponse::new(404, "Not Found".to_string(), "not found".to_string());
+        let mut response2 =
+            MockResponse::new(404, "Not Found".to_string(), "not found".to_string());
         response2.active = true;
-        
+
         request.add_response(response1);
         request.add_response(response2);
-        
+
         let active = request.active_response();
         // active_response() returns the first response with active=true
         // Since add_response might set the first response as active, we need to check
@@ -749,15 +733,12 @@ mod tests {
 
     #[test]
     fn test_mock_request_active_response_mut() {
-        let mut request = MockRequest::new(
-            "Test".to_string(),
-            HttpMethod::GET,
-            "/api/test".to_string(),
-        );
+        let mut request =
+            MockRequest::new("Test".to_string(), HttpMethod::GET, "/api/test".to_string());
         let mut response = MockResponse::new(200, "Success".to_string(), "ok".to_string());
         response.active = true;
         request.add_response(response);
-        
+
         let active = request.active_response_mut();
         assert!(active.is_some());
         active.unwrap().status_code = 201;
@@ -766,7 +747,8 @@ mod tests {
 
     #[test]
     fn test_mock_response_new() {
-        let response = MockResponse::new(200, "Success".to_string(), r#"{"data": "test"}"#.to_string());
+        let response =
+            MockResponse::new(200, "Success".to_string(), r#"{"data": "test"}"#.to_string());
         assert_eq!(response.status_code, 200);
         assert_eq!(response.name, "Success");
         assert_eq!(response.body, r#"{"data": "test"}"#);

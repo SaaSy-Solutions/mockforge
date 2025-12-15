@@ -177,12 +177,7 @@ async fn test_bridge_max_request_size() {
 
 #[tokio::test]
 async fn test_bridge_base_path_variations() {
-    let base_paths = vec![
-        "/api",
-        "/v1/api",
-        "/api/v1",
-        "/",
-    ];
+    let base_paths = vec!["/api", "/v1/api", "/api/v1", "/"];
 
     for base_path in base_paths {
         let config = HttpBridgeConfig {

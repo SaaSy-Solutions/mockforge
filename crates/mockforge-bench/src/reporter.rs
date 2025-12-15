@@ -87,10 +87,7 @@ impl TerminalReporter {
         println!("{}\n", "=".repeat(60).bright_green());
 
         println!("{}", "Overall Summary:".bold());
-        println!(
-            "  Total Targets:         {}",
-            results.total_targets.to_string().cyan()
-        );
+        println!("  Total Targets:         {}", results.total_targets.to_string().cyan());
         println!(
             "  Successful:           {} ({}%)",
             results.successful_targets.to_string().green(),

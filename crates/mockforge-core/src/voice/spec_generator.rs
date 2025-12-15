@@ -530,7 +530,10 @@ impl Default for VoiceSpecGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::voice::command_parser::{EndpointRequirement, FieldRequirement, ModelRequirement, ParsedCommand, RequestBodyRequirement, ResponseRequirement};
+    use crate::voice::command_parser::{
+        EndpointRequirement, FieldRequirement, ModelRequirement, ParsedCommand,
+        RequestBodyRequirement, ResponseRequirement,
+    };
 
     #[test]
     fn test_voice_spec_generator_new() {
@@ -559,7 +562,7 @@ mod tests {
             sample_counts: std::collections::HashMap::new(),
             flows: vec![],
         };
-        
+
         let spec = generator.generate_spec(&parsed).await.unwrap();
         assert_eq!(spec.title(), "Test API");
     }
@@ -584,7 +587,7 @@ mod tests {
                 },
             ],
         };
-        
+
         let parsed = ParsedCommand {
             api_type: "e-commerce".to_string(),
             title: "Shop API".to_string(),
@@ -595,7 +598,7 @@ mod tests {
             sample_counts: std::collections::HashMap::new(),
             flows: vec![],
         };
-        
+
         let spec = generator.generate_spec(&parsed).await.unwrap();
         assert_eq!(spec.title(), "Shop API");
     }
@@ -615,7 +618,7 @@ mod tests {
                 count: None,
             }),
         };
-        
+
         let parsed = ParsedCommand {
             api_type: "e-commerce".to_string(),
             title: "Shop API".to_string(),
@@ -626,7 +629,7 @@ mod tests {
             sample_counts: std::collections::HashMap::new(),
             flows: vec![],
         };
-        
+
         let spec = generator.generate_spec(&parsed).await.unwrap();
         assert_eq!(spec.title(), "Shop API");
     }
@@ -634,7 +637,7 @@ mod tests {
     #[tokio::test]
     async fn test_merge_spec() {
         let generator = VoiceSpecGenerator::new();
-        
+
         // Create existing spec
         let existing_json = serde_json::json!({
             "openapi": "3.0.3",
@@ -648,7 +651,7 @@ mod tests {
             }
         });
         let existing = OpenApiSpec::from_json(existing_json).unwrap();
-        
+
         // Create parsed command with new endpoint
         let parsed = ParsedCommand {
             api_type: "test".to_string(),
@@ -660,7 +663,7 @@ mod tests {
             sample_counts: std::collections::HashMap::new(),
             flows: vec![],
         };
-        
+
         let merged = generator.merge_spec(&existing, &parsed).await.unwrap();
         assert_eq!(merged.title(), "Existing API"); // Title should remain from existing
     }

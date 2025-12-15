@@ -13,10 +13,10 @@ fn test_overrides_empty() {
         rules: vec![],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"value": "original"});
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     // Should remain unchanged
     assert_eq!(body["value"], "original");
 }
@@ -49,10 +49,10 @@ fn test_overrides_multiple_rules() {
         ],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"value1": "original1", "value2": "original2"});
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["value1"], "first");
     assert_eq!(body["value2"], "second");
 }
@@ -73,7 +73,7 @@ fn test_overrides_merge_mode() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({
         "nested": {
             "key": "original",
@@ -81,7 +81,7 @@ fn test_overrides_merge_mode() {
         }
     });
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["nested"]["key"], "merged");
     assert_eq!(body["nested"]["other"], "preserved");
 }
@@ -89,13 +89,13 @@ fn test_overrides_merge_mode() {
 /// Test overrides with path matching
 #[test]
 fn test_overrides_path_matching() {
-    use std::collections::HashMap;
     use regex::Regex;
-    
+    use std::collections::HashMap;
+
     // Pre-compile regex pattern for path matching
     let mut regex_cache = HashMap::new();
     regex_cache.insert("/api/users/.*".to_string(), Regex::new(r"/api/users/.*").unwrap());
-    
+
     let overrides = Overrides {
         rules: vec![OverrideRule {
             targets: vec!["path:/api/users/.*".to_string()],
@@ -109,10 +109,10 @@ fn test_overrides_path_matching() {
         }],
         regex_cache,
     };
-    
+
     let mut body = json!({"count": 0});
     overrides.apply("any_op", &[], "/api/users/123", &mut body);
-    
+
     assert_eq!(body["count"], 100);
 }
 
@@ -132,10 +132,10 @@ fn test_overrides_tag_matching() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"role": "user"});
     overrides.apply("any_op", &["admin".to_string()], "/test", &mut body);
-    
+
     assert_eq!(body["role"], "admin");
 }
 
@@ -155,10 +155,10 @@ fn test_overrides_multiple_tags() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"tier": "free"});
     overrides.apply("any_op", &["premium".to_string(), "vip".to_string()], "/test", &mut body);
-    
+
     assert_eq!(body["tier"], "premium");
 }
 
@@ -178,10 +178,10 @@ fn test_overrides_no_matching_tags() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"tier": "free"});
     overrides.apply("any_op", &["basic".to_string()], "/test", &mut body);
-    
+
     // Should remain unchanged
     assert_eq!(body["tier"], "free");
 }
@@ -202,7 +202,7 @@ fn test_overrides_nested_path() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({
         "level1": {
             "level2": {
@@ -213,7 +213,7 @@ fn test_overrides_nested_path() {
         }
     });
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["level1"]["level2"]["level3"]["value"], "deep");
 }
 
@@ -233,7 +233,7 @@ fn test_overrides_array_index() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({
         "items": [
             {"name": "original", "id": 1},
@@ -241,7 +241,7 @@ fn test_overrides_array_index() {
         ]
     });
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["items"][0]["name"], "first");
     assert_eq!(body["items"][1]["name"], "second");
 }
@@ -262,10 +262,10 @@ fn test_overrides_non_existent_path() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({});
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     // Should create the path with Add operation
     assert_eq!(body["new"]["field"]["value"], "created");
 }
@@ -286,10 +286,10 @@ fn test_overrides_empty_string() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"value": "original"});
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["value"], "");
 }
 
@@ -309,10 +309,10 @@ fn test_overrides_null_value() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"value": "original"});
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert!(body["value"].is_null());
 }
 
@@ -332,10 +332,10 @@ fn test_overrides_boolean_value() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"enabled": false});
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["enabled"], true);
 }
 
@@ -355,10 +355,10 @@ fn test_overrides_number_value() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"count": 0});
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["count"], 42);
 }
 
@@ -378,10 +378,10 @@ fn test_overrides_float_value() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"price": 0.0});
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["price"], 99.99);
 }
 
@@ -401,10 +401,10 @@ fn test_overrides_array_value() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"items": []});
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["items"], json!([1, 2, 3]));
 }
 
@@ -424,10 +424,10 @@ fn test_overrides_object_value() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"metadata": {}});
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["metadata"]["key"], "value");
     assert_eq!(body["metadata"]["number"], 42);
 }
@@ -442,12 +442,12 @@ fn test_overrides_rules_method() {
         when: None,
         post_templating: false,
     };
-    
+
     let overrides = Overrides {
         rules: vec![rule.clone()],
         regex_cache: Default::default(),
     };
-    
+
     let rules = overrides.rules();
     assert_eq!(rules.len(), 1);
 }
@@ -457,10 +457,7 @@ fn test_overrides_rules_method() {
 fn test_overrides_multiple_targets() {
     let overrides = Overrides {
         rules: vec![OverrideRule {
-            targets: vec![
-                "operation:test_op".to_string(),
-                "tag:test_tag".to_string(),
-            ],
+            targets: vec!["operation:test_op".to_string(), "tag:test_tag".to_string()],
             mode: OverrideMode::Replace,
             patch: vec![PatchOp::Replace {
                 path: "/value".to_string(),
@@ -471,12 +468,12 @@ fn test_overrides_multiple_targets() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({"value": "original"});
     // Should match by operation
     overrides.apply("test_op", &[], "/test", &mut body);
     assert_eq!(body["value"], "matched");
-    
+
     // Reset and test tag match
     body = json!({"value": "original"});
     overrides.apply("other_op", &["test_tag".to_string()], "/test", &mut body);
@@ -505,7 +502,7 @@ fn test_overrides_complex_nested() {
         }],
         regex_cache: Default::default(),
     };
-    
+
     let mut body = json!({
         "user": {
             "profile": {
@@ -516,9 +513,8 @@ fn test_overrides_complex_nested() {
         }
     });
     overrides.apply("test_op", &[], "/test", &mut body);
-    
+
     assert_eq!(body["user"]["profile"]["name"], "John Doe");
     assert_eq!(body["user"]["profile"]["email"], "john@example.com");
     assert_eq!(body["user"]["profile"]["age"], 30); // Should be preserved
 }
-

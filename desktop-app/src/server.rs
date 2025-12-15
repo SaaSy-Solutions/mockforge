@@ -109,20 +109,20 @@ async fn start_embedded_servers(
     // Routes and CORS can be configured via OpenAPI spec instead
     let http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
         config.http.openapi_spec.clone(),
-        None, // validation options
-        None, // chain config
-        None, // multi-tenant config
-        None, // route_configs - skip custom routes to avoid type mismatch
-        None, // cors_config - skip to avoid type mismatch, use defaults
-        None,                                  // ai_generator
-        None,                                  // smtp_registry
-        None,                                  // mqtt_broker
-        None,                                  // traffic_shaper
-        false,                                 // traffic_shaping_enabled
-        Some(health_manager.clone()),          // health_manager
-        None,                                  // mockai
-        None,                                  // deceptive_deploy_config - skip to avoid type mismatch
-        None,                                  // proxy_config
+        None,                         // validation options
+        None,                         // chain config
+        None,                         // multi-tenant config
+        None,                         // route_configs - skip custom routes to avoid type mismatch
+        None,                         // cors_config - skip to avoid type mismatch, use defaults
+        None,                         // ai_generator
+        None,                         // smtp_registry
+        None,                         // mqtt_broker
+        None,                         // traffic_shaper
+        false,                        // traffic_shaping_enabled
+        Some(health_manager.clone()), // health_manager
+        None,                         // mockai
+        None,                         // deceptive_deploy_config - skip to avoid type mismatch
+        None,                         // proxy_config
     )
     .await;
 

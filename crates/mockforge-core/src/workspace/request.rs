@@ -1043,12 +1043,8 @@ mod tests {
 
     #[test]
     fn test_request_processor_with_performance_config() {
-        let processor = RequestProcessor::with_performance_config(
-            None,
-            500,
-            Duration::from_secs(120),
-            false,
-        );
+        let processor =
+            RequestProcessor::with_performance_config(None, 500, Duration::from_secs(120), false);
         assert!(!processor.optimizations_enabled);
         assert!(processor.environment_manager.is_none());
     }
@@ -1078,10 +1074,10 @@ mod tests {
     fn test_set_optimizations_enabled() {
         let mut processor = RequestProcessor::new();
         assert!(processor.optimizations_enabled);
-        
+
         processor.set_optimizations_enabled(false);
         assert!(!processor.optimizations_enabled);
-        
+
         processor.set_optimizations_enabled(true);
         assert!(processor.optimizations_enabled);
     }
@@ -1090,10 +1086,10 @@ mod tests {
     fn test_request_match_criteria_creation() {
         let mut query_params = HashMap::new();
         query_params.insert("key".to_string(), "value".to_string());
-        
+
         let mut headers = HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
-        
+
         let criteria = RequestMatchCriteria {
             method: HttpMethod::GET,
             path: "/api/test".to_string(),
@@ -1101,7 +1097,7 @@ mod tests {
             headers,
             body: Some(r#"{"test": "data"}"#.to_string()),
         };
-        
+
         assert_eq!(criteria.method, HttpMethod::GET);
         assert_eq!(criteria.path, "/api/test");
         assert_eq!(criteria.query_params.len(), 1);
@@ -1116,7 +1112,7 @@ mod tests {
             errors: vec![],
             warnings: vec!["Warning message".to_string()],
         };
-        
+
         assert!(result.is_valid);
         assert!(result.errors.is_empty());
         assert_eq!(result.warnings.len(), 1);
@@ -1129,7 +1125,7 @@ mod tests {
             errors: vec!["Error 1".to_string(), "Error 2".to_string()],
             warnings: vec![],
         };
-        
+
         assert!(!result.is_valid);
         assert_eq!(result.errors.len(), 2);
         assert!(result.warnings.is_empty());
@@ -1139,10 +1135,10 @@ mod tests {
     fn test_request_execution_context_creation() {
         let mut env_vars = HashMap::new();
         env_vars.insert("API_KEY".to_string(), "secret123".to_string());
-        
+
         let mut global_headers = HashMap::new();
         global_headers.insert("X-Request-ID".to_string(), "req-123".to_string());
-        
+
         let context = RequestExecutionContext {
             workspace_id: EntityId::new(),
             environment_variables: env_vars,
@@ -1150,7 +1146,7 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         assert_eq!(context.timeout_seconds, 30);
         assert!(context.ssl_verify);
         assert_eq!(context.environment_variables.len(), 1);
@@ -1164,13 +1160,10 @@ mod tests {
             successful_requests: 95,
             failed_requests: 5,
             average_response_time_ms: 125.5,
-            popular_requests: vec![
-                (EntityId::new(), 10),
-                (EntityId::new(), 8),
-            ],
+            popular_requests: vec![(EntityId::new(), 10), (EntityId::new(), 8)],
             last_execution: Some(Utc::now()),
         };
-        
+
         assert_eq!(metrics.total_requests, 100);
         assert_eq!(metrics.successful_requests, 95);
         assert_eq!(metrics.failed_requests, 5);
@@ -1189,7 +1182,7 @@ mod tests {
             error: None,
             failure_context: None,
         };
-        
+
         assert!(result.success);
         assert_eq!(result.duration_ms, 150);
         assert!(result.error.is_none());
@@ -1206,7 +1199,7 @@ mod tests {
             error: Some("Request failed".to_string()),
             failure_context: None,
         };
-        
+
         assert!(!result.success);
         assert!(result.error.is_some());
         assert_eq!(result.error.unwrap(), "Request failed");
@@ -1371,12 +1364,14 @@ mod tests {
     async fn test_execute_request_success() {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        let response = MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        let response =
+            MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
         request.add_response(response);
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1384,9 +1379,9 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         let result = processor.execute_request(&mut workspace, &request.id, &context).await;
-        
+
         assert!(result.is_ok());
         let execution_result = result.unwrap();
         assert!(execution_result.success);
@@ -1398,7 +1393,7 @@ mod tests {
     async fn test_execute_request_not_found() {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1406,10 +1401,10 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         let non_existent_id = EntityId::new();
         let result = processor.execute_request(&mut workspace, &non_existent_id, &context).await;
-        
+
         assert!(result.is_err());
     }
 
@@ -1417,13 +1412,15 @@ mod tests {
     async fn test_execute_request_with_delay() {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        let mut response = MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        let mut response =
+            MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
         response.delay = 10; // 10ms delay
         request.add_response(response);
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1431,11 +1428,11 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         let start = std::time::Instant::now();
         let result = processor.execute_request(&mut workspace, &request.id, &context).await;
         let elapsed = start.elapsed();
-        
+
         assert!(result.is_ok());
         assert!(elapsed.as_millis() >= 10); // Should have delay
     }
@@ -1444,10 +1441,11 @@ mod tests {
     fn test_find_matching_request_exact() {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+
+        let request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         workspace.add_request(request.clone());
-        
+
         let criteria = RequestMatchCriteria {
             method: HttpMethod::GET,
             path: "/api/test".to_string(),
@@ -1455,7 +1453,7 @@ mod tests {
             headers: HashMap::new(),
             body: None,
         };
-        
+
         let matched_id = processor.find_matching_request(&workspace, &criteria);
         assert_eq!(matched_id, Some(request.id));
     }
@@ -1464,11 +1462,12 @@ mod tests {
     fn test_find_matching_request_with_query_params() {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         request.query_params.insert("key".to_string(), "value".to_string());
         workspace.add_request(request.clone());
-        
+
         let mut criteria = RequestMatchCriteria {
             method: HttpMethod::GET,
             path: "/api/test".to_string(),
@@ -1477,7 +1476,7 @@ mod tests {
             body: None,
         };
         criteria.query_params.insert("key".to_string(), "value".to_string());
-        
+
         let matched_id = processor.find_matching_request(&workspace, &criteria);
         assert_eq!(matched_id, Some(request.id));
     }
@@ -1507,10 +1506,12 @@ mod tests {
     #[test]
     fn test_create_route_from_request() {
         let processor = RequestProcessor::new();
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        let response = MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        let response =
+            MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
         request.add_response(response);
-        
+
         let route = processor.create_route_from_request(&request).unwrap();
         assert_eq!(route.method, HttpMethod::GET);
         assert_eq!(route.path, "/api/test");
@@ -1519,9 +1520,10 @@ mod tests {
     #[test]
     fn test_create_route_from_disabled_request() {
         let processor = RequestProcessor::new();
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         request.enabled = false;
-        
+
         let result = processor.create_route_from_request(&request);
         assert!(result.is_err());
     }
@@ -1530,20 +1532,24 @@ mod tests {
     fn test_update_route_registry() {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request1 = MockRequest::new("Request 1".to_string(), HttpMethod::GET, "/api/test1".to_string());
-        let response1 = MockResponse::new(200, "Success".to_string(), r#"{"message": "test1"}"#.to_string());
+
+        let mut request1 =
+            MockRequest::new("Request 1".to_string(), HttpMethod::GET, "/api/test1".to_string());
+        let response1 =
+            MockResponse::new(200, "Success".to_string(), r#"{"message": "test1"}"#.to_string());
         request1.add_response(response1);
         workspace.add_request(request1);
-        
-        let mut request2 = MockRequest::new("Request 2".to_string(), HttpMethod::POST, "/api/test2".to_string());
-        let response2 = MockResponse::new(201, "Created".to_string(), r#"{"message": "test2"}"#.to_string());
+
+        let mut request2 =
+            MockRequest::new("Request 2".to_string(), HttpMethod::POST, "/api/test2".to_string());
+        let response2 =
+            MockResponse::new(201, "Created".to_string(), r#"{"message": "test2"}"#.to_string());
         request2.add_response(response2);
         workspace.add_request(request2);
-        
+
         let mut registry = RouteRegistry::new();
         processor.update_route_registry(&workspace, &mut registry).unwrap();
-        
+
         // Should have routes registered - check by finding routes
         let get_routes = registry.find_http_routes(&HttpMethod::GET, "/api/test1");
         let post_routes = registry.find_http_routes(&HttpMethod::POST, "/api/test2");
@@ -1554,13 +1560,15 @@ mod tests {
     fn test_get_request_metrics() {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        let mut response = MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        let mut response =
+            MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
         response.record_usage(request.id.clone(), 100);
         request.add_response(response);
         workspace.add_request(request);
-        
+
         let metrics = processor.get_request_metrics(&workspace);
         assert_eq!(metrics.total_requests, 1);
         assert!(metrics.successful_requests > 0 || metrics.failed_requests > 0);
@@ -1570,12 +1578,13 @@ mod tests {
     fn test_find_matching_request_in_folder() {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
+
         let mut folder = Folder::new("Test Folder".to_string());
-        let request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        let request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         folder.add_request(request.clone());
         workspace.add_folder(folder);
-        
+
         let criteria = RequestMatchCriteria {
             method: HttpMethod::GET,
             path: "/api/test".to_string(),
@@ -1583,7 +1592,7 @@ mod tests {
             headers: HashMap::new(),
             body: None,
         };
-        
+
         let matched_id = processor.find_matching_request(&workspace, &criteria);
         assert_eq!(matched_id, Some(request.id));
     }
@@ -1598,11 +1607,16 @@ mod tests {
             true, // Enable optimizations
         );
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        request.add_response(MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string()));
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        request.add_response(MockResponse::new(
+            200,
+            "Success".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1610,14 +1624,16 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // First execution - should cache the response
-        let result1 = processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
+        let result1 =
+            processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
         assert!(result1.success);
         // First execution may take longer than 1ms
-        
+
         // Second execution - should hit cache (lines 370-379)
-        let result2 = processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
+        let result2 =
+            processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
         assert!(result2.success);
         // Cached responses should be fast (duration_ms = 1)
         assert_eq!(result2.duration_ms, 1);
@@ -1633,11 +1649,16 @@ mod tests {
             true, // Enable optimizations
         );
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        request.add_response(MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string()));
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        request.add_response(MockResponse::new(
+            200,
+            "Success".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1645,9 +1666,10 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // First execution - should miss cache and then cache the response
-        let result = processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
+        let result =
+            processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
         assert!(result.success);
         // Duration should be >= 0ms (can be 0 for very fast executions)
         // The important thing is that it's not using the cached path (duration_ms = 1)
@@ -1667,7 +1689,7 @@ mod tests {
             true, // Enable optimizations
         );
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
+
         let non_existent_id = EntityId::new();
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
@@ -1676,7 +1698,7 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // Should return error when request not found (lines 388-409)
         let result = processor.execute_request(&mut workspace, &non_existent_id, &context).await;
         assert!(result.is_err());
@@ -1693,11 +1715,16 @@ mod tests {
             true, // Enable optimizations
         );
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        request.add_response(MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string()));
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        request.add_response(MockResponse::new(
+            200,
+            "Success".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1705,13 +1732,15 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // Execute request - should cache response (lines 502-506)
-        let result1 = processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
+        let result1 =
+            processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
         assert!(result1.success);
-        
+
         // Second execution should use cached response
-        let result2 = processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
+        let result2 =
+            processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
         assert!(result2.success);
         // Cached responses return duration_ms = 1 (line 375)
         // Allow some flexibility for timing edge cases
@@ -1723,11 +1752,12 @@ mod tests {
         // Test error path when no active response (lines 456-474)
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         // Don't add any responses - should trigger error
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1735,7 +1765,7 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // Should return error when no active response (lines 456-474)
         let result = processor.execute_request(&mut workspace, &request.id, &context).await;
         assert!(result.is_err());
@@ -1747,14 +1777,16 @@ mod tests {
         // Test error path when response processing fails (lines 478-496)
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         // Add a response that might cause processing issues
-        let mut response = MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
+        let mut response =
+            MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
         response.delay = 0; // No delay
         request.add_response(response);
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1762,7 +1794,7 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // Should succeed normally
         let result = processor.execute_request(&mut workspace, &request.id, &context).await;
         assert!(result.is_ok());
@@ -1773,11 +1805,16 @@ mod tests {
         // Test response usage recording (lines 508-513)
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        request.add_response(MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string()));
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        request.add_response(MockResponse::new(
+            200,
+            "Success".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1785,11 +1822,12 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // Execute request - should record usage (lines 508-513)
-        let result = processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
+        let result =
+            processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
         assert!(result.success);
-        
+
         // Check that usage was recorded
         let request_ref = workspace.requests.iter().find(|r| r.id == request.id).unwrap();
         let response_ref = request_ref.active_response().unwrap();
@@ -1806,13 +1844,18 @@ mod tests {
             true, // Enable optimizations
         );
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
+
         // Create a disabled request (will fail validation)
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         request.enabled = false; // Disabled request
-        request.add_response(MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string()));
+        request.add_response(MockResponse::new(
+            200,
+            "Success".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1820,7 +1863,7 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // Should fail validation (lines 438-453)
         let result = processor.execute_request(&mut workspace, &request.id, &context).await;
         assert!(result.is_err());
@@ -1839,12 +1882,17 @@ mod tests {
             true, // Enable optimizations
         );
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
+
         // Create a request with empty URL (will fail validation)
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "".to_string());
-        request.add_response(MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string()));
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "".to_string());
+        request.add_response(MockResponse::new(
+            200,
+            "Success".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1852,7 +1900,7 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // Should fail validation (lines 438-453)
         let result = processor.execute_request(&mut workspace, &request.id, &context).await;
         assert!(result.is_err());
@@ -1866,12 +1914,17 @@ mod tests {
         // Test validation with invalid status code (lines 438-453)
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         // Add response with invalid status code (will fail validation)
-        request.add_response(MockResponse::new(999, "Invalid".to_string(), r#"{"message": "test"}"#.to_string()));
+        request.add_response(MockResponse::new(
+            999,
+            "Invalid".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1879,7 +1932,7 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // Should fail validation due to invalid status code
         let result = processor.execute_request(&mut workspace, &request.id, &context).await;
         assert!(result.is_err());
@@ -1897,11 +1950,16 @@ mod tests {
             true, // Enable optimizations
         );
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        request.add_response(MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string()));
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        request.add_response(MockResponse::new(
+            200,
+            "Success".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
         workspace.add_request(request.clone());
-        
+
         let context = RequestExecutionContext {
             workspace_id: workspace.id.clone(),
             environment_variables: HashMap::new(),
@@ -1909,11 +1967,11 @@ mod tests {
             timeout_seconds: 30,
             ssl_verify: true,
         };
-        
+
         // First validation - should cache
         let validation1 = processor.validate_request_cached(&request, &context).await.unwrap();
         assert!(validation1.is_valid);
-        
+
         // Second validation - should use cache
         let validation2 = processor.validate_request_cached(&request, &context).await.unwrap();
         assert!(validation2.is_valid);
@@ -1923,9 +1981,14 @@ mod tests {
     fn test_create_route_from_request_with_metadata() {
         // Test create_route_from_request with metadata (lines 840-855)
         let processor = RequestProcessor::new();
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        request.add_response(MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string()));
-        
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        request.add_response(MockResponse::new(
+            200,
+            "Success".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
+
         let route = processor.create_route_from_request(&request).unwrap();
         assert_eq!(route.method, HttpMethod::GET);
         assert_eq!(route.path, "/api/test");
@@ -1936,10 +1999,15 @@ mod tests {
     fn test_create_route_from_request_disabled_error() {
         // Test create_route_from_request with disabled request (line 829)
         let processor = RequestProcessor::new();
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         request.enabled = false;
-        request.add_response(MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string()));
-        
+        request.add_response(MockResponse::new(
+            200,
+            "Success".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
+
         let result = processor.create_route_from_request(&request);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("disabled"));
@@ -1949,9 +2017,10 @@ mod tests {
     fn test_create_route_from_request_no_active_response_error() {
         // Test create_route_from_request with no active response (line 834)
         let processor = RequestProcessor::new();
-        let request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        let request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         // No responses added
-        
+
         let result = processor.create_route_from_request(&request);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("No active response"));
@@ -1963,13 +2032,18 @@ mod tests {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
         let mut registry = RouteRegistry::new();
-        
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
-        request.add_response(MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string()));
+
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
+        request.add_response(MockResponse::new(
+            200,
+            "Success".to_string(),
+            r#"{"message": "test"}"#.to_string(),
+        ));
         workspace.add_request(request);
-        
+
         processor.update_route_registry(&workspace, &mut registry).unwrap();
-        
+
         // Should have added the route - check by trying to find it
         let found_routes = registry.find_http_routes(&HttpMethod::GET, "/api/test");
         assert!(!found_routes.is_empty());
@@ -1981,15 +2055,20 @@ mod tests {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
         let mut registry = RouteRegistry::new();
-        
+
         let mut folder = Folder::new("Test Folder".to_string());
-        let mut request = MockRequest::new("Test Request".to_string(), HttpMethod::POST, "/api/test".to_string());
-        request.add_response(MockResponse::new(201, "Created".to_string(), r#"{"message": "created"}"#.to_string()));
+        let mut request =
+            MockRequest::new("Test Request".to_string(), HttpMethod::POST, "/api/test".to_string());
+        request.add_response(MockResponse::new(
+            201,
+            "Created".to_string(),
+            r#"{"message": "created"}"#.to_string(),
+        ));
         folder.add_request(request);
         workspace.add_folder(folder);
-        
+
         processor.update_route_registry(&workspace, &mut registry).unwrap();
-        
+
         // Should have added the route from folder
         let found_routes = registry.find_http_routes(&HttpMethod::POST, "/api/test");
         assert!(!found_routes.is_empty());
@@ -1999,9 +2078,12 @@ mod tests {
     fn test_convert_mock_response_to_cached_response() {
         // Test convert_mock_response_to_cached_response (lines 963-970)
         let processor = RequestProcessor::new();
-        let mut response = MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
-        response.headers.insert("Content-Type".to_string(), "application/json".to_string());
-        
+        let mut response =
+            MockResponse::new(200, "Success".to_string(), r#"{"message": "test"}"#.to_string());
+        response
+            .headers
+            .insert("Content-Type".to_string(), "application/json".to_string());
+
         let cached = processor.convert_mock_response_to_cached_response(&response);
         assert_eq!(cached.status_code, 200);
         assert_eq!(cached.body, r#"{"message": "test"}"#);
@@ -2018,14 +2100,13 @@ mod tests {
             body: r#"{"message": "test"}"#.to_string(),
             content_type: Some("application/json".to_string()),
         };
-        
+
         let mock_response = processor.convert_cached_response_to_mock_response(cached);
         assert_eq!(mock_response.status_code, 200);
         assert_eq!(mock_response.body, r#"{"message": "test"}"#);
         assert_eq!(mock_response.name, "Cached Response");
         assert_eq!(mock_response.delay, 0);
     }
-
 
     #[tokio::test]
     async fn test_get_performance_summary() {

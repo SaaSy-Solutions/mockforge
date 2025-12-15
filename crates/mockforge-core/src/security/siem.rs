@@ -1512,22 +1512,10 @@ mod tests {
     fn test_syslog_severity_from_security_event_severity() {
         use crate::security::events::SecurityEventSeverity;
 
-        assert_eq!(
-            SyslogSeverity::from(SecurityEventSeverity::Low),
-            SyslogSeverity::Informational
-        );
-        assert_eq!(
-            SyslogSeverity::from(SecurityEventSeverity::Medium),
-            SyslogSeverity::Warning
-        );
-        assert_eq!(
-            SyslogSeverity::from(SecurityEventSeverity::High),
-            SyslogSeverity::Error
-        );
-        assert_eq!(
-            SyslogSeverity::from(SecurityEventSeverity::Critical),
-            SyslogSeverity::Critical
-        );
+        assert_eq!(SyslogSeverity::from(SecurityEventSeverity::Low), SyslogSeverity::Informational);
+        assert_eq!(SyslogSeverity::from(SecurityEventSeverity::Medium), SyslogSeverity::Warning);
+        assert_eq!(SyslogSeverity::from(SecurityEventSeverity::High), SyslogSeverity::Error);
+        assert_eq!(SyslogSeverity::from(SecurityEventSeverity::Critical), SyslogSeverity::Critical);
     }
 
     #[test]

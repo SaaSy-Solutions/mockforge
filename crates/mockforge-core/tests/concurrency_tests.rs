@@ -5,8 +5,8 @@
 
 use mockforge_core::conditions::{evaluate_condition, ConditionContext};
 use mockforge_core::routing::{HttpMethod, Route, RouteRegistry};
-use mockforge_core::validation::validate_json_schema;
 use mockforge_core::templating::expand_str;
+use mockforge_core::validation::validate_json_schema;
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -26,10 +26,7 @@ mod route_registry_concurrency {
             let registry_clone = Arc::clone(&registry);
             let handle = thread::spawn(move || {
                 for j in 0..50 {
-                    let route = Route::new(
-                        HttpMethod::GET,
-                        format!("/api/route_{}_{}", i, j),
-                    );
+                    let route = Route::new(HttpMethod::GET, format!("/api/route_{}_{}", i, j));
                     let mut reg = registry_clone.lock().unwrap();
                     let _ = reg.add_http_route(route);
                 }
@@ -60,10 +57,7 @@ mod route_registry_concurrency {
             let registry_clone = Arc::clone(&registry);
             let handle = thread::spawn(move || {
                 for j in 0..100 {
-                    let route = Route::new(
-                        HttpMethod::GET,
-                        format!("/api/add_{}_{}", i, j),
-                    );
+                    let route = Route::new(HttpMethod::GET, format!("/api/add_{}_{}", i, j));
                     let mut reg = registry_clone.lock().unwrap();
                     let _ = reg.add_http_route(route);
                 }
@@ -114,10 +108,7 @@ mod route_registry_concurrency {
                 }
                 // Add new routes
                 for j in 0..20 {
-                    let route = Route::new(
-                        HttpMethod::GET,
-                        format!("/api/new_{}_{}", i, j),
-                    );
+                    let route = Route::new(HttpMethod::GET, format!("/api/new_{}_{}", i, j));
                     let mut reg = registry_clone.lock().unwrap();
                     let _ = reg.add_http_route(route);
                 }
@@ -200,9 +191,11 @@ mod condition_evaluation_concurrency {
 
     #[test]
     fn concurrent_condition_evaluation_with_shared_context() {
-        let context = Arc::new(ConditionContext::new()
-            .with_request_body(json!({"id": 123, "name": "test"}))
-            .with_response_body(json!({"status": "ok"})));
+        let context = Arc::new(
+            ConditionContext::new()
+                .with_request_body(json!({"id": 123, "name": "test"}))
+                .with_response_body(json!({"status": "ok"})),
+        );
 
         let mut handles = vec![];
 
@@ -226,11 +219,10 @@ mod condition_evaluation_concurrency {
 
     #[test]
     fn concurrent_complex_condition_evaluation() {
-        let context = Arc::new(ConditionContext::new()
-            .with_request_body(json!({
-                "user": {"id": 123, "name": "test"},
-                "items": [1, 2, 3, 4, 5]
-            })));
+        let context = Arc::new(ConditionContext::new().with_request_body(json!({
+            "user": {"id": 123, "name": "test"},
+            "items": [1, 2, 3, 4, 5]
+        })));
 
         let mut handles = vec![];
 
@@ -241,8 +233,14 @@ mod condition_evaluation_concurrency {
                 for _ in 0..100 {
                     let _ = evaluate_condition("$.user.id == 123", &context_clone);
                     let _ = evaluate_condition("$.items.length > 0", &context_clone);
-                    let _ = evaluate_condition("AND($.user.id == 123, $.items.length > 0)", &context_clone);
-                    let _ = evaluate_condition("OR($.user.id == 123, $.items.length == 0)", &context_clone);
+                    let _ = evaluate_condition(
+                        "AND($.user.id == 123, $.items.length > 0)",
+                        &context_clone,
+                    );
+                    let _ = evaluate_condition(
+                        "OR($.user.id == 123, $.items.length == 0)",
+                        &context_clone,
+                    );
                 }
             });
             handles.push(handle);
@@ -403,10 +401,7 @@ mod mixed_operations_concurrency {
             let handle = thread::spawn(move || {
                 // Add routes
                 for j in 0..20 {
-                    let route = Route::new(
-                        HttpMethod::GET,
-                        format!("/api/route_{}_{}", i, j),
-                    );
+                    let route = Route::new(HttpMethod::GET, format!("/api/route_{}_{}", i, j));
                     let mut reg = registry_clone.lock().unwrap();
                     let _ = reg.add_http_route(route);
                 }
@@ -460,10 +455,7 @@ mod stress_tests {
                 for j in 0..100 {
                     // Add route
                     {
-                        let route = Route::new(
-                            HttpMethod::GET,
-                            format!("/api/route_{}_{}", i, j),
-                        );
+                        let route = Route::new(HttpMethod::GET, format!("/api/route_{}_{}", i, j));
                         let mut reg = registry_clone.lock().unwrap();
                         let _ = reg.add_http_route(route);
                     }
@@ -501,10 +493,7 @@ mod stress_tests {
                 for _ in 0..50 {
                     // Add routes
                     for j in 0..10 {
-                        let route = Route::new(
-                            HttpMethod::GET,
-                            format!("/api/route_{}_{}", i, j),
-                        );
+                        let route = Route::new(HttpMethod::GET, format!("/api/route_{}_{}", i, j));
                         let mut reg = registry_clone.lock().unwrap();
                         let _ = reg.add_http_route(route);
                     }
@@ -533,8 +522,7 @@ mod data_race_prevention {
     fn verify_no_data_races_in_condition_evaluation() {
         // This test verifies that condition evaluation doesn't have data races
         // by running many concurrent evaluations and checking for consistency
-        let context = Arc::new(ConditionContext::new()
-            .with_request_body(json!({"value": 42})));
+        let context = Arc::new(ConditionContext::new().with_request_body(json!({"value": 42})));
 
         let mut handles = vec![];
 
@@ -561,7 +549,10 @@ mod data_race_prevention {
         let first_result = results[0].as_ref().ok();
         for result in results.iter().skip(1) {
             let result_bool = result.as_ref().ok();
-            assert_eq!(result_bool, first_result, "Condition evaluation should be consistent across threads");
+            assert_eq!(
+                result_bool, first_result,
+                "Condition evaluation should be consistent across threads"
+            );
         }
     }
 

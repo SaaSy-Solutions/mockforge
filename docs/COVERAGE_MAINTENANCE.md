@@ -268,4 +268,3 @@ enforcement = "warn"  # or "enforce"
 - [Testing Standards](TESTING_STANDARDS.md) - Testing guidelines and patterns
 - [Coverage Configuration](../coverage.toml) - Coverage thresholds and settings
 - [Coverage Dashboard](COVERAGE.md) - Current coverage status
-

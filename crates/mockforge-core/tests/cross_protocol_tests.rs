@@ -68,16 +68,10 @@ mod protocol_state_consistency {
 
         // Verify metadata is preserved
         let http_routes = registry.find_http_routes(&HttpMethod::GET, "/api/users");
-        assert_eq!(
-            http_routes[0].metadata.get("protocol"),
-            Some(&json!("http"))
-        );
+        assert_eq!(http_routes[0].metadata.get("protocol"), Some(&json!("http")));
 
         let ws_routes = registry.find_ws_routes("/ws/chat");
-        assert_eq!(
-            ws_routes[0].metadata.get("protocol"),
-            Some(&json!("websocket"))
-        );
+        assert_eq!(ws_routes[0].metadata.get("protocol"), Some(&json!("websocket")));
     }
 }
 
@@ -109,10 +103,8 @@ mod protocol_bridge_tests {
         let mut registry = RouteRegistry::new();
 
         // Add routes with different priorities
-        let low_priority = Route::new(HttpMethod::GET, "/api/*".to_string())
-            .with_priority(1);
-        let high_priority = Route::new(HttpMethod::GET, "/api/users".to_string())
-            .with_priority(10);
+        let low_priority = Route::new(HttpMethod::GET, "/api/*".to_string()).with_priority(1);
+        let high_priority = Route::new(HttpMethod::GET, "/api/users".to_string()).with_priority(10);
 
         registry.add_http_route(low_priority).unwrap();
         registry.add_http_route(high_priority).unwrap();
@@ -163,10 +155,7 @@ mod protocol_data_consistency {
         // Deserialize
         let deserialized: Route = serde_json::from_str(&serialized).unwrap();
         assert_eq!(deserialized.metadata.get("key1"), Some(&json!("value1")));
-        assert_eq!(
-            deserialized.metadata.get("key2"),
-            Some(&json!({"nested": "value"}))
-        );
+        assert_eq!(deserialized.metadata.get("key2"), Some(&json!({"nested": "value"})));
     }
 
     #[test]

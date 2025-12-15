@@ -728,10 +728,10 @@ mod tests {
     fn test_request_creation() {
         let mut query_params = HashMap::new();
         query_params.insert("page".to_string(), "1".to_string());
-        
+
         let mut headers = HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
-        
+
         let request = Request {
             method: "GET".to_string(),
             path: "/api/users".to_string(),
@@ -749,7 +749,7 @@ mod tests {
     fn test_response_creation() {
         let mut headers = HashMap::new();
         headers.insert("Content-Type".to_string(), "application/json".to_string());
-        
+
         let response = Response {
             status_code: 200,
             body: json!({"message": "success"}),

@@ -33,14 +33,14 @@ async fn test_malformed_json_request_body() {
     let malformed_bodies = vec![
         "{ invalid json }",
         "{'key': 'value'}", // Single quotes
-        "{key: value}", // No quotes
-        "{\"key\": }", // Missing value
-        "{\"key\":}", // Missing value
-        "{\"key\"}", // Missing colon
-        "{", // Incomplete
-        "}", // Incomplete
-        "null", // Just null
-        "undefined", // Invalid
+        "{key: value}",     // No quotes
+        "{\"key\": }",      // Missing value
+        "{\"key\":}",       // Missing value
+        "{\"key\"}",        // Missing colon
+        "{",                // Incomplete
+        "}",                // Incomplete
+        "null",             // Just null
+        "undefined",        // Invalid
     ];
 
     for body in malformed_bodies {
@@ -110,10 +110,7 @@ async fn test_malformed_headers() {
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let client = Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap();
+    let client = Client::builder().danger_accept_invalid_certs(true).build().unwrap();
     let base_url = format!("http://{}", addr);
 
     // Test with various malformed header scenarios
@@ -152,10 +149,7 @@ async fn test_invalid_http_methods() {
 
     for method_str in methods {
         let method = Method::from_bytes(method_str.as_bytes()).unwrap();
-        let response = client
-            .request(method, &format!("{}/api/test", base_url))
-            .send()
-            .await;
+        let response = client.request(method, &format!("{}/api/test", base_url)).send().await;
 
         // Should handle all methods gracefully
         let _ = response;
@@ -191,7 +185,7 @@ async fn test_malformed_query_parameters() {
         "?key=value&&key2=value2",
         "?key=value&key2",
         "?%",
-        "?%XX", // Invalid percent encoding
+        "?%XX",        // Invalid percent encoding
         "?key=value%", // Incomplete percent encoding
     ];
 
@@ -301,18 +295,12 @@ async fn test_timeout_handling() {
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let client = Client::builder()
-        .timeout(Duration::from_millis(100))
-        .build()
-        .unwrap();
+    let client = Client::builder().timeout(Duration::from_millis(100)).build().unwrap();
     let base_url = format!("http://{}", addr);
 
     // Request should timeout gracefully
-    let response = timeout(
-        Duration::from_secs(1),
-        client.get(&format!("{}/health", base_url)).send(),
-    )
-    .await;
+    let response =
+        timeout(Duration::from_secs(1), client.get(&format!("{}/health", base_url)).send()).await;
 
     // Should handle timeout without panicking
     let _ = response;
@@ -368,12 +356,7 @@ async fn test_unicode_in_paths_and_headers() {
     let base_url = format!("http://{}", addr);
 
     // Test with unicode in paths
-    let unicode_paths = vec![
-        "/api/测试",
-        "/api/тест",
-        "/api/テスト",
-        "/api/🎉",
-    ];
+    let unicode_paths = vec!["/api/测试", "/api/тест", "/api/テスト", "/api/🎉"];
 
     for path in unicode_paths {
         let url = format!("{}{}", base_url, path);

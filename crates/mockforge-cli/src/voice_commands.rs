@@ -257,7 +257,7 @@ async fn handle_create(
             None,                      // tls_cert
             None,                      // tls_key
             None,                      // tls_ca
-            "1.2".to_string(),        // tls_min_version
+            "1.2".to_string(),         // tls_min_version
             "off".to_string(),         // mtls
             None,                      // ws_replay_file
             None,                      // graphql
@@ -487,7 +487,7 @@ async fn handle_interactive(
                 None,                      // tls_cert
                 None,                      // tls_key
                 None,                      // tls_ca
-                "1.2".to_string(),        // tls_min_version
+                "1.2".to_string(),         // tls_min_version
                 "off".to_string(),         // mtls
                 None,                      // ws_replay_file
                 None,                      // graphql
