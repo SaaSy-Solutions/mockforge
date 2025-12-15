@@ -58,7 +58,7 @@ bincode = "1.3"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"], optional = true }
 
 # Tracing
-mockforge-tracing = "0.3.7"
+mockforge-tracing = { version = "0.3.8", path = "../mockforge-tracing" }
 
 # Recorder
 mockforge-recorder = { version = "0.3.8", path = "../mockforge-recorder" }

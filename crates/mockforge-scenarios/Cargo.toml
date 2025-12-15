@@ -74,10 +74,10 @@ mockforge-plugin-registry = { version = "0.3.8", path = "../mockforge-plugin-reg
 mockforge-plugin-loader = { version = "0.3.8", path = "../mockforge-plugin-loader" }
 
 # Core types for state machines
-mockforge-core = "0.3.7"
+mockforge-core = { version = "0.3.8", path = "../mockforge-core" }
 
 # Data types for schemas
-mockforge-data = "0.3.7"
+mockforge-data = { version = "0.3.8", path = "../mockforge-data" }
 
 [features]
 default = ["git-support"]

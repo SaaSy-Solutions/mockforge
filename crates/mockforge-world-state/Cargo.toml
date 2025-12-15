@@ -31,7 +31,7 @@ uuid = { workspace = true, features = ["serde"] }
 
 # MockForge dependencies
 mockforge-core = { version = "0.3.8", path = "../mockforge-core", features = ["data"] }
-mockforge-data = "0.3.7"
+mockforge-data = { version = "0.3.8", path = "../mockforge-data" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "test-util"] }

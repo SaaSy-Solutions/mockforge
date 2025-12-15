@@ -73,7 +73,7 @@ rustls-pemfile = "2.0"
 # Internal dependencies
 mockforge-analytics = { version = "0.3.8", path = "../mockforge-analytics" }
 mockforge-collab = { version = "0.3.8", path = "../mockforge-collab" }
-mockforge-core = "0.3.7"
+mockforge-core = { version = "0.3.8", path = "../mockforge-core" }
 mockforge-plugin-registry = { version = "0.3.8", path = "../mockforge-plugin-registry" }
 mockforge-observability = { version = "0.3.8", path = "../mockforge-observability" }
 

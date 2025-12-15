@@ -53,17 +53,17 @@ oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
 mockforge-core = { version = "0.3.8", path = "../mockforge-core" }
-mockforge-data = "0.3.7"
+mockforge-data = { version = "0.3.8", path = "../mockforge-data" }
 mockforge-observability = { version = "0.3.8", path = "../mockforge-observability" }
 mockforge-recorder = { version = "0.3.8", path = "../mockforge-recorder" }
 mockforge-scenarios = { version = "0.3.8", path = "../mockforge-scenarios" }
-mockforge-tracing = "0.3.7"
+mockforge-tracing = { version = "0.3.8", path = "../mockforge-tracing" }
 opentelemetry = { version = "0.22", features = ["trace"] }
 mockforge-mqtt = { version = "0.3.8", path = "../mockforge-mqtt", optional = true }
 mockforge-chaos = { version = "0.3.8", path = "../mockforge-chaos" }
 mockforge-performance = { version = "0.3.8", path = "../mockforge-performance" }
 mockforge-world-state = { version = "0.3.8", path = "../mockforge-world-state" }
-mockforge-template-expansion = "0.3.7"
+mockforge-template-expansion = { version = "0.3.8", path = "../mockforge-template-expansion" }
 mockforge-route-chaos = { version = "0.3.8", path = "../mockforge-route-chaos" }
 futures-util = "0.3"
 rustls = "0.23"
