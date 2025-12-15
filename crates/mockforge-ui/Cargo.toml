@@ -8,7 +8,7 @@ description = "Admin UI for MockForge - web-based interface for managing mock se
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false  # UI component used by mockforge-cli
+publish = true
 include = [
     "/src/**/*",
     "/ui/dist/**/*",
