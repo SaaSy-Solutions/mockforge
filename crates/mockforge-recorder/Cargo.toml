@@ -52,7 +52,7 @@ serde_path_to_error = "0.1"
 reqwest = { workspace = true }
 
 # Core types for OpenAPI generation
-mockforge-core = "0.3.6"
+mockforge-core = { version = "0.3.7", path = "../mockforge-core" }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }

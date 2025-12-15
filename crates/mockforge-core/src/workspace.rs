@@ -1538,4 +1538,285 @@ mod tests {
         let api_key_config = auth_config.api_key.as_ref().unwrap();
         assert_eq!(api_key_config.keys, vec!["folder-key".to_string()]);
     }
+
+    #[test]
+    fn test_folder_inheritance_config_default() {
+        let config = FolderInheritanceConfig::default();
+        assert!(config.headers.is_empty());
+        assert!(config.auth.is_none());
+    }
+
+    #[test]
+    fn test_mock_response_default() {
+        let response = MockResponse::default();
+        assert_eq!(response.status_code, 200);
+        assert!(response.headers.is_empty());
+    }
+
+    #[test]
+    fn test_mock_response_serialization() {
+        let mut response = MockResponse::default();
+        response.status_code = 404;
+        response.body = Some("Not Found".to_string());
+        response.headers.insert("Content-Type".to_string(), "application/json".to_string());
+        
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("404"));
+    }
+
+    #[test]
+    fn test_response_history_entry_creation() {
+        let entry = ResponseHistoryEntry {
+            id: "exec-123".to_string(),
+            executed_at: Utc::now(),
+            request_method: HttpMethod::GET,
+            request_path: "/api/test".to_string(),
+            request_headers: HashMap::new(),
+            request_body: None,
+            response_status_code: 200,
+            response_headers: HashMap::new(),
+            response_body: Some("{}".to_string()),
+            response_time_ms: 150,
+            response_size_bytes: 2,
+            error_message: None,
+        };
+
+        assert_eq!(entry.response_status_code, 200);
+        assert_eq!(entry.response_time_ms, 150);
+        assert_eq!(entry.id, "exec-123");
+    }
+
+    #[test]
+    fn test_environment_color_creation() {
+        let color = EnvironmentColor {
+            hex: "#FF8040".to_string(),
+            name: Some("Orange".to_string()),
+        };
+        assert_eq!(color.hex, "#FF8040");
+        assert_eq!(color.name, Some("Orange".to_string()));
+    }
+
+    #[test]
+    fn test_environment_color_serialization() {
+        let color = EnvironmentColor {
+            hex: "#FF0000".to_string(),
+            name: None,
+        };
+        let json = serde_json::to_string(&color).unwrap();
+        assert!(json.contains("#FF0000"));
+    }
+
+    #[test]
+    fn test_sync_config_default() {
+        // Use the SyncConfig from workspace.rs (not from sync module)
+        // This is the one used in WorkspaceConfig
+        let config = super::SyncConfig::default();
+        assert!(!config.enabled);
+        // Just verify it can be created
+        let _ = config;
+    }
+
+    #[test]
+    fn test_sync_directory_structure_serialization() {
+        let structures = vec![
+            SyncDirectoryStructure::Flat,
+            SyncDirectoryStructure::Nested,
+            SyncDirectoryStructure::Grouped,
+        ];
+
+        for structure in structures {
+            let json = serde_json::to_string(&structure).unwrap();
+            assert!(!json.is_empty());
+            // Just verify it can be deserialized
+            let _deserialized: SyncDirectoryStructure = serde_json::from_str(&json).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_sync_direction_serialization() {
+        let directions = vec![
+            SyncDirection::Manual,
+            SyncDirection::WorkspaceToDirectory,
+            SyncDirection::Bidirectional,
+        ];
+
+        for direction in directions {
+            let json = serde_json::to_string(&direction).unwrap();
+            assert!(!json.is_empty());
+            // Just verify it can be deserialized
+            let _deserialized: SyncDirection = serde_json::from_str(&json).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_workspace_config_default() {
+        let config = WorkspaceConfig::default();
+        assert!(config.base_url.is_none());
+        assert!(config.default_headers.is_empty());
+        assert!(config.auth.is_none());
+        assert!(config.environments.is_empty());
+        assert!(config.active_environment_id.is_none());
+    }
+
+    #[test]
+    fn test_workspace_registry_new() {
+        let registry = WorkspaceRegistry::new();
+        assert!(registry.get_workspaces().is_empty());
+        assert!(registry.get_active_workspace().is_none());
+    }
+
+    #[test]
+    fn test_workspace_registry_get_active_workspace_id() {
+        let mut registry = WorkspaceRegistry::new();
+        let workspace = Workspace::new("Test".to_string());
+        let id = registry.add_workspace(workspace).unwrap();
+        registry.set_active_workspace(Some(id.clone())).unwrap();
+        
+        assert_eq!(registry.get_active_workspace_id(), Some(id.as_str()));
+    }
+
+    #[test]
+    fn test_workspace_registry_get_workspaces_ordered() {
+        let mut registry = WorkspaceRegistry::new();
+        let mut ws1 = Workspace::new("First".to_string());
+        ws1.order = 2;
+        let mut ws2 = Workspace::new("Second".to_string());
+        ws2.order = 1;
+        
+        registry.add_workspace(ws1).unwrap();
+        registry.add_workspace(ws2).unwrap();
+        
+        let ordered = registry.get_workspaces_ordered();
+        assert_eq!(ordered.len(), 2);
+        assert_eq!(ordered[0].name, "Second"); // Lower order first
+        assert_eq!(ordered[1].name, "First");
+    }
+
+    #[test]
+    fn test_workspace_registry_update_workspaces_order() {
+        let mut registry = WorkspaceRegistry::new();
+        let id1 = registry.add_workspace(Workspace::new("First".to_string())).unwrap();
+        let id2 = registry.add_workspace(Workspace::new("Second".to_string())).unwrap();
+        
+        registry.update_workspaces_order(vec![id2.clone(), id1.clone()]).unwrap();
+        
+        let ordered = registry.get_workspaces_ordered();
+        assert_eq!(ordered[0].id, id2);
+        assert_eq!(ordered[1].id, id1);
+    }
+
+    #[test]
+    fn test_workspace_registry_update_workspaces_order_invalid_id() {
+        let mut registry = WorkspaceRegistry::new();
+        let id1 = registry.add_workspace(Workspace::new("First".to_string())).unwrap();
+        
+        let result = registry.update_workspaces_order(vec![id1, "invalid-id".to_string()]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_workspace_registry_set_active_workspace_invalid() {
+        let mut registry = WorkspaceRegistry::new();
+        let result = registry.set_active_workspace(Some("invalid-id".to_string()));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_workspace_registry_remove_active_workspace() {
+        let mut registry = WorkspaceRegistry::new();
+        let id = registry.add_workspace(Workspace::new("Test".to_string())).unwrap();
+        registry.set_active_workspace(Some(id.clone())).unwrap();
+        registry.remove_workspace(&id).unwrap();
+        
+        assert!(registry.get_active_workspace().is_none());
+    }
+
+    #[test]
+    fn test_workspace_clone() {
+        let workspace1 = Workspace::new("Test Workspace".to_string());
+        let workspace2 = workspace1.clone();
+        assert_eq!(workspace1.name, workspace2.name);
+        assert_eq!(workspace1.id, workspace2.id);
+    }
+
+    #[test]
+    fn test_workspace_debug() {
+        let workspace = Workspace::new("Debug Test".to_string());
+        let debug_str = format!("{:?}", workspace);
+        assert!(debug_str.contains("Workspace"));
+    }
+
+    #[test]
+    fn test_workspace_serialization() {
+        let workspace = Workspace::new("Serialization Test".to_string());
+        let json = serde_json::to_string(&workspace).unwrap();
+        assert!(json.contains("Serialization Test"));
+    }
+
+    #[test]
+    fn test_folder_clone() {
+        let folder1 = Folder::new("Test Folder".to_string());
+        let folder2 = folder1.clone();
+        assert_eq!(folder1.name, folder2.name);
+        assert_eq!(folder1.id, folder2.id);
+    }
+
+    #[test]
+    fn test_folder_debug() {
+        let folder = Folder::new("Debug Folder".to_string());
+        let debug_str = format!("{:?}", folder);
+        assert!(debug_str.contains("Folder"));
+    }
+
+    #[test]
+    fn test_folder_serialization() {
+        let folder = Folder::new("Serialization Folder".to_string());
+        let json = serde_json::to_string(&folder).unwrap();
+        assert!(json.contains("Serialization Folder"));
+    }
+
+    #[test]
+    fn test_folder_inheritance_config_clone() {
+        let mut config1 = FolderInheritanceConfig::default();
+        config1.headers.insert("X-Test".to_string(), "value".to_string());
+        let config2 = config1.clone();
+        assert_eq!(config1.headers, config2.headers);
+    }
+
+    #[test]
+    fn test_folder_inheritance_config_debug() {
+        let config = FolderInheritanceConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("FolderInheritanceConfig"));
+    }
+
+    #[test]
+    fn test_workspace_config_clone() {
+        let mut config1 = WorkspaceConfig::default();
+        config1.base_url = Some("https://api.example.com".to_string());
+        let config2 = config1.clone();
+        assert_eq!(config1.base_url, config2.base_url);
+    }
+
+    #[test]
+    fn test_workspace_config_debug() {
+        let config = WorkspaceConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("WorkspaceConfig"));
+    }
+
+    #[test]
+    fn test_workspace_registry_clone() {
+        let mut registry1 = WorkspaceRegistry::new();
+        let id = registry1.add_workspace(Workspace::new("Test".to_string())).unwrap();
+        let registry2 = registry1.clone();
+        assert!(registry2.get_workspace(&id).is_some());
+    }
+
+    #[test]
+    fn test_workspace_registry_debug() {
+        let registry = WorkspaceRegistry::new();
+        let debug_str = format!("{:?}", registry);
+        assert!(debug_str.contains("WorkspaceRegistry"));
+    }
 }

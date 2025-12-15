@@ -1,6 +1,122 @@
-# Mock Coverage
+# MockForge Coverage
 
 ## Overview
+
+This document covers two types of coverage in MockForge:
+
+1. **Code Coverage**: Test coverage of Rust source code across all crates
+2. **API Coverage**: Endpoint coverage tracking for OpenAPI specifications
+
+---
+
+## Code Coverage
+
+### Overview
+
+Code coverage tracks how much of the MockForge source code is exercised by tests. The project maintains an 80% coverage threshold across all crates.
+
+### Current Status
+
+**Last Updated**: Run `./scripts/coverage-baseline.sh` to generate latest report
+
+**Coverage Summary**:
+- See `coverage/summary.json` for detailed per-crate coverage
+- See `coverage/summary.txt` for human-readable summary
+- See `coverage/summary.csv` for spreadsheet-compatible data
+
+### Coverage Thresholds
+
+Per-crate thresholds are defined in `coverage.toml`:
+
+- **Default**: 80%
+- **High-Priority Crates** (core, http, cli, sdk): 85%
+- **Protocol Crates**: 75%
+- **Infrastructure Crates**: 70-75%
+
+### Generating Coverage Reports
+
+```bash
+# Generate coverage baseline for all crates
+./scripts/coverage-baseline.sh
+
+# Generate with HTML reports
+./scripts/coverage-baseline.sh --html
+
+# Generate in parallel (faster)
+./scripts/coverage-baseline.sh --parallel
+
+# Generate specific format
+./scripts/coverage-baseline.sh --format json
+./scripts/coverage-baseline.sh --format csv
+./scripts/coverage-baseline.sh --format text
+```
+
+### Coverage Reports Location
+
+All coverage reports are stored in the `coverage/` directory:
+
+```
+coverage/
+├── summary.json          # JSON summary with all crates
+├── summary.csv           # CSV summary for spreadsheet import
+├── summary.txt           # Human-readable text summary
+├── lcov.info            # LCOV format for tools
+└── crates/              # Per-crate reports
+    ├── mockforge-core/
+    │   ├── coverage.json
+    │   ├── lcov.info
+    │   └── index.html   # HTML report (if --html used)
+    └── ...
+```
+
+### Coverage Dashboard
+
+View the latest coverage summary:
+
+```bash
+cat coverage/summary.txt
+```
+
+Or view in JSON format:
+
+```bash
+cat coverage/summary.json | jq .
+```
+
+### Per-Crate Coverage
+
+View coverage for a specific crate:
+
+```bash
+# JSON format
+cat coverage/crates/mockforge-core/coverage.json | jq .
+
+# HTML format (if generated)
+open coverage/crates/mockforge-core/index.html
+```
+
+### CI Integration
+
+Coverage is automatically generated in CI for all pull requests:
+
+- Coverage reports are uploaded as artifacts
+- Coverage summary is posted as a PR comment
+- Coverage trends are tracked over time
+
+### Improving Coverage
+
+1. **Identify Gaps**: Review coverage reports to find untested code
+2. **Prioritize**: Focus on high-impact, low-coverage areas first
+3. **Add Tests**: Write tests for uncovered code paths
+4. **Verify**: Re-run coverage to confirm improvements
+
+See [TESTING_STANDARDS.md](TESTING_STANDARDS.md) for testing guidelines.
+
+---
+
+## API Endpoint Coverage
+
+### Overview
 
 Mock Coverage is a feature that tracks which API endpoints from your OpenAPI specification have been exercised during testing. Similar to code coverage in testing, mock coverage helps you identify untested parts of your API contracts.
 

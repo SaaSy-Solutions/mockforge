@@ -676,3 +676,350 @@ impl Default for FlowExecutor {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_flow_step_result_creation() {
+        let mut extracted = HashMap::new();
+        extracted.insert("user_id".to_string(), json!("123"));
+        
+        let result = FlowStepResult {
+            step_id: "step-1".to_string(),
+            success: true,
+            response: Some(json!({"status": "ok"})),
+            error: None,
+            duration_ms: 150,
+            extracted_variables: extracted.clone(),
+        };
+        
+        assert_eq!(result.step_id, "step-1");
+        assert!(result.success);
+        assert!(result.response.is_some());
+        assert!(result.error.is_none());
+        assert_eq!(result.duration_ms, 150);
+        assert_eq!(result.extracted_variables.len(), 1);
+    }
+
+    #[test]
+    fn test_flow_step_result_with_error() {
+        let result = FlowStepResult {
+            step_id: "step-2".to_string(),
+            success: false,
+            response: None,
+            error: Some("Request failed".to_string()),
+            duration_ms: 50,
+            extracted_variables: HashMap::new(),
+        };
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+        assert_eq!(result.error.unwrap(), "Request failed");
+    }
+
+    #[test]
+    fn test_flow_execution_result_creation() {
+        let step_result = FlowStepResult {
+            step_id: "step-1".to_string(),
+            success: true,
+            response: None,
+            error: None,
+            duration_ms: 100,
+            extracted_variables: HashMap::new(),
+        };
+        
+        let mut final_vars = HashMap::new();
+        final_vars.insert("result".to_string(), json!("success"));
+        
+        let result = FlowExecutionResult {
+            flow_id: "flow-123".to_string(),
+            success: true,
+            step_results: vec![step_result],
+            final_variables: final_vars.clone(),
+            total_duration_ms: 200,
+            error: None,
+        };
+        
+        assert_eq!(result.flow_id, "flow-123");
+        assert!(result.success);
+        assert_eq!(result.step_results.len(), 1);
+        assert_eq!(result.final_variables.len(), 1);
+        assert_eq!(result.total_duration_ms, 200);
+    }
+
+    #[test]
+    fn test_flow_execution_result_with_error() {
+        let step_result = FlowStepResult {
+            step_id: "step-1".to_string(),
+            success: false,
+            response: None,
+            error: Some("Step failed".to_string()),
+            duration_ms: 50,
+            extracted_variables: HashMap::new(),
+        };
+        
+        let result = FlowExecutionResult {
+            flow_id: "flow-456".to_string(),
+            success: false,
+            step_results: vec![step_result],
+            final_variables: HashMap::new(),
+            total_duration_ms: 100,
+            error: Some("Flow execution failed".to_string()),
+        };
+        
+        assert!(!result.success);
+        assert!(result.error.is_some());
+    }
+
+    #[test]
+    fn test_flow_executor_new() {
+        let executor = FlowExecutor::new();
+        // Just verify it can be created
+        let _ = executor;
+    }
+
+    #[test]
+    fn test_flow_executor_default() {
+        let executor = FlowExecutor::default();
+        // Just verify it can be created
+        let _ = executor;
+    }
+
+    #[test]
+    fn test_flow_executor_with_variables() {
+        let mut variables = HashMap::new();
+        variables.insert("api_key".to_string(), json!("secret123"));
+        variables.insert("base_url".to_string(), json!("https://api.example.com"));
+        
+        let executor = FlowExecutor::with_variables(variables);
+        // Just verify it can be created
+        let _ = executor;
+    }
+
+    #[test]
+    fn test_flow_step_result_clone() {
+        let result1 = FlowStepResult {
+            step_id: "step-1".to_string(),
+            success: true,
+            response: Some(json!({"status": "ok"})),
+            error: None,
+            duration_ms: 100,
+            extracted_variables: HashMap::new(),
+        };
+        let result2 = result1.clone();
+        assert_eq!(result1.step_id, result2.step_id);
+        assert_eq!(result1.success, result2.success);
+    }
+
+    #[test]
+    fn test_flow_step_result_debug() {
+        let result = FlowStepResult {
+            step_id: "step-1".to_string(),
+            success: true,
+            response: None,
+            error: None,
+            duration_ms: 150,
+            extracted_variables: HashMap::new(),
+        };
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("FlowStepResult"));
+    }
+
+    #[test]
+    fn test_flow_step_result_serialization() {
+        let result = FlowStepResult {
+            step_id: "step-1".to_string(),
+            success: true,
+            response: Some(json!({"data": "test"})),
+            error: None,
+            duration_ms: 200,
+            extracted_variables: HashMap::from([("var1".to_string(), json!("value1"))]),
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("step-1"));
+        assert!(json.contains("true"));
+    }
+
+    #[test]
+    fn test_flow_execution_result_clone() {
+        let result1 = FlowExecutionResult {
+            flow_id: "flow-1".to_string(),
+            success: true,
+            step_results: vec![],
+            final_variables: HashMap::new(),
+            total_duration_ms: 100,
+            error: None,
+        };
+        let result2 = result1.clone();
+        assert_eq!(result1.flow_id, result2.flow_id);
+        assert_eq!(result1.success, result2.success);
+    }
+
+    #[test]
+    fn test_flow_execution_result_debug() {
+        let result = FlowExecutionResult {
+            flow_id: "flow-123".to_string(),
+            success: false,
+            step_results: vec![],
+            final_variables: HashMap::new(),
+            total_duration_ms: 50,
+            error: Some("Error".to_string()),
+        };
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("FlowExecutionResult"));
+    }
+
+    #[test]
+    fn test_flow_execution_result_serialization() {
+        let step_result = FlowStepResult {
+            step_id: "step-1".to_string(),
+            success: true,
+            response: Some(json!({"id": 1})),
+            error: None,
+            duration_ms: 100,
+            extracted_variables: HashMap::new(),
+        };
+        let result = FlowExecutionResult {
+            flow_id: "flow-456".to_string(),
+            success: true,
+            step_results: vec![step_result],
+            final_variables: HashMap::from([("result".to_string(), json!("success"))]),
+            total_duration_ms: 200,
+            error: None,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("flow-456"));
+        assert!(json.contains("step-1"));
+    }
+
+    #[test]
+    fn test_flow_step_result_with_all_fields() {
+        let mut extracted = HashMap::new();
+        extracted.insert("user_id".to_string(), json!("123"));
+        extracted.insert("token".to_string(), json!("abc123"));
+        extracted.insert("expires_at".to_string(), json!("2024-01-01"));
+
+        let result = FlowStepResult {
+            step_id: "step-auth".to_string(),
+            success: true,
+            response: Some(json!({
+                "user": {"id": 123, "name": "Alice"},
+                "token": "abc123",
+                "expires_at": "2024-01-01"
+            })),
+            error: None,
+            duration_ms: 250,
+            extracted_variables: extracted.clone(),
+        };
+
+        assert_eq!(result.extracted_variables.len(), 3);
+        assert!(result.response.is_some());
+        assert_eq!(result.duration_ms, 250);
+    }
+
+    #[test]
+    fn test_flow_execution_result_with_multiple_steps() {
+        let step1 = FlowStepResult {
+            step_id: "step-1".to_string(),
+            success: true,
+            response: Some(json!({"id": 1})),
+            error: None,
+            duration_ms: 100,
+            extracted_variables: HashMap::from([("id".to_string(), json!(1))]),
+        };
+        let step2 = FlowStepResult {
+            step_id: "step-2".to_string(),
+            success: true,
+            response: Some(json!({"status": "ok"})),
+            error: None,
+            duration_ms: 150,
+            extracted_variables: HashMap::new(),
+        };
+        let step3 = FlowStepResult {
+            step_id: "step-3".to_string(),
+            success: true,
+            response: None,
+            error: None,
+            duration_ms: 50,
+            extracted_variables: HashMap::new(),
+        };
+
+        let result = FlowExecutionResult {
+            flow_id: "flow-multi".to_string(),
+            success: true,
+            step_results: vec![step1, step2, step3],
+            final_variables: HashMap::from([
+                ("id".to_string(), json!(1)),
+                ("status".to_string(), json!("ok")),
+            ]),
+            total_duration_ms: 300,
+            error: None,
+        };
+
+        assert_eq!(result.step_results.len(), 3);
+        assert_eq!(result.final_variables.len(), 2);
+        assert_eq!(result.total_duration_ms, 300);
+    }
+
+    #[test]
+    fn test_flow_step_result_with_extracted_variables() {
+        let mut extracted = HashMap::new();
+        extracted.insert("order_id".to_string(), json!("order-123"));
+        extracted.insert("total".to_string(), json!(99.99));
+        extracted.insert("currency".to_string(), json!("USD"));
+
+        let result = FlowStepResult {
+            step_id: "step-checkout".to_string(),
+            success: true,
+            response: Some(json!({
+                "order": {"id": "order-123", "total": 99.99, "currency": "USD"}
+            })),
+            error: None,
+            duration_ms: 300,
+            extracted_variables: extracted.clone(),
+        };
+
+        assert_eq!(result.extracted_variables.len(), 3);
+        assert_eq!(
+            result.extracted_variables.get("order_id"),
+            Some(&json!("order-123"))
+        );
+    }
+
+    #[test]
+    fn test_flow_execution_result_with_error_and_steps() {
+        let step1 = FlowStepResult {
+            step_id: "step-1".to_string(),
+            success: true,
+            response: Some(json!({"id": 1})),
+            error: None,
+            duration_ms: 100,
+            extracted_variables: HashMap::new(),
+        };
+        let step2 = FlowStepResult {
+            step_id: "step-2".to_string(),
+            success: false,
+            response: None,
+            error: Some("Connection timeout".to_string()),
+            duration_ms: 5000,
+            extracted_variables: HashMap::new(),
+        };
+
+        let result = FlowExecutionResult {
+            flow_id: "flow-error".to_string(),
+            success: false,
+            step_results: vec![step1, step2],
+            final_variables: HashMap::new(),
+            total_duration_ms: 5100,
+            error: Some("Flow failed at step-2: Connection timeout".to_string()),
+        };
+
+        assert!(!result.success);
+        assert_eq!(result.step_results.len(), 2);
+        assert!(result.error.is_some());
+        assert_eq!(result.total_duration_ms, 5100);
+    }
+}

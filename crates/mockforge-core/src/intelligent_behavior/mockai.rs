@@ -723,4 +723,318 @@ mod tests {
         assert_eq!(response.status_code, 201);
         assert!(response.body.is_object());
     }
+
+    #[test]
+    fn test_request_creation() {
+        let mut query_params = HashMap::new();
+        query_params.insert("page".to_string(), "1".to_string());
+        
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        
+        let request = Request {
+            method: "GET".to_string(),
+            path: "/api/users".to_string(),
+            body: Some(json!({"id": 1})),
+            query_params,
+            headers,
+        };
+
+        assert_eq!(request.method, "GET");
+        assert_eq!(request.path, "/api/users");
+        assert!(request.body.is_some());
+    }
+
+    #[test]
+    fn test_response_creation() {
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        
+        let response = Response {
+            status_code: 200,
+            body: json!({"message": "success"}),
+            headers,
+        };
+
+        assert_eq!(response.status_code, 200);
+        assert!(response.body.is_object());
+    }
+
+    #[test]
+    fn test_mockai_new() {
+        let config = IntelligentBehaviorConfig::default();
+        let mockai = MockAI::new(config);
+        // Just verify it can be created
+        let _ = mockai;
+    }
+
+    #[test]
+    fn test_mockai_rules() {
+        let config = IntelligentBehaviorConfig::default();
+        let mockai = MockAI::new(config);
+        let rules = mockai.rules();
+        // Just verify we can access rules
+        let _ = rules;
+    }
+
+    #[test]
+    fn test_mockai_update_rules() {
+        let config = IntelligentBehaviorConfig::default();
+        let mut mockai = MockAI::new(config);
+        let new_rules = BehaviorRules::default();
+        mockai.update_rules(new_rules);
+        // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_mockai_get_config() {
+        let config = IntelligentBehaviorConfig::default();
+        let mockai = MockAI::new(config.clone());
+        let retrieved_config = mockai.get_config();
+        // Just verify we can access config
+        let _ = retrieved_config;
+    }
+
+    #[test]
+    fn test_mockai_update_config() {
+        let config = IntelligentBehaviorConfig::default();
+        let mut mockai = MockAI::new(config.clone());
+        let new_config = IntelligentBehaviorConfig::default();
+        mockai.update_config(new_config);
+        // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_extract_examples_from_openapi_empty_spec() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {}
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let examples = MockAI::extract_examples_from_openapi(&spec).unwrap();
+        assert!(examples.is_empty());
+    }
+
+    #[test]
+    fn test_request_with_all_fields() {
+        let mut headers = HashMap::new();
+        headers.insert("Authorization".to_string(), "Bearer token".to_string());
+        let mut query_params = HashMap::new();
+        query_params.insert("limit".to_string(), "10".to_string());
+
+        let request = Request {
+            method: "POST".to_string(),
+            path: "/api/data".to_string(),
+            body: Some(json!({"key": "value"})),
+            query_params: query_params.clone(),
+            headers: headers.clone(),
+        };
+
+        assert_eq!(request.method, "POST");
+        assert_eq!(request.path, "/api/data");
+        assert!(request.body.is_some());
+        assert_eq!(request.query_params.get("limit"), Some(&"10".to_string()));
+        assert_eq!(request.headers.get("Authorization"), Some(&"Bearer token".to_string()));
+    }
+
+    #[test]
+    fn test_response_with_headers() {
+        let mut headers = HashMap::new();
+        headers.insert("X-Total-Count".to_string(), "100".to_string());
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+
+        let response = Response {
+            status_code: 201,
+            body: json!({"id": "123", "created": true}),
+            headers: headers.clone(),
+        };
+
+        assert_eq!(response.status_code, 201);
+        assert!(response.body.is_object());
+        assert_eq!(response.headers.len(), 2);
+        assert_eq!(response.headers.get("X-Total-Count"), Some(&"100".to_string()));
+    }
+
+    #[test]
+    fn test_request_clone() {
+        let request1 = Request {
+            method: "GET".to_string(),
+            path: "/api/test".to_string(),
+            body: Some(json!({"id": 1})),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+        };
+        let request2 = request1.clone();
+        assert_eq!(request1.method, request2.method);
+        assert_eq!(request1.path, request2.path);
+    }
+
+    #[test]
+    fn test_request_debug() {
+        let request = Request {
+            method: "POST".to_string(),
+            path: "/api/users".to_string(),
+            body: None,
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+        };
+        let debug_str = format!("{:?}", request);
+        assert!(debug_str.contains("Request"));
+    }
+
+    #[test]
+    fn test_response_clone() {
+        let response1 = Response {
+            status_code: 200,
+            body: json!({"status": "ok"}),
+            headers: HashMap::new(),
+        };
+        let response2 = response1.clone();
+        assert_eq!(response1.status_code, response2.status_code);
+    }
+
+    #[test]
+    fn test_response_debug() {
+        let response = Response {
+            status_code: 404,
+            body: json!({"error": "Not found"}),
+            headers: HashMap::new(),
+        };
+        let debug_str = format!("{:?}", response);
+        assert!(debug_str.contains("Response"));
+    }
+
+    #[test]
+    fn test_request_with_empty_fields() {
+        let request = Request {
+            method: "GET".to_string(),
+            path: "/api/test".to_string(),
+            body: None,
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+        };
+        assert!(request.body.is_none());
+        assert!(request.query_params.is_empty());
+        assert!(request.headers.is_empty());
+    }
+
+    #[test]
+    fn test_response_with_empty_headers() {
+        let response = Response {
+            status_code: 200,
+            body: json!({"data": []}),
+            headers: HashMap::new(),
+        };
+        assert!(response.headers.is_empty());
+        assert!(response.body.is_object());
+    }
+
+    #[test]
+    fn test_request_with_complex_body() {
+        let request = Request {
+            method: "PUT".to_string(),
+            path: "/api/users/123".to_string(),
+            body: Some(json!({
+                "name": "John Doe",
+                "email": "john@example.com",
+                "metadata": {
+                    "role": "admin",
+                    "permissions": ["read", "write"]
+                }
+            })),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+        };
+        assert!(request.body.is_some());
+        let body = request.body.unwrap();
+        assert!(body.is_object());
+        assert!(body.get("metadata").is_some());
+    }
+
+    #[test]
+    fn test_response_with_array_body() {
+        let response = Response {
+            status_code: 200,
+            body: json!([
+                {"id": 1, "name": "Alice"},
+                {"id": 2, "name": "Bob"},
+                {"id": 3, "name": "Charlie"}
+            ]),
+            headers: HashMap::new(),
+        };
+        assert!(response.body.is_array());
+        let array = response.body.as_array().unwrap();
+        assert_eq!(array.len(), 3);
+    }
+
+    #[test]
+    fn test_request_with_multiple_query_params() {
+        let mut query_params = HashMap::new();
+        query_params.insert("page".to_string(), "1".to_string());
+        query_params.insert("limit".to_string(), "20".to_string());
+        query_params.insert("sort".to_string(), "name".to_string());
+        query_params.insert("order".to_string(), "asc".to_string());
+
+        let request = Request {
+            method: "GET".to_string(),
+            path: "/api/users".to_string(),
+            body: None,
+            query_params: query_params.clone(),
+            headers: HashMap::new(),
+        };
+
+        assert_eq!(request.query_params.len(), 4);
+        assert_eq!(request.query_params.get("page"), Some(&"1".to_string()));
+        assert_eq!(request.query_params.get("limit"), Some(&"20".to_string()));
+    }
+
+    #[test]
+    fn test_response_with_multiple_headers() {
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        headers.insert("X-Request-ID".to_string(), "req-123".to_string());
+        headers.insert("X-Rate-Limit-Remaining".to_string(), "99".to_string());
+        headers.insert("Cache-Control".to_string(), "no-cache".to_string());
+
+        let response = Response {
+            status_code: 200,
+            body: json!({"data": "test"}),
+            headers: headers.clone(),
+        };
+
+        assert_eq!(response.headers.len(), 4);
+        assert_eq!(response.headers.get("X-Request-ID"), Some(&"req-123".to_string()));
+    }
+
+    #[test]
+    fn test_request_different_methods() {
+        let methods = vec!["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"];
+        for method in methods {
+            let request = Request {
+                method: method.to_string(),
+                path: "/api/test".to_string(),
+                body: None,
+                query_params: HashMap::new(),
+                headers: HashMap::new(),
+            };
+            assert_eq!(request.method, method);
+        }
+    }
+
+    #[test]
+    fn test_response_different_status_codes() {
+        let status_codes = vec![200, 201, 204, 400, 401, 403, 404, 500, 503];
+        for status_code in status_codes {
+            let response = Response {
+                status_code,
+                body: json!({"status": status_code}),
+                headers: HashMap::new(),
+            };
+            assert_eq!(response.status_code, status_code);
+        }
+    }
 }

@@ -1011,4 +1011,705 @@ mod tests {
             generator.determine_validation_type(&errors.iter().collect::<Vec<_>>()).unwrap();
         assert_eq!(validation_type, "required");
     }
+
+    #[test]
+    fn test_example_pair_creation() {
+        let mut query_params = HashMap::new();
+        query_params.insert("page".to_string(), "1".to_string());
+        
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        
+        let pair = ExamplePair {
+            method: "GET".to_string(),
+            path: "/api/users".to_string(),
+            request: None,
+            status: 200,
+            response: Some(json!({"users": []})),
+            query_params,
+            headers,
+            metadata: HashMap::new(),
+        };
+
+        assert_eq!(pair.method, "GET");
+        assert_eq!(pair.path, "/api/users");
+        assert_eq!(pair.status, 200);
+    }
+
+    #[test]
+    fn test_example_pair_serialization() {
+        let pair = ExamplePair {
+            method: "POST".to_string(),
+            path: "/api/users".to_string(),
+            request: Some(json!({"name": "Alice"})),
+            status: 201,
+            response: Some(json!({"id": 1, "name": "Alice"})),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            metadata: HashMap::new(),
+        };
+
+        let json = serde_json::to_string(&pair).unwrap();
+        assert!(json.contains("POST"));
+        assert!(json.contains("/api/users"));
+    }
+
+    #[test]
+    fn test_error_example_creation() {
+        let error = ErrorExample {
+            method: "POST".to_string(),
+            path: "/api/users".to_string(),
+            request: Some(json!({"email": "invalid"})),
+            status: 400,
+            error_response: json!({"error": "Invalid email"}),
+            field: Some("email".to_string()),
+        };
+
+        assert_eq!(error.method, "POST");
+        assert_eq!(error.status, 400);
+        assert_eq!(error.field, Some("email".to_string()));
+    }
+
+    #[test]
+    fn test_error_example_serialization() {
+        let error = ErrorExample {
+            method: "PUT".to_string(),
+            path: "/api/users/1".to_string(),
+            request: None,
+            status: 404,
+            error_response: json!({"error": "Not found"}),
+            field: None,
+        };
+
+        let json = serde_json::to_string(&error).unwrap();
+        assert!(json.contains("404"));
+    }
+
+    #[test]
+    fn test_paginated_response_creation() {
+        let mut query_params = HashMap::new();
+        query_params.insert("page".to_string(), "1".to_string());
+        query_params.insert("limit".to_string(), "10".to_string());
+
+        let response = PaginatedResponse {
+            path: "/api/users".to_string(),
+            query_params,
+            response: json!({"data": [], "page": 1, "total": 100}),
+            page: Some(1),
+            page_size: Some(10),
+            total: Some(100),
+        };
+
+        assert_eq!(response.path, "/api/users");
+        assert_eq!(response.page, Some(1));
+        assert_eq!(response.total, Some(100));
+    }
+
+    #[test]
+    fn test_crud_example_creation() {
+        let crud = CrudExample {
+            operation: "create".to_string(),
+            resource_type: "user".to_string(),
+            path: "/api/users".to_string(),
+            request: Some(json!({"name": "Alice"})),
+            status: 201,
+            response: Some(json!({"id": 1, "name": "Alice"})),
+            resource_state: Some("active".to_string()),
+        };
+
+        assert_eq!(crud.operation, "create");
+        assert_eq!(crud.resource_type, "user");
+        assert_eq!(crud.status, 201);
+    }
+
+    #[test]
+    fn test_validation_rule_creation() {
+        let mut parameters = HashMap::new();
+        parameters.insert("min_length".to_string(), json!(3));
+        parameters.insert("max_length".to_string(), json!(50));
+
+        let rule = ValidationRule {
+            field: "username".to_string(),
+            validation_type: "length".to_string(),
+            parameters,
+            error_message: "Username must be between 3 and 50 characters".to_string(),
+            status_code: 400,
+        };
+
+        assert_eq!(rule.field, "username");
+        assert_eq!(rule.validation_type, "length");
+        assert_eq!(rule.status_code, 400);
+    }
+
+    #[test]
+    fn test_pagination_rule_creation() {
+        let mut parameter_names = HashMap::new();
+        parameter_names.insert("page".to_string(), "page".to_string());
+        parameter_names.insert("limit".to_string(), "limit".to_string());
+
+        let rule = PaginationRule {
+            default_page_size: 20,
+            max_page_size: 100,
+            min_page_size: 1,
+            parameter_names,
+            format: "page-based".to_string(),
+        };
+
+        assert_eq!(rule.default_page_size, 20);
+        assert_eq!(rule.max_page_size, 100);
+        assert_eq!(rule.format, "page-based");
+    }
+
+    #[test]
+    fn test_rule_type_serialization() {
+        let rule_types = vec![
+            RuleType::Crud,
+            RuleType::Validation,
+            RuleType::Pagination,
+            RuleType::Consistency,
+            RuleType::StateTransition,
+            RuleType::Other,
+        ];
+
+        for rule_type in rule_types {
+            let json = serde_json::to_string(&rule_type).unwrap();
+            assert!(!json.is_empty());
+            let deserialized: RuleType = serde_json::from_str(&json).unwrap();
+            assert_eq!(rule_type, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_pattern_match_creation() {
+        let pattern = PatternMatch {
+            pattern: "/api/users/*".to_string(),
+            match_count: 5,
+            example_ids: vec!["ex1".to_string(), "ex2".to_string()],
+        };
+
+        assert_eq!(pattern.pattern, "/api/users/*");
+        assert_eq!(pattern.match_count, 5);
+        assert_eq!(pattern.example_ids.len(), 2);
+    }
+
+    #[test]
+    fn test_rule_explanation_new() {
+        let explanation = RuleExplanation::new(
+            "rule-1".to_string(),
+            RuleType::Consistency,
+            0.85,
+            "Inferred from examples".to_string(),
+        );
+
+        assert_eq!(explanation.rule_id, "rule-1");
+        assert_eq!(explanation.rule_type, RuleType::Consistency);
+        assert_eq!(explanation.confidence, 0.85);
+        assert!(explanation.source_examples.is_empty());
+    }
+
+    #[test]
+    fn test_rule_explanation_with_source_example() {
+        let explanation = RuleExplanation::new(
+            "rule-1".to_string(),
+            RuleType::Validation,
+            0.9,
+            "Test reasoning".to_string(),
+        )
+        .with_source_example("example-1".to_string())
+        .with_source_example("example-2".to_string());
+
+        assert_eq!(explanation.source_examples.len(), 2);
+        assert_eq!(explanation.source_examples[0], "example-1");
+    }
+
+    #[test]
+    fn test_rule_explanation_with_pattern_match() {
+        let pattern_match = PatternMatch {
+            pattern: "/api/*".to_string(),
+            match_count: 3,
+            example_ids: vec!["ex1".to_string()],
+        };
+
+        let explanation = RuleExplanation::new(
+            "rule-1".to_string(),
+            RuleType::Pagination,
+            0.75,
+            "Test".to_string(),
+        )
+        .with_pattern_match(pattern_match.clone());
+
+        assert_eq!(explanation.pattern_matches.len(), 1);
+        assert_eq!(explanation.pattern_matches[0].pattern, "/api/*");
+    }
+
+    #[test]
+    fn test_rule_generator_new() {
+        let config = BehaviorModelConfig::default();
+        let generator = RuleGenerator::new(config);
+        // Just verify it can be created
+        let _ = generator;
+    }
+
+    #[test]
+    fn test_rule_generator_new_with_disabled_llm() {
+        let mut config = BehaviorModelConfig::default();
+        config.llm_provider = "disabled".to_string();
+        let generator = RuleGenerator::new(config);
+        // Just verify it can be created
+        let _ = generator;
+    }
+
+    #[test]
+    fn test_paginated_response_serialization() {
+        let mut query_params = HashMap::new();
+        query_params.insert("page".to_string(), "2".to_string());
+        let response = PaginatedResponse {
+            path: "/api/items".to_string(),
+            query_params: query_params.clone(),
+            response: json!({"items": []}),
+            page: Some(2),
+            page_size: Some(20),
+            total: Some(50),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("/api/items"));
+        assert!(json.contains("2"));
+    }
+
+    #[test]
+    fn test_crud_example_serialization() {
+        let crud = CrudExample {
+            operation: "update".to_string(),
+            resource_type: "order".to_string(),
+            path: "/api/orders/123".to_string(),
+            request: Some(json!({"status": "shipped"})),
+            status: 200,
+            response: Some(json!({"id": 123, "status": "shipped"})),
+            resource_state: Some("shipped".to_string()),
+        };
+
+        let json = serde_json::to_string(&crud).unwrap();
+        assert!(json.contains("update"));
+        assert!(json.contains("order"));
+    }
+
+    #[test]
+    fn test_validation_rule_serialization() {
+        let mut parameters = HashMap::new();
+        parameters.insert("pattern".to_string(), json!("^[a-z]+$"));
+        let rule = ValidationRule {
+            field: "username".to_string(),
+            validation_type: "pattern".to_string(),
+            parameters: parameters.clone(),
+            error_message: "Invalid format".to_string(),
+            status_code: 422,
+        };
+
+        let json = serde_json::to_string(&rule).unwrap();
+        assert!(json.contains("username"));
+        assert!(json.contains("pattern"));
+    }
+
+    #[test]
+    fn test_pagination_rule_serialization() {
+        let mut parameter_names = HashMap::new();
+        parameter_names.insert("offset".to_string(), "offset".to_string());
+        parameter_names.insert("limit".to_string(), "limit".to_string());
+        let rule = PaginationRule {
+            default_page_size: 25,
+            max_page_size: 200,
+            min_page_size: 5,
+            parameter_names: parameter_names.clone(),
+            format: "offset-based".to_string(),
+        };
+
+        let json = serde_json::to_string(&rule).unwrap();
+        assert!(json.contains("offset-based"));
+        assert!(json.contains("25"));
+    }
+
+    #[test]
+    fn test_rule_type_variants() {
+        assert_eq!(RuleType::Crud, RuleType::Crud);
+        assert_eq!(RuleType::Validation, RuleType::Validation);
+        assert_eq!(RuleType::Pagination, RuleType::Pagination);
+        assert_eq!(RuleType::Consistency, RuleType::Consistency);
+        assert_eq!(RuleType::StateTransition, RuleType::StateTransition);
+        assert_eq!(RuleType::Other, RuleType::Other);
+    }
+
+    #[test]
+    fn test_pattern_match_serialization() {
+        let pattern = PatternMatch {
+            pattern: "/api/v1/*".to_string(),
+            match_count: 10,
+            example_ids: vec!["ex1".to_string(), "ex2".to_string(), "ex3".to_string()],
+        };
+
+        let json = serde_json::to_string(&pattern).unwrap();
+        assert!(json.contains("/api/v1/*"));
+        assert!(json.contains("10"));
+    }
+
+    #[test]
+    fn test_rule_explanation_serialization() {
+        let explanation = RuleExplanation::new(
+            "rule-123".to_string(),
+            RuleType::Consistency,
+            0.92,
+            "High confidence rule".to_string(),
+        )
+        .with_source_example("ex1".to_string())
+        .with_pattern_match(PatternMatch {
+            pattern: "/api/*".to_string(),
+            match_count: 5,
+            example_ids: vec!["ex1".to_string()],
+        });
+
+        let json = serde_json::to_string(&explanation).unwrap();
+        assert!(json.contains("rule-123"));
+        assert!(json.contains("0.92"));
+        assert!(json.contains("High confidence"));
+    }
+
+    #[test]
+    fn test_error_example_with_field() {
+        let error = ErrorExample {
+            method: "PATCH".to_string(),
+            path: "/api/users/1".to_string(),
+            request: Some(json!({"email": "invalid-email"})),
+            status: 422,
+            error_response: json!({"field": "email", "message": "Invalid email format"}),
+            field: Some("email".to_string()),
+        };
+
+        assert_eq!(error.field, Some("email".to_string()));
+        assert_eq!(error.status, 422);
+    }
+
+    #[test]
+    fn test_error_example_without_field() {
+        let error = ErrorExample {
+            method: "DELETE".to_string(),
+            path: "/api/users/999".to_string(),
+            request: None,
+            status: 404,
+            error_response: json!({"error": "Resource not found"}),
+            field: None,
+        };
+
+        assert!(error.field.is_none());
+        assert_eq!(error.status, 404);
+    }
+
+    #[test]
+    fn test_paginated_response_without_pagination_info() {
+        let response = PaginatedResponse {
+            path: "/api/data".to_string(),
+            query_params: HashMap::new(),
+            response: json!({"data": []}),
+            page: None,
+            page_size: None,
+            total: None,
+        };
+
+        assert!(response.page.is_none());
+        assert!(response.page_size.is_none());
+        assert!(response.total.is_none());
+    }
+
+    #[test]
+    fn test_crud_example_without_state() {
+        let crud = CrudExample {
+            operation: "read".to_string(),
+            resource_type: "product".to_string(),
+            path: "/api/products/1".to_string(),
+            request: None,
+            status: 200,
+            response: Some(json!({"id": 1, "name": "Product"})),
+            resource_state: None,
+        };
+
+        assert!(crud.resource_state.is_none());
+        assert_eq!(crud.operation, "read");
+    }
+
+    #[test]
+    fn test_validation_rule_without_parameters() {
+        let rule = ValidationRule {
+            field: "required_field".to_string(),
+            validation_type: "required".to_string(),
+            parameters: HashMap::new(),
+            error_message: "Field is required".to_string(),
+            status_code: 400,
+        };
+
+        assert!(rule.parameters.is_empty());
+        assert_eq!(rule.validation_type, "required");
+    }
+
+    #[test]
+    fn test_rule_explanation_with_multiple_pattern_matches() {
+        let explanation = RuleExplanation::new(
+            "rule-456".to_string(),
+            RuleType::StateTransition,
+            0.88,
+            "Complex rule".to_string(),
+        )
+        .with_pattern_match(PatternMatch {
+            pattern: "/api/v1/*".to_string(),
+            match_count: 3,
+            example_ids: vec![],
+        })
+        .with_pattern_match(PatternMatch {
+            pattern: "/api/v2/*".to_string(),
+            match_count: 2,
+            example_ids: vec![],
+        });
+
+        assert_eq!(explanation.pattern_matches.len(), 2);
+    }
+
+    #[test]
+    fn test_example_pair_clone() {
+        let pair1 = ExamplePair {
+            method: "GET".to_string(),
+            path: "/test".to_string(),
+            request: None,
+            status: 200,
+            response: Some(json!({})),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            metadata: HashMap::new(),
+        };
+        let pair2 = pair1.clone();
+        assert_eq!(pair1.method, pair2.method);
+    }
+
+    #[test]
+    fn test_example_pair_debug() {
+        let pair = ExamplePair {
+            method: "POST".to_string(),
+            path: "/api/test".to_string(),
+            request: Some(json!({"data": "test"})),
+            status: 201,
+            response: Some(json!({"id": 1})),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            metadata: HashMap::new(),
+        };
+        let debug_str = format!("{:?}", pair);
+        assert!(debug_str.contains("ExamplePair"));
+    }
+
+    #[test]
+    fn test_error_example_clone() {
+        let error1 = ErrorExample {
+            method: "PATCH".to_string(),
+            path: "/test".to_string(),
+            request: None,
+            status: 400,
+            error_response: json!({"error": "Bad request"}),
+            field: None,
+        };
+        let error2 = error1.clone();
+        assert_eq!(error1.status, error2.status);
+    }
+
+    #[test]
+    fn test_error_example_debug() {
+        let error = ErrorExample {
+            method: "PUT".to_string(),
+            path: "/api/users/1".to_string(),
+            request: Some(json!({"email": "invalid"})),
+            status: 422,
+            error_response: json!({"field": "email", "message": "Invalid"}),
+            field: Some("email".to_string()),
+        };
+        let debug_str = format!("{:?}", error);
+        assert!(debug_str.contains("ErrorExample"));
+    }
+
+    #[test]
+    fn test_paginated_response_clone() {
+        let response1 = PaginatedResponse {
+            path: "/api/data".to_string(),
+            query_params: HashMap::new(),
+            response: json!({}),
+            page: Some(1),
+            page_size: Some(10),
+            total: Some(100),
+        };
+        let response2 = response1.clone();
+        assert_eq!(response1.page, response2.page);
+    }
+
+    #[test]
+    fn test_paginated_response_debug() {
+        let response = PaginatedResponse {
+            path: "/api/users".to_string(),
+            query_params: HashMap::from([("page".to_string(), "1".to_string())]),
+            response: json!({"data": []}),
+            page: Some(1),
+            page_size: Some(20),
+            total: Some(50),
+        };
+        let debug_str = format!("{:?}", response);
+        assert!(debug_str.contains("PaginatedResponse"));
+    }
+
+    #[test]
+    fn test_crud_example_clone() {
+        let crud1 = CrudExample {
+            operation: "create".to_string(),
+            resource_type: "user".to_string(),
+            path: "/api/users".to_string(),
+            request: None,
+            status: 201,
+            response: None,
+            resource_state: None,
+        };
+        let crud2 = crud1.clone();
+        assert_eq!(crud1.operation, crud2.operation);
+    }
+
+    #[test]
+    fn test_crud_example_debug() {
+        let crud = CrudExample {
+            operation: "update".to_string(),
+            resource_type: "product".to_string(),
+            path: "/api/products/1".to_string(),
+            request: Some(json!({"name": "New Name"})),
+            status: 200,
+            response: Some(json!({"id": 1, "name": "New Name"})),
+            resource_state: Some("updated".to_string()),
+        };
+        let debug_str = format!("{:?}", crud);
+        assert!(debug_str.contains("CrudExample"));
+    }
+
+    #[test]
+    fn test_validation_rule_clone() {
+        let rule1 = ValidationRule {
+            field: "email".to_string(),
+            validation_type: "format".to_string(),
+            parameters: HashMap::new(),
+            error_message: "Invalid format".to_string(),
+            status_code: 400,
+        };
+        let rule2 = rule1.clone();
+        assert_eq!(rule1.field, rule2.field);
+    }
+
+    #[test]
+    fn test_validation_rule_debug() {
+        let mut parameters = HashMap::new();
+        parameters.insert("pattern".to_string(), json!(r"^[a-z]+$"));
+        let rule = ValidationRule {
+            field: "username".to_string(),
+            validation_type: "pattern".to_string(),
+            parameters,
+            error_message: "Invalid pattern".to_string(),
+            status_code: 422,
+        };
+        let debug_str = format!("{:?}", rule);
+        assert!(debug_str.contains("ValidationRule"));
+    }
+
+    #[test]
+    fn test_pagination_rule_clone() {
+        let rule1 = PaginationRule {
+            default_page_size: 20,
+            max_page_size: 100,
+            min_page_size: 1,
+            parameter_names: HashMap::new(),
+            format: "page-based".to_string(),
+        };
+        let rule2 = rule1.clone();
+        assert_eq!(rule1.default_page_size, rule2.default_page_size);
+    }
+
+    #[test]
+    fn test_pagination_rule_debug() {
+        let mut parameter_names = HashMap::new();
+        parameter_names.insert("page".to_string(), "page".to_string());
+        parameter_names.insert("size".to_string(), "limit".to_string());
+        let rule = PaginationRule {
+            default_page_size: 25,
+            max_page_size: 200,
+            min_page_size: 5,
+            parameter_names,
+            format: "offset-based".to_string(),
+        };
+        let debug_str = format!("{:?}", rule);
+        assert!(debug_str.contains("PaginationRule"));
+    }
+
+    #[test]
+    fn test_rule_type_clone() {
+        let rule_type1 = RuleType::Validation;
+        let rule_type2 = rule_type1.clone();
+        assert_eq!(rule_type1, rule_type2);
+    }
+
+    #[test]
+    fn test_rule_type_debug() {
+        let rule_type = RuleType::StateTransition;
+        let debug_str = format!("{:?}", rule_type);
+        assert!(debug_str.contains("StateTransition") || debug_str.contains("RuleType"));
+    }
+
+    #[test]
+    fn test_pattern_match_clone() {
+        let pattern1 = PatternMatch {
+            pattern: "/api/*".to_string(),
+            match_count: 10,
+            example_ids: vec!["ex1".to_string()],
+        };
+        let pattern2 = pattern1.clone();
+        assert_eq!(pattern1.pattern, pattern2.pattern);
+    }
+
+    #[test]
+    fn test_pattern_match_debug() {
+        let pattern = PatternMatch {
+            pattern: "/api/v1/users/*".to_string(),
+            match_count: 15,
+            example_ids: vec!["ex1".to_string(), "ex2".to_string(), "ex3".to_string()],
+        };
+        let debug_str = format!("{:?}", pattern);
+        assert!(debug_str.contains("PatternMatch"));
+    }
+
+    #[test]
+    fn test_rule_explanation_clone() {
+        let explanation1 = RuleExplanation::new(
+            "rule-1".to_string(),
+            RuleType::Consistency,
+            0.95,
+            "Test rule".to_string(),
+        );
+        let explanation2 = explanation1.clone();
+        assert_eq!(explanation1.rule_id, explanation2.rule_id);
+    }
+
+    #[test]
+    fn test_rule_explanation_debug() {
+        let explanation = RuleExplanation::new(
+            "rule-123".to_string(),
+            RuleType::Validation,
+            0.88,
+            "Validation rule".to_string(),
+        )
+        .with_source_example("ex-1".to_string())
+        .with_pattern_match(PatternMatch {
+            pattern: "/api/*".to_string(),
+            match_count: 5,
+            example_ids: vec![],
+        });
+        let debug_str = format!("{:?}", explanation);
+        assert!(debug_str.contains("RuleExplanation"));
+    }
+
 }

@@ -1933,9 +1933,8 @@ mod tests {
 
         // Create a test workspace
         let mut workspace = Workspace::new("Test Workspace".to_string());
-        let request =
-            MockRequest::new(HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
-        workspace.add_request(request).unwrap();
+        let request = MockRequest::new(HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
+        workspace.add_request(request);
 
         // Save workspace
         persistence.save_workspace(&workspace).await.unwrap();
@@ -2002,5 +2001,616 @@ mod tests {
         // Verify restored workspace
         let restored = persistence.load_workspace(&restored_id).await.unwrap();
         assert_eq!(restored.name, "Test Workspace");
+    }
+
+    #[test]
+    fn test_workspace_persistence_new() {
+        let persistence = WorkspacePersistence::new("/tmp/test");
+        assert_eq!(persistence.base_dir, PathBuf::from("/tmp/test"));
+    }
+
+    #[test]
+    fn test_workspace_persistence_workspace_dir() {
+        let persistence = WorkspacePersistence::new("/tmp/test");
+        assert_eq!(persistence.workspace_dir(), Path::new("/tmp/test"));
+    }
+
+    #[test]
+    fn test_workspace_persistence_workspace_file_path() {
+        let persistence = WorkspacePersistence::new("/tmp/test");
+        let path = persistence.workspace_file_path("workspace-123");
+        assert_eq!(path, PathBuf::from("/tmp/test/workspace-123.yaml"));
+    }
+
+    #[test]
+    fn test_workspace_persistence_registry_file_path() {
+        let persistence = WorkspacePersistence::new("/tmp/test");
+        let path = persistence.registry_file_path();
+        assert_eq!(path, PathBuf::from("/tmp/test/registry.yaml"));
+    }
+
+    #[test]
+    fn test_workspace_persistence_sync_state_file_path() {
+        let persistence = WorkspacePersistence::new("/tmp/test");
+        let path = persistence.sync_state_file_path();
+        assert_eq!(path, PathBuf::from("/tmp/test/sync_state.yaml"));
+    }
+
+    #[test]
+    fn test_sync_state_creation() {
+        let state = SyncState {
+            last_sync_timestamp: Utc::now(),
+        };
+        assert!(state.last_sync_timestamp <= Utc::now());
+    }
+
+    #[test]
+    fn test_sync_strategy_variants() {
+        let full = SyncStrategy::Full;
+        let incremental = SyncStrategy::Incremental;
+        let selective = SyncStrategy::Selective(vec!["id1".to_string(), "id2".to_string()]);
+
+        assert_eq!(full, SyncStrategy::Full);
+        assert_eq!(incremental, SyncStrategy::Incremental);
+        assert_eq!(selective, SyncStrategy::Selective(vec!["id1".to_string(), "id2".to_string()]));
+    }
+
+    #[test]
+    fn test_directory_structure_variants() {
+        let flat = DirectoryStructure::Flat;
+        let nested = DirectoryStructure::Nested;
+        let grouped = DirectoryStructure::Grouped;
+
+        assert_eq!(flat, DirectoryStructure::Flat);
+        assert_eq!(nested, DirectoryStructure::Nested);
+        assert_eq!(grouped, DirectoryStructure::Grouped);
+    }
+
+    #[test]
+    fn test_sync_result_creation() {
+        let result = SyncResult {
+            synced_workspaces: 5,
+            synced_requests: 10,
+            files_created: 15,
+            target_dir: PathBuf::from("/tmp/sync"),
+        };
+
+        assert_eq!(result.synced_workspaces, 5);
+        assert_eq!(result.synced_requests, 10);
+        assert_eq!(result.files_created, 15);
+    }
+
+    #[test]
+    fn test_encrypted_export_result_creation() {
+        let result = EncryptedExportResult {
+            output_path: PathBuf::from("/tmp/export.zip"),
+            backup_key: "backup-key-123".to_string(),
+            exported_at: Utc::now(),
+            workspace_name: "Test Workspace".to_string(),
+            encryption_enabled: true,
+        };
+
+        assert_eq!(result.workspace_name, "Test Workspace");
+        assert!(result.encryption_enabled);
+    }
+
+    #[test]
+    fn test_encrypted_import_result_creation() {
+        let result = EncryptedImportResult {
+            workspace_id: "ws-123".to_string(),
+            workspace_name: "Imported Workspace".to_string(),
+            imported_at: Utc::now(),
+            request_count: 5,
+            encryption_restored: true,
+        };
+
+        assert_eq!(result.workspace_id, "ws-123");
+        assert_eq!(result.request_count, 5);
+    }
+
+    #[test]
+    fn test_security_check_result_creation() {
+        let result = SecurityCheckResult {
+            workspace_id: "ws-123".to_string(),
+            workspace_name: "Test Workspace".to_string(),
+            warnings: vec![],
+            errors: vec![],
+            is_secure: true,
+            recommended_actions: vec!["Action 1".to_string()],
+        };
+
+        assert_eq!(result.workspace_id, "ws-123");
+        assert!(result.is_secure);
+    }
+
+    #[test]
+    fn test_security_warning_creation() {
+        let warning = SecurityWarning {
+            field_type: "header".to_string(),
+            field_name: "Authorization".to_string(),
+            location: "request".to_string(),
+            severity: SecuritySeverity::High,
+            message: "Sensitive data detected".to_string(),
+            suggestion: "Use encryption".to_string(),
+        };
+
+        assert_eq!(warning.severity, SecuritySeverity::High);
+        assert_eq!(warning.field_name, "Authorization");
+    }
+
+    #[test]
+    fn test_security_severity_variants() {
+        assert_eq!(SecuritySeverity::Low, SecuritySeverity::Low);
+        assert_eq!(SecuritySeverity::Medium, SecuritySeverity::Medium);
+        assert_eq!(SecuritySeverity::High, SecuritySeverity::High);
+        assert_eq!(SecuritySeverity::Critical, SecuritySeverity::Critical);
+    }
+
+    #[test]
+    fn test_workspace_export_creation() {
+        let export = WorkspaceExport {
+            metadata: WorkspaceMetadata {
+                id: "ws-123".to_string(),
+                name: "Test Workspace".to_string(),
+                description: None,
+                exported_at: Utc::now(),
+                request_count: 5,
+                folder_count: 2,
+            },
+            config: WorkspaceConfig {
+                auth: None,
+                base_url: Some("http://localhost:8080".to_string()),
+                variables: HashMap::new(),
+                reality_level: None,
+                ai_mode: None,
+            },
+            requests: HashMap::new(),
+        };
+
+        assert_eq!(export.metadata.id, "ws-123");
+        assert_eq!(export.config.base_url, Some("http://localhost:8080".to_string()));
+    }
+
+    #[test]
+    fn test_workspace_metadata_creation() {
+        let metadata = WorkspaceMetadata {
+            id: "ws-123".to_string(),
+            name: "Test Workspace".to_string(),
+            description: Some("Test description".to_string()),
+            exported_at: Utc::now(),
+            request_count: 10,
+            folder_count: 5,
+        };
+
+        assert_eq!(metadata.id, "ws-123");
+        assert_eq!(metadata.name, "Test Workspace");
+        assert_eq!(metadata.request_count, 10);
+        assert_eq!(metadata.folder_count, 5);
+    }
+
+    #[test]
+    fn test_workspace_config_creation() {
+        let config = WorkspaceConfig {
+            auth: None,
+            base_url: Some("http://localhost:8080".to_string()),
+            variables: HashMap::new(),
+            reality_level: None,
+            ai_mode: None,
+        };
+
+        assert_eq!(config.base_url, Some("http://localhost:8080".to_string()));
+    }
+
+    #[test]
+    fn test_auth_config_creation() {
+        let mut params = HashMap::new();
+        params.insert("token".to_string(), "token-123".to_string());
+        let auth = AuthConfig {
+            auth_type: "bearer".to_string(),
+            params,
+        };
+
+        assert_eq!(auth.auth_type, "bearer");
+        assert_eq!(auth.params.get("token"), Some(&"token-123".to_string()));
+    }
+
+    #[test]
+    fn test_exported_request_creation() {
+        let request = ExportedRequest {
+            id: "req-123".to_string(),
+            name: "Test Request".to_string(),
+            method: "GET".to_string(),
+            path: "/api/test".to_string(),
+            folder_path: "/folder1".to_string(),
+            headers: HashMap::new(),
+            query_params: HashMap::new(),
+            body: None,
+            response_status: Some(200),
+            response_body: Some("{}".to_string()),
+            response_headers: HashMap::new(),
+            delay: Some(100),
+        };
+
+        assert_eq!(request.id, "req-123");
+        assert_eq!(request.method, "GET");
+        assert_eq!(request.response_status, Some(200));
+    }
+
+    #[test]
+    fn test_serializable_workspace_registry_creation() {
+        let serializable = SerializableWorkspaceRegistry {
+            workspaces: vec![],
+            active_workspace: Some("ws-123".to_string()),
+        };
+
+        assert_eq!(serializable.active_workspace, Some("ws-123".to_string()));
+        assert!(serializable.workspaces.is_empty());
+    }
+
+    #[test]
+    fn test_serializable_workspace_registry_serialization() {
+        let serializable = SerializableWorkspaceRegistry {
+            workspaces: vec![],
+            active_workspace: Some("ws-123".to_string()),
+        };
+
+        let json = serde_json::to_string(&serializable).unwrap();
+        assert!(json.contains("ws-123"));
+    }
+
+    #[test]
+    fn test_sync_state_clone() {
+        let state1 = SyncState {
+            last_sync_timestamp: Utc::now(),
+        };
+        let state2 = state1.clone();
+        assert_eq!(state1.last_sync_timestamp, state2.last_sync_timestamp);
+    }
+
+    #[test]
+    fn test_sync_state_debug() {
+        let state = SyncState {
+            last_sync_timestamp: Utc::now(),
+        };
+        let debug_str = format!("{:?}", state);
+        assert!(debug_str.contains("SyncState"));
+    }
+
+    #[test]
+    fn test_sync_strategy_clone() {
+        let strategy1 = SyncStrategy::Selective(vec!["id1".to_string()]);
+        let strategy2 = strategy1.clone();
+        assert_eq!(strategy1, strategy2);
+    }
+
+    #[test]
+    fn test_directory_structure_clone() {
+        let structure1 = DirectoryStructure::Nested;
+        let structure2 = structure1.clone();
+        assert_eq!(structure1, structure2);
+    }
+
+    #[test]
+    fn test_sync_result_clone() {
+        let result1 = SyncResult {
+            synced_workspaces: 1,
+            synced_requests: 2,
+            files_created: 3,
+            target_dir: PathBuf::from("/tmp"),
+        };
+        let result2 = result1.clone();
+        assert_eq!(result1.synced_workspaces, result2.synced_workspaces);
+    }
+
+    #[test]
+    fn test_encrypted_export_result_clone() {
+        let result1 = EncryptedExportResult {
+            output_path: PathBuf::from("/tmp/export.zip"),
+            backup_key: "key".to_string(),
+            exported_at: Utc::now(),
+            workspace_name: "Test".to_string(),
+            encryption_enabled: true,
+        };
+        let result2 = result1.clone();
+        assert_eq!(result1.workspace_name, result2.workspace_name);
+    }
+
+    #[test]
+    fn test_encrypted_import_result_clone() {
+        let result1 = EncryptedImportResult {
+            workspace_id: "ws-1".to_string(),
+            workspace_name: "Test".to_string(),
+            imported_at: Utc::now(),
+            request_count: 5,
+            encryption_restored: true,
+        };
+        let result2 = result1.clone();
+        assert_eq!(result1.workspace_id, result2.workspace_id);
+    }
+
+    #[test]
+    fn test_security_check_result_clone() {
+        let result1 = SecurityCheckResult {
+            workspace_id: "ws-1".to_string(),
+            workspace_name: "Test".to_string(),
+            warnings: vec![],
+            errors: vec![],
+            is_secure: true,
+            recommended_actions: vec![],
+        };
+        let result2 = result1.clone();
+        assert_eq!(result1.workspace_id, result2.workspace_id);
+    }
+
+    #[test]
+    fn test_security_warning_clone() {
+        let warning1 = SecurityWarning {
+            field_type: "header".to_string(),
+            field_name: "Auth".to_string(),
+            location: "request".to_string(),
+            severity: SecuritySeverity::High,
+            message: "Test".to_string(),
+            suggestion: "Fix".to_string(),
+        };
+        let warning2 = warning1.clone();
+        assert_eq!(warning1.field_name, warning2.field_name);
+    }
+
+    #[test]
+    fn test_security_severity_clone() {
+        let severity1 = SecuritySeverity::Critical;
+        let severity2 = severity1.clone();
+        assert_eq!(severity1, severity2);
+    }
+
+    #[test]
+    fn test_workspace_export_clone() {
+        let export1 = WorkspaceExport {
+            metadata: WorkspaceMetadata {
+                id: "ws-1".to_string(),
+                name: "Test".to_string(),
+                description: None,
+                exported_at: Utc::now(),
+                request_count: 0,
+                folder_count: 0,
+            },
+            config: WorkspaceConfig {
+                auth: None,
+                base_url: None,
+                variables: HashMap::new(),
+                reality_level: None,
+                ai_mode: None,
+            },
+            requests: HashMap::new(),
+        };
+        let export2 = export1.clone();
+        assert_eq!(export1.metadata.id, export2.metadata.id);
+    }
+
+    #[test]
+    fn test_workspace_metadata_clone() {
+        let metadata1 = WorkspaceMetadata {
+            id: "ws-1".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            exported_at: Utc::now(),
+            request_count: 0,
+            folder_count: 0,
+        };
+        let metadata2 = metadata1.clone();
+        assert_eq!(metadata1.id, metadata2.id);
+    }
+
+    #[test]
+    fn test_workspace_config_clone() {
+        let config1 = WorkspaceConfig {
+            auth: None,
+            base_url: Some("http://localhost".to_string()),
+            variables: HashMap::new(),
+            reality_level: None,
+            ai_mode: None,
+        };
+        let config2 = config1.clone();
+        assert_eq!(config1.base_url, config2.base_url);
+    }
+
+    #[test]
+    fn test_auth_config_clone() {
+        let mut params = HashMap::new();
+        params.insert("key".to_string(), "value".to_string());
+        let auth1 = AuthConfig {
+            auth_type: "bearer".to_string(),
+            params: params.clone(),
+        };
+        let auth2 = auth1.clone();
+        assert_eq!(auth1.auth_type, auth2.auth_type);
+    }
+
+    #[test]
+    fn test_exported_request_clone() {
+        let request1 = ExportedRequest {
+            id: "req-1".to_string(),
+            name: "Test".to_string(),
+            method: "GET".to_string(),
+            path: "/test".to_string(),
+            folder_path: "/".to_string(),
+            headers: HashMap::new(),
+            query_params: HashMap::new(),
+            body: None,
+            response_status: Some(200),
+            response_body: None,
+            response_headers: HashMap::new(),
+            delay: None,
+        };
+        let request2 = request1.clone();
+        assert_eq!(request1.id, request2.id);
+    }
+
+    #[test]
+    fn test_sync_result_debug() {
+        let result = SyncResult {
+            synced_workspaces: 1,
+            synced_requests: 2,
+            files_created: 3,
+            target_dir: PathBuf::from("/tmp"),
+        };
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("SyncResult"));
+    }
+
+    #[test]
+    fn test_encrypted_export_result_debug() {
+        let result = EncryptedExportResult {
+            output_path: PathBuf::from("/tmp/export.zip"),
+            backup_key: "key".to_string(),
+            exported_at: Utc::now(),
+            workspace_name: "Test".to_string(),
+            encryption_enabled: true,
+        };
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("EncryptedExportResult"));
+    }
+
+    #[test]
+    fn test_encrypted_import_result_debug() {
+        let result = EncryptedImportResult {
+            workspace_id: "ws-1".to_string(),
+            workspace_name: "Test".to_string(),
+            imported_at: Utc::now(),
+            request_count: 5,
+            encryption_restored: true,
+        };
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("EncryptedImportResult"));
+    }
+
+    #[test]
+    fn test_security_check_result_debug() {
+        let result = SecurityCheckResult {
+            workspace_id: "ws-1".to_string(),
+            workspace_name: "Test".to_string(),
+            warnings: vec![],
+            errors: vec![],
+            is_secure: true,
+            recommended_actions: vec![],
+        };
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("SecurityCheckResult"));
+    }
+
+    #[test]
+    fn test_security_warning_debug() {
+        let warning = SecurityWarning {
+            field_type: "header".to_string(),
+            field_name: "Auth".to_string(),
+            location: "request".to_string(),
+            severity: SecuritySeverity::High,
+            message: "Test".to_string(),
+            suggestion: "Fix".to_string(),
+        };
+        let debug_str = format!("{:?}", warning);
+        assert!(debug_str.contains("SecurityWarning"));
+    }
+
+    #[test]
+    fn test_security_severity_debug() {
+        let severity = SecuritySeverity::Critical;
+        let debug_str = format!("{:?}", severity);
+        assert!(debug_str.contains("Critical"));
+    }
+
+    #[test]
+    fn test_workspace_export_debug() {
+        let export = WorkspaceExport {
+            metadata: WorkspaceMetadata {
+                id: "ws-1".to_string(),
+                name: "Test".to_string(),
+                description: None,
+                exported_at: Utc::now(),
+                request_count: 0,
+                folder_count: 0,
+            },
+            config: WorkspaceConfig {
+                auth: None,
+                base_url: None,
+                variables: HashMap::new(),
+                reality_level: None,
+                ai_mode: None,
+            },
+            requests: HashMap::new(),
+        };
+        let debug_str = format!("{:?}", export);
+        assert!(debug_str.contains("WorkspaceExport"));
+    }
+
+    #[test]
+    fn test_workspace_metadata_debug() {
+        let metadata = WorkspaceMetadata {
+            id: "ws-1".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            exported_at: Utc::now(),
+            request_count: 0,
+            folder_count: 0,
+        };
+        let debug_str = format!("{:?}", metadata);
+        assert!(debug_str.contains("WorkspaceMetadata"));
+    }
+
+    #[test]
+    fn test_workspace_config_debug() {
+        let config = WorkspaceConfig {
+            auth: None,
+            base_url: None,
+            variables: HashMap::new(),
+            reality_level: None,
+            ai_mode: None,
+        };
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("WorkspaceConfig"));
+    }
+
+    #[test]
+    fn test_auth_config_debug() {
+        let auth = AuthConfig {
+            auth_type: "bearer".to_string(),
+            params: HashMap::new(),
+        };
+        let debug_str = format!("{:?}", auth);
+        assert!(debug_str.contains("AuthConfig"));
+    }
+
+    #[test]
+    fn test_exported_request_debug() {
+        let request = ExportedRequest {
+            id: "req-1".to_string(),
+            name: "Test".to_string(),
+            method: "GET".to_string(),
+            path: "/test".to_string(),
+            folder_path: "/".to_string(),
+            headers: HashMap::new(),
+            query_params: HashMap::new(),
+            body: None,
+            response_status: None,
+            response_body: None,
+            response_headers: HashMap::new(),
+            delay: None,
+        };
+        let debug_str = format!("{:?}", request);
+        assert!(debug_str.contains("ExportedRequest"));
+    }
+
+    #[test]
+    fn test_sync_strategy_debug() {
+        let strategy = SyncStrategy::Full;
+        let debug_str = format!("{:?}", strategy);
+        assert!(debug_str.contains("Full") || debug_str.contains("SyncStrategy"));
+    }
+
+    #[test]
+    fn test_directory_structure_debug() {
+        let structure = DirectoryStructure::Flat;
+        let debug_str = format!("{:?}", structure);
+        assert!(debug_str.contains("Flat") || debug_str.contains("DirectoryStructure"));
     }
 }

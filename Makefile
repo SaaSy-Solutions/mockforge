@@ -43,6 +43,19 @@ test-integration: ## Run integration tests (including ignored tests)
 test-coverage: ## Run tests with coverage report
 	cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
+test-coverage-baseline: ## Generate per-crate coverage baseline
+	./scripts/coverage-baseline.sh
+
+test-coverage-baseline-html: ## Generate per-crate coverage baseline with HTML reports
+	./scripts/coverage-baseline.sh --html
+
+test-coverage-summary: ## Show coverage summary
+	@if [ -f coverage/summary.txt ]; then \
+		cat coverage/summary.txt; \
+	else \
+		echo "Coverage summary not found. Run 'make test-coverage-baseline' first."; \
+	fi
+
 test-watch: ## Run tests in watch mode
 	cargo watch -x "test --workspace"
 

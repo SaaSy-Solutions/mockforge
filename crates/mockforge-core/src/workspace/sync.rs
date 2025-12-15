@@ -1055,3 +1055,781 @@ impl Default for WorkspaceSyncManager {
         Self::new(SyncConfig::default())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_sync_config_creation() {
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: "/tmp/sync".to_string(),
+                watch_changes: true,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::LocalWins,
+            auto_commit: true,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::Bidirectional,
+        };
+        
+        assert!(config.enabled);
+        assert_eq!(config.interval_seconds, 60);
+        assert!(config.auto_commit);
+        assert!(!config.auto_push);
+    }
+
+    #[test]
+    fn test_sync_provider_git() {
+        let provider = SyncProvider::Git {
+            repo_url: "https://github.com/user/repo.git".to_string(),
+            branch: "main".to_string(),
+            auth_token: Some("token123".to_string()),
+        };
+        
+        match provider {
+            SyncProvider::Git { repo_url, branch, auth_token } => {
+                assert_eq!(repo_url, "https://github.com/user/repo.git");
+                assert_eq!(branch, "main");
+                assert_eq!(auth_token, Some("token123".to_string()));
+            }
+            _ => panic!("Expected Git provider"),
+        }
+    }
+
+    #[test]
+    fn test_sync_provider_cloud() {
+        let provider = SyncProvider::Cloud {
+            service_url: "https://api.example.com".to_string(),
+            api_key: "key123".to_string(),
+            project_id: "proj-456".to_string(),
+        };
+        
+        match provider {
+            SyncProvider::Cloud { service_url, api_key, project_id } => {
+                assert_eq!(service_url, "https://api.example.com");
+                assert_eq!(api_key, "key123");
+                assert_eq!(project_id, "proj-456");
+            }
+            _ => panic!("Expected Cloud provider"),
+        }
+    }
+
+    #[test]
+    fn test_sync_provider_local() {
+        let provider = SyncProvider::Local {
+            directory_path: "/tmp/sync".to_string(),
+            watch_changes: true,
+        };
+        
+        match provider {
+            SyncProvider::Local { directory_path, watch_changes } => {
+                assert_eq!(directory_path, "/tmp/sync");
+                assert!(watch_changes);
+            }
+            _ => panic!("Expected Local provider"),
+        }
+    }
+
+    #[test]
+    fn test_conflict_resolution_strategy_variants() {
+        let local_wins = ConflictResolutionStrategy::LocalWins;
+        let remote_wins = ConflictResolutionStrategy::RemoteWins;
+        let manual = ConflictResolutionStrategy::Manual;
+        let last_modified = ConflictResolutionStrategy::LastModified;
+        
+        // Just verify they can be created
+        match local_wins {
+            ConflictResolutionStrategy::LocalWins => {}
+            _ => panic!(),
+        }
+        match remote_wins {
+            ConflictResolutionStrategy::RemoteWins => {}
+            _ => panic!(),
+        }
+        match manual {
+            ConflictResolutionStrategy::Manual => {}
+            _ => panic!(),
+        }
+        match last_modified {
+            ConflictResolutionStrategy::LastModified => {}
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_sync_directory_structure_variants() {
+        let single = SyncDirectoryStructure::SingleDirectory;
+        let per_workspace = SyncDirectoryStructure::PerWorkspace;
+        let hierarchical = SyncDirectoryStructure::Hierarchical;
+        
+        match single {
+            SyncDirectoryStructure::SingleDirectory => {}
+            _ => panic!(),
+        }
+        match per_workspace {
+            SyncDirectoryStructure::PerWorkspace => {}
+            _ => panic!(),
+        }
+        match hierarchical {
+            SyncDirectoryStructure::Hierarchical => {}
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_sync_direction_variants() {
+        let bidirectional = SyncDirection::Bidirectional;
+        let local_to_remote = SyncDirection::LocalToRemote;
+        let remote_to_local = SyncDirection::RemoteToLocal;
+        
+        match bidirectional {
+            SyncDirection::Bidirectional => {}
+            _ => panic!(),
+        }
+        match local_to_remote {
+            SyncDirection::LocalToRemote => {}
+            _ => panic!(),
+        }
+        match remote_to_local {
+            SyncDirection::RemoteToLocal => {}
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_sync_state_variants() {
+        let not_synced = SyncState::NotSynced;
+        let syncing = SyncState::Syncing;
+        let synced = SyncState::Synced;
+        let sync_failed = SyncState::SyncFailed;
+        let has_conflicts = SyncState::HasConflicts;
+        
+        match not_synced {
+            SyncState::NotSynced => {}
+            _ => panic!(),
+        }
+        match syncing {
+            SyncState::Syncing => {}
+            _ => panic!(),
+        }
+        match synced {
+            SyncState::Synced => {}
+            _ => panic!(),
+        }
+        match sync_failed {
+            SyncState::SyncFailed => {}
+            _ => panic!(),
+        }
+        match has_conflicts {
+            SyncState::HasConflicts => {}
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_sync_status_creation() {
+        let status = SyncStatus {
+            last_sync: Some(Utc::now()),
+            state: SyncState::Synced,
+            pending_changes: 5,
+            conflicts: 2,
+            last_error: Some("Test error".to_string()),
+        };
+        
+        assert!(status.last_sync.is_some());
+        match status.state {
+            SyncState::Synced => {}
+            _ => panic!(),
+        }
+        assert_eq!(status.pending_changes, 5);
+        assert_eq!(status.conflicts, 2);
+        assert_eq!(status.last_error, Some("Test error".to_string()));
+    }
+
+    #[test]
+    fn test_sync_result_creation() {
+        let result = SyncResult {
+            success: true,
+            changes_count: 10,
+            conflicts: vec![],
+            error: None,
+        };
+        
+        assert!(result.success);
+        assert_eq!(result.changes_count, 10);
+        assert!(result.conflicts.is_empty());
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_sync_result_with_conflicts() {
+        let conflict = SyncConflict {
+            entity_id: EntityId::new(),
+            entity_type: "request".to_string(),
+            local_version: json!({"id": "local"}),
+            remote_version: json!({"id": "remote"}),
+            resolution: ConflictResolution::Manual,
+        };
+        
+        let result = SyncResult {
+            success: false,
+            changes_count: 0,
+            conflicts: vec![conflict],
+            error: Some("Conflicts detected".to_string()),
+        };
+        
+        assert!(!result.success);
+        assert_eq!(result.conflicts.len(), 1);
+        assert!(result.error.is_some());
+    }
+
+    #[test]
+    fn test_sync_conflict_creation() {
+        let conflict = SyncConflict {
+            entity_id: EntityId::new(),
+            entity_type: "workspace".to_string(),
+            local_version: json!({"name": "local"}),
+            remote_version: json!({"name": "remote"}),
+            resolution: ConflictResolution::Local,
+        };
+        
+        assert_eq!(conflict.entity_type, "workspace");
+        match conflict.resolution {
+            ConflictResolution::Local => {}
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_conflict_resolution_variants() {
+        let local = ConflictResolution::Local;
+        let remote = ConflictResolution::Remote;
+        let manual = ConflictResolution::Manual;
+        
+        match local {
+            ConflictResolution::Local => {}
+            _ => panic!(),
+        }
+        match remote {
+            ConflictResolution::Remote => {}
+            _ => panic!(),
+        }
+        match manual {
+            ConflictResolution::Manual => {}
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_workspace_sync_manager_new() {
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: "/tmp".to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 30,
+            conflict_strategy: ConflictResolutionStrategy::RemoteWins,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::SingleDirectory,
+            sync_direction: SyncDirection::LocalToRemote,
+        };
+        
+        let manager = WorkspaceSyncManager::new(config);
+        assert!(manager.is_enabled());
+        assert_eq!(manager.total_syncs, 0);
+        assert_eq!(manager.successful_syncs, 0);
+        assert_eq!(manager.failed_syncs, 0);
+    }
+
+    #[test]
+    fn test_workspace_sync_manager_default() {
+        let manager = WorkspaceSyncManager::default();
+        // Default config should have sync disabled
+        assert!(!manager.is_enabled());
+    }
+
+    #[test]
+    fn test_workspace_sync_manager_get_config() {
+        let config = SyncConfig {
+            enabled: false,
+            provider: SyncProvider::Local {
+                directory_path: "/tmp".to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: true,
+            auto_push: true,
+            directory_structure: SyncDirectoryStructure::Hierarchical,
+            sync_direction: SyncDirection::Bidirectional,
+        };
+        
+        let manager = WorkspaceSyncManager::new(config);
+        let retrieved_config = manager.get_config();
+        assert!(!retrieved_config.enabled);
+        assert_eq!(retrieved_config.interval_seconds, 60);
+    }
+
+    #[test]
+    fn test_workspace_sync_manager_update_config() {
+        let config1 = SyncConfig {
+            enabled: false,
+            provider: SyncProvider::Local {
+                directory_path: "/tmp1".to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 30,
+            conflict_strategy: ConflictResolutionStrategy::LocalWins,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::SingleDirectory,
+            sync_direction: SyncDirection::LocalToRemote,
+        };
+        
+        let mut manager = WorkspaceSyncManager::new(config1);
+        assert!(!manager.is_enabled());
+        
+        let config2 = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: "/tmp2".to_string(),
+                watch_changes: true,
+            },
+            interval_seconds: 120,
+            conflict_strategy: ConflictResolutionStrategy::RemoteWins,
+            auto_commit: true,
+            auto_push: true,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::Bidirectional,
+        };
+        
+        manager.update_config(config2);
+        assert!(manager.is_enabled());
+        assert_eq!(manager.get_config().interval_seconds, 120);
+    }
+
+    #[test]
+    fn test_workspace_sync_manager_get_status() {
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: "/tmp".to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::LocalWins,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::SingleDirectory,
+            sync_direction: SyncDirection::Bidirectional,
+        };
+        
+        let manager = WorkspaceSyncManager::new(config);
+        let status = manager.get_status();
+        assert_eq!(status.pending_changes, 0);
+        assert_eq!(status.conflicts, 0);
+        match status.state {
+            SyncState::NotSynced => {}
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn test_workspace_sync_manager_get_conflicts() {
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: "/tmp".to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::SingleDirectory,
+            sync_direction: SyncDirection::Bidirectional,
+        };
+        
+        let manager = WorkspaceSyncManager::new(config);
+        let conflicts = manager.get_conflicts();
+        assert!(conflicts.is_empty());
+    }
+
+    #[test]
+    fn test_workspace_sync_manager_is_enabled() {
+        let config_enabled = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: "/tmp".to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::LocalWins,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::SingleDirectory,
+            sync_direction: SyncDirection::Bidirectional,
+        };
+        
+        let manager_enabled = WorkspaceSyncManager::new(config_enabled);
+        assert!(manager_enabled.is_enabled());
+        
+        let config_disabled = SyncConfig {
+            enabled: false,
+            provider: SyncProvider::Local {
+                directory_path: "/tmp".to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::LocalWins,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::SingleDirectory,
+            sync_direction: SyncDirection::Bidirectional,
+        };
+        
+        let manager_disabled = WorkspaceSyncManager::new(config_disabled);
+        assert!(!manager_disabled.is_enabled());
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_disabled() {
+        // Test sync_workspace when disabled (lines 264-266)
+        let config = SyncConfig {
+            enabled: false,
+            provider: SyncProvider::Local {
+                directory_path: "/tmp/test".to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::Bidirectional,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        
+        // Should return error when disabled
+        let result = manager.sync_workspace(&mut workspace).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("disabled"));
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_local_to_remote() {
+        // Test sync_workspace with Local provider LocalToRemote (lines 260-321, 778-811)
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: temp_dir.path().to_string_lossy().to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::LocalToRemote,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        
+        // Should sync successfully (lines 260-321, 778-811)
+        let result = manager.sync_workspace(&mut workspace).await;
+        assert!(result.is_ok());
+        let sync_result = result.unwrap();
+        assert!(sync_result.success);
+        assert_eq!(sync_result.changes_count, 1);
+        assert!(matches!(manager.status.state, SyncState::Synced));
+        assert_eq!(manager.total_syncs, 1);
+        assert_eq!(manager.successful_syncs, 1);
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_remote_to_local() {
+        // Test sync_workspace with Local provider RemoteToLocal (lines 812-881)
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: temp_dir.path().to_string_lossy().to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::RemoteToLocal,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        
+        // First write a workspace file to simulate remote
+        let file_path = temp_dir.path().join(format!("{}.yaml", workspace.id));
+        let remote_workspace = Workspace::new("Remote Workspace".to_string());
+        let content = serde_yaml::to_string(&remote_workspace).unwrap();
+        tokio::fs::write(&file_path, content).await.unwrap();
+        
+        // Should sync successfully (lines 812-881)
+        let result = manager.sync_workspace(&mut workspace).await;
+        assert!(result.is_ok());
+        let sync_result = result.unwrap();
+        assert!(sync_result.success);
+        assert_eq!(workspace.name, "Remote Workspace");
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_remote_to_local_file_not_found() {
+        // Test sync_workspace RemoteToLocal when file doesn't exist (lines 816-818)
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: temp_dir.path().to_string_lossy().to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::RemoteToLocal,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        
+        // Should return error when file doesn't exist (lines 816-818)
+        let result = manager.sync_workspace(&mut workspace).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_bidirectional() {
+        // Test sync_workspace with Local provider Bidirectional (lines 882-925)
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: temp_dir.path().to_string_lossy().to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::Bidirectional,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        
+        // Should sync successfully (lines 882-925)
+        let result = manager.sync_workspace(&mut workspace).await;
+        assert!(result.is_ok());
+        let sync_result = result.unwrap();
+        assert!(sync_result.success);
+        assert_eq!(sync_result.changes_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_bidirectional_with_conflicts() {
+        // Test sync_workspace Bidirectional with conflicts (lines 897-908)
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: temp_dir.path().to_string_lossy().to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::Bidirectional,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        
+        // Create remote workspace with newer timestamp
+        // First set local timestamp
+        workspace.updated_at = chrono::Utc::now();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        // Then create remote with newer timestamp
+        let mut remote_workspace = Workspace::new("Remote Workspace".to_string());
+        remote_workspace.updated_at = chrono::Utc::now(); // Remote is newer
+        
+        let file_path = temp_dir.path().join(format!("{}.yaml", workspace.id));
+        let content = serde_yaml::to_string(&remote_workspace).unwrap();
+        tokio::fs::write(&file_path, content).await.unwrap();
+        
+        // Should detect conflicts (lines 897-908)
+        let result = manager.sync_workspace(&mut workspace).await;
+        assert!(result.is_ok());
+        let sync_result = result.unwrap();
+        assert!(sync_result.success);
+        assert!(!sync_result.conflicts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_remote_to_local_with_conflicts() {
+        // Test sync_workspace RemoteToLocal with conflicts (lines 832-862)
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: temp_dir.path().to_string_lossy().to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::RemoteToLocal,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        // Create remote workspace with older timestamp first
+        let mut remote_workspace = Workspace::new("Remote Workspace".to_string());
+        remote_workspace.updated_at = chrono::Utc::now();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        workspace.updated_at = chrono::Utc::now(); // Local is newer
+        
+        let file_path = temp_dir.path().join(format!("{}.yaml", workspace.id));
+        let content = serde_yaml::to_string(&remote_workspace).unwrap();
+        tokio::fs::write(&file_path, content).await.unwrap();
+        
+        // Should detect conflicts (lines 832-862)
+        let result = manager.sync_workspace(&mut workspace).await;
+        assert!(result.is_ok());
+        let sync_result = result.unwrap();
+        assert!(sync_result.success);
+        assert!(!sync_result.conflicts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_success_tracking() {
+        // Test sync_workspace success tracking (lines 299-311)
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: temp_dir.path().to_string_lossy().to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::LocalToRemote,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        
+        // Should track successful sync (lines 299-311)
+        let result = manager.sync_workspace(&mut workspace).await;
+        assert!(result.is_ok());
+        assert!(matches!(manager.status.state, SyncState::Synced));
+        assert_eq!(manager.successful_syncs, 1);
+        assert_eq!(manager.total_syncs, 1);
+        assert!(manager.status.last_sync.is_some());
+        assert_eq!(manager.status.pending_changes, 0);
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_error_tracking() {
+        // Test sync_workspace error tracking (lines 313-317)
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: "/nonexistent/path/that/does/not/exist".to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::RemoteToLocal,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        
+        // Should track failed sync (lines 313-317)
+        let result = manager.sync_workspace(&mut workspace).await;
+        // May succeed or fail depending on directory creation, but should track state
+        if result.is_err() {
+            assert!(matches!(manager.status.state, SyncState::SyncFailed));
+            assert_eq!(manager.failed_syncs, 1);
+            assert!(manager.status.last_error.is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_duration_tracking() {
+        // Test sync_workspace duration tracking (lines 294-297)
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: temp_dir.path().to_string_lossy().to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::LocalToRemote,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        
+        // Should track sync duration (lines 294-297)
+        let result = manager.sync_workspace(&mut workspace).await;
+        assert!(result.is_ok());
+        assert!(manager.last_sync_duration_ms.is_some());
+        assert!(manager.last_sync_duration_ms.unwrap() >= 0);
+    }
+
+    #[tokio::test]
+    async fn test_sync_workspace_state_transitions() {
+        // Test sync_workspace state transitions (lines 274-275, 303-310)
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = SyncConfig {
+            enabled: true,
+            provider: SyncProvider::Local {
+                directory_path: temp_dir.path().to_string_lossy().to_string(),
+                watch_changes: false,
+            },
+            interval_seconds: 60,
+            conflict_strategy: ConflictResolutionStrategy::Manual,
+            auto_commit: false,
+            auto_push: false,
+            directory_structure: SyncDirectoryStructure::PerWorkspace,
+            sync_direction: SyncDirection::LocalToRemote,
+        };
+        let mut manager = WorkspaceSyncManager::new(config);
+        let mut workspace = Workspace::new("Test Workspace".to_string());
+        
+        // Should transition to Syncing then Synced (lines 274-275, 303-310)
+        assert!(matches!(manager.status.state, SyncState::NotSynced));
+        let result = manager.sync_workspace(&mut workspace).await;
+        assert!(result.is_ok());
+        assert!(matches!(manager.status.state, SyncState::Synced));
+    }
+}

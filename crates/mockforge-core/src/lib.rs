@@ -327,7 +327,7 @@ pub use config::{
 pub use consistency::{
     ConsistencyEngine, EntityState, ProtocolState, SessionInfo, StateChangeEvent, UnifiedState,
 };
-pub use custom_fixture::{CustomFixture, CustomFixtureLoader};
+pub use custom_fixture::{CustomFixture, CustomFixtureLoader, NestedFixture};
 pub use data_source::{
     DataSource, DataSourceConfig, DataSourceContent, DataSourceFactory, DataSourceManager,
     DataSourceType, GitDataSource, HttpDataSource, LocalDataSource,

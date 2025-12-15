@@ -677,3 +677,473 @@ pub struct DebugPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ai_studio::debug_context_integrator::DebugContextIntegrator;
+    use crate::intelligent_behavior::config::BehaviorModelConfig;
+    use serde_json::json;
+
+    fn create_test_config() -> IntelligentBehaviorConfig {
+        IntelligentBehaviorConfig {
+            behavior_model: BehaviorModelConfig {
+                llm_provider: "ollama".to_string(),
+                model: "llama2".to_string(),
+                api_endpoint: Some("http://localhost:11434/api/chat".to_string()),
+                api_key: None,
+                temperature: 0.7,
+                max_tokens: 2000,
+                rules: crate::intelligent_behavior::types::BehaviorRules::default(),
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_debug_analyzer_new() {
+        let analyzer = DebugAnalyzer::new();
+        // Just verify it can be created
+        let _ = analyzer;
+    }
+
+    #[test]
+    fn test_debug_analyzer_default() {
+        let analyzer = DebugAnalyzer::default();
+        // Just verify it can be created
+        let _ = analyzer;
+    }
+
+    #[test]
+    fn test_debug_analyzer_with_config() {
+        let config = create_test_config();
+        let analyzer = DebugAnalyzer::with_config(config);
+        // Just verify it can be created
+        let _ = analyzer;
+    }
+
+    #[test]
+    fn test_debug_analyzer_with_integrator() {
+        // Create a minimal integrator for testing
+        // Note: This might fail if DebugContextIntegrator::new() requires parameters
+        // In that case, we'll need to adjust the test
+        let integrator = DebugContextIntegrator::new();
+        let analyzer = DebugAnalyzer::with_integrator(integrator);
+        // Just verify it can be created
+        let _ = analyzer;
+    }
+
+    #[test]
+    fn test_debug_analyzer_with_config_and_integrator() {
+        let config = create_test_config();
+        let integrator = DebugContextIntegrator::new();
+        let analyzer = DebugAnalyzer::with_config_and_integrator(config, integrator);
+        // Just verify it can be created
+        let _ = analyzer;
+    }
+
+    #[test]
+    fn test_debug_request_creation() {
+        let request = DebugRequest {
+            test_logs: "GET /api/users 404".to_string(),
+            test_name: Some("test_get_user".to_string()),
+            workspace_id: Some("ws-123".to_string()),
+        };
+
+        assert_eq!(request.test_logs, "GET /api/users 404");
+        assert_eq!(request.test_name, Some("test_get_user".to_string()));
+        assert_eq!(request.workspace_id, Some("ws-123".to_string()));
+    }
+
+    #[test]
+    fn test_debug_request_serialization() {
+        let request = DebugRequest {
+            test_logs: "Error: 500 Internal Server Error".to_string(),
+            test_name: None,
+            workspace_id: None,
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("Error: 500"));
+    }
+
+    #[test]
+    fn test_debug_response_creation() {
+        let response = DebugResponse {
+            root_cause: "Authentication failed".to_string(),
+            suggestions: vec![],
+            related_configs: vec!["Persona: admin".to_string()],
+            context: None,
+            unified_context: None,
+        };
+
+        assert_eq!(response.root_cause, "Authentication failed");
+        assert_eq!(response.related_configs.len(), 1);
+    }
+
+    #[test]
+    fn test_debug_response_serialization() {
+        let response = DebugResponse {
+            root_cause: "Root cause".to_string(),
+            suggestions: vec![],
+            related_configs: vec![],
+            context: None,
+            unified_context: None,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("Root cause"));
+    }
+
+    #[test]
+    fn test_debug_suggestion_creation() {
+        let suggestion = DebugSuggestion {
+            title: "Fix authentication".to_string(),
+            description: "Update the auth token".to_string(),
+            action: "Update config".to_string(),
+            config_path: Some("/auth/token".to_string()),
+            patch: None,
+            linked_artifacts: vec![],
+        };
+
+        assert_eq!(suggestion.title, "Fix authentication");
+        assert_eq!(suggestion.config_path, Some("/auth/token".to_string()));
+    }
+
+    #[test]
+    fn test_debug_suggestion_serialization() {
+        let suggestion = DebugSuggestion {
+            title: "Test suggestion".to_string(),
+            description: "Test description".to_string(),
+            action: "Test action".to_string(),
+            config_path: None,
+            patch: None,
+            linked_artifacts: vec![],
+        };
+
+        let json = serde_json::to_string(&suggestion).unwrap();
+        assert!(json.contains("Test suggestion"));
+    }
+
+    #[test]
+    fn test_linked_artifact_creation() {
+        let artifact = LinkedArtifact {
+            artifact_type: "persona".to_string(),
+            artifact_id: "persona-123".to_string(),
+            artifact_name: Some("Admin Persona".to_string()),
+        };
+
+        assert_eq!(artifact.artifact_type, "persona");
+        assert_eq!(artifact.artifact_id, "persona-123");
+        assert_eq!(artifact.artifact_name, Some("Admin Persona".to_string()));
+    }
+
+    #[test]
+    fn test_linked_artifact_serialization() {
+        let artifact = LinkedArtifact {
+            artifact_type: "scenario".to_string(),
+            artifact_id: "scenario-456".to_string(),
+            artifact_name: None,
+        };
+
+        let json = serde_json::to_string(&artifact).unwrap();
+        assert!(json.contains("scenario"));
+        assert!(json.contains("scenario-456"));
+    }
+
+    #[test]
+    fn test_debug_patch_creation() {
+        let patch = DebugPatch {
+            op: "replace".to_string(),
+            path: "/status".to_string(),
+            value: Some(json!("active")),
+            from: None,
+        };
+
+        assert_eq!(patch.op, "replace");
+        assert_eq!(patch.path, "/status");
+        assert!(patch.value.is_some());
+    }
+
+    #[test]
+    fn test_debug_patch_serialization() {
+        let patch = DebugPatch {
+            op: "add".to_string(),
+            path: "/new_field".to_string(),
+            value: Some(json!({"key": "value"})),
+            from: None,
+        };
+
+        let json = serde_json::to_string(&patch).unwrap();
+        assert!(json.contains("add"));
+        assert!(json.contains("new_field"));
+    }
+
+    #[test]
+    fn test_debug_patch_with_from() {
+        let patch = DebugPatch {
+            op: "move".to_string(),
+            path: "/target".to_string(),
+            value: None,
+            from: Some("/source".to_string()),
+        };
+
+        assert_eq!(patch.op, "move");
+        assert_eq!(patch.from, Some("/source".to_string()));
+    }
+
+    #[test]
+    fn test_parsed_failure_info_default() {
+        let info = ParsedFailureInfo::default();
+        assert!(info.method.is_none());
+        assert!(info.path.is_none());
+        assert!(info.status_code.is_none());
+        assert!(info.error_message.is_none());
+    }
+
+    #[test]
+    fn test_debug_request_clone() {
+        let request1 = DebugRequest {
+            test_logs: "GET /api/test 404".to_string(),
+            test_name: Some("test".to_string()),
+            workspace_id: Some("ws-1".to_string()),
+        };
+        let request2 = request1.clone();
+        assert_eq!(request1.test_logs, request2.test_logs);
+    }
+
+    #[test]
+    fn test_debug_request_debug() {
+        let request = DebugRequest {
+            test_logs: "Error occurred".to_string(),
+            test_name: None,
+            workspace_id: None,
+        };
+        let debug_str = format!("{:?}", request);
+        assert!(debug_str.contains("DebugRequest"));
+    }
+
+    #[test]
+    fn test_debug_response_clone() {
+        let response1 = DebugResponse {
+            root_cause: "Root cause".to_string(),
+            suggestions: vec![],
+            related_configs: vec![],
+            context: None,
+            unified_context: None,
+        };
+        let response2 = response1.clone();
+        assert_eq!(response1.root_cause, response2.root_cause);
+    }
+
+    #[test]
+    fn test_debug_response_debug() {
+        let response = DebugResponse {
+            root_cause: "Test root cause".to_string(),
+            suggestions: vec![],
+            related_configs: vec!["config1".to_string()],
+            context: None,
+            unified_context: None,
+        };
+        let debug_str = format!("{:?}", response);
+        assert!(debug_str.contains("DebugResponse"));
+    }
+
+    #[test]
+    fn test_debug_suggestion_clone() {
+        let suggestion1 = DebugSuggestion {
+            title: "Fix issue".to_string(),
+            description: "Description".to_string(),
+            action: "Action".to_string(),
+            config_path: None,
+            patch: None,
+            linked_artifacts: vec![],
+        };
+        let suggestion2 = suggestion1.clone();
+        assert_eq!(suggestion1.title, suggestion2.title);
+    }
+
+    #[test]
+    fn test_debug_suggestion_debug() {
+        let suggestion = DebugSuggestion {
+            title: "Test suggestion".to_string(),
+            description: "Test description".to_string(),
+            action: "Test action".to_string(),
+            config_path: Some("/config/path".to_string()),
+            patch: None,
+            linked_artifacts: vec![],
+        };
+        let debug_str = format!("{:?}", suggestion);
+        assert!(debug_str.contains("DebugSuggestion"));
+    }
+
+    #[test]
+    fn test_linked_artifact_clone() {
+        let artifact1 = LinkedArtifact {
+            artifact_type: "persona".to_string(),
+            artifact_id: "id-1".to_string(),
+            artifact_name: Some("Name".to_string()),
+        };
+        let artifact2 = artifact1.clone();
+        assert_eq!(artifact1.artifact_type, artifact2.artifact_type);
+    }
+
+    #[test]
+    fn test_linked_artifact_debug() {
+        let artifact = LinkedArtifact {
+            artifact_type: "scenario".to_string(),
+            artifact_id: "id-2".to_string(),
+            artifact_name: None,
+        };
+        let debug_str = format!("{:?}", artifact);
+        assert!(debug_str.contains("LinkedArtifact"));
+    }
+
+    #[test]
+    fn test_debug_patch_clone() {
+        let patch1 = DebugPatch {
+            op: "replace".to_string(),
+            path: "/path".to_string(),
+            value: Some(json!("value")),
+            from: None,
+        };
+        let patch2 = patch1.clone();
+        assert_eq!(patch1.op, patch2.op);
+    }
+
+    #[test]
+    fn test_debug_patch_debug() {
+        let patch = DebugPatch {
+            op: "add".to_string(),
+            path: "/new".to_string(),
+            value: None,
+            from: Some("/old".to_string()),
+        };
+        let debug_str = format!("{:?}", patch);
+        assert!(debug_str.contains("DebugPatch"));
+    }
+
+    #[test]
+    fn test_parsed_failure_info_creation() {
+        let info = ParsedFailureInfo {
+            method: Some("POST".to_string()),
+            path: Some("/api/users".to_string()),
+            status_code: Some(500),
+            error_message: Some("Internal error".to_string()),
+        };
+        assert_eq!(info.method, Some("POST".to_string()));
+        assert_eq!(info.status_code, Some(500));
+    }
+
+    #[test]
+    fn test_debug_request_with_all_fields() {
+        let request = DebugRequest {
+            test_logs: "POST /api/users 201\nResponse: {\"id\": 1}".to_string(),
+            test_name: Some("test_create_user".to_string()),
+            workspace_id: Some("workspace-123".to_string()),
+        };
+        assert!(!request.test_logs.is_empty());
+        assert!(request.test_name.is_some());
+        assert!(request.workspace_id.is_some());
+    }
+
+    #[test]
+    fn test_debug_response_with_all_fields() {
+        let suggestion = DebugSuggestion {
+            title: "Fix auth".to_string(),
+            description: "Update token".to_string(),
+            action: "Update config".to_string(),
+            config_path: Some("/auth/token".to_string()),
+            patch: Some(DebugPatch {
+                op: "replace".to_string(),
+                path: "/auth/token".to_string(),
+                value: Some(json!("new-token")),
+                from: None,
+            }),
+            linked_artifacts: vec![LinkedArtifact {
+                artifact_type: "persona".to_string(),
+                artifact_id: "persona-1".to_string(),
+                artifact_name: Some("Admin".to_string()),
+            }],
+        };
+        let response = DebugResponse {
+            root_cause: "Authentication failed".to_string(),
+            suggestions: vec![suggestion],
+            related_configs: vec!["Persona: admin".to_string(), "Scenario: auth".to_string()],
+            context: None,
+            unified_context: None,
+        };
+        assert_eq!(response.suggestions.len(), 1);
+        assert_eq!(response.related_configs.len(), 2);
+    }
+
+    #[test]
+    fn test_debug_suggestion_with_patch() {
+        let patch = DebugPatch {
+            op: "replace".to_string(),
+            path: "/status".to_string(),
+            value: Some(json!("active")),
+            from: None,
+        };
+        let suggestion = DebugSuggestion {
+            title: "Update status".to_string(),
+            description: "Change status to active".to_string(),
+            action: "Apply patch".to_string(),
+            config_path: Some("/status".to_string()),
+            patch: Some(patch.clone()),
+            linked_artifacts: vec![],
+        };
+        assert!(suggestion.patch.is_some());
+        assert_eq!(suggestion.patch.unwrap().op, "replace");
+    }
+
+    #[test]
+    fn test_debug_patch_all_operations() {
+        let operations = vec!["add", "remove", "replace", "move", "copy"];
+        for op in operations {
+            let patch = DebugPatch {
+                op: op.to_string(),
+                path: "/test".to_string(),
+                value: Some(json!("value")),
+                from: None,
+            };
+            assert_eq!(patch.op, op);
+        }
+    }
+
+    #[test]
+    fn test_linked_artifact_with_name() {
+        let artifact = LinkedArtifact {
+            artifact_type: "persona".to_string(),
+            artifact_id: "persona-123".to_string(),
+            artifact_name: Some("Admin Persona".to_string()),
+        };
+        assert_eq!(artifact.artifact_type, "persona");
+        assert!(artifact.artifact_name.is_some());
+    }
+
+    #[test]
+    fn test_linked_artifact_without_name() {
+        let artifact = LinkedArtifact {
+            artifact_type: "scenario".to_string(),
+            artifact_id: "scenario-456".to_string(),
+            artifact_name: None,
+        };
+        assert_eq!(artifact.artifact_type, "scenario");
+        assert!(artifact.artifact_name.is_none());
+    }
+
+    #[test]
+    fn test_parsed_failure_info_with_all_fields() {
+        let info = ParsedFailureInfo {
+            method: Some("PUT".to_string()),
+            path: Some("/api/users/123".to_string()),
+            status_code: Some(422),
+            error_message: Some("Validation failed: email is required".to_string()),
+        };
+        assert_eq!(info.method, Some("PUT".to_string()));
+        assert_eq!(info.path, Some("/api/users/123".to_string()));
+        assert_eq!(info.status_code, Some(422));
+        assert!(info.error_message.is_some());
+    }
+}

@@ -13,7 +13,7 @@ categories = ["development-tools", "network-programming"]
 
 [dependencies]
 # MockForge core
-mockforge = { version = "0.3.6", path = "../mockforge-cli" }
+mockforge-core = "0.3.7"
 
 # Standard workspace dependencies
 tokio = { workspace = true, features = ["net", "io-util", "time", "sync"] }

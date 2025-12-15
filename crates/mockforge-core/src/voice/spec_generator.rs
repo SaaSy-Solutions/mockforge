@@ -232,7 +232,7 @@ impl VoiceSpecGenerator {
 
         // Add response
         if let Some(ref response) = endpoint.response {
-            let status_code = response.status.to_string();
+            let _status_code = response.status.to_string();
             let is_array = response.is_array;
             let schema = if let Some(ref schema_value) = response.schema {
                 self.json_value_to_schema(schema_value)
@@ -524,5 +524,144 @@ impl VoiceSpecGenerator {
 impl Default for VoiceSpecGenerator {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::voice::command_parser::{EndpointRequirement, FieldRequirement, ModelRequirement, ParsedCommand, RequestBodyRequirement, ResponseRequirement};
+
+    #[test]
+    fn test_voice_spec_generator_new() {
+        let generator = VoiceSpecGenerator::new();
+        // Just verify it can be created
+        let _ = generator;
+    }
+
+    #[test]
+    fn test_voice_spec_generator_default() {
+        let generator = VoiceSpecGenerator::default();
+        // Just verify it can be created
+        let _ = generator;
+    }
+
+    #[tokio::test]
+    async fn test_generate_spec_basic() {
+        let generator = VoiceSpecGenerator::new();
+        let parsed = ParsedCommand {
+            api_type: "test".to_string(),
+            title: "Test API".to_string(),
+            description: "A test API".to_string(),
+            endpoints: vec![],
+            models: vec![],
+            relationships: vec![],
+            sample_counts: std::collections::HashMap::new(),
+            flows: vec![],
+        };
+        
+        let spec = generator.generate_spec(&parsed).await.unwrap();
+        assert_eq!(spec.title(), "Test API");
+    }
+
+    #[tokio::test]
+    async fn test_generate_spec_with_model() {
+        let generator = VoiceSpecGenerator::new();
+        let model = ModelRequirement {
+            name: "Product".to_string(),
+            fields: vec![
+                FieldRequirement {
+                    name: "id".to_string(),
+                    r#type: "integer".to_string(),
+                    description: "Product ID".to_string(),
+                    required: true,
+                },
+                FieldRequirement {
+                    name: "name".to_string(),
+                    r#type: "string".to_string(),
+                    description: "Product name".to_string(),
+                    required: true,
+                },
+            ],
+        };
+        
+        let parsed = ParsedCommand {
+            api_type: "e-commerce".to_string(),
+            title: "Shop API".to_string(),
+            description: "E-commerce API".to_string(),
+            endpoints: vec![],
+            models: vec![model],
+            relationships: vec![],
+            sample_counts: std::collections::HashMap::new(),
+            flows: vec![],
+        };
+        
+        let spec = generator.generate_spec(&parsed).await.unwrap();
+        assert_eq!(spec.title(), "Shop API");
+    }
+
+    #[tokio::test]
+    async fn test_generate_spec_with_endpoint() {
+        let generator = VoiceSpecGenerator::new();
+        let endpoint = EndpointRequirement {
+            path: "/api/products".to_string(),
+            method: "GET".to_string(),
+            description: "Get products".to_string(),
+            request_body: None,
+            response: Some(ResponseRequirement {
+                status: 200,
+                schema: None,
+                is_array: true,
+                count: None,
+            }),
+        };
+        
+        let parsed = ParsedCommand {
+            api_type: "e-commerce".to_string(),
+            title: "Shop API".to_string(),
+            description: "E-commerce API".to_string(),
+            endpoints: vec![endpoint],
+            models: vec![],
+            relationships: vec![],
+            sample_counts: std::collections::HashMap::new(),
+            flows: vec![],
+        };
+        
+        let spec = generator.generate_spec(&parsed).await.unwrap();
+        assert_eq!(spec.title(), "Shop API");
+    }
+
+    #[tokio::test]
+    async fn test_merge_spec() {
+        let generator = VoiceSpecGenerator::new();
+        
+        // Create existing spec
+        let existing_json = serde_json::json!({
+            "openapi": "3.0.3",
+            "info": {
+                "title": "Existing API",
+                "version": "1.0.0"
+            },
+            "paths": {},
+            "components": {
+                "schemas": {}
+            }
+        });
+        let existing = OpenApiSpec::from_json(existing_json).unwrap();
+        
+        // Create parsed command with new endpoint
+        let parsed = ParsedCommand {
+            api_type: "test".to_string(),
+            title: "New API".to_string(),
+            description: "New API description".to_string(),
+            endpoints: vec![],
+            models: vec![],
+            relationships: vec![],
+            sample_counts: std::collections::HashMap::new(),
+            flows: vec![],
+        };
+        
+        let merged = generator.merge_spec(&existing, &parsed).await.unwrap();
+        assert_eq!(merged.title(), "Existing API"); // Title should remain from existing
     }
 }

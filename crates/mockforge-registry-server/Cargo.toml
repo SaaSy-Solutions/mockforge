@@ -71,11 +71,11 @@ x509-parser = "0.17"
 rustls-pemfile = "2.0"
 
 # Internal dependencies
-mockforge-analytics = "0.3.6"
-mockforge-collab = "^0.3.0"
-mockforge-core = "0.3.6"
-mockforge-plugin-registry = "0.2.9"
-mockforge-observability = "0.2.9"
+mockforge-analytics = { version = "0.3.6", path = "../mockforge-analytics" }
+mockforge-collab = { version = "0.3.6", path = "../mockforge-collab" }
+mockforge-core = "0.3.7"
+mockforge-plugin-registry = { version = "0.3.6", path = "../mockforge-plugin-registry" }
+mockforge-observability = { version = "0.3.6", path = "../mockforge-observability" }
 
 # Metrics
 prometheus = { version = "0.14", features = ["process"] }

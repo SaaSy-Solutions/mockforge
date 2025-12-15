@@ -2,12 +2,16 @@
 //!
 //! This module handles loading OpenAPI specifications from files,
 //! parsing them, and providing basic operations on the specs.
+//! It also supports Swagger 2.0 specifications by converting them
+//! to OpenAPI 3.0 format automatically.
 
+use crate::openapi::swagger_convert;
 use crate::{Error, Result};
 use openapiv3::{OpenAPI, ReferenceOr, Schema};
 use std::collections::HashSet;
 use std::path::Path;
 use tokio::fs;
+use tracing;
 
 /// OpenAPI specification loader and parser
 #[derive(Debug, Clone)]
@@ -22,29 +26,64 @@ pub struct OpenApiSpec {
 
 impl OpenApiSpec {
     /// Load OpenAPI spec from a file path
+    ///
+    /// Supports both OpenAPI 3.x and Swagger 2.0 specifications.
+    /// Swagger 2.0 specs are automatically converted to OpenAPI 3.0 format.
     pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_ref = path.as_ref();
         let content = fs::read_to_string(path_ref)
             .await
             .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec file: {}", e)))?;
 
-        let (raw_document, spec) = if path_ref.extension().and_then(|s| s.to_str()) == Some("yaml")
+        let raw_json = if path_ref.extension().and_then(|s| s.to_str()) == Some("yaml")
             || path_ref.extension().and_then(|s| s.to_str()) == Some("yml")
         {
             let yaml_value: serde_yaml::Value = serde_yaml::from_str(&content)
                 .map_err(|e| Error::generic(format!("Failed to parse YAML OpenAPI spec: {}", e)))?;
-            let raw = serde_json::to_value(&yaml_value).map_err(|e| {
+            serde_json::to_value(&yaml_value).map_err(|e| {
                 Error::generic(format!("Failed to convert YAML OpenAPI spec to JSON: {}", e))
-            })?;
-            let spec = serde_json::from_value(raw.clone())
-                .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec: {}", e)))?;
-            (raw, spec)
+            })?
         } else {
-            let raw: serde_json::Value = serde_json::from_str(&content)
-                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
-            let spec = serde_json::from_value(raw.clone())
-                .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec: {}", e)))?;
-            (raw, spec)
+            serde_json::from_str(&content)
+                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?
+        };
+
+        // Check if this is a Swagger 2.0 spec and convert if necessary
+        let (raw_document, spec) = if swagger_convert::is_swagger_2(&raw_json) {
+            tracing::info!("Detected Swagger 2.0 specification, converting to OpenAPI 3.0");
+            let converted = swagger_convert::convert_swagger_to_openapi3(&raw_json)
+                .map_err(|e| Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e)))?;
+            let spec: OpenAPI = serde_json::from_value(converted.clone())
+                .map_err(|e| Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e)))?;
+            (converted, spec)
+        } else {
+            let spec: OpenAPI = serde_json::from_value(raw_json.clone())
+                .map_err(|e| {
+                    // Enhanced error reporting for debugging missing field errors
+                    let error_str = format!("{}", e);
+                    let mut error_msg = format!("Failed to read OpenAPI spec: {}", e);
+
+                    // If it's a missing field error, add diagnostic information
+                    if error_str.contains("missing field") {
+                        tracing::error!("OpenAPI deserialization error: {}", error_str);
+
+                        // Add context about the spec structure
+                        if let Some(info) = raw_json.get("info") {
+                            if let Some(info_obj) = info.as_object() {
+                                let has_desc = info_obj.contains_key("description");
+                                error_msg.push_str(&format!(" | Info.description present: {}", has_desc));
+                            }
+                        }
+                        if let Some(servers) = raw_json.get("servers") {
+                            if let Some(servers_arr) = servers.as_array() {
+                                error_msg.push_str(&format!(" | Servers count: {}", servers_arr.len()));
+                            }
+                        }
+                    }
+
+                    Error::generic(error_msg)
+                })?;
+            (raw_json, spec)
         };
 
         Ok(Self {
@@ -55,22 +94,32 @@ impl OpenApiSpec {
     }
 
     /// Load OpenAPI spec from string content
+    ///
+    /// Supports both OpenAPI 3.x and Swagger 2.0 specifications.
+    /// Swagger 2.0 specs are automatically converted to OpenAPI 3.0 format.
     pub fn from_string(content: &str, format: Option<&str>) -> Result<Self> {
-        let (raw_document, spec) = if format == Some("yaml") || format == Some("yml") {
+        let raw_json = if format == Some("yaml") || format == Some("yml") {
             let yaml_value: serde_yaml::Value = serde_yaml::from_str(content)
                 .map_err(|e| Error::generic(format!("Failed to parse YAML OpenAPI spec: {}", e)))?;
-            let raw = serde_json::to_value(&yaml_value).map_err(|e| {
+            serde_json::to_value(&yaml_value).map_err(|e| {
                 Error::generic(format!("Failed to convert YAML OpenAPI spec to JSON: {}", e))
-            })?;
-            let spec = serde_json::from_value(raw.clone())
-                .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec: {}", e)))?;
-            (raw, spec)
+            })?
         } else {
-            let raw: serde_json::Value = serde_json::from_str(content)
-                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
-            let spec = serde_json::from_value(raw.clone())
+            serde_json::from_str(content)
+                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?
+        };
+
+        // Check if this is a Swagger 2.0 spec and convert if necessary
+        let (raw_document, spec) = if swagger_convert::is_swagger_2(&raw_json) {
+            let converted = swagger_convert::convert_swagger_to_openapi3(&raw_json)
+                .map_err(|e| Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e)))?;
+            let spec: OpenAPI = serde_json::from_value(converted.clone())
+                .map_err(|e| Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e)))?;
+            (converted, spec)
+        } else {
+            let spec: OpenAPI = serde_json::from_value(raw_json.clone())
                 .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec: {}", e)))?;
-            (raw, spec)
+            (raw_json, spec)
         };
 
         Ok(Self {
@@ -81,18 +130,28 @@ impl OpenApiSpec {
     }
 
     /// Load OpenAPI spec from JSON value
+    ///
+    /// Supports both OpenAPI 3.x and Swagger 2.0 specifications.
+    /// Swagger 2.0 specs are automatically converted to OpenAPI 3.0 format.
     pub fn from_json(json: serde_json::Value) -> Result<Self> {
-        // Deserialize the spec - this consumes the JSON value
-        // We need to clone before deserialization to keep raw_document, but we optimize
-        // by only cloning if deserialization succeeds (early return on error avoids clone)
-        let json_for_doc = json.clone();
-        let spec: OpenAPI = serde_json::from_value(json)
-            .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
+        // Check if this is a Swagger 2.0 spec and convert if necessary
+        let (raw_document, spec) = if swagger_convert::is_swagger_2(&json) {
+            let converted = swagger_convert::convert_swagger_to_openapi3(&json)
+                .map_err(|e| Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e)))?;
+            let spec: OpenAPI = serde_json::from_value(converted.clone())
+                .map_err(|e| Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e)))?;
+            (converted, spec)
+        } else {
+            let json_for_doc = json.clone();
+            let spec: OpenAPI = serde_json::from_value(json)
+                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
+            (json_for_doc, spec)
+        };
 
         Ok(Self {
             spec,
             file_path: None,
-            raw_document: Some(json_for_doc),
+            raw_document: Some(raw_document),
         })
     }
 

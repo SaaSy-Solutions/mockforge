@@ -1718,6 +1718,19 @@ impl ResponseGenerator {
 mod tests {
     use super::*;
     use openapiv3::ReferenceOr;
+    use serde_json::json;
+    
+    // Mock AI generator for testing
+    struct MockAiGenerator {
+        response: Value,
+    }
+    
+    #[async_trait]
+    impl AiGenerator for MockAiGenerator {
+        async fn generate(&self, _prompt: &str, _config: &AiResponseConfig) -> Result<Value> {
+            Ok(self.response.clone())
+        }
+    }
 
     #[test]
     fn generates_example_using_referenced_schemas() {
@@ -1773,6 +1786,950 @@ components:
         let hive = obj.get("hive").and_then(|value| value.as_object()).expect("hive object");
         assert!(hive.contains_key("name"));
         assert!(hive.contains_key("active"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_ai_response_with_generator() {
+        let ai_config = AiResponseConfig {
+            enabled: true,
+            mode: crate::ai_response::AiResponseMode::Intelligent,
+            prompt: Some("Generate a response for {{method}} {{path}}".to_string()),
+            context: None,
+            temperature: 0.7,
+            max_tokens: 1000,
+            schema: None,
+            cache_enabled: true,
+        };
+        let context = RequestContext {
+            method: "GET".to_string(),
+            path: "/api/users".to_string(),
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+            multipart_fields: HashMap::new(),
+            multipart_files: HashMap::new(),
+        };
+        let mock_generator = MockAiGenerator {
+            response: json!({"message": "Generated response"}),
+        };
+        
+        let result = ResponseGenerator::generate_ai_response(
+            &ai_config,
+            &context,
+            Some(&mock_generator),
+        )
+        .await;
+        
+        assert!(result.is_ok());
+        let value = result.unwrap();
+        assert_eq!(value["message"], "Generated response");
+    }
+
+    #[tokio::test]
+    async fn test_generate_ai_response_without_generator() {
+        let ai_config = AiResponseConfig {
+            enabled: true,
+            mode: crate::ai_response::AiResponseMode::Intelligent,
+            prompt: Some("Generate a response for {{method}} {{path}}".to_string()),
+            context: None,
+            temperature: 0.7,
+            max_tokens: 1000,
+            schema: None,
+            cache_enabled: true,
+        };
+        let context = RequestContext {
+            method: "POST".to_string(),
+            path: "/api/users".to_string(),
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+            multipart_fields: HashMap::new(),
+            multipart_files: HashMap::new(),
+        };
+        
+        let result = ResponseGenerator::generate_ai_response(
+            &ai_config,
+            &context,
+            None,
+        )
+        .await;
+        
+        assert!(result.is_ok());
+        let value = result.unwrap();
+        assert_eq!(value["ai_response"], "AI generation placeholder");
+        assert!(value["expanded_prompt"].as_str().unwrap().contains("POST"));
+        assert!(value["expanded_prompt"].as_str().unwrap().contains("/api/users"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_ai_response_no_prompt() {
+        let ai_config = AiResponseConfig {
+            enabled: true,
+            mode: crate::ai_response::AiResponseMode::Intelligent,
+            prompt: None,
+            context: None,
+            temperature: 0.7,
+            max_tokens: 1000,
+            schema: None,
+            cache_enabled: true,
+        };
+        let context = RequestContext {
+            method: "GET".to_string(),
+            path: "/api/test".to_string(),
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+            multipart_fields: HashMap::new(),
+            multipart_files: HashMap::new(),
+        };
+        
+        let result = ResponseGenerator::generate_ai_response(
+            &ai_config,
+            &context,
+            None,
+        )
+        .await;
+        
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_response_with_expansion() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response_with_expansion(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+            true,
+        )
+        .unwrap();
+
+        assert!(response.is_object());
+    }
+
+    #[test]
+    fn test_generate_response_with_scenario() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              examples:
+                happy:
+                  value:
+                    id: 1
+                    name: "Happy User"
+                sad:
+                  value:
+                    id: 2
+                    name: "Sad User"
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response_with_scenario(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+            false,
+            Some("happy"),
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 1);
+        assert_eq!(response["name"], "Happy User");
+    }
+
+    #[test]
+    fn test_generate_response_with_referenced_response() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          $ref: '#/components/responses/UserResponse'
+components:
+  responses:
+    UserResponse:
+      description: User response
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        assert!(response.is_object());
+    }
+
+    #[test]
+    fn test_generate_response_with_default_status() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: OK
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        // Use default response for 500 status
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            500,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        assert!(response.is_object());
+    }
+
+    #[test]
+    fn test_generate_response_with_example_in_media_type() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example:
+                id: 1
+                name: "Example User"
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        assert_eq!(response["id"], 1);
+        assert_eq!(response["name"], "Example User");
+    }
+
+    #[test]
+    fn test_generate_response_with_schema_example() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  id: 42
+                  name: "Schema Example"
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        // Should use schema example if available
+        assert!(response.is_object());
+    }
+
+    #[test]
+    fn test_generate_response_with_referenced_schema() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        assert!(response.is_object());
+        assert!(response.get("id").is_some());
+        assert!(response.get("name").is_some());
+    }
+
+    #[test]
+    fn test_generate_response_with_array_schema() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        assert!(response.is_array());
+    }
+
+    #[test]
+    fn test_generate_response_with_different_content_types() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+            text/plain:
+              schema:
+                type: string
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        // Test JSON content type
+        let json_response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+        assert!(json_response.is_object());
+
+        // Test text/plain content type
+        let text_response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("text/plain"),
+        )
+        .unwrap();
+        assert!(text_response.is_string());
+    }
+
+    #[test]
+    fn test_generate_response_without_content_type() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        // No content type specified - should use first available
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            None,
+        )
+        .unwrap();
+
+        assert!(response.is_object());
+    }
+
+    #[test]
+    fn test_generate_response_with_no_content() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    delete:
+      responses:
+        '204':
+          description: No Content
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.delete.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            204,
+            None,
+        )
+        .unwrap();
+
+        // Should return empty object for no content
+        assert!(response.is_object());
+        assert!(response.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_generate_response_with_expansion_disabled() {
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response_with_expansion(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+            false, // No expansion
+        )
+        .unwrap();
+
+        assert!(response.is_object());
+    }
+
+    #[test]
+    fn test_generate_response_with_array_schema_referenced_items() {
+        // Test array schema with referenced item schema (lines 1035-1046)
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Item'
+components:
+  schemas:
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/items")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        // Should generate an array with items from referenced schema
+        let arr = response.as_array().expect("response should be array");
+        assert!(!arr.is_empty());
+        if let Some(item) = arr.first() {
+            let obj = item.as_object().expect("item should be object");
+            assert!(obj.contains_key("id") || obj.contains_key("name"));
+        }
+    }
+
+    #[test]
+    fn test_generate_response_with_array_schema_missing_reference() {
+        // Test array schema with missing referenced item schema (line 1045)
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NonExistentItem'
+components:
+  schemas: {}
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/items")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        // Should generate an array with empty objects when reference not found
+        let arr = response.as_array().expect("response should be array");
+        assert!(!arr.is_empty());
+    }
+
+    #[test]
+    fn test_generate_response_with_array_example_and_pagination() {
+        // Test array generation with pagination using example items (lines 1114-1126)
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /products:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                example: [{"id": 1, "name": "Product 1"}]
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/products")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        // Should generate an array using the example as template
+        let arr = response.as_array().expect("response should be array");
+        assert!(!arr.is_empty());
+        if let Some(item) = arr.first() {
+            let obj = item.as_object().expect("item should be object");
+            assert!(obj.contains_key("id") || obj.contains_key("name"));
+        }
+    }
+
+    #[test]
+    fn test_generate_response_with_missing_response_reference() {
+        // Test response generation with missing response reference (lines 294-298)
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '200':
+          $ref: '#/components/responses/NonExistentResponse'
+components:
+  responses: {}
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        // Should return empty object when reference not found
+        assert!(response.is_object());
+        assert!(response.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_generate_response_with_no_response_for_status() {
+        // Test response generation when no response found for status code (lines 302-310)
+        let spec = OpenApiSpec::from_string(
+            r#"openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      responses:
+        '404':
+          description: Not found
+"#,
+            Some("yaml"),
+        )
+        .unwrap();
+
+        let operation = spec
+            .spec
+            .paths
+            .paths
+            .get("/users")
+            .and_then(|p| p.as_item())
+            .and_then(|p| p.get.as_ref())
+            .unwrap();
+
+        // Request status code 200 but only 404 is defined
+        let response = ResponseGenerator::generate_response(
+            &spec,
+            operation,
+            200,
+            Some("application/json"),
+        )
+        .unwrap();
+
+        // Should return empty object when no response found
+        assert!(response.is_object());
+        assert!(response.as_object().unwrap().is_empty());
     }
 }
 

@@ -1,54 +1,27 @@
 [workspace]
 members = [
     # Core crates
-    "crates/mockforge-core",
     "crates/mockforge-data",
     "crates/mockforge-template-expansion",
 
     # Plugin system
     "crates/mockforge-plugin-core",
     "crates/mockforge-plugin-cli",
-    "crates/mockforge-plugin-loader",
     "crates/mockforge-plugin-registry",
-    "crates/mockforge-plugin-sdk",
 
     # Observability & tracing
-    "crates/mockforge-observability",
     "crates/mockforge-tracing",
     "crates/mockforge-analytics",
-    "crates/mockforge-recorder",
-    "crates/mockforge-reporting",
 
     # Protocol implementations
-    "crates/mockforge-http",
-    "crates/mockforge-grpc",
-    "crates/mockforge-graphql",
-    "crates/mockforge-ws",
-    "crates/mockforge-mqtt",
-    "crates/mockforge-smtp",
-    "crates/mockforge-amqp",
-    "crates/mockforge-kafka",
-    "crates/mockforge-ftp",
-    "crates/mockforge-tcp",
 
     # Testing & utilities
-    "crates/mockforge-test",
-    "crates/mockforge-bench",
-    "crates/mockforge-chaos",
-    "crates/mockforge-route-chaos",
-    "crates/mockforge-scenarios",
-    "crates/mockforge-schema",
 
     # Infrastructure
     "crates/mockforge-tunnel",
-    "crates/mockforge-vbr",
-    "crates/mockforge-pipelines",
-    "crates/mockforge-performance",
-    "crates/mockforge-world-state",
 
     # Main user-facing crates
-    "crates/mockforge-sdk",
-    "crates/mockforge-ui",
+    "crates/mockforge-bench",
     "crates/mockforge-cli",
 
     # Examples and tests
@@ -69,7 +42,7 @@ resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.3.6"
+version = "0.3.7"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"

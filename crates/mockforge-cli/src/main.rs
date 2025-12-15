@@ -27,6 +27,7 @@ mod contract_sync_commands;
 mod deploy_commands;
 mod dev_setup_commands;
 mod error_helpers;
+mod fixture_validation;
 mod flow_commands;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
@@ -122,6 +123,30 @@ enum Commands {
         /// TCP server port (defaults to config or 9999)
         #[arg(long, help_heading = "Server Ports")]
         tcp_port: Option<u16>,
+
+        /// Enable TLS/HTTPS
+        #[arg(long, help_heading = "TLS/HTTPS")]
+        tls_enabled: bool,
+
+        /// Path to TLS certificate file (PEM format)
+        #[arg(long, help_heading = "TLS/HTTPS")]
+        tls_cert: Option<PathBuf>,
+
+        /// Path to TLS private key file (PEM format)
+        #[arg(long, help_heading = "TLS/HTTPS")]
+        tls_key: Option<PathBuf>,
+
+        /// Path to CA certificate file for mTLS (optional)
+        #[arg(long, help_heading = "TLS/HTTPS")]
+        tls_ca: Option<PathBuf>,
+
+        /// Minimum TLS version (1.2 or 1.3, default: 1.2)
+        #[arg(long, default_value = "1.2", help_heading = "TLS/HTTPS")]
+        tls_min_version: String,
+
+        /// Mutual TLS mode: off (default), optional, required
+        #[arg(long, default_value = "off", help_heading = "TLS/HTTPS")]
+        mtls: String,
 
         /// Enable admin UI
         #[arg(long, help_heading = "Admin & UI")]
@@ -323,9 +348,21 @@ enum Commands {
         #[arg(long, default_value = "5000", help_heading = "Resilience Patterns")]
         bulkhead_queue_timeout_ms: u64,
 
-        /// OpenAPI spec file for HTTP server
-        #[arg(short, long, help_heading = "Server Configuration")]
-        spec: Option<PathBuf>,
+        /// OpenAPI spec file(s) for HTTP server (can be repeated multiple times)
+        #[arg(short, long, help_heading = "Server Configuration", action = clap::ArgAction::Append)]
+        spec: Vec<PathBuf>,
+
+        /// Directory containing OpenAPI spec files (discovers .json, .yaml, .yml files)
+        #[arg(long, help_heading = "Server Configuration")]
+        spec_dir: Option<PathBuf>,
+
+        /// Conflict resolution strategy when merging multiple specs: error (default), first, last
+        #[arg(long, default_value = "error", help_heading = "Server Configuration")]
+        merge_conflicts: String,
+
+        /// API versioning mode: none (default), info, path-prefix
+        #[arg(long, default_value = "none", help_heading = "Server Configuration")]
+        api_versioning: String,
 
         /// WebSocket replay file
         #[arg(long, help_heading = "Server Configuration")]
@@ -655,6 +692,30 @@ enum Commands {
     /// Examples:
     ///   mockforge wizard
     Wizard,
+
+    /// Validate HTTP fixtures
+    ///
+    /// Validates fixture files in a directory or a single file.
+    /// Supports both flat and nested fixture formats.
+    ///
+    /// Examples:
+    ///   mockforge validate-fixtures --dir ./fixtures
+    ///   mockforge validate-fixtures --file ./fixtures/auth-login.json
+    ///   mockforge validate-fixtures --dir ./fixtures --verbose
+    #[command(verbatim_doc_comment)]
+    ValidateFixtures {
+        /// Directory containing fixture files to validate
+        #[arg(short, long, conflicts_with = "file")]
+        dir: Option<PathBuf>,
+
+        /// Single fixture file to validate
+        #[arg(short, long, conflicts_with = "dir")]
+        file: Option<PathBuf>,
+
+        /// Show detailed output for all fixtures
+        #[arg(short, long)]
+        verbose: bool,
+    },
 
     /// Generate mock servers from OpenAPI specifications
     ///
@@ -1416,15 +1477,21 @@ enum Commands {
     ///   mockforge bench --spec api.yaml --target https://staging.api.com --duration 5m --vus 100
     ///   mockforge bench --spec api.yaml --target https://api.com --scenario spike --output results/
     ///   mockforge bench --spec api.yaml --target https://api.com --operations "GET /users,POST /users"
+    ///   mockforge bench --spec api.yaml --targets-file /path/to/targets.txt --max-concurrency 20
     #[command(verbatim_doc_comment)]
     Bench {
         /// API specification file (OpenAPI/Swagger)
         #[arg(short, long)]
         spec: PathBuf,
 
-        /// Target service URL
+        /// Target service URL (mutually exclusive with --targets-file)
         #[arg(short, long)]
-        target: String,
+        target: Option<String>,
+
+        /// File containing multiple targets (one per line or JSON array)
+        /// Mutually exclusive with --target. Supports absolute paths.
+        #[arg(long)]
+        targets_file: Option<PathBuf>,
 
         /// Test duration (e.g., 30s, 5m, 1h)
         #[arg(short, long, default_value = "1m")]
@@ -1462,8 +1529,8 @@ enum Commands {
         #[arg(long)]
         script_output: Option<PathBuf>,
 
-        /// Response time threshold percentile (p50, p75, p90, p95, p99)
-        #[arg(long, default_value = "p95")]
+        /// Response time threshold percentile (p(50), p(75), p(90), p(95), p(99))
+        #[arg(long, default_value = "p(95)")]
         threshold_percentile: String,
 
         /// Response time threshold in milliseconds
@@ -1477,6 +1544,20 @@ enum Commands {
         /// Enable verbose output
         #[arg(short = 'V', long)]
         verbose: bool,
+
+        /// Skip TLS certificate validation (insecure, for test environments only)
+        #[arg(long)]
+        insecure: bool,
+
+        /// Maximum number of parallel test executions (for multi-target mode)
+        /// Only used when --targets-file is specified
+        #[arg(long, default_value = "10")]
+        max_concurrency: u32,
+
+        /// Results format: "per-target", "aggregated", or "both" (default: "both")
+        /// Only used when --targets-file is specified
+        #[arg(long, default_value = "both")]
+        results_format: String,
     },
 }
 
@@ -2241,6 +2322,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             bulkhead_max_queue: _,
             bulkhead_queue_timeout_ms: _,
             spec,
+            spec_dir,
+            merge_conflicts,
+            api_versioning,
+            tls_enabled,
+            tls_cert,
+            tls_key,
+            tls_ca,
+            tls_min_version,
+            mtls,
             ws_replay_file,
             graphql,
             graphql_port,
@@ -2274,6 +2364,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 }
                 println!();
                 return Ok(());
+            }
+
+            // Validate TLS flags
+            if tls_enabled {
+                if tls_cert.is_none() || tls_key.is_none() {
+                    eprintln!("Error: --tls-enabled requires --tls-cert and --tls-key");
+                    std::process::exit(1);
+                }
+                if (mtls == "optional" || mtls == "required") && tls_ca.is_none() {
+                    eprintln!("Error: --mtls {} requires --tls-ca", mtls);
+                    std::process::exit(1);
+                }
+            }
+            if (mtls == "optional" || mtls == "required") && !tls_enabled {
+                eprintln!("Error: --mtls {} requires --tls-enabled", mtls);
+                std::process::exit(1);
+            }
+
+            // Validate spec flags (mutually exclusive)
+            if !spec.is_empty() && spec_dir.is_some() {
+                eprintln!("Error: --spec and --spec-dir cannot be used together");
+                std::process::exit(1);
+            }
+
+            // Validate merge_conflicts and api_versioning values
+            if !matches!(merge_conflicts.as_str(), "error" | "first" | "last") {
+                eprintln!("Error: --merge-conflicts must be one of: error, first, last");
+                std::process::exit(1);
+            }
+            if !matches!(api_versioning.as_str(), "none" | "info" | "path-prefix") {
+                eprintln!("Error: --api-versioning must be one of: none, info, path-prefix");
+                std::process::exit(1);
             }
 
             handle_serve(
@@ -2310,6 +2432,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 chaos_bandwidth_limit,
                 chaos_packet_loss,
                 spec,
+                spec_dir,
+                merge_conflicts,
+                api_versioning,
+                tls_enabled,
+                tls_cert,
+                tls_key,
+                tls_ca,
+                tls_min_version,
+                mtls,
                 ws_replay_file,
                 graphql,
                 graphql_port,
@@ -2393,6 +2524,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Wizard => {
             let config = wizard::run_wizard().await?;
             wizard::generate_project(&config).await?;
+        }
+        Commands::ValidateFixtures { dir, file, verbose } => {
+            use fixture_validation::{print_results, validate_directory, validate_file};
+
+            if let Some(dir_path) = dir {
+                let results = validate_directory(&dir_path).await?;
+                print_results(&results, verbose);
+
+                // Exit with error code if any fixtures are invalid
+                let invalid_count = results.iter().filter(|r| !r.valid).count();
+                if invalid_count > 0 {
+                    std::process::exit(1);
+                }
+            } else if let Some(file_path) = file {
+                let result = validate_file(&file_path).await?;
+                let is_valid = result.valid;
+                print_results(&[result], verbose);
+
+                if !is_valid {
+                    std::process::exit(1);
+                }
+            } else {
+                eprintln!("Error: Either --dir or --file must be specified");
+                std::process::exit(1);
+            }
         }
         Commands::Generate {
             config,
@@ -2701,6 +2857,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Bench {
             spec,
             target,
+            targets_file,
             duration,
             vus,
             scenario,
@@ -2714,10 +2871,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             threshold_ms,
             max_error_rate,
             verbose,
+            insecure,
+            max_concurrency,
+            results_format,
         } => {
+            // Validate that either --target or --targets-file is provided, but not both
+            match (&target, &targets_file) {
+                (None, None) => {
+                    eprintln!("Error: Either --target or --targets-file must be specified");
+                    std::process::exit(1);
+                }
+                (Some(_), Some(_)) => {
+                    eprintln!("Error: --target and --targets-file are mutually exclusive");
+                    std::process::exit(1);
+                }
+                _ => {}
+            }
+
+            // Validate results_format
+            if !matches!(results_format.as_str(), "per-target" | "aggregated" | "both") {
+                eprintln!(
+                    "Error: --results-format must be one of: per-target, aggregated, both"
+                );
+                std::process::exit(1);
+            }
+
+            // Use empty string for target if targets_file is provided (not used in multi-target mode)
+            let target_str = target.unwrap_or_default();
+
             let bench_cmd = mockforge_bench::BenchCommand {
                 spec,
-                target,
+                target: target_str,
                 duration,
                 vus,
                 scenario,
@@ -2731,6 +2915,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 threshold_ms,
                 max_error_rate,
                 verbose,
+                skip_tls_verify: insecure,
+                targets_file,
+                max_concurrency: Some(max_concurrency),
+                results_format,
             };
 
             if let Err(e) = bench_cmd.execute().await {
@@ -2777,7 +2965,16 @@ struct ServeArgs {
     chaos_rate_limit: Option<u32>,
     chaos_bandwidth_limit: Option<u64>,
     chaos_packet_loss: Option<f64>,
-    spec: Option<PathBuf>,
+    spec: Vec<PathBuf>,
+    spec_dir: Option<PathBuf>,
+    merge_conflicts: String,
+    api_versioning: String,
+    tls_enabled: bool,
+    tls_cert: Option<PathBuf>,
+    tls_key: Option<PathBuf>,
+    tls_ca: Option<PathBuf>,
+    tls_min_version: String,
+    mtls: String,
     ws_replay_file: Option<PathBuf>,
     graphql: Option<PathBuf>,
     graphql_port: Option<u16>,
@@ -2925,7 +3122,9 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
     if let Some(http_port) = serve_args.http_port {
         config.http.port = http_port;
     }
-    if let Some(spec_path) = &serve_args.spec {
+    // Handle spec files - use first spec for backward compatibility with config
+    // Full multi-spec handling will be done in HTTP server integration
+    if let Some(spec_path) = serve_args.spec.first() {
         config.http.openapi_spec = Some(spec_path.to_string_lossy().to_string());
     }
 
@@ -3165,7 +3364,7 @@ fn ensure_ports_available(ports: &[(u16, &str)]) -> Result<(), String> {
 /// Validate server configuration before starting
 async fn validate_serve_config(
     config_path: &Option<PathBuf>,
-    spec_path: &Option<PathBuf>,
+    spec_paths: &[PathBuf],
     ports: &[(u16, &str)],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::fs;
@@ -3194,8 +3393,8 @@ async fn validate_serve_config(
         }
     }
 
-    // Validate spec file if provided
-    if let Some(spec) = spec_path {
+    // Validate spec files if provided
+    for spec in spec_paths {
         if !spec.exists() {
             return Err(format!(
                 "OpenAPI spec file not found: {}\n\n\
@@ -3316,7 +3515,16 @@ pub async fn handle_serve(
     chaos_rate_limit: Option<u32>,
     chaos_bandwidth_limit: Option<u64>,
     chaos_packet_loss: Option<f64>,
-    spec: Option<PathBuf>,
+    spec: Vec<PathBuf>,
+    spec_dir: Option<PathBuf>,
+    merge_conflicts: String,
+    api_versioning: String,
+    tls_enabled: bool,
+    tls_cert: Option<PathBuf>,
+    tls_key: Option<PathBuf>,
+    tls_ca: Option<PathBuf>,
+    tls_min_version: String,
+    mtls: String,
     ws_replay_file: Option<PathBuf>,
     graphql: Option<PathBuf>,
     graphql_port: Option<u16>,
@@ -3401,6 +3609,15 @@ pub async fn handle_serve(
         chaos_bandwidth_limit,
         chaos_packet_loss,
         spec,
+        spec_dir,
+        merge_conflicts,
+        api_versioning,
+        tls_enabled,
+        tls_cert,
+        tls_key,
+        tls_ca,
+        tls_min_version,
+        mtls,
         ws_replay_file,
         graphql,
         graphql_port,
@@ -3458,8 +3675,11 @@ pub async fn handle_serve(
         if serve_args.config_path.is_some() {
             println!("✅ Configuration file is valid");
         }
-        if serve_args.spec.is_some() {
-            println!("✅ OpenAPI spec file is valid");
+        if !serve_args.spec.is_empty() {
+            println!("✅ OpenAPI spec file(s) are valid");
+        }
+        if serve_args.spec_dir.is_some() {
+            println!("✅ OpenAPI spec directory is valid");
         }
         println!("\n🎉 Dry run successful - no issues found!");
         return Ok(());
@@ -4082,9 +4302,115 @@ pub async fn handle_serve(
         validation_status: config.http.validation_status,
     };
 
+    // Process multiple specs if provided
+    let final_spec_path = if !serve_args.spec.is_empty() || serve_args.spec_dir.is_some() {
+        use mockforge_core::openapi::multi_spec::{
+            group_specs_by_api_version, group_specs_by_openapi_version, load_specs_from_directory,
+            load_specs_from_files, merge_specs, ConflictStrategy,
+        };
+
+        // Load specs
+        let specs = if !serve_args.spec.is_empty() {
+            load_specs_from_files(serve_args.spec.clone()).await
+                .map_err(|e| format!("Failed to load spec files: {}", e))?
+        } else if let Some(ref spec_dir) = serve_args.spec_dir {
+            load_specs_from_directory(spec_dir).await
+                .map_err(|e| format!("Failed to load specs from directory: {}", e))?
+        } else {
+            Vec::new()
+        };
+
+        if specs.is_empty() {
+            config.http.openapi_spec.clone()
+        } else {
+            // Determine conflict strategy
+            let conflict_strategy = ConflictStrategy::from(serve_args.merge_conflicts.as_str());
+
+            // Group by OpenAPI doc version first
+            let openapi_groups = group_specs_by_openapi_version(specs);
+
+            // Process each OpenAPI version group
+            let mut merged_specs = Vec::new();
+            for (_openapi_version, version_specs) in openapi_groups {
+                // Apply API versioning grouping if enabled
+                let api_versioning = serve_args.api_versioning.as_str();
+                match api_versioning {
+                    "info" | "path-prefix" => {
+                        // Group by API version
+                        let api_groups = group_specs_by_api_version(version_specs);
+                        for (_api_version, api_specs) in api_groups {
+                            // Merge specs in this API version group
+                            match merge_specs(api_specs, conflict_strategy) {
+                                Ok(merged) => merged_specs.push(merged),
+                                Err(e) => {
+                                    return Err(format!("Failed to merge specs: {}", e).into());
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        // Merge all specs in this OpenAPI version group
+                        match merge_specs(version_specs, conflict_strategy) {
+                            Ok(merged) => merged_specs.push(merged),
+                            Err(e) => {
+                                return Err(format!("Failed to merge specs: {}", e).into());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If we have multiple merged specs (different API versions), we need to handle them
+            // For now, merge them all into one (or we could create separate routers with path prefixes)
+            if merged_specs.len() == 1 {
+                // Single merged spec - write to temp file
+                let merged = &merged_specs[0];
+                let merged_json = serde_json::to_string_pretty(
+                    merged.raw_document.as_ref().unwrap()
+                ).map_err(|e| format!("Failed to serialize merged spec: {}", e))?;
+
+                // Use persistent temp file (won't be deleted automatically)
+                let temp_dir = std::env::temp_dir();
+                let temp_path = temp_dir.join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
+                std::fs::write(&temp_path, merged_json.as_bytes())
+                    .map_err(|e| format!("Failed to write merged spec: {}", e))?;
+
+                Some(temp_path.to_string_lossy().to_string())
+            } else if merged_specs.is_empty() {
+                config.http.openapi_spec.clone()
+            } else {
+                // Multiple merged specs - for now, merge them all
+                // TODO: Support path prefixes for different API versions
+                let all_specs: Vec<_> = merged_specs.into_iter()
+                    .map(|s| (PathBuf::from("merged"), s))
+                    .collect();
+                match merge_specs(all_specs, conflict_strategy) {
+                    Ok(final_merged) => {
+                        let merged_json = serde_json::to_string_pretty(
+                            final_merged.raw_document.as_ref().unwrap()
+                        ).map_err(|e| format!("Failed to serialize final merged spec: {}", e))?;
+
+                        // Use persistent temp file (won't be deleted automatically)
+                        let temp_dir = std::env::temp_dir();
+                        let temp_path = temp_dir.join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
+                        std::fs::write(&temp_path, merged_json.as_bytes())
+                            .map_err(|e| format!("Failed to write merged spec: {}", e))?;
+
+                        Some(temp_path.to_string_lossy().to_string())
+                    }
+                    Err(e) => {
+                        return Err(format!("Failed to merge multiple API version specs: {}", e).into());
+                    }
+                }
+            }
+        }
+    } else {
+        config.http.openapi_spec.clone()
+    };
+
     // Use standard router (traffic shaping temporarily disabled)
     let mut http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
-        config.http.openapi_spec.clone(),
+        final_spec_path,
         Some(validation_options),
         None, // circling_config
         multi_tenant_config,
@@ -4165,8 +4491,10 @@ pub async fn handle_serve(
 
     // Create and merge chaos API router
     // Pass MockAI instance if available for dynamic error message generation
+    // Note: Temporarily passing None to avoid type mismatch between different versions of MockAI
+    // TODO: Fix type compatibility between mockforge-cli and mockforge-chaos MockAI types
     let (chaos_router, chaos_config_arc, latency_tracker, chaos_api_state) =
-        create_chaos_api_router(chaos_config.clone(), mockai.clone());
+        create_chaos_api_router(chaos_config.clone(), None);
     http_app = http_app.merge(chaos_router);
     println!("✅ Chaos Engineering API available at /api/chaos/*");
 
@@ -4275,10 +4603,65 @@ pub async fn handle_serve(
 
     // Start HTTP server
     let http_port = config.http.port;
-    let http_tls_config = config.http.tls.clone();
+
+    // Build TLS config: CLI flags take precedence over config file
+    let mut http_tls_config = config.http.tls.clone();
+
+    // Override with CLI flags if provided
+    if serve_args.tls_enabled {
+        http_tls_config = Some(mockforge_core::config::HttpTlsConfig {
+            enabled: true,
+            cert_file: serve_args
+                .tls_cert
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| {
+                    http_tls_config
+                        .as_ref()
+                        .map(|t| t.cert_file.clone())
+                        .unwrap_or_default()
+                }),
+            key_file: serve_args
+                .tls_key
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| {
+                    http_tls_config
+                        .as_ref()
+                        .map(|t| t.key_file.clone())
+                        .unwrap_or_default()
+                }),
+            ca_file: serve_args
+                .tls_ca
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .or_else(|| {
+                    http_tls_config
+                        .as_ref()
+                        .and_then(|t| t.ca_file.clone())
+                }),
+            min_version: serve_args.tls_min_version.clone(),
+            cipher_suites: http_tls_config
+                .as_ref()
+                .map(|t| t.cipher_suites.clone())
+                .unwrap_or_default(),
+            require_client_cert: serve_args.mtls == "required",
+            mtls_mode: serve_args.mtls.clone(),
+        });
+    } else if let Some(ref mut tls) = http_tls_config {
+        // Update mtls_mode from CLI if provided, even if TLS wasn't enabled via CLI
+        if serve_args.mtls != "off" {
+            tls.mtls_mode = serve_args.mtls.clone();
+            if serve_args.mtls == "required" {
+                tls.require_client_cert = true;
+            }
+        }
+    }
+
+    let http_tls_config_final = http_tls_config.clone();
     let http_shutdown = shutdown_token.clone();
     let http_handle = tokio::spawn(async move {
-        if let Some(ref tls) = http_tls_config {
+        if let Some(ref tls) = http_tls_config_final {
             if tls.enabled {
                 println!("🔒 HTTPS server listening on https://localhost:{}", http_port);
             } else {
@@ -4288,7 +4671,7 @@ pub async fn handle_serve(
             println!("📡 HTTP server listening on http://localhost:{}", http_port);
         }
         tokio::select! {
-            result = mockforge_http::serve_router_with_tls(http_port, http_app, http_tls_config) => {
+            result = mockforge_http::serve_router_with_tls(http_port, http_app, http_tls_config_final) => {
                 result.map_err(|e| format!("HTTP server error: {}", e))
             }
             _ = http_shutdown.cancelled() => {

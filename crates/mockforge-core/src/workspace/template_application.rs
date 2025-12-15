@@ -77,7 +77,7 @@ pub fn apply_template_to_workspace(
     }
 
     // Apply security baseline configurations
-    if let Some(validation_mode) =
+    if let Some(_validation_mode) =
         security_baseline.get("default_validation_mode").and_then(|v| v.as_str())
     {
         // Store in workspace config metadata for later use

@@ -557,7 +557,7 @@ impl AccessReviewEngine {
         &mut self,
         review_id: &str,
         user_id: Uuid,
-        revoked_by: Uuid,
+        _revoked_by: Uuid,
         reason: String,
     ) -> Result<(), crate::Error> {
         let review = self

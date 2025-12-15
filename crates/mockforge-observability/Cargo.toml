@@ -37,7 +37,7 @@ sysinfo = { version = "0.37", optional = true }
 tracing-opentelemetry = { version = "0.22", optional = true }
 
 # MockForge tracing integration (optional)
-mockforge-tracing = { version = "0.3.6", optional = true }
+mockforge-tracing = { version = "0.3.7", optional = true }
 
 [features]
 default = ["sysinfo"]

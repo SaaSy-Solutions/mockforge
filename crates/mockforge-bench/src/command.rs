@@ -3,10 +3,12 @@
 use crate::error::{BenchError, Result};
 use crate::executor::K6Executor;
 use crate::k6_gen::{K6Config, K6ScriptGenerator};
+use crate::parallel_executor::{AggregatedResults, ParallelExecutor};
 use crate::reporter::TerminalReporter;
 use crate::request_gen::RequestGenerator;
 use crate::scenarios::LoadScenario;
 use crate::spec_parser::SpecParser;
+use crate::target_parser::parse_targets_file;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -28,11 +30,24 @@ pub struct BenchCommand {
     pub threshold_ms: u64,
     pub max_error_rate: f64,
     pub verbose: bool,
+    pub skip_tls_verify: bool,
+    /// Optional file containing multiple targets
+    pub targets_file: Option<PathBuf>,
+    /// Maximum number of parallel executions (for multi-target mode)
+    pub max_concurrency: Option<u32>,
+    /// Results format: "per-target", "aggregated", or "both"
+    pub results_format: String,
 }
 
 impl BenchCommand {
     /// Execute the bench command
     pub async fn execute(&self) -> Result<()> {
+        // Check if we're in multi-target mode
+        if let Some(targets_file) = &self.targets_file {
+            return self.execute_multi_target(targets_file).await;
+        }
+
+        // Single target mode (existing behavior)
         // Print header
         TerminalReporter::print_header(
             self.spec.to_str().unwrap(),
@@ -96,6 +111,7 @@ impl BenchCommand {
             max_error_rate: self.max_error_rate,
             auth_header: self.auth.clone(),
             custom_headers,
+            skip_tls_verify: self.skip_tls_verify,
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates);
@@ -152,8 +168,127 @@ impl BenchCommand {
         Ok(())
     }
 
+    /// Execute multi-target bench testing
+    async fn execute_multi_target(&self, targets_file: &PathBuf) -> Result<()> {
+        TerminalReporter::print_progress("Parsing targets file...");
+        let targets = parse_targets_file(targets_file)?;
+        let num_targets = targets.len();
+        TerminalReporter::print_success(&format!("Loaded {} targets", num_targets));
+
+        if targets.is_empty() {
+            return Err(BenchError::Other("No targets found in file".to_string()));
+        }
+
+        // Determine max concurrency
+        let max_concurrency = self.max_concurrency.unwrap_or(10) as usize;
+        let max_concurrency = max_concurrency.min(num_targets); // Don't exceed number of targets
+
+        // Print header for multi-target mode
+        TerminalReporter::print_header(
+            self.spec.to_str().unwrap(),
+            &format!("{} targets", num_targets),
+            0,
+            &self.scenario,
+            Self::parse_duration(&self.duration)?,
+        );
+
+        // Create parallel executor
+        let executor = ParallelExecutor::new(
+            BenchCommand {
+                // Clone all fields except targets_file (we don't need it in the executor)
+                spec: self.spec.clone(),
+                target: self.target.clone(), // Not used in multi-target mode, but kept for compatibility
+                duration: self.duration.clone(),
+                vus: self.vus,
+                scenario: self.scenario.clone(),
+                operations: self.operations.clone(),
+                auth: self.auth.clone(),
+                headers: self.headers.clone(),
+                output: self.output.clone(),
+                generate_only: self.generate_only,
+                script_output: self.script_output.clone(),
+                threshold_percentile: self.threshold_percentile.clone(),
+                threshold_ms: self.threshold_ms,
+                max_error_rate: self.max_error_rate,
+                verbose: self.verbose,
+                skip_tls_verify: self.skip_tls_verify,
+                targets_file: None,
+                max_concurrency: None,
+                results_format: self.results_format.clone(),
+            },
+            targets,
+            max_concurrency,
+        );
+
+        // Execute all targets
+        let aggregated_results = executor.execute_all().await?;
+
+        // Organize and report results
+        self.report_multi_target_results(&aggregated_results)?;
+
+        Ok(())
+    }
+
+    /// Report results for multi-target execution
+    fn report_multi_target_results(&self, results: &AggregatedResults) -> Result<()> {
+        // Print summary
+        TerminalReporter::print_multi_target_summary(results);
+
+        // Save aggregated summary if requested
+        if self.results_format == "aggregated" || self.results_format == "both" {
+            let summary_path = self.output.join("aggregated_summary.json");
+            let summary_json = serde_json::json!({
+                "total_targets": results.total_targets,
+                "successful_targets": results.successful_targets,
+                "failed_targets": results.failed_targets,
+                "aggregated_metrics": {
+                    "total_requests": results.aggregated_metrics.total_requests,
+                    "total_failed_requests": results.aggregated_metrics.total_failed_requests,
+                    "avg_duration_ms": results.aggregated_metrics.avg_duration_ms,
+                    "p95_duration_ms": results.aggregated_metrics.p95_duration_ms,
+                    "p99_duration_ms": results.aggregated_metrics.p99_duration_ms,
+                    "error_rate": results.aggregated_metrics.error_rate,
+                },
+                "target_results": results.target_results.iter().map(|r| {
+                    serde_json::json!({
+                        "target_url": r.target_url,
+                        "target_index": r.target_index,
+                        "success": r.success,
+                        "error": r.error,
+                        "total_requests": r.results.total_requests,
+                        "failed_requests": r.results.failed_requests,
+                        "avg_duration_ms": r.results.avg_duration_ms,
+                        "p95_duration_ms": r.results.p95_duration_ms,
+                        "p99_duration_ms": r.results.p99_duration_ms,
+                        "output_dir": r.output_dir.to_string_lossy(),
+                    })
+                }).collect::<Vec<_>>(),
+            });
+
+            std::fs::write(&summary_path, serde_json::to_string_pretty(&summary_json)?)?;
+            TerminalReporter::print_success(&format!(
+                "Aggregated summary saved to: {}",
+                summary_path.display()
+            ));
+        }
+
+        println!("\nResults saved to: {}", self.output.display());
+        println!(
+            "  - Per-target results: {}",
+            self.output.join("target_*").display()
+        );
+        if self.results_format == "aggregated" || self.results_format == "both" {
+            println!(
+                "  - Aggregated summary: {}",
+                self.output.join("aggregated_summary.json").display()
+            );
+        }
+
+        Ok(())
+    }
+
     /// Parse duration string (e.g., "30s", "5m", "1h") to seconds
-    fn parse_duration(duration: &str) -> Result<u64> {
+    pub fn parse_duration(duration: &str) -> Result<u64> {
         let duration = duration.trim();
 
         if let Some(secs) = duration.strip_suffix('s') {
@@ -177,7 +312,7 @@ impl BenchCommand {
     }
 
     /// Parse headers from command line format (Key:Value,Key2:Value2)
-    fn parse_headers(&self) -> Result<HashMap<String, String>> {
+    pub fn parse_headers(&self) -> Result<HashMap<String, String>> {
         let mut headers = HashMap::new();
 
         if let Some(header_str) = &self.headers {
@@ -229,10 +364,14 @@ mod tests {
             output: PathBuf::from("output"),
             generate_only: false,
             script_output: None,
-            threshold_percentile: "p95".to_string(),
+            threshold_percentile: "p(95)".to_string(),
             threshold_ms: 500,
             max_error_rate: 0.05,
             verbose: false,
+            skip_tls_verify: false,
+            targets_file: None,
+            max_concurrency: None,
+            results_format: "both".to_string(),
         };
 
         let headers = cmd.parse_headers().unwrap();

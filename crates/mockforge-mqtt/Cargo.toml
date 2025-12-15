@@ -12,7 +12,7 @@ keywords = ["mqtt", "iot", "pubsub", "mock", "testing"]
 categories = ["development-tools::testing", "network-programming"]
 
 [dependencies]
-mockforge-core = "0.3.6"
+mockforge-core = "0.3.7"
 tokio = { workspace = true, features = ["net", "io-util"] }
 rumqttc = "0.25"
 serde = { workspace = true }

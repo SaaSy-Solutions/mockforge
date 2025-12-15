@@ -666,3 +666,206 @@ pub mod utils {
         format!("{} bits", bits)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::encryption::algorithms::EncryptionAlgorithm;
+
+    #[test]
+    fn test_memory_key_storage_new() {
+        let storage = MemoryKeyStorage::new();
+        assert!(storage.keys.is_empty());
+    }
+
+    #[test]
+    fn test_memory_key_storage_default() {
+        let storage = MemoryKeyStorage::default();
+        assert!(storage.keys.is_empty());
+    }
+
+    #[test]
+    fn test_memory_key_storage_store_and_retrieve() {
+        let mut storage = MemoryKeyStorage::new();
+        let key_id = "test-key".to_string();
+        let encrypted_key = b"encrypted_data".to_vec();
+
+        storage.store_key(&key_id, &encrypted_key).unwrap();
+        assert!(storage.key_exists(&key_id));
+        
+        let retrieved = storage.retrieve_key(&key_id).unwrap();
+        assert_eq!(retrieved, encrypted_key);
+    }
+
+    #[test]
+    fn test_memory_key_storage_delete() {
+        let mut storage = MemoryKeyStorage::new();
+        let key_id = "test-key".to_string();
+        storage.store_key(&key_id, b"data".as_slice()).unwrap();
+        
+        storage.delete_key(&key_id).unwrap();
+        assert!(!storage.key_exists(&key_id));
+    }
+
+    #[test]
+    fn test_memory_key_storage_list_keys() {
+        let mut storage = MemoryKeyStorage::new();
+        storage.store_key(&"key1".to_string(), b"data1".as_slice()).unwrap();
+        storage.store_key(&"key2".to_string(), b"data2".as_slice()).unwrap();
+        
+        let keys = storage.list_keys();
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&"key1".to_string()));
+        assert!(keys.contains(&"key2".to_string()));
+    }
+
+    #[test]
+    fn test_memory_key_storage_retrieve_nonexistent() {
+        let storage = MemoryKeyStorage::new();
+        let result = storage.retrieve_key(&"nonexistent".to_string());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_file_key_storage_new() {
+        let storage = FileKeyStorage::new();
+        // Just verify it can be created
+        let _ = storage;
+    }
+
+    #[test]
+    fn test_file_key_storage_with_path() {
+        let storage = FileKeyStorage::with_path("/tmp/test-keys");
+        // Just verify it can be created
+        let _ = storage;
+    }
+
+    #[test]
+    fn test_file_key_storage_default() {
+        let storage = FileKeyStorage::default();
+        // Just verify it can be created
+        let _ = storage;
+    }
+
+    #[test]
+    fn test_key_metadata_creation() {
+        let metadata = KeyMetadata {
+            key_id: "test-key".to_string(),
+            algorithm: EncryptionAlgorithm::Aes256Gcm,
+            created_at: Utc::now(),
+            last_used_at: Some(Utc::now()),
+            expires_at: None,
+            version: 1,
+            purpose: "test".to_string(),
+            is_active: true,
+            usage_count: 0,
+        };
+
+        assert_eq!(metadata.key_id, "test-key");
+        assert_eq!(metadata.version, 1);
+        assert!(metadata.is_active);
+    }
+
+    #[test]
+    fn test_key_metadata_serialization() {
+        let metadata = KeyMetadata {
+            key_id: "test-key".to_string(),
+            algorithm: EncryptionAlgorithm::Aes256Gcm,
+            created_at: Utc::now(),
+            last_used_at: None,
+            expires_at: None,
+            version: 1,
+            purpose: "test".to_string(),
+            is_active: true,
+            usage_count: 5,
+        };
+
+        let json = serde_json::to_string(&metadata).unwrap();
+        assert!(json.contains("test-key"));
+        assert!(json.contains("test"));
+    }
+
+    #[test]
+    fn test_key_store_new() {
+        let store = KeyStore::new();
+        // Just verify it can be created
+        let _ = store;
+    }
+
+    #[test]
+    fn test_key_store_with_storage() {
+        let storage = Box::new(MemoryKeyStorage::new());
+        let store = KeyStore::with_storage(storage);
+        // Just verify it can be created
+        let _ = store;
+    }
+
+    #[test]
+    fn test_key_store_default() {
+        let store = KeyStore::default();
+        // Just verify it can be created
+        let _ = store;
+    }
+
+    #[test]
+    fn test_key_store_list_keys_empty() {
+        let store = KeyStore::new();
+        let keys = store.list_keys();
+        assert!(keys.is_empty());
+    }
+
+    #[test]
+    fn test_key_store_get_key_metadata_nonexistent() {
+        let store = KeyStore::new();
+        let metadata = store.get_key_metadata(&"nonexistent".to_string());
+        assert!(metadata.is_none());
+    }
+
+    #[test]
+    fn test_key_store_key_exists_false() {
+        let store = KeyStore::new();
+        assert!(!store.key_exists(&"nonexistent".to_string()));
+    }
+
+    #[test]
+    fn test_key_store_statistics_creation() {
+        let stats = KeyStoreStatistics {
+            total_keys: 10,
+            active_keys: 8,
+            expired_keys: 2,
+            total_usage: 100,
+            oldest_key: Some(Utc::now()),
+            newest_key: Some(Utc::now()),
+        };
+
+        assert_eq!(stats.total_keys, 10);
+        assert_eq!(stats.active_keys, 8);
+        assert_eq!(stats.expired_keys, 2);
+        assert_eq!(stats.total_usage, 100);
+    }
+
+    #[test]
+    fn test_key_store_statistics_with_none_timestamps() {
+        let stats = KeyStoreStatistics {
+            total_keys: 5,
+            active_keys: 4,
+            expired_keys: 1,
+            total_usage: 50,
+            oldest_key: None,
+            newest_key: None,
+        };
+
+        assert_eq!(stats.total_keys, 5);
+        assert!(stats.oldest_key.is_none());
+        assert!(stats.newest_key.is_none());
+    }
+
+    #[test]
+    fn test_key_store_get_statistics() {
+        let store = KeyStore::new();
+        let stats = store.get_statistics();
+        assert_eq!(stats.total_keys, 0);
+        assert_eq!(stats.active_keys, 0);
+        assert_eq!(stats.expired_keys, 0);
+    }
+}

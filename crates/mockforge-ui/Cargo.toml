@@ -8,15 +8,15 @@ description = "Admin UI for MockForge - web-based interface for managing mock se
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = true  # UI component used by mockforge-cli
+publish = false  # UI component used by mockforge-cli
 include = [
-    "src/**/*",
-    "ui/dist/**/*",
-    "ui/public/*.png",
-    "build.rs",
-    "build_ui.sh",
-    "Cargo.toml",
-    "README.md"
+    "/src/**/*",
+    "/ui/dist/**/*",
+    "/ui/public/*.png",
+    "/build.rs",
+    "/build_ui.sh",
+    "/Cargo.toml",
+    "/README.md"
 ]
 
 [dependencies]
@@ -39,17 +39,17 @@ reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
 once_cell = "1.19"
-mockforge-core = "0.3.6"
-mockforge-http = { version = "0.3.6", features = ["smtp", "mqtt"] }
-mockforge-ws = "0.3.6"
-mockforge-grpc = "0.3.6"
-mockforge-vbr = "0.3.6"
-mockforge-plugin-core = "0.3.6"
-mockforge-plugin-loader = "0.3.6"
-mockforge-analytics = "0.3.6"
-mockforge-chaos = "0.3.6"
-mockforge-collab = "0.3.6"
-mockforge-recorder = "0.3.6"
+mockforge-core = { version = "0.3.7", path = "../mockforge-core" }
+mockforge-http = { version = "0.3.6", path = "../mockforge-http", features = ["smtp", "mqtt"] }
+mockforge-ws = { version = "0.3.6", path = "../mockforge-ws" }
+mockforge-grpc = { version = "0.3.6", path = "../mockforge-grpc" }
+mockforge-vbr = { version = "0.3.6", path = "../mockforge-vbr" }
+mockforge-plugin-core = { version = "0.3.6", path = "../mockforge-plugin-core" }
+mockforge-plugin-loader = { version = "0.3.6", path = "../mockforge-plugin-loader" }
+mockforge-analytics = { version = "0.3.6", path = "../mockforge-analytics" }
+mockforge-chaos = { version = "0.3.6", path = "../mockforge-chaos" }
+mockforge-collab = { version = "0.3.6", path = "../mockforge-collab" }
+mockforge-recorder = { version = "0.3.6", path = "../mockforge-recorder" }
 base64 = { workspace = true }
 jsonwebtoken = "9.3"
 bcrypt = "0.15"

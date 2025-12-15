@@ -959,3 +959,839 @@ pub struct ParsedServiceBudget {
     #[serde(default)]
     pub max_non_breaking_changes: u32,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::intelligent_behavior::config::IntelligentBehaviorConfig;
+    use serde_json::json;
+
+    #[test]
+    fn test_voice_command_parser_new() {
+        let config = IntelligentBehaviorConfig::default();
+        let parser = VoiceCommandParser::new(config);
+        // Just verify it doesn't panic and creates the parser
+        // The llm_client is private, so we can't directly test it
+    }
+
+    #[test]
+    fn test_parsed_command_creation() {
+        let command = ParsedCommand {
+            api_type: "e-commerce".to_string(),
+            title: "Shop API".to_string(),
+            description: "An e-commerce API".to_string(),
+            endpoints: vec![],
+            models: vec![],
+            relationships: vec![],
+            sample_counts: HashMap::new(),
+            flows: vec![],
+        };
+        
+        assert_eq!(command.api_type, "e-commerce");
+        assert_eq!(command.title, "Shop API");
+        assert_eq!(command.description, "An e-commerce API");
+    }
+
+    #[test]
+    fn test_endpoint_requirement_creation() {
+        let endpoint = EndpointRequirement {
+            path: "/api/products".to_string(),
+            method: "GET".to_string(),
+            description: "Get all products".to_string(),
+            request_body: None,
+            response: None,
+        };
+        
+        assert_eq!(endpoint.path, "/api/products");
+        assert_eq!(endpoint.method, "GET");
+        assert_eq!(endpoint.description, "Get all products");
+    }
+
+    #[test]
+    fn test_endpoint_requirement_with_body() {
+        let request_body = RequestBodyRequirement {
+            schema: Some(json!({"type": "object"})),
+            required: vec!["name".to_string(), "price".to_string()],
+        };
+        
+        let response = ResponseRequirement {
+            status: 201,
+            schema: Some(json!({"type": "object"})),
+            is_array: false,
+            count: None,
+        };
+        
+        let endpoint = EndpointRequirement {
+            path: "/api/products".to_string(),
+            method: "POST".to_string(),
+            description: "Create a product".to_string(),
+            request_body: Some(request_body),
+            response: Some(response),
+        };
+        
+        assert!(endpoint.request_body.is_some());
+        assert!(endpoint.response.is_some());
+        assert_eq!(endpoint.response.unwrap().status, 201);
+    }
+
+    #[test]
+    fn test_request_body_requirement_creation() {
+        let body = RequestBodyRequirement {
+            schema: Some(json!({"type": "object", "properties": {"name": {"type": "string"}}})),
+            required: vec!["name".to_string()],
+        };
+        
+        assert!(body.schema.is_some());
+        assert_eq!(body.required.len(), 1);
+    }
+
+    #[test]
+    fn test_response_requirement_creation() {
+        let response = ResponseRequirement {
+            status: 200,
+            schema: Some(json!({"type": "array", "items": {"type": "object"}})),
+            is_array: true,
+            count: Some(10),
+        };
+        
+        assert_eq!(response.status, 200);
+        assert!(response.is_array);
+        assert_eq!(response.count, Some(10));
+    }
+
+    #[test]
+    fn test_response_requirement_default_status() {
+        let response = ResponseRequirement {
+            status: default_status(),
+            schema: None,
+            is_array: false,
+            count: None,
+        };
+        
+        assert_eq!(response.status, 200);
+    }
+
+    #[test]
+    fn test_model_requirement_creation() {
+        let field = FieldRequirement {
+            name: "id".to_string(),
+            r#type: "integer".to_string(),
+            description: "Product ID".to_string(),
+            required: true,
+        };
+        
+        let model = ModelRequirement {
+            name: "Product".to_string(),
+            fields: vec![field],
+        };
+        
+        assert_eq!(model.name, "Product");
+        assert_eq!(model.fields.len(), 1);
+        assert_eq!(model.fields[0].name, "id");
+    }
+
+    #[test]
+    fn test_field_requirement_creation() {
+        let field = FieldRequirement {
+            name: "name".to_string(),
+            r#type: "string".to_string(),
+            description: "Product name".to_string(),
+            required: true,
+        };
+        
+        assert_eq!(field.name, "name");
+        assert_eq!(field.r#type, "string");
+        assert!(field.required);
+    }
+
+    #[test]
+    fn test_field_requirement_default_required() {
+        let field = FieldRequirement {
+            name: "optional_field".to_string(),
+            r#type: "string".to_string(),
+            description: "".to_string(),
+            required: default_true(),
+        };
+        
+        assert!(field.required);
+    }
+
+    #[test]
+    fn test_relationship_requirement_creation() {
+        let relationship = RelationshipRequirement {
+            from: "Product".to_string(),
+            to: "Category".to_string(),
+            r#type: "many-to-one".to_string(),
+        };
+        
+        assert_eq!(relationship.from, "Product");
+        assert_eq!(relationship.to, "Category");
+        assert_eq!(relationship.r#type, "many-to-one");
+    }
+
+    #[test]
+    fn test_flow_requirement_creation() {
+        let flow = FlowRequirement {
+            name: "checkout".to_string(),
+            description: "Checkout flow".to_string(),
+            steps: vec!["Add to cart".to_string(), "Payment".to_string()],
+        };
+        
+        assert_eq!(flow.name, "checkout");
+        assert_eq!(flow.steps.len(), 2);
+    }
+
+    #[test]
+    fn test_parsed_workspace_scenario_creation() {
+        let scenario = ParsedWorkspaceScenario {
+            domain: "e-commerce".to_string(),
+            title: "Shop Workspace".to_string(),
+            description: "E-commerce workspace".to_string(),
+            chaos_characteristics: vec![],
+            initial_data: InitialDataRequirements::default(),
+            api_requirements: ApiRequirements::default(),
+            behavioral_rules: vec![],
+        };
+        
+        assert_eq!(scenario.domain, "e-commerce");
+        assert_eq!(scenario.title, "Shop Workspace");
+    }
+
+    #[test]
+    fn test_chaos_characteristic_creation() {
+        let chaos = ChaosCharacteristic {
+            r#type: "latency".to_string(),
+            description: "High latency on checkout".to_string(),
+            config: json!({"delay_ms": 1000}),
+        };
+        
+        assert_eq!(chaos.r#type, "latency");
+        assert_eq!(chaos.description, "High latency on checkout");
+    }
+
+    #[test]
+    fn test_initial_data_requirements_creation() {
+        let mut custom = HashMap::new();
+        custom.insert("products".to_string(), 50);
+        
+        let data = InitialDataRequirements {
+            users: Some(100),
+            disputes: Some(5),
+            orders: Some(200),
+            custom,
+        };
+        
+        assert_eq!(data.users, Some(100));
+        assert_eq!(data.disputes, Some(5));
+        assert_eq!(data.orders, Some(200));
+        assert_eq!(data.custom.get("products"), Some(&50));
+    }
+
+    #[test]
+    fn test_initial_data_requirements_default() {
+        let data = InitialDataRequirements::default();
+        assert!(data.users.is_none());
+        assert!(data.disputes.is_none());
+        assert!(data.orders.is_none());
+        assert!(data.custom.is_empty());
+    }
+
+    #[test]
+    fn test_api_requirements_creation() {
+        let endpoint = EndpointRequirement {
+            path: "/api/products".to_string(),
+            method: "GET".to_string(),
+            description: "Get products".to_string(),
+            request_body: None,
+            response: None,
+        };
+        
+        let model = ModelRequirement {
+            name: "Product".to_string(),
+            fields: vec![],
+        };
+        
+        let api_req = ApiRequirements {
+            endpoints: vec![endpoint],
+            models: vec![model],
+        };
+        
+        assert_eq!(api_req.endpoints.len(), 1);
+        assert_eq!(api_req.models.len(), 1);
+    }
+
+    #[test]
+    fn test_api_requirements_default() {
+        let api_req = ApiRequirements::default();
+        assert!(api_req.endpoints.is_empty());
+        assert!(api_req.models.is_empty());
+    }
+
+    #[test]
+    fn test_behavioral_rule_creation() {
+        let rule = BehavioralRule {
+            description: "Slow response on checkout".to_string(),
+            r#type: "latency".to_string(),
+            config: json!({"delay_ms": 2000}),
+        };
+        
+        assert_eq!(rule.description, "Slow response on checkout");
+        assert_eq!(rule.r#type, "latency");
+    }
+
+    #[test]
+    fn test_parsed_workspace_creation_creation() {
+        let creation = ParsedWorkspaceCreation {
+            workspace_name: "New Workspace".to_string(),
+            workspace_description: "A new workspace".to_string(),
+            entities: vec![],
+            personas: vec![],
+            scenarios: vec![],
+            reality_continuum: None,
+            drift_budget: None,
+        };
+        
+        assert_eq!(creation.workspace_name, "New Workspace");
+        assert_eq!(creation.workspace_description, "A new workspace");
+        assert!(creation.entities.is_empty());
+    }
+
+    #[test]
+    fn test_entity_requirement_creation() {
+        let entity = EntityRequirement {
+            name: "Product".to_string(),
+            description: "Product entity".to_string(),
+            endpoints: vec![],
+            fields: vec![],
+        };
+        
+        assert_eq!(entity.name, "Product");
+        assert_eq!(entity.description, "Product entity");
+        assert!(entity.fields.is_empty());
+    }
+
+    #[test]
+    fn test_entity_endpoint_requirement_creation() {
+        let endpoint = EntityEndpointRequirement {
+            path: "/api/products".to_string(),
+            method: "GET".to_string(),
+            description: "Get products".to_string(),
+        };
+        
+        assert_eq!(endpoint.path, "/api/products");
+        assert_eq!(endpoint.method, "GET");
+    }
+
+    #[test]
+    fn test_persona_requirement_creation() {
+        let persona = PersonaRequirement {
+            name: "Customer".to_string(),
+            description: "Regular customer".to_string(),
+            traits: HashMap::new(),
+            relationships: vec![],
+        };
+        
+        assert_eq!(persona.name, "Customer");
+        assert_eq!(persona.description, "Regular customer");
+        assert!(persona.traits.is_empty());
+    }
+
+    #[test]
+    fn test_persona_relationship_creation() {
+        let relationship = PersonaRelationship {
+            r#type: "one-to-many".to_string(),
+            target_entity: "Order".to_string(),
+        };
+        
+        assert_eq!(relationship.r#type, "one-to-many");
+        assert_eq!(relationship.target_entity, "Order");
+    }
+
+    #[test]
+    fn test_parsed_reality_continuum_creation() {
+        let continuum = ParsedRealityContinuum {
+            default_ratio: 0.2,
+            enabled: true,
+            route_rules: vec![],
+            transition_mode: "manual".to_string(),
+            merge_strategy: "field_level".to_string(),
+        };
+        
+        assert_eq!(continuum.default_ratio, 0.2);
+        assert!(continuum.enabled);
+        assert_eq!(continuum.transition_mode, "manual");
+        assert_eq!(continuum.merge_strategy, "field_level");
+    }
+
+    #[test]
+    fn test_parsed_continuum_rule_creation() {
+        let rule = ParsedContinuumRule {
+            pattern: "/api/catalog/*".to_string(),
+            ratio: 0.5,
+            description: "Catalog route".to_string(),
+        };
+        
+        assert_eq!(rule.pattern, "/api/catalog/*");
+        assert_eq!(rule.ratio, 0.5);
+    }
+
+    #[test]
+    fn test_parsed_drift_budget_creation() {
+        let mut per_service_budgets = HashMap::new();
+        per_service_budgets.insert("catalog".to_string(), ParsedServiceBudget {
+            max_breaking_changes: 5,
+            max_non_breaking_changes: 20,
+        });
+        
+        let budget = ParsedDriftBudget {
+            strictness: "moderate".to_string(),
+            enabled: true,
+            max_breaking_changes: 10,
+            max_non_breaking_changes: 50,
+            max_field_churn_percent: Some(5.0),
+            time_window_days: Some(30),
+            per_service_budgets,
+            description: "Drift budget config".to_string(),
+        };
+        
+        assert_eq!(budget.strictness, "moderate");
+        assert!(budget.enabled);
+        assert_eq!(budget.max_breaking_changes, 10);
+        assert_eq!(budget.max_non_breaking_changes, 50);
+        assert_eq!(budget.per_service_budgets.len(), 1);
+    }
+
+    #[test]
+    fn test_parsed_service_budget_creation() {
+        let budget = ParsedServiceBudget {
+            max_breaking_changes: 3,
+            max_non_breaking_changes: 15,
+        };
+        
+        assert_eq!(budget.max_breaking_changes, 3);
+        assert_eq!(budget.max_non_breaking_changes, 15);
+    }
+
+    #[test]
+    fn test_parsed_command_clone() {
+        let command1 = ParsedCommand {
+            api_type: "test".to_string(),
+            title: "Test API".to_string(),
+            description: "Test".to_string(),
+            endpoints: vec![],
+            models: vec![],
+            relationships: vec![],
+            sample_counts: HashMap::new(),
+            flows: vec![],
+        };
+        let command2 = command1.clone();
+        assert_eq!(command1.api_type, command2.api_type);
+    }
+
+    #[test]
+    fn test_parsed_command_debug() {
+        let command = ParsedCommand {
+            api_type: "test".to_string(),
+            title: "Test".to_string(),
+            description: "Test".to_string(),
+            endpoints: vec![],
+            models: vec![],
+            relationships: vec![],
+            sample_counts: HashMap::new(),
+            flows: vec![],
+        };
+        let debug_str = format!("{:?}", command);
+        assert!(debug_str.contains("ParsedCommand"));
+    }
+
+    #[test]
+    fn test_endpoint_requirement_clone() {
+        let endpoint1 = EndpointRequirement {
+            path: "/test".to_string(),
+            method: "GET".to_string(),
+            description: "Test".to_string(),
+            request_body: None,
+            response: None,
+        };
+        let endpoint2 = endpoint1.clone();
+        assert_eq!(endpoint1.path, endpoint2.path);
+    }
+
+    #[test]
+    fn test_endpoint_requirement_debug() {
+        let endpoint = EndpointRequirement {
+            path: "/test".to_string(),
+            method: "POST".to_string(),
+            description: "Test".to_string(),
+            request_body: None,
+            response: None,
+        };
+        let debug_str = format!("{:?}", endpoint);
+        assert!(debug_str.contains("EndpointRequirement"));
+    }
+
+    #[test]
+    fn test_request_body_requirement_clone() {
+        let body1 = RequestBodyRequirement {
+            schema: None,
+            required: vec!["field".to_string()],
+        };
+        let body2 = body1.clone();
+        assert_eq!(body1.required, body2.required);
+    }
+
+    #[test]
+    fn test_request_body_requirement_debug() {
+        let body = RequestBodyRequirement {
+            schema: Some(json!({})),
+            required: vec![],
+        };
+        let debug_str = format!("{:?}", body);
+        assert!(debug_str.contains("RequestBodyRequirement"));
+    }
+
+    #[test]
+    fn test_response_requirement_clone() {
+        let response1 = ResponseRequirement {
+            status: 200,
+            schema: None,
+            is_array: false,
+            count: None,
+        };
+        let response2 = response1.clone();
+        assert_eq!(response1.status, response2.status);
+    }
+
+    #[test]
+    fn test_response_requirement_debug() {
+        let response = ResponseRequirement {
+            status: 201,
+            schema: Some(json!({})),
+            is_array: true,
+            count: Some(10),
+        };
+        let debug_str = format!("{:?}", response);
+        assert!(debug_str.contains("ResponseRequirement"));
+    }
+
+    #[test]
+    fn test_model_requirement_clone() {
+        let model1 = ModelRequirement {
+            name: "User".to_string(),
+            fields: vec![],
+        };
+        let model2 = model1.clone();
+        assert_eq!(model1.name, model2.name);
+    }
+
+    #[test]
+    fn test_model_requirement_debug() {
+        let model = ModelRequirement {
+            name: "Product".to_string(),
+            fields: vec![],
+        };
+        let debug_str = format!("{:?}", model);
+        assert!(debug_str.contains("ModelRequirement"));
+    }
+
+    #[test]
+    fn test_field_requirement_clone() {
+        let field1 = FieldRequirement {
+            name: "id".to_string(),
+            r#type: "integer".to_string(),
+            description: "ID".to_string(),
+            required: true,
+        };
+        let field2 = field1.clone();
+        assert_eq!(field1.name, field2.name);
+    }
+
+    #[test]
+    fn test_field_requirement_debug() {
+        let field = FieldRequirement {
+            name: "name".to_string(),
+            r#type: "string".to_string(),
+            description: "Name".to_string(),
+            required: false,
+        };
+        let debug_str = format!("{:?}", field);
+        assert!(debug_str.contains("FieldRequirement"));
+    }
+
+    #[test]
+    fn test_relationship_requirement_clone() {
+        let rel1 = RelationshipRequirement {
+            from: "User".to_string(),
+            to: "Order".to_string(),
+            r#type: "one-to-many".to_string(),
+        };
+        let rel2 = rel1.clone();
+        assert_eq!(rel1.from, rel2.from);
+    }
+
+    #[test]
+    fn test_relationship_requirement_debug() {
+        let rel = RelationshipRequirement {
+            from: "Product".to_string(),
+            to: "Category".to_string(),
+            r#type: "many-to-one".to_string(),
+        };
+        let debug_str = format!("{:?}", rel);
+        assert!(debug_str.contains("RelationshipRequirement"));
+    }
+
+    #[test]
+    fn test_flow_requirement_clone() {
+        let flow1 = FlowRequirement {
+            name: "checkout".to_string(),
+            description: "Checkout".to_string(),
+            steps: vec![],
+        };
+        let flow2 = flow1.clone();
+        assert_eq!(flow1.name, flow2.name);
+    }
+
+    #[test]
+    fn test_flow_requirement_debug() {
+        let flow = FlowRequirement {
+            name: "auth".to_string(),
+            description: "Auth flow".to_string(),
+            steps: vec!["step1".to_string()],
+        };
+        let debug_str = format!("{:?}", flow);
+        assert!(debug_str.contains("FlowRequirement"));
+    }
+
+    #[test]
+    fn test_parsed_workspace_scenario_clone() {
+        let scenario1 = ParsedWorkspaceScenario {
+            domain: "e-commerce".to_string(),
+            title: "Shop".to_string(),
+            description: "Shop".to_string(),
+            chaos_characteristics: vec![],
+            initial_data: InitialDataRequirements::default(),
+            api_requirements: ApiRequirements::default(),
+            behavioral_rules: vec![],
+        };
+        let scenario2 = scenario1.clone();
+        assert_eq!(scenario1.domain, scenario2.domain);
+    }
+
+    #[test]
+    fn test_parsed_workspace_scenario_debug() {
+        let scenario = ParsedWorkspaceScenario {
+            domain: "social".to_string(),
+            title: "Social".to_string(),
+            description: "Social".to_string(),
+            chaos_characteristics: vec![],
+            initial_data: InitialDataRequirements::default(),
+            api_requirements: ApiRequirements::default(),
+            behavioral_rules: vec![],
+        };
+        let debug_str = format!("{:?}", scenario);
+        assert!(debug_str.contains("ParsedWorkspaceScenario"));
+    }
+
+    #[test]
+    fn test_chaos_characteristic_clone() {
+        let chaos1 = ChaosCharacteristic {
+            r#type: "latency".to_string(),
+            description: "High latency".to_string(),
+            config: json!({}),
+        };
+        let chaos2 = chaos1.clone();
+        assert_eq!(chaos1.r#type, chaos2.r#type);
+    }
+
+    #[test]
+    fn test_chaos_characteristic_debug() {
+        let chaos = ChaosCharacteristic {
+            r#type: "failure".to_string(),
+            description: "Failures".to_string(),
+            config: json!({"rate": 0.1}),
+        };
+        let debug_str = format!("{:?}", chaos);
+        assert!(debug_str.contains("ChaosCharacteristic"));
+    }
+
+    #[test]
+    fn test_initial_data_requirements_clone() {
+        let data1 = InitialDataRequirements::default();
+        let data2 = data1.clone();
+        // Just verify it doesn't panic
+        assert_eq!(data1.users, data2.users);
+    }
+
+    #[test]
+    fn test_initial_data_requirements_debug() {
+        let data = InitialDataRequirements::default();
+        let debug_str = format!("{:?}", data);
+        assert!(debug_str.contains("InitialDataRequirements"));
+    }
+
+    #[test]
+    fn test_api_requirements_clone() {
+        let api1 = ApiRequirements::default();
+        let api2 = api1.clone();
+        assert_eq!(api1.endpoints.len(), api2.endpoints.len());
+    }
+
+    #[test]
+    fn test_api_requirements_debug() {
+        let api = ApiRequirements::default();
+        let debug_str = format!("{:?}", api);
+        assert!(debug_str.contains("ApiRequirements"));
+    }
+
+    #[test]
+    fn test_behavioral_rule_clone() {
+        let rule1 = BehavioralRule {
+            description: "Rule".to_string(),
+            r#type: "failure".to_string(),
+            config: json!({}),
+        };
+        let rule2 = rule1.clone();
+        assert_eq!(rule1.description, rule2.description);
+    }
+
+    #[test]
+    fn test_behavioral_rule_debug() {
+        let rule = BehavioralRule {
+            description: "Test rule".to_string(),
+            r#type: "latency".to_string(),
+            config: json!({"delay": 100}),
+        };
+        let debug_str = format!("{:?}", rule);
+        assert!(debug_str.contains("BehavioralRule"));
+    }
+
+    #[test]
+    fn test_parsed_workspace_creation_clone() {
+        let creation1 = ParsedWorkspaceCreation {
+            workspace_name: "Test".to_string(),
+            workspace_description: "Test".to_string(),
+            entities: vec![],
+            personas: vec![],
+            scenarios: vec![],
+            reality_continuum: None,
+            drift_budget: None,
+        };
+        let creation2 = creation1.clone();
+        assert_eq!(creation1.workspace_name, creation2.workspace_name);
+    }
+
+    #[test]
+    fn test_parsed_workspace_creation_debug() {
+        let creation = ParsedWorkspaceCreation {
+            workspace_name: "Workspace".to_string(),
+            workspace_description: "Description".to_string(),
+            entities: vec![],
+            personas: vec![],
+            scenarios: vec![],
+            reality_continuum: None,
+            drift_budget: None,
+        };
+        let debug_str = format!("{:?}", creation);
+        assert!(debug_str.contains("ParsedWorkspaceCreation"));
+    }
+
+    #[test]
+    fn test_parsed_reality_continuum_clone() {
+        let continuum1 = ParsedRealityContinuum {
+            default_ratio: 0.5,
+            enabled: true,
+            route_rules: vec![],
+            transition_mode: "manual".to_string(),
+            merge_strategy: "field_level".to_string(),
+        };
+        let continuum2 = continuum1.clone();
+        assert_eq!(continuum1.default_ratio, continuum2.default_ratio);
+    }
+
+    #[test]
+    fn test_parsed_reality_continuum_debug() {
+        let continuum = ParsedRealityContinuum {
+            default_ratio: 0.2,
+            enabled: true,
+            route_rules: vec![],
+            transition_mode: "time_based".to_string(),
+            merge_strategy: "weighted".to_string(),
+        };
+        let debug_str = format!("{:?}", continuum);
+        assert!(debug_str.contains("ParsedRealityContinuum"));
+    }
+
+    #[test]
+    fn test_parsed_continuum_rule_clone() {
+        let rule1 = ParsedContinuumRule {
+            pattern: "/api/*".to_string(),
+            ratio: 0.3,
+            description: "Test".to_string(),
+        };
+        let rule2 = rule1.clone();
+        assert_eq!(rule1.pattern, rule2.pattern);
+    }
+
+    #[test]
+    fn test_parsed_continuum_rule_debug() {
+        let rule = ParsedContinuumRule {
+            pattern: "/catalog/*".to_string(),
+            ratio: 0.5,
+            description: "Catalog".to_string(),
+        };
+        let debug_str = format!("{:?}", rule);
+        assert!(debug_str.contains("ParsedContinuumRule"));
+    }
+
+    #[test]
+    fn test_parsed_drift_budget_clone() {
+        let budget1 = ParsedDriftBudget {
+            strictness: "moderate".to_string(),
+            enabled: true,
+            max_breaking_changes: 10,
+            max_non_breaking_changes: 50,
+            max_field_churn_percent: None,
+            time_window_days: None,
+            per_service_budgets: HashMap::new(),
+            description: "Budget".to_string(),
+        };
+        let budget2 = budget1.clone();
+        assert_eq!(budget1.strictness, budget2.strictness);
+    }
+
+    #[test]
+    fn test_parsed_drift_budget_debug() {
+        let budget = ParsedDriftBudget {
+            strictness: "strict".to_string(),
+            enabled: true,
+            max_breaking_changes: 5,
+            max_non_breaking_changes: 20,
+            max_field_churn_percent: Some(3.0),
+            time_window_days: Some(7),
+            per_service_budgets: HashMap::new(),
+            description: "Strict budget".to_string(),
+        };
+        let debug_str = format!("{:?}", budget);
+        assert!(debug_str.contains("ParsedDriftBudget"));
+    }
+
+    #[test]
+    fn test_parsed_service_budget_clone() {
+        let budget1 = ParsedServiceBudget {
+            max_breaking_changes: 3,
+            max_non_breaking_changes: 15,
+        };
+        let budget2 = budget1.clone();
+        assert_eq!(budget1.max_breaking_changes, budget2.max_breaking_changes);
+    }
+
+    #[test]
+    fn test_parsed_service_budget_debug() {
+        let budget = ParsedServiceBudget {
+            max_breaking_changes: 5,
+            max_non_breaking_changes: 25,
+        };
+        let debug_str = format!("{:?}", budget);
+        assert!(debug_str.contains("ParsedServiceBudget"));
+    }
+}

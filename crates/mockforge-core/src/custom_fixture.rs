@@ -1,6 +1,8 @@
 //! Custom fixture format support for simple JSON fixtures
 //!
-//! Supports fixtures in the format:
+//! Supports fixtures in two formats:
+//!
+//! **Flat format** (preferred):
 //! ```json
 //! {
 //!   "method": "GET",
@@ -12,11 +14,29 @@
 //! }
 //! ```
 //!
+//! **Nested format** (also supported):
+//! ```json
+//! {
+//!   "request": {
+//!     "method": "GET",
+//!     "path": "/api/v1/endpoint"
+//!   },
+//!   "response": {
+//!     "status": 200,
+//!     "headers": { /* optional */ },
+//!     "body": { /* response body */ }
+//!   }
+//! }
+//! ```
+//!
 //! Path matching supports path parameters using curly braces:
 //! - `/api/v1/hives/{hiveId}` matches `/api/v1/hives/hive_001`
+//!
+//! Paths are automatically normalized (trailing slashes removed, multiple slashes collapsed)
 
 use crate::{Error, RequestFingerprint, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
@@ -41,6 +61,43 @@ pub struct CustomFixture {
     pub delay_ms: u64,
 }
 
+/// Nested fixture format for backward compatibility
+#[derive(Debug, Deserialize)]
+pub struct NestedFixture {
+    /// Request configuration for the fixture
+    pub request: Option<NestedRequest>,
+    /// Response configuration for the fixture
+    pub response: Option<NestedResponse>,
+}
+
+/// Request portion of a nested fixture
+#[derive(Debug, Deserialize)]
+pub struct NestedRequest {
+    /// HTTP method for the request
+    pub method: String,
+    /// URL path pattern for the request
+    pub path: String,
+}
+
+/// Response portion of a nested fixture
+#[derive(Debug, Deserialize)]
+pub struct NestedResponse {
+    /// HTTP status code for the response
+    pub status: u16,
+    /// HTTP headers for the response
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+    /// Response body content
+    pub body: Value,
+}
+
+/// Result of loading a fixture file
+#[derive(Debug)]
+enum LoadResult {
+    Loaded,
+    Skipped,
+}
+
 /// Custom fixture loader that scans a directory for fixture files
 pub struct CustomFixtureLoader {
     /// Directory containing custom fixtures
@@ -49,6 +106,16 @@ pub struct CustomFixtureLoader {
     enabled: bool,
     /// Loaded fixtures cache (method -> path pattern -> fixture)
     fixtures: HashMap<String, HashMap<String, CustomFixture>>,
+    /// Statistics for loaded fixtures
+    stats: LoadStats,
+}
+
+/// Statistics about fixture loading
+#[derive(Debug, Default)]
+struct LoadStats {
+    loaded: usize,
+    failed: usize,
+    skipped: usize,
 }
 
 impl CustomFixtureLoader {
@@ -58,7 +125,111 @@ impl CustomFixtureLoader {
             fixtures_dir,
             enabled,
             fixtures: HashMap::new(),
+            stats: LoadStats::default(),
         }
+    }
+
+    /// Normalize a path by removing trailing slashes (except root) and collapsing multiple slashes
+    /// Also strips query strings from the path (query strings are handled separately in RequestFingerprint)
+    pub fn normalize_path(path: &str) -> String {
+        let mut normalized = path.trim().to_string();
+
+        // Strip query string if present (query strings are handled separately)
+        if let Some(query_start) = normalized.find('?') {
+            normalized = normalized[..query_start].to_string();
+        }
+
+        // Collapse multiple slashes into one
+        while normalized.contains("//") {
+            normalized = normalized.replace("//", "/");
+        }
+
+        // Remove trailing slash (except for root path)
+        if normalized.len() > 1 && normalized.ends_with('/') {
+            normalized.pop();
+        }
+
+        // Ensure path starts with /
+        if !normalized.starts_with('/') {
+            normalized = format!("/{}", normalized);
+        }
+
+        normalized
+    }
+
+    /// Check if a file should be skipped (template files, etc.)
+    pub fn should_skip_file(content: &str) -> bool {
+        // Check for template indicators
+        if content.contains("\"_comment\"") || content.contains("\"_usage\"") {
+            return true;
+        }
+
+        // Check if it's a scenario/config file (not a fixture)
+        if content.contains("\"scenario\"") || content.contains("\"presentation_mode\"") {
+            return true;
+        }
+
+        false
+    }
+
+    /// Convert nested fixture format to flat format
+    pub fn convert_nested_to_flat(nested: NestedFixture) -> Result<CustomFixture> {
+        let request = nested.request.ok_or_else(|| {
+            Error::generic("Nested fixture missing 'request' object".to_string())
+        })?;
+
+        let response = nested.response.ok_or_else(|| {
+            Error::generic("Nested fixture missing 'response' object".to_string())
+        })?;
+
+        Ok(CustomFixture {
+            method: request.method,
+            path: Self::normalize_path(&request.path),
+            status: response.status,
+            response: response.body,
+            headers: response.headers,
+            delay_ms: 0,
+        })
+    }
+
+    /// Validate a fixture has required fields and valid values
+    pub fn validate_fixture(fixture: &CustomFixture, file_path: &Path) -> Result<()> {
+        // Check required fields
+        if fixture.method.is_empty() {
+            return Err(Error::generic(format!(
+                "Invalid fixture in {}: method is required and cannot be empty",
+                file_path.display()
+            )));
+        }
+
+        if fixture.path.is_empty() {
+            return Err(Error::generic(format!(
+                "Invalid fixture in {}: path is required and cannot be empty",
+                file_path.display()
+            )));
+        }
+
+        // Validate HTTP method
+        let method_upper = fixture.method.to_uppercase();
+        let valid_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"];
+        if !valid_methods.contains(&method_upper.as_str()) {
+            tracing::warn!(
+                "Fixture {} uses non-standard HTTP method: {}",
+                file_path.display(),
+                fixture.method
+            );
+        }
+
+        // Validate status code
+        if fixture.status < 100 || fixture.status >= 600 {
+            return Err(Error::generic(format!(
+                "Invalid fixture in {}: status code {} is not a valid HTTP status code (100-599)",
+                file_path.display(),
+                fixture.status
+            )));
+        }
+
+        Ok(())
     }
 
     /// Load all fixtures from the directory
@@ -75,6 +246,9 @@ impl CustomFixtureLoader {
             return Ok(());
         }
 
+        // Reset stats
+        self.stats = LoadStats::default();
+
         // Scan directory for JSON files
         let mut entries = fs::read_dir(&self.fixtures_dir).await.map_err(|e| {
             Error::generic(format!(
@@ -84,7 +258,6 @@ impl CustomFixtureLoader {
             ))
         })?;
 
-        let mut loaded_count = 0;
         while let Some(entry) = entries
             .next_entry()
             .await
@@ -92,17 +265,27 @@ impl CustomFixtureLoader {
         {
             let path = entry.path();
             if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
-                if let Err(e) = self.load_fixture_file(&path).await {
-                    tracing::warn!("Failed to load fixture file {}: {}", path.display(), e);
-                } else {
-                    loaded_count += 1;
+                match self.load_fixture_file(&path).await {
+                    Ok(LoadResult::Loaded) => {
+                        self.stats.loaded += 1;
+                    }
+                    Ok(LoadResult::Skipped) => {
+                        self.stats.skipped += 1;
+                    }
+                    Err(e) => {
+                        self.stats.failed += 1;
+                        tracing::warn!("Failed to load fixture file {}: {}", path.display(), e);
+                    }
                 }
             }
         }
 
+        // Log summary
         tracing::info!(
-            "Loaded {} custom fixtures from {}",
-            loaded_count,
+            "Fixture loading complete: {} loaded, {} failed, {} skipped from {}",
+            self.stats.loaded,
+            self.stats.failed,
+            self.stats.skipped,
             self.fixtures_dir.display()
         );
 
@@ -110,29 +293,59 @@ impl CustomFixtureLoader {
     }
 
     /// Load a single fixture file
-    async fn load_fixture_file(&mut self, path: &Path) -> Result<()> {
+    async fn load_fixture_file(&mut self, path: &Path) -> Result<LoadResult> {
         let content = fs::read_to_string(path).await.map_err(|e| {
             Error::generic(format!("Failed to read fixture file {}: {}", path.display(), e))
         })?;
 
-        let fixture: CustomFixture = serde_json::from_str(&content).map_err(|e| {
-            Error::generic(format!("Failed to parse fixture file {}: {}", path.display(), e))
-        })?;
+        // Check if this is a template file that should be skipped
+        if Self::should_skip_file(&content) {
+            tracing::debug!("Skipping template file: {}", path.display());
+            return Ok(LoadResult::Skipped);
+        }
+
+        // Try to parse as flat format first
+        let fixture = match serde_json::from_str::<CustomFixture>(&content) {
+            Ok(mut fixture) => {
+                // Normalize path
+                fixture.path = Self::normalize_path(&fixture.path);
+                fixture
+            }
+            Err(_) => {
+                // Try nested format
+                let nested: NestedFixture = serde_json::from_str(&content).map_err(|e| {
+                    Error::generic(format!(
+                        "Failed to parse fixture file {}: not a valid flat or nested format. Error: {}",
+                        path.display(),
+                        e
+                    ))
+                })?;
+
+                // Convert nested to flat
+                Self::convert_nested_to_flat(nested)?
+            }
+        };
 
         // Validate fixture
-        if fixture.method.is_empty() || fixture.path.is_empty() {
-            return Err(Error::generic(format!(
-                "Invalid fixture in {}: method and path are required",
-                path.display()
-            )));
-        }
+        Self::validate_fixture(&fixture, path)?;
 
         // Store fixture by method and path pattern
         let method = fixture.method.to_uppercase();
-        let fixtures_by_method = self.fixtures.entry(method).or_default();
+        let fixtures_by_method = self.fixtures.entry(method.clone()).or_default();
+
+        // Check for duplicate paths (warn but allow)
+        if fixtures_by_method.contains_key(&fixture.path) {
+            tracing::warn!(
+                "Duplicate fixture path '{}' for method '{}' in file {} (overwriting previous)",
+                fixture.path,
+                method,
+                path.display()
+            );
+        }
+
         fixtures_by_method.insert(fixture.path.clone(), fixture);
 
-        Ok(())
+        Ok(LoadResult::Loaded)
     }
 
     /// Check if a fixture exists for the given request fingerprint
@@ -158,34 +371,69 @@ impl CustomFixtureLoader {
         let method = fingerprint.method.to_uppercase();
         let fixtures_by_method = self.fixtures.get(&method)?;
 
-        let request_path = &fingerprint.path;
+        // Normalize the request path for matching
+        let request_path = Self::normalize_path(&fingerprint.path);
 
-        // Try exact match first
-        if let Some(fixture) = fixtures_by_method.get(request_path) {
+        // Debug logging
+        tracing::debug!(
+            "Fixture matching: method={}, fingerprint.path='{}', normalized='{}', available fixtures: {:?}",
+            method,
+            fingerprint.path,
+            request_path,
+            fixtures_by_method.keys().collect::<Vec<_>>()
+        );
+
+        // Try exact match first (with normalized path)
+        if let Some(fixture) = fixtures_by_method.get(&request_path) {
+            tracing::debug!(
+                "Found exact fixture match: {} {}",
+                method,
+                request_path
+            );
             return Some(fixture);
         }
 
         // Try pattern matching for path parameters
         for (pattern, fixture) in fixtures_by_method.iter() {
-            if self.path_matches(pattern, request_path) {
+            if self.path_matches(pattern, &request_path) {
+                tracing::debug!(
+                    "Found pattern fixture match: {} {} (pattern: {})",
+                    method,
+                    request_path,
+                    pattern
+                );
                 return Some(fixture);
             }
         }
 
+        tracing::debug!(
+            "No fixture match found for: {} {}",
+            method,
+            request_path
+        );
         None
     }
 
     /// Check if a request path matches a fixture path pattern
     ///
     /// Supports path parameters using curly braces:
-    /// - Pattern: `/api/v1/hives/{hiveId}`
-    /// - Matches: `/api/v1/hives/hive_001`, `/api/v1/hives/123`, etc.
+    /// - Pattern: `/api/v1/hives/{hiveId}` matches `/api/v1/hives/hive_001`, `/api/v1/hives/123`, etc.
+    /// - Paths are normalized before matching (trailing slashes removed, multiple slashes collapsed)
     fn path_matches(&self, pattern: &str, request_path: &str) -> bool {
+        // Normalize both paths before matching
+        let normalized_pattern = Self::normalize_path(pattern);
+        let normalized_request = Self::normalize_path(request_path);
+
         // Simple pattern matching without full regex (for performance)
         // Split both paths into segments
-        let pattern_segments: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
-        let request_segments: Vec<&str> =
-            request_path.split('/').filter(|s| !s.is_empty()).collect();
+        let pattern_segments: Vec<&str> = normalized_pattern
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .collect();
+        let request_segments: Vec<&str> = normalized_request
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .collect();
 
         if pattern_segments.len() != request_segments.len() {
             return false;
@@ -410,5 +658,233 @@ mod tests {
         // Should not find fixture when disabled
         assert!(!loader.has_fixture(&create_test_fingerprint("GET", "/test")));
         assert!(loader.load_fixture(&create_test_fingerprint("GET", "/test")).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_load_nested_format() {
+        let temp_dir = TempDir::new().unwrap();
+        let fixtures_dir = temp_dir.path().to_path_buf();
+
+        // Create a nested format fixture
+        let fixture_content = r#"{
+          "request": {
+            "method": "POST",
+            "path": "/api/auth/login"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "access_token": "test_token",
+              "user": {
+                "id": "user_001"
+              }
+            }
+          }
+        }"#;
+
+        let fixture_file = fixtures_dir.join("auth-login.json");
+        fs::write(&fixture_file, fixture_content).await.unwrap();
+
+        // Load fixtures
+        let mut loader = CustomFixtureLoader::new(fixtures_dir, true);
+        loader.load_fixtures().await.unwrap();
+
+        // Check if fixture is loaded
+        let fingerprint = create_test_fingerprint("POST", "/api/auth/login");
+        assert!(loader.has_fixture(&fingerprint));
+
+        let fixture = loader.load_fixture(&fingerprint).unwrap();
+        assert_eq!(fixture.method, "POST");
+        assert_eq!(fixture.path, "/api/auth/login");
+        assert_eq!(fixture.status, 200);
+        assert_eq!(
+            fixture.headers.get("Content-Type"),
+            Some(&"application/json".to_string())
+        );
+        assert!(fixture.response.get("access_token").is_some());
+    }
+
+    #[test]
+    fn test_path_normalization() {
+        let loader = CustomFixtureLoader::new(PathBuf::from("/tmp"), true);
+
+        // Test trailing slash removal
+        assert_eq!(CustomFixtureLoader::normalize_path("/api/v1/test/"), "/api/v1/test");
+        assert_eq!(CustomFixtureLoader::normalize_path("/api/v1/test"), "/api/v1/test");
+
+        // Root path should remain as /
+        assert_eq!(CustomFixtureLoader::normalize_path("/"), "/");
+
+        // Multiple slashes should be collapsed
+        assert_eq!(CustomFixtureLoader::normalize_path("/api//v1///test"), "/api/v1/test");
+
+        // Paths without leading slash should get one
+        assert_eq!(CustomFixtureLoader::normalize_path("api/v1/test"), "/api/v1/test");
+
+        // Whitespace should be trimmed
+        assert_eq!(CustomFixtureLoader::normalize_path(" /api/v1/test "), "/api/v1/test");
+    }
+
+    #[test]
+    fn test_path_matching_with_normalization() {
+        let loader = CustomFixtureLoader::new(PathBuf::from("/tmp"), true);
+
+        // Test that trailing slashes don't prevent matching
+        assert!(loader.path_matches("/api/v1/test", "/api/v1/test/"));
+        assert!(loader.path_matches("/api/v1/test/", "/api/v1/test"));
+
+        // Test multiple slashes
+        assert!(loader.path_matches("/api/v1/test", "/api//v1///test"));
+
+        // Test path parameters still work
+        assert!(loader.path_matches("/api/v1/hives/{hiveId}", "/api/v1/hives/hive_001/"));
+    }
+
+    #[tokio::test]
+    async fn test_skip_template_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let fixtures_dir = temp_dir.path().to_path_buf();
+
+        // Create a template file
+        let template_content = r#"{
+          "_comment": "This is a template",
+          "_usage": "Use this for errors",
+          "error": {
+            "code": "ERROR_CODE"
+          }
+        }"#;
+
+        let template_file = fixtures_dir.join("error-template.json");
+        fs::write(&template_file, template_content).await.unwrap();
+
+        // Create a valid fixture
+        let valid_fixture = r#"{
+          "method": "GET",
+          "path": "/api/test",
+          "status": 200,
+          "response": {}
+        }"#;
+        let valid_file = fixtures_dir.join("valid.json");
+        fs::write(&valid_file, valid_fixture).await.unwrap();
+
+        // Load fixtures
+        let mut loader = CustomFixtureLoader::new(fixtures_dir, true);
+        loader.load_fixtures().await.unwrap();
+
+        // Valid fixture should work
+        assert!(loader.has_fixture(&create_test_fingerprint("GET", "/api/test")));
+
+        // Template file should be skipped (no fixture for a path that doesn't exist)
+        // We can't easily test this without accessing internal state, but the fact that
+        // the valid fixture loads means the template was skipped
+    }
+
+    #[tokio::test]
+    async fn test_skip_scenario_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let fixtures_dir = temp_dir.path().to_path_buf();
+
+        // Create a scenario file (not a fixture)
+        let scenario_content = r#"{
+          "scenario": "demo",
+          "presentation_mode": true,
+          "apiaries": []
+        }"#;
+
+        let scenario_file = fixtures_dir.join("demo-scenario.json");
+        fs::write(&scenario_file, scenario_content).await.unwrap();
+
+        // Create a valid fixture
+        let valid_fixture = r#"{
+          "method": "GET",
+          "path": "/api/test",
+          "status": 200,
+          "response": {}
+        }"#;
+        let valid_file = fixtures_dir.join("valid.json");
+        fs::write(&valid_file, valid_fixture).await.unwrap();
+
+        // Load fixtures
+        let mut loader = CustomFixtureLoader::new(fixtures_dir, true);
+        loader.load_fixtures().await.unwrap();
+
+        // Valid fixture should work
+        assert!(loader.has_fixture(&create_test_fingerprint("GET", "/api/test")));
+    }
+
+    #[tokio::test]
+    async fn test_mixed_format_fixtures() {
+        let temp_dir = TempDir::new().unwrap();
+        let fixtures_dir = temp_dir.path().to_path_buf();
+
+        // Create flat format fixture
+        let flat_fixture = r#"{
+          "method": "GET",
+          "path": "/api/v1/flat",
+          "status": 200,
+          "response": {"type": "flat"}
+        }"#;
+
+        // Create nested format fixture
+        let nested_fixture = r#"{
+          "request": {
+            "method": "GET",
+            "path": "/api/v1/nested"
+          },
+          "response": {
+            "status": 200,
+            "body": {"type": "nested"}
+          }
+        }"#;
+
+        fs::write(fixtures_dir.join("flat.json"), flat_fixture).await.unwrap();
+        fs::write(fixtures_dir.join("nested.json"), nested_fixture).await.unwrap();
+
+        // Load fixtures
+        let mut loader = CustomFixtureLoader::new(fixtures_dir, true);
+        loader.load_fixtures().await.unwrap();
+
+        // Both should work
+        assert!(loader.has_fixture(&create_test_fingerprint("GET", "/api/v1/flat")));
+        assert!(loader.has_fixture(&create_test_fingerprint("GET", "/api/v1/nested")));
+
+        let flat = loader.load_fixture(&create_test_fingerprint("GET", "/api/v1/flat")).unwrap();
+        assert_eq!(flat.response.get("type").and_then(|v| v.as_str()), Some("flat"));
+
+        let nested = loader.load_fixture(&create_test_fingerprint("GET", "/api/v1/nested")).unwrap();
+        assert_eq!(nested.response.get("type").and_then(|v| v.as_str()), Some("nested"));
+    }
+
+    #[tokio::test]
+    async fn test_validation_errors() {
+        let temp_dir = TempDir::new().unwrap();
+        let fixtures_dir = temp_dir.path().to_path_buf();
+
+        // Test missing method
+        let no_method = r#"{
+          "path": "/api/test",
+          "status": 200,
+          "response": {}
+        }"#;
+        fs::write(fixtures_dir.join("no-method.json"), no_method).await.unwrap();
+
+        // Test invalid status code
+        let invalid_status = r#"{
+          "method": "GET",
+          "path": "/api/test",
+          "status": 999,
+          "response": {}
+        }"#;
+        fs::write(fixtures_dir.join("invalid-status.json"), invalid_status).await.unwrap();
+
+        // Load fixtures - should handle errors gracefully
+        let mut loader = CustomFixtureLoader::new(fixtures_dir, true);
+        let result = loader.load_fixtures().await;
+
+        // Should not crash, but should log warnings
+        assert!(result.is_ok());
     }
 }

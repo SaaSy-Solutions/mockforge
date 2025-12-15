@@ -1461,4 +1461,263 @@ mod tests {
         assert!(message.starts_with("<"));
         assert!(message.contains("mockforge"));
     }
+
+    #[test]
+    fn test_siem_protocol_serialization() {
+        let protocols = vec![
+            SiemProtocol::Syslog,
+            SiemProtocol::Http,
+            SiemProtocol::Https,
+            SiemProtocol::File,
+            SiemProtocol::Splunk,
+            SiemProtocol::Datadog,
+            SiemProtocol::Cloudwatch,
+            SiemProtocol::Gcp,
+            SiemProtocol::Azure,
+        ];
+
+        for protocol in protocols {
+            let json = serde_json::to_string(&protocol).unwrap();
+            assert!(!json.is_empty());
+            let deserialized: SiemProtocol = serde_json::from_str(&json).unwrap();
+            assert_eq!(protocol, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_syslog_facility_default() {
+        let facility = SyslogFacility::default();
+        assert_eq!(facility, SyslogFacility::Local0);
+    }
+
+    #[test]
+    fn test_syslog_facility_serialization() {
+        let facilities = vec![
+            SyslogFacility::Kernel,
+            SyslogFacility::User,
+            SyslogFacility::Security,
+            SyslogFacility::Local0,
+            SyslogFacility::Local7,
+        ];
+
+        for facility in facilities {
+            let json = serde_json::to_string(&facility).unwrap();
+            assert!(!json.is_empty());
+            let deserialized: SyslogFacility = serde_json::from_str(&json).unwrap();
+            assert_eq!(facility, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_syslog_severity_from_security_event_severity() {
+        use crate::security::events::SecurityEventSeverity;
+
+        assert_eq!(
+            SyslogSeverity::from(SecurityEventSeverity::Low),
+            SyslogSeverity::Informational
+        );
+        assert_eq!(
+            SyslogSeverity::from(SecurityEventSeverity::Medium),
+            SyslogSeverity::Warning
+        );
+        assert_eq!(
+            SyslogSeverity::from(SecurityEventSeverity::High),
+            SyslogSeverity::Error
+        );
+        assert_eq!(
+            SyslogSeverity::from(SecurityEventSeverity::Critical),
+            SyslogSeverity::Critical
+        );
+    }
+
+    #[test]
+    fn test_retry_config_default() {
+        let config = RetryConfig::default();
+        assert_eq!(config.max_attempts, 3);
+        assert_eq!(config.backoff, "exponential");
+        assert_eq!(config.initial_delay_secs, 1);
+    }
+
+    #[test]
+    fn test_retry_config_serialization() {
+        let config = RetryConfig {
+            max_attempts: 5,
+            backoff: "linear".to_string(),
+            initial_delay_secs: 2,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("max_attempts"));
+        assert!(json.contains("linear"));
+    }
+
+    #[test]
+    fn test_file_rotation_config_serialization() {
+        let config = FileRotationConfig {
+            max_size: "100MB".to_string(),
+            max_files: 10,
+            compress: true,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("100MB"));
+        assert!(json.contains("max_files"));
+    }
+
+    #[test]
+    fn test_siem_config_default() {
+        let config = SiemConfig::default();
+        assert!(!config.enabled);
+        assert!(config.protocol.is_none());
+        assert!(config.destinations.is_empty());
+        assert!(config.filters.is_none());
+    }
+
+    #[test]
+    fn test_siem_config_serialization() {
+        let config = SiemConfig {
+            enabled: true,
+            protocol: Some(SiemProtocol::Syslog),
+            destinations: vec![],
+            filters: None,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("enabled"));
+        assert!(json.contains("syslog"));
+    }
+
+    #[test]
+    fn test_transport_health_creation() {
+        let health = TransportHealth {
+            identifier: "test_transport".to_string(),
+            healthy: true,
+            last_success: Some(chrono::Utc::now()),
+            last_error: None,
+            success_count: 100,
+            failure_count: 0,
+        };
+
+        assert_eq!(health.identifier, "test_transport");
+        assert!(health.healthy);
+        assert_eq!(health.success_count, 100);
+        assert_eq!(health.failure_count, 0);
+    }
+
+    #[test]
+    fn test_transport_health_serialization() {
+        let health = TransportHealth {
+            identifier: "transport_1".to_string(),
+            healthy: false,
+            last_success: None,
+            last_error: Some("Connection failed".to_string()),
+            success_count: 50,
+            failure_count: 5,
+        };
+
+        let json = serde_json::to_string(&health).unwrap();
+        assert!(json.contains("transport_1"));
+        assert!(json.contains("Connection failed"));
+    }
+
+    #[test]
+    fn test_syslog_transport_new() {
+        let transport = SyslogTransport::new(
+            "example.com".to_string(),
+            514,
+            "tcp".to_string(),
+            SyslogFacility::Security,
+            "app".to_string(),
+        );
+
+        // Just verify it can be created
+        let _ = transport;
+    }
+
+    #[test]
+    fn test_http_transport_new() {
+        let mut headers = HashMap::new();
+        headers.insert("X-Custom-Header".to_string(), "value".to_string());
+        let transport = HttpTransport::new(
+            "https://example.com/webhook".to_string(),
+            "POST".to_string(),
+            headers,
+            10,
+            RetryConfig::default(),
+        );
+
+        // Just verify it can be created
+        let _ = transport;
+    }
+
+    #[test]
+    fn test_splunk_transport_new() {
+        let transport = SplunkTransport::new(
+            "https://splunk.example.com:8088".to_string(),
+            "token123".to_string(),
+            Some("index1".to_string()),
+            Some("json".to_string()),
+            RetryConfig::default(),
+        );
+
+        // Just verify it can be created
+        let _ = transport;
+    }
+
+    #[test]
+    fn test_datadog_transport_new() {
+        let transport = DatadogTransport::new(
+            "api_key_123".to_string(),
+            Some("app_key_456".to_string()),
+            "us".to_string(),
+            vec!["env:test".to_string()],
+            RetryConfig::default(),
+        );
+
+        // Just verify it can be created
+        let _ = transport;
+    }
+
+    #[test]
+    fn test_cloudwatch_transport_new() {
+        let mut credentials = HashMap::new();
+        credentials.insert("access_key".to_string(), "key123".to_string());
+        credentials.insert("secret_key".to_string(), "secret123".to_string());
+        let transport = CloudwatchTransport::new(
+            "us-east-1".to_string(),
+            "log-group-name".to_string(),
+            "log-stream-name".to_string(),
+            credentials,
+            RetryConfig::default(),
+        );
+
+        // Just verify it can be created
+        let _ = transport;
+    }
+
+    #[test]
+    fn test_gcp_transport_new() {
+        let transport = GcpTransport::new(
+            "project-id".to_string(),
+            "log-name".to_string(),
+            "/path/to/credentials.json".to_string(),
+            RetryConfig::default(),
+        );
+
+        // Just verify it can be created
+        let _ = transport;
+    }
+
+    #[test]
+    fn test_azure_transport_new() {
+        let transport = AzureTransport::new(
+            "workspace-id".to_string(),
+            "shared-key".to_string(),
+            "CustomLog".to_string(),
+            RetryConfig::default(),
+        );
+
+        // Just verify it can be created
+        let _ = transport;
+    }
 }

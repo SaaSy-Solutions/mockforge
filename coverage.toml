@@ -1,0 +1,134 @@
+# MockForge Test Coverage Configuration
+#
+# This file configures test coverage thresholds, exclusions, and enforcement
+# settings for the MockForge project.
+
+# Default coverage threshold (0-100)
+# All crates should aim to meet or exceed this threshold
+[coverage]
+default_threshold = 80
+
+# CI enforcement mode
+# Options: "report_only", "warn", "enforce"
+# - report_only: Generate reports but don't enforce (current phase)
+# - warn: Generate warnings in CI but don't block PRs
+# - enforce: Block PRs if coverage drops below threshold
+enforcement = "report_only"
+
+# Coverage report output settings
+[coverage.reports]
+# Base directory for coverage reports
+output_dir = "coverage"
+# Generate HTML reports for each crate
+generate_html = false
+# Generate per-crate JSON summaries
+generate_json = true
+# Generate CSV summary
+generate_csv = true
+# Generate text summary
+generate_text = true
+
+# Per-crate coverage thresholds
+# Override default threshold for specific crates
+[coverage.crates]
+# High-priority user-facing crates should maintain high coverage
+mockforge-core = 85
+mockforge-http = 85
+mockforge-cli = 80
+mockforge-sdk = 80
+
+# Protocol crates - moderate threshold initially
+mockforge-grpc = 75
+mockforge-ws = 75
+mockforge-graphql = 75
+mockforge-kafka = 70
+mockforge-mqtt = 70
+mockforge-amqp = 70
+mockforge-smtp = 70
+mockforge-ftp = 70
+mockforge-tcp = 70
+
+# Infrastructure crates
+mockforge-ui = 75
+mockforge-tunnel = 75
+mockforge-observability = 70
+mockforge-tracing = 70
+mockforge-analytics = 70
+
+# Feature crates
+mockforge-scenarios = 75
+mockforge-recorder = 75
+mockforge-collab = 75
+mockforge-chaos = 70
+mockforge-performance = 70
+mockforge-pipelines = 70
+mockforge-reporting = 70
+
+# Plugin system
+mockforge-plugin-core = 80
+mockforge-plugin-sdk = 75
+mockforge-plugin-loader = 80
+mockforge-plugin-cli = 75
+mockforge-plugin-registry = 70
+
+# Data and core utilities
+mockforge-data = 85
+mockforge-template-expansion = 80
+mockforge-schema = 75
+mockforge-world-state = 70
+mockforge-route-chaos = 70
+mockforge-vbr = 70
+
+# Other crates
+mockforge-bench = 60
+mockforge-test = 80
+
+# Excluded files and patterns
+# Files matching these patterns will be excluded from coverage calculations
+[coverage.exclude]
+# Generated code
+patterns = [
+    "**/target/**",
+    "**/fuzz/**",
+    "**/examples/**",
+    "**/*.generated.rs",
+    "**/build.rs",
+]
+
+# Excluded modules (by crate)
+# Modules that should not be included in coverage calculations
+[coverage.exclude.modules]
+# Example: exclude main.rs from CLI crate (it's just argument parsing)
+# mockforge-cli = ["src/main.rs"]
+
+# Coverage report generation settings
+[coverage.generation]
+# Run coverage in parallel (faster but more resource intensive)
+parallel = false
+# Include doctests in coverage
+include_doctests = true
+# Include tests in coverage
+include_tests = false
+# All features flag
+all_features = true
+
+# CI/CD integration
+[coverage.ci]
+# Generate coverage reports in CI
+enabled = true
+# Upload coverage artifacts
+upload_artifacts = true
+# Comment on PRs with coverage summary
+comment_on_pr = true
+# Fail CI if coverage drops below threshold (only if enforcement = "enforce")
+fail_on_threshold = false
+
+# Coverage history tracking
+[coverage.history]
+# Track coverage over time
+enabled = false
+# Storage location for historical data
+storage_dir = "coverage/history"
+# Maximum number of historical reports to keep
+max_reports = 30
+

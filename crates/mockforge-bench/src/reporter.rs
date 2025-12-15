@@ -1,6 +1,7 @@
 //! Result reporting and formatting
 
 use crate::executor::K6Results;
+use crate::parallel_executor::AggregatedResults;
 use colored::*;
 
 /// Terminal reporter for bench results
@@ -77,6 +78,121 @@ impl TerminalReporter {
     /// Print warning message
     pub fn print_warning(message: &str) {
         println!("{} {}", "⚠".bright_yellow().bold(), message.yellow());
+    }
+
+    /// Print multi-target summary
+    pub fn print_multi_target_summary(results: &AggregatedResults) {
+        println!("\n{}", "=".repeat(60).bright_green());
+        println!("{}", "Multi-Target Load Test Complete! ✓".bright_green().bold());
+        println!("{}\n", "=".repeat(60).bright_green());
+
+        println!("{}", "Overall Summary:".bold());
+        println!(
+            "  Total Targets:         {}",
+            results.total_targets.to_string().cyan()
+        );
+        println!(
+            "  Successful:           {} ({}%)",
+            results.successful_targets.to_string().green(),
+            format!(
+                "{:.1}",
+                (results.successful_targets as f64 / results.total_targets as f64) * 100.0
+            )
+            .green()
+        );
+        println!(
+            "  Failed:               {} ({}%)",
+            results.failed_targets.to_string().red(),
+            format!(
+                "{:.1}",
+                (results.failed_targets as f64 / results.total_targets as f64) * 100.0
+            )
+            .red()
+        );
+
+        println!("\n{}", "Aggregated Metrics:".bold());
+        println!(
+            "  Total Requests:       {}",
+            results.aggregated_metrics.total_requests.to_string().cyan()
+        );
+        println!(
+            "  Failed Requests:     {} ({}%)",
+            results.aggregated_metrics.total_failed_requests.to_string().red(),
+            format!("{:.2}", results.aggregated_metrics.error_rate).red()
+        );
+        println!(
+            "  Avg Response Time:    {}ms",
+            format!("{:.2}", results.aggregated_metrics.avg_duration_ms).cyan()
+        );
+        println!(
+            "  p95 Response Time:    {}ms",
+            format!("{:.2}", results.aggregated_metrics.p95_duration_ms).cyan()
+        );
+        println!(
+            "  p99 Response Time:    {}ms",
+            format!("{:.2}", results.aggregated_metrics.p99_duration_ms).cyan()
+        );
+
+        // Show per-target summary (top 10 and bottom 10 if many targets)
+        if results.total_targets <= 20 {
+            println!("\n{}", "Per-Target Results:".bold());
+            for result in &results.target_results {
+                let status = if result.success {
+                    "✓".bright_green()
+                } else {
+                    "✗".bright_red()
+                };
+                println!(
+                    "  {} {} - {} requests, {}ms avg",
+                    status,
+                    result.target_url.cyan(),
+                    result.results.total_requests,
+                    format!("{:.2}", result.results.avg_duration_ms)
+                );
+                if let Some(error) = &result.error {
+                    println!("    Error: {}", error.red());
+                }
+            }
+        } else {
+            // Show top 10 and bottom 10
+            println!("\n{}", "Top 10 Targets (by requests):".bold());
+            let mut sorted_results = results.target_results.clone();
+            sorted_results.sort_by_key(|r| r.results.total_requests);
+            sorted_results.reverse();
+
+            for result in sorted_results.iter().take(10) {
+                let status = if result.success {
+                    "✓".bright_green()
+                } else {
+                    "✗".bright_red()
+                };
+                println!(
+                    "  {} {} - {} requests, {}ms avg",
+                    status,
+                    result.target_url.cyan(),
+                    result.results.total_requests,
+                    format!("{:.2}", result.results.avg_duration_ms)
+                );
+            }
+
+            println!("\n{}", "Bottom 10 Targets:".bold());
+            for result in sorted_results.iter().rev().take(10) {
+                let status = if result.success {
+                    "✓".bright_green()
+                } else {
+                    "✗".bright_red()
+                };
+                println!(
+                    "  {} {} - {} requests, {}ms avg",
+                    status,
+                    result.target_url.cyan(),
+                    result.results.total_requests,
+                    format!("{:.2}", result.results.avg_duration_ms)
+                );
+            }
+        }
+
+        println!("\n{}", "=".repeat(60).bright_green());
     }
 }
 

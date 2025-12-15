@@ -38,9 +38,15 @@ export default function () {
 
     {{#if this.has_body}}
     const payload = {{{this.body}}};
-    const res = http.{{this.method}}(`${BASE_URL}{{this.path}}`, JSON.stringify(payload), { headers });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, JSON.stringify(payload), { 
+      headers{{#if ../skip_tls_verify}},
+      tls: { skipTLSVerify: true }{{/if}}
+    });
     {{else}}
-    const res = http.{{this.method}}(`${BASE_URL}{{this.path}}`, null, { headers });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, { 
+      headers{{#if ../skip_tls_verify}},
+      tls: { skipTLSVerify: true }{{/if}}
+    });
     {{/if}}
 
     const success = check(res, {

@@ -483,6 +483,12 @@ restore_dependencies() {
         "mockforge-tunnel"
         "mockforge-cli"
         "mockforge-schema"
+        "mockforge-pipelines"
+        "mockforge-route-chaos"
+        "mockforge-scenarios"
+        "mockforge-world-state"
+        "mockforge-vbr"
+        "mockforge-performance"
     )
 
     for crate in "${crates_to_restore[@]}"; do
@@ -499,7 +505,7 @@ text = path.read_text()
 changed = False
 
 targets = [
-    ("mockforge", "../mockforge-cli"),  # mockforge-cli publishes as "mockforge"
+    # Note: mockforge-cli publishes as "mockforge-cli", not "mockforge"
     ("mockforge-core", "../mockforge-core"),
     ("mockforge-data", "../mockforge-data"),
     ("mockforge-plugin-core", "../mockforge-plugin-core"),

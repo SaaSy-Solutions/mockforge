@@ -249,7 +249,16 @@ async fn handle_create(
             None,                      // chaos_rate_limit
             None,                      // chaos_bandwidth_limit
             None,                      // chaos_packet_loss
-            Some(temp_spec),           // spec
+            vec![temp_spec],           // spec
+            None,                      // spec_dir
+            "overwrite".to_string(),   // merge_conflicts
+            "none".to_string(),        // api_versioning
+            false,                     // tls_enabled
+            None,                      // tls_cert
+            None,                      // tls_key
+            None,                      // tls_ca
+            "1.2".to_string(),        // tls_min_version
+            "off".to_string(),         // mtls
             None,                      // ws_replay_file
             None,                      // graphql
             None,                      // graphql_port
@@ -470,7 +479,16 @@ async fn handle_interactive(
                 None,                      // chaos_rate_limit
                 None,                      // chaos_bandwidth_limit
                 None,                      // chaos_packet_loss
-                Some(temp_spec),           // spec
+                vec![temp_spec],           // spec
+                None,                      // spec_dir
+                "overwrite".to_string(),   // merge_conflicts
+                "none".to_string(),        // api_versioning
+                false,                     // tls_enabled
+                None,                      // tls_cert
+                None,                      // tls_key
+                None,                      // tls_ca
+                "1.2".to_string(),        // tls_min_version
+                "off".to_string(),         // mtls
                 None,                      // ws_replay_file
                 None,                      // graphql
                 None,                      // graphql_port

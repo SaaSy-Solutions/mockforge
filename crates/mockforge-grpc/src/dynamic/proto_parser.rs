@@ -73,6 +73,10 @@ impl ProtoParser {
     }
 
     /// Parse proto files from a directory
+    ///
+    /// If the directory doesn't exist, this function will gracefully return Ok
+    /// with an empty service registry, allowing the gRPC server to start
+    /// even when only OpenAPI/HTTP is being used.
     pub async fn parse_directory(
         &mut self,
         proto_dir: &str,
@@ -81,7 +85,12 @@ impl ProtoParser {
 
         let proto_path = Path::new(proto_dir);
         if !proto_path.exists() {
-            return Err(format!("Proto directory does not exist: {}", proto_dir).into());
+            warn!(
+                "Proto directory does not exist: {}. gRPC server will start with no services. \
+                This is normal when using only OpenAPI/HTTP.",
+                proto_dir
+            );
+            return Ok(());
         }
 
         // Discover all proto files

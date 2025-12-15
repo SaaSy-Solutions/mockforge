@@ -1320,31 +1320,33 @@ pub async fn serve_router_with_tls(
     Ok(())
 }
 
-/// Serve router with TLS/HTTPS support
+/// Serve router with TLS/HTTPS support using axum-server
 ///
-/// Note: This is a simplified implementation. For production use, consider using
-/// a reverse proxy (nginx) for TLS termination, or use axum-server crate.
-/// This implementation validates TLS configuration but recommends using a reverse proxy.
+/// This function implements native TLS serving using axum-server and tokio-rustls.
+/// It supports standard TLS and mutual TLS (mTLS) based on the configuration.
 async fn serve_with_tls(
     addr: std::net::SocketAddr,
-    _app: Router,
+    app: Router,
     tls_config: &mockforge_core::config::HttpTlsConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Validate TLS configuration by attempting to load certificates
-    let _acceptor = tls::load_tls_acceptor(tls_config)?;
+    use axum_server::tls_rustls::RustlsConfig;
 
-    // For now, return an informative error suggesting reverse proxy usage
-    // Full TLS implementation with axum requires axum-server or similar
-    Err(format!(
-        "TLS/HTTPS support is configured but requires a reverse proxy (nginx) for production use.\n\
-         Certificate validation passed: {} and {}\n\
-         For native TLS support, please use a reverse proxy or wait for axum-server integration.\n\
-         You can configure nginx with TLS termination pointing to the HTTP server on port {}.",
-        tls_config.cert_file,
-        tls_config.key_file,
-        addr.port()
-    )
-    .into())
+    info!("Loading TLS configuration for HTTPS server");
+
+    // Load TLS server configuration (supports mTLS)
+    let server_config = tls::load_tls_server_config(tls_config)?;
+
+    // Create RustlsConfig from the ServerConfig
+    // Note: axum-server's RustlsConfig can be created from a ServerConfig
+    let rustls_config = RustlsConfig::from_config(server_config);
+
+    info!("Starting HTTPS server on {}", addr);
+
+    // Serve with TLS using axum-server
+    axum_server::bind_rustls(addr, rustls_config)
+        .serve(app.into_make_service())
+        .await
+        .map_err(|e| format!("HTTPS server error: {}", e).into())
 }
 
 /// Backwards-compatible start that builds + serves the base router.
@@ -1583,16 +1585,18 @@ pub async fn build_router_with_chains_and_multi_tenant(
         std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>,
     > = if let Some(ref route_configs) = route_configs {
         if !route_configs.is_empty() {
-            match mockforge_route_chaos::RouteChaosInjector::new(route_configs.clone()) {
+            // Convert to the type expected by RouteChaosInjector
+            // Note: Both use the same mockforge-core, but we need to ensure type compatibility
+            let route_configs_converted: Vec<mockforge_core::config::RouteConfig> = route_configs.iter().cloned().collect();
+            match mockforge_route_chaos::RouteChaosInjector::new(route_configs_converted) {
                 Ok(injector) => {
                     info!(
                         "Initialized advanced routing features for {} route(s)",
                         route_configs.len()
                     );
-                    Some(std::sync::Arc::new(injector)
-                        as std::sync::Arc<
-                            dyn mockforge_core::priority_handler::RouteChaosInjectorTrait,
-                        >)
+                    // RouteChaosInjector implements RouteChaosInjectorTrait, so we can cast it
+                    // The trait is implemented in mockforge-route-chaos/src/lib.rs
+                    Some(std::sync::Arc::new(injector) as std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>)
                 }
                 Err(e) => {
                     warn!(

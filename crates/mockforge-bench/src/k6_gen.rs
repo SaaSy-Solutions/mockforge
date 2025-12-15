@@ -18,6 +18,7 @@ pub struct K6Config {
     pub max_error_rate: f64,
     pub auth_header: Option<String>,
     pub custom_headers: HashMap<String, String>,
+    pub skip_tls_verify: bool,
 }
 
 /// Generate k6 load test script
@@ -105,14 +106,19 @@ impl K6ScriptGenerator {
                 // metric_name must also be sanitized for k6 metric name validation
                 // k6 metric names must only contain ASCII letters, numbers, or underscores
                 let metric_name = sanitized_name.clone();
+                // k6 uses 'del' instead of 'delete' for HTTP DELETE method
+                let k6_method = match template.operation.method.to_lowercase().as_str() {
+                    "delete" => "del".to_string(),
+                    m => m.to_string(),
+                };
                 json!({
                     "index": idx,
                     "name": sanitized_name,  // Use sanitized name for variable names
                     "metric_name": metric_name,  // Use sanitized name for metric name strings (k6 validation)
                     "display_name": display_name,  // Keep original for comments/display
-                    "method": template.operation.method.to_uppercase(),
+                    "method": k6_method,  // k6 uses lowercase methods (http.get, http.post, http.del)
                     "path": template.generate_path(),
-                    "headers": self.build_headers(template),
+                    "headers": self.build_headers_json(template),  // Returns JSON string for template
                     "body": template.body.as_ref().map(|b| b.to_string()),
                     "has_body": template.body.is_some(),
                 })
@@ -130,11 +136,12 @@ impl K6ScriptGenerator {
             "threshold_ms": self.config.threshold_ms,
             "max_error_rate": self.config.max_error_rate,
             "scenario_name": format!("{:?}", self.config.scenario).to_lowercase(),
+            "skip_tls_verify": self.config.skip_tls_verify,
         }))
     }
 
-    /// Build headers for a request template
-    fn build_headers(&self, template: &RequestTemplate) -> Value {
+    /// Build headers for a request template as a JSON string for k6 script
+    fn build_headers_json(&self, template: &RequestTemplate) -> String {
         let mut headers = template.get_headers();
 
         // Add auth header if provided
@@ -147,7 +154,8 @@ impl K6ScriptGenerator {
             headers.insert(key.clone(), value.clone());
         }
 
-        json!(headers)
+        // Convert to JSON string for embedding in k6 script
+        serde_json::to_string(&headers).unwrap_or_else(|_| "{}".to_string())
     }
 
     /// Validate the generated k6 script for common issues
@@ -274,11 +282,12 @@ mod tests {
             scenario: LoadScenario::RampUp,
             duration_secs: 60,
             max_vus: 10,
-            threshold_percentile: "p95".to_string(),
+            threshold_percentile: "p(95)".to_string(),
             threshold_ms: 500,
             max_error_rate: 0.05,
             auth_header: None,
             custom_headers: HashMap::new(),
+            skip_tls_verify: false,
         };
 
         assert_eq!(config.duration_secs, 60);
@@ -292,11 +301,12 @@ mod tests {
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
-            threshold_percentile: "p95".to_string(),
+            threshold_percentile: "p(95)".to_string(),
             threshold_ms: 500,
             max_error_rate: 0.05,
             auth_header: None,
             custom_headers: HashMap::new(),
+            skip_tls_verify: false,
         };
 
         let templates = vec![];
@@ -358,11 +368,12 @@ mod tests {
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
-            threshold_percentile: "p95".to_string(),
+            threshold_percentile: "p(95)".to_string(),
             threshold_ms: 500,
             max_error_rate: 0.05,
             auth_header: None,
             custom_headers: HashMap::new(),
+            skip_tls_verify: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -514,5 +525,207 @@ export default function() {{}}
                 description
             );
         }
+    }
+
+    #[test]
+    fn test_skip_tls_verify_with_body() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+        use serde_json::json;
+
+        // Create an operation with a request body
+        let operation = ApiOperation {
+            method: "post".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("createUser".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: Some(json!({"name": "test"})),
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: true,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify the script includes TLS skip option for requests with body
+        assert!(
+            script.contains("tls: { skipTLSVerify: true }"),
+            "Script should include TLS skip option when skip_tls_verify is true"
+        );
+        assert!(
+            script.contains("skipTLSVerify: true"),
+            "Script should include skipTLSVerify option"
+        );
+    }
+
+    #[test]
+    fn test_skip_tls_verify_without_body() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        // Create an operation without a request body
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("getUsers".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: true,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify the script includes TLS skip option for requests without body
+        assert!(
+            script.contains("tls: { skipTLSVerify: true }"),
+            "Script should include TLS skip option when skip_tls_verify is true (no body)"
+        );
+    }
+
+    #[test]
+    fn test_no_skip_tls_verify() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        // Create an operation
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("getUsers".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify the script does NOT include TLS skip option when skip_tls_verify is false
+        assert!(
+            !script.contains("skipTLSVerify"),
+            "Script should NOT include TLS skip option when skip_tls_verify is false"
+        );
+        assert!(
+            !script.contains("tls: { skipTLSVerify: true }"),
+            "Script should NOT include TLS skip option when skip_tls_verify is false"
+        );
+    }
+
+    #[test]
+    fn test_skip_tls_verify_multiple_operations() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+        use serde_json::json;
+
+        // Create multiple operations - one with body, one without
+        let operation1 = ApiOperation {
+            method: "get".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("getUsers".to_string()),
+        };
+
+        let operation2 = ApiOperation {
+            method: "post".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("createUser".to_string()),
+        };
+
+        let template1 = RequestTemplate {
+            operation: operation1,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+
+        let template2 = RequestTemplate {
+            operation: operation2,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: Some(json!({"name": "test"})),
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: true,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template1, template2]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify the script includes TLS skip option for all operations
+        let skip_count = script.matches("skipTLSVerify").count();
+        assert_eq!(
+            skip_count, 2,
+            "Script should include TLS skip option for all operations when skip_tls_verify is true"
+        );
     }
 }

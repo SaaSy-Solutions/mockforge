@@ -228,7 +228,7 @@ let cmd = BenchCommand {
     output: PathBuf::from("bench-results"),
     generate_only: false,
     script_output: None,
-    threshold_percentile: "p95".to_string(),
+    threshold_percentile: "p(95)".to_string(),
     threshold_ms: 500,
     max_error_rate: 0.05,
     verbose: false,

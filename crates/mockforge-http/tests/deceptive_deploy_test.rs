@@ -17,8 +17,10 @@ use mockforge_core::config::{DeceptiveDeployConfig, OAuth2Config, ProductionOAut
 use mockforge_http::middleware::{production_headers_middleware, rate_limit_middleware};
 use mockforge_http::HttpServerState as HttpState;
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
-use tower::ServiceExt;
+use tokio::net::TcpListener;
+use tower::util::ServiceExt;
 
 /// Test handler that returns a simple response
 async fn test_handler() -> impl IntoResponse {
@@ -46,10 +48,21 @@ async fn test_rate_limit_headers_present() {
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .with_state(state);
 
-    // Make a request
-    let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
+    // Use a real server to provide connection info
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
+    });
 
-    let response = app.oneshot(request).await.unwrap();
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    // Make a request using reqwest
+    let client = reqwest::Client::new();
+    let url = format!("http://{}/test", addr);
+    let response = client.get(&url).send().await.unwrap();
 
     // Verify rate limit headers are present
     assert_eq!(response.status(), StatusCode::OK);
@@ -78,6 +91,8 @@ async fn test_rate_limit_headers_present() {
 
     let reset = headers.get("x-rate-limit-reset").unwrap().to_str().unwrap();
     let reset_num: u64 = reset.parse().unwrap();
+
+    drop(server);
     assert!(reset_num > 0, "Reset timestamp should be positive");
 }
 
@@ -245,11 +260,23 @@ async fn test_rate_limit_enforcement() {
         .layer(axum::middleware::from_fn_with_state(state.clone(), rate_limit_middleware))
         .with_state(state);
 
+    // Use a real server to provide connection info
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+            .unwrap()
+    });
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let client = reqwest::Client::new();
+    let url = format!("http://{}/test", addr);
+
     // Make requests up to the limit
     for i in 0..2 {
-        let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
-
-        let response = app.clone().oneshot(request).await.unwrap();
+        let response = client.get(&url).send().await.unwrap();
 
         if i < 2 {
             // First two requests should succeed
@@ -259,9 +286,7 @@ async fn test_rate_limit_enforcement() {
 
     // The third request should be rate limited
     // Note: This test may be flaky due to timing, but it validates the structure
-    let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
-
-    let response = app.oneshot(request).await;
+    let response = client.get(&url).send().await;
 
     // Either the request succeeds (if window reset) or is rate limited
     // The important thing is that the middleware is working
@@ -278,6 +303,8 @@ async fn test_rate_limit_enforcement() {
             // Error is also acceptable (rate limit rejection)
         }
     }
+
+    drop(server);
 }
 
 #[tokio::test]

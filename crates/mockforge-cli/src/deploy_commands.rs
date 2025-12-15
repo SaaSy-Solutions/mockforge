@@ -377,7 +377,16 @@ async fn deploy_mock_api(
         None,                                // chaos_rate_limit
         None,                                // chaos_bandwidth_limit
         None,                                // chaos_packet_loss
-        spec_path_for_serve,                 // spec
+        spec_path_for_serve.into_iter().collect(), // spec
+        None,                                // spec_dir
+        "overwrite".to_string(),             // merge_conflicts
+        "none".to_string(),                  // api_versioning
+        false,                               // tls_enabled
+        None,                                // tls_cert
+        None,                                // tls_key
+        None,                                // tls_ca
+        "1.2".to_string(),                   // tls_min_version
+        "off".to_string(),                   // mtls
         None,                                // ws_replay_file
         None,                                // graphql
         None,                                // graphql_port

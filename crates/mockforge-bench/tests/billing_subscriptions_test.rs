@@ -62,7 +62,7 @@ async fn test_billing_subscriptions_spec_generation() {
         scenario: LoadScenario::Constant,
         duration_secs: 30,
         max_vus: 50,
-        threshold_percentile: "p95".to_string(),
+        threshold_percentile: "p(95)".to_string(),
         threshold_ms: 500,
         max_error_rate: 0.05,
         auth_header: None,

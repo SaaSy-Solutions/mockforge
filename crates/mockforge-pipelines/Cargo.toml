@@ -17,7 +17,7 @@ workspace = true
 
 [dependencies]
 # Core dependencies
-mockforge-core = "0.3.6"
+mockforge-core = "0.3.7"
 
 # Serialization
 serde = { workspace = true }

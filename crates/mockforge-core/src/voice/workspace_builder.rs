@@ -246,7 +246,7 @@ impl WorkspaceBuilder {
     fn create_scenarios(
         &mut self,
         parsed: &ParsedWorkspaceCreation,
-        personas: &[PersonaProfile],
+        _personas: &[PersonaProfile],
     ) -> Result<Vec<ScenarioDefinition>> {
         let mut scenarios = Vec::new();
 

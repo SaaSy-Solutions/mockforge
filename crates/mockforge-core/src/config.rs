@@ -1028,6 +1028,13 @@ pub struct HttpTlsConfig {
     /// Require client certificate (mutual TLS)
     #[serde(default)]
     pub require_client_cert: bool,
+    /// Mutual TLS mode: "off" (default), "optional", "required"
+    #[serde(default = "default_mtls_mode")]
+    pub mtls_mode: String,
+}
+
+fn default_mtls_mode() -> String {
+    "off".to_string()
 }
 
 fn default_tls_min_version() -> String {
@@ -1044,6 +1051,7 @@ impl Default for HttpTlsConfig {
             min_version: "1.2".to_string(),
             cipher_suites: Vec::new(),
             require_client_cert: false,
+            mtls_mode: "off".to_string(),
         }
     }
 }
