@@ -30,7 +30,7 @@ chrono = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
 
 # MockForge dependencies
-mockforge-core = { version = "0.3.8", features = ["data"] }
+mockforge-core = { version = "0.3.8", path = "../mockforge-core", features = ["data"] }
 mockforge-data = "0.3.7"
 
 [dev-dependencies]

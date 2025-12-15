@@ -43,7 +43,7 @@ mockforge-tracing = "0.3.7"
 opentelemetry = { version = "0.22", features = ["trace"] }
 
 # Optional data generation support
-mockforge-data = { version = "0.3.8", optional = true }
+mockforge-data = { version = "0.3.8", path = "../mockforge-data", optional = true }
 
 [features]
 default = ["data-faker"]

@@ -16,7 +16,7 @@ publish = true
 # Core MockForge dependencies
 mockforge-core = "0.3.7"
 mockforge-http = "0.3.7"
-mockforge-data = { version = "0.3.8", optional = true }
+mockforge-data = { version = "0.3.8", path = "../mockforge-data", optional = true }
 
 # Async runtime
 tokio = { workspace = true }

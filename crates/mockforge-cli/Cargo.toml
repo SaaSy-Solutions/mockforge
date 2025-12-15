@@ -46,7 +46,7 @@ mockforge-plugin-loader = { version = "0.3.8", path = "../mockforge-plugin-loade
 mockforge-scenarios = { version = "0.3.8", path = "../mockforge-scenarios", features = ["studio-packs"] }
 mockforge-chaos = { version = "0.3.8", path = "../mockforge-chaos" }
 mockforge-schema = { version = "0.3.8", path = "../mockforge-schema" }
-mockforge-pipelines = { version = "0.3.8", optional = true }
+mockforge-pipelines = { version = "0.3.8", path = "../mockforge-pipelines", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
