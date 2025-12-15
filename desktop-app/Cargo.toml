@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "MockForge Desktop Application - Native desktop app for API mocking"
+publish = false
 
 [build-dependencies]
 tauri-build = { version = "1.5", features = [] }

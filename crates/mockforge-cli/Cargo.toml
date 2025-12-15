@@ -22,28 +22,28 @@ tokio-util = "0.7"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-opentelemetry = "0.22"
-mockforge-core = { path = "../mockforge-core" }
-mockforge-http = { path = "../mockforge-http", optional = true }
+mockforge-core = { version = "0.3.7", path = "../mockforge-core" }
+mockforge-http = { version = "0.3.7", path = "../mockforge-http", optional = true }
 mockforge-ws = { version = "0.3.6", path = "../mockforge-ws", optional = true }
 mockforge-grpc = { version = "0.3.6", path = "../mockforge-grpc", optional = true }
 mockforge-graphql = { version = "0.3.6", path = "../mockforge-graphql", optional = true }
 mockforge-smtp = { version = "0.3.6", path = "../mockforge-smtp", optional = true }
 mockforge-mqtt = { version = "0.3.6", path = "../mockforge-mqtt", optional = true }
-mockforge-data = { path = "../mockforge-data" }
+mockforge-data = { version = "0.3.7", path = "../mockforge-data" }
 mockforge-ui = { version = "0.3.6", path = "../mockforge-ui" }
 mockforge-observability = { version = "0.3.6", path = "../mockforge-observability" }
-mockforge-tracing = { path = "../mockforge-tracing" }
+mockforge-tracing = { version = "0.3.7", path = "../mockforge-tracing" }
 mockforge-recorder = { version = "0.3.6", path = "../mockforge-recorder" }
-mockforge-bench = { path = "../mockforge-bench" }
+mockforge-bench = { version = "0.3.7", path = "../mockforge-bench" }
 mockforge-ftp = { version = "0.3.6", path = "../mockforge-ftp", optional = true }
 mockforge-kafka = { version = "0.3.6", path = "../mockforge-kafka", optional = true }
 mockforge-amqp = { version = "0.3.6", path = "../mockforge-amqp", optional = true }
 mockforge-tcp = { version = "0.3.6", path = "../mockforge-tcp", optional = true }
 mockforge-tunnel = { version = "0.3.6", path = "../mockforge-tunnel" }
-mockforge-vbr = { path = "../mockforge-vbr" }
+mockforge-vbr = { version = "0.3.6", path = "../mockforge-vbr" }
 mockforge-plugin-core = { version = "0.3.6", path = "../mockforge-plugin-core" }
 mockforge-plugin-loader = { version = "0.3.6", path = "../mockforge-plugin-loader" }
-mockforge-scenarios = { path = "../mockforge-scenarios", features = ["studio-packs"] }
+mockforge-scenarios = { version = "0.3.6", path = "../mockforge-scenarios", features = ["studio-packs"] }
 mockforge-chaos = { version = "0.3.6", path = "../mockforge-chaos" }
 mockforge-schema = { version = "0.3.6", path = "../mockforge-schema" }
 mockforge-pipelines = { version = "0.3.6", optional = true }

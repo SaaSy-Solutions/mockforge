@@ -52,7 +52,7 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = { path = "../mockforge-core" }
+mockforge-core = { version = "0.3.7", path = "../mockforge-core" }
 mockforge-data = "0.3.7"
 mockforge-observability = { version = "0.3.6", path = "../mockforge-observability" }
 mockforge-recorder = { version = "0.3.6", path = "../mockforge-recorder" }
@@ -64,7 +64,7 @@ mockforge-chaos = { version = "0.3.6", path = "../mockforge-chaos" }
 mockforge-performance = { version = "0.3.6", path = "../mockforge-performance" }
 mockforge-world-state = { version = "0.3.6", path = "../mockforge-world-state" }
 mockforge-template-expansion = "0.3.7"
-mockforge-route-chaos = { path = "../mockforge-route-chaos" }
+mockforge-route-chaos = { version = "0.3.7", path = "../mockforge-route-chaos" }
 futures-util = "0.3"
 rustls = "0.23"
 rustls-pemfile = "2.0"
