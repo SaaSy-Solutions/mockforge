@@ -24,6 +24,25 @@
 
 - Nothing yet.
 
+## [0.3.8] - 2025-01-XX
+
+### Fixed
+
+- **[DevX] Compilation errors resolved**: Fixed all compilation errors across the workspace
+  - Updated `axum-server` from 0.6 to 0.8 with `tls-rustls-no-provider` feature
+  - Updated `rustls` from 0.21 to 0.23, `rustls-pemfile` from 1.0 to 2.0, `tokio-rustls` from 0.24 to 0.26
+  - Adapted TLS code to rustls 0.23 API (CertificateDer, PrivateKeyDer, WebPkiClientVerifier)
+  - Fixed multi_spec module: properly exported and resolved compilation errors
+  - Fixed handle_serve function calls: added missing parameters and fixed type mismatches
+  - Fixed borrow checker issues in multi_spec merging logic
+  - Added missing documentation for enum variants and struct fields
+  - Fixed various type mismatches and iteration patterns
+
+- **[DevX] Cargo publish readiness**: Fixed all dependency version requirements for crates.io publishing
+  - Added version requirements to all path dependencies in mockforge-cli, mockforge-chaos, mockforge-http, mockforge-route-chaos, mockforge-vbr
+  - Set `publish = false` for desktop-app and tests packages (not meant for crates.io)
+  - All crates now pass `cargo publish --dry-run` validation
+
 ## [0.3.6] - 2025-11-25
 
 ### Fixed

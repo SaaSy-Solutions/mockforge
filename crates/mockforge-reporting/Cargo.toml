@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-reporting"
-version = "0.3.6"
+version = "0.3.8"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -41,7 +41,7 @@ tera = "1.19"
 tokio = { version = "1.48", features = ["full"] }
 
 # MockForge dependencies
-mockforge-chaos = { version = "0.3.6", path = "../mockforge-chaos" }
+mockforge-chaos = { version = "0.3.8", path = "../mockforge-chaos" }
 
 # UUID generation
 uuid = { version = "1.0", features = ["v4", "serde"] }

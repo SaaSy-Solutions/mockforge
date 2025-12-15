@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-sdk"
-version = "0.3.6"
+version = "0.3.8"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -18,10 +18,10 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 mockforge-core = "0.3.7"
 mockforge-http = "0.3.7"
-mockforge-ws = { version = "0.3.6", path = "../mockforge-ws", optional = true }
-mockforge-grpc = { version = "0.3.6", path = "../mockforge-grpc", optional = true }
-mockforge-graphql = { version = "0.3.6", path = "../mockforge-graphql", optional = true }
-mockforge-observability = { version = "0.3.6", path = "../mockforge-observability" }
+mockforge-ws = { version = "0.3.8", path = "../mockforge-ws", optional = true }
+mockforge-grpc = { version = "0.3.8", path = "../mockforge-grpc", optional = true }
+mockforge-graphql = { version = "0.3.8", path = "../mockforge-graphql", optional = true }
+mockforge-observability = { version = "0.3.8", path = "../mockforge-observability" }
 mockforge-data = "0.3.7"
 
 tokio = { workspace = true, features = ["full"] }
