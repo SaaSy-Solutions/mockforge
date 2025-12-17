@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-schema"
-version = "0.3.8"
+version = "0.3.9"
 edition = "2021"
 authors.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ description = "JSON Schema generation for MockForge configuration files"
 schemars = { version = "0.8", features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
-mockforge-core = { version = "0.3.8", path = "../mockforge-core", features = ["schema"] }
+mockforge-core = { version = "0.3.9", path = "../mockforge-core", features = ["schema"] }
 jsonschema = "0.33"
 
 [lints.rust]

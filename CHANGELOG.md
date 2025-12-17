@@ -24,6 +24,74 @@
 
 - Nothing yet.
 
+## [0.3.9] - 2025-12-17
+
+### Added
+
+- **[Reality] Comprehensive Mock Server Implementation**: Full implementation across all protocol crates
+  - **mockforge-amqp**: Complete AMQP 0-9-1 broker with exchanges, queues, bindings, messages, protocol handling, fixtures, and spec registry
+  - **mockforge-kafka**: Full Kafka broker with consumer groups, partitions, topics, metrics, and protocol handling
+  - **mockforge-mqtt**: Complete MQTT broker with QoS levels, topic subscriptions, and retained messages
+  - **mockforge-ftp**: Virtual filesystem, spec registry, and fixture support
+  - **mockforge-smtp**: Email server with fixtures and spec registry
+  - **mockforge-tcp**: TCP server with fixtures and protocol support
+  - **mockforge-grpc**: Dynamic proto parser, service generator, reflection, and metrics
+  - **mockforge-graphql**: Full handler implementations
+
+- **[DevX] Enhanced CLI Commands**: New commands for all protocols and features
+  - AMQP, Kafka, MQTT, FTP, SMTP protocol commands
+  - Blueprint, cloud, deploy, dev-setup, governance commands
+  - Logs, progress, recorder, scenario, snapshot commands
+  - Time manipulation, VBR, voice, wizard, and workspace commands
+  - AI-powered mock generation commands
+
+- **[Reality] Virtual Backend Repository (VBR)**: Complete data management system
+  - API generator, entity management, constraints, and validation
+  - Database integration with migrations and schema management
+  - Session handling, snapshots, and mutation rules
+  - ID generation strategies and scheduling
+
+- **[Reality] World State Engine**: Coherent world simulation
+  - State engine with model and query support
+  - Entity relationships and lifecycle management
+
+- **[AI] Enhanced AI Capabilities**: AI-powered mock generation
+  - RAG-based AI response generator
+  - AI event generator for WebSocket scenarios
+  - Behavioral cloning with scenario types
+
+- **[Cloud] Collaboration Features**: Team collaboration support
+  - Backup, merge, and promotion workflows
+  - Multi-environment configuration
+  - Client SDK improvements
+
+- **[DevX] Observability & Analytics**: Enhanced monitoring
+  - Pillar usage tracking and analytics queries
+  - Metrics middleware and coverage tracking
+  - Latency metrics and performance monitoring
+
+- **[Contracts] Chaos Engineering**: Resilience testing capabilities
+  - Failure designer and incident replay
+  - Chaos API with configurable fault injection
+  - Route-level chaos with latency distributions
+
+- **[DevX] Plugin System Enhancements**: Extended plugin capabilities
+  - Backend generator and datasource support
+  - Runtime adapter improvements
+  - SDK builders and testing utilities
+
+- **[Cloud] Registry Server**: Complete registry implementation
+  - Authentication, authorization, and RBAC
+  - Redis caching, email notifications
+  - Organization and subscription models
+  - API token management and audit logging
+
+- **[DevX] UI Server**: Dashboard and admin features
+  - Admin handlers for workspace management
+  - Chain visualization and coverage metrics
+  - Failure analysis and promotion workflows
+  - Graph visualization and health monitoring
+
 ## [0.3.8] - 2025-01-27
 
 ### Fixed
