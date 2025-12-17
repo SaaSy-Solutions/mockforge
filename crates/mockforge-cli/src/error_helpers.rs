@@ -191,3 +191,174 @@ pub fn format_validation_errors(errors: &[String]) -> String {
     message.push_str("\n💡 Tip: Run 'mockforge config validate' to check your configuration");
     message
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ErrorBuilder tests
+    #[test]
+    fn test_error_builder_new() {
+        let builder = ErrorBuilder::new("Test message", ExitCode::GeneralError);
+        let error = builder.build();
+        assert!(error.message.contains("Test message"));
+        assert_eq!(error.exit_code, ExitCode::GeneralError);
+    }
+
+    #[test]
+    fn test_error_builder_with_suggestion() {
+        let error = ErrorBuilder::new("Error", ExitCode::GeneralError)
+            .with_suggestion("Try this")
+            .build();
+        assert!(error.suggestion.is_some());
+        assert!(error.suggestion.unwrap().contains("Try this"));
+    }
+
+    #[test]
+    fn test_error_builder_multiple_suggestions() {
+        let error = ErrorBuilder::new("Error", ExitCode::GeneralError)
+            .with_suggestion("Suggestion 1")
+            .with_suggestion("Suggestion 2")
+            .build();
+        let suggestion = error.suggestion.unwrap();
+        assert!(suggestion.contains("Suggestion 1"));
+        assert!(suggestion.contains("Suggestion 2"));
+    }
+
+    #[test]
+    fn test_error_builder_with_context() {
+        let error = ErrorBuilder::new("Error", ExitCode::GeneralError)
+            .with_context("Context info")
+            .build();
+        assert!(error.message.contains("Context"));
+        assert!(error.message.contains("Context info"));
+    }
+
+    #[test]
+    fn test_error_builder_multiple_contexts() {
+        let error = ErrorBuilder::new("Error", ExitCode::GeneralError)
+            .with_context("Context 1")
+            .with_context("Context 2")
+            .build();
+        assert!(error.message.contains("Context 1"));
+        assert!(error.message.contains("Context 2"));
+    }
+
+    #[test]
+    fn test_error_builder_with_help_url() {
+        let error = ErrorBuilder::new("Error", ExitCode::GeneralError)
+            .with_help_url("https://docs.example.com")
+            .build();
+        let suggestion = error.suggestion.unwrap();
+        assert!(suggestion.contains("https://docs.example.com"));
+    }
+
+    #[test]
+    fn test_error_builder_chaining() {
+        let error = ErrorBuilder::new("Main error", ExitCode::ConfigurationError)
+            .with_suggestion("Suggestion")
+            .with_context("File: test.yaml")
+            .with_help_url("https://docs.example.com")
+            .build();
+
+        assert!(error.message.contains("Main error"));
+        assert!(error.message.contains("File: test.yaml"));
+        let suggestion = error.suggestion.unwrap();
+        assert!(suggestion.contains("Suggestion"));
+        assert!(suggestion.contains("https://docs.example.com"));
+    }
+
+    // Common error pattern tests
+    #[test]
+    fn test_port_in_use_error() {
+        let error = port_in_use_error(8080, "HTTP");
+        assert!(error.message.contains("8080"));
+        assert!(error.message.contains("HTTP"));
+        assert_eq!(error.exit_code, ExitCode::ServerError);
+        assert!(error.suggestion.is_some());
+    }
+
+    #[test]
+    fn test_port_in_use_error_different_port() {
+        let error = port_in_use_error(3000, "gRPC");
+        assert!(error.message.contains("3000"));
+        assert!(error.message.contains("gRPC"));
+    }
+
+    #[test]
+    fn test_config_not_found_error() {
+        let path = PathBuf::from("/path/to/config.yaml");
+        let error = config_not_found_error(&path);
+        assert!(error.message.contains("config.yaml"));
+        assert_eq!(error.exit_code, ExitCode::FileNotFound);
+        assert!(error.suggestion.is_some());
+    }
+
+    #[test]
+    fn test_invalid_openapi_error() {
+        let path = PathBuf::from("/path/to/spec.yaml");
+        let error = invalid_openapi_error(&path, "Missing paths object");
+        assert!(error.message.contains("Invalid OpenAPI"));
+        assert!(error.message.contains("Missing paths object"));
+        assert!(error.message.contains("spec.yaml"));
+        assert_eq!(error.exit_code, ExitCode::ConfigurationError);
+    }
+
+    #[test]
+    fn test_missing_field_error() {
+        let error = missing_field_error("base_url", "HTTP configuration");
+        assert!(error.message.contains("base_url"));
+        assert!(error.message.contains("HTTP configuration"));
+        assert_eq!(error.exit_code, ExitCode::ConfigurationError);
+    }
+
+    #[test]
+    fn test_network_error() {
+        let error = network_error("API fetch", "Connection refused");
+        assert!(error.message.contains("API fetch"));
+        assert!(error.message.contains("Connection refused"));
+        assert_eq!(error.exit_code, ExitCode::NetworkError);
+        assert!(error.suggestion.is_some());
+    }
+
+    #[test]
+    fn test_permission_denied_error() {
+        let path = PathBuf::from("/etc/mockforge/config.yaml");
+        let error = permission_denied_error(&path, "write to");
+        assert!(error.message.contains("Permission denied"));
+        assert!(error.message.contains("write to"));
+        assert!(error.message.contains("config.yaml"));
+        assert_eq!(error.exit_code, ExitCode::PermissionDenied);
+    }
+
+    // format_validation_errors tests
+    #[test]
+    fn test_format_validation_errors_single() {
+        let errors = vec!["Invalid port number".to_string()];
+        let formatted = format_validation_errors(&errors);
+        assert!(formatted.contains("Configuration validation failed"));
+        assert!(formatted.contains("1. Invalid port number"));
+        assert!(formatted.contains("mockforge config validate"));
+    }
+
+    #[test]
+    fn test_format_validation_errors_multiple() {
+        let errors = vec![
+            "Invalid port".to_string(),
+            "Missing spec file".to_string(),
+            "Invalid timeout".to_string(),
+        ];
+        let formatted = format_validation_errors(&errors);
+        assert!(formatted.contains("1. Invalid port"));
+        assert!(formatted.contains("2. Missing spec file"));
+        assert!(formatted.contains("3. Invalid timeout"));
+    }
+
+    #[test]
+    fn test_format_validation_errors_empty() {
+        let errors: Vec<String> = vec![];
+        let formatted = format_validation_errors(&errors);
+        assert!(formatted.contains("Configuration validation failed"));
+        // Should not crash with empty list
+    }
+}

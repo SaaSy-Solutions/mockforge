@@ -217,7 +217,20 @@ mod tests {
         let config = ServerConfig::default();
         assert_eq!(config.http_port, 0);
         assert!(config.ws_port.is_none());
+        assert!(config.grpc_port.is_none());
+        assert!(config.admin_port.is_none());
+        assert!(config.metrics_port.is_none());
+        assert!(config.spec_file.is_none());
+        assert!(config.workspace_dir.is_none());
+        assert!(config.profile.is_none());
         assert!(!config.enable_admin);
+        assert!(!config.enable_metrics);
+        assert!(config.extra_args.is_empty());
+        assert_eq!(config.health_timeout, Duration::from_secs(30));
+        assert_eq!(config.health_interval, Duration::from_millis(100));
+        assert!(config.working_dir.is_none());
+        assert!(config.env_vars.is_empty());
+        assert!(config.binary_path.is_none());
     }
 
     #[test]
@@ -241,5 +254,141 @@ mod tests {
         assert!(config.enable_metrics);
         assert_eq!(config.profile, Some("test".to_string()));
         assert_eq!(config.extra_args, vec!["--verbose"]);
+    }
+
+    #[test]
+    fn test_builder_metrics_port() {
+        let config = ServerConfig::builder().metrics_port(9090).build();
+        assert_eq!(config.metrics_port, Some(9090));
+    }
+
+    #[test]
+    fn test_builder_spec_file() {
+        let config = ServerConfig::builder().spec_file("/path/to/spec.yaml").build();
+        assert_eq!(config.spec_file, Some(PathBuf::from("/path/to/spec.yaml")));
+    }
+
+    #[test]
+    fn test_builder_workspace_dir() {
+        let config = ServerConfig::builder().workspace_dir("/path/to/workspace").build();
+        assert_eq!(config.workspace_dir, Some(PathBuf::from("/path/to/workspace")));
+    }
+
+    #[test]
+    fn test_builder_extra_args() {
+        let config = ServerConfig::builder().extra_args(vec!["--verbose", "--debug"]).build();
+        assert_eq!(config.extra_args, vec!["--verbose", "--debug"]);
+    }
+
+    #[test]
+    fn test_builder_extra_args_combined() {
+        let config = ServerConfig::builder()
+            .extra_arg("--first")
+            .extra_args(vec!["--second", "--third"])
+            .extra_arg("--fourth")
+            .build();
+        assert_eq!(config.extra_args, vec!["--first", "--second", "--third", "--fourth"]);
+    }
+
+    #[test]
+    fn test_builder_health_timeout() {
+        let config = ServerConfig::builder().health_timeout(Duration::from_secs(60)).build();
+        assert_eq!(config.health_timeout, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_builder_health_interval() {
+        let config = ServerConfig::builder().health_interval(Duration::from_millis(500)).build();
+        assert_eq!(config.health_interval, Duration::from_millis(500));
+    }
+
+    #[test]
+    fn test_builder_working_dir() {
+        let config = ServerConfig::builder().working_dir("/tmp/test").build();
+        assert_eq!(config.working_dir, Some(PathBuf::from("/tmp/test")));
+    }
+
+    #[test]
+    fn test_builder_env_var() {
+        let config = ServerConfig::builder()
+            .env_var("RUST_LOG", "debug")
+            .env_var("MY_VAR", "value")
+            .build();
+        assert_eq!(config.env_vars.len(), 2);
+        assert!(config.env_vars.contains(&("RUST_LOG".to_string(), "debug".to_string())));
+        assert!(config.env_vars.contains(&("MY_VAR".to_string(), "value".to_string())));
+    }
+
+    #[test]
+    fn test_builder_binary_path() {
+        let config = ServerConfig::builder().binary_path("/usr/local/bin/mockforge").build();
+        assert_eq!(config.binary_path, Some(PathBuf::from("/usr/local/bin/mockforge")));
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config = ServerConfig::builder().http_port(3000).profile("test").build();
+
+        let cloned = config.clone();
+        assert_eq!(config.http_port, cloned.http_port);
+        assert_eq!(config.profile, cloned.profile);
+    }
+
+    #[test]
+    fn test_config_debug() {
+        let config = ServerConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("ServerConfig"));
+    }
+
+    #[test]
+    fn test_builder_debug() {
+        let builder = ServerConfigBuilder::default();
+        let debug = format!("{:?}", builder);
+        assert!(debug.contains("ServerConfigBuilder"));
+    }
+
+    #[test]
+    fn test_builder_full_chain() {
+        let config = ServerConfig::builder()
+            .http_port(3000)
+            .ws_port(3001)
+            .grpc_port(3002)
+            .admin_port(3003)
+            .metrics_port(9090)
+            .spec_file("/spec.yaml")
+            .workspace_dir("/workspace")
+            .profile("production")
+            .enable_admin(true)
+            .enable_metrics(true)
+            .extra_arg("--verbose")
+            .health_timeout(Duration::from_secs(60))
+            .health_interval(Duration::from_millis(200))
+            .working_dir("/working")
+            .env_var("KEY", "VALUE")
+            .binary_path("/bin/mockforge")
+            .build();
+
+        assert_eq!(config.http_port, 3000);
+        assert_eq!(config.ws_port, Some(3001));
+        assert_eq!(config.grpc_port, Some(3002));
+        assert_eq!(config.admin_port, Some(3003));
+        assert_eq!(config.metrics_port, Some(9090));
+        assert_eq!(config.spec_file, Some(PathBuf::from("/spec.yaml")));
+        assert_eq!(config.workspace_dir, Some(PathBuf::from("/workspace")));
+        assert_eq!(config.profile, Some("production".to_string()));
+        assert!(config.enable_admin);
+        assert!(config.enable_metrics);
+        assert_eq!(config.health_timeout, Duration::from_secs(60));
+        assert_eq!(config.health_interval, Duration::from_millis(200));
+        assert_eq!(config.working_dir, Some(PathBuf::from("/working")));
+        assert_eq!(config.binary_path, Some(PathBuf::from("/bin/mockforge")));
+    }
+
+    #[test]
+    fn test_server_config_builder_method() {
+        let builder = ServerConfig::builder();
+        let config = builder.http_port(8080).build();
+        assert_eq!(config.http_port, 8080);
     }
 }

@@ -214,13 +214,331 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::Request;
-    use axum::http::StatusCode;
+    use mockforge_core::verification::{VerificationCount, VerificationRequest};
     use tower::ServiceExt;
+
+    // ==================== Router Tests ====================
 
     #[tokio::test]
     async fn test_verification_router_creation() {
         let router = verification_router();
         // Router should be created without panicking
-        assert!(true);
+        assert!(std::mem::size_of_val(&router) > 0);
+    }
+
+    #[tokio::test]
+    async fn test_verification_router_has_verify_route() {
+        let router = verification_router();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/verification/verify")
+            .header("Content-Type", "application/json")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        // Should return an error since body is empty (either 422 or 503)
+        assert!(response.status().is_client_error() || response.status().is_server_error());
+    }
+
+    #[tokio::test]
+    async fn test_verification_router_has_count_route() {
+        let router = verification_router();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/verification/count")
+            .header("Content-Type", "application/json")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        // Should return an error since body is empty
+        assert!(response.status().is_client_error() || response.status().is_server_error());
+    }
+
+    #[tokio::test]
+    async fn test_verification_router_has_sequence_route() {
+        let router = verification_router();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/verification/sequence")
+            .header("Content-Type", "application/json")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        // Should return an error since body is empty
+        assert!(response.status().is_client_error() || response.status().is_server_error());
+    }
+
+    #[tokio::test]
+    async fn test_verification_router_has_never_route() {
+        let router = verification_router();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/verification/never")
+            .header("Content-Type", "application/json")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        // Should return an error since body is empty
+        assert!(response.status().is_client_error() || response.status().is_server_error());
+    }
+
+    #[tokio::test]
+    async fn test_verification_router_has_at_least_route() {
+        let router = verification_router();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/verification/at-least")
+            .header("Content-Type", "application/json")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        // Should return an error since body is empty
+        assert!(response.status().is_client_error() || response.status().is_server_error());
+    }
+
+    // ==================== VerificationState Tests ====================
+
+    #[test]
+    fn test_verification_state_new() {
+        let state = VerificationState::new();
+        // State should be created successfully (size_of_val always >= 0 for usize)
+        let _ = std::mem::size_of_val(&state);
+    }
+
+    #[test]
+    fn test_verification_state_default() {
+        let state = VerificationState::default();
+        // size_of_val always >= 0 for usize
+        let _ = std::mem::size_of_val(&state);
+    }
+
+    #[test]
+    fn test_verification_state_clone() {
+        let state = VerificationState::new();
+        let _cloned = state.clone();
+        // Clone should succeed without panic
+    }
+
+    // ==================== VerifyRequest Tests ====================
+
+    #[test]
+    fn test_verify_request_creation() {
+        let pattern = VerificationRequest {
+            method: Some("GET".to_string()),
+            path: Some("/api/users".to_string()),
+            ..Default::default()
+        };
+
+        let verify_request = VerifyRequest {
+            pattern,
+            expected: VerificationCount::Exactly(1),
+        };
+
+        assert!(verify_request.pattern.method.is_some());
+        assert!(matches!(verify_request.expected, VerificationCount::Exactly(1)));
+    }
+
+    #[test]
+    fn test_verify_request_structure() {
+        let pattern = VerificationRequest {
+            method: Some("POST".to_string()),
+            path: Some("/api/create".to_string()),
+            ..Default::default()
+        };
+
+        let verify_request = VerifyRequest {
+            pattern,
+            expected: VerificationCount::AtLeast(2),
+        };
+
+        // Test that the structure is properly created
+        assert_eq!(verify_request.pattern.method, Some("POST".to_string()));
+        assert!(matches!(verify_request.expected, VerificationCount::AtLeast(2)));
+    }
+
+    #[test]
+    fn test_verify_request_clone() {
+        let pattern = VerificationRequest {
+            method: Some("GET".to_string()),
+            path: Some("/test".to_string()),
+            ..Default::default()
+        };
+
+        let verify_request = VerifyRequest {
+            pattern,
+            expected: VerificationCount::Exactly(5),
+        };
+
+        let cloned = verify_request.clone();
+        assert_eq!(cloned.pattern.method, verify_request.pattern.method);
+    }
+
+    // ==================== CountRequest Tests ====================
+
+    #[test]
+    fn test_count_request_creation() {
+        let pattern = VerificationRequest {
+            method: Some("DELETE".to_string()),
+            path: Some("/api/users/123".to_string()),
+            ..Default::default()
+        };
+
+        let count_request = CountRequest { pattern };
+        assert_eq!(count_request.pattern.method, Some("DELETE".to_string()));
+    }
+
+    #[test]
+    fn test_count_request_serialization() {
+        let count_request = CountRequest {
+            pattern: VerificationRequest {
+                method: Some("PUT".to_string()),
+                path: Some("/api/update".to_string()),
+                ..Default::default()
+            },
+        };
+
+        let json = serde_json::to_string(&count_request);
+        assert!(json.is_ok());
+    }
+
+    #[test]
+    fn test_count_request_clone() {
+        let count_request = CountRequest {
+            pattern: VerificationRequest {
+                method: Some("GET".to_string()),
+                path: Some("/test".to_string()),
+                ..Default::default()
+            },
+        };
+
+        let cloned = count_request.clone();
+        assert_eq!(cloned.pattern.method, Some("GET".to_string()));
+    }
+
+    // ==================== CountResponse Tests ====================
+
+    #[test]
+    fn test_count_response_creation() {
+        let response = CountResponse { count: 42 };
+        assert_eq!(response.count, 42);
+    }
+
+    #[test]
+    fn test_count_response_serialization() {
+        let response = CountResponse { count: 100 };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("100"));
+    }
+
+    #[test]
+    fn test_count_response_deserialization() {
+        let json = r#"{"count":25}"#;
+        let response: CountResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.count, 25);
+    }
+
+    #[test]
+    fn test_count_response_zero() {
+        let response = CountResponse { count: 0 };
+        assert_eq!(response.count, 0);
+    }
+
+    // ==================== SequenceRequest Tests ====================
+
+    #[test]
+    fn test_sequence_request_creation() {
+        let patterns = vec![
+            VerificationRequest {
+                method: Some("POST".to_string()),
+                path: Some("/api/login".to_string()),
+                ..Default::default()
+            },
+            VerificationRequest {
+                method: Some("GET".to_string()),
+                path: Some("/api/profile".to_string()),
+                ..Default::default()
+            },
+        ];
+
+        let sequence_request = SequenceRequest { patterns };
+        assert_eq!(sequence_request.patterns.len(), 2);
+    }
+
+    #[test]
+    fn test_sequence_request_empty() {
+        let sequence_request = SequenceRequest { patterns: vec![] };
+        assert!(sequence_request.patterns.is_empty());
+    }
+
+    #[test]
+    fn test_sequence_request_serialization() {
+        let sequence_request = SequenceRequest {
+            patterns: vec![VerificationRequest {
+                method: Some("GET".to_string()),
+                path: Some("/health".to_string()),
+                ..Default::default()
+            }],
+        };
+
+        let json = serde_json::to_string(&sequence_request);
+        assert!(json.is_ok());
+    }
+
+    // ==================== AtLeastRequest Tests ====================
+
+    #[test]
+    fn test_at_least_request_creation() {
+        let request = AtLeastRequest {
+            pattern: VerificationRequest {
+                method: Some("GET".to_string()),
+                path: Some("/api/data".to_string()),
+                ..Default::default()
+            },
+            min: 3,
+        };
+
+        assert_eq!(request.min, 3);
+        assert_eq!(request.pattern.method, Some("GET".to_string()));
+    }
+
+    #[test]
+    fn test_at_least_request_serialization() {
+        let request = AtLeastRequest {
+            pattern: VerificationRequest {
+                method: Some("POST".to_string()),
+                path: Some("/api/submit".to_string()),
+                ..Default::default()
+            },
+            min: 5,
+        };
+
+        let json = serde_json::to_string(&request);
+        assert!(json.is_ok());
+    }
+
+    #[test]
+    fn test_at_least_request_clone() {
+        let request = AtLeastRequest {
+            pattern: VerificationRequest {
+                method: Some("GET".to_string()),
+                path: Some("/test".to_string()),
+                ..Default::default()
+            },
+            min: 2,
+        };
+
+        let cloned = request.clone();
+        assert_eq!(cloned.min, 2);
+        assert_eq!(cloned.pattern.method, Some("GET".to_string()));
     }
 }

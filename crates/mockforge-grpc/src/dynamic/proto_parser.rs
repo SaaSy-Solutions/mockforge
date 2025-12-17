@@ -486,6 +486,277 @@ impl Default for ProtoParser {
 mod tests {
     use super::*;
 
+    // ==================== ProtoService Tests ====================
+
+    #[test]
+    fn test_proto_service_creation() {
+        let service = ProtoService {
+            name: "mypackage.MyService".to_string(),
+            package: "mypackage".to_string(),
+            short_name: "MyService".to_string(),
+            methods: vec![],
+        };
+
+        assert_eq!(service.name, "mypackage.MyService");
+        assert_eq!(service.package, "mypackage");
+        assert_eq!(service.short_name, "MyService");
+        assert!(service.methods.is_empty());
+    }
+
+    #[test]
+    fn test_proto_service_with_methods() {
+        let method = ProtoMethod {
+            name: "GetData".to_string(),
+            input_type: "mypackage.Request".to_string(),
+            output_type: "mypackage.Response".to_string(),
+            client_streaming: false,
+            server_streaming: false,
+        };
+
+        let service = ProtoService {
+            name: "mypackage.DataService".to_string(),
+            package: "mypackage".to_string(),
+            short_name: "DataService".to_string(),
+            methods: vec![method],
+        };
+
+        assert_eq!(service.methods.len(), 1);
+        assert_eq!(service.methods[0].name, "GetData");
+    }
+
+    #[test]
+    fn test_proto_service_clone() {
+        let service = ProtoService {
+            name: "test.Service".to_string(),
+            package: "test".to_string(),
+            short_name: "Service".to_string(),
+            methods: vec![ProtoMethod {
+                name: "Method".to_string(),
+                input_type: "Request".to_string(),
+                output_type: "Response".to_string(),
+                client_streaming: false,
+                server_streaming: false,
+            }],
+        };
+
+        let cloned = service.clone();
+        assert_eq!(cloned.name, service.name);
+        assert_eq!(cloned.methods.len(), service.methods.len());
+    }
+
+    // ==================== ProtoMethod Tests ====================
+
+    #[test]
+    fn test_proto_method_unary() {
+        let method = ProtoMethod {
+            name: "UnaryMethod".to_string(),
+            input_type: "Request".to_string(),
+            output_type: "Response".to_string(),
+            client_streaming: false,
+            server_streaming: false,
+        };
+
+        assert_eq!(method.name, "UnaryMethod");
+        assert!(!method.client_streaming);
+        assert!(!method.server_streaming);
+    }
+
+    #[test]
+    fn test_proto_method_server_streaming() {
+        let method = ProtoMethod {
+            name: "StreamMethod".to_string(),
+            input_type: "Request".to_string(),
+            output_type: "Response".to_string(),
+            client_streaming: false,
+            server_streaming: true,
+        };
+
+        assert!(!method.client_streaming);
+        assert!(method.server_streaming);
+    }
+
+    #[test]
+    fn test_proto_method_client_streaming() {
+        let method = ProtoMethod {
+            name: "ClientStreamMethod".to_string(),
+            input_type: "Request".to_string(),
+            output_type: "Response".to_string(),
+            client_streaming: true,
+            server_streaming: false,
+        };
+
+        assert!(method.client_streaming);
+        assert!(!method.server_streaming);
+    }
+
+    #[test]
+    fn test_proto_method_bidi_streaming() {
+        let method = ProtoMethod {
+            name: "BidiStreamMethod".to_string(),
+            input_type: "Request".to_string(),
+            output_type: "Response".to_string(),
+            client_streaming: true,
+            server_streaming: true,
+        };
+
+        assert!(method.client_streaming);
+        assert!(method.server_streaming);
+    }
+
+    #[test]
+    fn test_proto_method_clone() {
+        let method = ProtoMethod {
+            name: "TestMethod".to_string(),
+            input_type: "Input".to_string(),
+            output_type: "Output".to_string(),
+            client_streaming: true,
+            server_streaming: true,
+        };
+
+        let cloned = method.clone();
+        assert_eq!(cloned.name, method.name);
+        assert_eq!(cloned.input_type, method.input_type);
+        assert_eq!(cloned.output_type, method.output_type);
+        assert_eq!(cloned.client_streaming, method.client_streaming);
+        assert_eq!(cloned.server_streaming, method.server_streaming);
+    }
+
+    // ==================== ProtoParser Tests ====================
+
+    #[test]
+    fn test_proto_parser_new() {
+        let parser = ProtoParser::new();
+        assert!(parser.services().is_empty());
+    }
+
+    #[test]
+    fn test_proto_parser_default() {
+        let parser = ProtoParser::default();
+        assert!(parser.services().is_empty());
+    }
+
+    #[test]
+    fn test_proto_parser_with_include_paths() {
+        let paths = vec![PathBuf::from("/usr/include"), PathBuf::from("/opt/proto")];
+        let parser = ProtoParser::with_include_paths(paths);
+        assert!(parser.services().is_empty());
+    }
+
+    #[test]
+    fn test_proto_parser_get_service_nonexistent() {
+        let parser = ProtoParser::new();
+        assert!(parser.get_service("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_proto_parser_pool() {
+        let parser = ProtoParser::new();
+        let _pool = parser.pool();
+        // Pool should be accessible
+    }
+
+    #[test]
+    fn test_proto_parser_into_pool() {
+        let parser = ProtoParser::new();
+        let _pool = parser.into_pool();
+        // Should consume the parser and return the pool
+    }
+
+    #[test]
+    fn test_proto_parser_add_mock_greeter_service() {
+        let mut parser = ProtoParser::new();
+        parser.add_mock_greeter_service();
+
+        let services = parser.services();
+        assert_eq!(services.len(), 1);
+        assert!(services.contains_key("mockforge.greeter.Greeter"));
+
+        let service = &services["mockforge.greeter.Greeter"];
+        assert_eq!(service.short_name, "Greeter");
+        assert_eq!(service.package, "mockforge.greeter");
+        assert_eq!(service.methods.len(), 4);
+    }
+
+    #[test]
+    fn test_proto_parser_discover_empty_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        let parser = ProtoParser::new();
+
+        let result = parser.discover_proto_files(temp_dir.path()).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_proto_parser_discover_with_proto_files() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a fake proto file
+        let proto_path = temp_dir.path().join("test.proto");
+        fs::write(&proto_path, "syntax = \"proto3\";").unwrap();
+
+        let parser = ProtoParser::new();
+        let result = parser.discover_proto_files(temp_dir.path()).unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert!(result[0].ends_with("test.proto"));
+    }
+
+    #[test]
+    fn test_proto_parser_discover_recursive() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create subdirectory with proto files
+        let sub_dir = temp_dir.path().join("subdir");
+        fs::create_dir(&sub_dir).unwrap();
+        fs::write(temp_dir.path().join("root.proto"), "").unwrap();
+        fs::write(sub_dir.join("nested.proto"), "").unwrap();
+
+        let parser = ProtoParser::new();
+        let result = parser.discover_proto_files(temp_dir.path()).unwrap();
+
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_proto_parser_discover_ignores_non_proto() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create various files
+        fs::write(temp_dir.path().join("test.proto"), "").unwrap();
+        fs::write(temp_dir.path().join("test.txt"), "").unwrap();
+        fs::write(temp_dir.path().join("test.json"), "").unwrap();
+
+        let parser = ProtoParser::new();
+        let result = parser.discover_proto_files(temp_dir.path()).unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert!(result[0].ends_with(".proto"));
+    }
+
+    // ==================== Async Tests ====================
+
+    #[tokio::test]
+    async fn test_parse_nonexistent_directory() {
+        let mut parser = ProtoParser::new();
+        let result = parser.parse_directory("/nonexistent/path").await;
+
+        // Should succeed gracefully with empty services
+        assert!(result.is_ok());
+        assert!(parser.services().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_parse_empty_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut parser = ProtoParser::new();
+
+        let result = parser.parse_directory(temp_dir.path().to_str().unwrap()).await;
+
+        // Should succeed gracefully with empty services
+        assert!(result.is_ok());
+        assert!(parser.services().is_empty());
+    }
+
     #[tokio::test]
     async fn test_parse_proto_file() {
         // Test with the existing greeter.proto file

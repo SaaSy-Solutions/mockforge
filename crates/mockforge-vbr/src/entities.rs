@@ -256,6 +256,12 @@ mod tests {
     use super::*;
     use mockforge_data::SchemaDefinition;
 
+    fn create_test_schema(name: &str) -> VbrSchemaDefinition {
+        let base_schema = SchemaDefinition::new(name.to_string());
+        VbrSchemaDefinition::new(base_schema)
+    }
+
+    // Entity tests
     #[test]
     fn test_entity_creation() {
         let base_schema = SchemaDefinition::new("User".to_string());
@@ -266,6 +272,52 @@ mod tests {
         assert_eq!(entity.table_name(), "users");
     }
 
+    #[test]
+    fn test_entity_table_name_pluralization() {
+        let entity = Entity::new("Order".to_string(), create_test_schema("Order"));
+        assert_eq!(entity.table_name(), "orders");
+
+        let entity2 = Entity::new("Product".to_string(), create_test_schema("Product"));
+        assert_eq!(entity2.table_name(), "products");
+    }
+
+    #[test]
+    fn test_entity_table_name_lowercase() {
+        let entity = Entity::new("UserProfile".to_string(), create_test_schema("UserProfile"));
+        assert_eq!(entity.table_name(), "userprofiles");
+    }
+
+    #[test]
+    fn test_entity_no_state_machine() {
+        let entity = Entity::new("Item".to_string(), create_test_schema("Item"));
+        assert!(!entity.has_state_machine());
+        assert!(entity.state_machine().is_none());
+    }
+
+    #[test]
+    fn test_entity_clone() {
+        let entity = Entity::new("Test".to_string(), create_test_schema("Test"));
+        let cloned = entity.clone();
+        assert_eq!(entity.name(), cloned.name());
+        assert_eq!(entity.table_name(), cloned.table_name());
+    }
+
+    #[test]
+    fn test_entity_debug() {
+        let entity = Entity::new("DebugEntity".to_string(), create_test_schema("DebugEntity"));
+        let debug = format!("{:?}", entity);
+        assert!(debug.contains("Entity"));
+        assert!(debug.contains("DebugEntity"));
+    }
+
+    #[test]
+    fn test_entity_name_getter() {
+        let entity = Entity::new("Customer".to_string(), create_test_schema("Customer"));
+        assert_eq!(entity.name(), "Customer");
+        assert_eq!(entity.name, "Customer");
+    }
+
+    // EntityRegistry tests
     #[test]
     fn test_entity_registry() {
         let mut registry = EntityRegistry::new();
@@ -293,5 +345,130 @@ mod tests {
 
         assert!(registry.register(entity1).is_ok());
         assert!(registry.register(entity2).is_err());
+    }
+
+    #[test]
+    fn test_entity_registry_default() {
+        let registry = EntityRegistry::default();
+        assert!(registry.list().is_empty());
+    }
+
+    #[test]
+    fn test_entity_registry_new() {
+        let registry = EntityRegistry::new();
+        assert!(registry.list().is_empty());
+        assert!(!registry.exists("Anything"));
+    }
+
+    #[test]
+    fn test_entity_registry_get_nonexistent() {
+        let registry = EntityRegistry::new();
+        assert!(registry.get("NonExistent").is_none());
+    }
+
+    #[test]
+    fn test_entity_registry_list() {
+        let mut registry = EntityRegistry::new();
+
+        registry
+            .register(Entity::new("User".to_string(), create_test_schema("User")))
+            .unwrap();
+        registry
+            .register(Entity::new("Order".to_string(), create_test_schema("Order")))
+            .unwrap();
+        registry
+            .register(Entity::new("Product".to_string(), create_test_schema("Product")))
+            .unwrap();
+
+        let list = registry.list();
+        assert_eq!(list.len(), 3);
+        assert!(list.contains(&"User".to_string()));
+        assert!(list.contains(&"Order".to_string()));
+        assert!(list.contains(&"Product".to_string()));
+    }
+
+    #[test]
+    fn test_entity_registry_exists() {
+        let mut registry = EntityRegistry::new();
+        registry
+            .register(Entity::new("User".to_string(), create_test_schema("User")))
+            .unwrap();
+
+        assert!(registry.exists("User"));
+        assert!(!registry.exists("Order"));
+        assert!(!registry.exists("user")); // Case sensitive
+    }
+
+    #[test]
+    fn test_entity_registry_remove() {
+        let mut registry = EntityRegistry::new();
+        registry
+            .register(Entity::new("User".to_string(), create_test_schema("User")))
+            .unwrap();
+
+        assert!(registry.exists("User"));
+        assert!(registry.remove("User").is_ok());
+        assert!(!registry.exists("User"));
+    }
+
+    #[test]
+    fn test_entity_registry_remove_nonexistent() {
+        let mut registry = EntityRegistry::new();
+        let result = registry.remove("NonExistent");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_entity_registry_clone() {
+        let mut registry = EntityRegistry::new();
+        registry
+            .register(Entity::new("User".to_string(), create_test_schema("User")))
+            .unwrap();
+
+        let cloned = registry.clone();
+        assert!(cloned.exists("User"));
+        assert_eq!(cloned.list().len(), 1);
+    }
+
+    #[test]
+    fn test_entity_registry_multiple_operations() {
+        let mut registry = EntityRegistry::new();
+
+        // Register multiple entities
+        registry
+            .register(Entity::new("A".to_string(), create_test_schema("A")))
+            .unwrap();
+        registry
+            .register(Entity::new("B".to_string(), create_test_schema("B")))
+            .unwrap();
+
+        // Verify
+        assert_eq!(registry.list().len(), 2);
+        assert!(registry.exists("A"));
+        assert!(registry.exists("B"));
+
+        // Remove one
+        registry.remove("A").unwrap();
+        assert_eq!(registry.list().len(), 1);
+        assert!(!registry.exists("A"));
+        assert!(registry.exists("B"));
+
+        // Add another
+        registry
+            .register(Entity::new("C".to_string(), create_test_schema("C")))
+            .unwrap();
+        assert_eq!(registry.list().len(), 2);
+    }
+
+    #[test]
+    fn test_entity_registry_get_returns_reference() {
+        let mut registry = EntityRegistry::new();
+        registry
+            .register(Entity::new("User".to_string(), create_test_schema("User")))
+            .unwrap();
+
+        let entity = registry.get("User").unwrap();
+        assert_eq!(entity.name(), "User");
+        assert_eq!(entity.table_name(), "users");
     }
 }

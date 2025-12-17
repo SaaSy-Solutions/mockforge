@@ -515,3 +515,366 @@ pub struct AnalyzeRequestPayload {
     /// Contract diff configuration
     pub config: Option<ContractDiffConfig>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== UploadRequestPayload Tests ====================
+
+    #[test]
+    fn test_upload_request_payload_minimal() {
+        let payload = UploadRequestPayload {
+            method: "GET".to_string(),
+            path: "/api/users".to_string(),
+            headers: None,
+            query_params: None,
+            body: None,
+            status_code: None,
+            response_body: None,
+        };
+
+        assert_eq!(payload.method, "GET");
+        assert_eq!(payload.path, "/api/users");
+        assert!(payload.headers.is_none());
+    }
+
+    #[test]
+    fn test_upload_request_payload_full() {
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+
+        let mut query_params = HashMap::new();
+        query_params.insert("page".to_string(), "1".to_string());
+
+        let payload = UploadRequestPayload {
+            method: "POST".to_string(),
+            path: "/api/orders".to_string(),
+            headers: Some(headers),
+            query_params: Some(query_params),
+            body: Some(serde_json::json!({"item": "book"})),
+            status_code: Some(201),
+            response_body: Some(serde_json::json!({"id": 123})),
+        };
+
+        assert_eq!(payload.method, "POST");
+        assert_eq!(payload.status_code, Some(201));
+        assert!(payload.body.is_some());
+    }
+
+    #[test]
+    fn test_upload_request_payload_deserialization() {
+        let json = r#"{
+            "method": "DELETE",
+            "path": "/api/items/123",
+            "status_code": 204
+        }"#;
+
+        let payload: UploadRequestPayload = serde_json::from_str(json).unwrap();
+        assert_eq!(payload.method, "DELETE");
+        assert_eq!(payload.path, "/api/items/123");
+        assert_eq!(payload.status_code, Some(204));
+    }
+
+    #[test]
+    fn test_upload_request_payload_debug() {
+        let payload = UploadRequestPayload {
+            method: "GET".to_string(),
+            path: "/test".to_string(),
+            headers: None,
+            query_params: None,
+            body: None,
+            status_code: None,
+            response_body: None,
+        };
+
+        let debug = format!("{:?}", payload);
+        assert!(debug.contains("GET"));
+        assert!(debug.contains("/test"));
+    }
+
+    // ==================== SubmitRequestPayload Tests ====================
+
+    #[test]
+    fn test_submit_request_payload_minimal() {
+        let payload = SubmitRequestPayload {
+            method: "PUT".to_string(),
+            path: "/api/update".to_string(),
+            headers: None,
+            query_params: None,
+            body: None,
+            status_code: None,
+            response_body: None,
+        };
+
+        assert_eq!(payload.method, "PUT");
+        assert_eq!(payload.path, "/api/update");
+    }
+
+    #[test]
+    fn test_submit_request_payload_with_body() {
+        let payload = SubmitRequestPayload {
+            method: "POST".to_string(),
+            path: "/api/data".to_string(),
+            headers: None,
+            query_params: None,
+            body: Some(serde_json::json!({"key": "value"})),
+            status_code: Some(200),
+            response_body: Some(serde_json::json!({"success": true})),
+        };
+
+        assert!(payload.body.is_some());
+        assert!(payload.response_body.is_some());
+    }
+
+    #[test]
+    fn test_submit_request_payload_deserialization() {
+        let json = r#"{
+            "method": "PATCH",
+            "path": "/api/partial",
+            "body": {"field": "updated"}
+        }"#;
+
+        let payload: SubmitRequestPayload = serde_json::from_str(json).unwrap();
+        assert_eq!(payload.method, "PATCH");
+        assert!(payload.body.is_some());
+    }
+
+    // ==================== AnalyzeRequestPayload Tests ====================
+
+    #[test]
+    fn test_analyze_request_payload_with_spec_path() {
+        let payload = AnalyzeRequestPayload {
+            spec_path: Some("/path/to/spec.yaml".to_string()),
+            spec_content: None,
+            contract_id: Some("contract-123".to_string()),
+            config: None,
+        };
+
+        assert!(payload.spec_path.is_some());
+        assert!(payload.spec_content.is_none());
+        assert_eq!(payload.contract_id, Some("contract-123".to_string()));
+    }
+
+    #[test]
+    fn test_analyze_request_payload_with_spec_content() {
+        let spec_content = r#"
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0.0"
+        "#;
+
+        let payload = AnalyzeRequestPayload {
+            spec_path: None,
+            spec_content: Some(spec_content.to_string()),
+            contract_id: None,
+            config: None,
+        };
+
+        assert!(payload.spec_path.is_none());
+        assert!(payload.spec_content.is_some());
+    }
+
+    #[test]
+    fn test_analyze_request_payload_deserialization() {
+        let json = r#"{
+            "spec_path": "/specs/api.yaml",
+            "contract_id": "my-contract"
+        }"#;
+
+        let payload: AnalyzeRequestPayload = serde_json::from_str(json).unwrap();
+        assert_eq!(payload.spec_path, Some("/specs/api.yaml".to_string()));
+        assert_eq!(payload.contract_id, Some("my-contract".to_string()));
+    }
+
+    #[test]
+    fn test_analyze_request_payload_empty() {
+        let json = r#"{}"#;
+
+        let payload: AnalyzeRequestPayload = serde_json::from_str(json).unwrap();
+        assert!(payload.spec_path.is_none());
+        assert!(payload.spec_content.is_none());
+        assert!(payload.contract_id.is_none());
+        assert!(payload.config.is_none());
+    }
+
+    // ==================== GeneratePatchPayload Tests ====================
+
+    #[test]
+    fn test_generate_patch_payload_with_spec_path() {
+        let payload = GeneratePatchPayload {
+            spec_path: Some("/path/to/spec.json".to_string()),
+            spec_content: None,
+            config: None,
+        };
+
+        assert!(payload.spec_path.is_some());
+        assert!(payload.spec_content.is_none());
+    }
+
+    #[test]
+    fn test_generate_patch_payload_with_spec_content() {
+        let payload = GeneratePatchPayload {
+            spec_path: None,
+            spec_content: Some("{}".to_string()),
+            config: None,
+        };
+
+        assert!(payload.spec_path.is_none());
+        assert!(payload.spec_content.is_some());
+    }
+
+    #[test]
+    fn test_generate_patch_payload_deserialization() {
+        let json = r#"{
+            "spec_path": "/api/openapi.yaml"
+        }"#;
+
+        let payload: GeneratePatchPayload = serde_json::from_str(json).unwrap();
+        assert_eq!(payload.spec_path, Some("/api/openapi.yaml".to_string()));
+    }
+
+    // ==================== Helper Function Tests ====================
+
+    #[test]
+    fn test_error_response_creation() {
+        let error = Error::validation("test error");
+        let response = error_response(error);
+        // Response is created successfully
+        let _ = response;
+    }
+
+    // ==================== HTTP Method Coverage ====================
+
+    #[test]
+    fn test_all_http_methods() {
+        let methods = vec!["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
+
+        for method in methods {
+            let payload = UploadRequestPayload {
+                method: method.to_string(),
+                path: "/test".to_string(),
+                headers: None,
+                query_params: None,
+                body: None,
+                status_code: None,
+                response_body: None,
+            };
+
+            assert_eq!(payload.method, method);
+        }
+    }
+
+    #[test]
+    fn test_various_status_codes() {
+        let status_codes = vec![200, 201, 204, 400, 401, 403, 404, 500, 502, 503];
+
+        for code in status_codes {
+            let payload = UploadRequestPayload {
+                method: "GET".to_string(),
+                path: "/test".to_string(),
+                headers: None,
+                query_params: None,
+                body: None,
+                status_code: Some(code),
+                response_body: None,
+            };
+
+            assert_eq!(payload.status_code, Some(code));
+        }
+    }
+
+    // ==================== Edge Cases ====================
+
+    #[test]
+    fn test_payload_with_empty_path() {
+        let payload = UploadRequestPayload {
+            method: "GET".to_string(),
+            path: "".to_string(),
+            headers: None,
+            query_params: None,
+            body: None,
+            status_code: None,
+            response_body: None,
+        };
+
+        assert!(payload.path.is_empty());
+    }
+
+    #[test]
+    fn test_payload_with_complex_body() {
+        let body = serde_json::json!({
+            "user": {
+                "name": "John",
+                "roles": ["admin", "user"],
+                "settings": {
+                    "theme": "dark",
+                    "notifications": true
+                }
+            },
+            "items": [1, 2, 3, 4, 5]
+        });
+
+        let payload = UploadRequestPayload {
+            method: "POST".to_string(),
+            path: "/api/complex".to_string(),
+            headers: None,
+            query_params: None,
+            body: Some(body),
+            status_code: None,
+            response_body: None,
+        };
+
+        assert!(payload.body.is_some());
+        let body_val = payload.body.unwrap();
+        assert!(body_val.get("user").is_some());
+        assert!(body_val.get("items").is_some());
+    }
+
+    #[test]
+    fn test_payload_with_many_headers() {
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        headers.insert("Authorization".to_string(), "Bearer token123".to_string());
+        headers.insert("X-Request-ID".to_string(), "uuid-123".to_string());
+        headers.insert("Accept".to_string(), "application/json".to_string());
+        headers.insert("X-Custom-Header".to_string(), "custom-value".to_string());
+
+        let payload = UploadRequestPayload {
+            method: "GET".to_string(),
+            path: "/api/test".to_string(),
+            headers: Some(headers.clone()),
+            query_params: None,
+            body: None,
+            status_code: None,
+            response_body: None,
+        };
+
+        assert!(payload.headers.is_some());
+        assert_eq!(payload.headers.unwrap().len(), 5);
+    }
+
+    #[test]
+    fn test_payload_with_many_query_params() {
+        let mut query_params = HashMap::new();
+        query_params.insert("page".to_string(), "1".to_string());
+        query_params.insert("limit".to_string(), "50".to_string());
+        query_params.insert("sort".to_string(), "created_at".to_string());
+        query_params.insert("order".to_string(), "desc".to_string());
+        query_params.insert("filter".to_string(), "active".to_string());
+
+        let payload = UploadRequestPayload {
+            method: "GET".to_string(),
+            path: "/api/list".to_string(),
+            headers: None,
+            query_params: Some(query_params.clone()),
+            body: None,
+            status_code: None,
+            response_body: None,
+        };
+
+        assert!(payload.query_params.is_some());
+        assert_eq!(payload.query_params.unwrap().len(), 5);
+    }
+}

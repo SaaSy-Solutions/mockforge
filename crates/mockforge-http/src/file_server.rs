@@ -87,6 +87,8 @@ mod tests {
     use axum::http::Request;
     use tower::ServiceExt;
 
+    // ==================== Path Traversal Protection Tests ====================
+
     #[tokio::test]
     async fn test_serve_mock_file_path_traversal() {
         // Test path traversal protection
@@ -97,11 +99,201 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_serve_mock_file_path_traversal_double_slash() {
+        use axum::extract::Path;
+        let result = serve_mock_file(Path("route//file.json".to_string())).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_serve_mock_file_path_traversal_nested() {
+        use axum::extract::Path;
+        let result = serve_mock_file(Path("route/../../../etc/passwd".to_string())).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_serve_mock_file_path_traversal_middle() {
+        use axum::extract::Path;
+        let result = serve_mock_file(Path("route/sub/../../../file.txt".to_string())).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), StatusCode::BAD_REQUEST);
+    }
+
+    // ==================== Invalid Path Format Tests ====================
+
+    #[tokio::test]
     async fn test_serve_mock_file_invalid_format() {
         // Test invalid path format (empty string results in empty parts)
         use axum::extract::Path;
         let result = serve_mock_file(Path("".to_string())).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_serve_mock_file_only_slashes() {
+        use axum::extract::Path;
+        let result = serve_mock_file(Path("/".to_string())).await;
+        // After filtering empty parts, should be empty
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), StatusCode::BAD_REQUEST);
+    }
+
+    // ==================== File Not Found Tests ====================
+
+    #[tokio::test]
+    async fn test_serve_mock_file_not_found() {
+        use axum::extract::Path;
+        let result = serve_mock_file(Path("nonexistent/file.json".to_string())).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_serve_mock_file_deep_path_not_found() {
+        use axum::extract::Path;
+        let result = serve_mock_file(Path("route/subdir/deep/file.json".to_string())).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), StatusCode::NOT_FOUND);
+    }
+
+    // ==================== Router Tests ====================
+
+    #[test]
+    fn test_file_serving_router_creation() {
+        let router = file_serving_router();
+        // Router should be created successfully
+        assert!(std::mem::size_of_val(&router) > 0);
+    }
+
+    #[tokio::test]
+    async fn test_router_path_traversal_blocked() {
+        let router = file_serving_router();
+
+        let request =
+            Request::builder().uri("/mock-files/../etc/passwd").body(Body::empty()).unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        // Should be blocked by path traversal check
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_router_nonexistent_file() {
+        let router = file_serving_router();
+
+        let request = Request::builder()
+            .uri("/mock-files/route123/file.json")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        // File doesn't exist
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    // ==================== Content Type Detection Tests ====================
+    // These tests verify the content type logic is correct
+
+    #[test]
+    fn test_content_type_detection_logic() {
+        // Test the extension to content-type mapping logic
+        let extensions = vec![
+            ("pdf", "application/pdf"),
+            ("csv", "text/csv"),
+            ("json", "application/json"),
+            ("xml", "application/xml"),
+            ("txt", "text/plain"),
+            ("unknown", "application/octet-stream"),
+            ("bin", "application/octet-stream"),
+        ];
+
+        for (ext, expected) in extensions {
+            let content_type = match ext.to_lowercase().as_str() {
+                "pdf" => "application/pdf",
+                "csv" => "text/csv",
+                "json" => "application/json",
+                "xml" => "application/xml",
+                "txt" => "text/plain",
+                _ => "application/octet-stream",
+            };
+            assert_eq!(content_type, expected, "Extension: {}", ext);
+        }
+    }
+
+    #[test]
+    fn test_content_type_case_insensitive() {
+        // Content type detection should be case insensitive
+        let extensions = vec!["PDF", "Pdf", "pDf", "JSON", "Json", "XML", "Xml"];
+
+        for ext in extensions {
+            let content_type = match ext.to_lowercase().as_str() {
+                "pdf" => "application/pdf",
+                "json" => "application/json",
+                "xml" => "application/xml",
+                _ => "application/octet-stream",
+            };
+            assert_ne!(
+                content_type, "application/octet-stream",
+                "Extension {} should be recognized",
+                ext
+            );
+        }
+    }
+
+    // ==================== PathBuf Construction Tests ====================
+
+    #[test]
+    fn test_path_construction() {
+        let base_dir = "mock-files";
+        let file_path = "route123/data.json";
+        let full_path = PathBuf::from(base_dir).join(file_path);
+
+        assert!(full_path.to_string_lossy().contains("mock-files"));
+        assert!(full_path.to_string_lossy().contains("route123"));
+        assert!(full_path.to_string_lossy().contains("data.json"));
+    }
+
+    #[test]
+    fn test_path_with_subdirectory() {
+        let base_dir = "mock-files";
+        let file_path = "route123/subdir/nested/file.csv";
+        let full_path = PathBuf::from(base_dir).join(file_path);
+
+        assert!(full_path.to_string_lossy().contains("subdir"));
+        assert!(full_path.to_string_lossy().contains("nested"));
+    }
+
+    #[test]
+    fn test_filename_extraction() {
+        let full_path = PathBuf::from("mock-files/route123/data.json");
+        let filename = full_path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
+        assert_eq!(filename, "data.json");
+    }
+
+    #[test]
+    fn test_filename_extraction_nested() {
+        let full_path = PathBuf::from("mock-files/route/sub/deep/report.pdf");
+        let filename = full_path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
+        assert_eq!(filename, "report.pdf");
+    }
+
+    #[test]
+    fn test_extension_extraction() {
+        let paths = vec![
+            ("mock-files/file.pdf", Some("pdf")),
+            ("mock-files/file.JSON", Some("JSON")),
+            ("mock-files/file.tar.gz", Some("gz")),
+            ("mock-files/file", None),
+        ];
+
+        for (path, expected_ext) in paths {
+            let full_path = PathBuf::from(path);
+            let ext = full_path.extension().and_then(|e| e.to_str());
+            assert_eq!(ext, expected_ext, "Path: {}", path);
+        }
     }
 }

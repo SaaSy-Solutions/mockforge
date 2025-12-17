@@ -215,3 +215,291 @@ fn find_available_port(start: u16, end: u16) -> Result<u16> {
         "No available ports found in range {start}-{end}"
     )))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_builder_new() {
+        let builder = MockServerBuilder::new();
+        assert!(builder.port.is_none());
+        assert!(builder.host.is_none());
+        assert!(!builder.enable_admin);
+        assert!(!builder.auto_port);
+    }
+
+    #[test]
+    fn test_builder_default() {
+        let builder = MockServerBuilder::default();
+        assert!(builder.port.is_none());
+        assert!(builder.host.is_none());
+    }
+
+    #[test]
+    fn test_builder_port() {
+        let builder = MockServerBuilder::new().port(8080);
+        assert_eq!(builder.port, Some(8080));
+        assert!(!builder.auto_port);
+    }
+
+    #[test]
+    fn test_builder_auto_port() {
+        let builder = MockServerBuilder::new().auto_port();
+        assert!(builder.auto_port);
+        assert!(builder.port.is_none());
+    }
+
+    #[test]
+    fn test_builder_auto_port_overrides_manual_port() {
+        let builder = MockServerBuilder::new().port(8080).auto_port();
+        assert!(builder.auto_port);
+        assert!(builder.port.is_none());
+    }
+
+    #[test]
+    fn test_builder_manual_port_overrides_auto_port() {
+        let builder = MockServerBuilder::new().auto_port().port(8080);
+        assert!(!builder.auto_port);
+        assert_eq!(builder.port, Some(8080));
+    }
+
+    #[test]
+    fn test_builder_port_range() {
+        let builder = MockServerBuilder::new().port_range(30000, 31000);
+        assert_eq!(builder.port_range, Some((30000, 31000)));
+    }
+
+    #[test]
+    fn test_builder_host() {
+        let builder = MockServerBuilder::new().host("0.0.0.0");
+        assert_eq!(builder.host, Some("0.0.0.0".to_string()));
+    }
+
+    #[test]
+    fn test_builder_config_file() {
+        let builder = MockServerBuilder::new().config_file("/path/to/config.yaml");
+        assert_eq!(builder.config_file, Some(PathBuf::from("/path/to/config.yaml")));
+    }
+
+    #[test]
+    fn test_builder_openapi_spec() {
+        let builder = MockServerBuilder::new().openapi_spec("/path/to/spec.yaml");
+        assert_eq!(builder.openapi_spec, Some(PathBuf::from("/path/to/spec.yaml")));
+    }
+
+    #[test]
+    fn test_builder_latency() {
+        let latency = LatencyProfile::Fixed { ms: 100 };
+        let builder = MockServerBuilder::new().latency(latency);
+        assert!(builder.latency_profile.is_some());
+    }
+
+    #[test]
+    fn test_builder_failures() {
+        let failures = FailureConfig {
+            enabled: true,
+            rate: 0.1,
+            http_codes: vec![500, 503],
+        };
+        let builder = MockServerBuilder::new().failures(failures);
+        assert!(builder.failure_config.is_some());
+    }
+
+    #[test]
+    fn test_builder_proxy() {
+        let proxy = ProxyConfig {
+            enabled: true,
+            target_url: "http://example.com".to_string(),
+            preserve_host_header: true,
+        };
+        let builder = MockServerBuilder::new().proxy(proxy);
+        assert!(builder.proxy_config.is_some());
+    }
+
+    #[test]
+    fn test_builder_admin() {
+        let builder = MockServerBuilder::new().admin(true);
+        assert!(builder.enable_admin);
+    }
+
+    #[test]
+    fn test_builder_admin_port() {
+        let builder = MockServerBuilder::new().admin_port(9090);
+        assert_eq!(builder.admin_port, Some(9090));
+    }
+
+    #[test]
+    fn test_builder_fluent_chaining() {
+        let latency = LatencyProfile::Fixed { ms: 50 };
+        let failures = FailureConfig {
+            enabled: true,
+            rate: 0.05,
+            http_codes: vec![500],
+        };
+
+        let builder = MockServerBuilder::new()
+            .port(8080)
+            .host("localhost")
+            .latency(latency)
+            .failures(failures)
+            .admin(true)
+            .admin_port(9090);
+
+        assert_eq!(builder.port, Some(8080));
+        assert_eq!(builder.host, Some("localhost".to_string()));
+        assert!(builder.latency_profile.is_some());
+        assert!(builder.failure_config.is_some());
+        assert!(builder.enable_admin);
+        assert_eq!(builder.admin_port, Some(9090));
+    }
+
+    #[test]
+    fn test_is_port_available_unbound_port() {
+        // Port 0 should allow binding (OS will assign a port)
+        assert!(is_port_available(0));
+    }
+
+    #[test]
+    fn test_is_port_available_bound_port() {
+        // Bind to a port first
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let port = addr.port();
+
+        // Now that port should not be available
+        assert!(!is_port_available(port));
+    }
+
+    #[test]
+    fn test_find_available_port_success() {
+        // Should find an available port in a large range
+        let result = find_available_port(30000, 35000);
+        assert!(result.is_ok());
+        let port = result.unwrap();
+        assert!(port >= 30000 && port <= 35000);
+    }
+
+    #[test]
+    fn test_find_available_port_invalid_range_equal() {
+        let result = find_available_port(8080, 8080);
+        assert!(result.is_err());
+        match result {
+            Err(Error::InvalidConfig(msg)) => {
+                assert!(msg.contains("Invalid port range"));
+                assert!(msg.contains("8080"));
+            }
+            _ => panic!("Expected InvalidConfig error"),
+        }
+    }
+
+    #[test]
+    fn test_find_available_port_invalid_range_reversed() {
+        let result = find_available_port(9000, 8000);
+        assert!(result.is_err());
+        match result {
+            Err(Error::InvalidConfig(msg)) => {
+                assert!(msg.contains("Invalid port range"));
+            }
+            _ => panic!("Expected InvalidConfig error"),
+        }
+    }
+
+    #[test]
+    fn test_find_available_port_no_ports_available() {
+        // Bind to all ports in a small range
+        let port1 = 40000;
+        let port2 = 40001;
+        let _listener1 = TcpListener::bind(("127.0.0.1", port1)).ok();
+        let _listener2 = TcpListener::bind(("127.0.0.1", port2)).ok();
+
+        // If both binds succeeded, the search should fail
+        if _listener1.is_some() && _listener2.is_some() {
+            let result = find_available_port(port1, port2);
+            assert!(result.is_err());
+            match result {
+                Err(Error::PortDiscoveryFailed(msg)) => {
+                    assert!(msg.contains("No available ports"));
+                    assert!(msg.contains("40000"));
+                    assert!(msg.contains("40001"));
+                }
+                _ => panic!("Expected PortDiscoveryFailed error"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_find_available_port_single_port_range() {
+        // Even though start < end, this is a valid single-port range (inclusive)
+        let result = find_available_port(45000, 45001);
+        assert!(result.is_ok());
+        let port = result.unwrap();
+        assert!(port == 45000 || port == 45001);
+    }
+
+    #[test]
+    fn test_builder_multiple_config_sources() {
+        let builder = MockServerBuilder::new()
+            .config_file("/path/to/config.yaml")
+            .openapi_spec("/path/to/spec.yaml")
+            .port(8080)
+            .host("localhost");
+
+        assert!(builder.config_file.is_some());
+        assert!(builder.openapi_spec.is_some());
+        assert_eq!(builder.port, Some(8080));
+        assert_eq!(builder.host, Some("localhost".to_string()));
+    }
+
+    #[test]
+    fn test_builder_with_all_features() {
+        let latency = LatencyProfile::Fixed { ms: 100 };
+        let failures = FailureConfig {
+            enabled: true,
+            rate: 0.1,
+            http_codes: vec![500, 503],
+        };
+        let proxy = ProxyConfig {
+            enabled: true,
+            target_url: "http://backend.com".to_string(),
+            preserve_host_header: false,
+        };
+
+        let builder = MockServerBuilder::new()
+            .port(8080)
+            .host("0.0.0.0")
+            .config_file("/config.yaml")
+            .openapi_spec("/spec.yaml")
+            .latency(latency)
+            .failures(failures)
+            .proxy(proxy)
+            .admin(true)
+            .admin_port(9090);
+
+        assert!(builder.port.is_some());
+        assert!(builder.host.is_some());
+        assert!(builder.config_file.is_some());
+        assert!(builder.openapi_spec.is_some());
+        assert!(builder.latency_profile.is_some());
+        assert!(builder.failure_config.is_some());
+        assert!(builder.proxy_config.is_some());
+        assert!(builder.enable_admin);
+        assert!(builder.admin_port.is_some());
+    }
+
+    #[test]
+    fn test_builder_port_range_default() {
+        let builder = MockServerBuilder::new().auto_port();
+        // Default range should be used if not specified
+        assert!(builder.port_range.is_none());
+    }
+
+    #[test]
+    fn test_builder_port_range_custom() {
+        let builder = MockServerBuilder::new()
+            .auto_port()
+            .port_range(40000, 50000);
+        assert_eq!(builder.port_range, Some((40000, 50000)));
+    }
+}

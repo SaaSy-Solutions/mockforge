@@ -8,7 +8,7 @@ use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::models::{HostedMock, DeploymentLog, HealthStatus};
+use crate::models::{DeploymentLog, HealthStatus, HostedMock};
 
 /// Health check worker that periodically checks deployed services
 pub struct HealthCheckWorker {
@@ -53,7 +53,7 @@ impl HealthCheckWorker {
             WHERE status = 'active'
             AND health_check_url IS NOT NULL
             AND deleted_at IS NULL
-            "#
+            "#,
         )
         .fetch_all(pool)
         .await
@@ -81,7 +81,7 @@ impl HealthCheckWorker {
                         last_health_check = NOW(),
                         updated_at = NOW()
                     WHERE id = $2
-                    "#
+                    "#,
                 )
                 .bind(status.to_string())
                 .bind(deployment.id)
@@ -100,7 +100,8 @@ impl HealthCheckWorker {
 
     /// Check health of a single deployment
     async fn check_health(&self, url: &str) -> Result<bool> {
-        let response = self.client
+        let response = self
+            .client
             .get(url)
             .send()
             .await
@@ -117,24 +118,29 @@ impl HealthCheckWorker {
         if let Some(last_check) = deployment.last_health_check {
             let unhealthy_duration = Utc::now() - last_check;
             if unhealthy_duration.num_minutes() > 5 {
-                warn!("Deployment {} has been unhealthy for {} minutes",
-                    deployment.id, unhealthy_duration.num_minutes());
+                warn!(
+                    "Deployment {} has been unhealthy for {} minutes",
+                    deployment.id,
+                    unhealthy_duration.num_minutes()
+                );
 
                 // Log warning
                 DeploymentLog::create(
                     pool,
                     deployment.id,
                     "warning",
-                    &format!("Service has been unhealthy for {} minutes",
-                        unhealthy_duration.num_minutes()),
+                    &format!(
+                        "Service has been unhealthy for {} minutes",
+                        unhealthy_duration.num_minutes()
+                    ),
                     None,
                 )
                 .await?;
 
                 // Optionally: mark as failed if unhealthy for too long
                 if unhealthy_duration.num_minutes() > 15 {
-                    use crate::models::DeploymentStatus;
                     use crate::models::hosted_mock::HostedMock;
+                    use crate::models::DeploymentStatus;
 
                     HostedMock::update_status(
                         pool,

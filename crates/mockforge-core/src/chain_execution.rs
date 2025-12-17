@@ -647,14 +647,166 @@ pub enum ChainExecutionStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::request_chaining::{ChainRequest, ChainResponse};
+    use serde_json::json;
     use std::sync::Arc;
 
+    fn create_test_engine() -> ChainExecutionEngine {
+        let registry = Arc::new(RequestChainRegistry::new(ChainConfig::default()));
+        ChainExecutionEngine::new(registry, ChainConfig::default())
+    }
+
+    fn create_test_chain_response() -> ChainResponse {
+        ChainResponse {
+            status: 200,
+            headers: {
+                let mut h = HashMap::new();
+                h.insert("content-type".to_string(), "application/json".to_string());
+                h
+            },
+            body: Some(json!({
+                "user": {
+                    "id": 123,
+                    "name": "test",
+                    "roles": ["admin", "user"]
+                },
+                "items": [
+                    {"id": 1, "value": "a"},
+                    {"id": 2, "value": "b"}
+                ]
+            })),
+            duration_ms: 50,
+            executed_at: "2024-01-15T10:00:00Z".to_string(),
+            error: None,
+        }
+    }
+
+    // ExecutionRecord tests
+    #[test]
+    fn test_execution_record_debug() {
+        let record = ExecutionRecord {
+            executed_at: "2024-01-15T10:00:00Z".to_string(),
+            result: ChainExecutionResult {
+                chain_id: "test-chain".to_string(),
+                status: ChainExecutionStatus::Successful,
+                total_duration_ms: 100,
+                request_results: HashMap::new(),
+                error_message: None,
+            },
+        };
+
+        let debug = format!("{:?}", record);
+        assert!(debug.contains("ExecutionRecord"));
+        assert!(debug.contains("executed_at"));
+    }
+
+    #[test]
+    fn test_execution_record_clone() {
+        let record = ExecutionRecord {
+            executed_at: "2024-01-15T10:00:00Z".to_string(),
+            result: ChainExecutionResult {
+                chain_id: "test-chain".to_string(),
+                status: ChainExecutionStatus::Successful,
+                total_duration_ms: 100,
+                request_results: HashMap::new(),
+                error_message: None,
+            },
+        };
+
+        let cloned = record.clone();
+        assert_eq!(cloned.executed_at, record.executed_at);
+        assert_eq!(cloned.result.chain_id, record.result.chain_id);
+    }
+
+    // ChainExecutionResult tests
+    #[test]
+    fn test_chain_execution_result_debug() {
+        let result = ChainExecutionResult {
+            chain_id: "test-chain".to_string(),
+            status: ChainExecutionStatus::Successful,
+            total_duration_ms: 100,
+            request_results: HashMap::new(),
+            error_message: None,
+        };
+
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("ChainExecutionResult"));
+        assert!(debug.contains("chain_id"));
+    }
+
+    #[test]
+    fn test_chain_execution_result_clone() {
+        let mut request_results = HashMap::new();
+        request_results.insert("req1".to_string(), create_test_chain_response());
+
+        let result = ChainExecutionResult {
+            chain_id: "test-chain".to_string(),
+            status: ChainExecutionStatus::Successful,
+            total_duration_ms: 100,
+            request_results,
+            error_message: Some("test error".to_string()),
+        };
+
+        let cloned = result.clone();
+        assert_eq!(cloned.chain_id, result.chain_id);
+        assert_eq!(cloned.total_duration_ms, result.total_duration_ms);
+        assert_eq!(cloned.error_message, result.error_message);
+    }
+
+    // ChainExecutionStatus tests
+    #[test]
+    fn test_chain_execution_status_debug() {
+        let status = ChainExecutionStatus::Successful;
+        let debug = format!("{:?}", status);
+        assert!(debug.contains("Successful"));
+
+        let status = ChainExecutionStatus::PartialSuccess;
+        let debug = format!("{:?}", status);
+        assert!(debug.contains("PartialSuccess"));
+
+        let status = ChainExecutionStatus::Failed;
+        let debug = format!("{:?}", status);
+        assert!(debug.contains("Failed"));
+    }
+
+    #[test]
+    fn test_chain_execution_status_clone() {
+        let status = ChainExecutionStatus::Successful;
+        let cloned = status.clone();
+        assert_eq!(cloned, ChainExecutionStatus::Successful);
+    }
+
+    #[test]
+    fn test_chain_execution_status_eq() {
+        assert_eq!(ChainExecutionStatus::Successful, ChainExecutionStatus::Successful);
+        assert_eq!(ChainExecutionStatus::PartialSuccess, ChainExecutionStatus::PartialSuccess);
+        assert_eq!(ChainExecutionStatus::Failed, ChainExecutionStatus::Failed);
+
+        assert_ne!(ChainExecutionStatus::Successful, ChainExecutionStatus::Failed);
+        assert_ne!(ChainExecutionStatus::PartialSuccess, ChainExecutionStatus::Successful);
+    }
+
+    // ChainExecutionEngine tests
     #[tokio::test]
     async fn test_engine_creation() {
         let registry = Arc::new(RequestChainRegistry::new(ChainConfig::default()));
         let _engine = ChainExecutionEngine::new(registry, ChainConfig::default());
 
         // Engine should be created successfully
+    }
+
+    #[tokio::test]
+    async fn test_engine_try_new() {
+        let registry = Arc::new(RequestChainRegistry::new(ChainConfig::default()));
+        let result = ChainExecutionEngine::try_new(registry, ChainConfig::default());
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_engine_debug() {
+        let engine = create_test_engine();
+        let debug = format!("{:?}", engine);
+        assert!(debug.contains("ChainExecutionEngine"));
     }
 
     #[tokio::test]
@@ -687,6 +839,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_topological_sort_single_node() {
+        let engine = create_test_engine();
+
+        let mut graph = HashMap::new();
+        graph.insert("A".to_string(), vec![]);
+
+        let topo_order = engine.topological_sort(&graph).unwrap();
+        assert_eq!(topo_order, vec!["A".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_topological_sort_linear_chain() {
+        let engine = create_test_engine();
+
+        let mut graph = HashMap::new();
+        graph.insert("A".to_string(), vec![]);
+        graph.insert("B".to_string(), vec!["A".to_string()]);
+        graph.insert("C".to_string(), vec!["B".to_string()]);
+
+        let topo_order = engine.topological_sort(&graph).unwrap();
+
+        let c_pos = topo_order.iter().position(|x| x == "C").unwrap();
+        let b_pos = topo_order.iter().position(|x| x == "B").unwrap();
+        let a_pos = topo_order.iter().position(|x| x == "A").unwrap();
+
+        assert!(c_pos < b_pos);
+        assert!(b_pos < a_pos);
+    }
+
+    #[tokio::test]
+    async fn test_topological_sort_empty_graph() {
+        let engine = create_test_engine();
+        let graph = HashMap::new();
+
+        let topo_order = engine.topological_sort(&graph).unwrap();
+        assert!(topo_order.is_empty());
+    }
+
+    #[tokio::test]
     async fn test_circular_dependency_detection() {
         let registry = Arc::new(RequestChainRegistry::new(ChainConfig::default()));
         let engine = ChainExecutionEngine::new(registry, ChainConfig::default());
@@ -697,5 +888,341 @@ mod tests {
 
         let result = engine.topological_sort(&graph);
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_circular_dependency_self_reference() {
+        let engine = create_test_engine();
+
+        let mut graph = HashMap::new();
+        graph.insert("A".to_string(), vec!["A".to_string()]); // Self-reference
+
+        let result = engine.topological_sort(&graph);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_circular_dependency_chain() {
+        let engine = create_test_engine();
+
+        let mut graph = HashMap::new();
+        graph.insert("A".to_string(), vec!["C".to_string()]);
+        graph.insert("B".to_string(), vec!["A".to_string()]);
+        graph.insert("C".to_string(), vec!["B".to_string()]); // A -> C -> B -> A
+
+        let result = engine.topological_sort(&graph);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_build_dependency_graph() {
+        let engine = create_test_engine();
+
+        let links = vec![
+            ChainLink {
+                request: ChainRequest {
+                    id: "req1".to_string(),
+                    method: "GET".to_string(),
+                    url: "http://example.com/1".to_string(),
+                    headers: HashMap::new(),
+                    body: None,
+                    depends_on: vec![],
+                    timeout_secs: None,
+                    expected_status: None,
+                    scripting: None,
+                },
+                store_as: None,
+                extract: HashMap::new(),
+            },
+            ChainLink {
+                request: ChainRequest {
+                    id: "req2".to_string(),
+                    method: "GET".to_string(),
+                    url: "http://example.com/2".to_string(),
+                    headers: HashMap::new(),
+                    body: None,
+                    depends_on: vec!["req1".to_string()],
+                    timeout_secs: None,
+                    expected_status: None,
+                    scripting: None,
+                },
+                store_as: None,
+                extract: HashMap::new(),
+            },
+            ChainLink {
+                request: ChainRequest {
+                    id: "req3".to_string(),
+                    method: "GET".to_string(),
+                    url: "http://example.com/3".to_string(),
+                    headers: HashMap::new(),
+                    body: None,
+                    depends_on: vec!["req1".to_string(), "req2".to_string()],
+                    timeout_secs: None,
+                    expected_status: None,
+                    scripting: None,
+                },
+                store_as: None,
+                extract: HashMap::new(),
+            },
+        ];
+
+        let graph = engine.build_dependency_graph(&links);
+
+        assert!(graph.contains_key("req1"));
+        assert!(graph.contains_key("req2"));
+        assert!(graph.contains_key("req3"));
+        assert_eq!(graph.get("req1").unwrap().len(), 0);
+        assert_eq!(graph.get("req2").unwrap(), &vec!["req1".to_string()]);
+        assert_eq!(graph.get("req3").unwrap(), &vec!["req1".to_string(), "req2".to_string()]);
+    }
+
+    // extract_from_response tests
+    #[tokio::test]
+    async fn test_extract_from_response_simple_field() {
+        let engine = create_test_engine();
+        let response = create_test_chain_response();
+
+        let value = engine.extract_from_response(&response, "body.user.id");
+        assert!(value.is_some());
+        assert_eq!(value.unwrap(), json!(123));
+    }
+
+    #[tokio::test]
+    async fn test_extract_from_response_nested_field() {
+        let engine = create_test_engine();
+        let response = create_test_chain_response();
+
+        let value = engine.extract_from_response(&response, "body.user.name");
+        assert!(value.is_some());
+        assert_eq!(value.unwrap(), json!("test"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_from_response_array_element() {
+        let engine = create_test_engine();
+        let response = create_test_chain_response();
+
+        let value = engine.extract_from_response(&response, "body.items.[0].value");
+        assert!(value.is_some());
+        assert_eq!(value.unwrap(), json!("a"));
+    }
+
+    #[tokio::test]
+    async fn test_extract_from_response_array_element_second() {
+        let engine = create_test_engine();
+        let response = create_test_chain_response();
+
+        let value = engine.extract_from_response(&response, "body.items.[1].id");
+        assert!(value.is_some());
+        assert_eq!(value.unwrap(), json!(2));
+    }
+
+    #[tokio::test]
+    async fn test_extract_from_response_invalid_path() {
+        let engine = create_test_engine();
+        let response = create_test_chain_response();
+
+        let value = engine.extract_from_response(&response, "body.nonexistent");
+        assert!(value.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_extract_from_response_non_body_path() {
+        let engine = create_test_engine();
+        let response = create_test_chain_response();
+
+        let value = engine.extract_from_response(&response, "headers.content-type");
+        assert!(value.is_none()); // Must start with "body"
+    }
+
+    #[tokio::test]
+    async fn test_extract_from_response_empty_path() {
+        let engine = create_test_engine();
+        let response = create_test_chain_response();
+
+        let value = engine.extract_from_response(&response, "");
+        assert!(value.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_extract_from_response_invalid_array_index() {
+        let engine = create_test_engine();
+        let response = create_test_chain_response();
+
+        let value = engine.extract_from_response(&response, "body.items.[invalid].value");
+        assert!(value.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_extract_from_response_array_out_of_bounds() {
+        let engine = create_test_engine();
+        let response = create_test_chain_response();
+
+        let value = engine.extract_from_response(&response, "body.items.[100].value");
+        assert!(value.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_extract_from_response_no_body() {
+        let engine = create_test_engine();
+        let response = ChainResponse {
+            status: 200,
+            headers: HashMap::new(),
+            body: None,
+            duration_ms: 50,
+            executed_at: "2024-01-15T10:00:00Z".to_string(),
+            error: None,
+        };
+
+        let value = engine.extract_from_response(&response, "body.user.id");
+        assert!(value.is_none());
+    }
+
+    // expand_template tests
+    #[tokio::test]
+    async fn test_expand_template_simple() {
+        use crate::request_chaining::ChainContext;
+        let engine = create_test_engine();
+        let context = ChainTemplatingContext::new(ChainContext::new());
+
+        let result = engine.expand_template("hello world", &context);
+        assert_eq!(result, "hello world");
+    }
+
+    #[tokio::test]
+    async fn test_expand_template_with_variable() {
+        use crate::request_chaining::ChainContext;
+        let engine = create_test_engine();
+        let mut context = ChainTemplatingContext::new(ChainContext::new());
+        context.chain_context.set_variable("name".to_string(), json!("test"));
+
+        let result = engine.expand_template("hello {{chain.name}}", &context);
+        // Template expansion should work
+        assert!(result.contains("hello"));
+    }
+
+    // expand_template_in_json tests
+    #[tokio::test]
+    async fn test_expand_template_in_json_string() {
+        use crate::request_chaining::ChainContext;
+        let engine = create_test_engine();
+        let context = ChainTemplatingContext::new(ChainContext::new());
+
+        let input = json!("hello world");
+        let result = engine.expand_template_in_json(&input, &context);
+        assert_eq!(result, json!("hello world"));
+    }
+
+    #[tokio::test]
+    async fn test_expand_template_in_json_number() {
+        use crate::request_chaining::ChainContext;
+        let engine = create_test_engine();
+        let context = ChainTemplatingContext::new(ChainContext::new());
+
+        let input = json!(42);
+        let result = engine.expand_template_in_json(&input, &context);
+        assert_eq!(result, json!(42));
+    }
+
+    #[tokio::test]
+    async fn test_expand_template_in_json_boolean() {
+        use crate::request_chaining::ChainContext;
+        let engine = create_test_engine();
+        let context = ChainTemplatingContext::new(ChainContext::new());
+
+        let input = json!(true);
+        let result = engine.expand_template_in_json(&input, &context);
+        assert_eq!(result, json!(true));
+    }
+
+    #[tokio::test]
+    async fn test_expand_template_in_json_null() {
+        use crate::request_chaining::ChainContext;
+        let engine = create_test_engine();
+        let context = ChainTemplatingContext::new(ChainContext::new());
+
+        let input = json!(null);
+        let result = engine.expand_template_in_json(&input, &context);
+        assert_eq!(result, json!(null));
+    }
+
+    #[tokio::test]
+    async fn test_expand_template_in_json_array() {
+        use crate::request_chaining::ChainContext;
+        let engine = create_test_engine();
+        let context = ChainTemplatingContext::new(ChainContext::new());
+
+        let input = json!(["a", "b", "c"]);
+        let result = engine.expand_template_in_json(&input, &context);
+        assert_eq!(result, json!(["a", "b", "c"]));
+    }
+
+    #[tokio::test]
+    async fn test_expand_template_in_json_object() {
+        use crate::request_chaining::ChainContext;
+        let engine = create_test_engine();
+        let context = ChainTemplatingContext::new(ChainContext::new());
+
+        let input = json!({"key": "value", "nested": {"inner": "data"}});
+        let result = engine.expand_template_in_json(&input, &context);
+        assert_eq!(result, json!({"key": "value", "nested": {"inner": "data"}}));
+    }
+
+    // get_chain_history tests
+    #[tokio::test]
+    async fn test_get_chain_history_empty() {
+        let engine = create_test_engine();
+
+        let history = engine.get_chain_history("nonexistent").await;
+        assert!(history.is_empty());
+    }
+
+    // collect_dependency_level tests
+    #[tokio::test]
+    async fn test_collect_dependency_level() {
+        let engine = create_test_engine();
+        let graph = HashMap::new();
+        let mut level = vec![];
+        let mut processed = HashSet::new();
+
+        engine.collect_dependency_level("req1".to_string(), &graph, &mut level, &mut processed);
+
+        assert_eq!(level, vec!["req1".to_string()]);
+        assert!(processed.contains("req1"));
+    }
+
+    // Chain execution with non-existent chain
+    #[tokio::test]
+    async fn test_execute_chain_not_found() {
+        let engine = create_test_engine();
+
+        let result = engine.execute_chain("nonexistent", None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("not found"));
+    }
+
+    // Test engine with custom config
+    #[tokio::test]
+    async fn test_engine_with_custom_config() {
+        let registry = Arc::new(RequestChainRegistry::new(ChainConfig::default()));
+        let config = ChainConfig {
+            enabled: true,
+            max_chain_length: 50,
+            global_timeout_secs: 60,
+            enable_parallel_execution: false,
+        };
+
+        let result = ChainExecutionEngine::try_new(registry, config);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_engine_with_default_config() {
+        let registry = Arc::new(RequestChainRegistry::new(ChainConfig::default()));
+        let config = ChainConfig::default();
+
+        let result = ChainExecutionEngine::try_new(registry, config);
+        assert!(result.is_ok());
     }
 }

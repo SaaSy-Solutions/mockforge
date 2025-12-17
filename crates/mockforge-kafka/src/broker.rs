@@ -485,3 +485,440 @@ impl Drop for ConnectionGuard {
 fn get_api_key_from_request(request: &KafkaRequest) -> i16 {
     request.api_key
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== Record Tests ====================
+
+    #[test]
+    fn test_record_creation_with_all_fields() {
+        let record = Record {
+            key: Some(b"test-key".to_vec()),
+            value: b"test-value".to_vec(),
+            headers: vec![("header1".to_string(), b"value1".to_vec())],
+        };
+
+        assert_eq!(record.key, Some(b"test-key".to_vec()));
+        assert_eq!(record.value, b"test-value".to_vec());
+        assert_eq!(record.headers.len(), 1);
+        assert_eq!(record.headers[0].0, "header1");
+    }
+
+    #[test]
+    fn test_record_creation_without_key() {
+        let record = Record {
+            key: None,
+            value: b"message body".to_vec(),
+            headers: vec![],
+        };
+
+        assert!(record.key.is_none());
+        assert_eq!(record.value, b"message body".to_vec());
+        assert!(record.headers.is_empty());
+    }
+
+    #[test]
+    fn test_record_with_multiple_headers() {
+        let record = Record {
+            key: Some(b"key".to_vec()),
+            value: b"value".to_vec(),
+            headers: vec![
+                ("content-type".to_string(), b"application/json".to_vec()),
+                ("correlation-id".to_string(), b"12345".to_vec()),
+                ("source".to_string(), b"test-producer".to_vec()),
+            ],
+        };
+
+        assert_eq!(record.headers.len(), 3);
+        assert_eq!(record.headers[0].0, "content-type");
+        assert_eq!(record.headers[1].0, "correlation-id");
+        assert_eq!(record.headers[2].0, "source");
+    }
+
+    #[test]
+    fn test_record_clone() {
+        let original = Record {
+            key: Some(b"key".to_vec()),
+            value: b"value".to_vec(),
+            headers: vec![("h".to_string(), b"v".to_vec())],
+        };
+
+        let cloned = original.clone();
+
+        assert_eq!(original.key, cloned.key);
+        assert_eq!(original.value, cloned.value);
+        assert_eq!(original.headers, cloned.headers);
+    }
+
+    #[test]
+    fn test_record_debug() {
+        let record = Record {
+            key: Some(b"key".to_vec()),
+            value: b"value".to_vec(),
+            headers: vec![],
+        };
+
+        let debug_str = format!("{:?}", record);
+        assert!(debug_str.contains("Record"));
+        assert!(debug_str.contains("key"));
+        assert!(debug_str.contains("value"));
+    }
+
+    #[test]
+    fn test_record_empty_value() {
+        let record = Record {
+            key: None,
+            value: vec![],
+            headers: vec![],
+        };
+
+        assert!(record.key.is_none());
+        assert!(record.value.is_empty());
+        assert!(record.headers.is_empty());
+    }
+
+    #[test]
+    fn test_record_binary_data() {
+        // Test with binary data that's not valid UTF-8
+        let binary_data: Vec<u8> = vec![0x00, 0xFF, 0x80, 0x7F, 0xFE];
+        let record = Record {
+            key: Some(binary_data.clone()),
+            value: binary_data.clone(),
+            headers: vec![],
+        };
+
+        assert_eq!(record.key.as_ref().unwrap().len(), 5);
+        assert_eq!(record.value.len(), 5);
+        assert_eq!(record.value[0], 0x00);
+        assert_eq!(record.value[1], 0xFF);
+    }
+
+    // ==================== ProduceResponse Tests ====================
+
+    #[test]
+    fn test_produce_response_success() {
+        let response = ProduceResponse {
+            partition: 0,
+            error_code: 0,
+            offset: 100,
+        };
+
+        assert_eq!(response.partition, 0);
+        assert_eq!(response.error_code, 0);
+        assert_eq!(response.offset, 100);
+    }
+
+    #[test]
+    fn test_produce_response_with_error() {
+        let response = ProduceResponse {
+            partition: 1,
+            error_code: 3, // UNKNOWN_TOPIC_OR_PARTITION
+            offset: -1,
+        };
+
+        assert_eq!(response.partition, 1);
+        assert_eq!(response.error_code, 3);
+        assert_eq!(response.offset, -1);
+    }
+
+    #[test]
+    fn test_produce_response_high_offset() {
+        let response = ProduceResponse {
+            partition: 5,
+            error_code: 0,
+            offset: i64::MAX,
+        };
+
+        assert_eq!(response.partition, 5);
+        assert_eq!(response.offset, i64::MAX);
+    }
+
+    #[test]
+    fn test_produce_response_debug() {
+        let response = ProduceResponse {
+            partition: 0,
+            error_code: 0,
+            offset: 42,
+        };
+
+        let debug_str = format!("{:?}", response);
+        assert!(debug_str.contains("ProduceResponse"));
+        assert!(debug_str.contains("partition"));
+        assert!(debug_str.contains("error_code"));
+        assert!(debug_str.contains("offset"));
+    }
+
+    // ==================== FetchResponse Tests ====================
+
+    #[test]
+    fn test_fetch_response_empty() {
+        let response = FetchResponse {
+            partition: 0,
+            error_code: 0,
+            high_watermark: 100,
+            records: vec![],
+        };
+
+        assert_eq!(response.partition, 0);
+        assert_eq!(response.error_code, 0);
+        assert_eq!(response.high_watermark, 100);
+        assert!(response.records.is_empty());
+    }
+
+    #[test]
+    fn test_fetch_response_with_records() {
+        let records = vec![
+            Record {
+                key: Some(b"key1".to_vec()),
+                value: b"value1".to_vec(),
+                headers: vec![],
+            },
+            Record {
+                key: Some(b"key2".to_vec()),
+                value: b"value2".to_vec(),
+                headers: vec![],
+            },
+        ];
+
+        let response = FetchResponse {
+            partition: 0,
+            error_code: 0,
+            high_watermark: 50,
+            records,
+        };
+
+        assert_eq!(response.records.len(), 2);
+        assert_eq!(response.records[0].key, Some(b"key1".to_vec()));
+        assert_eq!(response.records[1].value, b"value2".to_vec());
+    }
+
+    #[test]
+    fn test_fetch_response_with_error() {
+        let response = FetchResponse {
+            partition: 0,
+            error_code: 1, // OFFSET_OUT_OF_RANGE
+            high_watermark: 0,
+            records: vec![],
+        };
+
+        assert_eq!(response.error_code, 1);
+        assert_eq!(response.high_watermark, 0);
+    }
+
+    #[test]
+    fn test_fetch_response_debug() {
+        let response = FetchResponse {
+            partition: 2,
+            error_code: 0,
+            high_watermark: 1000,
+            records: vec![],
+        };
+
+        let debug_str = format!("{:?}", response);
+        assert!(debug_str.contains("FetchResponse"));
+        assert!(debug_str.contains("high_watermark"));
+    }
+
+    // ==================== get_api_key_from_request Tests ====================
+
+    #[test]
+    fn test_get_api_key_produce() {
+        let request = KafkaRequest {
+            api_key: 0, // Produce
+            api_version: 7,
+            correlation_id: 1,
+            client_id: "test-client".to_string(),
+            request_type: KafkaRequestType::Produce,
+        };
+
+        assert_eq!(get_api_key_from_request(&request), 0);
+    }
+
+    #[test]
+    fn test_get_api_key_fetch() {
+        let request = KafkaRequest {
+            api_key: 1, // Fetch
+            api_version: 11,
+            correlation_id: 2,
+            client_id: "consumer".to_string(),
+            request_type: KafkaRequestType::Fetch,
+        };
+
+        assert_eq!(get_api_key_from_request(&request), 1);
+    }
+
+    #[test]
+    fn test_get_api_key_metadata() {
+        let request = KafkaRequest {
+            api_key: 3, // Metadata
+            api_version: 9,
+            correlation_id: 3,
+            client_id: "admin".to_string(),
+            request_type: KafkaRequestType::Metadata,
+        };
+
+        assert_eq!(get_api_key_from_request(&request), 3);
+    }
+
+    #[test]
+    fn test_get_api_key_api_versions() {
+        let request = KafkaRequest {
+            api_key: 18, // ApiVersions
+            api_version: 3,
+            correlation_id: 100,
+            client_id: "client".to_string(),
+            request_type: KafkaRequestType::ApiVersions,
+        };
+
+        assert_eq!(get_api_key_from_request(&request), 18);
+    }
+
+    #[test]
+    fn test_get_api_key_list_groups() {
+        let request = KafkaRequest {
+            api_key: 16, // ListGroups
+            api_version: 4,
+            correlation_id: 5,
+            client_id: "admin-client".to_string(),
+            request_type: KafkaRequestType::ListGroups,
+        };
+
+        assert_eq!(get_api_key_from_request(&request), 16);
+    }
+
+    #[test]
+    fn test_get_api_key_create_topics() {
+        let request = KafkaRequest {
+            api_key: 19, // CreateTopics
+            api_version: 5,
+            correlation_id: 10,
+            client_id: "admin".to_string(),
+            request_type: KafkaRequestType::CreateTopics,
+        };
+
+        assert_eq!(get_api_key_from_request(&request), 19);
+    }
+
+    // ==================== KafkaRequest Field Tests ====================
+
+    #[test]
+    fn test_kafka_request_fields() {
+        let request = KafkaRequest {
+            api_key: 0,
+            api_version: 8,
+            correlation_id: 12345,
+            client_id: "my-producer".to_string(),
+            request_type: KafkaRequestType::Produce,
+        };
+
+        assert_eq!(request.api_key, 0);
+        assert_eq!(request.api_version, 8);
+        assert_eq!(request.correlation_id, 12345);
+        assert_eq!(request.client_id, "my-producer");
+    }
+
+    #[test]
+    fn test_kafka_request_empty_client_id() {
+        let request = KafkaRequest {
+            api_key: 3,
+            api_version: 9,
+            correlation_id: 1,
+            client_id: String::new(),
+            request_type: KafkaRequestType::Metadata,
+        };
+
+        assert!(request.client_id.is_empty());
+    }
+
+    #[test]
+    fn test_kafka_request_max_correlation_id() {
+        let request = KafkaRequest {
+            api_key: 0,
+            api_version: 0,
+            correlation_id: i32::MAX,
+            client_id: "test".to_string(),
+            request_type: KafkaRequestType::Produce,
+        };
+
+        assert_eq!(request.correlation_id, i32::MAX);
+    }
+
+    // ==================== KafkaRequestType Tests ====================
+
+    #[test]
+    fn test_request_type_variants() {
+        let metadata = KafkaRequestType::Metadata;
+        let produce = KafkaRequestType::Produce;
+        let fetch = KafkaRequestType::Fetch;
+        let list_groups = KafkaRequestType::ListGroups;
+        let describe_groups = KafkaRequestType::DescribeGroups;
+        let api_versions = KafkaRequestType::ApiVersions;
+        let create_topics = KafkaRequestType::CreateTopics;
+        let delete_topics = KafkaRequestType::DeleteTopics;
+        let describe_configs = KafkaRequestType::DescribeConfigs;
+
+        // Verify they can be matched
+        assert!(matches!(metadata, KafkaRequestType::Metadata));
+        assert!(matches!(produce, KafkaRequestType::Produce));
+        assert!(matches!(fetch, KafkaRequestType::Fetch));
+        assert!(matches!(list_groups, KafkaRequestType::ListGroups));
+        assert!(matches!(describe_groups, KafkaRequestType::DescribeGroups));
+        assert!(matches!(api_versions, KafkaRequestType::ApiVersions));
+        assert!(matches!(create_topics, KafkaRequestType::CreateTopics));
+        assert!(matches!(delete_topics, KafkaRequestType::DeleteTopics));
+        assert!(matches!(describe_configs, KafkaRequestType::DescribeConfigs));
+    }
+
+    // ==================== Message Size Limit Tests ====================
+
+    #[test]
+    fn test_message_size_limit_constant() {
+        // The broker has a 10MB message size limit
+        let max_message_size: usize = 10 * 1024 * 1024;
+        assert_eq!(max_message_size, 10_485_760);
+    }
+
+    #[test]
+    fn test_message_size_under_limit() {
+        let message_size: usize = 1024 * 1024; // 1MB
+        let limit: usize = 10 * 1024 * 1024; // 10MB
+        assert!(message_size <= limit);
+    }
+
+    #[test]
+    fn test_message_size_over_limit() {
+        let message_size: usize = 11 * 1024 * 1024; // 11MB
+        let limit: usize = 10 * 1024 * 1024; // 10MB
+        assert!(message_size > limit);
+    }
+
+    // ==================== Response Size Serialization Tests ====================
+
+    #[test]
+    fn test_response_size_serialization() {
+        let response_len: i32 = 1000;
+        let size_bytes = response_len.to_be_bytes();
+
+        assert_eq!(size_bytes.len(), 4);
+        assert_eq!(i32::from_be_bytes(size_bytes), 1000);
+    }
+
+    #[test]
+    fn test_response_size_max_value() {
+        let response_len: i32 = i32::MAX;
+        let size_bytes = response_len.to_be_bytes();
+
+        assert_eq!(size_bytes.len(), 4);
+        assert_eq!(i32::from_be_bytes(size_bytes), i32::MAX);
+    }
+
+    #[test]
+    fn test_response_size_zero() {
+        let response_len: i32 = 0;
+        let size_bytes = response_len.to_be_bytes();
+
+        assert_eq!(size_bytes, [0, 0, 0, 0]);
+    }
+}

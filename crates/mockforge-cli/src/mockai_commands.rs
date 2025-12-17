@@ -41,7 +41,7 @@ pub enum MockAICommands {
         #[arg(short, long)]
         output: Option<PathBuf>,
         /// Enable verbose output
-        #[arg(short, long)]
+        #[arg(long)]
         verbose: bool,
     },
 
@@ -61,7 +61,7 @@ pub enum MockAICommands {
         #[arg(short, long)]
         output: Option<PathBuf>,
         /// Enable verbose output
-        #[arg(short, long)]
+        #[arg(long)]
         verbose: bool,
     },
 
@@ -141,7 +141,7 @@ pub enum MockAICommands {
         #[arg(long, default_value = "0.7")]
         min_confidence: f64,
         /// Enable verbose output
-        #[arg(short, long)]
+        #[arg(long)]
         verbose: bool,
     },
 }
@@ -617,4 +617,483 @@ async fn handle_generate_from_traffic(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mockai_commands_learn() {
+        let cmd = MockAICommands::Learn {
+            from_examples: Some(PathBuf::from("examples.json")),
+            from_openapi: None,
+            output: Some(PathBuf::from("rules.yaml")),
+            verbose: true,
+        };
+
+        match cmd {
+            MockAICommands::Learn {
+                from_examples,
+                from_openapi,
+                output,
+                verbose,
+            } => {
+                assert_eq!(from_examples, Some(PathBuf::from("examples.json")));
+                assert!(from_openapi.is_none());
+                assert_eq!(output, Some(PathBuf::from("rules.yaml")));
+                assert!(verbose);
+            }
+            _ => panic!("Expected Learn command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_learn_from_openapi() {
+        let cmd = MockAICommands::Learn {
+            from_examples: None,
+            from_openapi: Some(PathBuf::from("api.yaml")),
+            output: None,
+            verbose: false,
+        };
+
+        match cmd {
+            MockAICommands::Learn {
+                from_examples,
+                from_openapi,
+                ..
+            } => {
+                assert!(from_examples.is_none());
+                assert_eq!(from_openapi, Some(PathBuf::from("api.yaml")));
+            }
+            _ => panic!("Expected Learn command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_generate() {
+        let cmd = MockAICommands::Generate {
+            from_openapi: PathBuf::from("spec.yaml"),
+            output: Some(PathBuf::from("output.json")),
+            verbose: false,
+        };
+
+        match cmd {
+            MockAICommands::Generate {
+                from_openapi,
+                output,
+                verbose,
+            } => {
+                assert_eq!(from_openapi, PathBuf::from("spec.yaml"));
+                assert_eq!(output, Some(PathBuf::from("output.json")));
+                assert!(!verbose);
+            }
+            _ => panic!("Expected Generate command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_enable() {
+        let cmd = MockAICommands::Enable {
+            endpoint: vec!["/api/users".to_string(), "/api/products".to_string()],
+            config: Some(PathBuf::from("config.yaml")),
+        };
+
+        match cmd {
+            MockAICommands::Enable { endpoint, config } => {
+                assert_eq!(endpoint.len(), 2);
+                assert_eq!(endpoint[0], "/api/users");
+                assert_eq!(endpoint[1], "/api/products");
+                assert_eq!(config, Some(PathBuf::from("config.yaml")));
+            }
+            _ => panic!("Expected Enable command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_enable_all() {
+        let cmd = MockAICommands::Enable {
+            endpoint: vec![],
+            config: None,
+        };
+
+        match cmd {
+            MockAICommands::Enable { endpoint, config } => {
+                assert!(endpoint.is_empty());
+                assert!(config.is_none());
+            }
+            _ => panic!("Expected Enable command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_disable() {
+        let cmd = MockAICommands::Disable {
+            endpoint: vec!["/api/legacy".to_string()],
+            config: Some(PathBuf::from("mockforge.yaml")),
+        };
+
+        match cmd {
+            MockAICommands::Disable { endpoint, config } => {
+                assert_eq!(endpoint.len(), 1);
+                assert_eq!(endpoint[0], "/api/legacy");
+                assert!(config.is_some());
+            }
+            _ => panic!("Expected Disable command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_disable_all() {
+        let cmd = MockAICommands::Disable {
+            endpoint: vec![],
+            config: None,
+        };
+
+        match cmd {
+            MockAICommands::Disable { endpoint, config } => {
+                assert!(endpoint.is_empty());
+                assert!(config.is_none());
+            }
+            _ => panic!("Expected Disable command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_status() {
+        let cmd = MockAICommands::Status {
+            config: Some(PathBuf::from("config.yaml")),
+        };
+
+        match cmd {
+            MockAICommands::Status { config } => {
+                assert_eq!(config, Some(PathBuf::from("config.yaml")));
+            }
+            _ => panic!("Expected Status command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_status_no_config() {
+        let cmd = MockAICommands::Status { config: None };
+
+        match cmd {
+            MockAICommands::Status { config } => {
+                assert!(config.is_none());
+            }
+            _ => panic!("Expected Status command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_generate_from_traffic() {
+        let cmd = MockAICommands::GenerateFromTraffic {
+            database: Some(PathBuf::from("recordings.db")),
+            output: Some(PathBuf::from("openapi.yaml")),
+            since: Some("2025-01-01T00:00:00Z".to_string()),
+            until: Some("2025-12-31T23:59:59Z".to_string()),
+            path_pattern: Some("/api/*".to_string()),
+            min_confidence: 0.8,
+            verbose: true,
+        };
+
+        match cmd {
+            MockAICommands::GenerateFromTraffic {
+                database,
+                output,
+                since,
+                until,
+                path_pattern,
+                min_confidence,
+                verbose,
+            } => {
+                assert_eq!(database, Some(PathBuf::from("recordings.db")));
+                assert_eq!(output, Some(PathBuf::from("openapi.yaml")));
+                assert_eq!(since, Some("2025-01-01T00:00:00Z".to_string()));
+                assert_eq!(until, Some("2025-12-31T23:59:59Z".to_string()));
+                assert_eq!(path_pattern, Some("/api/*".to_string()));
+                assert_eq!(min_confidence, 0.8);
+                assert!(verbose);
+            }
+            _ => panic!("Expected GenerateFromTraffic command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_generate_from_traffic_minimal() {
+        let cmd = MockAICommands::GenerateFromTraffic {
+            database: None,
+            output: None,
+            since: None,
+            until: None,
+            path_pattern: None,
+            min_confidence: 0.7,
+            verbose: false,
+        };
+
+        match cmd {
+            MockAICommands::GenerateFromTraffic {
+                database,
+                output,
+                since,
+                until,
+                path_pattern,
+                min_confidence,
+                verbose,
+            } => {
+                assert!(database.is_none());
+                assert!(output.is_none());
+                assert!(since.is_none());
+                assert!(until.is_none());
+                assert!(path_pattern.is_none());
+                assert_eq!(min_confidence, 0.7);
+                assert!(!verbose);
+            }
+            _ => panic!("Expected GenerateFromTraffic command"),
+        }
+    }
+
+    #[test]
+    fn test_mockai_commands_debug_format() {
+        let cmd = MockAICommands::Learn {
+            from_examples: Some(PathBuf::from("examples.json")),
+            from_openapi: None,
+            output: None,
+            verbose: true,
+        };
+
+        let debug_str = format!("{:?}", cmd);
+        assert!(debug_str.contains("Learn"));
+        assert!(debug_str.contains("examples.json"));
+    }
+
+    #[test]
+    fn test_generate_with_verbose_flag() {
+        let cmd = MockAICommands::Generate {
+            from_openapi: PathBuf::from("api.yaml"),
+            output: None,
+            verbose: true,
+        };
+
+        match cmd {
+            MockAICommands::Generate { verbose, .. } => {
+                assert!(verbose);
+            }
+            _ => panic!("Expected Generate command"),
+        }
+    }
+
+    #[test]
+    fn test_learn_output_formats() {
+        let yaml_cmd = MockAICommands::Learn {
+            from_examples: Some(PathBuf::from("examples.json")),
+            from_openapi: None,
+            output: Some(PathBuf::from("rules.yaml")),
+            verbose: false,
+        };
+
+        match yaml_cmd {
+            MockAICommands::Learn { output, .. } => {
+                assert!(output.unwrap().to_str().unwrap().ends_with(".yaml"));
+            }
+            _ => panic!("Expected Learn command"),
+        }
+
+        let json_cmd = MockAICommands::Learn {
+            from_examples: Some(PathBuf::from("examples.json")),
+            from_openapi: None,
+            output: Some(PathBuf::from("rules.json")),
+            verbose: false,
+        };
+
+        match json_cmd {
+            MockAICommands::Learn { output, .. } => {
+                assert!(output.unwrap().to_str().unwrap().ends_with(".json"));
+            }
+            _ => panic!("Expected Learn command"),
+        }
+    }
+
+    #[test]
+    fn test_enable_multiple_endpoints() {
+        let endpoints = vec![
+            "/api/users".to_string(),
+            "/api/products".to_string(),
+            "/api/orders".to_string(),
+        ];
+
+        let cmd = MockAICommands::Enable {
+            endpoint: endpoints.clone(),
+            config: None,
+        };
+
+        match cmd {
+            MockAICommands::Enable { endpoint, .. } => {
+                assert_eq!(endpoint.len(), 3);
+                assert_eq!(endpoint, endpoints);
+            }
+            _ => panic!("Expected Enable command"),
+        }
+    }
+
+    #[test]
+    fn test_disable_single_endpoint() {
+        let cmd = MockAICommands::Disable {
+            endpoint: vec!["/api/admin".to_string()],
+            config: None,
+        };
+
+        match cmd {
+            MockAICommands::Disable { endpoint, .. } => {
+                assert_eq!(endpoint.len(), 1);
+                assert_eq!(endpoint[0], "/api/admin");
+            }
+            _ => panic!("Expected Disable command"),
+        }
+    }
+
+    #[test]
+    fn test_generate_from_traffic_confidence_scores() {
+        let cmd1 = MockAICommands::GenerateFromTraffic {
+            database: None,
+            output: None,
+            since: None,
+            until: None,
+            path_pattern: None,
+            min_confidence: 0.5,
+            verbose: false,
+        };
+
+        match cmd1 {
+            MockAICommands::GenerateFromTraffic { min_confidence, .. } => {
+                assert_eq!(min_confidence, 0.5);
+            }
+            _ => panic!("Expected GenerateFromTraffic command"),
+        }
+
+        let cmd2 = MockAICommands::GenerateFromTraffic {
+            database: None,
+            output: None,
+            since: None,
+            until: None,
+            path_pattern: None,
+            min_confidence: 0.95,
+            verbose: false,
+        };
+
+        match cmd2 {
+            MockAICommands::GenerateFromTraffic { min_confidence, .. } => {
+                assert_eq!(min_confidence, 0.95);
+            }
+            _ => panic!("Expected GenerateFromTraffic command"),
+        }
+    }
+
+    #[test]
+    fn test_generate_from_traffic_time_filters() {
+        let since = "2025-01-01T00:00:00Z".to_string();
+        let until = "2025-01-31T23:59:59Z".to_string();
+
+        let cmd = MockAICommands::GenerateFromTraffic {
+            database: None,
+            output: None,
+            since: Some(since.clone()),
+            until: Some(until.clone()),
+            path_pattern: None,
+            min_confidence: 0.7,
+            verbose: false,
+        };
+
+        match cmd {
+            MockAICommands::GenerateFromTraffic {
+                since: s, until: u, ..
+            } => {
+                assert_eq!(s, Some(since));
+                assert_eq!(u, Some(until));
+            }
+            _ => panic!("Expected GenerateFromTraffic command"),
+        }
+    }
+
+    #[test]
+    fn test_generate_from_traffic_path_patterns() {
+        let patterns = vec!["/api/*", "/v1/users/*", "/admin/**"];
+
+        for pattern in patterns {
+            let cmd = MockAICommands::GenerateFromTraffic {
+                database: None,
+                output: None,
+                since: None,
+                until: None,
+                path_pattern: Some(pattern.to_string()),
+                min_confidence: 0.7,
+                verbose: false,
+            };
+
+            match cmd {
+                MockAICommands::GenerateFromTraffic { path_pattern, .. } => {
+                    assert_eq!(path_pattern, Some(pattern.to_string()));
+                }
+                _ => panic!("Expected GenerateFromTraffic command"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_pathbuf_handling_across_commands() {
+        let path = PathBuf::from("/tmp/test/file.yaml");
+
+        // Test with Learn
+        let learn_cmd = MockAICommands::Learn {
+            from_examples: Some(path.clone()),
+            from_openapi: None,
+            output: None,
+            verbose: false,
+        };
+
+        match learn_cmd {
+            MockAICommands::Learn { from_examples, .. } => {
+                assert_eq!(from_examples, Some(path.clone()));
+            }
+            _ => panic!("Expected Learn command"),
+        }
+
+        // Test with Generate
+        let gen_cmd = MockAICommands::Generate {
+            from_openapi: path.clone(),
+            output: None,
+            verbose: false,
+        };
+
+        match gen_cmd {
+            MockAICommands::Generate { from_openapi, .. } => {
+                assert_eq!(from_openapi, path);
+            }
+            _ => panic!("Expected Generate command"),
+        }
+    }
+
+    #[test]
+    fn test_optional_config_paths() {
+        let commands = vec![
+            MockAICommands::Enable {
+                endpoint: vec![],
+                config: None,
+            },
+            MockAICommands::Disable {
+                endpoint: vec![],
+                config: None,
+            },
+            MockAICommands::Status { config: None },
+        ];
+
+        for cmd in commands {
+            match cmd {
+                MockAICommands::Enable { config, .. } => assert!(config.is_none()),
+                MockAICommands::Disable { config, .. } => assert!(config.is_none()),
+                MockAICommands::Status { config } => assert!(config.is_none()),
+                _ => {}
+            }
+        }
+    }
 }

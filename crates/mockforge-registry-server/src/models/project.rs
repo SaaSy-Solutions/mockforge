@@ -84,13 +84,11 @@ impl Project {
         org_id: Uuid,
         slug: &str,
     ) -> sqlx::Result<Option<Self>> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM projects WHERE org_id = $1 AND slug = $2",
-        )
-        .bind(org_id)
-        .bind(slug)
-        .fetch_optional(pool)
-        .await
+        sqlx::query_as::<_, Self>("SELECT * FROM projects WHERE org_id = $1 AND slug = $2")
+            .bind(org_id)
+            .bind(slug)
+            .fetch_optional(pool)
+            .await
     }
 
     /// Get all projects for an organization
@@ -139,11 +137,7 @@ impl Project {
         updates.push(format!("updated_at = NOW()"));
         updates.push(format!("id = ${}", param_count));
 
-        let sql = format!(
-            "UPDATE projects SET {} WHERE id = ${}",
-            updates.join(", "),
-            param_count
-        );
+        let sql = format!("UPDATE projects SET {} WHERE id = ${}", updates.join(", "), param_count);
 
         let mut query = sqlx::query(&sql);
         if let Some(n) = name {
@@ -166,10 +160,7 @@ impl Project {
 
     /// Delete project
     pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
-        sqlx::query("DELETE FROM projects WHERE id = $1")
-            .bind(id)
-            .execute(pool)
-            .await?;
+        sqlx::query("DELETE FROM projects WHERE id = $1").bind(id).execute(pool).await?;
 
         Ok(())
     }

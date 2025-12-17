@@ -280,3 +280,343 @@ pub fn print_results(results: &[ValidationResult], verbose: bool) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    // FixtureFormat tests
+    #[test]
+    fn test_fixture_format_debug() {
+        let format = FixtureFormat::Flat;
+        let debug = format!("{:?}", format);
+        assert!(debug.contains("Flat"));
+    }
+
+    #[test]
+    fn test_fixture_format_clone() {
+        let format = FixtureFormat::Nested;
+        let cloned = format;
+        assert!(matches!(cloned, FixtureFormat::Nested));
+    }
+
+    // normalize_path tests
+    #[test]
+    fn test_normalize_path_simple() {
+        assert_eq!(normalize_path("/api/users"), "/api/users");
+    }
+
+    #[test]
+    fn test_normalize_path_adds_leading_slash() {
+        assert_eq!(normalize_path("api/users"), "/api/users");
+    }
+
+    #[test]
+    fn test_normalize_path_removes_trailing_slash() {
+        assert_eq!(normalize_path("/api/users/"), "/api/users");
+    }
+
+    #[test]
+    fn test_normalize_path_root() {
+        assert_eq!(normalize_path("/"), "/");
+    }
+
+    #[test]
+    fn test_normalize_path_collapses_double_slashes() {
+        assert_eq!(normalize_path("/api//users"), "/api/users");
+        assert_eq!(normalize_path("/api///users"), "/api/users");
+    }
+
+    #[test]
+    fn test_normalize_path_strips_query_string() {
+        assert_eq!(normalize_path("/api/users?page=1"), "/api/users");
+        assert_eq!(normalize_path("/api/users?page=1&limit=10"), "/api/users");
+    }
+
+    #[test]
+    fn test_normalize_path_trims_whitespace() {
+        assert_eq!(normalize_path("  /api/users  "), "/api/users");
+    }
+
+    #[test]
+    fn test_normalize_path_empty() {
+        assert_eq!(normalize_path(""), "/");
+    }
+
+    // should_skip_file tests
+    #[test]
+    fn test_should_skip_file_with_comment() {
+        let content = r#"{"_comment": "This is a template", "method": "GET"}"#;
+        assert!(should_skip_file(content));
+    }
+
+    #[test]
+    fn test_should_skip_file_with_usage() {
+        let content = r#"{"_usage": "Example usage", "method": "GET"}"#;
+        assert!(should_skip_file(content));
+    }
+
+    #[test]
+    fn test_should_skip_file_with_scenario() {
+        let content = r#"{"scenario": "test-scenario", "steps": []}"#;
+        assert!(should_skip_file(content));
+    }
+
+    #[test]
+    fn test_should_skip_file_with_presentation_mode() {
+        let content = r#"{"presentation_mode": true, "slides": []}"#;
+        assert!(should_skip_file(content));
+    }
+
+    #[test]
+    fn test_should_skip_file_normal_fixture() {
+        let content = r#"{"method": "GET", "path": "/api/users", "status": 200}"#;
+        assert!(!should_skip_file(content));
+    }
+
+    // validate_file tests
+    #[tokio::test]
+    async fn test_validate_file_valid_flat_fixture() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("fixture.json");
+        let fixture = r#"{
+            "method": "GET",
+            "path": "/api/users",
+            "status": 200,
+            "response": {"users": []}
+        }"#;
+        std::fs::write(&file_path, fixture).unwrap();
+
+        let result = validate_file(&file_path).await.unwrap();
+        assert!(result.valid);
+        assert!(matches!(result.format, FixtureFormat::Flat));
+    }
+
+    #[tokio::test]
+    async fn test_validate_file_valid_nested_fixture() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("fixture.json");
+        let fixture = r#"{
+            "request": {
+                "method": "POST",
+                "path": "/api/users"
+            },
+            "response": {
+                "status": 201,
+                "body": {"id": 1}
+            }
+        }"#;
+        std::fs::write(&file_path, fixture).unwrap();
+
+        let result = validate_file(&file_path).await.unwrap();
+        assert!(result.valid);
+        assert!(matches!(result.format, FixtureFormat::Nested));
+    }
+
+    #[tokio::test]
+    async fn test_validate_file_invalid_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("fixture.json");
+        std::fs::write(&file_path, "{ invalid json }").unwrap();
+
+        let result = validate_file(&file_path).await.unwrap();
+        assert!(!result.valid);
+        assert!(result.error.is_some());
+        assert!(matches!(result.format, FixtureFormat::Invalid));
+    }
+
+    #[tokio::test]
+    async fn test_validate_file_template_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("template.json");
+        let template = r#"{"_comment": "Template file", "method": "GET"}"#;
+        std::fs::write(&file_path, template).unwrap();
+
+        let result = validate_file(&file_path).await.unwrap();
+        assert!(!result.valid);
+        assert!(result.error.unwrap().contains("Template file"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_file_missing_method() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("fixture.json");
+        let fixture = r#"{
+            "path": "/api/users",
+            "status": 200,
+            "response": {}
+        }"#;
+        std::fs::write(&file_path, fixture).unwrap();
+
+        let result = validate_file(&file_path).await.unwrap();
+        // May fail during parsing or validation
+        // Just ensure it handles gracefully
+        assert!(result.valid || result.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_validate_file_invalid_status_code() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("fixture.json");
+        let fixture = r#"{
+            "method": "GET",
+            "path": "/api/users",
+            "status": 999,
+            "response": {}
+        }"#;
+        std::fs::write(&file_path, fixture).unwrap();
+
+        let result = validate_file(&file_path).await.unwrap();
+        assert!(!result.valid);
+        assert!(result.error.unwrap().contains("status code"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_file_status_code_too_low() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("fixture.json");
+        let fixture = r#"{
+            "method": "GET",
+            "path": "/api/users",
+            "status": 50,
+            "response": {}
+        }"#;
+        std::fs::write(&file_path, fixture).unwrap();
+
+        let result = validate_file(&file_path).await.unwrap();
+        assert!(!result.valid);
+    }
+
+    // validate_directory tests
+    #[tokio::test]
+    async fn test_validate_directory_empty() {
+        let temp_dir = TempDir::new().unwrap();
+        let results = validate_directory(temp_dir.path()).await.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_validate_directory_with_fixtures() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create valid fixture
+        let valid_fixture = r#"{
+            "method": "GET",
+            "path": "/api/users",
+            "status": 200,
+            "response": []
+        }"#;
+        std::fs::write(temp_dir.path().join("valid.json"), valid_fixture).unwrap();
+
+        // Create invalid fixture
+        std::fs::write(temp_dir.path().join("invalid.json"), "{ bad json }").unwrap();
+
+        let results = validate_directory(temp_dir.path()).await.unwrap();
+        assert_eq!(results.len(), 2);
+
+        let valid_count = results.iter().filter(|r| r.valid).count();
+        let invalid_count = results.iter().filter(|r| !r.valid).count();
+        assert_eq!(valid_count, 1);
+        assert_eq!(invalid_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_validate_directory_ignores_non_json() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create JSON fixture
+        let fixture = r#"{"method": "GET", "path": "/api", "status": 200, "response": {}}"#;
+        std::fs::write(temp_dir.path().join("fixture.json"), fixture).unwrap();
+
+        // Create non-JSON file
+        std::fs::write(temp_dir.path().join("readme.txt"), "This is not JSON").unwrap();
+
+        let results = validate_directory(temp_dir.path()).await.unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_validate_directory_not_exists() {
+        let result = validate_directory(Path::new("/nonexistent/path")).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_directory_is_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("file.txt");
+        std::fs::write(&file_path, "content").unwrap();
+
+        let result = validate_directory(&file_path).await;
+        assert!(result.is_err());
+    }
+
+    // ValidationResult tests
+    #[test]
+    fn test_validation_result_debug() {
+        let result = ValidationResult {
+            file: PathBuf::from("test.json"),
+            valid: true,
+            error: None,
+            format: FixtureFormat::Flat,
+        };
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("ValidationResult"));
+        assert!(debug.contains("test.json"));
+    }
+
+    // print_results tests (just ensure no panic)
+    #[test]
+    fn test_print_results_empty() {
+        let results: Vec<ValidationResult> = vec![];
+        print_results(&results, false);
+    }
+
+    #[test]
+    fn test_print_results_with_valid() {
+        let results = vec![ValidationResult {
+            file: PathBuf::from("test.json"),
+            valid: true,
+            error: None,
+            format: FixtureFormat::Flat,
+        }];
+        print_results(&results, true);
+    }
+
+    #[test]
+    fn test_print_results_with_invalid() {
+        let results = vec![ValidationResult {
+            file: PathBuf::from("test.json"),
+            valid: false,
+            error: Some("Test error".to_string()),
+            format: FixtureFormat::Invalid,
+        }];
+        print_results(&results, false);
+    }
+
+    #[test]
+    fn test_print_results_mixed() {
+        let results = vec![
+            ValidationResult {
+                file: PathBuf::from("valid.json"),
+                valid: true,
+                error: None,
+                format: FixtureFormat::Flat,
+            },
+            ValidationResult {
+                file: PathBuf::from("nested.json"),
+                valid: true,
+                error: None,
+                format: FixtureFormat::Nested,
+            },
+            ValidationResult {
+                file: PathBuf::from("invalid.json"),
+                valid: false,
+                error: Some("Parse error".to_string()),
+                format: FixtureFormat::Invalid,
+            },
+        ];
+        print_results(&results, true);
+    }
+}

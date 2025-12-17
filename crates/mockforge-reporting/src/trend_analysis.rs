@@ -352,38 +352,283 @@ mod tests {
     use super::*;
     use crate::pdf::ReportMetrics;
 
+    fn create_test_report(i: i64, avg_latency: f64, error_rate: f64) -> ExecutionReport {
+        ExecutionReport {
+            orchestration_name: "test".to_string(),
+            start_time: Utc::now() - Duration::days(10 - i),
+            end_time: Utc::now() - Duration::days(10 - i),
+            duration_seconds: 100,
+            status: "Completed".to_string(),
+            total_steps: 5,
+            completed_steps: 5,
+            failed_steps: 0,
+            metrics: ReportMetrics {
+                total_requests: 1000,
+                successful_requests: 980,
+                failed_requests: 20,
+                avg_latency_ms: avg_latency,
+                p95_latency_ms: 200.0,
+                p99_latency_ms: 300.0,
+                error_rate,
+            },
+            failures: vec![],
+            recommendations: vec![],
+        }
+    }
+
     #[test]
     fn test_trend_analyzer() {
         let mut analyzer = TrendAnalyzer::new();
 
         for i in 0..10 {
-            let report = ExecutionReport {
-                orchestration_name: "test".to_string(),
-                start_time: Utc::now() - Duration::days(10 - i),
-                end_time: Utc::now() - Duration::days(10 - i),
-                duration_seconds: 100,
-                status: "Completed".to_string(),
-                total_steps: 5,
-                completed_steps: 5,
-                failed_steps: 0,
-                metrics: ReportMetrics {
-                    total_requests: 1000,
-                    successful_requests: 980,
-                    failed_requests: 20,
-                    avg_latency_ms: 100.0 + i as f64 * 5.0,
-                    p95_latency_ms: 200.0,
-                    p99_latency_ms: 300.0,
-                    error_rate: 0.02,
-                },
-                failures: vec![],
-                recommendations: vec![],
-            };
-
+            let report = create_test_report(i, 100.0 + i as f64 * 5.0, 0.02);
             analyzer.add_report(report);
         }
 
         let trend = analyzer.analyze_metric("avg_latency").unwrap();
         assert_eq!(trend.metric_name, "avg_latency");
         assert!(trend.data_points.len() >= 10);
+    }
+
+    #[test]
+    fn test_trend_analyzer_new() {
+        let analyzer = TrendAnalyzer::new();
+        assert!(analyzer.historical_reports.is_empty());
+    }
+
+    #[test]
+    fn test_trend_analyzer_default() {
+        let analyzer = TrendAnalyzer::default();
+        assert!(analyzer.historical_reports.is_empty());
+    }
+
+    #[test]
+    fn test_trend_direction_enum_serialize() {
+        let improving = TrendDirection::Improving;
+        let json = serde_json::to_string(&improving).unwrap();
+        assert_eq!(json, "\"improving\"");
+
+        let degrading = TrendDirection::Degrading;
+        let json = serde_json::to_string(&degrading).unwrap();
+        assert_eq!(json, "\"degrading\"");
+
+        let stable = TrendDirection::Stable;
+        let json = serde_json::to_string(&stable).unwrap();
+        assert_eq!(json, "\"stable\"");
+
+        let volatile = TrendDirection::Volatile;
+        let json = serde_json::to_string(&volatile).unwrap();
+        assert_eq!(json, "\"volatile\"");
+    }
+
+    #[test]
+    fn test_analyze_no_historical_data() {
+        let analyzer = TrendAnalyzer::new();
+        let result = analyzer.analyze_metric("error_rate");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_analyze_unknown_metric() {
+        let mut analyzer = TrendAnalyzer::new();
+        analyzer.add_report(create_test_report(0, 100.0, 0.02));
+
+        let result = analyzer.analyze_metric("unknown_metric");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_available_metrics() {
+        let analyzer = TrendAnalyzer::new();
+        let metrics = analyzer.available_metrics();
+
+        assert!(metrics.contains(&"error_rate".to_string()));
+        assert!(metrics.contains(&"avg_latency".to_string()));
+        assert!(metrics.contains(&"p95_latency".to_string()));
+        assert!(metrics.contains(&"p99_latency".to_string()));
+        assert!(metrics.contains(&"total_requests".to_string()));
+        assert!(metrics.contains(&"failed_requests".to_string()));
+        assert!(metrics.contains(&"success_rate".to_string()));
+    }
+
+    #[test]
+    fn test_analyze_all_metrics() {
+        let mut analyzer = TrendAnalyzer::new();
+
+        for i in 0..5 {
+            analyzer.add_report(create_test_report(i, 100.0 + i as f64 * 2.0, 0.02));
+        }
+
+        let reports = analyzer.analyze_all_metrics().unwrap();
+        assert!(!reports.is_empty());
+    }
+
+    #[test]
+    fn test_trend_report_clone() {
+        let report = TrendReport {
+            metric_name: "error_rate".to_string(),
+            trend: TrendDirection::Stable,
+            change_percentage: 0.0,
+            current_value: 0.02,
+            previous_value: 0.02,
+            average_value: 0.02,
+            std_deviation: 0.001,
+            data_points: vec![],
+            forecast: vec![],
+            anomalies: vec![],
+        };
+
+        let cloned = report.clone();
+        assert_eq!(report.metric_name, cloned.metric_name);
+        assert_eq!(report.trend, cloned.trend);
+    }
+
+    #[test]
+    fn test_data_point_clone() {
+        let point = DataPoint {
+            timestamp: Utc::now(),
+            value: 100.0,
+        };
+
+        let cloned = point.clone();
+        assert_eq!(point.timestamp, cloned.timestamp);
+        assert_eq!(point.value, cloned.value);
+    }
+
+    #[test]
+    fn test_forecast_point_clone() {
+        let point = ForecastPoint {
+            timestamp: Utc::now(),
+            predicted_value: 105.0,
+            confidence_interval: (100.0, 110.0),
+        };
+
+        let cloned = point.clone();
+        assert_eq!(point.predicted_value, cloned.predicted_value);
+        assert_eq!(point.confidence_interval, cloned.confidence_interval);
+    }
+
+    #[test]
+    fn test_anomaly_point_clone() {
+        let point = AnomalyPoint {
+            timestamp: Utc::now(),
+            value: 500.0,
+            severity: "high".to_string(),
+        };
+
+        let cloned = point.clone();
+        assert_eq!(point.value, cloned.value);
+        assert_eq!(point.severity, cloned.severity);
+    }
+
+    #[test]
+    fn test_regression_result_clone() {
+        let result = RegressionResult {
+            slope: 1.5,
+            intercept: 100.0,
+            r_squared: 0.95,
+        };
+
+        let cloned = result.clone();
+        assert_eq!(result.slope, cloned.slope);
+        assert_eq!(result.r_squared, cloned.r_squared);
+    }
+
+    #[test]
+    fn test_trend_degrading() {
+        let mut analyzer = TrendAnalyzer::new();
+
+        // Create reports with increasing error rate (degrading)
+        for i in 0..10 {
+            let report = create_test_report(i, 100.0, 0.01 + i as f64 * 0.02);
+            analyzer.add_report(report);
+        }
+
+        let trend = analyzer.analyze_metric("error_rate").unwrap();
+        assert!(matches!(trend.trend, TrendDirection::Degrading | TrendDirection::Volatile));
+    }
+
+    #[test]
+    fn test_trend_stable() {
+        let mut analyzer = TrendAnalyzer::new();
+
+        // Create reports with stable metrics
+        for i in 0..10 {
+            let report = create_test_report(i, 100.0, 0.02);
+            analyzer.add_report(report);
+        }
+
+        let trend = analyzer.analyze_metric("error_rate").unwrap();
+        // With no variation, should be stable or volatile (depending on r_squared)
+        assert!(matches!(trend.trend, TrendDirection::Stable | TrendDirection::Volatile));
+    }
+
+    #[test]
+    fn test_forecast_generation() {
+        let mut analyzer = TrendAnalyzer::new();
+
+        for i in 0..10 {
+            let report = create_test_report(i, 100.0 + i as f64 * 5.0, 0.02);
+            analyzer.add_report(report);
+        }
+
+        let trend = analyzer.analyze_metric("avg_latency").unwrap();
+        assert!(!trend.forecast.is_empty());
+        assert_eq!(trend.forecast.len(), 5); // Default forecast periods
+    }
+
+    #[test]
+    fn test_trend_report_serialize() {
+        let mut analyzer = TrendAnalyzer::new();
+
+        for i in 0..5 {
+            analyzer.add_report(create_test_report(i, 100.0, 0.02));
+        }
+
+        let trend = analyzer.analyze_metric("error_rate").unwrap();
+        let json = serde_json::to_string(&trend).unwrap();
+        assert!(json.contains("metric_name"));
+        assert!(json.contains("trend"));
+    }
+
+    #[test]
+    fn test_single_report_analysis() {
+        let mut analyzer = TrendAnalyzer::new();
+        analyzer.add_report(create_test_report(0, 100.0, 0.02));
+
+        let trend = analyzer.analyze_metric("error_rate").unwrap();
+        assert_eq!(trend.data_points.len(), 1);
+        // With single point, change_percentage should be 0
+        assert_eq!(trend.change_percentage, 0.0);
+    }
+
+    #[test]
+    fn test_success_rate_metric() {
+        let mut analyzer = TrendAnalyzer::new();
+
+        for i in 0..5 {
+            analyzer.add_report(create_test_report(i, 100.0, 0.02));
+        }
+
+        let trend = analyzer.analyze_metric("success_rate").unwrap();
+        assert_eq!(trend.metric_name, "success_rate");
+        // Success rate should be ~0.98 (980/1000)
+        assert!(trend.current_value > 0.9);
+    }
+
+    #[test]
+    fn test_reports_sorted_by_time() {
+        let mut analyzer = TrendAnalyzer::new();
+
+        // Add reports out of order
+        analyzer.add_report(create_test_report(5, 100.0, 0.02));
+        analyzer.add_report(create_test_report(0, 100.0, 0.02));
+        analyzer.add_report(create_test_report(3, 100.0, 0.02));
+
+        // Reports should be sorted by time
+        let times: Vec<_> = analyzer.historical_reports.iter().map(|r| r.start_time).collect();
+        for i in 1..times.len() {
+            assert!(times[i] >= times[i - 1]);
+        }
     }
 }

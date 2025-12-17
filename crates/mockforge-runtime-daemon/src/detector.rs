@@ -102,6 +102,26 @@ impl NotFoundDetector {
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_new_detector() {
+        let config = RuntimeDaemonConfig::default();
+        let detector = NotFoundDetector::new(config);
+        assert!(detector.config.exclude_patterns.contains(&"/health".to_string()));
+    }
+
+    #[test]
+    fn test_detector_clone() {
+        let config = RuntimeDaemonConfig {
+            enabled: true,
+            exclude_patterns: vec!["/test".to_string()],
+            ..Default::default()
+        };
+        let detector = NotFoundDetector::new(config);
+        let cloned = detector.clone();
+        assert!(cloned.config.enabled);
+        assert!(cloned.config.exclude_patterns.contains(&"/test".to_string()));
+    }
+
     #[tokio::test]
     async fn test_should_exclude() {
         let config = RuntimeDaemonConfig {
@@ -114,5 +134,124 @@ mod tests {
         assert!(detector.should_exclude("/health/check"));
         assert!(detector.should_exclude("/metrics"));
         assert!(!detector.should_exclude("/api/users"));
+    }
+
+    #[test]
+    fn test_should_exclude_prefix_patterns() {
+        let config = RuntimeDaemonConfig {
+            exclude_patterns: vec!["/internal".to_string(), "/admin".to_string()],
+            ..Default::default()
+        };
+        let detector = NotFoundDetector::new(config);
+
+        // Prefix patterns (start with /) should match path starts
+        assert!(detector.should_exclude("/internal"));
+        assert!(detector.should_exclude("/internal/api"));
+        assert!(detector.should_exclude("/internal/users/123"));
+        assert!(detector.should_exclude("/admin"));
+        assert!(detector.should_exclude("/admin/dashboard"));
+        assert!(!detector.should_exclude("/api/internal"));
+    }
+
+    #[test]
+    fn test_should_exclude_contains_patterns() {
+        let config = RuntimeDaemonConfig {
+            exclude_patterns: vec!["secret".to_string(), "private".to_string()],
+            ..Default::default()
+        };
+        let detector = NotFoundDetector::new(config);
+
+        // Contains patterns (not starting with /) should match anywhere
+        assert!(detector.should_exclude("/api/secret/data"));
+        assert!(detector.should_exclude("/secret"));
+        assert!(detector.should_exclude("/users/secret/key"));
+        assert!(detector.should_exclude("/private/info"));
+        assert!(detector.should_exclude("/api/private"));
+        assert!(!detector.should_exclude("/api/public/data"));
+    }
+
+    #[test]
+    fn test_should_exclude_mixed_patterns() {
+        let config = RuntimeDaemonConfig {
+            exclude_patterns: vec![
+                "/health".to_string(),  // Prefix pattern
+                "internal".to_string(), // Contains pattern
+            ],
+            ..Default::default()
+        };
+        let detector = NotFoundDetector::new(config);
+
+        // Prefix pattern
+        assert!(detector.should_exclude("/health"));
+        assert!(detector.should_exclude("/health/check"));
+        assert!(!detector.should_exclude("/api/health")); // /health only matches start
+
+        // Contains pattern
+        assert!(detector.should_exclude("/internal"));
+        assert!(detector.should_exclude("/api/internal"));
+        assert!(detector.should_exclude("/internal/api"));
+    }
+
+    #[test]
+    fn test_should_exclude_empty_patterns() {
+        let config = RuntimeDaemonConfig {
+            exclude_patterns: vec![],
+            ..Default::default()
+        };
+        let detector = NotFoundDetector::new(config);
+
+        // Nothing should be excluded
+        assert!(!detector.should_exclude("/health"));
+        assert!(!detector.should_exclude("/metrics"));
+        assert!(!detector.should_exclude("/api/users"));
+    }
+
+    #[test]
+    fn test_should_exclude_default_patterns() {
+        let config = RuntimeDaemonConfig::default();
+        let detector = NotFoundDetector::new(config);
+
+        // Default patterns include /health, /metrics, /__mockforge
+        assert!(detector.should_exclude("/health"));
+        assert!(detector.should_exclude("/metrics"));
+        assert!(detector.should_exclude("/__mockforge"));
+        assert!(detector.should_exclude("/__mockforge/api/mocks"));
+        assert!(!detector.should_exclude("/api/users"));
+    }
+
+    #[tokio::test]
+    async fn test_set_generator() {
+        let config = RuntimeDaemonConfig::default();
+        let detector = NotFoundDetector::new(config.clone());
+
+        // Initially generator should be None
+        {
+            let gen = detector.generator.read().await;
+            assert!(gen.is_none());
+        }
+
+        // Set a generator
+        let auto_gen = Arc::new(AutoGenerator::new(config, "http://localhost:3000".to_string()));
+        detector.set_generator(auto_gen).await;
+
+        // Now generator should be Some
+        {
+            let gen = detector.generator.read().await;
+            assert!(gen.is_some());
+        }
+    }
+
+    #[test]
+    fn test_detector_config_arc_sharing() {
+        let config = RuntimeDaemonConfig {
+            enabled: true,
+            auto_create_on_404: true,
+            ..Default::default()
+        };
+        let detector = NotFoundDetector::new(config);
+        let cloned = detector.clone();
+
+        // Both should point to the same Arc
+        assert!(Arc::ptr_eq(&detector.config, &cloned.config));
     }
 }

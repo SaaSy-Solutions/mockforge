@@ -5,8 +5,24 @@
 use mockforge_core::config::HttpTlsConfig;
 use mockforge_core::Result;
 use std::sync::Arc;
+use std::sync::Once;
 use tokio_rustls::TlsAcceptor;
 use tracing::info;
+
+static CRYPTO_INIT: Once = Once::new();
+
+/// Initialize the rustls crypto provider.
+///
+/// This must be called before any TLS operations. It is safe to call multiple times
+/// as it uses `Once` to ensure initialization happens exactly once.
+///
+/// Uses the `ring` crypto provider for rustls.
+pub fn init_crypto_provider() {
+    CRYPTO_INIT.call_once(|| {
+        // Install the ring crypto provider as the default for rustls
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
 
 /// Load TLS acceptor from certificate and key files
 ///
@@ -18,6 +34,9 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
     use rustls_pemfile::{certs, pkcs8_private_keys};
     use std::fs::File;
     use std::io::BufReader;
+
+    // Ensure crypto provider is initialized
+    init_crypto_provider();
 
     info!(
         "Loading TLS certificate from {} and key from {}",
@@ -263,6 +282,9 @@ pub fn load_tls_server_config(
     use std::io::BufReader;
     use std::sync::Arc;
 
+    // Ensure crypto provider is initialized
+    init_crypto_provider();
+
     info!(
         "Loading TLS certificate from {} and key from {}",
         config.cert_file, config.key_file
@@ -395,6 +417,8 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
+    // Tests use the module-level init_crypto_provider() from super::*
+
     fn create_test_cert() -> (NamedTempFile, NamedTempFile) {
         // Create minimal test certificates (these won't actually work for real TLS,
         // but allow us to test the parsing logic)
@@ -415,6 +439,7 @@ mod tests {
 
     #[test]
     fn test_tls_config_validation() {
+        init_crypto_provider();
         let (cert, key) = create_test_cert();
 
         let config = HttpTlsConfig {
@@ -436,6 +461,7 @@ mod tests {
 
     #[test]
     fn test_mtls_requires_ca() {
+        init_crypto_provider();
         let (cert, key) = create_test_cert();
 
         let config = HttpTlsConfig {
@@ -452,6 +478,10 @@ mod tests {
         let result = load_tls_acceptor(&config);
         assert!(result.is_err());
         let err_msg = format!("{}", result.err().unwrap());
-        assert!(err_msg.contains("no CA file provided") || err_msg.contains("CA file"));
+        assert!(
+            err_msg.contains("CA") || err_msg.contains("--tls-ca"),
+            "Expected error message about CA certificate, got: {}",
+            err_msg
+        );
     }
 }

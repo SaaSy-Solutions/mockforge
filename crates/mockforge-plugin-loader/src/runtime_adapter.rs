@@ -1102,6 +1102,24 @@ impl RuntimeAdapter for RemoteAdapter {
 mod tests {
     use super::*;
 
+    // ===== RuntimeType Tests =====
+
+    #[test]
+    fn test_runtime_type_equality() {
+        assert_eq!(RuntimeType::Rust, RuntimeType::Rust);
+        assert_eq!(RuntimeType::TinyGo, RuntimeType::TinyGo);
+        assert_eq!(RuntimeType::AssemblyScript, RuntimeType::AssemblyScript);
+
+        assert_ne!(RuntimeType::Rust, RuntimeType::TinyGo);
+    }
+
+    #[test]
+    fn test_runtime_type_clone() {
+        let rt = RuntimeType::Rust;
+        let cloned = rt.clone();
+        assert_eq!(rt, cloned);
+    }
+
     #[test]
     fn test_runtime_type_detection() {
         // Test with empty bytes (should default to Rust)
@@ -1109,6 +1127,36 @@ mod tests {
         let runtime = detect_runtime_type(&empty_bytes).unwrap();
         assert_eq!(runtime, RuntimeType::Rust);
     }
+
+    #[test]
+    fn test_runtime_type_detection_tinygo() {
+        // Test with bytes containing "tinygo"
+        let tinygo_bytes = b"wasm module with tinygo runtime".to_vec();
+        let runtime = detect_runtime_type(&tinygo_bytes).unwrap();
+        assert_eq!(runtime, RuntimeType::TinyGo);
+    }
+
+    #[test]
+    fn test_runtime_type_detection_assemblyscript() {
+        // Test with bytes containing "assemblyscript"
+        let as_bytes = b"wasm module with assemblyscript runtime".to_vec();
+        let runtime = detect_runtime_type(&as_bytes).unwrap();
+        assert_eq!(runtime, RuntimeType::AssemblyScript);
+    }
+
+    #[test]
+    fn test_has_tinygo_signature() {
+        assert!(has_tinygo_signature(b"this contains tinygo"));
+        assert!(!has_tinygo_signature(b"this does not contain it"));
+    }
+
+    #[test]
+    fn test_has_assemblyscript_signature() {
+        assert!(has_assemblyscript_signature(b"this contains assemblyscript"));
+        assert!(!has_assemblyscript_signature(b"this does not contain it"));
+    }
+
+    // ===== RemoteRuntimeConfig Tests =====
 
     #[test]
     fn test_remote_runtime_config() {
@@ -1125,5 +1173,264 @@ mod tests {
 
         assert_eq!(config.endpoint, "http://localhost:8080");
         assert_eq!(config.timeout_ms, 5000);
+        assert_eq!(config.max_retries, 3);
+        assert!(config.auth.is_some());
+    }
+
+    #[test]
+    fn test_remote_runtime_config_without_auth() {
+        let config = RemoteRuntimeConfig {
+            protocol: RemoteProtocol::Grpc,
+            endpoint: "grpc://localhost:9090".to_string(),
+            timeout_ms: 10000,
+            max_retries: 5,
+            auth: None,
+        };
+
+        assert_eq!(config.protocol, RemoteProtocol::Grpc);
+        assert!(config.auth.is_none());
+    }
+
+    #[test]
+    fn test_remote_runtime_config_clone() {
+        let config = RemoteRuntimeConfig {
+            protocol: RemoteProtocol::Http,
+            endpoint: "http://localhost:8080".to_string(),
+            timeout_ms: 5000,
+            max_retries: 3,
+            auth: None,
+        };
+
+        let cloned = config.clone();
+        assert_eq!(config.endpoint, cloned.endpoint);
+        assert_eq!(config.timeout_ms, cloned.timeout_ms);
+    }
+
+    #[test]
+    fn test_remote_runtime_config_equality() {
+        let config1 = RemoteRuntimeConfig {
+            protocol: RemoteProtocol::Http,
+            endpoint: "http://localhost:8080".to_string(),
+            timeout_ms: 5000,
+            max_retries: 3,
+            auth: None,
+        };
+
+        let config2 = RemoteRuntimeConfig {
+            protocol: RemoteProtocol::Http,
+            endpoint: "http://localhost:8080".to_string(),
+            timeout_ms: 5000,
+            max_retries: 3,
+            auth: None,
+        };
+
+        assert_eq!(config1, config2);
+    }
+
+    // ===== RemoteProtocol Tests =====
+
+    #[test]
+    fn test_remote_protocol_equality() {
+        assert_eq!(RemoteProtocol::Http, RemoteProtocol::Http);
+        assert_eq!(RemoteProtocol::Grpc, RemoteProtocol::Grpc);
+        assert_ne!(RemoteProtocol::Http, RemoteProtocol::Grpc);
+    }
+
+    #[test]
+    fn test_remote_protocol_clone() {
+        let proto = RemoteProtocol::Http;
+        let cloned = proto.clone();
+        assert_eq!(proto, cloned);
+    }
+
+    // ===== RemoteAuthConfig Tests =====
+
+    #[test]
+    fn test_remote_auth_config() {
+        let auth = RemoteAuthConfig {
+            auth_type: "bearer".to_string(),
+            value: "secret-token".to_string(),
+        };
+
+        assert_eq!(auth.auth_type, "bearer");
+        assert_eq!(auth.value, "secret-token");
+    }
+
+    #[test]
+    fn test_remote_auth_config_api_key() {
+        let auth = RemoteAuthConfig {
+            auth_type: "api_key".to_string(),
+            value: "my-api-key".to_string(),
+        };
+
+        assert_eq!(auth.auth_type, "api_key");
+    }
+
+    #[test]
+    fn test_remote_auth_config_clone() {
+        let auth = RemoteAuthConfig {
+            auth_type: "bearer".to_string(),
+            value: "token".to_string(),
+        };
+
+        let cloned = auth.clone();
+        assert_eq!(auth.auth_type, cloned.auth_type);
+        assert_eq!(auth.value, cloned.value);
+    }
+
+    #[test]
+    fn test_remote_auth_config_equality() {
+        let auth1 = RemoteAuthConfig {
+            auth_type: "bearer".to_string(),
+            value: "token".to_string(),
+        };
+
+        let auth2 = RemoteAuthConfig {
+            auth_type: "bearer".to_string(),
+            value: "token".to_string(),
+        };
+
+        assert_eq!(auth1, auth2);
+    }
+
+    // ===== RuntimeAdapterFactory Tests =====
+
+    #[test]
+    fn test_factory_create_rust_adapter() {
+        let plugin_id = PluginId::new("test-plugin");
+        // Create minimal valid WASM module (magic bytes + version)
+        let wasm_bytes = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+
+        let result = RuntimeAdapterFactory::create(RuntimeType::Rust, plugin_id, wasm_bytes);
+
+        assert!(result.is_ok());
+        let adapter = result.unwrap();
+        assert_eq!(adapter.runtime_type(), RuntimeType::Rust);
+    }
+
+    #[test]
+    fn test_factory_create_tinygo_adapter() {
+        let plugin_id = PluginId::new("test-plugin");
+        let wasm_bytes = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+
+        let result = RuntimeAdapterFactory::create(RuntimeType::TinyGo, plugin_id, wasm_bytes);
+
+        assert!(result.is_ok());
+        let adapter = result.unwrap();
+        assert_eq!(adapter.runtime_type(), RuntimeType::TinyGo);
+    }
+
+    #[test]
+    fn test_factory_create_assemblyscript_adapter() {
+        let plugin_id = PluginId::new("test-plugin");
+        let wasm_bytes = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+
+        let result =
+            RuntimeAdapterFactory::create(RuntimeType::AssemblyScript, plugin_id, wasm_bytes);
+
+        assert!(result.is_ok());
+        let adapter = result.unwrap();
+        assert_eq!(adapter.runtime_type(), RuntimeType::AssemblyScript);
+    }
+
+    #[test]
+    fn test_factory_create_remote_adapter() {
+        let plugin_id = PluginId::new("test-plugin");
+        let config = RemoteRuntimeConfig {
+            protocol: RemoteProtocol::Http,
+            endpoint: "http://localhost:8080".to_string(),
+            timeout_ms: 5000,
+            max_retries: 3,
+            auth: None,
+        };
+
+        let result =
+            RuntimeAdapterFactory::create(RuntimeType::Remote(config.clone()), plugin_id, vec![]);
+
+        assert!(result.is_ok());
+        let adapter = result.unwrap();
+        assert_eq!(adapter.runtime_type(), RuntimeType::Remote(config));
+    }
+
+    #[test]
+    fn test_factory_create_with_invalid_wasm() {
+        let plugin_id = PluginId::new("test-plugin");
+        // Invalid WASM bytes
+        let wasm_bytes = vec![0x00, 0x00, 0x00, 0x00];
+
+        let result = RuntimeAdapterFactory::create(RuntimeType::Rust, plugin_id, wasm_bytes);
+
+        assert!(result.is_err());
+    }
+
+    // ===== RemoteAdapter Tests =====
+
+    #[test]
+    fn test_remote_adapter_creation() {
+        let plugin_id = PluginId::new("test-plugin");
+        let config = RemoteRuntimeConfig {
+            protocol: RemoteProtocol::Http,
+            endpoint: "http://localhost:8080".to_string(),
+            timeout_ms: 5000,
+            max_retries: 3,
+            auth: None,
+        };
+
+        let result = RemoteAdapter::new(plugin_id, config.clone());
+        assert!(result.is_ok());
+
+        let adapter = result.unwrap();
+        assert_eq!(adapter.runtime_type(), RuntimeType::Remote(config));
+    }
+
+    #[test]
+    fn test_remote_adapter_get_metrics() {
+        let plugin_id = PluginId::new("test-plugin");
+        let config = RemoteRuntimeConfig {
+            protocol: RemoteProtocol::Http,
+            endpoint: "http://localhost:8080".to_string(),
+            timeout_ms: 5000,
+            max_retries: 3,
+            auth: None,
+        };
+
+        let adapter = RemoteAdapter::new(plugin_id.clone(), config).unwrap();
+        let metrics = adapter.get_metrics();
+
+        assert!(metrics.contains_key("plugin_id"));
+        assert!(metrics.contains_key("endpoint"));
+        assert!(metrics.contains_key("protocol"));
+        assert_eq!(metrics.get("plugin_id").unwrap(), &serde_json::json!(plugin_id.as_str()));
+    }
+
+    // ===== Edge Cases and Error Handling =====
+
+    #[test]
+    fn test_runtime_type_with_mixed_signatures() {
+        // Test with bytes containing both signatures (tinygo should win as it's checked first)
+        let mixed_bytes = b"tinygo and assemblyscript".to_vec();
+        let runtime = detect_runtime_type(&mixed_bytes).unwrap();
+        assert_eq!(runtime, RuntimeType::TinyGo);
+    }
+
+    #[test]
+    fn test_empty_wasm_bytes() {
+        let plugin_id = PluginId::new("test");
+        let result = RustAdapter::new(plugin_id, vec![]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_runtime_type_debug() {
+        let rt = RuntimeType::Rust;
+        let debug_str = format!("{:?}", rt);
+        assert!(debug_str.contains("Rust"));
+    }
+
+    #[test]
+    fn test_remote_protocol_debug() {
+        let proto = RemoteProtocol::Http;
+        let debug_str = format!("{:?}", proto);
+        assert!(debug_str.contains("Http"));
     }
 }

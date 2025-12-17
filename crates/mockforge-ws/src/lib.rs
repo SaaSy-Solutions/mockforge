@@ -628,6 +628,8 @@ async fn handle_socket_with_handlers(
 mod tests {
     use super::*;
 
+    // ==================== Router Tests ====================
+
     #[test]
     fn test_router_creation() {
         let _router = router();
@@ -653,6 +655,13 @@ mod tests {
         // Router should be created successfully
     }
 
+    #[test]
+    fn test_router_with_handlers_creation() {
+        let registry = std::sync::Arc::new(HandlerRegistry::new());
+        let _router = router_with_handlers(registry);
+        // Router should be created successfully
+    }
+
     #[tokio::test]
     async fn test_start_with_latency_config_none() {
         // Test that we can create the router without latency
@@ -672,5 +681,127 @@ mod tests {
             let _router = router_with_latency(latency_injector);
         });
         assert!(result.is_ok());
+    }
+
+    // ==================== Token Expansion Tests ====================
+
+    #[test]
+    fn test_expand_tokens_uuid() {
+        let text = "session-{{uuid}}";
+        let expanded = expand_tokens(text);
+        assert!(!expanded.contains("{{uuid}}"));
+        assert!(expanded.starts_with("session-"));
+        // UUID format check (36 chars with hyphens)
+        let uuid_part = &expanded[8..];
+        assert_eq!(uuid_part.len(), 36);
+    }
+
+    #[test]
+    fn test_expand_tokens_now() {
+        let text = "time: {{now}}";
+        let expanded = expand_tokens(text);
+        assert!(!expanded.contains("{{now}}"));
+        assert!(expanded.starts_with("time: "));
+        // Should be ISO 8601 format
+        assert!(expanded.contains("T"));
+    }
+
+    #[test]
+    fn test_expand_tokens_now_plus_1m() {
+        let text = "expires: {{now+1m}}";
+        let expanded = expand_tokens(text);
+        assert!(!expanded.contains("{{now+1m}}"));
+        assert!(expanded.starts_with("expires: "));
+    }
+
+    #[test]
+    fn test_expand_tokens_now_plus_1h() {
+        let text = "expires: {{now+1h}}";
+        let expanded = expand_tokens(text);
+        assert!(!expanded.contains("{{now+1h}}"));
+        assert!(expanded.starts_with("expires: "));
+    }
+
+    #[test]
+    fn test_expand_tokens_randint() {
+        let text = "value: {{randInt 1 100}}";
+        let expanded = expand_tokens(text);
+        assert!(!expanded.contains("{{randInt"), "Token should be expanded");
+        assert!(expanded.starts_with("value: "));
+        // The implementation replaces randInt with a number (or fallback)
+    }
+
+    #[test]
+    fn test_expand_tokens_randint_multiple() {
+        let text = "a: {{randInt 1 10}}, b: {{randInt 20 30}}";
+        let expanded = expand_tokens(text);
+        assert!(!expanded.contains("{{randInt"));
+        assert!(expanded.contains("a: "));
+        assert!(expanded.contains("b: "));
+    }
+
+    #[test]
+    fn test_expand_tokens_mixed() {
+        let text = "id: {{uuid}}, time: {{now}}, rand: {{randInt 1 10}}";
+        let expanded = expand_tokens(text);
+        assert!(!expanded.contains("{{uuid}}"));
+        assert!(!expanded.contains("{{now}}"));
+        assert!(!expanded.contains("{{randInt"));
+    }
+
+    #[test]
+    fn test_expand_tokens_no_tokens() {
+        let text = "plain text without tokens";
+        let expanded = expand_tokens(text);
+        assert_eq!(expanded, text);
+    }
+
+    // ==================== Latency Profile Tests ====================
+
+    #[test]
+    fn test_latency_profile_default() {
+        let profile = LatencyProfile::default();
+        // Default profile should be valid
+        let injector = LatencyInjector::new(profile, Default::default());
+        let _router = router_with_latency(injector);
+    }
+
+    #[test]
+    fn test_latency_profile_with_normal_distribution() {
+        let profile = LatencyProfile::with_normal_distribution(100, 25.0)
+            .with_min_ms(50)
+            .with_max_ms(200);
+        let injector = LatencyInjector::new(profile, Default::default());
+        let _router = router_with_latency(injector);
+    }
+
+    // ==================== Proxy Config Tests ====================
+
+    #[test]
+    fn test_ws_proxy_config_default() {
+        let config = mockforge_core::WsProxyConfig::default();
+        // Just verify the default can be created
+        let _url = &config.upstream_url;
+    }
+
+    #[test]
+    fn test_ws_proxy_config_custom() {
+        let config = mockforge_core::WsProxyConfig {
+            upstream_url: "wss://api.example.com/ws".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(config.upstream_url, "wss://api.example.com/ws");
+    }
+
+    // ==================== Re-export Tests ====================
+
+    #[test]
+    fn test_reexports_available() {
+        // Test that public re-exports work
+        let _ = create_ws_connection_span("conn-123");
+
+        // Handler types
+        let _registry = HandlerRegistry::new();
+        let _pattern = MessagePattern::any();
     }
 }

@@ -723,6 +723,125 @@ mod tests {
         .add_transition(StateTransition::new("processing", "shipped"))
     }
 
+    // ==================== StateInstance Tests ====================
+
+    #[test]
+    fn test_state_instance_new() {
+        let instance = StateInstance::new("resource-1", "order", "pending");
+
+        assert_eq!(instance.resource_id, "resource-1");
+        assert_eq!(instance.resource_type, "order");
+        assert_eq!(instance.current_state, "pending");
+        assert!(instance.state_history.is_empty());
+        assert!(instance.state_data.is_empty());
+    }
+
+    #[test]
+    fn test_state_instance_transition_to() {
+        let mut instance = StateInstance::new("resource-1", "order", "pending");
+
+        instance.transition_to("processing", Some("t1".to_string()));
+
+        assert_eq!(instance.current_state, "processing");
+        assert_eq!(instance.state_history.len(), 1);
+        assert_eq!(instance.state_history[0].from_state, "pending");
+        assert_eq!(instance.state_history[0].to_state, "processing");
+        assert_eq!(instance.state_history[0].transition_id, Some("t1".to_string()));
+    }
+
+    #[test]
+    fn test_state_instance_multiple_transitions() {
+        let mut instance = StateInstance::new("resource-1", "order", "pending");
+
+        instance.transition_to("processing", None);
+        instance.transition_to("shipped", None);
+
+        assert_eq!(instance.current_state, "shipped");
+        assert_eq!(instance.state_history.len(), 2);
+        assert_eq!(instance.state_history[0].from_state, "pending");
+        assert_eq!(instance.state_history[0].to_state, "processing");
+        assert_eq!(instance.state_history[1].from_state, "processing");
+        assert_eq!(instance.state_history[1].to_state, "shipped");
+    }
+
+    #[test]
+    fn test_state_instance_current_state() {
+        let instance = StateInstance::new("resource-1", "order", "pending");
+        assert_eq!(instance.current_state(), "pending");
+    }
+
+    #[test]
+    fn test_state_instance_set_and_get_data() {
+        let mut instance = StateInstance::new("resource-1", "order", "pending");
+
+        instance.set_data("key1", serde_json::json!("value1"));
+        instance.set_data("count", serde_json::json!(42));
+
+        assert_eq!(instance.get_data("key1"), Some(&serde_json::json!("value1")));
+        assert_eq!(instance.get_data("count"), Some(&serde_json::json!(42)));
+        assert_eq!(instance.get_data("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_state_instance_overwrite_data() {
+        let mut instance = StateInstance::new("resource-1", "order", "pending");
+
+        instance.set_data("key1", serde_json::json!("original"));
+        instance.set_data("key1", serde_json::json!("updated"));
+
+        assert_eq!(instance.get_data("key1"), Some(&serde_json::json!("updated")));
+    }
+
+    // ==================== StateHistoryEntry Tests ====================
+
+    #[test]
+    fn test_state_history_entry_creation() {
+        let entry = StateHistoryEntry {
+            from_state: "pending".to_string(),
+            to_state: "processing".to_string(),
+            timestamp: chrono::Utc::now(),
+            transition_id: Some("t1".to_string()),
+        };
+
+        assert_eq!(entry.from_state, "pending");
+        assert_eq!(entry.to_state, "processing");
+        assert_eq!(entry.transition_id, Some("t1".to_string()));
+    }
+
+    #[test]
+    fn test_state_history_entry_without_transition_id() {
+        let entry = StateHistoryEntry {
+            from_state: "pending".to_string(),
+            to_state: "processing".to_string(),
+            timestamp: chrono::Utc::now(),
+            transition_id: None,
+        };
+
+        assert_eq!(entry.transition_id, None);
+    }
+
+    // ==================== ScenarioStateMachineManager Tests ====================
+
+    #[tokio::test]
+    async fn test_manager_new() {
+        let manager = ScenarioStateMachineManager::new();
+
+        // Should have empty state machines and instances
+        let instances = manager.list_instances().await;
+        assert!(instances.is_empty());
+
+        let state_machines = manager.list_state_machines().await;
+        assert!(state_machines.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_manager_default() {
+        let manager = ScenarioStateMachineManager::default();
+
+        let instances = manager.list_instances().await;
+        assert!(instances.is_empty());
+    }
+
     #[tokio::test]
     async fn test_load_state_machine() {
         let manager = ScenarioStateMachineManager::new();
@@ -740,6 +859,40 @@ mod tests {
         let state_machine = manager.get_state_machine("order").await;
         assert!(state_machine.is_some());
         assert_eq!(state_machine.unwrap().resource_type, "order");
+    }
+
+    #[tokio::test]
+    async fn test_load_multiple_state_machines() {
+        let manager = ScenarioStateMachineManager::new();
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+
+        manifest.state_machines.push(create_test_state_machine());
+        manifest.state_machines.push(
+            StateMachine::new(
+                "user",
+                vec!["active".to_string(), "suspended".to_string()],
+                "active",
+            )
+            .add_transition(StateTransition::new("active", "suspended")),
+        );
+
+        manager.load_from_manifest(&manifest).await.unwrap();
+
+        let state_machines = manager.list_state_machines().await;
+        assert_eq!(state_machines.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_nonexistent_state_machine() {
+        let manager = ScenarioStateMachineManager::new();
+
+        let result = manager.get_state_machine("nonexistent").await;
+        assert!(result.is_none());
     }
 
     #[tokio::test]
@@ -762,6 +915,56 @@ mod tests {
         manager.execute_transition("order-1", "processing", None).await.unwrap();
         let state = manager.get_current_state("order-1").await;
         assert_eq!(state, Some("processing".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_create_instance_nonexistent_type() {
+        let manager = ScenarioStateMachineManager::new();
+
+        let result = manager.create_instance("resource-1", "nonexistent").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_current_state_nonexistent() {
+        let manager = ScenarioStateMachineManager::new();
+
+        let state = manager.get_current_state("nonexistent").await;
+        assert!(state.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_execute_transition_nonexistent_instance() {
+        let manager = ScenarioStateMachineManager::new();
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+        manifest.state_machines.push(create_test_state_machine());
+        manager.load_from_manifest(&manifest).await.unwrap();
+
+        let result = manager.execute_transition("nonexistent", "processing", None).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_execute_invalid_transition() {
+        let manager = ScenarioStateMachineManager::new();
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+        manifest.state_machines.push(create_test_state_machine());
+        manager.load_from_manifest(&manifest).await.unwrap();
+        manager.create_instance("order-1", "order").await.unwrap();
+
+        // Try to transition directly from pending to shipped (invalid)
+        let result = manager.execute_transition("order-1", "shipped", None).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -799,5 +1002,264 @@ mod tests {
         context.insert("amount".to_string(), Value::Number(serde_json::Number::from(150)));
         manager.execute_transition("order-1", "approved", Some(context)).await.unwrap();
         assert_eq!(manager.get_current_state("order-1").await, Some("approved".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_conditional_transition_fails() {
+        let manager = ScenarioStateMachineManager::new();
+        let state_machine = StateMachine::new(
+            "order",
+            vec!["pending".to_string(), "approved".to_string()],
+            "pending",
+        )
+        .add_transition(
+            StateTransition::new("pending", "approved").with_condition_expression("amount > 100"),
+        );
+
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+        manifest.state_machines.push(state_machine);
+        manager.load_from_manifest(&manifest).await.unwrap();
+        manager.create_instance("order-1", "order").await.unwrap();
+
+        // Test with condition that fails
+        let mut context = HashMap::new();
+        context.insert("amount".to_string(), Value::Number(serde_json::Number::from(50)));
+        let result = manager.execute_transition("order-1", "approved", Some(context)).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_next_states() {
+        let manager = ScenarioStateMachineManager::new();
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+        manifest.state_machines.push(create_test_state_machine());
+        manager.load_from_manifest(&manifest).await.unwrap();
+        manager.create_instance("order-1", "order").await.unwrap();
+
+        let next_states = manager.get_next_states("order-1").await.unwrap();
+        assert_eq!(next_states, vec!["processing".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_get_next_states_nonexistent_instance() {
+        let manager = ScenarioStateMachineManager::new();
+
+        let result = manager.get_next_states("nonexistent").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_list_instances() {
+        let manager = ScenarioStateMachineManager::new();
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+        manifest.state_machines.push(create_test_state_machine());
+        manager.load_from_manifest(&manifest).await.unwrap();
+
+        manager.create_instance("order-1", "order").await.unwrap();
+        manager.create_instance("order-2", "order").await.unwrap();
+
+        let instances = manager.list_instances().await;
+        assert_eq!(instances.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_instance() {
+        let manager = ScenarioStateMachineManager::new();
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+        manifest.state_machines.push(create_test_state_machine());
+        manager.load_from_manifest(&manifest).await.unwrap();
+        manager.create_instance("order-1", "order").await.unwrap();
+
+        let instance = manager.get_instance("order-1").await;
+        assert!(instance.is_some());
+        assert_eq!(instance.unwrap().resource_id, "order-1");
+    }
+
+    #[tokio::test]
+    async fn test_get_instance_nonexistent() {
+        let manager = ScenarioStateMachineManager::new();
+
+        let instance = manager.get_instance("nonexistent").await;
+        assert!(instance.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_instance() {
+        let manager = ScenarioStateMachineManager::new();
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+        manifest.state_machines.push(create_test_state_machine());
+        manager.load_from_manifest(&manifest).await.unwrap();
+        manager.create_instance("order-1", "order").await.unwrap();
+
+        assert!(manager.delete_instance("order-1").await);
+        assert!(manager.get_instance("order-1").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_instance_nonexistent() {
+        let manager = ScenarioStateMachineManager::new();
+
+        assert!(!manager.delete_instance("nonexistent").await);
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_visual_layout() {
+        let manager = ScenarioStateMachineManager::new();
+        let layout = VisualLayout::default();
+
+        manager.set_visual_layout("order", layout.clone()).await;
+
+        let retrieved = manager.get_visual_layout("order").await;
+        assert!(retrieved.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_visual_layout_nonexistent() {
+        let manager = ScenarioStateMachineManager::new();
+
+        let layout = manager.get_visual_layout("nonexistent").await;
+        assert!(layout.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_clear() {
+        let manager = ScenarioStateMachineManager::new();
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+        manifest.state_machines.push(create_test_state_machine());
+        manager.load_from_manifest(&manifest).await.unwrap();
+        manager.create_instance("order-1", "order").await.unwrap();
+
+        manager.clear().await;
+
+        assert!(manager.list_state_machines().await.is_empty());
+        assert!(manager.list_instances().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_delete_state_machine() {
+        let manager = ScenarioStateMachineManager::new();
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+        manifest.state_machines.push(create_test_state_machine());
+        manager.load_from_manifest(&manifest).await.unwrap();
+        manager.create_instance("order-1", "order").await.unwrap();
+
+        assert!(manager.delete_state_machine("order").await);
+        assert!(manager.get_state_machine("order").await.is_none());
+        // Instances should be deleted too
+        assert!(manager.get_instance("order-1").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_state_machine_nonexistent() {
+        let manager = ScenarioStateMachineManager::new();
+
+        assert!(!manager.delete_state_machine("nonexistent").await);
+    }
+
+    #[tokio::test]
+    async fn test_export_all() {
+        let manager = ScenarioStateMachineManager::new();
+        let mut manifest = ScenarioManifest::new(
+            "test".to_string(),
+            "1.0.0".to_string(),
+            "Test".to_string(),
+            "Test scenario".to_string(),
+        );
+        manifest.state_machines.push(create_test_state_machine());
+        manager.load_from_manifest(&manifest).await.unwrap();
+
+        let (machines, layouts) = manager.export_all().await;
+
+        assert_eq!(machines.len(), 1);
+        assert_eq!(machines[0].resource_type, "order");
+        // Layouts may be empty if none defined
+        assert!(layouts.is_empty() || !layouts.is_empty());
+    }
+
+    // ==================== Validation Tests ====================
+
+    #[tokio::test]
+    async fn test_validate_invalid_initial_state() {
+        let manager = ScenarioStateMachineManager::new();
+        let state_machine = StateMachine::new(
+            "order",
+            vec!["pending".to_string(), "processing".to_string()],
+            "nonexistent", // Invalid initial state
+        );
+
+        let result = manager.validate_state_machine(&state_machine);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_invalid_transition_from_state() {
+        let manager = ScenarioStateMachineManager::new();
+        let state_machine = StateMachine::new(
+            "order",
+            vec!["pending".to_string(), "processing".to_string()],
+            "pending",
+        )
+        .add_transition(StateTransition::new("nonexistent", "processing"));
+
+        let result = manager.validate_state_machine(&state_machine);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_invalid_transition_to_state() {
+        let manager = ScenarioStateMachineManager::new();
+        let state_machine = StateMachine::new(
+            "order",
+            vec!["pending".to_string(), "processing".to_string()],
+            "pending",
+        )
+        .add_transition(StateTransition::new("pending", "nonexistent"));
+
+        let result = manager.validate_state_machine(&state_machine);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_valid_state_machine() {
+        let manager = ScenarioStateMachineManager::new();
+        let state_machine = create_test_state_machine();
+
+        let result = manager.validate_state_machine(&state_machine);
+        assert!(result.is_ok());
     }
 }

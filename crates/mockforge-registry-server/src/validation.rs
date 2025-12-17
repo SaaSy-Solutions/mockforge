@@ -46,9 +46,7 @@ pub fn validate_wasm_file(data: &[u8], reported_size: u64) -> ApiResult<()> {
 
     // Check minimum size (WASM files should be at least 8 bytes)
     if data.len() < 8 {
-        return Err(ApiError::InvalidRequest(
-            "File too small to be a valid WASM file".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("File too small to be a valid WASM file".to_string()));
     }
 
     // Check WASM magic bytes
@@ -68,9 +66,7 @@ pub fn validate_wasm_file(data: &[u8], reported_size: u64) -> ApiResult<()> {
     // Basic structure check: ensure file has reasonable structure
     // WASM files should have at least a version number (4 bytes) after magic
     if data.len() < 8 {
-        return Err(ApiError::InvalidRequest(
-            "Invalid WASM file: incomplete header".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Invalid WASM file: incomplete header".to_string()));
     }
 
     Ok(())
@@ -82,11 +78,7 @@ pub fn validate_wasm_file(data: &[u8], reported_size: u64) -> ApiResult<()> {
 /// - File size within limits
 /// - Valid archive format (tar.gz, zip, etc.)
 /// - No path traversal in archive
-pub fn validate_package_file(
-    data: &[u8],
-    reported_size: u64,
-    max_size: u64,
-) -> ApiResult<()> {
+pub fn validate_package_file(data: &[u8], reported_size: u64, max_size: u64) -> ApiResult<()> {
     // Check reported size matches actual size
     if data.len() as u64 != reported_size {
         return Err(ApiError::InvalidRequest(format!(
@@ -155,9 +147,7 @@ fn validate_gzip(data: &[u8]) -> ApiResult<()> {
     // Check for reasonable structure
     // GZIP files should have at least 10 bytes for header
     if data.len() < 10 {
-        return Err(ApiError::InvalidRequest(
-            "Invalid GZIP file: incomplete header".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Invalid GZIP file: incomplete header".to_string()));
     }
 
     // Check compression method (should be deflate = 8)
@@ -228,9 +218,7 @@ fn contains_path_traversal(data: &[u8]) -> bool {
 pub fn validate_filename(name: &str) -> ApiResult<()> {
     // Check for path traversal
     if name.contains("..") {
-        return Err(ApiError::InvalidRequest(
-            "Filename contains path traversal (..)".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Filename contains path traversal (..)".to_string()));
     }
 
     // Check for absolute paths
@@ -253,9 +241,7 @@ pub fn validate_filename(name: &str) -> ApiResult<()> {
 
     // Check length (reasonable limit)
     if name.len() > 255 {
-        return Err(ApiError::InvalidRequest(
-            "Filename too long (max 255 characters)".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Filename too long (max 255 characters)".to_string()));
     }
 
     // Check for empty name
@@ -270,9 +256,7 @@ pub fn validate_filename(name: &str) -> ApiResult<()> {
 pub fn validate_base64(data: &str) -> ApiResult<()> {
     // Check for reasonable length
     if data.is_empty() {
-        return Err(ApiError::InvalidRequest(
-            "Base64 data cannot be empty".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Base64 data cannot be empty".to_string()));
     }
 
     // Check for suspicious patterns (basic check)
@@ -329,20 +313,18 @@ pub fn validate_version(version: &str) -> ApiResult<()> {
     }
 
     if version.len() > 100 {
-        return Err(ApiError::InvalidRequest(
-            "Version too long (max 100 characters)".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Version too long (max 100 characters)".to_string()));
     }
 
     // Basic semantic version pattern: major.minor.patch[-pre][+build]
     // Allow alphanumeric, dots, hyphens, and plus signs
-    let valid_chars = version
-        .chars()
-        .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '+');
+    let valid_chars =
+        version.chars().all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '+');
 
     if !valid_chars {
         return Err(ApiError::InvalidRequest(
-            "Version contains invalid characters. Use semantic versioning (e.g., 1.0.0)".to_string(),
+            "Version contains invalid characters. Use semantic versioning (e.g., 1.0.0)"
+                .to_string(),
         ));
     }
 
@@ -371,9 +353,7 @@ pub fn validate_name(name: &str) -> ApiResult<()> {
     }
 
     if name.len() > 100 {
-        return Err(ApiError::InvalidRequest(
-            "Name too long (max 100 characters)".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("Name too long (max 100 characters)".to_string()));
     }
 
     // Check for path traversal
@@ -395,9 +375,7 @@ pub fn validate_name(name: &str) -> ApiResult<()> {
     }
 
     // Name should be alphanumeric with hyphens, underscores, and dots
-    let valid_chars = name
-        .chars()
-        .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.');
+    let valid_chars = name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.');
 
     if !valid_chars {
         return Err(ApiError::InvalidRequest(
@@ -412,36 +390,419 @@ pub fn validate_name(name: &str) -> ApiResult<()> {
 mod tests {
     use super::*;
 
+    // ==================== WASM Validation Tests ====================
+
     #[test]
-    fn test_validate_wasm_file() {
-        // Valid WASM file
+    fn test_validate_wasm_file_valid() {
         let valid_wasm = [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00];
         assert!(validate_wasm_file(&valid_wasm, 8).is_ok());
+    }
 
-        // Invalid magic bytes
+    #[test]
+    fn test_validate_wasm_file_invalid_magic() {
         let invalid_wasm = [0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00];
-        assert!(validate_wasm_file(&invalid_wasm, 8).is_err());
-
-        // Too large
-        let large_data = vec![0x00, 0x61, 0x73, 0x6D; MAX_PLUGIN_SIZE as usize + 1];
-        assert!(validate_wasm_file(&large_data, large_data.len() as u64).is_err());
+        let result = validate_wasm_file(&invalid_wasm, 8);
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_validate_filename() {
+    fn test_validate_wasm_file_too_small() {
+        let small_wasm = [0x00, 0x61, 0x73, 0x6D]; // Only 4 bytes
+        let result = validate_wasm_file(&small_wasm, 4);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_wasm_file_size_mismatch() {
+        let wasm = [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00];
+        let result = validate_wasm_file(&wasm, 100); // Report wrong size
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_wasm_file_too_large() {
+        let mut large_data = vec![0u8; MAX_PLUGIN_SIZE as usize + 1];
+        large_data[..4].copy_from_slice(&[0x00, 0x61, 0x73, 0x6D]);
+        let result = validate_wasm_file(&large_data, large_data.len() as u64);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_wasm_file_exact_max_size() {
+        let mut max_data = vec![0u8; MAX_PLUGIN_SIZE as usize];
+        max_data[..4].copy_from_slice(&[0x00, 0x61, 0x73, 0x6D]);
+        let result = validate_wasm_file(&max_data, max_data.len() as u64);
+        assert!(result.is_ok());
+    }
+
+    // ==================== Package Validation Tests ====================
+
+    #[test]
+    fn test_validate_package_file_gzip() {
+        // GZIP magic bytes + deflate compression
+        let gzip_data = [0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let result = validate_package_file(&gzip_data, 10, MAX_TEMPLATE_SIZE);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_package_file_zip() {
+        let zip_data = [0x50, 0x4B, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let result = validate_package_file(&zip_data, 10, MAX_TEMPLATE_SIZE);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_package_file_unsupported_format() {
+        let unknown_data = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let result = validate_package_file(&unknown_data, 10, MAX_TEMPLATE_SIZE);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_package_file_too_small() {
+        let small_data = [0x1F, 0x8B, 0x08];
+        let result = validate_package_file(&small_data, 3, MAX_TEMPLATE_SIZE);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_package_file_size_mismatch() {
+        let gzip_data = [0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let result = validate_package_file(&gzip_data, 100, MAX_TEMPLATE_SIZE);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_package_file_exceeds_max() {
+        let mut large_gzip = vec![0u8; (MAX_TEMPLATE_SIZE + 1) as usize];
+        large_gzip[0] = 0x1F;
+        large_gzip[1] = 0x8B;
+        large_gzip[2] = 0x08;
+        let result = validate_package_file(&large_gzip, large_gzip.len() as u64, MAX_TEMPLATE_SIZE);
+        assert!(result.is_err());
+    }
+
+    // ==================== Archive Format Detection Tests ====================
+
+    #[test]
+    fn test_is_gzip() {
+        assert!(is_gzip(&[0x1F, 0x8B, 0x08]));
+        assert!(!is_gzip(&[0x50, 0x4B, 0x03, 0x04]));
+        assert!(!is_gzip(&[0x1F])); // Too short
+        assert!(!is_gzip(&[]));
+    }
+
+    #[test]
+    fn test_is_zip() {
+        assert!(is_zip(&[0x50, 0x4B, 0x03, 0x04])); // Local file header
+        assert!(is_zip(&[0x50, 0x4B, 0x05, 0x06])); // End of central directory
+        assert!(is_zip(&[0x50, 0x4B, 0x07, 0x08])); // Spanning marker
+        assert!(!is_zip(&[0x1F, 0x8B, 0x08, 0x00])); // GZIP
+        assert!(!is_zip(&[0x50, 0x4B])); // Too short
+        assert!(!is_zip(&[]));
+    }
+
+    // ==================== GZIP Validation Tests ====================
+
+    #[test]
+    fn test_validate_gzip_valid() {
+        let gzip_data = [0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert!(validate_gzip(&gzip_data).is_ok());
+    }
+
+    #[test]
+    fn test_validate_gzip_invalid_magic() {
+        let invalid_data = [0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert!(validate_gzip(&invalid_data).is_err());
+    }
+
+    #[test]
+    fn test_validate_gzip_too_short() {
+        let short_data = [0x1F, 0x8B, 0x08, 0x00, 0x00];
+        assert!(validate_gzip(&short_data).is_err());
+    }
+
+    #[test]
+    fn test_validate_gzip_wrong_compression() {
+        let wrong_compression = [0x1F, 0x8B, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert!(validate_gzip(&wrong_compression).is_err());
+    }
+
+    // ==================== ZIP Validation Tests ====================
+
+    #[test]
+    fn test_validate_zip_valid() {
+        let zip_data = [0x50, 0x4B, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert!(validate_zip(&zip_data).is_ok());
+    }
+
+    #[test]
+    fn test_validate_zip_invalid_magic() {
+        let invalid_data = [0x00, 0x00, 0x03, 0x04];
+        assert!(validate_zip(&invalid_data).is_err());
+    }
+
+    // ==================== Path Traversal Detection Tests ====================
+
+    #[test]
+    fn test_contains_path_traversal_unix() {
+        assert!(contains_path_traversal(b"../etc/passwd"));
+        assert!(contains_path_traversal(b"foo/../bar"));
+    }
+
+    #[test]
+    fn test_contains_path_traversal_windows() {
+        assert!(contains_path_traversal(b"..\\windows\\system32"));
+        assert!(contains_path_traversal(b"C:\\Windows\\"));
+        assert!(contains_path_traversal(b"C:\\System32\\"));
+    }
+
+    #[test]
+    fn test_contains_path_traversal_etc() {
+        assert!(contains_path_traversal(b"/etc/passwd"));
+        assert!(contains_path_traversal(b"/root/secret"));
+    }
+
+    #[test]
+    fn test_contains_path_traversal_safe() {
+        assert!(!contains_path_traversal(b"normal/path/file.txt"));
+        assert!(!contains_path_traversal(b"src/main.rs"));
+        assert!(!contains_path_traversal(b"data.json"));
+    }
+
+    // ==================== Filename Validation Tests ====================
+
+    #[test]
+    fn test_validate_filename_valid() {
         assert!(validate_filename("plugin.wasm").is_ok());
-        assert!(validate_filename("../etc/passwd").is_err());
-        assert!(validate_filename("/absolute/path").is_err());
-        assert!(validate_filename("file<name>").is_err());
+        assert!(validate_filename("my-plugin_v1.0.wasm").is_ok());
+        assert!(validate_filename("file.tar.gz").is_ok());
+        assert!(validate_filename("a").is_ok());
     }
 
     #[test]
-    fn test_validate_checksum() {
+    fn test_validate_filename_path_traversal() {
+        assert!(validate_filename("../etc/passwd").is_err());
+        assert!(validate_filename("..\\windows").is_err());
+        assert!(validate_filename("foo/../bar").is_err());
+    }
+
+    #[test]
+    fn test_validate_filename_absolute_unix() {
+        assert!(validate_filename("/absolute/path").is_err());
+        assert!(validate_filename("/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn test_validate_filename_absolute_windows() {
+        assert!(validate_filename("C:\\Windows\\file").is_err());
+        assert!(validate_filename("D:\\path").is_err());
+    }
+
+    #[test]
+    fn test_validate_filename_dangerous_chars() {
+        assert!(validate_filename("file<name>").is_err());
+        assert!(validate_filename("file:name").is_err());
+        assert!(validate_filename("file\"name").is_err());
+        assert!(validate_filename("file|name").is_err());
+        assert!(validate_filename("file?name").is_err());
+        assert!(validate_filename("file*name").is_err());
+    }
+
+    #[test]
+    fn test_validate_filename_too_long() {
+        let long_name = "a".repeat(256);
+        assert!(validate_filename(&long_name).is_err());
+    }
+
+    #[test]
+    fn test_validate_filename_max_length() {
+        let max_name = "a".repeat(255);
+        assert!(validate_filename(&max_name).is_ok());
+    }
+
+    #[test]
+    fn test_validate_filename_empty() {
+        assert!(validate_filename("").is_err());
+        assert!(validate_filename("   ").is_err());
+    }
+
+    // ==================== Base64 Validation Tests ====================
+
+    #[test]
+    fn test_validate_base64_valid() {
+        assert!(validate_base64("SGVsbG8gV29ybGQ=").is_ok());
+        assert!(validate_base64("dGVzdA==").is_ok());
+        assert!(validate_base64("YWJj").is_ok());
+        assert!(validate_base64("YQ==").is_ok());
+    }
+
+    #[test]
+    fn test_validate_base64_empty() {
+        assert!(validate_base64("").is_err());
+    }
+
+    #[test]
+    fn test_validate_base64_invalid_chars() {
+        assert!(validate_base64("Hello!@#$").is_err());
+        assert!(validate_base64("abc def").is_err()); // Space is invalid
+        assert!(validate_base64("abc\ndef").is_err()); // Newline is invalid
+    }
+
+    #[test]
+    fn test_validate_base64_too_much_padding() {
+        assert!(validate_base64("YWI===").is_err());
+        assert!(validate_base64("====").is_err());
+    }
+
+    #[test]
+    fn test_validate_base64_valid_padding() {
+        assert!(validate_base64("YQ==").is_ok()); // 2 padding
+        assert!(validate_base64("YWI=").is_ok()); // 1 padding
+        assert!(validate_base64("YWJj").is_ok()); // 0 padding
+    }
+
+    // ==================== Checksum Validation Tests ====================
+
+    #[test]
+    fn test_validate_checksum_valid() {
         assert!(validate_checksum(
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         )
         .is_ok());
-        assert!(validate_checksum("invalid").is_err());
+        assert!(validate_checksum(
+            "ABCDEF0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789"
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn test_validate_checksum_wrong_length() {
+        assert!(validate_checksum("e3b0c44298fc").is_err());
         assert!(validate_checksum("").is_err());
+        assert!(validate_checksum(&"a".repeat(63)).is_err());
+        assert!(validate_checksum(&"a".repeat(65)).is_err());
+    }
+
+    #[test]
+    fn test_validate_checksum_invalid_chars() {
+        assert!(validate_checksum(&format!("{}g", "a".repeat(63))).is_err());
+        assert!(validate_checksum(
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85!"
+        )
+        .is_err());
+    }
+
+    // ==================== Version Validation Tests ====================
+
+    #[test]
+    fn test_validate_version_valid() {
+        assert!(validate_version("1.0.0").is_ok());
+        assert!(validate_version("1.2.3").is_ok());
+        assert!(validate_version("0.0.1").is_ok());
+        assert!(validate_version("1.0.0-alpha").is_ok());
+        assert!(validate_version("1.0.0-beta.1").is_ok());
+        assert!(validate_version("1.0.0+build.123").is_ok());
+        assert!(validate_version("1.0.0-rc.1+build.456").is_ok());
+    }
+
+    #[test]
+    fn test_validate_version_empty() {
+        assert!(validate_version("").is_err());
+    }
+
+    #[test]
+    fn test_validate_version_too_long() {
+        let long_version = "1.".repeat(51);
+        assert!(validate_version(&long_version).is_err());
+    }
+
+    #[test]
+    fn test_validate_version_invalid_chars() {
+        assert!(validate_version("1.0.0!").is_err());
+        assert!(validate_version("1.0.0@beta").is_err());
+        assert!(validate_version("v1.0.0/rc").is_err());
+    }
+
+    #[test]
+    fn test_validate_version_path_traversal() {
+        assert!(validate_version("1.0.0../etc").is_err());
+        assert!(validate_version("..1.0.0").is_err());
+    }
+
+    #[test]
+    fn test_validate_version_starts_with_special() {
+        assert!(validate_version(".1.0.0").is_err());
+        assert!(validate_version("-1.0.0").is_err());
+        assert!(validate_version("+1.0.0").is_err());
+    }
+
+    // ==================== Name Validation Tests ====================
+
+    #[test]
+    fn test_validate_name_valid() {
+        assert!(validate_name("my-plugin").is_ok());
+        assert!(validate_name("my_plugin").is_ok());
+        assert!(validate_name("MyPlugin").is_ok());
+        assert!(validate_name("plugin.v1").is_ok());
+        assert!(validate_name("plugin123").is_ok());
+        assert!(validate_name("a").is_ok());
+    }
+
+    #[test]
+    fn test_validate_name_empty() {
+        assert!(validate_name("").is_err());
+    }
+
+    #[test]
+    fn test_validate_name_too_long() {
+        let long_name = "a".repeat(101);
+        assert!(validate_name(&long_name).is_err());
+    }
+
+    #[test]
+    fn test_validate_name_max_length() {
+        let max_name = "a".repeat(100);
+        assert!(validate_name(&max_name).is_ok());
+    }
+
+    #[test]
+    fn test_validate_name_path_traversal() {
+        assert!(validate_name("..plugin").is_err());
+        assert!(validate_name("plugin..name").is_err());
+    }
+
+    #[test]
+    fn test_validate_name_dangerous_chars() {
+        assert!(validate_name("plugin/name").is_err());
+        assert!(validate_name("plugin\\name").is_err());
+        assert!(validate_name("plugin<name>").is_err());
+        assert!(validate_name("plugin:name").is_err());
+        assert!(validate_name("plugin\"name").is_err());
+        assert!(validate_name("plugin|name").is_err());
+        assert!(validate_name("plugin?name").is_err());
+        assert!(validate_name("plugin*name").is_err());
+    }
+
+    #[test]
+    fn test_validate_name_invalid_chars() {
+        assert!(validate_name("plugin name").is_err()); // Space
+        assert!(validate_name("plugin@name").is_err());
+        assert!(validate_name("plugin#name").is_err());
+    }
+
+    // ==================== Constants Tests ====================
+
+    #[test]
+    fn test_size_constants() {
+        assert_eq!(MAX_PLUGIN_SIZE, 10 * 1024 * 1024);
+        assert_eq!(MAX_TEMPLATE_SIZE, 50 * 1024 * 1024);
+        assert_eq!(MAX_SCENARIO_SIZE, 100 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_wasm_magic_bytes() {
+        assert_eq!(WASM_MAGIC, &[0x00, 0x61, 0x73, 0x6D]);
     }
 }

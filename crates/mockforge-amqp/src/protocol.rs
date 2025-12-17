@@ -813,3 +813,472 @@ impl ConnectionHandler {
         response.write_to_stream(&mut self.stream).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== Class ID Tests ====================
+
+    #[test]
+    fn test_class_ids_are_correct() {
+        assert_eq!(class_id::CONNECTION, 10);
+        assert_eq!(class_id::CHANNEL, 20);
+        assert_eq!(class_id::EXCHANGE, 40);
+        assert_eq!(class_id::QUEUE, 50);
+        assert_eq!(class_id::BASIC, 60);
+        assert_eq!(class_id::TX, 90);
+        assert_eq!(class_id::CONFIRM, 85);
+    }
+
+    // ==================== Connection Method ID Tests ====================
+
+    #[test]
+    fn test_connection_method_ids() {
+        assert_eq!(method_id::CONNECTION_START, 10);
+        assert_eq!(method_id::CONNECTION_START_OK, 11);
+        assert_eq!(method_id::CONNECTION_TUNE, 30);
+        assert_eq!(method_id::CONNECTION_TUNE_OK, 31);
+        assert_eq!(method_id::CONNECTION_OPEN, 40);
+        assert_eq!(method_id::CONNECTION_OPEN_OK, 41);
+        assert_eq!(method_id::CONNECTION_CLOSE, 50);
+        assert_eq!(method_id::CONNECTION_CLOSE_OK, 51);
+    }
+
+    // ==================== Channel Method ID Tests ====================
+
+    #[test]
+    fn test_channel_method_ids() {
+        assert_eq!(method_id::CHANNEL_OPEN, 10);
+        assert_eq!(method_id::CHANNEL_OPEN_OK, 11);
+        assert_eq!(method_id::CHANNEL_CLOSE, 40);
+        assert_eq!(method_id::CHANNEL_CLOSE_OK, 41);
+    }
+
+    // ==================== Exchange Method ID Tests ====================
+
+    #[test]
+    fn test_exchange_method_ids() {
+        assert_eq!(method_id::EXCHANGE_DECLARE, 10);
+        assert_eq!(method_id::EXCHANGE_DECLARE_OK, 11);
+        assert_eq!(method_id::EXCHANGE_DELETE, 20);
+        assert_eq!(method_id::EXCHANGE_DELETE_OK, 21);
+    }
+
+    // ==================== Queue Method ID Tests ====================
+
+    #[test]
+    fn test_queue_method_ids() {
+        assert_eq!(method_id::QUEUE_DECLARE, 10);
+        assert_eq!(method_id::QUEUE_DECLARE_OK, 11);
+        assert_eq!(method_id::QUEUE_BIND, 20);
+        assert_eq!(method_id::QUEUE_BIND_OK, 21);
+        assert_eq!(method_id::QUEUE_UNBIND, 50);
+        assert_eq!(method_id::QUEUE_UNBIND_OK, 51);
+        assert_eq!(method_id::QUEUE_DELETE, 40);
+        assert_eq!(method_id::QUEUE_DELETE_OK, 41);
+    }
+
+    // ==================== Basic Method ID Tests ====================
+
+    #[test]
+    fn test_basic_method_ids() {
+        assert_eq!(method_id::BASIC_PUBLISH, 40);
+        assert_eq!(method_id::BASIC_CONSUME, 20);
+        assert_eq!(method_id::BASIC_CONSUME_OK, 21);
+        assert_eq!(method_id::BASIC_DELIVER, 60);
+        assert_eq!(method_id::BASIC_ACK, 80);
+        assert_eq!(method_id::BASIC_NACK, 120);
+        assert_eq!(method_id::BASIC_QOS, 10);
+        assert_eq!(method_id::BASIC_QOS_OK, 11);
+        assert_eq!(method_id::BASIC_GET, 70);
+        assert_eq!(method_id::BASIC_GET_OK, 71);
+        assert_eq!(method_id::BASIC_GET_EMPTY, 72);
+    }
+
+    // ==================== Transaction Method ID Tests ====================
+
+    #[test]
+    fn test_tx_method_ids() {
+        assert_eq!(method_id::TX_SELECT, 10);
+        assert_eq!(method_id::TX_SELECT_OK, 11);
+        assert_eq!(method_id::TX_COMMIT, 20);
+        assert_eq!(method_id::TX_COMMIT_OK, 21);
+        assert_eq!(method_id::TX_ROLLBACK, 30);
+        assert_eq!(method_id::TX_ROLLBACK_OK, 31);
+    }
+
+    // ==================== Confirm Method ID Tests ====================
+
+    #[test]
+    fn test_confirm_method_ids() {
+        assert_eq!(method_id::CONFIRM_SELECT, 10);
+        assert_eq!(method_id::CONFIRM_SELECT_OK, 11);
+    }
+
+    // ==================== MethodFrame Tests ====================
+
+    #[test]
+    fn test_method_frame_creation() {
+        let frame = MethodFrame {
+            class_id: class_id::CONNECTION,
+            method_id: method_id::CONNECTION_START,
+            arguments: vec![0x01, 0x02, 0x03],
+        };
+
+        assert_eq!(frame.class_id, 10);
+        assert_eq!(frame.method_id, 10);
+        assert_eq!(frame.arguments.len(), 3);
+    }
+
+    #[test]
+    fn test_method_frame_empty_arguments() {
+        let frame = MethodFrame {
+            class_id: class_id::CHANNEL,
+            method_id: method_id::CHANNEL_OPEN,
+            arguments: vec![],
+        };
+
+        assert_eq!(frame.class_id, 20);
+        assert_eq!(frame.method_id, 10);
+        assert!(frame.arguments.is_empty());
+    }
+
+    // ==================== ChannelState Tests ====================
+
+    #[test]
+    fn test_channel_state_debug() {
+        let closed = ChannelState::Closed;
+        let opening = ChannelState::Opening;
+        let open = ChannelState::Open;
+        let closing = ChannelState::Closing;
+
+        assert_eq!(format!("{:?}", closed), "Closed");
+        assert_eq!(format!("{:?}", opening), "Opening");
+        assert_eq!(format!("{:?}", open), "Open");
+        assert_eq!(format!("{:?}", closing), "Closing");
+    }
+
+    #[test]
+    fn test_channel_state_clone() {
+        let state = ChannelState::Open;
+        let cloned = state.clone();
+        // Both should be Open
+        assert!(matches!(cloned, ChannelState::Open));
+    }
+
+    // ==================== Channel Tests ====================
+
+    #[test]
+    fn test_channel_creation() {
+        let channel = Channel {
+            id: 1,
+            state: ChannelState::Open,
+            consumer_tag: None,
+            prefetch_count: 10,
+            prefetch_size: 0,
+            publisher_confirms: false,
+            transaction_mode: false,
+            next_delivery_tag: 1,
+            unconfirmed_messages: HashMap::new(),
+        };
+
+        assert_eq!(channel.id, 1);
+        assert!(matches!(channel.state, ChannelState::Open));
+        assert!(channel.consumer_tag.is_none());
+        assert_eq!(channel.prefetch_count, 10);
+        assert!(!channel.publisher_confirms);
+        assert!(!channel.transaction_mode);
+    }
+
+    #[test]
+    fn test_channel_with_consumer() {
+        let channel = Channel {
+            id: 2,
+            state: ChannelState::Open,
+            consumer_tag: Some("ctag-1".to_string()),
+            prefetch_count: 5,
+            prefetch_size: 65536,
+            publisher_confirms: true,
+            transaction_mode: false,
+            next_delivery_tag: 100,
+            unconfirmed_messages: HashMap::new(),
+        };
+
+        assert_eq!(channel.consumer_tag, Some("ctag-1".to_string()));
+        assert!(channel.publisher_confirms);
+        assert_eq!(channel.next_delivery_tag, 100);
+    }
+
+    #[test]
+    fn test_channel_unconfirmed_messages() {
+        let mut channel = Channel {
+            id: 1,
+            state: ChannelState::Open,
+            consumer_tag: None,
+            prefetch_count: 0,
+            prefetch_size: 0,
+            publisher_confirms: true,
+            transaction_mode: false,
+            next_delivery_tag: 1,
+            unconfirmed_messages: HashMap::new(),
+        };
+
+        // Simulate publisher confirms tracking
+        channel.unconfirmed_messages.insert(1, "test.routing.key".to_string());
+        channel.unconfirmed_messages.insert(2, "another.key".to_string());
+        channel.next_delivery_tag = 3;
+
+        assert_eq!(channel.unconfirmed_messages.len(), 2);
+        assert_eq!(channel.unconfirmed_messages.get(&1), Some(&"test.routing.key".to_string()));
+        assert_eq!(channel.next_delivery_tag, 3);
+    }
+
+    // ==================== Frame Tests ====================
+
+    #[test]
+    fn test_frame_creation_method() {
+        let frame = Frame {
+            frame_type: FrameType::Method,
+            channel: 1,
+            payload: vec![0x00, 0x0A, 0x00, 0x0A], // Connection.Start
+        };
+
+        assert!(matches!(frame.frame_type, FrameType::Method));
+        assert_eq!(frame.channel, 1);
+        assert_eq!(frame.payload.len(), 4);
+    }
+
+    #[test]
+    fn test_frame_creation_heartbeat() {
+        let frame = Frame {
+            frame_type: FrameType::Heartbeat,
+            channel: 0,
+            payload: vec![],
+        };
+
+        assert!(matches!(frame.frame_type, FrameType::Heartbeat));
+        assert_eq!(frame.channel, 0);
+        assert!(frame.payload.is_empty());
+    }
+
+    #[test]
+    fn test_frame_creation_body() {
+        let body_data = b"Hello, AMQP!".to_vec();
+        let frame = Frame {
+            frame_type: FrameType::Body,
+            channel: 1,
+            payload: body_data.clone(),
+        };
+
+        assert!(matches!(frame.frame_type, FrameType::Body));
+        assert_eq!(frame.payload, body_data);
+    }
+
+    #[test]
+    fn test_frame_creation_header() {
+        let frame = Frame {
+            frame_type: FrameType::Header,
+            channel: 1,
+            payload: vec![0x00, 0x3C, 0x00, 0x00], // Basic class properties
+        };
+
+        assert!(matches!(frame.frame_type, FrameType::Header));
+        assert_eq!(frame.channel, 1);
+    }
+
+    // ==================== FrameType Tests ====================
+
+    #[test]
+    fn test_frame_type_values() {
+        assert_eq!(FrameType::Method as u8, 1);
+        assert_eq!(FrameType::Header as u8, 2);
+        assert_eq!(FrameType::Body as u8, 3);
+        assert_eq!(FrameType::Heartbeat as u8, 8);
+    }
+
+    #[test]
+    fn test_frame_type_debug() {
+        assert_eq!(format!("{:?}", FrameType::Method), "Method");
+        assert_eq!(format!("{:?}", FrameType::Header), "Header");
+        assert_eq!(format!("{:?}", FrameType::Body), "Body");
+        assert_eq!(format!("{:?}", FrameType::Heartbeat), "Heartbeat");
+    }
+
+    // ==================== Method Frame Parsing Helper Tests ====================
+
+    #[test]
+    fn test_parse_class_method_from_payload() {
+        // Simulate parsing a method frame payload
+        let payload: Vec<u8> = vec![
+            0x00, 0x0A, // class_id: 10 (Connection)
+            0x00, 0x0A, // method_id: 10 (Start)
+            0x01, 0x02, 0x03, // arguments
+        ];
+
+        let class_id = u16::from_be_bytes([payload[0], payload[1]]);
+        let method_id = u16::from_be_bytes([payload[2], payload[3]]);
+        let arguments = payload[4..].to_vec();
+
+        assert_eq!(class_id, 10);
+        assert_eq!(method_id, 10);
+        assert_eq!(arguments, vec![0x01, 0x02, 0x03]);
+    }
+
+    #[test]
+    fn test_parse_channel_open_payload() {
+        // Channel.Open method frame
+        let payload: Vec<u8> = vec![
+            0x00, 0x14, // class_id: 20 (Channel)
+            0x00, 0x0A, // method_id: 10 (Open)
+        ];
+
+        let class_id = u16::from_be_bytes([payload[0], payload[1]]);
+        let method_id = u16::from_be_bytes([payload[2], payload[3]]);
+
+        assert_eq!(class_id, class_id::CHANNEL);
+        assert_eq!(method_id, method_id::CHANNEL_OPEN);
+    }
+
+    #[test]
+    fn test_parse_queue_declare_payload() {
+        // Queue.Declare method frame
+        let payload: Vec<u8> = vec![
+            0x00, 0x32, // class_id: 50 (Queue)
+            0x00, 0x0A, // method_id: 10 (Declare)
+            0x00, 0x00, // reserved1
+            0x04, // queue name length
+            b't', b'e', b's', b't', // queue name: "test"
+        ];
+
+        let class_id = u16::from_be_bytes([payload[0], payload[1]]);
+        let method_id = u16::from_be_bytes([payload[2], payload[3]]);
+
+        assert_eq!(class_id, class_id::QUEUE);
+        assert_eq!(method_id, method_id::QUEUE_DECLARE);
+
+        // Parse queue name
+        let name_len = payload[6] as usize;
+        let queue_name = String::from_utf8_lossy(&payload[7..7 + name_len]);
+        assert_eq!(queue_name, "test");
+    }
+
+    #[test]
+    fn test_parse_basic_qos_payload() {
+        // Basic.Qos method frame
+        let payload: Vec<u8> = vec![
+            0x00, 0x3C, // class_id: 60 (Basic)
+            0x00, 0x0A, // method_id: 10 (Qos)
+            0x00, 0x00, 0x00, 0x00, // prefetch_size: 0
+            0x00, 0x0A, // prefetch_count: 10
+            0x00, // global: false
+        ];
+
+        let class_id = u16::from_be_bytes([payload[0], payload[1]]);
+        let method_id = u16::from_be_bytes([payload[2], payload[3]]);
+
+        assert_eq!(class_id, class_id::BASIC);
+        assert_eq!(method_id, method_id::BASIC_QOS);
+
+        // Parse prefetch_count (offset 8-9)
+        let prefetch_count = u16::from_be_bytes([payload[8], payload[9]]);
+        assert_eq!(prefetch_count, 10);
+    }
+
+    // ==================== Frame Serialization Tests ====================
+
+    #[test]
+    fn test_frame_header_bytes() {
+        let frame = Frame {
+            frame_type: FrameType::Method,
+            channel: 1,
+            payload: vec![0x00, 0x0A, 0x00, 0x0A],
+        };
+
+        // Verify frame type byte
+        let frame_type_byte: u8 = match frame.frame_type {
+            FrameType::Method => 1,
+            FrameType::Header => 2,
+            FrameType::Body => 3,
+            FrameType::Heartbeat => 8,
+        };
+        assert_eq!(frame_type_byte, 1);
+
+        // Verify channel bytes
+        let channel_bytes = frame.channel.to_be_bytes();
+        assert_eq!(channel_bytes, [0x00, 0x01]);
+
+        // Verify size bytes
+        let size = frame.payload.len() as u32;
+        let size_bytes = size.to_be_bytes();
+        assert_eq!(size_bytes, [0x00, 0x00, 0x00, 0x04]);
+    }
+
+    #[test]
+    fn test_frame_end_marker() {
+        // AMQP frame end marker should be 0xCE
+        let frame_end: u8 = 0xCE;
+        assert_eq!(frame_end, 206);
+    }
+
+    // ==================== AMQP Protocol Header Tests ====================
+
+    #[test]
+    fn test_amqp_protocol_header() {
+        // AMQP 0.9.1 protocol header
+        let header = b"AMQP\x00\x00\x09\x01";
+
+        assert_eq!(header[0], b'A');
+        assert_eq!(header[1], b'M');
+        assert_eq!(header[2], b'Q');
+        assert_eq!(header[3], b'P');
+        assert_eq!(header[4], 0x00); // Protocol ID
+        assert_eq!(header[5], 0x00); // Major version
+        assert_eq!(header[6], 0x09); // Minor version
+        assert_eq!(header[7], 0x01); // Revision
+    }
+
+    // ==================== Transaction Mode Tests ====================
+
+    #[test]
+    fn test_channel_transaction_mode() {
+        let mut channel = Channel {
+            id: 1,
+            state: ChannelState::Open,
+            consumer_tag: None,
+            prefetch_count: 0,
+            prefetch_size: 0,
+            publisher_confirms: false,
+            transaction_mode: false,
+            next_delivery_tag: 1,
+            unconfirmed_messages: HashMap::new(),
+        };
+
+        assert!(!channel.transaction_mode);
+
+        // Enable transaction mode (simulating Tx.Select)
+        channel.transaction_mode = true;
+        assert!(channel.transaction_mode);
+    }
+
+    #[test]
+    fn test_channel_publisher_confirms() {
+        let mut channel = Channel {
+            id: 1,
+            state: ChannelState::Open,
+            consumer_tag: None,
+            prefetch_count: 0,
+            prefetch_size: 0,
+            publisher_confirms: false,
+            transaction_mode: false,
+            next_delivery_tag: 1,
+            unconfirmed_messages: HashMap::new(),
+        };
+
+        assert!(!channel.publisher_confirms);
+
+        // Enable publisher confirms (simulating Confirm.Select)
+        channel.publisher_confirms = true;
+        assert!(channel.publisher_confirms);
+    }
+}

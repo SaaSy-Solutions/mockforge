@@ -13,16 +13,16 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
+    middleware::{resolve_org_context, AuthUser},
     models::{
         OrgMember, OrgRole, PromotionStatus, Scenario, ScenarioEnvironmentVersion,
         ScenarioPromotion,
     },
     AppState,
 };
-use mockforge_core::workspace::MockEnvironmentName;
-use mockforge_collab::permissions::{Permission, RolePermissions};
 use mockforge_collab::models::UserRole;
+use mockforge_collab::permissions::{Permission, RolePermissions};
+use mockforge_core::workspace::MockEnvironmentName;
 
 /// Promote a scenario from one environment to another
 ///
@@ -76,11 +76,12 @@ pub async fn promote_scenario(
 
     // Determine if approval is required
     let approval_rules = mockforge_core::workspace::ApprovalRules::default();
-    let (requires_approval, approval_reason) = mockforge_core::workspace::ScenarioPromotionWorkflow::requires_approval(
-        &scenario.tags,
-        to_env,
-        &approval_rules,
-    );
+    let (requires_approval, approval_reason) =
+        mockforge_core::workspace::ScenarioPromotionWorkflow::requires_approval(
+            &scenario.tags,
+            to_env,
+            &approval_rules,
+        );
 
     // Create promotion record
     let promotion = ScenarioPromotion::create(
@@ -219,7 +220,9 @@ pub async fn approve_promotion(
 
     // Verify it's for the correct workspace
     if promotion.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest("Promotion does not belong to this workspace".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "Promotion does not belong to this workspace".to_string(),
+        ));
     }
 
     // Verify it's pending
@@ -303,7 +306,9 @@ pub async fn reject_promotion(
 
     // Verify it's for the correct workspace
     if promotion.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest("Promotion does not belong to this workspace".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "Promotion does not belong to this workspace".to_string(),
+        ));
     }
 
     // Reject the promotion

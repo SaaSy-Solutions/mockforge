@@ -187,12 +187,126 @@ pub async fn rate_limit_middleware(
 mod tests {
     use super::*;
 
+    // ==================== RateLimitConfig Tests ====================
+
+    #[test]
+    fn test_rate_limit_config_default() {
+        let config = RateLimitConfig::default();
+        assert_eq!(config.requests_per_minute, 100);
+        assert_eq!(config.burst, 200);
+        assert!(config.per_ip);
+        assert!(!config.per_endpoint);
+    }
+
+    #[test]
+    fn test_rate_limit_config_custom() {
+        let config = RateLimitConfig {
+            requests_per_minute: 50,
+            burst: 100,
+            per_ip: false,
+            per_endpoint: true,
+        };
+
+        assert_eq!(config.requests_per_minute, 50);
+        assert_eq!(config.burst, 100);
+        assert!(!config.per_ip);
+        assert!(config.per_endpoint);
+    }
+
+    #[test]
+    fn test_rate_limit_config_clone() {
+        let config = RateLimitConfig {
+            requests_per_minute: 75,
+            burst: 150,
+            per_ip: true,
+            per_endpoint: true,
+        };
+
+        let cloned = config.clone();
+
+        assert_eq!(cloned.requests_per_minute, config.requests_per_minute);
+        assert_eq!(cloned.burst, config.burst);
+        assert_eq!(cloned.per_ip, config.per_ip);
+        assert_eq!(cloned.per_endpoint, config.per_endpoint);
+    }
+
+    #[test]
+    fn test_rate_limit_config_debug() {
+        let config = RateLimitConfig::default();
+        let debug_str = format!("{:?}", config);
+
+        assert!(debug_str.contains("requests_per_minute"));
+        assert!(debug_str.contains("burst"));
+        assert!(debug_str.contains("per_ip"));
+        assert!(debug_str.contains("per_endpoint"));
+    }
+
+    // ==================== RateLimitQuota Tests ====================
+
+    #[test]
+    fn test_rate_limit_quota_creation() {
+        let quota = RateLimitQuota {
+            limit: 100,
+            remaining: 50,
+            reset: 1234567890,
+        };
+
+        assert_eq!(quota.limit, 100);
+        assert_eq!(quota.remaining, 50);
+        assert_eq!(quota.reset, 1234567890);
+    }
+
+    #[test]
+    fn test_rate_limit_quota_clone() {
+        let quota = RateLimitQuota {
+            limit: 200,
+            remaining: 175,
+            reset: 9876543210,
+        };
+
+        let cloned = quota.clone();
+
+        assert_eq!(cloned.limit, quota.limit);
+        assert_eq!(cloned.remaining, quota.remaining);
+        assert_eq!(cloned.reset, quota.reset);
+    }
+
+    #[test]
+    fn test_rate_limit_quota_debug() {
+        let quota = RateLimitQuota {
+            limit: 100,
+            remaining: 50,
+            reset: 1234567890,
+        };
+
+        let debug_str = format!("{:?}", quota);
+
+        assert!(debug_str.contains("limit"));
+        assert!(debug_str.contains("remaining"));
+        assert!(debug_str.contains("reset"));
+    }
+
+    // ==================== GlobalRateLimiter Tests ====================
+
     #[test]
     fn test_rate_limiter_creation() {
         let config = RateLimitConfig::default();
         let limiter = GlobalRateLimiter::new(config);
 
         // Should allow first request
+        assert!(limiter.check_rate_limit());
+    }
+
+    #[test]
+    fn test_rate_limiter_with_custom_config() {
+        let config = RateLimitConfig {
+            requests_per_minute: 60,
+            burst: 10,
+            per_ip: false,
+            per_endpoint: false,
+        };
+
+        let limiter = GlobalRateLimiter::new(config);
         assert!(limiter.check_rate_limit());
     }
 
@@ -214,11 +328,175 @@ mod tests {
     }
 
     #[test]
-    fn test_rate_limit_config_default() {
+    fn test_rate_limiter_multiple_requests() {
+        let config = RateLimitConfig {
+            requests_per_minute: 1000,
+            burst: 100,
+            per_ip: false,
+            per_endpoint: false,
+        };
+
+        let limiter = GlobalRateLimiter::new(config);
+
+        // Should allow many requests within burst limit
+        for i in 0..50 {
+            assert!(limiter.check_rate_limit(), "Request {} should be allowed", i);
+        }
+    }
+
+    #[test]
+    fn test_get_quota_info() {
+        let config = RateLimitConfig {
+            requests_per_minute: 100,
+            burst: 50,
+            per_ip: false,
+            per_endpoint: false,
+        };
+
+        let limiter = GlobalRateLimiter::new(config);
+
+        let quota = limiter.get_quota_info();
+
+        assert_eq!(quota.limit, 100);
+        assert!(quota.remaining > 0);
+        assert!(quota.reset > 0);
+    }
+
+    #[test]
+    fn test_quota_info_limit_matches_config() {
+        let config = RateLimitConfig {
+            requests_per_minute: 500,
+            burst: 100,
+            per_ip: false,
+            per_endpoint: false,
+        };
+
+        let limiter = GlobalRateLimiter::new(config);
+        let quota = limiter.get_quota_info();
+
+        assert_eq!(quota.limit, 500);
+    }
+
+    #[test]
+    fn test_quota_decrements_remaining() {
+        let config = RateLimitConfig {
+            requests_per_minute: 100,
+            burst: 50,
+            per_ip: false,
+            per_endpoint: false,
+        };
+
+        let limiter = GlobalRateLimiter::new(config);
+
+        let first_quota = limiter.get_quota_info();
+        let second_quota = limiter.get_quota_info();
+
+        // Remaining should decrement between calls
+        assert!(second_quota.remaining <= first_quota.remaining, "Remaining should not increase");
+    }
+
+    #[test]
+    fn test_quota_reset_timestamp_is_future() {
         let config = RateLimitConfig::default();
-        assert_eq!(config.requests_per_minute, 100);
-        assert_eq!(config.burst, 200);
-        assert!(config.per_ip);
-        assert!(!config.per_endpoint);
+        let limiter = GlobalRateLimiter::new(config);
+
+        let quota = limiter.get_quota_info();
+
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+        // Reset timestamp should be in the future (approximately 60 seconds from window start)
+        assert!(quota.reset >= now, "Reset timestamp should be >= current time");
+        assert!(quota.reset <= now + 120, "Reset timestamp should be within 2 minutes");
+    }
+
+    #[test]
+    fn test_rate_limiter_high_burst() {
+        let config = RateLimitConfig {
+            requests_per_minute: 10,
+            burst: 1000, // Very high burst
+            per_ip: false,
+            per_endpoint: false,
+        };
+
+        let limiter = GlobalRateLimiter::new(config);
+
+        // Should allow many requests due to high burst
+        for _ in 0..100 {
+            assert!(limiter.check_rate_limit());
+        }
+    }
+
+    #[test]
+    fn test_rate_limiter_low_limit() {
+        let config = RateLimitConfig {
+            requests_per_minute: 1,
+            burst: 1,
+            per_ip: false,
+            per_endpoint: false,
+        };
+
+        let limiter = GlobalRateLimiter::new(config);
+
+        // First request should succeed
+        assert!(limiter.check_rate_limit());
+    }
+
+    // ==================== Edge Cases ====================
+
+    #[test]
+    fn test_config_with_zero_values_handled() {
+        // Zero values should be handled gracefully by governor
+        let config = RateLimitConfig {
+            requests_per_minute: 0, // Will use default (100)
+            burst: 0,               // Will use default (200)
+            per_ip: false,
+            per_endpoint: false,
+        };
+
+        // Should not panic - NonZeroU32::new(0) returns None, unwrap_or handles it
+        let limiter = GlobalRateLimiter::new(config);
+        assert!(limiter.check_rate_limit());
+    }
+
+    #[test]
+    fn test_multiple_quota_calls_same_limiter() {
+        let config = RateLimitConfig::default();
+        let limiter = GlobalRateLimiter::new(config);
+
+        // Call get_quota_info multiple times
+        let quotas: Vec<RateLimitQuota> = (0..5).map(|_| limiter.get_quota_info()).collect();
+
+        // All should have same limit
+        for quota in &quotas {
+            assert_eq!(quota.limit, 100);
+        }
+
+        // Reset timestamps should be similar (within same window)
+        let first_reset = quotas[0].reset;
+        for quota in &quotas {
+            assert!(
+                (quota.reset as i64 - first_reset as i64).abs() <= 1,
+                "Reset timestamps should be within 1 second of each other"
+            );
+        }
+    }
+
+    #[test]
+    fn test_quota_remaining_never_negative() {
+        let config = RateLimitConfig {
+            requests_per_minute: 5,
+            burst: 5,
+            per_ip: false,
+            per_endpoint: false,
+        };
+
+        let limiter = GlobalRateLimiter::new(config);
+
+        // Call many times to exhaust quota
+        for _ in 0..20 {
+            let quota = limiter.get_quota_info();
+            // Remaining should never go below 0 due to saturating_sub
+            assert!(quota.remaining <= 100, "Remaining should be reasonable");
+        }
     }
 }

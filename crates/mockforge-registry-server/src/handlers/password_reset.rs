@@ -38,7 +38,9 @@ pub async fn request_password_reset(
             // Return success even if user doesn't exist
             return Ok(Json(PasswordResetRequestResponse {
                 success: true,
-                message: "If an account with that email exists, a password reset link has been sent.".to_string(),
+                message:
+                    "If an account with that email exists, a password reset link has been sent."
+                        .to_string(),
             }));
         }
         Err(e) => return Err(ApiError::Database(e)),
@@ -51,11 +53,13 @@ pub async fn request_password_reset(
         .map_err(|e| ApiError::Database(e))?;
 
     // Update token expiration to 1 hour (instead of default 24 hours)
-    sqlx::query("UPDATE verification_tokens SET expires_at = NOW() + INTERVAL '1 hour' WHERE id = $1")
-        .bind(reset_token.id)
-        .execute(pool)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    sqlx::query(
+        "UPDATE verification_tokens SET expires_at = NOW() + INTERVAL '1 hour' WHERE id = $1",
+    )
+    .bind(reset_token.id)
+    .execute(pool)
+    .await
+    .map_err(|e| ApiError::Database(e))?;
 
     // Send password reset email (non-blocking)
     let email_service = EmailService::from_env();
@@ -75,7 +79,8 @@ pub async fn request_password_reset(
 
     Ok(Json(PasswordResetRequestResponse {
         success: true,
-        message: "If an account with that email exists, a password reset link has been sent.".to_string(),
+        message: "If an account with that email exists, a password reset link has been sent."
+            .to_string(),
     }))
 }
 
@@ -112,7 +117,9 @@ pub async fn confirm_password_reset(
 
     // Check if token is valid (not expired and not used)
     if !reset_token.is_valid() {
-        return Err(ApiError::InvalidRequest("Reset token has expired or already been used".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "Reset token has expired or already been used".to_string(),
+        ));
     }
 
     // Get user
@@ -122,8 +129,7 @@ pub async fn confirm_password_reset(
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Hash new password
-    let password_hash = hash_password(&request.new_password)
-        .map_err(|e| ApiError::Internal(e))?;
+    let password_hash = hash_password(&request.new_password).map_err(|e| ApiError::Internal(e))?;
 
     // Update user password
     sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
@@ -142,6 +148,7 @@ pub async fn confirm_password_reset(
 
     Ok(Json(PasswordResetConfirmResponse {
         success: true,
-        message: "Password has been reset successfully. You can now log in with your new password.".to_string(),
+        message: "Password has been reset successfully. You can now log in with your new password."
+            .to_string(),
     }))
 }

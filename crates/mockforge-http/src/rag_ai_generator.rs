@@ -171,6 +171,8 @@ impl AiGenerator for RagAiGenerator {
 mod tests {
     use super::*;
 
+    // ==================== RagAiGenerator Creation Tests ====================
+
     #[test]
     fn test_rag_generator_creation() {
         let config = RagConfig {
@@ -184,6 +186,167 @@ mod tests {
         let result = RagAiGenerator::new(config);
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_rag_generator_creation_openai() {
+        let config = RagConfig {
+            provider: LlmProvider::OpenAI,
+            api_key: Some("test-api-key".to_string()),
+            model: "gpt-4".to_string(),
+            api_endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
+            ..Default::default()
+        };
+
+        let result = RagAiGenerator::new(config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_rag_generator_creation_anthropic() {
+        let config = RagConfig {
+            provider: LlmProvider::Anthropic,
+            api_key: Some("test-api-key".to_string()),
+            model: "claude-3-opus".to_string(),
+            api_endpoint: "https://api.anthropic.com/v1/messages".to_string(),
+            ..Default::default()
+        };
+
+        let result = RagAiGenerator::new(config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_rag_generator_creation_openai_compatible() {
+        let config = RagConfig {
+            provider: LlmProvider::OpenAICompatible,
+            api_key: None,
+            model: "local-model".to_string(),
+            api_endpoint: "http://localhost:8080/v1/chat/completions".to_string(),
+            ..Default::default()
+        };
+
+        let result = RagAiGenerator::new(config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_rag_generator_creation_with_custom_settings() {
+        let config = RagConfig {
+            provider: LlmProvider::Ollama,
+            api_key: None,
+            model: "codellama".to_string(),
+            api_endpoint: "http://localhost:11434/api/generate".to_string(),
+            temperature: 0.5,
+            max_tokens: 2048,
+            ..Default::default()
+        };
+
+        let result = RagAiGenerator::new(config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_rag_generator_creation_with_low_temperature() {
+        let config = RagConfig {
+            provider: LlmProvider::OpenAI,
+            api_key: Some("test-key".to_string()),
+            model: "gpt-3.5-turbo".to_string(),
+            api_endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
+            temperature: 0.0,
+            max_tokens: 512,
+            ..Default::default()
+        };
+
+        let result = RagAiGenerator::new(config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_rag_generator_creation_with_high_temperature() {
+        let config = RagConfig {
+            provider: LlmProvider::OpenAI,
+            api_key: Some("test-key".to_string()),
+            model: "gpt-4".to_string(),
+            api_endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
+            temperature: 1.0,
+            max_tokens: 4096,
+            ..Default::default()
+        };
+
+        let result = RagAiGenerator::new(config);
+        assert!(result.is_ok());
+    }
+
+    // ==================== RagConfig Tests ====================
+
+    #[test]
+    fn test_rag_config_default() {
+        let config = RagConfig::default();
+        // Default config should have reasonable defaults
+        assert!(config.temperature >= 0.0);
+        assert!(config.max_tokens > 0);
+    }
+
+    #[test]
+    fn test_rag_config_clone() {
+        let config = RagConfig {
+            provider: LlmProvider::Ollama,
+            api_key: Some("secret".to_string()),
+            model: "llama2".to_string(),
+            api_endpoint: "http://localhost:11434/api/generate".to_string(),
+            temperature: 0.7,
+            max_tokens: 1024,
+            ..Default::default()
+        };
+
+        let cloned = config.clone();
+        assert_eq!(cloned.model, config.model);
+        assert_eq!(cloned.api_key, config.api_key);
+    }
+
+    // ==================== LlmProvider Tests ====================
+
+    #[test]
+    fn test_llm_provider_openai() {
+        let provider = LlmProvider::OpenAI;
+        let config = RagConfig {
+            provider,
+            ..Default::default()
+        };
+        assert!(matches!(config.provider, LlmProvider::OpenAI));
+    }
+
+    #[test]
+    fn test_llm_provider_anthropic() {
+        let provider = LlmProvider::Anthropic;
+        let config = RagConfig {
+            provider,
+            ..Default::default()
+        };
+        assert!(matches!(config.provider, LlmProvider::Anthropic));
+    }
+
+    #[test]
+    fn test_llm_provider_ollama() {
+        let provider = LlmProvider::Ollama;
+        let config = RagConfig {
+            provider,
+            ..Default::default()
+        };
+        assert!(matches!(config.provider, LlmProvider::Ollama));
+    }
+
+    #[test]
+    fn test_llm_provider_openai_compatible() {
+        let provider = LlmProvider::OpenAICompatible;
+        let config = RagConfig {
+            provider,
+            ..Default::default()
+        };
+        assert!(matches!(config.provider, LlmProvider::OpenAICompatible));
+    }
+
+    // ==================== Generator Async Tests ====================
 
     #[tokio::test]
     async fn test_generate_fallback_to_json() {
@@ -202,5 +365,198 @@ mod tests {
         // but we can verify the generator was created successfully
         let generator = RagAiGenerator::new(config);
         assert!(generator.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_generator_engine_access() {
+        let config = RagConfig {
+            provider: LlmProvider::Ollama,
+            api_key: None,
+            model: "llama2".to_string(),
+            api_endpoint: "http://localhost:11434/api/generate".to_string(),
+            temperature: 0.8,
+            max_tokens: 512,
+            ..Default::default()
+        };
+
+        let generator = RagAiGenerator::new(config).unwrap();
+        // The engine is wrapped in Arc<RwLock>, verify we can access it
+        let engine = generator.engine.read().await;
+        let engine_config = engine.config();
+        assert_eq!(engine_config.model, "llama2");
+    }
+
+    #[tokio::test]
+    async fn test_generator_can_be_cloned_via_arc() {
+        let config = RagConfig {
+            provider: LlmProvider::OpenAI,
+            api_key: Some("test".to_string()),
+            model: "gpt-3.5-turbo".to_string(),
+            api_endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
+            ..Default::default()
+        };
+
+        let generator = RagAiGenerator::new(config).unwrap();
+        // Engine is Arc-wrapped, so cloning should work
+        let engine_clone = generator.engine.clone();
+        assert!(Arc::strong_count(&engine_clone) >= 2);
+    }
+
+    // ==================== AiResponseConfig Tests ====================
+
+    #[test]
+    fn test_ai_response_config_with_generator() {
+        // Test that we can create AiResponseConfig compatible with the generator
+        let ai_config = AiResponseConfig {
+            temperature: 0.7,
+            max_tokens: 1024,
+            ..Default::default()
+        };
+
+        assert!((ai_config.temperature - 0.7).abs() < 0.001);
+        assert_eq!(ai_config.max_tokens, 1024);
+    }
+
+    #[test]
+    fn test_ai_response_config_low_temp() {
+        let ai_config = AiResponseConfig {
+            temperature: 0.0,
+            max_tokens: 256,
+            ..Default::default()
+        };
+
+        assert!((ai_config.temperature - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_ai_response_config_high_tokens() {
+        let ai_config = AiResponseConfig {
+            temperature: 0.5,
+            max_tokens: 8192,
+            ..Default::default()
+        };
+
+        assert_eq!(ai_config.max_tokens, 8192);
+    }
+
+    // ==================== Edge Cases ====================
+
+    #[test]
+    fn test_generator_with_empty_model_name() {
+        let config = RagConfig {
+            provider: LlmProvider::Ollama,
+            api_key: None,
+            model: String::new(), // Empty model name
+            api_endpoint: "http://localhost:11434/api/generate".to_string(),
+            ..Default::default()
+        };
+
+        // Should still create successfully (validation happens later)
+        let result = RagAiGenerator::new(config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_generator_with_empty_endpoint() {
+        let config = RagConfig {
+            provider: LlmProvider::Ollama,
+            api_key: None,
+            model: "llama2".to_string(),
+            api_endpoint: String::new(), // Empty endpoint
+            ..Default::default()
+        };
+
+        // Should still create successfully (validation happens at request time)
+        let result = RagAiGenerator::new(config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_generator_with_no_api_key_openai() {
+        let config = RagConfig {
+            provider: LlmProvider::OpenAI,
+            api_key: None, // No API key (will fail at request time)
+            model: "gpt-4".to_string(),
+            api_endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
+            ..Default::default()
+        };
+
+        // Creation should succeed, failure happens when making requests
+        let result = RagAiGenerator::new(config);
+        assert!(result.is_ok());
+    }
+
+    // ==================== Integration-style Tests ====================
+
+    #[tokio::test]
+    async fn test_multiple_generators_different_providers() {
+        let openai_config = RagConfig {
+            provider: LlmProvider::OpenAI,
+            api_key: Some("test-key".to_string()),
+            model: "gpt-4".to_string(),
+            api_endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
+            ..Default::default()
+        };
+
+        let ollama_config = RagConfig {
+            provider: LlmProvider::Ollama,
+            api_key: None,
+            model: "llama2".to_string(),
+            api_endpoint: "http://localhost:11434/api/generate".to_string(),
+            ..Default::default()
+        };
+
+        let anthropic_config = RagConfig {
+            provider: LlmProvider::Anthropic,
+            api_key: Some("test-key".to_string()),
+            model: "claude-3-haiku-20240307".to_string(),
+            api_endpoint: "https://api.anthropic.com/v1/messages".to_string(),
+            ..Default::default()
+        };
+
+        // All three should create successfully
+        assert!(RagAiGenerator::new(openai_config).is_ok());
+        assert!(RagAiGenerator::new(ollama_config).is_ok());
+        assert!(RagAiGenerator::new(anthropic_config).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_generator_engine_update() {
+        let config = RagConfig {
+            provider: LlmProvider::Ollama,
+            api_key: None,
+            model: "llama2".to_string(),
+            api_endpoint: "http://localhost:11434/api/generate".to_string(),
+            temperature: 0.7,
+            max_tokens: 1024,
+            ..Default::default()
+        };
+
+        let generator = RagAiGenerator::new(config).unwrap();
+
+        // Test that we can read and the engine has correct config
+        {
+            let engine = generator.engine.read().await;
+            let engine_config = engine.config();
+            assert!((engine_config.temperature - 0.7).abs() < 0.001);
+            assert_eq!(engine_config.max_tokens, 1024);
+        }
+
+        // Test that we can write to update the config
+        {
+            let mut engine = generator.engine.write().await;
+            let mut new_config = engine.config().clone();
+            new_config.temperature = 0.5;
+            new_config.max_tokens = 2048;
+            engine.update_config(new_config);
+        }
+
+        // Verify the update took effect
+        {
+            let engine = generator.engine.read().await;
+            let engine_config = engine.config();
+            assert!((engine_config.temperature - 0.5).abs() < 0.001);
+            assert_eq!(engine_config.max_tokens, 2048);
+        }
     }
 }

@@ -762,3 +762,211 @@ impl BackupService {
         self.core_bridge.get_workspace_state_json(&team_workspace)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_storage_backend_equality() {
+        assert_eq!(StorageBackend::Local, StorageBackend::Local);
+        assert_eq!(StorageBackend::S3, StorageBackend::S3);
+        assert_eq!(StorageBackend::Azure, StorageBackend::Azure);
+        assert_eq!(StorageBackend::Gcs, StorageBackend::Gcs);
+        assert_eq!(StorageBackend::Custom, StorageBackend::Custom);
+
+        assert_ne!(StorageBackend::Local, StorageBackend::S3);
+    }
+
+    #[test]
+    fn test_storage_backend_serialization() {
+        let backend = StorageBackend::S3;
+        let json = serde_json::to_string(&backend).unwrap();
+        let deserialized: StorageBackend = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(backend, deserialized);
+    }
+
+    #[test]
+    fn test_storage_backend_all_variants() {
+        let backends = vec![
+            StorageBackend::Local,
+            StorageBackend::S3,
+            StorageBackend::Azure,
+            StorageBackend::Gcs,
+            StorageBackend::Custom,
+        ];
+
+        for backend in backends {
+            let json = serde_json::to_string(&backend).unwrap();
+            let deserialized: StorageBackend = serde_json::from_str(&json).unwrap();
+            assert_eq!(backend, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_workspace_backup_new() {
+        let workspace_id = Uuid::new_v4();
+        let created_by = Uuid::new_v4();
+        let backup_url = "s3://bucket/backup.yaml".to_string();
+        let size_bytes = 1024;
+
+        let backup = WorkspaceBackup::new(
+            workspace_id,
+            backup_url.clone(),
+            StorageBackend::S3,
+            size_bytes,
+            created_by,
+        );
+
+        assert_eq!(backup.workspace_id, workspace_id);
+        assert_eq!(backup.backup_url, backup_url);
+        assert_eq!(backup.storage_backend, StorageBackend::S3);
+        assert_eq!(backup.size_bytes, size_bytes);
+        assert_eq!(backup.created_by, created_by);
+        assert_eq!(backup.backup_format, "yaml");
+        assert!(!backup.encrypted);
+        assert!(backup.commit_id.is_none());
+        assert!(backup.expires_at.is_none());
+        assert!(backup.storage_config.is_none());
+    }
+
+    #[test]
+    fn test_workspace_backup_clone() {
+        let backup = WorkspaceBackup::new(
+            Uuid::new_v4(),
+            "backup.yaml".to_string(),
+            StorageBackend::Local,
+            512,
+            Uuid::new_v4(),
+        );
+
+        let cloned = backup.clone();
+
+        assert_eq!(backup.id, cloned.id);
+        assert_eq!(backup.workspace_id, cloned.workspace_id);
+        assert_eq!(backup.backup_url, cloned.backup_url);
+        assert_eq!(backup.size_bytes, cloned.size_bytes);
+    }
+
+    #[test]
+    fn test_workspace_backup_serialization() {
+        let backup = WorkspaceBackup::new(
+            Uuid::new_v4(),
+            "backup.yaml".to_string(),
+            StorageBackend::Local,
+            256,
+            Uuid::new_v4(),
+        );
+
+        let json = serde_json::to_string(&backup).unwrap();
+        let deserialized: WorkspaceBackup = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(backup.id, deserialized.id);
+        assert_eq!(backup.workspace_id, deserialized.workspace_id);
+        assert_eq!(backup.storage_backend, deserialized.storage_backend);
+    }
+
+    #[test]
+    fn test_workspace_backup_with_commit() {
+        let mut backup = WorkspaceBackup::new(
+            Uuid::new_v4(),
+            "backup.yaml".to_string(),
+            StorageBackend::Local,
+            128,
+            Uuid::new_v4(),
+        );
+
+        let commit_id = Uuid::new_v4();
+        backup.commit_id = Some(commit_id);
+
+        assert_eq!(backup.commit_id, Some(commit_id));
+    }
+
+    #[test]
+    fn test_workspace_backup_with_encryption() {
+        let mut backup = WorkspaceBackup::new(
+            Uuid::new_v4(),
+            "backup.yaml".to_string(),
+            StorageBackend::S3,
+            2048,
+            Uuid::new_v4(),
+        );
+
+        backup.encrypted = true;
+
+        assert!(backup.encrypted);
+    }
+
+    #[test]
+    fn test_workspace_backup_with_expiration() {
+        let mut backup = WorkspaceBackup::new(
+            Uuid::new_v4(),
+            "backup.yaml".to_string(),
+            StorageBackend::Azure,
+            512,
+            Uuid::new_v4(),
+        );
+
+        let expires_at = Utc::now() + chrono::Duration::days(30);
+        backup.expires_at = Some(expires_at);
+
+        assert!(backup.expires_at.is_some());
+    }
+
+    #[test]
+    fn test_workspace_backup_with_storage_config() {
+        let mut backup = WorkspaceBackup::new(
+            Uuid::new_v4(),
+            "backup.yaml".to_string(),
+            StorageBackend::S3,
+            1024,
+            Uuid::new_v4(),
+        );
+
+        let config = serde_json::json!({
+            "region": "us-east-1",
+            "bucket": "my-bucket"
+        });
+        backup.storage_config = Some(config.clone());
+
+        assert_eq!(backup.storage_config, Some(config));
+    }
+
+    #[test]
+    fn test_workspace_backup_different_formats() {
+        let mut backup = WorkspaceBackup::new(
+            Uuid::new_v4(),
+            "backup.json".to_string(),
+            StorageBackend::Local,
+            256,
+            Uuid::new_v4(),
+        );
+
+        assert_eq!(backup.backup_format, "yaml"); // Default
+
+        backup.backup_format = "json".to_string();
+        assert_eq!(backup.backup_format, "json");
+    }
+
+    #[test]
+    fn test_storage_backend_debug() {
+        let backend = StorageBackend::S3;
+        let debug_str = format!("{:?}", backend);
+        assert!(debug_str.contains("S3"));
+    }
+
+    #[test]
+    fn test_workspace_backup_debug() {
+        let backup = WorkspaceBackup::new(
+            Uuid::new_v4(),
+            "backup.yaml".to_string(),
+            StorageBackend::Local,
+            100,
+            Uuid::new_v4(),
+        );
+
+        let debug_str = format!("{:?}", backup);
+        assert!(debug_str.contains("WorkspaceBackup"));
+    }
+}

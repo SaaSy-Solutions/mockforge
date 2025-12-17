@@ -34,9 +34,9 @@ use crate::config::Config;
 use crate::database::Database;
 use crate::storage::PluginStorage;
 
+use axum::response::IntoResponse;
 use mockforge_observability::get_global_registry;
 use std::sync::Arc;
-use axum::response::IntoResponse;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -79,9 +79,9 @@ async fn main() -> Result<()> {
 
     // Initialize analytics database (optional)
     let analytics_db = if let Some(analytics_db_path) = &config.analytics_db_path {
-        match mockforge_analytics::AnalyticsDatabase::new(
-            std::path::Path::new(analytics_db_path)
-        ).await {
+        match mockforge_analytics::AnalyticsDatabase::new(std::path::Path::new(analytics_db_path))
+            .await
+        {
             Ok(analytics_db) => {
                 if let Err(e) = analytics_db.run_migrations().await {
                     tracing::warn!("Failed to run analytics database migrations: {}", e);
@@ -105,7 +105,9 @@ async fn main() -> Result<()> {
                     tracing::warn!("Failed to run analytics database migrations: {}", e);
                     None
                 } else {
-                    tracing::info!("Analytics database initialized at default path: mockforge-analytics.db");
+                    tracing::info!(
+                        "Analytics database initialized at default path: mockforge-analytics.db"
+                    );
                     Some(analytics_db)
                 }
             }
@@ -173,14 +175,16 @@ async fn metrics_handler() -> impl axum::response::IntoResponse {
     let mut buffer = Vec::new();
     if let Err(e) = encoder.encode(&metric_families, &mut buffer) {
         tracing::error!("Failed to encode metrics: {}", e);
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to encode metrics").into_response();
+        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to encode metrics")
+            .into_response();
     }
 
     let body = match String::from_utf8(buffer) {
         Ok(body) => body,
         Err(e) => {
             tracing::error!("Failed to convert metrics to UTF-8: {}", e);
-            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to convert metrics").into_response();
+            return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to convert metrics")
+                .into_response();
         }
     };
 
@@ -188,7 +192,8 @@ async fn metrics_handler() -> impl axum::response::IntoResponse {
         axum::http::StatusCode::OK,
         [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
         body,
-    ).into_response()
+    )
+        .into_response()
 }
 
 #[cfg(test)]

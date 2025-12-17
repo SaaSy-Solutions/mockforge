@@ -124,3 +124,151 @@ impl SessionDataManager {
         self.session_manager.update_session(session_id, state).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockforge_core::intelligent_behavior::session::SessionTracking;
+
+    fn create_test_session_manager() -> Arc<SessionManager> {
+        let config = SessionTracking::default();
+        Arc::new(SessionManager::new(config, 3600))
+    }
+
+    #[tokio::test]
+    async fn test_session_data_manager_new() {
+        let session_manager = create_test_session_manager();
+        let manager = SessionDataManager::new(session_manager.clone(), StorageBackend::Memory);
+
+        assert!(Arc::ptr_eq(&manager.session_manager, &session_manager));
+    }
+
+    #[tokio::test]
+    async fn test_get_session_database_no_session() {
+        let session_manager = create_test_session_manager();
+        let manager = SessionDataManager::new(session_manager, StorageBackend::Memory);
+
+        let result = manager.get_session_database("nonexistent-session").await;
+        assert!(result.is_err());
+        match result {
+            Err(err) => {
+                assert!(err.to_string().contains("Session"));
+                assert!(err.to_string().contains("not found"));
+            }
+            Ok(_) => panic!("Expected an error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_session_database_creates_new() {
+        let session_manager = create_test_session_manager();
+
+        // Create a session first
+        let _ = session_manager.get_or_create_session(Some("test-session".to_string())).await;
+
+        let manager = SessionDataManager::new(session_manager, StorageBackend::Memory);
+        let result = manager.get_session_database("test-session").await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_session_database_returns_same() {
+        let session_manager = create_test_session_manager();
+
+        // Create a session first
+        let _ = session_manager.get_or_create_session(Some("test-session".to_string())).await;
+
+        let manager = SessionDataManager::new(session_manager, StorageBackend::Memory);
+
+        // Get database twice
+        let db1 = manager.get_session_database("test-session").await.unwrap();
+        let db2 = manager.get_session_database("test-session").await.unwrap();
+
+        // Should return the same Arc
+        assert!(Arc::ptr_eq(&db1, &db2));
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_session_database() {
+        let session_manager = create_test_session_manager();
+
+        // Create a session first
+        let _ = session_manager.get_or_create_session(Some("test-session".to_string())).await;
+
+        let manager = SessionDataManager::new(session_manager, StorageBackend::Memory);
+
+        // Get a database to create the entry
+        let _db = manager.get_session_database("test-session").await.unwrap();
+
+        // Clean up
+        let result = manager.cleanup_session_database("test-session").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_nonexistent_session() {
+        let session_manager = create_test_session_manager();
+        let manager = SessionDataManager::new(session_manager, StorageBackend::Memory);
+
+        // Should not error even if session doesn't exist
+        let result = manager.cleanup_session_database("nonexistent").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_session_manager_getter() {
+        let session_manager = create_test_session_manager();
+        let manager = SessionDataManager::new(session_manager.clone(), StorageBackend::Memory);
+
+        assert!(Arc::ptr_eq(manager.session_manager(), &session_manager));
+    }
+
+    #[tokio::test]
+    async fn test_get_session_state_exists() {
+        let session_manager = create_test_session_manager();
+
+        // Create a session first
+        let _ = session_manager.get_or_create_session(Some("test-session".to_string())).await;
+
+        let manager = SessionDataManager::new(session_manager, StorageBackend::Memory);
+        let state = manager.get_session_state("test-session").await;
+
+        assert!(state.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_session_state_not_exists() {
+        let session_manager = create_test_session_manager();
+        let manager = SessionDataManager::new(session_manager, StorageBackend::Memory);
+
+        let state = manager.get_session_state("nonexistent").await;
+        assert!(state.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_multiple_sessions_isolated() {
+        let session_manager = create_test_session_manager();
+
+        // Create two sessions
+        let _ = session_manager.get_or_create_session(Some("session-1".to_string())).await;
+        let _ = session_manager.get_or_create_session(Some("session-2".to_string())).await;
+
+        let manager = SessionDataManager::new(session_manager, StorageBackend::Memory);
+
+        let db1 = manager.get_session_database("session-1").await.unwrap();
+        let db2 = manager.get_session_database("session-2").await.unwrap();
+
+        // Should be different databases
+        assert!(!Arc::ptr_eq(&db1, &db2));
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_expired_sessions() {
+        let session_manager = create_test_session_manager();
+        let manager = SessionDataManager::new(session_manager, StorageBackend::Memory);
+
+        let result = manager.cleanup_expired_sessions().await;
+        assert!(result.is_ok());
+    }
+}

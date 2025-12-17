@@ -237,3 +237,188 @@ impl MetricsExporter {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_kafka_metrics_new() {
+        let metrics = KafkaMetrics::new();
+        assert_eq!(metrics.connections_total.load(Ordering::Relaxed), 0);
+        assert_eq!(metrics.connections_active.load(Ordering::Relaxed), 0);
+        assert_eq!(metrics.requests_total.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn test_kafka_metrics_default() {
+        let metrics = KafkaMetrics::default();
+        assert_eq!(metrics.connections_total.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn test_record_connection() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_connection();
+        assert_eq!(metrics.connections_total.load(Ordering::Relaxed), 1);
+        assert_eq!(metrics.connections_active.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_record_connection_closed() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_connection();
+        metrics.record_connection();
+        metrics.record_connection_closed();
+        assert_eq!(metrics.connections_total.load(Ordering::Relaxed), 2);
+        assert_eq!(metrics.connections_active.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_record_request() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_request(0); // Produce API
+        metrics.record_request(1); // Fetch API
+        metrics.record_request(0);
+        assert_eq!(metrics.requests_total.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn test_record_request_unknown_api() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_request(999); // Unknown API key
+        assert_eq!(metrics.requests_total.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_record_response() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_response();
+        metrics.record_response();
+        assert_eq!(metrics.responses_total.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn test_record_messages_produced() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_messages_produced(10);
+        metrics.record_messages_produced(5);
+        assert_eq!(metrics.messages_produced_total.load(Ordering::Relaxed), 15);
+    }
+
+    #[test]
+    fn test_record_messages_consumed() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_messages_consumed(20);
+        assert_eq!(metrics.messages_consumed_total.load(Ordering::Relaxed), 20);
+    }
+
+    #[test]
+    fn test_record_topic_created() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_topic_created();
+        metrics.record_topic_created();
+        assert_eq!(metrics.topics_created_total.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn test_record_topic_deleted() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_topic_deleted();
+        assert_eq!(metrics.topics_deleted_total.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_record_consumer_group_created() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_consumer_group_created();
+        assert_eq!(metrics.consumer_groups_total.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_record_partition_created() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_partition_created();
+        metrics.record_partition_created();
+        metrics.record_partition_created();
+        assert_eq!(metrics.partitions_total.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn test_record_request_latency() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_request_latency(100);
+        metrics.record_request_latency(200);
+        // Moving average - result depends on implementation
+        let latency = metrics.request_latency_micros.load(Ordering::Relaxed);
+        assert!(latency > 0);
+    }
+
+    #[test]
+    fn test_record_error() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_error();
+        metrics.record_error();
+        assert_eq!(metrics.errors_total.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn test_snapshot() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_connection();
+        metrics.record_request(0);
+        metrics.record_messages_produced(5);
+
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.connections_total, 1);
+        assert_eq!(snapshot.connections_active, 1);
+        assert_eq!(snapshot.requests_total, 1);
+        assert_eq!(snapshot.messages_produced_total, 5);
+    }
+
+    #[test]
+    fn test_snapshot_clone() {
+        let metrics = KafkaMetrics::new();
+        metrics.record_connection();
+
+        let snapshot = metrics.snapshot();
+        let cloned = snapshot.clone();
+        assert_eq!(snapshot.connections_total, cloned.connections_total);
+    }
+
+    #[test]
+    fn test_metrics_exporter_new() {
+        let metrics = Arc::new(KafkaMetrics::new());
+        let _exporter = MetricsExporter::new(metrics);
+    }
+
+    #[test]
+    fn test_metrics_exporter_prometheus() {
+        let metrics = Arc::new(KafkaMetrics::new());
+        metrics.record_connection();
+        metrics.record_messages_produced(100);
+
+        let exporter = MetricsExporter::new(metrics);
+        let output = exporter.export_prometheus();
+
+        assert!(output.contains("kafka_connections_total 1"));
+        assert!(output.contains("kafka_messages_produced_total 100"));
+        assert!(output.contains("# HELP"));
+        assert!(output.contains("# TYPE"));
+    }
+
+    #[test]
+    fn test_kafka_metrics_debug() {
+        let metrics = KafkaMetrics::new();
+        let debug = format!("{:?}", metrics);
+        assert!(debug.contains("KafkaMetrics"));
+    }
+
+    #[test]
+    fn test_metrics_snapshot_debug() {
+        let metrics = KafkaMetrics::new();
+        let snapshot = metrics.snapshot();
+        let debug = format!("{:?}", snapshot);
+        assert!(debug.contains("MetricsSnapshot"));
+    }
+}

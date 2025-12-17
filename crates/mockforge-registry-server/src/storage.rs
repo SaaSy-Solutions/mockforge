@@ -226,3 +226,99 @@ impl PluginStorage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_key_component() {
+        // Normal names should be lowercased
+        assert_eq!(PluginStorage::sanitize_key_component("MyPlugin"), "myplugin");
+
+        // Alphanumeric with hyphens, underscores, and dots should be preserved
+        assert_eq!(PluginStorage::sanitize_key_component("my-plugin_v1.0"), "my-plugin_v1.0");
+
+        // Dangerous characters should be removed
+        assert_eq!(PluginStorage::sanitize_key_component("my/plugin"), "myplugin");
+        assert_eq!(PluginStorage::sanitize_key_component("../evil"), "evil");
+        assert_eq!(PluginStorage::sanitize_key_component("plugin<script>"), "pluginscript");
+
+        // Path traversal attempts should be sanitized
+        assert_eq!(PluginStorage::sanitize_key_component("../../etc/passwd"), "etcpasswd");
+
+        // Special characters should be removed
+        assert_eq!(PluginStorage::sanitize_key_component("plugin@#$%"), "plugin");
+
+        // Leading/trailing dots, hyphens, underscores should be trimmed
+        assert_eq!(PluginStorage::sanitize_key_component("...plugin..."), "plugin");
+        assert_eq!(PluginStorage::sanitize_key_component("---plugin---"), "plugin");
+        assert_eq!(PluginStorage::sanitize_key_component("___plugin___"), "plugin");
+
+        // Mixed case with special chars
+        assert_eq!(
+            PluginStorage::sanitize_key_component("My!Super@Plugin#2024"),
+            "mysuperplugin2024"
+        );
+
+        // Long strings should be truncated to 100 characters
+        let long_name = "a".repeat(150);
+        assert_eq!(PluginStorage::sanitize_key_component(&long_name).len(), 100);
+
+        // Empty after sanitization
+        assert_eq!(PluginStorage::sanitize_key_component("@#$%^&*()"), "");
+    }
+
+    #[test]
+    fn test_sanitize_key_component_versions() {
+        // Semantic versions should be preserved
+        assert_eq!(PluginStorage::sanitize_key_component("1.0.0"), "1.0.0");
+        assert_eq!(PluginStorage::sanitize_key_component("2.3.4-alpha"), "2.3.4-alpha");
+        assert_eq!(PluginStorage::sanitize_key_component("1.0.0-beta.1"), "1.0.0-beta.1");
+
+        // Version with invalid characters
+        assert_eq!(PluginStorage::sanitize_key_component("1.0.0/../../etc"), "1.0.0etc");
+    }
+
+    #[test]
+    fn test_sanitize_key_component_unicode() {
+        // Unicode should be removed (only ASCII alphanumeric allowed)
+        assert_eq!(PluginStorage::sanitize_key_component("plugin-中文"), "plugin-");
+        assert_eq!(PluginStorage::sanitize_key_component("émoji-😀"), "moji-");
+    }
+
+    #[test]
+    fn test_sanitize_key_component_edge_cases() {
+        // Empty string
+        assert_eq!(PluginStorage::sanitize_key_component(""), "");
+
+        // Only special characters
+        assert_eq!(PluginStorage::sanitize_key_component("!@#$%^&*()"), "");
+
+        // Whitespace should be removed
+        assert_eq!(PluginStorage::sanitize_key_component("my plugin"), "myplugin");
+
+        // Tabs and newlines should be removed
+        assert_eq!(PluginStorage::sanitize_key_component("my\tplugin\n"), "myplugin");
+    }
+
+    #[test]
+    fn test_sanitize_key_component_security() {
+        // Path traversal attempts
+        assert_eq!(PluginStorage::sanitize_key_component("../"), "");
+        assert_eq!(PluginStorage::sanitize_key_component("..\\"), "");
+        assert_eq!(
+            PluginStorage::sanitize_key_component("../../../../../../etc/passwd"),
+            "etcpasswd"
+        );
+
+        // Null bytes
+        assert_eq!(PluginStorage::sanitize_key_component("plugin\0evil"), "pluginevil");
+
+        // Windows path separators
+        assert_eq!(
+            PluginStorage::sanitize_key_component("C:\\Windows\\System32"),
+            "cwindowssystem32"
+        );
+    }
+}

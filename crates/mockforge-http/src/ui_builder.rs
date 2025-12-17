@@ -978,6 +978,808 @@ pub fn create_ui_builder_router(state: UIBuilderState) -> Router {
 mod tests {
     use super::*;
 
+    // ==================== Helper Functions ====================
+
+    fn create_test_http_endpoint() -> EndpointConfig {
+        EndpointConfig {
+            id: "test-1".to_string(),
+            protocol: Protocol::Http,
+            name: "Test Endpoint".to_string(),
+            description: Some("A test endpoint".to_string()),
+            enabled: true,
+            config: EndpointProtocolConfig::Http(HttpEndpointConfig {
+                method: "GET".to_string(),
+                path: "/test".to_string(),
+                request: None,
+                response: HttpResponseConfig {
+                    status: 200,
+                    headers: None,
+                    body: ResponseBody::Static {
+                        content: serde_json::json!({"message": "Hello"}),
+                    },
+                },
+                behavior: None,
+            }),
+        }
+    }
+
+    // ==================== Protocol Tests ====================
+
+    #[test]
+    fn test_protocol_http_serialization() {
+        let protocol = Protocol::Http;
+        let json = serde_json::to_string(&protocol).unwrap();
+        assert_eq!(json, "\"http\"");
+    }
+
+    #[test]
+    fn test_protocol_grpc_serialization() {
+        let protocol = Protocol::Grpc;
+        let json = serde_json::to_string(&protocol).unwrap();
+        assert_eq!(json, "\"grpc\"");
+    }
+
+    #[test]
+    fn test_protocol_websocket_serialization() {
+        let protocol = Protocol::Websocket;
+        let json = serde_json::to_string(&protocol).unwrap();
+        assert_eq!(json, "\"websocket\"");
+    }
+
+    #[test]
+    fn test_protocol_graphql_serialization() {
+        let protocol = Protocol::Graphql;
+        let json = serde_json::to_string(&protocol).unwrap();
+        assert_eq!(json, "\"graphql\"");
+    }
+
+    #[test]
+    fn test_protocol_mqtt_serialization() {
+        let protocol = Protocol::Mqtt;
+        let json = serde_json::to_string(&protocol).unwrap();
+        assert_eq!(json, "\"mqtt\"");
+    }
+
+    #[test]
+    fn test_protocol_smtp_serialization() {
+        let protocol = Protocol::Smtp;
+        let json = serde_json::to_string(&protocol).unwrap();
+        assert_eq!(json, "\"smtp\"");
+    }
+
+    #[test]
+    fn test_protocol_kafka_serialization() {
+        let protocol = Protocol::Kafka;
+        let json = serde_json::to_string(&protocol).unwrap();
+        assert_eq!(json, "\"kafka\"");
+    }
+
+    #[test]
+    fn test_protocol_amqp_serialization() {
+        let protocol = Protocol::Amqp;
+        let json = serde_json::to_string(&protocol).unwrap();
+        assert_eq!(json, "\"amqp\"");
+    }
+
+    #[test]
+    fn test_protocol_ftp_serialization() {
+        let protocol = Protocol::Ftp;
+        let json = serde_json::to_string(&protocol).unwrap();
+        assert_eq!(json, "\"ftp\"");
+    }
+
+    #[test]
+    fn test_protocol_deserialization() {
+        let json = "\"http\"";
+        let protocol: Protocol = serde_json::from_str(json).unwrap();
+        assert_eq!(protocol, Protocol::Http);
+    }
+
+    #[test]
+    fn test_protocol_equality() {
+        assert_eq!(Protocol::Http, Protocol::Http);
+        assert_ne!(Protocol::Http, Protocol::Grpc);
+    }
+
+    #[test]
+    fn test_protocol_clone() {
+        let protocol = Protocol::Websocket;
+        let cloned = protocol.clone();
+        assert_eq!(protocol, cloned);
+    }
+
+    // ==================== ValidationMode Tests ====================
+
+    #[test]
+    fn test_validation_mode_off_serialization() {
+        let mode = ValidationMode::Off;
+        let json = serde_json::to_string(&mode).unwrap();
+        assert_eq!(json, "\"off\"");
+    }
+
+    #[test]
+    fn test_validation_mode_warn_serialization() {
+        let mode = ValidationMode::Warn;
+        let json = serde_json::to_string(&mode).unwrap();
+        assert_eq!(json, "\"warn\"");
+    }
+
+    #[test]
+    fn test_validation_mode_enforce_serialization() {
+        let mode = ValidationMode::Enforce;
+        let json = serde_json::to_string(&mode).unwrap();
+        assert_eq!(json, "\"enforce\"");
+    }
+
+    #[test]
+    fn test_validation_mode_deserialization() {
+        let json = "\"enforce\"";
+        let mode: ValidationMode = serde_json::from_str(json).unwrap();
+        assert!(matches!(mode, ValidationMode::Enforce));
+    }
+
+    // ==================== HeaderConfig Tests ====================
+
+    #[test]
+    fn test_header_config_creation() {
+        let header = HeaderConfig {
+            name: "Content-Type".to_string(),
+            value: "application/json".to_string(),
+        };
+        assert_eq!(header.name, "Content-Type");
+        assert_eq!(header.value, "application/json");
+    }
+
+    #[test]
+    fn test_header_config_serialization() {
+        let header = HeaderConfig {
+            name: "X-Custom-Header".to_string(),
+            value: "custom-value".to_string(),
+        };
+        let json = serde_json::to_string(&header).unwrap();
+        let deserialized: HeaderConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(header.name, deserialized.name);
+        assert_eq!(header.value, deserialized.value);
+    }
+
+    #[test]
+    fn test_header_config_clone() {
+        let header = HeaderConfig {
+            name: "Authorization".to_string(),
+            value: "Bearer token".to_string(),
+        };
+        let cloned = header.clone();
+        assert_eq!(header.name, cloned.name);
+        assert_eq!(header.value, cloned.value);
+    }
+
+    // ==================== QueryParamConfig Tests ====================
+
+    #[test]
+    fn test_query_param_config_required() {
+        let param = QueryParamConfig {
+            name: "page".to_string(),
+            required: true,
+            schema: Some(serde_json::json!({"type": "integer"})),
+        };
+        assert!(param.required);
+        assert!(param.schema.is_some());
+    }
+
+    #[test]
+    fn test_query_param_config_optional() {
+        let param = QueryParamConfig {
+            name: "filter".to_string(),
+            required: false,
+            schema: None,
+        };
+        assert!(!param.required);
+        assert!(param.schema.is_none());
+    }
+
+    #[test]
+    fn test_query_param_config_serialization() {
+        let param = QueryParamConfig {
+            name: "limit".to_string(),
+            required: true,
+            schema: Some(serde_json::json!({"type": "integer", "maximum": 100})),
+        };
+        let json = serde_json::to_string(&param).unwrap();
+        let deserialized: QueryParamConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(param.name, deserialized.name);
+        assert_eq!(param.required, deserialized.required);
+    }
+
+    // ==================== ValidationConfig Tests ====================
+
+    #[test]
+    fn test_validation_config_with_schema() {
+        let config = ValidationConfig {
+            mode: ValidationMode::Enforce,
+            schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"}
+                }
+            })),
+        };
+        assert!(matches!(config.mode, ValidationMode::Enforce));
+        assert!(config.schema.is_some());
+    }
+
+    #[test]
+    fn test_validation_config_without_schema() {
+        let config = ValidationConfig {
+            mode: ValidationMode::Off,
+            schema: None,
+        };
+        assert!(matches!(config.mode, ValidationMode::Off));
+        assert!(config.schema.is_none());
+    }
+
+    // ==================== LatencyConfig Tests ====================
+
+    #[test]
+    fn test_latency_config_fixed() {
+        let config = LatencyConfig {
+            base_ms: 100,
+            jitter_ms: 20,
+            distribution: LatencyDistribution::Fixed,
+        };
+        assert_eq!(config.base_ms, 100);
+        assert_eq!(config.jitter_ms, 20);
+    }
+
+    #[test]
+    fn test_latency_config_normal_distribution() {
+        let config = LatencyConfig {
+            base_ms: 50,
+            jitter_ms: 10,
+            distribution: LatencyDistribution::Normal { std_dev_ms: 15.0 },
+        };
+        assert!(matches!(config.distribution, LatencyDistribution::Normal { .. }));
+    }
+
+    #[test]
+    fn test_latency_config_pareto_distribution() {
+        let config = LatencyConfig {
+            base_ms: 75,
+            jitter_ms: 25,
+            distribution: LatencyDistribution::Pareto { shape: 1.5 },
+        };
+        assert!(matches!(config.distribution, LatencyDistribution::Pareto { .. }));
+    }
+
+    #[test]
+    fn test_latency_config_serialization() {
+        let config = LatencyConfig {
+            base_ms: 200,
+            jitter_ms: 50,
+            distribution: LatencyDistribution::Fixed,
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: LatencyConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(config.base_ms, deserialized.base_ms);
+        assert_eq!(config.jitter_ms, deserialized.jitter_ms);
+    }
+
+    // ==================== FailureConfig Tests ====================
+
+    #[test]
+    fn test_failure_config_creation() {
+        let config = FailureConfig {
+            error_rate: 0.1,
+            status_codes: vec![500, 502, 503],
+            error_message: Some("Server error".to_string()),
+        };
+        assert!((config.error_rate - 0.1).abs() < 0.001);
+        assert_eq!(config.status_codes.len(), 3);
+        assert!(config.error_message.is_some());
+    }
+
+    #[test]
+    fn test_failure_config_high_error_rate() {
+        let config = FailureConfig {
+            error_rate: 0.75,
+            status_codes: vec![500],
+            error_message: None,
+        };
+        assert!(config.error_rate > 0.5);
+    }
+
+    #[test]
+    fn test_failure_config_serialization() {
+        let config = FailureConfig {
+            error_rate: 0.25,
+            status_codes: vec![429, 500],
+            error_message: Some("Rate limited".to_string()),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: FailureConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(config.status_codes, deserialized.status_codes);
+    }
+
+    // ==================== TrafficShapingConfig Tests ====================
+
+    #[test]
+    fn test_traffic_shaping_config_bandwidth_limit() {
+        let config = TrafficShapingConfig {
+            bandwidth_limit_bps: Some(1024 * 1024), // 1 MB/s
+            packet_loss_rate: None,
+        };
+        assert_eq!(config.bandwidth_limit_bps, Some(1024 * 1024));
+    }
+
+    #[test]
+    fn test_traffic_shaping_config_packet_loss() {
+        let config = TrafficShapingConfig {
+            bandwidth_limit_bps: None,
+            packet_loss_rate: Some(0.05),
+        };
+        assert!(config.packet_loss_rate.is_some());
+    }
+
+    #[test]
+    fn test_traffic_shaping_config_both_enabled() {
+        let config = TrafficShapingConfig {
+            bandwidth_limit_bps: Some(500_000),
+            packet_loss_rate: Some(0.02),
+        };
+        assert!(config.bandwidth_limit_bps.is_some());
+        assert!(config.packet_loss_rate.is_some());
+    }
+
+    // ==================== EndpointBehavior Tests ====================
+
+    #[test]
+    fn test_endpoint_behavior_with_latency_only() {
+        let behavior = EndpointBehavior {
+            latency: Some(LatencyConfig {
+                base_ms: 100,
+                jitter_ms: 10,
+                distribution: LatencyDistribution::Fixed,
+            }),
+            failure: None,
+            traffic_shaping: None,
+        };
+        assert!(behavior.latency.is_some());
+        assert!(behavior.failure.is_none());
+    }
+
+    #[test]
+    fn test_endpoint_behavior_with_failure_only() {
+        let behavior = EndpointBehavior {
+            latency: None,
+            failure: Some(FailureConfig {
+                error_rate: 0.1,
+                status_codes: vec![500],
+                error_message: None,
+            }),
+            traffic_shaping: None,
+        };
+        assert!(behavior.failure.is_some());
+    }
+
+    #[test]
+    fn test_endpoint_behavior_full_config() {
+        let behavior = EndpointBehavior {
+            latency: Some(LatencyConfig {
+                base_ms: 50,
+                jitter_ms: 10,
+                distribution: LatencyDistribution::Fixed,
+            }),
+            failure: Some(FailureConfig {
+                error_rate: 0.05,
+                status_codes: vec![503],
+                error_message: None,
+            }),
+            traffic_shaping: Some(TrafficShapingConfig {
+                bandwidth_limit_bps: Some(100_000),
+                packet_loss_rate: Some(0.01),
+            }),
+        };
+        assert!(behavior.latency.is_some());
+        assert!(behavior.failure.is_some());
+        assert!(behavior.traffic_shaping.is_some());
+    }
+
+    // ==================== ResponseBody Tests ====================
+
+    #[test]
+    fn test_response_body_static() {
+        let body = ResponseBody::Static {
+            content: serde_json::json!({"message": "Hello"}),
+        };
+        if let ResponseBody::Static { content } = body {
+            assert_eq!(content["message"], "Hello");
+        } else {
+            panic!("Expected Static response body");
+        }
+    }
+
+    #[test]
+    fn test_response_body_template() {
+        let body = ResponseBody::Template {
+            template: "Hello, {{name}}!".to_string(),
+        };
+        if let ResponseBody::Template { template } = body {
+            assert!(template.contains("{{name}}"));
+        } else {
+            panic!("Expected Template response body");
+        }
+    }
+
+    #[test]
+    fn test_response_body_faker() {
+        let body = ResponseBody::Faker {
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "name": {"type": "string"}
+                }
+            }),
+        };
+        if let ResponseBody::Faker { schema } = body {
+            assert_eq!(schema["type"], "object");
+        } else {
+            panic!("Expected Faker response body");
+        }
+    }
+
+    #[test]
+    fn test_response_body_ai() {
+        let body = ResponseBody::AI {
+            prompt: "Generate a user profile".to_string(),
+        };
+        if let ResponseBody::AI { prompt } = body {
+            assert!(prompt.contains("user profile"));
+        } else {
+            panic!("Expected AI response body");
+        }
+    }
+
+    // ==================== HttpRequestConfig Tests ====================
+
+    #[test]
+    fn test_http_request_config_with_validation() {
+        let config = HttpRequestConfig {
+            validation: Some(ValidationConfig {
+                mode: ValidationMode::Enforce,
+                schema: Some(serde_json::json!({"type": "object"})),
+            }),
+            headers: None,
+            query_params: None,
+            body_schema: None,
+        };
+        assert!(config.validation.is_some());
+    }
+
+    #[test]
+    fn test_http_request_config_with_headers() {
+        let config = HttpRequestConfig {
+            validation: None,
+            headers: Some(vec![HeaderConfig {
+                name: "Authorization".to_string(),
+                value: "Bearer token".to_string(),
+            }]),
+            query_params: None,
+            body_schema: None,
+        };
+        assert_eq!(config.headers.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_http_request_config_with_query_params() {
+        let config = HttpRequestConfig {
+            validation: None,
+            headers: None,
+            query_params: Some(vec![
+                QueryParamConfig {
+                    name: "page".to_string(),
+                    required: true,
+                    schema: None,
+                },
+                QueryParamConfig {
+                    name: "limit".to_string(),
+                    required: false,
+                    schema: None,
+                },
+            ]),
+            body_schema: None,
+        };
+        assert_eq!(config.query_params.as_ref().unwrap().len(), 2);
+    }
+
+    // ==================== HttpResponseConfig Tests ====================
+
+    #[test]
+    fn test_http_response_config_ok() {
+        let config = HttpResponseConfig {
+            status: 200,
+            headers: None,
+            body: ResponseBody::Static {
+                content: serde_json::json!({"success": true}),
+            },
+        };
+        assert_eq!(config.status, 200);
+    }
+
+    #[test]
+    fn test_http_response_config_not_found() {
+        let config = HttpResponseConfig {
+            status: 404,
+            headers: Some(vec![HeaderConfig {
+                name: "X-Error-Code".to_string(),
+                value: "NOT_FOUND".to_string(),
+            }]),
+            body: ResponseBody::Static {
+                content: serde_json::json!({"error": "Not found"}),
+            },
+        };
+        assert_eq!(config.status, 404);
+        assert!(config.headers.is_some());
+    }
+
+    #[test]
+    fn test_http_response_config_server_error() {
+        let config = HttpResponseConfig {
+            status: 500,
+            headers: None,
+            body: ResponseBody::Static {
+                content: serde_json::json!({"error": "Internal server error"}),
+            },
+        };
+        assert_eq!(config.status, 500);
+    }
+
+    // ==================== HttpEndpointConfig Tests ====================
+
+    #[test]
+    fn test_http_endpoint_config_get() {
+        let config = HttpEndpointConfig {
+            method: "GET".to_string(),
+            path: "/api/users".to_string(),
+            request: None,
+            response: HttpResponseConfig {
+                status: 200,
+                headers: None,
+                body: ResponseBody::Static {
+                    content: serde_json::json!([]),
+                },
+            },
+            behavior: None,
+        };
+        assert_eq!(config.method, "GET");
+        assert!(config.path.starts_with('/'));
+    }
+
+    #[test]
+    fn test_http_endpoint_config_post_with_request() {
+        let config = HttpEndpointConfig {
+            method: "POST".to_string(),
+            path: "/api/users".to_string(),
+            request: Some(HttpRequestConfig {
+                validation: Some(ValidationConfig {
+                    mode: ValidationMode::Enforce,
+                    schema: Some(serde_json::json!({
+                        "type": "object",
+                        "required": ["name", "email"]
+                    })),
+                }),
+                headers: None,
+                query_params: None,
+                body_schema: None,
+            }),
+            response: HttpResponseConfig {
+                status: 201,
+                headers: None,
+                body: ResponseBody::Static {
+                    content: serde_json::json!({"id": 1}),
+                },
+            },
+            behavior: None,
+        };
+        assert_eq!(config.method, "POST");
+        assert!(config.request.is_some());
+    }
+
+    // ==================== GrpcEndpointConfig Tests ====================
+
+    #[test]
+    fn test_grpc_endpoint_config_creation() {
+        let config = GrpcEndpointConfig {
+            service: "users.UserService".to_string(),
+            method: "GetUser".to_string(),
+            proto_file: "/path/to/user.proto".to_string(),
+            request_type: "GetUserRequest".to_string(),
+            response_type: "GetUserResponse".to_string(),
+            response: GrpcResponseConfig {
+                body: ResponseBody::Static {
+                    content: serde_json::json!({"id": 1, "name": "John"}),
+                },
+                metadata: None,
+            },
+            behavior: None,
+        };
+        assert_eq!(config.service, "users.UserService");
+        assert_eq!(config.method, "GetUser");
+    }
+
+    #[test]
+    fn test_grpc_endpoint_config_with_metadata() {
+        let config = GrpcEndpointConfig {
+            service: "example.ExampleService".to_string(),
+            method: "DoSomething".to_string(),
+            proto_file: "/path/to/example.proto".to_string(),
+            request_type: "Request".to_string(),
+            response_type: "Response".to_string(),
+            response: GrpcResponseConfig {
+                body: ResponseBody::Static {
+                    content: serde_json::json!({}),
+                },
+                metadata: Some(vec![HeaderConfig {
+                    name: "x-request-id".to_string(),
+                    value: "12345".to_string(),
+                }]),
+            },
+            behavior: None,
+        };
+        assert!(config.response.metadata.is_some());
+    }
+
+    // ==================== WebsocketEndpointConfig Tests ====================
+
+    #[test]
+    fn test_websocket_endpoint_config_basic() {
+        let config = WebsocketEndpointConfig {
+            path: "/ws".to_string(),
+            on_connect: None,
+            on_message: Some(WebsocketAction::Echo),
+            on_disconnect: None,
+            behavior: None,
+        };
+        assert_eq!(config.path, "/ws");
+    }
+
+    #[test]
+    fn test_websocket_endpoint_config_with_send() {
+        let config = WebsocketEndpointConfig {
+            path: "/notifications".to_string(),
+            on_connect: Some(WebsocketAction::Send {
+                message: ResponseBody::Static {
+                    content: serde_json::json!({"type": "connected"}),
+                },
+            }),
+            on_message: None,
+            on_disconnect: None,
+            behavior: None,
+        };
+        assert!(config.on_connect.is_some());
+    }
+
+    #[test]
+    fn test_websocket_endpoint_config_with_broadcast() {
+        let config = WebsocketEndpointConfig {
+            path: "/chat".to_string(),
+            on_connect: None,
+            on_message: Some(WebsocketAction::Broadcast {
+                message: ResponseBody::Template {
+                    template: "{{message}}".to_string(),
+                },
+            }),
+            on_disconnect: None,
+            behavior: None,
+        };
+        if let Some(WebsocketAction::Broadcast { .. }) = config.on_message {
+            // Test passes
+        } else {
+            panic!("Expected Broadcast action");
+        }
+    }
+
+    #[test]
+    fn test_websocket_endpoint_config_with_close() {
+        let config = WebsocketEndpointConfig {
+            path: "/stream".to_string(),
+            on_connect: None,
+            on_message: None,
+            on_disconnect: Some(WebsocketAction::Close {
+                code: 1000,
+                reason: "Normal closure".to_string(),
+            }),
+            behavior: None,
+        };
+        if let Some(WebsocketAction::Close { code, reason }) = config.on_disconnect {
+            assert_eq!(code, 1000);
+            assert_eq!(reason, "Normal closure");
+        } else {
+            panic!("Expected Close action");
+        }
+    }
+
+    // ==================== ValidationResult Tests ====================
+
+    #[test]
+    fn test_validation_result_valid() {
+        let result = ValidationResult {
+            valid: true,
+            errors: vec![],
+            warnings: vec![],
+        };
+        assert!(result.valid);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_validation_result_with_errors() {
+        let result = ValidationResult {
+            valid: false,
+            errors: vec![ValidationError {
+                field: "method".to_string(),
+                message: "Invalid HTTP method".to_string(),
+            }],
+            warnings: vec![],
+        };
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+    }
+
+    #[test]
+    fn test_validation_result_with_warnings() {
+        let result = ValidationResult {
+            valid: true,
+            errors: vec![],
+            warnings: vec!["High error rate configured".to_string()],
+        };
+        assert!(result.valid);
+        assert_eq!(result.warnings.len(), 1);
+    }
+
+    // ==================== ValidationError Tests ====================
+
+    #[test]
+    fn test_validation_error_creation() {
+        let error = ValidationError {
+            field: "path".to_string(),
+            message: "Path must start with /".to_string(),
+        };
+        assert_eq!(error.field, "path");
+        assert!(error.message.contains('/'));
+    }
+
+    #[test]
+    fn test_validation_error_clone() {
+        let error = ValidationError {
+            field: "status".to_string(),
+            message: "Invalid status code".to_string(),
+        };
+        let cloned = error.clone();
+        assert_eq!(error.field, cloned.field);
+        assert_eq!(error.message, cloned.message);
+    }
+
+    // ==================== UIBuilderState Tests ====================
+
+    #[test]
+    fn test_ui_builder_state_creation() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+        // State should be created without panic
+        let _ = state;
+    }
+
+    #[test]
+    fn test_ui_builder_state_clone() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+        let cloned = state.clone();
+        // Both should exist without panic
+        let _ = (state, cloned);
+    }
+
+    // ==================== EndpointConfig Tests ====================
+
     #[test]
     fn test_endpoint_serialization() {
         let endpoint = EndpointConfig {
@@ -1009,6 +1811,77 @@ mod tests {
     }
 
     #[test]
+    fn test_endpoint_config_disabled() {
+        let endpoint = EndpointConfig {
+            id: "disabled-1".to_string(),
+            protocol: Protocol::Http,
+            name: "Disabled Endpoint".to_string(),
+            description: None,
+            enabled: false,
+            config: EndpointProtocolConfig::Http(HttpEndpointConfig {
+                method: "GET".to_string(),
+                path: "/disabled".to_string(),
+                request: None,
+                response: HttpResponseConfig {
+                    status: 200,
+                    headers: None,
+                    body: ResponseBody::Static {
+                        content: serde_json::json!({}),
+                    },
+                },
+                behavior: None,
+            }),
+        };
+        assert!(!endpoint.enabled);
+        assert!(endpoint.description.is_none());
+    }
+
+    #[test]
+    fn test_endpoint_config_grpc() {
+        let endpoint = EndpointConfig {
+            id: "grpc-1".to_string(),
+            protocol: Protocol::Grpc,
+            name: "gRPC Endpoint".to_string(),
+            description: Some("A gRPC endpoint".to_string()),
+            enabled: true,
+            config: EndpointProtocolConfig::Grpc(GrpcEndpointConfig {
+                service: "test.Service".to_string(),
+                method: "Call".to_string(),
+                proto_file: "/test.proto".to_string(),
+                request_type: "Request".to_string(),
+                response_type: "Response".to_string(),
+                response: GrpcResponseConfig {
+                    body: ResponseBody::Static {
+                        content: serde_json::json!({}),
+                    },
+                    metadata: None,
+                },
+                behavior: None,
+            }),
+        };
+        assert_eq!(endpoint.protocol, Protocol::Grpc);
+    }
+
+    #[test]
+    fn test_endpoint_config_websocket() {
+        let endpoint = EndpointConfig {
+            id: "ws-1".to_string(),
+            protocol: Protocol::Websocket,
+            name: "WebSocket Endpoint".to_string(),
+            description: None,
+            enabled: true,
+            config: EndpointProtocolConfig::Websocket(WebsocketEndpointConfig {
+                path: "/ws".to_string(),
+                on_connect: None,
+                on_message: Some(WebsocketAction::Echo),
+                on_disconnect: None,
+                behavior: None,
+            }),
+        };
+        assert_eq!(endpoint.protocol, Protocol::Websocket);
+    }
+
+    #[test]
     fn test_validation() {
         // Test invalid HTTP method
         let endpoint = EndpointConfig {
@@ -1034,5 +1907,340 @@ mod tests {
 
         // Validation would catch this in the async function
         assert_eq!(endpoint.protocol, Protocol::Http);
+    }
+
+    // ==================== ConfigFormat Tests ====================
+
+    #[test]
+    fn test_config_format_yaml_deserialization() {
+        let json = r#"{"config": "test", "format": "yaml"}"#;
+        let request: ImportRequest = serde_json::from_str(json).unwrap();
+        assert!(matches!(request.format, ConfigFormat::Yaml));
+    }
+
+    #[test]
+    fn test_config_format_json_deserialization() {
+        let json = r#"{"config": "test", "format": "json"}"#;
+        let request: ImportRequest = serde_json::from_str(json).unwrap();
+        assert!(matches!(request.format, ConfigFormat::Json));
+    }
+
+    // ==================== Async Handler Tests ====================
+
+    #[tokio::test]
+    async fn test_list_endpoints_empty() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+        let result = list_endpoints(State(state)).await;
+        let response = result.0;
+        assert_eq!(response["total"], 0);
+        assert_eq!(response["enabled"], 0);
+    }
+
+    #[tokio::test]
+    async fn test_create_and_get_endpoint() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let endpoint = create_test_http_endpoint();
+        let create_result = create_endpoint(State(state.clone()), Json(endpoint.clone())).await;
+        assert!(create_result.is_ok());
+
+        let get_result = get_endpoint(State(state), Path("test-1".to_string())).await;
+        assert!(get_result.is_ok());
+        assert_eq!(get_result.unwrap().0.id, "test-1");
+    }
+
+    #[tokio::test]
+    async fn test_get_endpoint_not_found() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let result = get_endpoint(State(state), Path("nonexistent".to_string())).await;
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_create_endpoint_duplicate_id() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let endpoint = create_test_http_endpoint();
+        let _ = create_endpoint(State(state.clone()), Json(endpoint.clone())).await;
+
+        // Try to create with same ID
+        let result = create_endpoint(State(state), Json(endpoint)).await;
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn test_create_endpoint_auto_generate_id() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let mut endpoint = create_test_http_endpoint();
+        endpoint.id = String::new(); // Empty ID should be auto-generated
+
+        let result = create_endpoint(State(state), Json(endpoint)).await;
+        assert!(result.is_ok());
+        let created = result.unwrap().0;
+        assert!(!created.id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_update_endpoint() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let endpoint = create_test_http_endpoint();
+        let _ = create_endpoint(State(state.clone()), Json(endpoint.clone())).await;
+
+        let mut updated = endpoint.clone();
+        updated.name = "Updated Name".to_string();
+
+        let result = update_endpoint(State(state), Path("test-1".to_string()), Json(updated)).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().0.name, "Updated Name");
+    }
+
+    #[tokio::test]
+    async fn test_update_endpoint_not_found() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let endpoint = create_test_http_endpoint();
+        let result =
+            update_endpoint(State(state), Path("nonexistent".to_string()), Json(endpoint)).await;
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_delete_endpoint() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let endpoint = create_test_http_endpoint();
+        let _ = create_endpoint(State(state.clone()), Json(endpoint)).await;
+
+        let result = delete_endpoint(State(state), Path("test-1".to_string())).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn test_delete_endpoint_not_found() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let result = delete_endpoint(State(state), Path("nonexistent".to_string())).await;
+        assert!(result.is_err());
+        assert_eq!(result.err().unwrap(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_validate_endpoint_valid_http() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let endpoint = create_test_http_endpoint();
+        let result = validate_endpoint(State(state), Json(endpoint)).await;
+        assert!(result.0.valid);
+        assert!(result.0.errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_validate_endpoint_invalid_method() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let mut endpoint = create_test_http_endpoint();
+        if let EndpointProtocolConfig::Http(ref mut http_config) = endpoint.config {
+            http_config.method = "INVALID".to_string();
+        }
+
+        let result = validate_endpoint(State(state), Json(endpoint)).await;
+        assert!(!result.0.valid);
+        assert!(!result.0.errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_validate_endpoint_invalid_path() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let mut endpoint = create_test_http_endpoint();
+        if let EndpointProtocolConfig::Http(ref mut http_config) = endpoint.config {
+            http_config.path = "no-leading-slash".to_string();
+        }
+
+        let result = validate_endpoint(State(state), Json(endpoint)).await;
+        assert!(!result.0.valid);
+    }
+
+    #[tokio::test]
+    async fn test_validate_endpoint_invalid_status() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let mut endpoint = create_test_http_endpoint();
+        if let EndpointProtocolConfig::Http(ref mut http_config) = endpoint.config {
+            http_config.response.status = 999; // Invalid status code
+        }
+
+        let result = validate_endpoint(State(state), Json(endpoint)).await;
+        assert!(!result.0.valid);
+    }
+
+    #[tokio::test]
+    async fn test_validate_endpoint_high_error_rate_warning() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let mut endpoint = create_test_http_endpoint();
+        if let EndpointProtocolConfig::Http(ref mut http_config) = endpoint.config {
+            http_config.behavior = Some(EndpointBehavior {
+                latency: None,
+                failure: Some(FailureConfig {
+                    error_rate: 0.75,
+                    status_codes: vec![500],
+                    error_message: None,
+                }),
+                traffic_shaping: None,
+            });
+        }
+
+        let result = validate_endpoint(State(state), Json(endpoint)).await;
+        assert!(result.0.valid); // Still valid, just has warnings
+        assert!(!result.0.warnings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_validate_grpc_endpoint_empty_service() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let endpoint = EndpointConfig {
+            id: "grpc-test".to_string(),
+            protocol: Protocol::Grpc,
+            name: "gRPC Test".to_string(),
+            description: None,
+            enabled: true,
+            config: EndpointProtocolConfig::Grpc(GrpcEndpointConfig {
+                service: String::new(), // Empty service name
+                method: "Method".to_string(),
+                proto_file: "/test.proto".to_string(),
+                request_type: "Request".to_string(),
+                response_type: "Response".to_string(),
+                response: GrpcResponseConfig {
+                    body: ResponseBody::Static {
+                        content: serde_json::json!({}),
+                    },
+                    metadata: None,
+                },
+                behavior: None,
+            }),
+        };
+
+        let result = validate_endpoint(State(state), Json(endpoint)).await;
+        assert!(!result.0.valid);
+    }
+
+    #[tokio::test]
+    async fn test_validate_websocket_endpoint_invalid_path() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let endpoint = EndpointConfig {
+            id: "ws-test".to_string(),
+            protocol: Protocol::Websocket,
+            name: "WebSocket Test".to_string(),
+            description: None,
+            enabled: true,
+            config: EndpointProtocolConfig::Websocket(WebsocketEndpointConfig {
+                path: "no-slash".to_string(), // Invalid path
+                on_connect: None,
+                on_message: None,
+                on_disconnect: None,
+                behavior: None,
+            }),
+        };
+
+        let result = validate_endpoint(State(state), Json(endpoint)).await;
+        assert!(!result.0.valid);
+    }
+
+    #[tokio::test]
+    async fn test_get_config() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let result = get_config(State(state)).await;
+        // Should return the default config
+        let _ = result.0;
+    }
+
+    #[tokio::test]
+    async fn test_update_config() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config.clone());
+
+        let result = update_config(State(state), Json(config)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_export_config() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        let result = export_config(State(state)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_list_endpoints_with_multiple_protocols() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+
+        // Add HTTP endpoint
+        let http_endpoint = create_test_http_endpoint();
+        let _ = create_endpoint(State(state.clone()), Json(http_endpoint)).await;
+
+        // Add WebSocket endpoint
+        let ws_endpoint = EndpointConfig {
+            id: "ws-1".to_string(),
+            protocol: Protocol::Websocket,
+            name: "WS Endpoint".to_string(),
+            description: None,
+            enabled: true,
+            config: EndpointProtocolConfig::Websocket(WebsocketEndpointConfig {
+                path: "/ws".to_string(),
+                on_connect: None,
+                on_message: Some(WebsocketAction::Echo),
+                on_disconnect: None,
+                behavior: None,
+            }),
+        };
+        let _ = create_endpoint(State(state.clone()), Json(ws_endpoint)).await;
+
+        let result = list_endpoints(State(state)).await;
+        let response = result.0;
+        assert_eq!(response["total"], 2);
+        assert_eq!(response["by_protocol"]["http"], 1);
+        assert_eq!(response["by_protocol"]["websocket"], 1);
+    }
+
+    // ==================== Router Tests ====================
+
+    #[test]
+    fn test_create_ui_builder_router() {
+        let config = ServerConfig::default();
+        let state = UIBuilderState::new(config);
+        let router = create_ui_builder_router(state);
+        // Router should be created without panic
+        let _ = router;
     }
 }

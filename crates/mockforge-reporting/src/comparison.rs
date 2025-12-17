@@ -417,11 +417,8 @@ mod tests {
     use crate::pdf::ReportMetrics;
     use chrono::Utc;
 
-    #[test]
-    fn test_comparison_report_generator() {
-        let mut generator = ComparisonReportGenerator::new();
-
-        let baseline = ExecutionReport {
+    fn create_baseline_report() -> ExecutionReport {
+        ExecutionReport {
             orchestration_name: "test".to_string(),
             start_time: Utc::now(),
             end_time: Utc::now(),
@@ -441,8 +438,13 @@ mod tests {
             },
             failures: vec![],
             recommendations: vec![],
-        };
+        }
+    }
 
+    #[test]
+    fn test_comparison_report_generator() {
+        let mut generator = ComparisonReportGenerator::new();
+        let baseline = create_baseline_report();
         generator.set_baseline(baseline.clone());
 
         let comparison = ExecutionReport {
@@ -462,5 +464,236 @@ mod tests {
 
         assert!(!report.metric_differences.is_empty());
         assert_eq!(report.overall_assessment.verdict, ComparisonVerdict::Better);
+    }
+
+    #[test]
+    fn test_comparison_generator_new() {
+        let generator = ComparisonReportGenerator::new();
+        assert!(generator.baseline.is_none());
+    }
+
+    #[test]
+    fn test_comparison_generator_default() {
+        let generator = ComparisonReportGenerator::default();
+        assert!(generator.baseline.is_none());
+    }
+
+    #[test]
+    fn test_comparison_no_baseline_error() {
+        let generator = ComparisonReportGenerator::new();
+        let result = generator.compare(vec![]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_comparison_worse_verdict() {
+        let mut generator = ComparisonReportGenerator::new();
+        let baseline = create_baseline_report();
+        generator.set_baseline(baseline.clone());
+
+        // Create comparison with worse metrics
+        let comparison = ExecutionReport {
+            metrics: ReportMetrics {
+                total_requests: 1000,
+                successful_requests: 900,
+                failed_requests: 100,  // Much more failures
+                avg_latency_ms: 200.0, // Higher latency
+                p95_latency_ms: 400.0,
+                p99_latency_ms: 600.0,
+                error_rate: 0.10, // Higher error rate
+            },
+            ..baseline
+        };
+
+        let report = generator.compare(vec![comparison]).unwrap();
+        assert_eq!(report.overall_assessment.verdict, ComparisonVerdict::Worse);
+        assert!(report.regressions.len() > 0);
+    }
+
+    #[test]
+    fn test_comparison_similar_verdict() {
+        let mut generator = ComparisonReportGenerator::new();
+        let baseline = create_baseline_report();
+        generator.set_baseline(baseline.clone());
+
+        // Create comparison with nearly identical metrics
+        let comparison = ExecutionReport {
+            metrics: ReportMetrics {
+                total_requests: 1000,
+                successful_requests: 980,
+                failed_requests: 20,
+                avg_latency_ms: 101.0, // Almost the same
+                p95_latency_ms: 201.0,
+                p99_latency_ms: 301.0,
+                error_rate: 0.0201,
+            },
+            ..baseline
+        };
+
+        let report = generator.compare(vec![comparison]).unwrap();
+        assert_eq!(report.overall_assessment.verdict, ComparisonVerdict::Similar);
+    }
+
+    #[test]
+    fn test_change_direction_enum() {
+        // Test serialization
+        let increase = ChangeDirection::Increase;
+        let json = serde_json::to_string(&increase).unwrap();
+        assert_eq!(json, "\"increase\"");
+
+        let decrease = ChangeDirection::Decrease;
+        let json = serde_json::to_string(&decrease).unwrap();
+        assert_eq!(json, "\"decrease\"");
+
+        let no_change = ChangeDirection::NoChange;
+        let json = serde_json::to_string(&no_change).unwrap();
+        assert_eq!(json, "\"nochange\"");
+    }
+
+    #[test]
+    fn test_significance_level_enum() {
+        let not_sig = SignificanceLevel::NotSignificant;
+        let json = serde_json::to_string(&not_sig).unwrap();
+        assert_eq!(json, "\"notsignificant\"");
+
+        let high = SignificanceLevel::High;
+        let json = serde_json::to_string(&high).unwrap();
+        assert_eq!(json, "\"high\"");
+    }
+
+    #[test]
+    fn test_comparison_verdict_enum() {
+        let better = ComparisonVerdict::Better;
+        let json = serde_json::to_string(&better).unwrap();
+        assert_eq!(json, "\"better\"");
+
+        let worse = ComparisonVerdict::Worse;
+        let json = serde_json::to_string(&worse).unwrap();
+        assert_eq!(json, "\"worse\"");
+
+        let similar = ComparisonVerdict::Similar;
+        let json = serde_json::to_string(&similar).unwrap();
+        assert_eq!(json, "\"similar\"");
+
+        let mixed = ComparisonVerdict::Mixed;
+        let json = serde_json::to_string(&mixed).unwrap();
+        assert_eq!(json, "\"mixed\"");
+    }
+
+    #[test]
+    fn test_execution_summary_clone() {
+        let summary = ExecutionSummary {
+            orchestration_name: "test".to_string(),
+            run_id: "123".to_string(),
+            timestamp: Utc::now(),
+            status: "Completed".to_string(),
+            duration_seconds: 100,
+            metrics_snapshot: HashMap::new(),
+        };
+
+        let cloned = summary.clone();
+        assert_eq!(summary.orchestration_name, cloned.orchestration_name);
+        assert_eq!(summary.run_id, cloned.run_id);
+    }
+
+    #[test]
+    fn test_metric_difference_clone() {
+        let diff = MetricDifference {
+            metric_name: "error_rate".to_string(),
+            baseline_value: 0.02,
+            comparison_value: 0.01,
+            absolute_difference: -0.01,
+            percentage_difference: -50.0,
+            direction: ChangeDirection::Decrease,
+            significance: SignificanceLevel::High,
+        };
+
+        let cloned = diff.clone();
+        assert_eq!(diff.metric_name, cloned.metric_name);
+        assert_eq!(diff.baseline_value, cloned.baseline_value);
+    }
+
+    #[test]
+    fn test_regression_clone() {
+        let regression = Regression {
+            metric_name: "latency".to_string(),
+            baseline_value: 100.0,
+            regressed_value: 200.0,
+            impact_percentage: 100.0,
+            severity: "High".to_string(),
+            description: "Latency doubled".to_string(),
+        };
+
+        let cloned = regression.clone();
+        assert_eq!(regression.metric_name, cloned.metric_name);
+        assert_eq!(regression.severity, cloned.severity);
+    }
+
+    #[test]
+    fn test_improvement_clone() {
+        let improvement = Improvement {
+            metric_name: "error_rate".to_string(),
+            baseline_value: 0.10,
+            improved_value: 0.02,
+            improvement_percentage: 80.0,
+            description: "Error rate improved".to_string(),
+        };
+
+        let cloned = improvement.clone();
+        assert_eq!(improvement.metric_name, cloned.metric_name);
+        assert_eq!(improvement.improvement_percentage, cloned.improvement_percentage);
+    }
+
+    #[test]
+    fn test_comparison_assessment_clone() {
+        let assessment = ComparisonAssessment {
+            verdict: ComparisonVerdict::Better,
+            summary: "Performance improved".to_string(),
+            regressions_count: 0,
+            improvements_count: 5,
+            confidence: 0.9,
+        };
+
+        let cloned = assessment.clone();
+        assert_eq!(assessment.verdict, cloned.verdict);
+        assert_eq!(assessment.confidence, cloned.confidence);
+    }
+
+    #[test]
+    fn test_comparison_report_serialize() {
+        let mut generator = ComparisonReportGenerator::new();
+        let baseline = create_baseline_report();
+        generator.set_baseline(baseline.clone());
+
+        let report = generator.compare(vec![baseline.clone()]).unwrap();
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(json.contains("baseline_run"));
+        assert!(json.contains("comparison_runs"));
+    }
+
+    #[test]
+    fn test_multiple_comparisons() {
+        let mut generator = ComparisonReportGenerator::new();
+        let baseline = create_baseline_report();
+        generator.set_baseline(baseline.clone());
+
+        let comparison1 = ExecutionReport {
+            metrics: ReportMetrics {
+                avg_latency_ms: 90.0,
+                ..baseline.metrics.clone()
+            },
+            ..baseline.clone()
+        };
+
+        let comparison2 = ExecutionReport {
+            metrics: ReportMetrics {
+                avg_latency_ms: 110.0,
+                ..baseline.metrics.clone()
+            },
+            ..baseline.clone()
+        };
+
+        let report = generator.compare(vec![comparison1, comparison2]).unwrap();
+        assert_eq!(report.comparison_runs.len(), 2);
     }
 }

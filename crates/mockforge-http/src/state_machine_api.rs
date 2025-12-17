@@ -564,3 +564,377 @@ pub fn create_state_machine_routes() -> axum::Router<ManagementState> {
         .route("/export", get(export_state_machines))
         .route("/import", post(import_state_machines))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn create_test_state_machine() -> StateMachine {
+        StateMachine::new(
+            "test-resource",
+            vec!["pending".to_string(), "active".to_string()],
+            "pending",
+        )
+    }
+
+    // StateMachineRequest tests
+    #[test]
+    fn test_state_machine_request_serialize() {
+        let request = StateMachineRequest {
+            state_machine: create_test_state_machine(),
+            visual_layout: None,
+        };
+        let json = serde_json::to_string(&request);
+        assert!(json.is_ok());
+    }
+
+    #[test]
+    fn test_state_machine_request_deserialize() {
+        let json = r#"{"state_machine":{"resource_type":"test","states":["a","b"],"initial_state":"a","transitions":[],"sub_scenarios":[]}}"#;
+        let result: Result<StateMachineRequest, _> = serde_json::from_str(json);
+        assert!(result.is_ok());
+        assert!(result.unwrap().visual_layout.is_none());
+    }
+
+    #[test]
+    fn test_state_machine_request_clone() {
+        let request = StateMachineRequest {
+            state_machine: create_test_state_machine(),
+            visual_layout: None,
+        };
+        let cloned = request.clone();
+        assert!(cloned.visual_layout.is_none());
+    }
+
+    #[test]
+    fn test_state_machine_request_debug() {
+        let request = StateMachineRequest {
+            state_machine: create_test_state_machine(),
+            visual_layout: None,
+        };
+        let debug = format!("{:?}", request);
+        assert!(debug.contains("StateMachineRequest"));
+    }
+
+    // TransitionRequest tests
+    #[test]
+    fn test_transition_request_new() {
+        let request = TransitionRequest {
+            resource_id: "order-123".to_string(),
+            to_state: "shipped".to_string(),
+            context: None,
+        };
+        assert_eq!(request.resource_id, "order-123");
+        assert_eq!(request.to_state, "shipped");
+        assert!(request.context.is_none());
+    }
+
+    #[test]
+    fn test_transition_request_with_context() {
+        let mut context = HashMap::new();
+        context.insert("priority".to_string(), serde_json::json!("high"));
+
+        let request = TransitionRequest {
+            resource_id: "order-123".to_string(),
+            to_state: "shipped".to_string(),
+            context: Some(context),
+        };
+        assert!(request.context.is_some());
+        assert_eq!(request.context.unwrap().get("priority"), Some(&serde_json::json!("high")));
+    }
+
+    #[test]
+    fn test_transition_request_serialize() {
+        let request = TransitionRequest {
+            resource_id: "test".to_string(),
+            to_state: "active".to_string(),
+            context: None,
+        };
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("resource_id"));
+        assert!(json.contains("to_state"));
+        assert!(!json.contains("context")); // skip_serializing_if removes None
+    }
+
+    #[test]
+    fn test_transition_request_deserialize() {
+        let json = r#"{"resource_id":"test","to_state":"active"}"#;
+        let request: TransitionRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.resource_id, "test");
+        assert_eq!(request.to_state, "active");
+    }
+
+    // CreateInstanceRequest tests
+    #[test]
+    fn test_create_instance_request_new() {
+        let request = CreateInstanceRequest {
+            resource_id: "order-456".to_string(),
+            resource_type: "order".to_string(),
+        };
+        assert_eq!(request.resource_id, "order-456");
+        assert_eq!(request.resource_type, "order");
+    }
+
+    #[test]
+    fn test_create_instance_request_serialize() {
+        let request = CreateInstanceRequest {
+            resource_id: "test-id".to_string(),
+            resource_type: "test-type".to_string(),
+        };
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("test-id"));
+        assert!(json.contains("test-type"));
+    }
+
+    #[test]
+    fn test_create_instance_request_deserialize() {
+        let json = r#"{"resource_id":"id-1","resource_type":"type-1"}"#;
+        let request: CreateInstanceRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.resource_id, "id-1");
+        assert_eq!(request.resource_type, "type-1");
+    }
+
+    // StateMachineResponse tests
+    #[test]
+    fn test_state_machine_response_without_layout() {
+        let response = StateMachineResponse {
+            state_machine: create_test_state_machine(),
+            visual_layout: None,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(!json.contains("visual_layout")); // skip_serializing_if
+    }
+
+    #[test]
+    fn test_state_machine_response_clone() {
+        let response = StateMachineResponse {
+            state_machine: create_test_state_machine(),
+            visual_layout: None,
+        };
+        let cloned = response.clone();
+        assert!(cloned.visual_layout.is_none());
+    }
+
+    // StateMachineListResponse tests
+    #[test]
+    fn test_state_machine_list_response_empty() {
+        let response = StateMachineListResponse {
+            state_machines: vec![],
+            total: 0,
+        };
+        assert_eq!(response.total, 0);
+        assert!(response.state_machines.is_empty());
+    }
+
+    #[test]
+    fn test_state_machine_list_response_with_items() {
+        let info = StateMachineInfo {
+            resource_type: "order".to_string(),
+            state_count: 5,
+            transition_count: 10,
+            sub_scenario_count: 2,
+            has_visual_layout: true,
+        };
+        let response = StateMachineListResponse {
+            state_machines: vec![info],
+            total: 1,
+        };
+        assert_eq!(response.total, 1);
+        assert_eq!(response.state_machines[0].resource_type, "order");
+    }
+
+    #[test]
+    fn test_state_machine_list_response_serialize() {
+        let response = StateMachineListResponse {
+            state_machines: vec![],
+            total: 0,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("state_machines"));
+        assert!(json.contains("total"));
+    }
+
+    // StateMachineInfo tests
+    #[test]
+    fn test_state_machine_info_new() {
+        let info = StateMachineInfo {
+            resource_type: "user".to_string(),
+            state_count: 3,
+            transition_count: 5,
+            sub_scenario_count: 1,
+            has_visual_layout: false,
+        };
+        assert_eq!(info.resource_type, "user");
+        assert_eq!(info.state_count, 3);
+        assert_eq!(info.transition_count, 5);
+        assert_eq!(info.sub_scenario_count, 1);
+        assert!(!info.has_visual_layout);
+    }
+
+    #[test]
+    fn test_state_machine_info_clone() {
+        let info = StateMachineInfo {
+            resource_type: "product".to_string(),
+            state_count: 4,
+            transition_count: 8,
+            sub_scenario_count: 0,
+            has_visual_layout: true,
+        };
+        let cloned = info.clone();
+        assert_eq!(info.resource_type, cloned.resource_type);
+        assert_eq!(info.state_count, cloned.state_count);
+    }
+
+    #[test]
+    fn test_state_machine_info_serialize() {
+        let info = StateMachineInfo {
+            resource_type: "item".to_string(),
+            state_count: 2,
+            transition_count: 3,
+            sub_scenario_count: 0,
+            has_visual_layout: false,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("\"resource_type\":\"item\""));
+        assert!(json.contains("\"state_count\":2"));
+    }
+
+    // StateInstanceResponse tests
+    #[test]
+    fn test_state_instance_response_new() {
+        let response = StateInstanceResponse {
+            resource_id: "order-1".to_string(),
+            current_state: "pending".to_string(),
+            resource_type: "order".to_string(),
+            history_count: 0,
+            state_data: HashMap::new(),
+        };
+        assert_eq!(response.resource_id, "order-1");
+        assert_eq!(response.current_state, "pending");
+        assert_eq!(response.history_count, 0);
+    }
+
+    #[test]
+    fn test_state_instance_response_with_data() {
+        let mut state_data = HashMap::new();
+        state_data.insert("total".to_string(), serde_json::json!(100.50));
+
+        let response = StateInstanceResponse {
+            resource_id: "order-2".to_string(),
+            current_state: "confirmed".to_string(),
+            resource_type: "order".to_string(),
+            history_count: 3,
+            state_data,
+        };
+        assert_eq!(response.history_count, 3);
+        assert!(response.state_data.contains_key("total"));
+    }
+
+    #[test]
+    fn test_state_instance_response_serialize() {
+        let response = StateInstanceResponse {
+            resource_id: "test".to_string(),
+            current_state: "active".to_string(),
+            resource_type: "resource".to_string(),
+            history_count: 5,
+            state_data: HashMap::new(),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("resource_id"));
+        assert!(json.contains("current_state"));
+        assert!(json.contains("history_count"));
+    }
+
+    // StateInstanceListResponse tests
+    #[test]
+    fn test_state_instance_list_response_empty() {
+        let response = StateInstanceListResponse {
+            instances: vec![],
+            total: 0,
+        };
+        assert_eq!(response.total, 0);
+        assert!(response.instances.is_empty());
+    }
+
+    #[test]
+    fn test_state_instance_list_response_with_instances() {
+        let instance = StateInstanceResponse {
+            resource_id: "inst-1".to_string(),
+            current_state: "ready".to_string(),
+            resource_type: "service".to_string(),
+            history_count: 2,
+            state_data: HashMap::new(),
+        };
+        let response = StateInstanceListResponse {
+            instances: vec![instance],
+            total: 1,
+        };
+        assert_eq!(response.total, 1);
+    }
+
+    // NextStatesResponse tests
+    #[test]
+    fn test_next_states_response_empty() {
+        let response = NextStatesResponse {
+            next_states: vec![],
+        };
+        assert!(response.next_states.is_empty());
+    }
+
+    #[test]
+    fn test_next_states_response_with_states() {
+        let response = NextStatesResponse {
+            next_states: vec!["shipped".to_string(), "cancelled".to_string()],
+        };
+        assert_eq!(response.next_states.len(), 2);
+        assert!(response.next_states.contains(&"shipped".to_string()));
+    }
+
+    #[test]
+    fn test_next_states_response_serialize() {
+        let response = NextStatesResponse {
+            next_states: vec!["state1".to_string(), "state2".to_string()],
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("state1"));
+        assert!(json.contains("state2"));
+    }
+
+    // ImportExportResponse tests
+    #[test]
+    fn test_import_export_response_empty() {
+        let response = ImportExportResponse {
+            state_machines: vec![],
+            visual_layouts: HashMap::new(),
+        };
+        assert!(response.state_machines.is_empty());
+        assert!(response.visual_layouts.is_empty());
+    }
+
+    #[test]
+    fn test_import_export_response_serialize() {
+        let response = ImportExportResponse {
+            state_machines: vec![],
+            visual_layouts: HashMap::new(),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("state_machines"));
+        assert!(json.contains("visual_layouts"));
+    }
+
+    #[test]
+    fn test_import_export_response_deserialize() {
+        let json = r#"{"state_machines":[],"visual_layouts":{}}"#;
+        let response: ImportExportResponse = serde_json::from_str(json).unwrap();
+        assert!(response.state_machines.is_empty());
+    }
+
+    // Router tests
+    #[test]
+    fn test_create_state_machine_routes() {
+        let router = create_state_machine_routes();
+        // Just verify it creates without panicking
+        let _ = format!("{:?}", router);
+    }
+}

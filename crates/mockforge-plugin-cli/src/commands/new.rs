@@ -106,3 +106,270 @@ fn init_git_repo(dir: &Path) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_create_plugin_project_basic() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result =
+            create_plugin_project("test-plugin", "auth", Some(temp_dir.path()), None, None, false)
+                .await;
+
+        assert!(result.is_ok());
+
+        let plugin_dir = temp_dir.path().join("test-plugin");
+        assert!(plugin_dir.exists());
+        assert!(plugin_dir.join("Cargo.toml").exists());
+        assert!(plugin_dir.join("plugin.yaml").exists());
+        assert!(plugin_dir.join("src/lib.rs").exists());
+        assert!(plugin_dir.join("README.md").exists());
+        assert!(plugin_dir.join(".gitignore").exists());
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_project_with_author() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result = create_plugin_project(
+            "author-plugin",
+            "template",
+            Some(temp_dir.path()),
+            Some("John Doe"),
+            Some("john@example.com"),
+            false,
+        )
+        .await;
+
+        assert!(result.is_ok());
+
+        let plugin_dir = temp_dir.path().join("author-plugin");
+        let cargo_content = fs::read_to_string(plugin_dir.join("Cargo.toml")).unwrap();
+        assert!(cargo_content.contains("John Doe"));
+        assert!(cargo_content.contains("john@example.com"));
+
+        let manifest_content = fs::read_to_string(plugin_dir.join("plugin.yaml")).unwrap();
+        assert!(manifest_content.contains("John Doe"));
+        assert!(manifest_content.contains("john@example.com"));
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_project_all_types() {
+        let temp_dir = TempDir::new().unwrap();
+
+        for plugin_type in &["auth", "template", "response", "datasource"] {
+            let result = create_plugin_project(
+                &format!("{}-plugin", plugin_type),
+                plugin_type,
+                Some(temp_dir.path()),
+                None,
+                None,
+                false,
+            )
+            .await;
+
+            assert!(result.is_ok(), "Failed for plugin type: {}", plugin_type);
+
+            let plugin_dir = temp_dir.path().join(format!("{}-plugin", plugin_type));
+            assert!(plugin_dir.exists());
+
+            let manifest_content = fs::read_to_string(plugin_dir.join("plugin.yaml")).unwrap();
+            assert!(manifest_content.contains(&format!("plugin_type: {}", plugin_type)));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_project_invalid_type() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result = create_plugin_project(
+            "bad-plugin",
+            "invalid-type",
+            Some(temp_dir.path()),
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_project_already_exists() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create first time
+        create_plugin_project("existing", "auth", Some(temp_dir.path()), None, None, false)
+            .await
+            .unwrap();
+
+        // Try to create again - should fail
+        let result =
+            create_plugin_project("existing", "auth", Some(temp_dir.path()), None, None, false)
+                .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already exists"));
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_project_kebab_case_conversion() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result = create_plugin_project(
+            "My Plugin Name",
+            "auth",
+            Some(temp_dir.path()),
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        assert!(result.is_ok());
+
+        let plugin_dir = temp_dir.path().join("my-plugin-name");
+        assert!(plugin_dir.exists());
+
+        let manifest_content = fs::read_to_string(plugin_dir.join("plugin.yaml")).unwrap();
+        assert!(manifest_content.contains("id: my-plugin-name"));
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_project_with_path_in_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let project_path = temp_dir.path().join("custom/path/plugin");
+
+        let result =
+            create_plugin_project(project_path.to_str().unwrap(), "auth", None, None, None, false)
+                .await;
+
+        assert!(result.is_ok());
+        assert!(project_path.exists());
+        assert!(project_path.join("Cargo.toml").exists());
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_project_default_output() {
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+
+        std::env::set_current_dir(&temp_dir).unwrap();
+
+        let result = create_plugin_project("default-out", "auth", None, None, None, false).await;
+
+        assert!(result.is_ok());
+
+        let plugin_dir = temp_dir.path().join("default-out");
+        assert!(plugin_dir.exists());
+
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_project_files_content() {
+        let temp_dir = TempDir::new().unwrap();
+
+        create_plugin_project("content-test", "auth", Some(temp_dir.path()), None, None, false)
+            .await
+            .unwrap();
+
+        let plugin_dir = temp_dir.path().join("content-test");
+
+        // Check Cargo.toml
+        let cargo_content = fs::read_to_string(plugin_dir.join("Cargo.toml")).unwrap();
+        assert!(cargo_content.contains("name = \"content-test\""));
+        assert!(cargo_content.contains("crate-type = [\"cdylib\"]"));
+        assert!(cargo_content.contains("mockforge-plugin-sdk"));
+
+        // Check plugin.yaml
+        let manifest_content = fs::read_to_string(plugin_dir.join("plugin.yaml")).unwrap();
+        assert!(manifest_content.contains("id: content-test"));
+        assert!(manifest_content.contains("plugin_type: auth"));
+        assert!(manifest_content.contains("capabilities:"));
+
+        // Check .gitignore
+        let gitignore_content = fs::read_to_string(plugin_dir.join(".gitignore")).unwrap();
+        assert!(gitignore_content.contains("/target"));
+        assert!(gitignore_content.contains("*.wasm"));
+
+        // Check README.md
+        let readme_content = fs::read_to_string(plugin_dir.join("README.md")).unwrap();
+        assert!(readme_content.contains("content-test"));
+        assert!(readme_content.contains("auth"));
+
+        // Check src/lib.rs exists
+        assert!(plugin_dir.join("src/lib.rs").exists());
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_project_data_source_hyphen() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result = create_plugin_project(
+            "ds-plugin",
+            "data-source",
+            Some(temp_dir.path()),
+            None,
+            None,
+            false,
+        )
+        .await;
+
+        assert!(result.is_ok());
+
+        let plugin_dir = temp_dir.path().join("ds-plugin");
+        let manifest_content = fs::read_to_string(plugin_dir.join("plugin.yaml")).unwrap();
+        assert!(manifest_content.contains("plugin_type: datasource"));
+    }
+
+    #[test]
+    fn test_init_git_repo() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a basic directory structure
+        fs::create_dir_all(temp_dir.path()).unwrap();
+        fs::write(temp_dir.path().join("test.txt"), "test").unwrap();
+
+        let result = init_git_repo(temp_dir.path());
+
+        // Git might not be available in all test environments
+        // So we accept both success and error
+        match result {
+            Ok(_) => {
+                // If git succeeded, check .git directory exists
+                assert!(temp_dir.path().join(".git").exists());
+            }
+            Err(_) => {
+                // Git not available, test passes
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_plugin_project_no_git() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result = create_plugin_project(
+            "no-git",
+            "auth",
+            Some(temp_dir.path()),
+            None,
+            None,
+            false, // init_git = false
+        )
+        .await;
+
+        assert!(result.is_ok());
+
+        let plugin_dir = temp_dir.path().join("no-git");
+        assert!(plugin_dir.exists());
+        // .git might not exist if git init wasn't called or failed
+    }
+}

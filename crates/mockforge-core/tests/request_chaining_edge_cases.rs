@@ -427,7 +427,7 @@ fn test_chain_context_variable_types() {
 
     context.set_variable("string".to_string(), json!("text"));
     context.set_variable("number".to_string(), json!(42));
-    context.set_variable("float".to_string(), json!(3.14));
+    context.set_variable("float".to_string(), json!(3.125));
     context.set_variable("boolean".to_string(), json!(true));
     context.set_variable("null".to_string(), json!(null));
     context.set_variable("array".to_string(), json!([1, 2, 3]));
@@ -435,7 +435,7 @@ fn test_chain_context_variable_types() {
 
     assert_eq!(context.get_variable("string"), Some(&json!("text")));
     assert_eq!(context.get_variable("number"), Some(&json!(42)));
-    assert_eq!(context.get_variable("float"), Some(&json!(3.14)));
+    assert_eq!(context.get_variable("float"), Some(&json!(3.125)));
     assert_eq!(context.get_variable("boolean"), Some(&json!(true)));
     assert_eq!(context.get_variable("null"), Some(&json!(null)));
     assert_eq!(context.get_variable("array"), Some(&json!([1, 2, 3])));

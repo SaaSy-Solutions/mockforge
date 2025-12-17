@@ -727,7 +727,733 @@ impl DynamicGrpcService {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    // Helper function to create a test ProtoService
+    fn create_test_proto_service() -> ProtoService {
+        ProtoService {
+            name: "test.package.TestService".to_string(),
+            package: "test.package".to_string(),
+            short_name: "TestService".to_string(),
+            methods: vec![
+                ProtoMethod {
+                    name: "SayHello".to_string(),
+                    input_type: "HelloRequest".to_string(),
+                    output_type: "HelloResponse".to_string(),
+                    client_streaming: false,
+                    server_streaming: false,
+                },
+                ProtoMethod {
+                    name: "GetUser".to_string(),
+                    input_type: "GetUserRequest".to_string(),
+                    output_type: "GetUserResponse".to_string(),
+                    client_streaming: false,
+                    server_streaming: false,
+                },
+                ProtoMethod {
+                    name: "CreateItem".to_string(),
+                    input_type: "CreateItemRequest".to_string(),
+                    output_type: "CreateItemResponse".to_string(),
+                    client_streaming: false,
+                    server_streaming: false,
+                },
+            ],
+        }
+    }
+
+    fn create_streaming_proto_service() -> ProtoService {
+        ProtoService {
+            name: "streaming.package.StreamingService".to_string(),
+            package: "streaming.package".to_string(),
+            short_name: "StreamingService".to_string(),
+            methods: vec![
+                ProtoMethod {
+                    name: "ServerStream".to_string(),
+                    input_type: "StreamRequest".to_string(),
+                    output_type: "StreamResponse".to_string(),
+                    client_streaming: false,
+                    server_streaming: true,
+                },
+                ProtoMethod {
+                    name: "ClientStream".to_string(),
+                    input_type: "StreamRequest".to_string(),
+                    output_type: "StreamResponse".to_string(),
+                    client_streaming: true,
+                    server_streaming: false,
+                },
+                ProtoMethod {
+                    name: "BiDiStream".to_string(),
+                    input_type: "StreamRequest".to_string(),
+                    output_type: "StreamResponse".to_string(),
+                    client_streaming: true,
+                    server_streaming: true,
+                },
+            ],
+        }
+    }
+
+    // ==================== MockResponse Tests ====================
 
     #[test]
-    fn test_module_compiles() {}
+    fn test_mock_response_creation() {
+        let response = MockResponse {
+            response_json: r#"{"message": "test"}"#.to_string(),
+            simulate_error: false,
+            error_message: None,
+            error_code: None,
+        };
+
+        assert_eq!(response.response_json, r#"{"message": "test"}"#);
+        assert!(!response.simulate_error);
+        assert!(response.error_message.is_none());
+        assert!(response.error_code.is_none());
+    }
+
+    #[test]
+    fn test_mock_response_with_error() {
+        let response = MockResponse {
+            response_json: "{}".to_string(),
+            simulate_error: true,
+            error_message: Some("Test error".to_string()),
+            error_code: Some(3),
+        };
+
+        assert!(response.simulate_error);
+        assert_eq!(response.error_message, Some("Test error".to_string()));
+        assert_eq!(response.error_code, Some(3));
+    }
+
+    #[test]
+    fn test_mock_response_clone() {
+        let response = MockResponse {
+            response_json: r#"{"key": "value"}"#.to_string(),
+            simulate_error: true,
+            error_message: Some("error".to_string()),
+            error_code: Some(5),
+        };
+
+        let cloned = response.clone();
+        assert_eq!(cloned.response_json, response.response_json);
+        assert_eq!(cloned.simulate_error, response.simulate_error);
+        assert_eq!(cloned.error_message, response.error_message);
+        assert_eq!(cloned.error_code, response.error_code);
+    }
+
+    // ==================== DynamicGrpcService Basic Tests ====================
+
+    #[test]
+    fn test_dynamic_grpc_service_new() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        assert_eq!(service.service_name(), "test.package.TestService");
+        assert_eq!(service.package(), "test.package");
+        assert_eq!(service.methods().len(), 3);
+    }
+
+    #[test]
+    fn test_dynamic_grpc_service_with_latency_injector() {
+        use mockforge_core::latency::{FaultConfig, LatencyProfile};
+
+        let proto_service = create_test_proto_service();
+        let latency_injector =
+            LatencyInjector::new(LatencyProfile::default(), FaultConfig::default());
+        let service = DynamicGrpcService::new(proto_service, Some(latency_injector));
+
+        assert_eq!(service.service_name(), "test.package.TestService");
+        assert!(service.latency_injector.is_some());
+    }
+
+    #[test]
+    fn test_dynamic_grpc_service_service_accessor() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        let accessed_service = service.service();
+        assert_eq!(accessed_service.name, "test.package.TestService");
+        assert_eq!(accessed_service.package, "test.package");
+        assert_eq!(accessed_service.short_name, "TestService");
+    }
+
+    #[test]
+    fn test_dynamic_grpc_service_methods_accessor() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        let methods = service.methods();
+        assert_eq!(methods.len(), 3);
+        assert_eq!(methods[0].name, "SayHello");
+        assert_eq!(methods[1].name, "GetUser");
+        assert_eq!(methods[2].name, "CreateItem");
+    }
+
+    #[test]
+    fn test_dynamic_grpc_service_package_accessor() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        assert_eq!(service.package(), "test.package");
+    }
+
+    // ==================== Mock Response Generation Tests ====================
+
+    #[test]
+    fn test_generate_mock_response_say_hello() {
+        let response = DynamicGrpcService::generate_mock_response("SayHello", "HelloResponse");
+
+        assert!(response.response_json.contains("Hello from MockForge"));
+        assert!(!response.simulate_error);
+    }
+
+    #[test]
+    fn test_generate_mock_response_say_hello_stream() {
+        let response =
+            DynamicGrpcService::generate_mock_response("SayHelloStream", "HelloResponse");
+
+        assert!(response.response_json.contains("Hello from MockForge"));
+    }
+
+    #[test]
+    fn test_generate_mock_response_client_stream() {
+        let response =
+            DynamicGrpcService::generate_mock_response("SayHelloClientStream", "HelloResponse");
+
+        assert!(response.response_json.contains("Hello from MockForge"));
+    }
+
+    #[test]
+    fn test_generate_mock_response_chat() {
+        let response = DynamicGrpcService::generate_mock_response("Chat", "ChatResponse");
+
+        assert!(response.response_json.contains("Hello from MockForge"));
+    }
+
+    #[test]
+    fn test_generate_mock_response_generic() {
+        let response = DynamicGrpcService::generate_mock_response("CustomMethod", "CustomResponse");
+
+        assert!(response.response_json.contains("Mock response for CustomMethod"));
+        assert!(response.response_json.contains("CustomResponse"));
+    }
+
+    // ==================== Enhanced Mock Response Tests ====================
+
+    #[test]
+    fn test_generate_enhanced_mock_response_hello() {
+        let smart_generator =
+            Arc::new(Mutex::new(SmartMockGenerator::new(SmartMockConfig::default())));
+
+        let response = DynamicGrpcService::generate_enhanced_mock_response(
+            "SayHello",
+            "HelloResponse",
+            "TestService",
+            &smart_generator,
+        );
+
+        assert!(response.response_json.contains("message"));
+        assert!(!response.simulate_error);
+    }
+
+    #[test]
+    fn test_generate_enhanced_mock_response_list() {
+        let smart_generator =
+            Arc::new(Mutex::new(SmartMockGenerator::new(SmartMockConfig::default())));
+
+        let response = DynamicGrpcService::generate_enhanced_mock_response(
+            "ListUsers",
+            "ListUsersResponse",
+            "UserService",
+            &smart_generator,
+        );
+
+        assert!(response.response_json.contains("id") || response.response_json.contains("data"));
+    }
+
+    #[test]
+    fn test_generate_enhanced_mock_response_create() {
+        let smart_generator =
+            Arc::new(Mutex::new(SmartMockGenerator::new(SmartMockConfig::default())));
+
+        let response = DynamicGrpcService::generate_enhanced_mock_response(
+            "CreateUser",
+            "CreateUserResponse",
+            "UserService",
+            &smart_generator,
+        );
+
+        assert!(
+            response.response_json.contains("status") || response.response_json.contains("message")
+        );
+    }
+
+    #[test]
+    fn test_generate_enhanced_mock_response_update() {
+        let smart_generator =
+            Arc::new(Mutex::new(SmartMockGenerator::new(SmartMockConfig::default())));
+
+        let response = DynamicGrpcService::generate_enhanced_mock_response(
+            "UpdateUser",
+            "UpdateUserResponse",
+            "UserService",
+            &smart_generator,
+        );
+
+        assert!(
+            response.response_json.contains("status")
+                || response.response_json.contains("version")
+                || response.response_json.contains("updated")
+        );
+    }
+
+    #[test]
+    fn test_generate_enhanced_mock_response_delete() {
+        let smart_generator =
+            Arc::new(Mutex::new(SmartMockGenerator::new(SmartMockConfig::default())));
+
+        let response = DynamicGrpcService::generate_enhanced_mock_response(
+            "DeleteUser",
+            "DeleteUserResponse",
+            "UserService",
+            &smart_generator,
+        );
+
+        assert!(
+            response.response_json.contains("deleted")
+                || response.response_json.contains("message")
+        );
+    }
+
+    #[test]
+    fn test_generate_enhanced_mock_response_generic() {
+        let smart_generator =
+            Arc::new(Mutex::new(SmartMockGenerator::new(SmartMockConfig::default())));
+
+        let response = DynamicGrpcService::generate_enhanced_mock_response(
+            "ProcessData",
+            "ProcessDataResponse",
+            "DataService",
+            &smart_generator,
+        );
+
+        assert!(
+            response.response_json.contains("result")
+                || response.response_json.contains("status")
+                || response.response_json.contains("message")
+        );
+    }
+
+    // ==================== Set Mock Response Tests ====================
+
+    #[test]
+    fn test_set_mock_response() {
+        let proto_service = create_test_proto_service();
+        let mut service = DynamicGrpcService::new(proto_service, None);
+
+        let custom_response = MockResponse {
+            response_json: r#"{"custom": "response"}"#.to_string(),
+            simulate_error: false,
+            error_message: None,
+            error_code: None,
+        };
+
+        service.set_mock_response("SayHello", custom_response.clone());
+
+        let stored = service.mock_responses.get("SayHello").unwrap();
+        assert_eq!(stored.response_json, r#"{"custom": "response"}"#);
+    }
+
+    #[test]
+    fn test_set_mock_response_new_method() {
+        let proto_service = create_test_proto_service();
+        let mut service = DynamicGrpcService::new(proto_service, None);
+
+        let custom_response = MockResponse {
+            response_json: r#"{"new": "method"}"#.to_string(),
+            simulate_error: false,
+            error_message: None,
+            error_code: None,
+        };
+
+        service.set_mock_response("NewMethod", custom_response);
+
+        assert!(service.mock_responses.contains_key("NewMethod"));
+    }
+
+    // ==================== Error Simulation Tests ====================
+
+    #[test]
+    fn test_set_error_simulation() {
+        let proto_service = create_test_proto_service();
+        let mut service = DynamicGrpcService::new(proto_service, None);
+
+        service.set_error_simulation("SayHello", "Test error message", 3);
+
+        let response = service.mock_responses.get("SayHello").unwrap();
+        assert!(response.simulate_error);
+        assert_eq!(response.error_message, Some("Test error message".to_string()));
+        assert_eq!(response.error_code, Some(3));
+    }
+
+    #[test]
+    fn test_set_error_simulation_nonexistent_method() {
+        let proto_service = create_test_proto_service();
+        let mut service = DynamicGrpcService::new(proto_service, None);
+
+        // Should not panic, just do nothing
+        service.set_error_simulation("NonExistent", "Error", 5);
+
+        assert!(!service.mock_responses.contains_key("NonExistent"));
+    }
+
+    // ==================== Output Type Tests ====================
+
+    #[test]
+    fn test_get_output_type_existing_method() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        let output_type = service.get_output_type("SayHello");
+        assert_eq!(output_type, "HelloResponse");
+    }
+
+    #[test]
+    fn test_get_output_type_nonexistent_method() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        let output_type = service.get_output_type("NonExistent");
+        assert_eq!(output_type, "google.protobuf.Any");
+    }
+
+    // ==================== Stream Response Message Tests ====================
+
+    #[test]
+    fn test_create_stream_response_message_json() {
+        let base_response = r#"{"message": "test"}"#;
+        let response = DynamicGrpcService::create_stream_response_message(
+            "TestMethod",
+            "TestOutput",
+            base_response,
+            0,
+            3,
+        );
+
+        assert!(response.type_url.contains("TestOutput"));
+        let value_str = String::from_utf8(response.value.clone()).unwrap();
+        assert!(value_str.contains("stream_index"));
+        assert!(value_str.contains("stream_total"));
+        assert!(value_str.contains("is_final"));
+    }
+
+    #[test]
+    fn test_create_stream_response_message_first() {
+        let base_response = r#"{"data": "value"}"#;
+        let response = DynamicGrpcService::create_stream_response_message(
+            "TestMethod",
+            "TestOutput",
+            base_response,
+            0,
+            5,
+        );
+
+        let value_str = String::from_utf8(response.value).unwrap();
+        assert!(value_str.contains(r#""stream_index": 0"#));
+        assert!(value_str.contains(r#""is_final": false"#));
+    }
+
+    #[test]
+    fn test_create_stream_response_message_last() {
+        let base_response = r#"{"data": "value"}"#;
+        let response = DynamicGrpcService::create_stream_response_message(
+            "TestMethod",
+            "TestOutput",
+            base_response,
+            4,
+            5,
+        );
+
+        let value_str = String::from_utf8(response.value).unwrap();
+        assert!(value_str.contains(r#""stream_index": 4"#));
+        assert!(value_str.contains(r#""is_final": true"#));
+    }
+
+    #[test]
+    fn test_create_stream_response_message_non_json() {
+        let base_response = "simple string";
+        let response = DynamicGrpcService::create_stream_response_message(
+            "TestMethod",
+            "TestOutput",
+            base_response,
+            1,
+            3,
+        );
+
+        let value_str = String::from_utf8(response.value).unwrap();
+        assert!(value_str.contains("simple string"));
+        assert!(value_str.contains("stream_index"));
+        assert!(value_str.contains("method"));
+    }
+
+    // ==================== Bidirectional Response Message Tests ====================
+
+    #[test]
+    fn test_create_bidirectional_response_message_json() {
+        let base_response = r#"{"message": "hello"}"#;
+        let input_message = Any {
+            type_url: "type.googleapis.com/test".to_string(),
+            value: b"input data".to_vec(),
+        };
+
+        let response = DynamicGrpcService::create_bidirectional_response_message(
+            "TestMethod",
+            "TestOutput",
+            base_response,
+            &input_message,
+            1,
+            1,
+            0,
+        );
+
+        let value_str = String::from_utf8(response.value).unwrap();
+        assert!(value_str.contains("input_sequence"));
+        assert!(value_str.contains("output_sequence"));
+        assert!(value_str.contains("input_context"));
+    }
+
+    #[test]
+    fn test_create_bidirectional_response_message_with_binary_input() {
+        let base_response = r#"{"data": "test"}"#;
+        let input_message = Any {
+            type_url: "type.googleapis.com/test".to_string(),
+            value: vec![0xFF, 0xFE, 0x00, 0x01], // Invalid UTF-8
+        };
+
+        let response = DynamicGrpcService::create_bidirectional_response_message(
+            "TestMethod",
+            "TestOutput",
+            base_response,
+            &input_message,
+            2,
+            3,
+            1,
+        );
+
+        let value_str = String::from_utf8(response.value).unwrap();
+        assert!(value_str.contains("Binary input"));
+    }
+
+    #[test]
+    fn test_create_bidirectional_response_message_large_input() {
+        let base_response = r#"{"data": "test"}"#;
+        let large_input = "x".repeat(300); // Larger than 200 char limit
+        let input_message = Any {
+            type_url: "type.googleapis.com/test".to_string(),
+            value: large_input.as_bytes().to_vec(),
+        };
+
+        let response = DynamicGrpcService::create_bidirectional_response_message(
+            "TestMethod",
+            "TestOutput",
+            base_response,
+            &input_message,
+            1,
+            1,
+            0,
+        );
+
+        let value_str = String::from_utf8(response.value).unwrap();
+        assert!(value_str.contains("Large input"));
+    }
+
+    // ==================== Enhanced Service Tests ====================
+
+    #[test]
+    fn test_dynamic_grpc_service_new_enhanced() {
+        let proto_service = create_test_proto_service();
+        let smart_config = SmartMockConfig::default();
+
+        let service = DynamicGrpcService::new_enhanced(proto_service, None, None, smart_config);
+
+        assert_eq!(service.service_name(), "test.package.TestService");
+        assert!(service.proto_parser.is_none());
+    }
+
+    #[test]
+    fn test_smart_generator_accessor() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        let generator = service.smart_generator();
+        assert!(generator.lock().is_ok());
+    }
+
+    #[test]
+    fn test_descriptor_pool_none() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        assert!(service.descriptor_pool().is_none());
+    }
+
+    // ==================== EnhancedServiceFactory Tests ====================
+
+    #[test]
+    fn test_create_service_from_proto_basic() {
+        let proto_service = create_test_proto_service();
+        let smart_config = SmartMockConfig::default();
+
+        let service = EnhancedServiceFactory::create_service_from_proto(
+            proto_service,
+            None,
+            None,
+            smart_config,
+        );
+
+        assert_eq!(service.service_name(), "test.package.TestService");
+        assert!(service.proto_parser.is_none());
+    }
+
+    #[test]
+    fn test_create_service_from_proto_with_latency() {
+        use mockforge_core::latency::{FaultConfig, LatencyProfile};
+
+        let proto_service = create_test_proto_service();
+        let latency_injector =
+            LatencyInjector::new(LatencyProfile::default(), FaultConfig::default());
+        let smart_config = SmartMockConfig::default();
+
+        let service = EnhancedServiceFactory::create_service_from_proto(
+            proto_service,
+            Some(latency_injector),
+            None,
+            smart_config,
+        );
+
+        assert!(service.latency_injector.is_some());
+    }
+
+    // ==================== Streaming Service Tests ====================
+
+    #[test]
+    fn test_streaming_service_methods() {
+        let proto_service = create_streaming_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        let methods = service.methods();
+        assert_eq!(methods.len(), 3);
+
+        assert!(!methods[0].client_streaming && methods[0].server_streaming); // Server stream
+        assert!(methods[1].client_streaming && !methods[1].server_streaming); // Client stream
+        assert!(methods[2].client_streaming && methods[2].server_streaming); // BiDi
+    }
+
+    #[test]
+    fn test_mock_responses_generated_for_all_methods() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        // All methods should have mock responses
+        assert!(service.mock_responses.contains_key("SayHello"));
+        assert!(service.mock_responses.contains_key("GetUser"));
+        assert!(service.mock_responses.contains_key("CreateItem"));
+    }
+
+    // ==================== Async Handler Tests ====================
+
+    #[tokio::test]
+    async fn test_handle_unary_success() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        let request = Request::new(Any {
+            type_url: "type.googleapis.com/HelloRequest".to_string(),
+            value: b"{}".to_vec(),
+        });
+
+        let result = service.handle_unary("SayHello", request).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.type_url.contains("HelloResponse"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_unary_method_not_found() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        let request = Request::new(Any {
+            type_url: "type.googleapis.com/UnknownRequest".to_string(),
+            value: b"{}".to_vec(),
+        });
+
+        let result = service.handle_unary("UnknownMethod", request).await;
+        assert!(result.is_err());
+
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn test_handle_unary_with_error_simulation() {
+        let proto_service = create_test_proto_service();
+        let mut service = DynamicGrpcService::new(proto_service, None);
+
+        service.set_error_simulation("SayHello", "Simulated error", 3);
+
+        let request = Request::new(Any {
+            type_url: "type.googleapis.com/HelloRequest".to_string(),
+            value: b"{}".to_vec(),
+        });
+
+        let result = service.handle_unary("SayHello", request).await;
+        assert!(result.is_err());
+
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument); // Code 3
+    }
+
+    #[tokio::test]
+    async fn test_handle_server_streaming_success() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        let request = Request::new(Any {
+            type_url: "type.googleapis.com/HelloRequest".to_string(),
+            value: b"{}".to_vec(),
+        });
+
+        let result = service.handle_server_streaming("SayHello", request).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_server_streaming_method_not_found() {
+        let proto_service = create_test_proto_service();
+        let service = DynamicGrpcService::new(proto_service, None);
+
+        let request = Request::new(Any {
+            type_url: "type.googleapis.com/UnknownRequest".to_string(),
+            value: b"{}".to_vec(),
+        });
+
+        let result = service.handle_server_streaming("UnknownMethod", request).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_handle_server_streaming_with_error_simulation() {
+        let proto_service = create_test_proto_service();
+        let mut service = DynamicGrpcService::new(proto_service, None);
+
+        service.set_error_simulation("SayHello", "Stream error", 13);
+
+        let request = Request::new(Any {
+            type_url: "type.googleapis.com/HelloRequest".to_string(),
+            value: b"{}".to_vec(),
+        });
+
+        let result = service.handle_server_streaming("SayHello", request).await;
+        assert!(result.is_err());
+    }
 }

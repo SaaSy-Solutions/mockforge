@@ -44,8 +44,8 @@ pub fn create_api_router(
     Router::new()
         // Query endpoints
         .route("/api/recorder/requests", get(list_requests))
-        .route("/api/recorder/requests/:id", get(get_request))
-        .route("/api/recorder/requests/:id/response", get(get_response))
+        .route("/api/recorder/requests/{id}", get(get_request))
+        .route("/api/recorder/requests/{id}/response", get(get_response))
         .route("/api/recorder/search", post(search_requests))
 
         // Export endpoints
@@ -58,8 +58,8 @@ pub fn create_api_router(
         .route("/api/recorder/clear", delete(clear_recordings))
 
         // Replay endpoints
-        .route("/api/recorder/replay/:id", post(replay_request))
-        .route("/api/recorder/compare/:id", post(compare_responses))
+        .route("/api/recorder/replay/{id}", post(replay_request))
+        .route("/api/recorder/compare/{id}", post(compare_responses))
 
         // Statistics endpoints
         .route("/api/recorder/stats", get(get_statistics))
@@ -69,8 +69,8 @@ pub fn create_api_router(
 
         // Integration testing endpoints
         .route("/api/recorder/workflows", post(create_workflow))
-        .route("/api/recorder/workflows/:id", get(get_workflow))
-        .route("/api/recorder/workflows/:id/generate", post(generate_integration_test))
+        .route("/api/recorder/workflows/{id}", get(get_workflow))
+        .route("/api/recorder/workflows/{id}/generate", post(generate_integration_test))
 
         // Sync endpoints
         .route("/api/recorder/sync/status", get(get_sync_status))
@@ -81,11 +81,11 @@ pub fn create_api_router(
 
         // Sync snapshot endpoints (Shadow Snapshot Mode)
         .route("/api/recorder/sync/snapshots", get(list_snapshots))
-        .route("/api/recorder/sync/snapshots/:endpoint", get(get_endpoint_timeline))
-        .route("/api/recorder/sync/snapshots/cycle/:cycle_id", get(get_snapshots_by_cycle))
+        .route("/api/recorder/sync/snapshots/{endpoint}", get(get_endpoint_timeline))
+        .route("/api/recorder/sync/snapshots/cycle/{cycle_id}", get(get_snapshots_by_cycle))
 
         // Stub mapping conversion endpoints
-        .route("/api/recorder/convert/:id", post(convert_to_stub))
+        .route("/api/recorder/convert/{id}", post(convert_to_stub))
         .route("/api/recorder/convert/batch", post(convert_batch))
 
         .with_state(state)
@@ -343,7 +343,7 @@ impl IntoResponse for ApiError {
 }
 
 /// Test generation request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GenerateTestsRequest {
     /// Test format to generate
     #[serde(default = "default_format")]
@@ -404,7 +404,7 @@ fn default_true() -> bool {
 }
 
 /// LLM configuration request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LlmConfigRequest {
     /// LLM provider
     pub provider: String,
@@ -509,7 +509,7 @@ async fn generate_tests(
 // Integration Testing Endpoints
 
 /// Create workflow request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CreateWorkflowRequest {
     workflow: IntegrationWorkflow,
 }
@@ -874,4 +874,540 @@ async fn get_snapshots_by_cycle(
         "snapshots": snapshots,
         "total": snapshots.len(),
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::RecorderDatabase;
+    use crate::models::{Protocol, RecordedRequest, RecordedResponse};
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode as HttpStatusCode};
+    use tower::ServiceExt;
+
+    async fn create_test_db() -> RecorderDatabase {
+        RecorderDatabase::new_in_memory().await.unwrap()
+    }
+
+    async fn create_test_recorder() -> Arc<Recorder> {
+        let db = create_test_db().await;
+        Arc::new(Recorder::new(db))
+    }
+
+    #[tokio::test]
+    async fn test_api_state_creation() {
+        let recorder = create_test_recorder().await;
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        assert!(state.sync_service.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_create_api_router() {
+        let recorder = create_test_recorder().await;
+        let router = create_api_router(recorder, None);
+
+        // Router should be created successfully
+        assert!(std::mem::size_of_val(&router) > 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_status_enabled() {
+        let recorder = create_test_recorder().await;
+        recorder.enable().await;
+
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let response = get_status(State(state)).await;
+        assert!(response.0.enabled);
+    }
+
+    #[tokio::test]
+    async fn test_get_status_disabled() {
+        let recorder = create_test_recorder().await;
+        recorder.disable().await;
+
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let response = get_status(State(state)).await;
+        assert!(!response.0.enabled);
+    }
+
+    #[tokio::test]
+    async fn test_enable_recording() {
+        let recorder = create_test_recorder().await;
+        recorder.disable().await;
+
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let response = enable_recording(State(state)).await;
+        assert!(response.0.enabled);
+        assert!(recorder.is_enabled().await);
+    }
+
+    #[tokio::test]
+    async fn test_disable_recording() {
+        let recorder = create_test_recorder().await;
+        recorder.enable().await;
+
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let response = disable_recording(State(state)).await;
+        assert!(!response.0.enabled);
+        assert!(!recorder.is_enabled().await);
+    }
+
+    #[tokio::test]
+    async fn test_clear_recordings() {
+        let recorder = create_test_recorder().await;
+
+        // Add a test request
+        let request = RecordedRequest {
+            id: "test-1".to_string(),
+            protocol: Protocol::Http,
+            timestamp: chrono::Utc::now(),
+            method: "GET".to_string(),
+            path: "/test".to_string(),
+            query_params: None,
+            headers: "{}".to_string(),
+            body: None,
+            body_encoding: "utf8".to_string(),
+            client_ip: None,
+            trace_id: None,
+            span_id: None,
+            duration_ms: None,
+            status_code: Some(200),
+            tags: None,
+        };
+        recorder.database().insert_request(&request).await.unwrap();
+
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let response = clear_recordings(State(state)).await.unwrap();
+        assert_eq!(response.0.message, "All recordings cleared");
+    }
+
+    #[test]
+    fn test_api_error_from_sqlx() {
+        let err = sqlx::Error::RowNotFound;
+        let api_err = ApiError::from(err);
+
+        match api_err {
+            ApiError::Database(_) => {}
+            _ => panic!("Expected Database error"),
+        }
+    }
+
+    #[test]
+    fn test_api_error_from_serde() {
+        let err = serde_json::from_str::<serde_json::Value>("invalid").unwrap_err();
+        let api_err = ApiError::from(err);
+
+        match api_err {
+            ApiError::Serialization(_) => {}
+            _ => panic!("Expected Serialization error"),
+        }
+    }
+
+    #[test]
+    fn test_api_error_into_response_not_found() {
+        let err = ApiError::NotFound("Test not found".to_string());
+        let response = err.into_response();
+
+        assert_eq!(response.status(), HttpStatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn test_api_error_into_response_invalid_input() {
+        let err = ApiError::InvalidInput("Invalid data".to_string());
+        let response = err.into_response();
+
+        assert_eq!(response.status(), HttpStatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn test_list_params_defaults() {
+        let params = ListParams {
+            limit: None,
+            offset: None,
+        };
+
+        assert!(params.limit.is_none());
+        assert!(params.offset.is_none());
+    }
+
+    #[test]
+    fn test_export_params_defaults() {
+        let params = ExportParams { limit: None };
+        assert!(params.limit.is_none());
+    }
+
+    #[test]
+    fn test_compare_request_creation() {
+        let mut headers = std::collections::HashMap::new();
+        headers.insert("content-type".to_string(), "application/json".to_string());
+
+        let req = CompareRequest {
+            status_code: 200,
+            headers,
+            body: "test body".to_string(),
+        };
+
+        assert_eq!(req.status_code, 200);
+        assert_eq!(req.body, "test body");
+        assert_eq!(req.headers.get("content-type").unwrap(), "application/json");
+    }
+
+    #[test]
+    fn test_status_response_serialization() {
+        let response = StatusResponse { enabled: true };
+        let json = serde_json::to_string(&response).unwrap();
+
+        assert!(json.contains("enabled"));
+        assert!(json.contains("true"));
+    }
+
+    #[test]
+    fn test_clear_response_serialization() {
+        let response = ClearResponse {
+            message: "All cleared".to_string(),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+
+        assert!(json.contains("All cleared"));
+    }
+
+    #[test]
+    fn test_statistics_response_creation() {
+        let mut by_protocol = std::collections::HashMap::new();
+        by_protocol.insert("http".to_string(), 100);
+
+        let mut by_status_code = std::collections::HashMap::new();
+        by_status_code.insert(200, 80);
+        by_status_code.insert(404, 20);
+
+        let response = StatisticsResponse {
+            total_requests: 100,
+            by_protocol,
+            by_status_code,
+            avg_duration_ms: Some(150.5),
+        };
+
+        assert_eq!(response.total_requests, 100);
+        assert_eq!(response.by_protocol.get("http").unwrap(), &100);
+        assert_eq!(response.by_status_code.get(&200).unwrap(), &80);
+        assert_eq!(response.avg_duration_ms, Some(150.5));
+    }
+
+    #[test]
+    fn test_default_format() {
+        assert_eq!(default_format(), "rust_reqwest");
+    }
+
+    #[test]
+    fn test_default_suite_name() {
+        assert_eq!(default_suite_name(), "generated_tests");
+    }
+
+    #[test]
+    fn test_default_true() {
+        assert!(default_true());
+    }
+
+    #[test]
+    fn test_default_temperature() {
+        assert_eq!(default_temperature(), 0.3);
+    }
+
+    #[test]
+    fn test_generate_tests_request_defaults() {
+        let request = GenerateTestsRequest {
+            format: default_format(),
+            filter: QueryFilter::default(),
+            suite_name: default_suite_name(),
+            base_url: None,
+            ai_descriptions: false,
+            llm_config: None,
+            include_assertions: default_true(),
+            validate_body: default_true(),
+            validate_status: default_true(),
+            validate_headers: false,
+            validate_timing: false,
+            max_duration_ms: None,
+        };
+
+        assert_eq!(request.format, "rust_reqwest");
+        assert_eq!(request.suite_name, "generated_tests");
+        assert!(request.include_assertions);
+        assert!(request.validate_body);
+        assert!(request.validate_status);
+        assert!(!request.validate_headers);
+    }
+
+    #[test]
+    fn test_llm_config_request_creation() {
+        let config = LlmConfigRequest {
+            provider: "openai".to_string(),
+            api_endpoint: "https://api.openai.com".to_string(),
+            api_key: Some("secret".to_string()),
+            model: "gpt-4".to_string(),
+            temperature: default_temperature(),
+        };
+
+        assert_eq!(config.provider, "openai");
+        assert_eq!(config.model, "gpt-4");
+        assert_eq!(config.temperature, 0.3);
+    }
+
+    #[test]
+    fn test_create_workflow_request_serialization() {
+        let workflow = IntegrationWorkflow {
+            id: "wf-1".to_string(),
+            name: "Test Workflow".to_string(),
+            description: "A test workflow".to_string(),
+            steps: vec![],
+            setup: WorkflowSetup::default(),
+            cleanup: vec![],
+            created_at: chrono::Utc::now(),
+        };
+
+        let request = CreateWorkflowRequest { workflow };
+        let json = serde_json::to_string(&request).unwrap();
+
+        assert!(json.contains("Test Workflow"));
+    }
+
+    #[test]
+    fn test_generate_integration_test_request_creation() {
+        let workflow = IntegrationWorkflow {
+            id: "wf-1".to_string(),
+            name: "Test".to_string(),
+            description: "Test".to_string(),
+            steps: vec![],
+            setup: WorkflowSetup::default(),
+            cleanup: vec![],
+            created_at: chrono::Utc::now(),
+        };
+
+        let request = GenerateIntegrationTestRequest {
+            workflow,
+            format: "rust".to_string(),
+        };
+
+        assert_eq!(request.format, "rust");
+    }
+
+    #[test]
+    fn test_convert_request_defaults() {
+        let req = ConvertRequest {
+            format: None,
+            detect_dynamic_values: None,
+        };
+
+        assert!(req.format.is_none());
+        assert!(req.detect_dynamic_values.is_none());
+    }
+
+    #[test]
+    fn test_batch_convert_request_creation() {
+        let request = BatchConvertRequest {
+            request_ids: vec!["req-1".to_string(), "req-2".to_string()],
+            format: Some("json".to_string()),
+            detect_dynamic_values: Some(true),
+            deduplicate: Some(false),
+        };
+
+        assert_eq!(request.request_ids.len(), 2);
+        assert_eq!(request.format, Some("json".to_string()));
+        assert_eq!(request.detect_dynamic_values, Some(true));
+        assert_eq!(request.deduplicate, Some(false));
+    }
+
+    #[test]
+    fn test_snapshot_list_params() {
+        let params = SnapshotListParams {
+            limit: Some(50),
+            offset: Some(10),
+        };
+
+        assert_eq!(params.limit, Some(50));
+        assert_eq!(params.offset, Some(10));
+    }
+
+    #[test]
+    fn test_timeline_params() {
+        let params = TimelineParams {
+            method: Some("GET".to_string()),
+            limit: Some(100),
+        };
+
+        assert_eq!(params.method, Some("GET".to_string()));
+        assert_eq!(params.limit, Some(100));
+    }
+
+    #[tokio::test]
+    async fn test_get_request_not_found() {
+        let recorder = create_test_recorder().await;
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let result = get_request(State(state), Path("non-existent".to_string())).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(ApiError::NotFound(_)) => {}
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_response_not_found() {
+        let recorder = create_test_recorder().await;
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let result = get_response(State(state), Path("non-existent".to_string())).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(ApiError::NotFound(_)) => {}
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_sync_status_no_service() {
+        let recorder = create_test_recorder().await;
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let result = get_sync_status(State(state)).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(ApiError::NotFound(_)) => {}
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_sync_config_no_service() {
+        let recorder = create_test_recorder().await;
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let result = get_sync_config(State(state)).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(ApiError::NotFound(_)) => {}
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_search_requests_empty() {
+        let recorder = create_test_recorder().await;
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let filter = QueryFilter::default();
+        let result = search_requests(State(state), Json(filter)).await.unwrap();
+
+        assert_eq!(result.0.total, 0);
+        assert!(result.0.exchanges.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_requests_with_params() {
+        let recorder = create_test_recorder().await;
+
+        // Add some test requests
+        for i in 0..5 {
+            let request = RecordedRequest {
+                id: format!("req-{}", i),
+                protocol: Protocol::Http,
+                timestamp: chrono::Utc::now(),
+                method: "GET".to_string(),
+                path: "/test".to_string(),
+                query_params: None,
+                headers: "{}".to_string(),
+                body: None,
+                body_encoding: "utf8".to_string(),
+                client_ip: None,
+                trace_id: None,
+                span_id: None,
+                duration_ms: None,
+                status_code: Some(200),
+                tags: None,
+            };
+            recorder.database().insert_request(&request).await.unwrap();
+        }
+
+        let state = ApiState {
+            recorder: recorder.clone(),
+            sync_service: None,
+        };
+
+        let params = ListParams {
+            limit: Some(3),
+            offset: Some(0),
+        };
+
+        let result = list_requests(State(state), Query(params)).await.unwrap();
+
+        assert_eq!(result.0.exchanges.len(), 3);
+    }
+
+    #[test]
+    fn test_generate_tests_request_serialization() {
+        let request = GenerateTestsRequest {
+            format: "rust_reqwest".to_string(),
+            filter: QueryFilter::default(),
+            suite_name: "my_tests".to_string(),
+            base_url: Some("http://localhost:8080".to_string()),
+            ai_descriptions: true,
+            llm_config: None,
+            include_assertions: true,
+            validate_body: true,
+            validate_status: true,
+            validate_headers: true,
+            validate_timing: false,
+            max_duration_ms: Some(1000),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+
+        assert!(json.contains("rust_reqwest"));
+        assert!(json.contains("my_tests"));
+        assert!(json.contains("http://localhost:8080"));
+    }
 }

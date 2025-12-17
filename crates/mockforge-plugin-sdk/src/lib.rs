@@ -116,4 +116,128 @@ impl SdkError {
     pub fn build<S: Into<String>>(msg: S) -> Self {
         Self::BuildError(msg.into())
     }
+
+    /// Create a template error
+    pub fn template<S: Into<String>>(msg: S) -> Self {
+        Self::TemplateError(msg.into())
+    }
+
+    /// Create a serialization error
+    pub fn serialization<S: Into<String>>(msg: S) -> Self {
+        Self::SerializationError(msg.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // SDK constants tests
+    #[test]
+    fn test_sdk_version() {
+        assert!(!SDK_VERSION.is_empty());
+    }
+
+    #[test]
+    fn test_wasm_target() {
+        assert_eq!(WASM_TARGET, "wasm32-wasi");
+    }
+
+    // SdkError tests
+    #[test]
+    fn test_sdk_error_config() {
+        let error = SdkError::config("missing field");
+        assert_eq!(error.to_string(), "Plugin configuration error: missing field");
+    }
+
+    #[test]
+    fn test_sdk_error_manifest() {
+        let error = SdkError::manifest("invalid version");
+        assert_eq!(error.to_string(), "Manifest generation error: invalid version");
+    }
+
+    #[test]
+    fn test_sdk_error_build() {
+        let error = SdkError::build("compilation failed");
+        assert_eq!(error.to_string(), "Build error: compilation failed");
+    }
+
+    #[test]
+    fn test_sdk_error_template() {
+        let error = SdkError::template("invalid template");
+        assert_eq!(error.to_string(), "Template error: invalid template");
+    }
+
+    #[test]
+    fn test_sdk_error_serialization() {
+        let error = SdkError::serialization("JSON error");
+        assert_eq!(error.to_string(), "Serialization error: JSON error");
+    }
+
+    #[test]
+    fn test_sdk_error_from_io() {
+        let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let sdk_error: SdkError = io_error.into();
+        assert!(matches!(sdk_error, SdkError::IoError(_)));
+        assert!(sdk_error.to_string().contains("IO error"));
+    }
+
+    #[test]
+    fn test_sdk_error_debug() {
+        let error = SdkError::config("test");
+        let debug = format!("{:?}", error);
+        assert!(debug.contains("ConfigError"));
+    }
+
+    #[test]
+    fn test_sdk_error_config_with_string() {
+        let msg = String::from("config error message");
+        let error = SdkError::config(msg);
+        assert!(error.to_string().contains("config error message"));
+    }
+
+    #[test]
+    fn test_sdk_error_manifest_with_string() {
+        let msg = String::from("manifest error message");
+        let error = SdkError::manifest(msg);
+        assert!(error.to_string().contains("manifest error message"));
+    }
+
+    #[test]
+    fn test_sdk_error_build_with_string() {
+        let msg = String::from("build error message");
+        let error = SdkError::build(msg);
+        assert!(error.to_string().contains("build error message"));
+    }
+
+    // SdkResult tests
+    #[test]
+    fn test_sdk_result_ok() {
+        let result: SdkResult<i32> = Ok(42);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_sdk_result_err() {
+        let result: SdkResult<i32> = Err(SdkError::config("test"));
+        assert!(result.is_err());
+    }
+
+    // Test error variants
+    #[test]
+    fn test_all_error_variants_display() {
+        let errors = vec![
+            SdkError::ConfigError("config".to_string()),
+            SdkError::ManifestError("manifest".to_string()),
+            SdkError::BuildError("build".to_string()),
+            SdkError::TemplateError("template".to_string()),
+            SdkError::SerializationError("serialization".to_string()),
+        ];
+
+        for error in errors {
+            let display = error.to_string();
+            assert!(!display.is_empty());
+        }
+    }
 }

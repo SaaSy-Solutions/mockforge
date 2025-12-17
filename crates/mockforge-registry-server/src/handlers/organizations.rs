@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{AuditEventType, Organization, OrgMember, OrgRole, Plan, User, record_audit_event},
+    models::{record_audit_event, AuditEventType, OrgMember, OrgRole, Organization, Plan, User},
     AppState,
 };
 
@@ -37,7 +37,8 @@ pub async fn create_organization(
     // Validate slug format (alphanumeric, hyphens, underscores only)
     if !request.slug.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
         return Err(ApiError::InvalidRequest(
-            "Organization slug must contain only alphanumeric characters, hyphens, and underscores".to_string(),
+            "Organization slug must contain only alphanumeric characters, hyphens, and underscores"
+                .to_string(),
         ));
     }
 
@@ -168,9 +169,7 @@ pub async fn get_organization_members(
     let org_id_for_members = org.id;
 
     // Get all members (including owner)
-    let members = OrgMember::find_by_org(pool, org_id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let members = OrgMember::find_by_org(pool, org_id).await.map_err(|e| ApiError::Database(e))?;
 
     // Get user details for each member
     let mut member_responses = Vec::new();
@@ -259,12 +258,16 @@ pub async fn add_organization_member(
             .map_err(|e| ApiError::Database(e))?
             .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?
     } else {
-        return Err(ApiError::InvalidRequest("Either email or user_id must be provided".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "Either email or user_id must be provided".to_string(),
+        ));
     };
 
     // Check if user is already a member
     if org.owner_id == target_user.id {
-        return Err(ApiError::InvalidRequest("User is already the owner of this organization".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "User is already the owner of this organization".to_string(),
+        ));
     }
 
     if OrgMember::find(pool, org_id, target_user.id)
@@ -272,14 +275,20 @@ pub async fn add_organization_member(
         .map_err(|e| ApiError::Database(e))?
         .is_some()
     {
-        return Err(ApiError::InvalidRequest("User is already a member of this organization".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "User is already a member of this organization".to_string(),
+        ));
     }
 
     // Determine role (default to member)
     let role = match request.role.as_deref() {
         Some("admin") => OrgRole::Admin,
         Some("member") | None => OrgRole::Member,
-        _ => return Err(ApiError::InvalidRequest("Invalid role. Must be 'admin' or 'member'".to_string())),
+        _ => {
+            return Err(ApiError::InvalidRequest(
+                "Invalid role. Must be 'admin' or 'member'".to_string(),
+            ))
+        }
     };
 
     // Add member
@@ -288,20 +297,24 @@ pub async fn add_organization_member(
         .map_err(|e| ApiError::Database(e))?;
 
     // Record audit event
-    let ip_address = headers.get("x-forwarded-for")
+    let ip_address = headers
+        .get("x-forwarded-for")
         .or_else(|| headers.get("x-real-ip"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
-    let user_agent = headers.get("user-agent")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
+    let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
     record_audit_event(
         pool,
         org_id,
         Some(user_id),
         AuditEventType::MemberAdded,
-        format!("Added member {} ({}) with role {}", target_user.username, target_user.email, role.to_string()),
+        format!(
+            "Added member {} ({}) with role {}",
+            target_user.username,
+            target_user.email,
+            role.to_string()
+        ),
         None,
         ip_address.as_deref(),
         user_agent.as_deref(),
@@ -373,13 +386,12 @@ pub async fn remove_organization_member(
         .map_err(|e| ApiError::Database(e))?;
 
     // Record audit event
-    let ip_address = headers.get("x-forwarded-for")
+    let ip_address = headers
+        .get("x-forwarded-for")
         .or_else(|| headers.get("x-real-ip"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
-    let user_agent = headers.get("user-agent")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
+    let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
     record_audit_event(
         pool,
@@ -393,7 +405,9 @@ pub async fn remove_organization_member(
     )
     .await;
 
-    Ok(Json(serde_json::json!({"success": true, "message": "Member removed successfully"})))
+    Ok(Json(
+        serde_json::json!({"success": true, "message": "Member removed successfully"}),
+    ))
 }
 
 /// Update a member's role in an organization
@@ -430,7 +444,9 @@ pub async fn update_organization_member_role(
 
     // Prevent changing owner's role
     if org.owner_id == member_user_id {
-        return Err(ApiError::InvalidRequest("Cannot change the organization owner's role".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "Cannot change the organization owner's role".to_string(),
+        ));
     }
 
     // Check if member exists
@@ -443,7 +459,11 @@ pub async fn update_organization_member_role(
     let new_role = match request.role.as_str() {
         "admin" => OrgRole::Admin,
         "member" => OrgRole::Member,
-        _ => return Err(ApiError::InvalidRequest("Invalid role. Must be 'admin' or 'member'".to_string())),
+        _ => {
+            return Err(ApiError::InvalidRequest(
+                "Invalid role. Must be 'admin' or 'member'".to_string(),
+            ))
+        }
     };
 
     // Update role
@@ -458,20 +478,25 @@ pub async fn update_organization_member_role(
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Record audit event
-    let ip_address = headers.get("x-forwarded-for")
+    let ip_address = headers
+        .get("x-forwarded-for")
         .or_else(|| headers.get("x-real-ip"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
-    let user_agent = headers.get("user-agent")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
+    let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
     record_audit_event(
         pool,
         org_id,
         Some(user_id),
         AuditEventType::MemberRoleChanged,
-        format!("Changed role of {} ({}) from {} to {}", target_user.username, target_user.email, member.role().to_string(), new_role.to_string()),
+        format!(
+            "Changed role of {} ({}) from {} to {}",
+            target_user.username,
+            target_user.email,
+            member.role().to_string(),
+            new_role.to_string()
+        ),
         None,
         ip_address.as_deref(),
         user_agent.as_deref(),
@@ -545,7 +570,9 @@ pub async fn update_organization(
         // Check if slug is already taken (by another org)
         if let Ok(Some(existing_org)) = Organization::find_by_slug(pool, slug).await {
             if existing_org.id != org_id {
-                return Err(ApiError::InvalidRequest("Organization slug is already taken".to_string()));
+                return Err(ApiError::InvalidRequest(
+                    "Organization slug is already taken".to_string(),
+                ));
             }
         }
 
@@ -563,7 +590,11 @@ pub async fn update_organization(
             "free" => Plan::Free,
             "pro" => Plan::Pro,
             "team" => Plan::Team,
-            _ => return Err(ApiError::InvalidRequest("Invalid plan. Must be 'free', 'pro', or 'team'".to_string())),
+            _ => {
+                return Err(ApiError::InvalidRequest(
+                    "Invalid plan. Must be 'free', 'pro', or 'team'".to_string(),
+                ))
+            }
         };
 
         Organization::update_plan(pool, org_id, new_plan)
@@ -571,13 +602,13 @@ pub async fn update_organization(
             .map_err(|e| ApiError::Database(e))?;
 
         // Record audit event for plan change
-        let ip_address = headers.get("x-forwarded-for")
+        let ip_address = headers
+            .get("x-forwarded-for")
             .or_else(|| headers.get("x-real-ip"))
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
-        let user_agent = headers.get("user-agent")
-            .and_then(|h| h.to_str().ok())
-            .map(|s| s.to_string());
+        let user_agent =
+            headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
         record_audit_event(
             pool,
@@ -645,13 +676,12 @@ pub async fn delete_organization(
     }
 
     // Record audit event before deletion
-    let ip_address = headers.get("x-forwarded-for")
+    let ip_address = headers
+        .get("x-forwarded-for")
         .or_else(|| headers.get("x-real-ip"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
-    let user_agent = headers.get("user-agent")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
+    let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
     record_audit_event(
         pool,
@@ -672,7 +702,9 @@ pub async fn delete_organization(
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-    Ok(Json(serde_json::json!({"success": true, "message": "Organization deleted successfully"})))
+    Ok(Json(
+        serde_json::json!({"success": true, "message": "Organization deleted successfully"}),
+    ))
 }
 
 #[derive(Debug, Deserialize)]

@@ -223,3 +223,336 @@ async fn handle_convert(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_recorder_commands_convert_variant() {
+        let cmd = RecorderCommands::Convert {
+            recording_id: Some("abc123".to_string()),
+            input: Some(PathBuf::from("input.db")),
+            output: PathBuf::from("output/fixtures"),
+            format: "yaml".to_string(),
+            detect_dynamic_values: true,
+            deduplicate: false,
+            protocol: Some("http".to_string()),
+            method: Some("GET".to_string()),
+            path: Some("/api/users".to_string()),
+            limit: 100,
+        };
+
+        // Verify the command can be constructed
+        match cmd {
+            RecorderCommands::Convert {
+                recording_id,
+                input,
+                output,
+                format,
+                detect_dynamic_values,
+                deduplicate,
+                protocol,
+                method,
+                path,
+                limit,
+            } => {
+                assert_eq!(recording_id, Some("abc123".to_string()));
+                assert_eq!(input, Some(PathBuf::from("input.db")));
+                assert_eq!(output, PathBuf::from("output/fixtures"));
+                assert_eq!(format, "yaml");
+                assert!(detect_dynamic_values);
+                assert!(!deduplicate);
+                assert_eq!(protocol, Some("http".to_string()));
+                assert_eq!(method, Some("GET".to_string()));
+                assert_eq!(path, Some("/api/users".to_string()));
+                assert_eq!(limit, 100);
+            }
+        }
+    }
+
+    #[test]
+    fn test_recorder_commands_convert_minimal() {
+        let cmd = RecorderCommands::Convert {
+            recording_id: None,
+            input: None,
+            output: PathBuf::from("output"),
+            format: "json".to_string(),
+            detect_dynamic_values: false,
+            deduplicate: true,
+            protocol: None,
+            method: None,
+            path: None,
+            limit: 50,
+        };
+
+        match cmd {
+            RecorderCommands::Convert {
+                recording_id,
+                input,
+                format,
+                detect_dynamic_values,
+                deduplicate,
+                protocol,
+                method,
+                path,
+                limit,
+                ..
+            } => {
+                assert!(recording_id.is_none());
+                assert!(input.is_none());
+                assert_eq!(format, "json");
+                assert!(!detect_dynamic_values);
+                assert!(deduplicate);
+                assert!(protocol.is_none());
+                assert!(method.is_none());
+                assert!(path.is_none());
+                assert_eq!(limit, 50);
+            }
+        }
+    }
+
+    #[test]
+    fn test_format_parsing() {
+        // Test format string conversion (mimics the logic in handle_convert)
+        let formats = vec![
+            ("json", "json"),
+            ("JSON", "json"),
+            ("Json", "json"),
+            ("yaml", "yaml"),
+            ("YAML", "yaml"),
+            ("Yaml", "yaml"),
+            ("other", "yaml"), // defaults to yaml
+        ];
+
+        for (input, expected) in formats {
+            let result = match input.to_lowercase().as_str() {
+                "json" => "json",
+                "yaml" | _ => "yaml",
+            };
+            assert_eq!(result, expected, "Format '{}' should map to '{}'", input, expected);
+        }
+    }
+
+    #[test]
+    fn test_protocol_parsing() {
+        // Test protocol string conversion (mimics the logic in handle_convert)
+        let valid_protocols = vec![
+            ("http", Protocol::Http),
+            ("HTTP", Protocol::Http),
+            ("grpc", Protocol::Grpc),
+            ("GRPC", Protocol::Grpc),
+            ("websocket", Protocol::WebSocket),
+            ("WebSocket", Protocol::WebSocket),
+            ("graphql", Protocol::GraphQL),
+            ("GraphQL", Protocol::GraphQL),
+        ];
+
+        for (input, expected) in valid_protocols {
+            let result = match input.to_lowercase().as_str() {
+                "http" => Some(Protocol::Http),
+                "grpc" => Some(Protocol::Grpc),
+                "websocket" => Some(Protocol::WebSocket),
+                "graphql" => Some(Protocol::GraphQL),
+                _ => None,
+            };
+            assert_eq!(result, Some(expected), "Protocol '{}' should parse correctly", input);
+        }
+    }
+
+    #[test]
+    fn test_invalid_protocol_parsing() {
+        let invalid_protocols = vec!["invalid", "tcp", "udp", "mqtt", "amqp"];
+
+        for proto in invalid_protocols {
+            let result = match proto.to_lowercase().as_str() {
+                "http" => Some(Protocol::Http),
+                "grpc" => Some(Protocol::Grpc),
+                "websocket" => Some(Protocol::WebSocket),
+                "graphql" => Some(Protocol::GraphQL),
+                _ => None,
+            };
+            assert!(result.is_none(), "Protocol '{}' should be invalid", proto);
+        }
+    }
+
+    #[test]
+    fn test_output_path_handling() {
+        // Test various output path scenarios
+        let paths = vec![
+            PathBuf::from("fixtures/"),
+            PathBuf::from("./output"),
+            PathBuf::from("/absolute/path"),
+            PathBuf::from("relative/path/file.yaml"),
+        ];
+
+        for path in paths {
+            // Just verify paths can be created
+            let cmd = RecorderCommands::Convert {
+                recording_id: None,
+                input: None,
+                output: path.clone(),
+                format: "yaml".to_string(),
+                detect_dynamic_values: true,
+                deduplicate: false,
+                protocol: None,
+                method: None,
+                path: None,
+                limit: 100,
+            };
+
+            match cmd {
+                RecorderCommands::Convert { output, .. } => {
+                    assert_eq!(output, path);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_http_methods() {
+        let methods = vec!["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"];
+
+        for method in methods {
+            let cmd = RecorderCommands::Convert {
+                recording_id: None,
+                input: None,
+                output: PathBuf::from("output"),
+                format: "yaml".to_string(),
+                detect_dynamic_values: true,
+                deduplicate: false,
+                protocol: None,
+                method: Some(method.to_string()),
+                path: None,
+                limit: 100,
+            };
+
+            match cmd {
+                RecorderCommands::Convert { method: m, .. } => {
+                    assert_eq!(m, Some(method.to_string()));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_path_filter_patterns() {
+        let path_patterns = vec![
+            "/api/users",
+            "/api/users/*",
+            "/api/v1/items/**",
+            "/health",
+            "/api/search?q=*",
+        ];
+
+        for pattern in path_patterns {
+            let cmd = RecorderCommands::Convert {
+                recording_id: None,
+                input: None,
+                output: PathBuf::from("output"),
+                format: "yaml".to_string(),
+                detect_dynamic_values: true,
+                deduplicate: false,
+                protocol: None,
+                method: None,
+                path: Some(pattern.to_string()),
+                limit: 100,
+            };
+
+            match cmd {
+                RecorderCommands::Convert { path, .. } => {
+                    assert_eq!(path, Some(pattern.to_string()));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_limit_values() {
+        let limits = vec![1, 10, 100, 1000, 10000];
+
+        for limit_val in limits {
+            let cmd = RecorderCommands::Convert {
+                recording_id: None,
+                input: None,
+                output: PathBuf::from("output"),
+                format: "yaml".to_string(),
+                detect_dynamic_values: true,
+                deduplicate: false,
+                protocol: None,
+                method: None,
+                path: None,
+                limit: limit_val,
+            };
+
+            match cmd {
+                RecorderCommands::Convert { limit, .. } => {
+                    assert_eq!(limit, limit_val);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_recording_id_formats() {
+        // Test various recording ID formats
+        let ids = vec![
+            "abc123".to_string(),
+            "uuid-like-id-12345".to_string(),
+            "123456".to_string(),
+            "rec_001".to_string(),
+            "a".repeat(100), // long ID
+        ];
+
+        for id in ids {
+            let cmd = RecorderCommands::Convert {
+                recording_id: Some(id.clone()),
+                input: None,
+                output: PathBuf::from("output.yaml"),
+                format: "yaml".to_string(),
+                detect_dynamic_values: true,
+                deduplicate: false,
+                protocol: None,
+                method: None,
+                path: None,
+                limit: 100,
+            };
+
+            match cmd {
+                RecorderCommands::Convert { recording_id, .. } => {
+                    assert_eq!(recording_id, Some(id));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_input_database_paths() {
+        let db_paths = vec![
+            PathBuf::from("recordings.db"),
+            PathBuf::from("./data/mockforge-recordings.db"),
+            PathBuf::from("/var/lib/mockforge/recordings.db"),
+        ];
+
+        for db_path in db_paths {
+            let cmd = RecorderCommands::Convert {
+                recording_id: None,
+                input: Some(db_path.clone()),
+                output: PathBuf::from("output"),
+                format: "yaml".to_string(),
+                detect_dynamic_values: true,
+                deduplicate: false,
+                protocol: None,
+                method: None,
+                path: None,
+                limit: 100,
+            };
+
+            match cmd {
+                RecorderCommands::Convert { input, .. } => {
+                    assert_eq!(input, Some(db_path));
+                }
+            }
+        }
+    }
+}

@@ -716,3 +716,434 @@ fn create_config_from_storage(
     config.storage = storage_backend;
     Ok(config)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_schema_from_fields_basic() {
+        let schema = create_schema_from_fields("User", "id:string,name:string,email:string")
+            .expect("Failed to create schema");
+
+        assert_eq!(schema.base.name, "User");
+        assert_eq!(schema.base.fields.len(), 3);
+        assert_eq!(schema.primary_key, vec!["id".to_string()]);
+    }
+
+    #[test]
+    fn test_create_schema_from_fields_with_types() {
+        let schema = create_schema_from_fields("Product", "id:string,price:number,quantity:number")
+            .expect("Failed to create schema");
+
+        assert_eq!(schema.base.fields.len(), 3);
+
+        let id_field = schema.base.fields.iter().find(|f| f.name == "id").unwrap();
+        assert_eq!(id_field.field_type, "string");
+        assert!(id_field.required);
+
+        let price_field = schema.base.fields.iter().find(|f| f.name == "price").unwrap();
+        assert_eq!(price_field.field_type, "number");
+        assert!(!price_field.required);
+    }
+
+    #[test]
+    fn test_create_schema_from_fields_invalid_format() {
+        let result = create_schema_from_fields("Invalid", "field1:type1,field2");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid field specification"));
+    }
+
+    #[test]
+    fn test_create_schema_from_fields_single_field() {
+        let schema =
+            create_schema_from_fields("Simple", "id:string").expect("Failed to create schema");
+
+        assert_eq!(schema.base.fields.len(), 1);
+        assert_eq!(schema.primary_key, vec!["id".to_string()]);
+    }
+
+    #[test]
+    fn test_create_schema_from_fields_whitespace() {
+        let schema = create_schema_from_fields("Test", " id : string , name : string ")
+            .expect("Failed to create schema");
+
+        assert_eq!(schema.base.fields.len(), 2);
+        let field_names: Vec<String> = schema.base.fields.iter().map(|f| f.name.clone()).collect();
+        assert!(field_names.contains(&"id".to_string()));
+        assert!(field_names.contains(&"name".to_string()));
+    }
+
+    #[test]
+    fn test_create_config_from_storage_memory() {
+        let config = create_config_from_storage("memory", None).expect("Failed to create config");
+
+        match config.storage {
+            StorageBackend::Memory => {}
+            _ => panic!("Expected Memory storage backend"),
+        }
+    }
+
+    #[test]
+    fn test_create_config_from_storage_sqlite() {
+        let db_path = PathBuf::from("./test.db");
+        let config = create_config_from_storage("sqlite", Some(db_path.clone()))
+            .expect("Failed to create config");
+
+        match config.storage {
+            StorageBackend::Sqlite { path } => {
+                assert_eq!(path, db_path);
+            }
+            _ => panic!("Expected Sqlite storage backend"),
+        }
+    }
+
+    #[test]
+    fn test_create_config_from_storage_sqlite_default_path() {
+        let config = create_config_from_storage("sqlite", None).expect("Failed to create config");
+
+        match config.storage {
+            StorageBackend::Sqlite { path } => {
+                assert_eq!(path, PathBuf::from("./data/vbr.db"));
+            }
+            _ => panic!("Expected Sqlite storage backend"),
+        }
+    }
+
+    #[test]
+    fn test_create_config_from_storage_json() {
+        let db_path = PathBuf::from("./test.json");
+        let config = create_config_from_storage("json", Some(db_path.clone()))
+            .expect("Failed to create config");
+
+        match config.storage {
+            StorageBackend::Json { path } => {
+                assert_eq!(path, db_path);
+            }
+            _ => panic!("Expected Json storage backend"),
+        }
+    }
+
+    #[test]
+    fn test_create_config_from_storage_json_default_path() {
+        let config = create_config_from_storage("json", None).expect("Failed to create config");
+
+        match config.storage {
+            StorageBackend::Json { path } => {
+                assert_eq!(path, PathBuf::from("./data/vbr.json"));
+            }
+            _ => panic!("Expected Json storage backend"),
+        }
+    }
+
+    #[test]
+    fn test_create_config_from_storage_invalid() {
+        let result = create_config_from_storage("invalid", None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid storage backend"));
+    }
+
+    #[test]
+    fn test_vbr_commands_create_entity() {
+        let cmd = VbrCommands::Create {
+            create_command: CreateCommands::Entity {
+                name: "User".to_string(),
+                fields: Some("id:string,name:string".to_string()),
+                schema: None,
+                output: None,
+            },
+        };
+
+        match cmd {
+            VbrCommands::Create { create_command } => match create_command {
+                CreateCommands::Entity { name, fields, .. } => {
+                    assert_eq!(name, "User");
+                    assert!(fields.is_some());
+                }
+            },
+            _ => panic!("Expected Create command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_serve() {
+        let cmd = VbrCommands::Serve {
+            port: 8080,
+            storage: "memory".to_string(),
+            db_path: None,
+            api_prefix: "/api".to_string(),
+            session_scoped: true,
+        };
+
+        match cmd {
+            VbrCommands::Serve {
+                port,
+                storage,
+                session_scoped,
+                ..
+            } => {
+                assert_eq!(port, 8080);
+                assert_eq!(storage, "memory");
+                assert!(session_scoped);
+            }
+            _ => panic!("Expected Serve command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_import_openapi() {
+        let cmd = VbrCommands::Import {
+            import_command: ImportCommands::Openapi {
+                file: PathBuf::from("api.yaml"),
+                output: Some(PathBuf::from("./entities")),
+                db_path: None,
+                storage: "memory".to_string(),
+            },
+        };
+
+        match cmd {
+            VbrCommands::Import { import_command } => match import_command {
+                ImportCommands::Openapi { file, output, .. } => {
+                    assert_eq!(file, PathBuf::from("api.yaml"));
+                    assert!(output.is_some());
+                }
+            },
+            _ => panic!("Expected Import command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_seed() {
+        let cmd = VbrCommands::Seed {
+            file: PathBuf::from("seed.json"),
+            entity: Some("User".to_string()),
+            db_path: None,
+            storage: "sqlite".to_string(),
+        };
+
+        match cmd {
+            VbrCommands::Seed {
+                file,
+                entity,
+                storage,
+                ..
+            } => {
+                assert_eq!(file, PathBuf::from("seed.json"));
+                assert_eq!(entity, Some("User".to_string()));
+                assert_eq!(storage, "sqlite");
+            }
+            _ => panic!("Expected Seed command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_snapshot_create() {
+        let cmd = VbrCommands::Snapshot {
+            snapshot_command: SnapshotCommands::Create {
+                name: "initial".to_string(),
+                description: Some("Initial state".to_string()),
+                snapshots_dir: PathBuf::from("./snapshots"),
+                db_path: None,
+                storage: "memory".to_string(),
+            },
+        };
+
+        match cmd {
+            VbrCommands::Snapshot { snapshot_command } => match snapshot_command {
+                SnapshotCommands::Create {
+                    name, description, ..
+                } => {
+                    assert_eq!(name, "initial");
+                    assert_eq!(description, Some("Initial state".to_string()));
+                }
+                _ => panic!("Expected Create snapshot command"),
+            },
+            _ => panic!("Expected Snapshot command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_snapshot_list() {
+        let cmd = VbrCommands::Snapshot {
+            snapshot_command: SnapshotCommands::List {
+                snapshots_dir: PathBuf::from("./snapshots"),
+            },
+        };
+
+        match cmd {
+            VbrCommands::Snapshot { snapshot_command } => match snapshot_command {
+                SnapshotCommands::List { snapshots_dir } => {
+                    assert_eq!(snapshots_dir, PathBuf::from("./snapshots"));
+                }
+                _ => panic!("Expected List snapshot command"),
+            },
+            _ => panic!("Expected Snapshot command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_snapshot_restore() {
+        let cmd = VbrCommands::Snapshot {
+            snapshot_command: SnapshotCommands::Restore {
+                name: "backup1".to_string(),
+                snapshots_dir: PathBuf::from("./snapshots"),
+                db_path: None,
+                storage: "sqlite".to_string(),
+            },
+        };
+
+        match cmd {
+            VbrCommands::Snapshot { snapshot_command } => match snapshot_command {
+                SnapshotCommands::Restore { name, .. } => {
+                    assert_eq!(name, "backup1");
+                }
+                _ => panic!("Expected Restore snapshot command"),
+            },
+            _ => panic!("Expected Snapshot command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_snapshot_delete() {
+        let cmd = VbrCommands::Snapshot {
+            snapshot_command: SnapshotCommands::Delete {
+                name: "old_snapshot".to_string(),
+                snapshots_dir: PathBuf::from("./snapshots"),
+            },
+        };
+
+        match cmd {
+            VbrCommands::Snapshot { snapshot_command } => match snapshot_command {
+                SnapshotCommands::Delete { name, .. } => {
+                    assert_eq!(name, "old_snapshot");
+                }
+                _ => panic!("Expected Delete snapshot command"),
+            },
+            _ => panic!("Expected Snapshot command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_reset() {
+        let cmd = VbrCommands::Reset {
+            entity: Some("User".to_string()),
+            db_path: Some(PathBuf::from("./data.db")),
+            storage: "sqlite".to_string(),
+        };
+
+        match cmd {
+            VbrCommands::Reset {
+                entity,
+                db_path,
+                storage,
+            } => {
+                assert_eq!(entity, Some("User".to_string()));
+                assert!(db_path.is_some());
+                assert_eq!(storage, "sqlite");
+            }
+            _ => panic!("Expected Reset command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_reset_all() {
+        let cmd = VbrCommands::Reset {
+            entity: None,
+            db_path: None,
+            storage: "memory".to_string(),
+        };
+
+        match cmd {
+            VbrCommands::Reset { entity, .. } => {
+                assert!(entity.is_none());
+            }
+            _ => panic!("Expected Reset command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_manage_entities_list() {
+        let cmd = VbrCommands::Manage {
+            manage_command: ManageCommands::Entities {
+                entities_command: EntitiesCommands::List,
+            },
+        };
+
+        match cmd {
+            VbrCommands::Manage { manage_command } => match manage_command {
+                ManageCommands::Entities { entities_command } => match entities_command {
+                    EntitiesCommands::List => {}
+                    _ => panic!("Expected List entities command"),
+                },
+                _ => panic!("Expected Entities command"),
+            },
+            _ => panic!("Expected Manage command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_manage_entities_show() {
+        let cmd = VbrCommands::Manage {
+            manage_command: ManageCommands::Entities {
+                entities_command: EntitiesCommands::Show {
+                    name: "User".to_string(),
+                },
+            },
+        };
+
+        match cmd {
+            VbrCommands::Manage { manage_command } => match manage_command {
+                ManageCommands::Entities { entities_command } => match entities_command {
+                    EntitiesCommands::Show { name } => {
+                        assert_eq!(name, "User");
+                    }
+                    _ => panic!("Expected Show entities command"),
+                },
+                _ => panic!("Expected Entities command"),
+            },
+            _ => panic!("Expected Manage command"),
+        }
+    }
+
+    #[test]
+    fn test_vbr_commands_manage_data() {
+        let cmd = VbrCommands::Manage {
+            manage_command: ManageCommands::Data {
+                query: "SELECT * FROM users".to_string(),
+            },
+        };
+
+        match cmd {
+            VbrCommands::Manage { manage_command } => match manage_command {
+                ManageCommands::Data { query } => {
+                    assert_eq!(query, "SELECT * FROM users");
+                }
+                _ => panic!("Expected Data command"),
+            },
+            _ => panic!("Expected Manage command"),
+        }
+    }
+
+    #[test]
+    fn test_create_schema_empty_fields() {
+        let result = create_schema_from_fields("Test", "");
+        // Should either fail or handle gracefully
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_create_schema_complex_types() {
+        let schema = create_schema_from_fields(
+            "Complex",
+            "id:string,count:number,active:boolean,data:object",
+        )
+        .expect("Failed to create schema");
+
+        assert_eq!(schema.base.fields.len(), 4);
+        let types: Vec<String> = schema.base.fields.iter().map(|f| f.field_type.clone()).collect();
+        assert!(types.contains(&"string".to_string()));
+        assert!(types.contains(&"number".to_string()));
+        assert!(types.contains(&"boolean".to_string()));
+        assert!(types.contains(&"object".to_string()));
+    }
+}

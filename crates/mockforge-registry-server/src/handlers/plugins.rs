@@ -362,7 +362,7 @@ pub async fn publish_plugin(
     crate::validation::validate_wasm_file(&wasm_bytes, request.file_size as u64)?;
 
     // Verify checksum matches uploaded data
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(&wasm_bytes);
     let calculated_checksum = hex::encode(hasher.finalize());

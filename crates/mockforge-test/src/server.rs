@@ -296,6 +296,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn test_builder_creation() {
@@ -304,5 +305,112 @@ mod tests {
 
         // Builder should compile without errors
         assert!(true);
+    }
+
+    #[test]
+    fn test_builder_default() {
+        let _builder = MockForgeServerBuilder::default();
+        // Default builder should be created
+    }
+
+    #[test]
+    fn test_builder_http_port() {
+        let builder = MockForgeServer::builder().http_port(8080);
+        // Chain continues
+        let _builder = builder.http_port(9090);
+    }
+
+    #[test]
+    fn test_builder_ws_port() {
+        let _builder = MockForgeServer::builder().ws_port(3001);
+    }
+
+    #[test]
+    fn test_builder_grpc_port() {
+        let _builder = MockForgeServer::builder().grpc_port(50051);
+    }
+
+    #[test]
+    fn test_builder_admin_port() {
+        let _builder = MockForgeServer::builder().admin_port(3002);
+    }
+
+    #[test]
+    fn test_builder_metrics_port() {
+        let _builder = MockForgeServer::builder().metrics_port(9090);
+    }
+
+    #[test]
+    fn test_builder_spec_file() {
+        let _builder = MockForgeServer::builder().spec_file("/path/to/spec.yaml");
+    }
+
+    #[test]
+    fn test_builder_workspace_dir() {
+        let _builder = MockForgeServer::builder().workspace_dir("/path/to/workspace");
+    }
+
+    #[test]
+    fn test_builder_profile() {
+        let _builder = MockForgeServer::builder().profile("production");
+    }
+
+    #[test]
+    fn test_builder_enable_admin() {
+        let _builder = MockForgeServer::builder().enable_admin(true);
+        let _builder2 = MockForgeServer::builder().enable_admin(false);
+    }
+
+    #[test]
+    fn test_builder_enable_metrics() {
+        let _builder = MockForgeServer::builder().enable_metrics(true);
+        let _builder2 = MockForgeServer::builder().enable_metrics(false);
+    }
+
+    #[test]
+    fn test_builder_extra_arg() {
+        let _builder = MockForgeServer::builder().extra_arg("--verbose");
+    }
+
+    #[test]
+    fn test_builder_health_timeout() {
+        let _builder = MockForgeServer::builder().health_timeout(Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_builder_working_dir() {
+        let _builder = MockForgeServer::builder().working_dir("/tmp/test");
+    }
+
+    #[test]
+    fn test_builder_env_var() {
+        let _builder = MockForgeServer::builder().env_var("RUST_LOG", "debug");
+    }
+
+    #[test]
+    fn test_builder_binary_path() {
+        let _builder = MockForgeServer::builder().binary_path("/usr/local/bin/mockforge");
+    }
+
+    #[test]
+    fn test_builder_full_chain() {
+        let _builder = MockForgeServer::builder()
+            .http_port(3000)
+            .ws_port(3001)
+            .grpc_port(50051)
+            .admin_port(3002)
+            .metrics_port(9090)
+            .spec_file("/spec.yaml")
+            .workspace_dir("/workspace")
+            .profile("test")
+            .enable_admin(true)
+            .enable_metrics(true)
+            .extra_arg("--verbose")
+            .health_timeout(Duration::from_secs(30))
+            .working_dir("/working")
+            .env_var("KEY", "VALUE")
+            .binary_path("/bin/mockforge");
+
+        // Full builder chain should compile
     }
 }

@@ -634,3 +634,40 @@ async fn execute_fixture_command(command: FixtureCommands) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_amqp_commands_serve_variant() {
+        let _cmd = AmqpCommands::Serve {
+            port: 5672,
+            host: "127.0.0.1".to_string(),
+            config: None,
+        };
+    }
+
+    #[test]
+    fn test_amqp_commands_bind_variant() {
+        let _cmd = AmqpCommands::Bind {
+            exchange: "test-exchange".to_string(),
+            queue: "test-queue".to_string(),
+            routing_key: "test.key".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_amqp_commands_unbind_variant() {
+        let _cmd = AmqpCommands::Unbind {
+            exchange: "test-exchange".to_string(),
+            queue: "test-queue".to_string(),
+            routing_key: "test.key".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_amqp_commands_list_bindings_variant() {
+        let _cmd = AmqpCommands::ListBindings;
+    }
+}

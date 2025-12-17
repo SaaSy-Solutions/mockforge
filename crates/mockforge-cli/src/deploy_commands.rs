@@ -550,3 +550,360 @@ async fn stop_deployment(_config_path: Option<PathBuf>) -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deploy_subcommand_deploy() {
+        let cmd = DeploySubcommand::Deploy {
+            config: Some(PathBuf::from("config.yaml")),
+            spec: Some(PathBuf::from("api.yaml")),
+            auto_tunnel: true,
+            custom_domain: Some("api.example.com".to_string()),
+            production_preset: false,
+            start_server: false,
+            dry_run: true,
+        };
+
+        match cmd {
+            DeploySubcommand::Deploy {
+                config,
+                spec,
+                auto_tunnel,
+                custom_domain,
+                production_preset,
+                start_server,
+                dry_run,
+            } => {
+                assert_eq!(config, Some(PathBuf::from("config.yaml")));
+                assert_eq!(spec, Some(PathBuf::from("api.yaml")));
+                assert!(auto_tunnel);
+                assert_eq!(custom_domain, Some("api.example.com".to_string()));
+                assert!(!production_preset);
+                assert!(!start_server);
+                assert!(dry_run);
+            }
+            _ => panic!("Expected Deploy command"),
+        }
+    }
+
+    #[test]
+    fn test_deploy_subcommand_status() {
+        let cmd = DeploySubcommand::Status {
+            config: Some(PathBuf::from("config.yaml")),
+        };
+
+        match cmd {
+            DeploySubcommand::Status { config } => {
+                assert_eq!(config, Some(PathBuf::from("config.yaml")));
+            }
+            _ => panic!("Expected Status command"),
+        }
+    }
+
+    #[test]
+    fn test_deploy_subcommand_stop() {
+        let cmd = DeploySubcommand::Stop { config: None };
+
+        match cmd {
+            DeploySubcommand::Stop { config } => {
+                assert!(config.is_none());
+            }
+            _ => panic!("Expected Stop command"),
+        }
+    }
+
+    #[test]
+    fn test_deployment_metadata_serialization() {
+        let metadata = DeploymentMetadata {
+            pid: Some(1234),
+            http_port: 3000,
+            admin_port: Some(9080),
+            tunnel_url: Some("https://abc123.ngrok.io".to_string()),
+            config_path: "mockforge.yaml".to_string(),
+            spec_path: Some("api.yaml".to_string()),
+            deployed_at: "2025-01-01T00:00:00Z".to_string(),
+        };
+
+        let json = serde_json::to_string(&metadata).expect("Failed to serialize");
+        assert!(json.contains("1234"));
+        assert!(json.contains("3000"));
+        assert!(json.contains("ngrok.io"));
+    }
+
+    #[test]
+    fn test_deployment_metadata_deserialization() {
+        let json = r#"{
+            "pid": 5678,
+            "http_port": 8080,
+            "admin_port": 9090,
+            "tunnel_url": "https://test.localtunnel.me",
+            "config_path": "config.yaml",
+            "spec_path": "openapi.json",
+            "deployed_at": "2025-01-15T12:00:00Z"
+        }"#;
+
+        let metadata: DeploymentMetadata =
+            serde_json::from_str(json).expect("Failed to deserialize");
+
+        assert_eq!(metadata.pid, Some(5678));
+        assert_eq!(metadata.http_port, 8080);
+        assert_eq!(metadata.admin_port, Some(9090));
+        assert_eq!(metadata.tunnel_url, Some("https://test.localtunnel.me".to_string()));
+        assert_eq!(metadata.config_path, "config.yaml");
+        assert_eq!(metadata.spec_path, Some("openapi.json".to_string()));
+    }
+
+    #[test]
+    fn test_deployment_metadata_optional_fields() {
+        let metadata = DeploymentMetadata {
+            pid: None,
+            http_port: 3000,
+            admin_port: None,
+            tunnel_url: None,
+            config_path: "config.yaml".to_string(),
+            spec_path: None,
+            deployed_at: "2025-01-01T00:00:00Z".to_string(),
+        };
+
+        assert!(metadata.pid.is_none());
+        assert!(metadata.admin_port.is_none());
+        assert!(metadata.tunnel_url.is_none());
+        assert!(metadata.spec_path.is_none());
+    }
+
+    #[test]
+    fn test_deployment_metadata_debug_format() {
+        let metadata = DeploymentMetadata {
+            pid: Some(9999),
+            http_port: 4000,
+            admin_port: Some(8080),
+            tunnel_url: None,
+            config_path: "test.yaml".to_string(),
+            spec_path: Some("spec.yaml".to_string()),
+            deployed_at: "2025-01-01T00:00:00Z".to_string(),
+        };
+
+        let debug_str = format!("{:?}", metadata);
+        assert!(debug_str.contains("9999"));
+        assert!(debug_str.contains("4000"));
+        assert!(debug_str.contains("test.yaml"));
+    }
+
+    #[test]
+    fn test_deploy_with_production_preset() {
+        let cmd = DeploySubcommand::Deploy {
+            config: None,
+            spec: Some(PathBuf::from("api.yaml")),
+            auto_tunnel: false,
+            custom_domain: None,
+            production_preset: true,
+            start_server: false,
+            dry_run: true,
+        };
+
+        match cmd {
+            DeploySubcommand::Deploy {
+                production_preset, ..
+            } => {
+                assert!(production_preset);
+            }
+            _ => panic!("Expected Deploy command"),
+        }
+    }
+
+    #[test]
+    fn test_deploy_without_config() {
+        let cmd = DeploySubcommand::Deploy {
+            config: None,
+            spec: Some(PathBuf::from("api.yaml")),
+            auto_tunnel: false,
+            custom_domain: None,
+            production_preset: false,
+            start_server: false,
+            dry_run: false,
+        };
+
+        match cmd {
+            DeploySubcommand::Deploy { config, .. } => {
+                assert!(config.is_none());
+            }
+            _ => panic!("Expected Deploy command"),
+        }
+    }
+
+    #[test]
+    fn test_deploy_with_custom_domain() {
+        let domain = "api.mycompany.com";
+        let cmd = DeploySubcommand::Deploy {
+            config: None,
+            spec: None,
+            auto_tunnel: false,
+            custom_domain: Some(domain.to_string()),
+            production_preset: false,
+            start_server: false,
+            dry_run: false,
+        };
+
+        match cmd {
+            DeploySubcommand::Deploy { custom_domain, .. } => {
+                assert_eq!(custom_domain, Some(domain.to_string()));
+            }
+            _ => panic!("Expected Deploy command"),
+        }
+    }
+
+    #[test]
+    fn test_deploy_start_server_flag() {
+        let cmd = DeploySubcommand::Deploy {
+            config: None,
+            spec: None,
+            auto_tunnel: false,
+            custom_domain: None,
+            production_preset: false,
+            start_server: true,
+            dry_run: false,
+        };
+
+        match cmd {
+            DeploySubcommand::Deploy {
+                start_server,
+                dry_run,
+                ..
+            } => {
+                assert!(start_server);
+                assert!(!dry_run);
+            }
+            _ => panic!("Expected Deploy command"),
+        }
+    }
+
+    #[test]
+    fn test_deploy_dry_run_flag() {
+        let cmd = DeploySubcommand::Deploy {
+            config: None,
+            spec: None,
+            auto_tunnel: false,
+            custom_domain: None,
+            production_preset: false,
+            start_server: false,
+            dry_run: true,
+        };
+
+        match cmd {
+            DeploySubcommand::Deploy { dry_run, .. } => {
+                assert!(dry_run);
+            }
+            _ => panic!("Expected Deploy command"),
+        }
+    }
+
+    #[test]
+    fn test_deployment_metadata_with_tunnel() {
+        let metadata = DeploymentMetadata {
+            pid: Some(1234),
+            http_port: 3000,
+            admin_port: Some(9080),
+            tunnel_url: Some("https://mock-api.ngrok.io".to_string()),
+            config_path: "config.yaml".to_string(),
+            spec_path: Some("openapi.yaml".to_string()),
+            deployed_at: "2025-01-01T12:00:00Z".to_string(),
+        };
+
+        assert!(metadata.tunnel_url.is_some());
+        assert!(metadata.tunnel_url.unwrap().contains("ngrok.io"));
+    }
+
+    #[test]
+    fn test_deployment_metadata_timestamp_format() {
+        let metadata = DeploymentMetadata {
+            pid: None,
+            http_port: 3000,
+            admin_port: None,
+            tunnel_url: None,
+            config_path: "config.yaml".to_string(),
+            spec_path: None,
+            deployed_at: "2025-01-15T14:30:00+00:00".to_string(),
+        };
+
+        // Check that timestamp is in RFC3339 format (or similar)
+        assert!(metadata.deployed_at.contains("T"));
+        assert!(metadata.deployed_at.contains(":"));
+    }
+
+    #[test]
+    fn test_deploy_all_flags_enabled() {
+        let cmd = DeploySubcommand::Deploy {
+            config: Some(PathBuf::from("custom.yaml")),
+            spec: Some(PathBuf::from("spec.yaml")),
+            auto_tunnel: true,
+            custom_domain: Some("api.test.com".to_string()),
+            production_preset: true,
+            start_server: true,
+            dry_run: false,
+        };
+
+        match cmd {
+            DeploySubcommand::Deploy {
+                config,
+                spec,
+                auto_tunnel,
+                custom_domain,
+                production_preset,
+                start_server,
+                dry_run,
+            } => {
+                assert!(config.is_some());
+                assert!(spec.is_some());
+                assert!(auto_tunnel);
+                assert!(custom_domain.is_some());
+                assert!(production_preset);
+                assert!(start_server);
+                assert!(!dry_run);
+            }
+            _ => panic!("Expected Deploy command"),
+        }
+    }
+
+    #[test]
+    fn test_deployment_metadata_ports() {
+        let metadata = DeploymentMetadata {
+            pid: Some(1),
+            http_port: 8080,
+            admin_port: Some(8081),
+            tunnel_url: None,
+            config_path: "config.yaml".to_string(),
+            spec_path: None,
+            deployed_at: "2025-01-01T00:00:00Z".to_string(),
+        };
+
+        assert_eq!(metadata.http_port, 8080);
+        assert_eq!(metadata.admin_port, Some(8081));
+    }
+
+    #[test]
+    fn test_pathbuf_fields_in_deploy() {
+        let config_path = PathBuf::from("/path/to/config.yaml");
+        let spec_path = PathBuf::from("/path/to/spec.json");
+
+        let cmd = DeploySubcommand::Deploy {
+            config: Some(config_path.clone()),
+            spec: Some(spec_path.clone()),
+            auto_tunnel: false,
+            custom_domain: None,
+            production_preset: false,
+            start_server: false,
+            dry_run: false,
+        };
+
+        match cmd {
+            DeploySubcommand::Deploy { config, spec, .. } => {
+                assert_eq!(config, Some(config_path));
+                assert_eq!(spec, Some(spec_path));
+            }
+            _ => panic!("Expected Deploy command"),
+        }
+    }
+}

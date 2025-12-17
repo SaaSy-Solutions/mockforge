@@ -2,18 +2,20 @@
 //!
 //! Provides endpoints for managing organization settings, usage stats, and billing info
 
+use anyhow;
 use axum::{
     extract::{Path, State},
     Json,
 };
-use anyhow;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{Organization, OrgMember, OrgRole, OrgSetting, BYOKConfig, OrgAiSettings, User, Subscription},
+    models::{
+        BYOKConfig, OrgAiSettings, OrgMember, OrgRole, OrgSetting, Organization, Subscription, User,
+    },
     AppState,
 };
 
@@ -44,9 +46,8 @@ pub async fn get_organization_settings(
     }
 
     // Get BYOK settings (if any exist)
-    let byok_setting = OrgSetting::get(pool, org_id, "byok")
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let byok_setting =
+        OrgSetting::get(pool, org_id, "byok").await.map_err(|e| ApiError::Database(e))?;
 
     let (byok_enabled, byok_provider) = if let Some(setting) = &byok_setting {
         let config: Result<BYOKConfig, _> = serde_json::from_value(setting.setting_value.clone());
@@ -114,8 +115,9 @@ pub async fn update_organization_settings(
             enabled: true,
         };
 
-        let config_value = serde_json::to_value(&byok_config)
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to serialize BYOK config: {}", e)))?;
+        let config_value = serde_json::to_value(&byok_config).map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Failed to serialize BYOK config: {}", e))
+        })?;
 
         OrgSetting::set(pool, org_id, "byok", config_value)
             .await
@@ -128,9 +130,8 @@ pub async fn update_organization_settings(
         .map_err(|e| ApiError::Database(e))?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let byok_setting = OrgSetting::get(pool, org_id, "byok")
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let byok_setting =
+        OrgSetting::get(pool, org_id, "byok").await.map_err(|e| ApiError::Database(e))?;
 
     let (byok_enabled, byok_provider) = if let Some(setting) = &byok_setting {
         let config: Result<BYOKConfig, _> = serde_json::from_value(setting.setting_value.clone());
@@ -183,54 +184,49 @@ pub async fn get_organization_usage(
     }
 
     // Get usage statistics
-    let total_requests: (Option<i64>,) = sqlx::query_as(
-        "SELECT SUM(request_count) FROM usage_stats WHERE org_id = $1"
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let total_requests: (Option<i64>,) =
+        sqlx::query_as("SELECT SUM(request_count) FROM usage_stats WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     let total_storage_gb: (Option<f64>,) = sqlx::query_as(
-        "SELECT SUM(storage_bytes) / 1073741824.0 FROM usage_stats WHERE org_id = $1"
+        "SELECT SUM(storage_bytes) / 1073741824.0 FROM usage_stats WHERE org_id = $1",
     )
     .bind(org_id)
     .fetch_one(pool)
     .await
     .map_err(|e| ApiError::Database(e))?;
 
-    let total_ai_tokens: (Option<i64>,) = sqlx::query_as(
-        "SELECT SUM(ai_tokens_used) FROM usage_stats WHERE org_id = $1"
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let total_ai_tokens: (Option<i64>,) =
+        sqlx::query_as("SELECT SUM(ai_tokens_used) FROM usage_stats WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     // Get feature usage counts
-    let hosted_mocks_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM hosted_mocks WHERE org_id = $1"
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let hosted_mocks_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM hosted_mocks WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
-    let plugins_published: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM plugins WHERE org_id = $1"
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let plugins_published: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM plugins WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
-    let api_tokens_count: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM api_tokens WHERE org_id = $1"
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let api_tokens_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM api_tokens WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     Ok(Json(OrganizationUsageResponse {
         org_id: org.id,
@@ -401,8 +397,9 @@ pub async fn update_organization_ai_settings(
     }
 
     // Save AI settings
-    let config_value = serde_json::to_value(&request)
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to serialize AI settings: {}", e)))?;
+    let config_value = serde_json::to_value(&request).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to serialize AI settings: {}", e))
+    })?;
 
     OrgSetting::set(pool, org_id, "ai_settings", config_value)
         .await

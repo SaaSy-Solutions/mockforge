@@ -332,7 +332,9 @@ async fn fetch_chain_details(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::SocketAddr;
+    use mockforge_core::graph::Protocol;
+
+    // ==================== GraphBuilder Tests ====================
 
     #[test]
     fn test_graph_builder_creation() {
@@ -341,5 +343,258 @@ mod tests {
         assert_eq!(graph.nodes.len(), 0);
         assert_eq!(graph.edges.len(), 0);
         assert_eq!(graph.clusters.len(), 0);
+    }
+
+    #[test]
+    fn test_graph_builder_add_endpoint() {
+        let mut builder = GraphBuilder::new();
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("enabled".to_string(), Value::Bool(true));
+
+        builder.add_endpoint(
+            "endpoint-1".to_string(),
+            "Test Endpoint".to_string(),
+            Protocol::Http,
+            metadata,
+        );
+
+        let graph = builder.build();
+        assert_eq!(graph.nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_graph_builder_multiple_endpoints() {
+        let mut builder = GraphBuilder::new();
+
+        for i in 0..5 {
+            let metadata = std::collections::HashMap::new();
+            builder.add_endpoint(
+                format!("endpoint-{}", i),
+                format!("Endpoint {}", i),
+                Protocol::Http,
+                metadata,
+            );
+        }
+
+        let graph = builder.build();
+        assert_eq!(graph.nodes.len(), 5);
+    }
+
+    #[test]
+    fn test_graph_builder_different_protocols() {
+        let mut builder = GraphBuilder::new();
+        let metadata = std::collections::HashMap::new();
+
+        let protocols = vec![
+            Protocol::Http,
+            Protocol::Grpc,
+            Protocol::Websocket,
+            Protocol::Graphql,
+            Protocol::Mqtt,
+        ];
+
+        for (i, protocol) in protocols.into_iter().enumerate() {
+            builder.add_endpoint(
+                format!("endpoint-{}", i),
+                format!("Protocol {}", i),
+                protocol,
+                metadata.clone(),
+            );
+        }
+
+        let graph = builder.build();
+        assert_eq!(graph.nodes.len(), 5);
+    }
+
+    #[test]
+    fn test_graph_builder_with_metadata() {
+        let mut builder = GraphBuilder::new();
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("method".to_string(), Value::String("GET".to_string()));
+        metadata.insert("path".to_string(), Value::String("/api/users".to_string()));
+        metadata.insert("enabled".to_string(), Value::Bool(true));
+
+        builder.add_endpoint(
+            "http-endpoint".to_string(),
+            "HTTP API".to_string(),
+            Protocol::Http,
+            metadata,
+        );
+
+        let graph = builder.build();
+        assert_eq!(graph.nodes.len(), 1);
+    }
+
+    // ==================== Protocol Conversion Tests ====================
+
+    #[test]
+    fn test_protocol_http() {
+        let protocol = Protocol::Http;
+        assert!(matches!(protocol, Protocol::Http));
+    }
+
+    #[test]
+    fn test_protocol_grpc() {
+        let protocol = Protocol::Grpc;
+        assert!(matches!(protocol, Protocol::Grpc));
+    }
+
+    #[test]
+    fn test_protocol_websocket() {
+        let protocol = Protocol::Websocket;
+        assert!(matches!(protocol, Protocol::Websocket));
+    }
+
+    #[test]
+    fn test_protocol_graphql() {
+        let protocol = Protocol::Graphql;
+        assert!(matches!(protocol, Protocol::Graphql));
+    }
+
+    #[test]
+    fn test_protocol_mqtt() {
+        let protocol = Protocol::Mqtt;
+        assert!(matches!(protocol, Protocol::Mqtt));
+    }
+
+    #[test]
+    fn test_protocol_smtp() {
+        let protocol = Protocol::Smtp;
+        assert!(matches!(protocol, Protocol::Smtp));
+    }
+
+    #[test]
+    fn test_protocol_kafka() {
+        let protocol = Protocol::Kafka;
+        assert!(matches!(protocol, Protocol::Kafka));
+    }
+
+    #[test]
+    fn test_protocol_amqp() {
+        let protocol = Protocol::Amqp;
+        assert!(matches!(protocol, Protocol::Amqp));
+    }
+
+    #[test]
+    fn test_protocol_ftp() {
+        let protocol = Protocol::Ftp;
+        assert!(matches!(protocol, Protocol::Ftp));
+    }
+
+    // ==================== Graph Structure Tests ====================
+
+    #[test]
+    fn test_graph_empty_clusters() {
+        let builder = GraphBuilder::new();
+        let graph = builder.build();
+        assert!(graph.clusters.is_empty());
+    }
+
+    #[test]
+    fn test_graph_empty_edges() {
+        let builder = GraphBuilder::new();
+        let graph = builder.build();
+        assert!(graph.edges.is_empty());
+    }
+
+    // ==================== Edge Cases ====================
+
+    #[test]
+    fn test_graph_builder_empty_metadata() {
+        let mut builder = GraphBuilder::new();
+        let metadata = std::collections::HashMap::new();
+
+        builder.add_endpoint(
+            "minimal".to_string(),
+            "Minimal Endpoint".to_string(),
+            Protocol::Http,
+            metadata,
+        );
+
+        let graph = builder.build();
+        assert_eq!(graph.nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_graph_builder_unicode_names() {
+        let mut builder = GraphBuilder::new();
+        let metadata = std::collections::HashMap::new();
+
+        builder.add_endpoint(
+            "unicode-日本語".to_string(),
+            "ユニコード".to_string(),
+            Protocol::Http,
+            metadata,
+        );
+
+        let graph = builder.build();
+        assert_eq!(graph.nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_graph_builder_special_characters() {
+        let mut builder = GraphBuilder::new();
+        let metadata = std::collections::HashMap::new();
+
+        builder.add_endpoint(
+            "special-!@#$%".to_string(),
+            "Special <>&'\"".to_string(),
+            Protocol::Http,
+            metadata,
+        );
+
+        let graph = builder.build();
+        assert_eq!(graph.nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_graph_builder_long_names() {
+        let mut builder = GraphBuilder::new();
+        let metadata = std::collections::HashMap::new();
+        let long_id = "a".repeat(1000);
+        let long_name = "b".repeat(1000);
+
+        builder.add_endpoint(long_id, long_name, Protocol::Http, metadata);
+
+        let graph = builder.build();
+        assert_eq!(graph.nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_graph_builder_complex_metadata() {
+        let mut builder = GraphBuilder::new();
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("nested".to_string(), serde_json::json!({"key": {"inner": "value"}}));
+        metadata.insert("array".to_string(), serde_json::json!([1, 2, 3]));
+        metadata.insert("null".to_string(), Value::Null);
+
+        builder.add_endpoint(
+            "complex".to_string(),
+            "Complex Metadata".to_string(),
+            Protocol::Http,
+            metadata,
+        );
+
+        let graph = builder.build();
+        assert_eq!(graph.nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_graph_builder_duplicate_ids() {
+        let mut builder = GraphBuilder::new();
+        let metadata = std::collections::HashMap::new();
+
+        // Add same ID twice - behavior depends on implementation
+        builder.add_endpoint(
+            "same-id".to_string(),
+            "First".to_string(),
+            Protocol::Http,
+            metadata.clone(),
+        );
+        builder.add_endpoint("same-id".to_string(), "Second".to_string(), Protocol::Grpc, metadata);
+
+        let graph = builder.build();
+        // Either 1 (replaced) or 2 (both added) depending on implementation
+        assert!(graph.nodes.len() >= 1);
     }
 }

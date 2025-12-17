@@ -501,3 +501,408 @@ pub mod utils {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== EncryptionAlgorithm Tests ====================
+
+    #[test]
+    fn test_encryption_algorithm_display_aes() {
+        let algo = EncryptionAlgorithm::Aes256Gcm;
+        assert_eq!(format!("{}", algo), "AES-256-GCM");
+    }
+
+    #[test]
+    fn test_encryption_algorithm_display_chacha() {
+        let algo = EncryptionAlgorithm::ChaCha20Poly1305;
+        assert_eq!(format!("{}", algo), "ChaCha20-Poly1305");
+    }
+
+    #[test]
+    fn test_encryption_algorithm_equality() {
+        let algo1 = EncryptionAlgorithm::Aes256Gcm;
+        let algo2 = EncryptionAlgorithm::Aes256Gcm;
+        let algo3 = EncryptionAlgorithm::ChaCha20Poly1305;
+
+        assert_eq!(algo1, algo2);
+        assert_ne!(algo1, algo3);
+    }
+
+    #[test]
+    fn test_encryption_algorithm_clone() {
+        let algo = EncryptionAlgorithm::Aes256Gcm;
+        let cloned = algo.clone();
+        assert_eq!(algo, cloned);
+    }
+
+    #[test]
+    fn test_encryption_algorithm_debug() {
+        let algo = EncryptionAlgorithm::Aes256Gcm;
+        let debug_str = format!("{:?}", algo);
+        assert!(debug_str.contains("Aes256Gcm"));
+    }
+
+    // ==================== EncryptionKey Tests ====================
+
+    #[test]
+    fn test_encryption_key_new_valid() {
+        let key_bytes = vec![0u8; 32];
+        let key = EncryptionKey::new(key_bytes, EncryptionAlgorithm::Aes256Gcm);
+        assert!(key.is_ok());
+        assert_eq!(key.unwrap().len(), 32);
+    }
+
+    #[test]
+    fn test_encryption_key_new_invalid_length() {
+        let key_bytes = vec![0u8; 16]; // Wrong length for AES-256
+        let key = EncryptionKey::new(key_bytes, EncryptionAlgorithm::Aes256Gcm);
+        assert!(key.is_err());
+    }
+
+    #[test]
+    fn test_encryption_key_generate_aes() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm);
+        assert!(key.is_ok());
+        let key = key.unwrap();
+        assert_eq!(key.len(), 32);
+        assert_eq!(*key.algorithm(), EncryptionAlgorithm::Aes256Gcm);
+    }
+
+    #[test]
+    fn test_encryption_key_generate_chacha() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::ChaCha20Poly1305);
+        assert!(key.is_ok());
+        let key = key.unwrap();
+        assert_eq!(key.len(), 32);
+        assert_eq!(*key.algorithm(), EncryptionAlgorithm::ChaCha20Poly1305);
+    }
+
+    #[test]
+    fn test_encryption_key_generates_different_keys() {
+        let key1 = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let key2 = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+
+        // Keys should be different (with overwhelming probability)
+        assert_ne!(key1.as_bytes(), key2.as_bytes());
+    }
+
+    #[test]
+    fn test_encryption_key_base64_roundtrip() {
+        let original = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let encoded = original.to_base64();
+
+        let decoded = EncryptionKey::from_base64(&encoded, EncryptionAlgorithm::Aes256Gcm).unwrap();
+
+        assert_eq!(original.as_bytes(), decoded.as_bytes());
+    }
+
+    #[test]
+    fn test_encryption_key_from_base64_invalid() {
+        let result =
+            EncryptionKey::from_base64("not-valid-base64!@#$", EncryptionAlgorithm::Aes256Gcm);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_encryption_key_is_empty() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        assert!(!key.is_empty());
+    }
+
+    // ==================== EncryptedData Tests ====================
+
+    #[test]
+    fn test_encrypted_data_creation() {
+        let ciphertext = vec![1, 2, 3, 4, 5];
+        let nonce = vec![0u8; 12];
+        let data = EncryptedData::new(
+            ciphertext.clone(),
+            nonce.clone(),
+            EncryptionAlgorithm::Aes256Gcm,
+            None,
+        );
+
+        assert_eq!(data.algorithm, EncryptionAlgorithm::Aes256Gcm);
+        assert!(data.aad.is_none());
+    }
+
+    #[test]
+    fn test_encrypted_data_with_aad() {
+        let ciphertext = vec![1, 2, 3, 4, 5];
+        let nonce = vec![0u8; 12];
+        let aad = vec![10, 20, 30];
+        let data = EncryptedData::new(
+            ciphertext.clone(),
+            nonce.clone(),
+            EncryptionAlgorithm::Aes256Gcm,
+            Some(aad.clone()),
+        );
+
+        assert!(data.aad.is_some());
+        assert_eq!(data.aad_bytes().unwrap().unwrap(), aad);
+    }
+
+    #[test]
+    fn test_encrypted_data_ciphertext_bytes() {
+        let original = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let nonce = vec![0u8; 12];
+        let data =
+            EncryptedData::new(original.clone(), nonce, EncryptionAlgorithm::Aes256Gcm, None);
+
+        let recovered = data.ciphertext_bytes().unwrap();
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn test_encrypted_data_nonce_bytes() {
+        let ciphertext = vec![1, 2, 3, 4, 5];
+        let nonce = vec![0xAA; 12];
+        let data =
+            EncryptedData::new(ciphertext, nonce.clone(), EncryptionAlgorithm::Aes256Gcm, None);
+
+        let recovered = data.nonce_bytes().unwrap();
+        assert_eq!(nonce, recovered);
+    }
+
+    // ==================== EncryptionEngine AES-256-GCM Tests ====================
+
+    #[test]
+    fn test_encrypt_decrypt_aes_roundtrip() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let plaintext = b"Hello, World!";
+
+        let encrypted = EncryptionEngine::encrypt(&key, plaintext, None).unwrap();
+        let decrypted = EncryptionEngine::decrypt(&key, &encrypted).unwrap();
+
+        assert_eq!(plaintext.to_vec(), decrypted);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_aes_with_aad() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let plaintext = b"Secret message";
+        let aad = b"associated data";
+
+        let encrypted = EncryptionEngine::encrypt(&key, plaintext, Some(aad)).unwrap();
+        let decrypted = EncryptionEngine::decrypt(&key, &encrypted).unwrap();
+
+        assert_eq!(plaintext.to_vec(), decrypted);
+    }
+
+    #[test]
+    fn test_encrypt_produces_different_ciphertexts() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let plaintext = b"Same message";
+
+        let encrypted1 = EncryptionEngine::encrypt(&key, plaintext, None).unwrap();
+        let encrypted2 = EncryptionEngine::encrypt(&key, plaintext, None).unwrap();
+
+        // Different nonces should produce different ciphertexts
+        assert_ne!(encrypted1.ciphertext, encrypted2.ciphertext);
+        assert_ne!(encrypted1.nonce, encrypted2.nonce);
+    }
+
+    #[test]
+    fn test_decrypt_wrong_key_aes() {
+        let key1 = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let key2 = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let plaintext = b"Secret";
+
+        let encrypted = EncryptionEngine::encrypt(&key1, plaintext, None).unwrap();
+        let result = EncryptionEngine::decrypt(&key2, &encrypted);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_algorithm_mismatch() {
+        let key_aes = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let key_chacha = EncryptionKey::generate(EncryptionAlgorithm::ChaCha20Poly1305).unwrap();
+        let plaintext = b"Secret";
+
+        let encrypted = EncryptionEngine::encrypt(&key_aes, plaintext, None).unwrap();
+        let result = EncryptionEngine::decrypt(&key_chacha, &encrypted);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_encrypt_empty_plaintext() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let plaintext = b"";
+
+        let encrypted = EncryptionEngine::encrypt(&key, plaintext, None).unwrap();
+        let decrypted = EncryptionEngine::decrypt(&key, &encrypted).unwrap();
+
+        assert!(decrypted.is_empty());
+    }
+
+    #[test]
+    fn test_encrypt_large_plaintext() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let plaintext = vec![0xAB; 10000]; // 10KB of data
+
+        let encrypted = EncryptionEngine::encrypt(&key, &plaintext, None).unwrap();
+        let decrypted = EncryptionEngine::decrypt(&key, &encrypted).unwrap();
+
+        assert_eq!(plaintext, decrypted);
+    }
+
+    // ==================== EncryptionEngine ChaCha20-Poly1305 Tests ====================
+
+    #[test]
+    fn test_encrypt_decrypt_chacha_roundtrip() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::ChaCha20Poly1305).unwrap();
+        let plaintext = b"Hello, ChaCha!";
+
+        let encrypted = EncryptionEngine::encrypt(&key, plaintext, None).unwrap();
+        let decrypted = EncryptionEngine::decrypt(&key, &encrypted).unwrap();
+
+        assert_eq!(plaintext.to_vec(), decrypted);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_chacha_with_aad() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::ChaCha20Poly1305).unwrap();
+        let plaintext = b"Secret message";
+        let aad = b"metadata";
+
+        let encrypted = EncryptionEngine::encrypt(&key, plaintext, Some(aad)).unwrap();
+        let decrypted = EncryptionEngine::decrypt(&key, &encrypted).unwrap();
+
+        assert_eq!(plaintext.to_vec(), decrypted);
+    }
+
+    #[test]
+    fn test_decrypt_wrong_key_chacha() {
+        let key1 = EncryptionKey::generate(EncryptionAlgorithm::ChaCha20Poly1305).unwrap();
+        let key2 = EncryptionKey::generate(EncryptionAlgorithm::ChaCha20Poly1305).unwrap();
+        let plaintext = b"Secret";
+
+        let encrypted = EncryptionEngine::encrypt(&key1, plaintext, None).unwrap();
+        let result = EncryptionEngine::decrypt(&key2, &encrypted);
+
+        assert!(result.is_err());
+    }
+
+    // ==================== String Encryption Tests ====================
+
+    #[test]
+    fn test_encrypt_decrypt_string() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let plaintext = "Hello, World! 🔐";
+
+        let encrypted = EncryptionEngine::encrypt_string(&key, plaintext).unwrap();
+        let decrypted = EncryptionEngine::decrypt_string(&key, &encrypted).unwrap();
+
+        assert_eq!(plaintext, decrypted);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_empty_string() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let plaintext = "";
+
+        let encrypted = EncryptionEngine::encrypt_string(&key, plaintext).unwrap();
+        let decrypted = EncryptionEngine::decrypt_string(&key, &encrypted).unwrap();
+
+        assert_eq!(plaintext, decrypted);
+    }
+
+    // ==================== Key Strength Validation Tests ====================
+
+    #[test]
+    fn test_validate_key_strength_valid() {
+        let key = EncryptionKey::generate(EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let result = EncryptionEngine::validate_key_strength(&key);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_key_strength_all_zeros() {
+        let key_bytes = vec![0u8; 32];
+        let key = EncryptionKey::new(key_bytes, EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let result = EncryptionEngine::validate_key_strength(&key);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_key_strength_all_ones() {
+        let key_bytes = vec![0xFF; 32];
+        let key = EncryptionKey::new(key_bytes, EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let result = EncryptionEngine::validate_key_strength(&key);
+        assert!(result.is_err());
+    }
+
+    // ==================== Utils Module Tests ====================
+
+    #[test]
+    fn test_generate_nonce_aes() {
+        let nonce = utils::generate_nonce(&EncryptionAlgorithm::Aes256Gcm).unwrap();
+        assert_eq!(nonce.len(), 12);
+    }
+
+    #[test]
+    fn test_generate_nonce_chacha() {
+        let nonce = utils::generate_nonce(&EncryptionAlgorithm::ChaCha20Poly1305).unwrap();
+        assert_eq!(nonce.len(), 12);
+    }
+
+    #[test]
+    fn test_generate_nonce_produces_different_values() {
+        let nonce1 = utils::generate_nonce(&EncryptionAlgorithm::Aes256Gcm).unwrap();
+        let nonce2 = utils::generate_nonce(&EncryptionAlgorithm::Aes256Gcm).unwrap();
+        assert_ne!(nonce1, nonce2);
+    }
+
+    #[test]
+    fn test_validate_nonce_valid() {
+        let nonce = vec![0u8; 12];
+        let result = utils::validate_nonce(&nonce, &EncryptionAlgorithm::Aes256Gcm);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_nonce_invalid_length() {
+        let nonce = vec![0u8; 8]; // Wrong length
+        let result = utils::validate_nonce(&nonce, &EncryptionAlgorithm::Aes256Gcm);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_nonces_equal_same() {
+        let nonce1 = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        let nonce2 = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        assert!(utils::nonces_equal(&nonce1, &nonce2));
+    }
+
+    #[test]
+    fn test_nonces_equal_different() {
+        let nonce1 = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        let nonce2 = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13];
+        assert!(!utils::nonces_equal(&nonce1, &nonce2));
+    }
+
+    #[test]
+    fn test_nonces_equal_different_lengths() {
+        let nonce1 = vec![1, 2, 3, 4, 5];
+        let nonce2 = vec![1, 2, 3, 4, 5, 6];
+        assert!(!utils::nonces_equal(&nonce1, &nonce2));
+    }
+
+    #[test]
+    fn test_zeroize() {
+        let mut data = vec![1, 2, 3, 4, 5];
+        utils::zeroize(&mut data);
+        assert!(data.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_zeroize_empty() {
+        let mut data: Vec<u8> = vec![];
+        utils::zeroize(&mut data);
+        assert!(data.is_empty());
+    }
+}

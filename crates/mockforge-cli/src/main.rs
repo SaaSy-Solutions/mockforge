@@ -34,6 +34,7 @@ mod ftp_commands;
 mod git_watch_commands;
 mod governance_commands;
 mod import_commands;
+mod import_utils;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
 mod logs_commands;
@@ -713,7 +714,7 @@ enum Commands {
         file: Option<PathBuf>,
 
         /// Show detailed output for all fixtures
-        #[arg(short, long)]
+        #[arg(long)]
         verbose: bool,
     },
 
@@ -1250,7 +1251,7 @@ enum Commands {
         file: Option<PathBuf>,
 
         /// Follow logs in real-time (like tail -f)
-        #[arg(short, long)]
+        #[arg(short = 'F', long)]
         follow: bool,
 
         /// Filter by HTTP method (GET, POST, etc.)

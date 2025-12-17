@@ -94,4 +94,86 @@ mod tests {
     fn test_protocol_display() {
         assert_eq!(Protocol::Smtp.to_string(), "SMTP");
     }
+
+    #[test]
+    fn test_smtp_config_all_defaults() {
+        let config = SmtpConfig::default();
+        assert_eq!(config.timeout_secs, 300);
+        assert_eq!(config.max_connections, 10);
+        assert!(config.enable_mailbox);
+        assert_eq!(config.max_mailbox_messages, 1000);
+        assert!(!config.enable_starttls);
+        assert!(config.tls_cert_path.is_none());
+        assert!(config.tls_key_path.is_none());
+        assert_eq!(config.fixtures_dir, Some(PathBuf::from("./fixtures/smtp")));
+    }
+
+    #[test]
+    fn test_smtp_config_serialize() {
+        let config = SmtpConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("\"port\":1025"));
+        assert!(json.contains("mockforge-smtp"));
+    }
+
+    #[test]
+    fn test_smtp_config_deserialize() {
+        let json = r#"{
+            "port": 2025,
+            "host": "127.0.0.1",
+            "hostname": "test-smtp",
+            "timeout_secs": 600,
+            "max_connections": 20,
+            "enable_mailbox": false,
+            "max_mailbox_messages": 500,
+            "enable_starttls": true,
+            "fixtures_dir": "/tmp/fixtures"
+        }"#;
+        let config: SmtpConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.port, 2025);
+        assert_eq!(config.host, "127.0.0.1");
+        assert_eq!(config.hostname, "test-smtp");
+        assert_eq!(config.timeout_secs, 600);
+        assert_eq!(config.max_connections, 20);
+        assert!(!config.enable_mailbox);
+        assert!(config.enable_starttls);
+    }
+
+    #[test]
+    fn test_smtp_config_clone() {
+        let config = SmtpConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.port, cloned.port);
+        assert_eq!(config.hostname, cloned.hostname);
+    }
+
+    #[test]
+    fn test_smtp_config_debug() {
+        let config = SmtpConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("SmtpConfig"));
+        assert!(debug.contains("1025"));
+    }
+
+    #[test]
+    fn test_smtp_config_with_tls() {
+        let config = SmtpConfig {
+            enable_starttls: true,
+            tls_cert_path: Some(PathBuf::from("/path/to/cert.pem")),
+            tls_key_path: Some(PathBuf::from("/path/to/key.pem")),
+            ..SmtpConfig::default()
+        };
+        assert!(config.enable_starttls);
+        assert!(config.tls_cert_path.is_some());
+        assert!(config.tls_key_path.is_some());
+    }
+
+    #[test]
+    fn test_smtp_config_custom_fixtures_dir() {
+        let config = SmtpConfig {
+            fixtures_dir: Some(PathBuf::from("/custom/fixtures")),
+            ..SmtpConfig::default()
+        };
+        assert_eq!(config.fixtures_dir, Some(PathBuf::from("/custom/fixtures")));
+    }
 }

@@ -69,10 +69,11 @@ impl ScenarioReview {
 
     /// Count reviews for a scenario
     pub async fn count_by_scenario(pool: &sqlx::PgPool, scenario_id: Uuid) -> sqlx::Result<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scenario_reviews WHERE scenario_id = $1")
-            .bind(scenario_id)
-            .fetch_one(pool)
-            .await?;
+        let (count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM scenario_reviews WHERE scenario_id = $1")
+                .bind(scenario_id)
+                .fetch_one(pool)
+                .await?;
         Ok(count)
     }
 

@@ -140,3 +140,226 @@ pub async fn validate_plugin(path: Option<&Path>) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn create_valid_plugin_project(dir: &Path) {
+        // Create manifest
+        let manifest_content = r#"id: test-plugin
+version: 1.0.0
+name: Test Plugin
+description: A test plugin
+plugin_type: auth
+author:
+  name: Test Author
+  email: test@example.com
+capabilities:
+  network: false
+  filesystem: false
+"#;
+        fs::write(dir.join("plugin.yaml"), manifest_content).unwrap();
+
+        // Create Cargo.toml
+        let cargo_content = r#"[package]
+name = "test-plugin"
+version = "1.0.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mockforge-plugin-sdk = "0.1"
+"#;
+        fs::write(dir.join("Cargo.toml"), cargo_content).unwrap();
+
+        // Create src/lib.rs
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::write(dir.join("src/lib.rs"), "// Plugin code").unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_valid_project() {
+        let temp_dir = TempDir::new().unwrap();
+        create_valid_plugin_project(temp_dir.path());
+
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_no_manifest() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_invalid_yaml() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("plugin.yaml"), "invalid: yaml: [[[").unwrap();
+
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_missing_id() {
+        let temp_dir = TempDir::new().unwrap();
+        let manifest_content = "version: 1.0.0\nname: Test";
+        fs::write(temp_dir.path().join("plugin.yaml"), manifest_content).unwrap();
+        fs::write(temp_dir.path().join("Cargo.toml"), "[package]\nname=\"test\"").unwrap();
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/lib.rs"), "").unwrap();
+
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_missing_version() {
+        let temp_dir = TempDir::new().unwrap();
+        let manifest_content = "id: test-plugin\nname: Test";
+        fs::write(temp_dir.path().join("plugin.yaml"), manifest_content).unwrap();
+        fs::write(temp_dir.path().join("Cargo.toml"), "[package]\nname=\"test\"").unwrap();
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/lib.rs"), "").unwrap();
+
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_missing_plugin_type() {
+        let temp_dir = TempDir::new().unwrap();
+        let manifest_content = "id: test-plugin\nversion: 1.0.0\nname: Test";
+        fs::write(temp_dir.path().join("plugin.yaml"), manifest_content).unwrap();
+        fs::write(temp_dir.path().join("Cargo.toml"), "[package]\nname=\"test\"").unwrap();
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/lib.rs"), "").unwrap();
+
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_no_cargo_toml() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("plugin.yaml"),
+            "id: test\nversion: 1.0.0\nplugin_type: auth",
+        )
+        .unwrap();
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/lib.rs"), "").unwrap();
+
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_no_lib_rs() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("plugin.yaml"),
+            "id: test\nversion: 1.0.0\nplugin_type: auth",
+        )
+        .unwrap();
+        fs::write(temp_dir.path().join("Cargo.toml"), "[package]\nname=\"test\"").unwrap();
+
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_yml_extension() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let manifest_content = r#"id: test-plugin
+version: 1.0.0
+plugin_type: auth
+"#;
+        fs::write(temp_dir.path().join("plugin.yml"), manifest_content).unwrap();
+        fs::write(temp_dir.path().join("Cargo.toml"), "[package]\nname=\"test\"").unwrap();
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/lib.rs"), "").unwrap();
+
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_missing_optional_fields() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Minimal valid manifest (missing name and author)
+        let manifest_content = "id: test\nversion: 1.0.0\nplugin_type: auth";
+        fs::write(temp_dir.path().join("plugin.yaml"), manifest_content).unwrap();
+
+        let cargo_content = r#"[package]
+name = "test"
+[lib]
+crate-type = ["cdylib"]
+[dependencies]
+mockforge-plugin-sdk = "0.1"
+"#;
+        fs::write(temp_dir.path().join("Cargo.toml"), cargo_content).unwrap();
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/lib.rs"), "").unwrap();
+
+        // Should succeed but with warnings
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_cargo_toml_no_cdylib() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(
+            temp_dir.path().join("plugin.yaml"),
+            "id: test\nversion: 1.0.0\nplugin_type: auth",
+        )
+        .unwrap();
+
+        // Cargo.toml without cdylib
+        let cargo_content = "[package]\nname = \"test\"";
+        fs::write(temp_dir.path().join("Cargo.toml"), cargo_content).unwrap();
+
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/lib.rs"), "").unwrap();
+
+        // Should succeed but with warnings
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_plugin_cargo_toml_no_sdk() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(
+            temp_dir.path().join("plugin.yaml"),
+            "id: test\nversion: 1.0.0\nplugin_type: auth",
+        )
+        .unwrap();
+
+        let cargo_content = r#"[package]
+name = "test"
+[lib]
+crate-type = ["cdylib"]
+"#;
+        fs::write(temp_dir.path().join("Cargo.toml"), cargo_content).unwrap();
+
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(temp_dir.path().join("src/lib.rs"), "").unwrap();
+
+        // Should succeed but with warnings
+        let result = validate_plugin(Some(temp_dir.path())).await;
+        assert!(result.is_ok());
+    }
+}

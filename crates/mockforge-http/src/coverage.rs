@@ -295,6 +295,8 @@ pub async fn get_coverage_handler(
 mod tests {
     use super::*;
 
+    // ==================== Normalize Path Tests ====================
+
     #[test]
     fn test_normalize_path() {
         assert_eq!(normalize_path("/users/{id}"), "/users/:id");
@@ -308,11 +310,269 @@ mod tests {
     }
 
     #[test]
+    fn test_normalize_path_root() {
+        assert_eq!(normalize_path("/"), "/");
+    }
+
+    #[test]
+    fn test_normalize_path_deep_nested() {
+        assert_eq!(
+            normalize_path("/api/v1/org/{orgId}/team/{teamId}/member/{memberId}"),
+            "/api/v1/org/:id/team/:id/member/:id"
+        );
+    }
+
+    #[test]
+    fn test_normalize_path_no_params() {
+        assert_eq!(normalize_path("/health/check"), "/health/check");
+        assert_eq!(normalize_path("/api/v1/status"), "/api/v1/status");
+    }
+
+    #[test]
+    fn test_normalize_path_hex_ids() {
+        // Long hex strings should be normalized
+        assert_eq!(normalize_path("/objects/abcdef1234567890"), "/objects/:id");
+    }
+
+    // ==================== Is UUID Tests ====================
+
+    #[test]
     fn test_is_uuid() {
         assert!(is_uuid("550e8400-e29b-41d4-a716-446655440000"));
         assert!(!is_uuid("not-a-uuid"));
         assert!(!is_uuid("123"));
     }
+
+    #[test]
+    fn test_is_uuid_various_formats() {
+        // Valid UUIDs
+        assert!(is_uuid("00000000-0000-0000-0000-000000000000"));
+        assert!(is_uuid("ffffffff-ffff-ffff-ffff-ffffffffffff"));
+        assert!(is_uuid("12345678-1234-1234-1234-123456789abc"));
+
+        // Invalid
+        assert!(!is_uuid("12345678-1234-1234-1234-123456789")); // too short
+        assert!(!is_uuid("12345678123412341234123456789abc")); // no dashes
+        assert!(!is_uuid("")); // empty
+    }
+
+    // ==================== RouteCoverage Tests ====================
+
+    #[test]
+    fn test_route_coverage_creation() {
+        let coverage = RouteCoverage {
+            method: "GET".to_string(),
+            path: "/users".to_string(),
+            operation_id: Some("getUsers".to_string()),
+            summary: Some("List users".to_string()),
+            covered: true,
+            hit_count: 100,
+            status_breakdown: HashMap::new(),
+            avg_latency_seconds: Some(0.05),
+        };
+
+        assert_eq!(coverage.method, "GET");
+        assert!(coverage.covered);
+        assert_eq!(coverage.hit_count, 100);
+    }
+
+    #[test]
+    fn test_route_coverage_serialization() {
+        let coverage = RouteCoverage {
+            method: "POST".to_string(),
+            path: "/orders".to_string(),
+            operation_id: None,
+            summary: None,
+            covered: false,
+            hit_count: 0,
+            status_breakdown: HashMap::new(),
+            avg_latency_seconds: None,
+        };
+
+        let json = serde_json::to_string(&coverage).unwrap();
+        assert!(json.contains("POST"));
+        assert!(json.contains("/orders"));
+        assert!(json.contains("false"));
+    }
+
+    #[test]
+    fn test_route_coverage_with_status_breakdown() {
+        let mut status_breakdown = HashMap::new();
+        status_breakdown.insert(200, 50);
+        status_breakdown.insert(201, 30);
+        status_breakdown.insert(500, 5);
+
+        let coverage = RouteCoverage {
+            method: "POST".to_string(),
+            path: "/api/data".to_string(),
+            operation_id: Some("createData".to_string()),
+            summary: None,
+            covered: true,
+            hit_count: 85,
+            status_breakdown,
+            avg_latency_seconds: Some(0.1),
+        };
+
+        assert_eq!(coverage.status_breakdown.len(), 3);
+        assert_eq!(coverage.status_breakdown.get(&200), Some(&50));
+    }
+
+    #[test]
+    fn test_route_coverage_clone() {
+        let coverage = RouteCoverage {
+            method: "DELETE".to_string(),
+            path: "/items/{id}".to_string(),
+            operation_id: None,
+            summary: None,
+            covered: true,
+            hit_count: 10,
+            status_breakdown: HashMap::new(),
+            avg_latency_seconds: None,
+        };
+
+        let cloned = coverage.clone();
+        assert_eq!(cloned.method, coverage.method);
+        assert_eq!(cloned.hit_count, coverage.hit_count);
+    }
+
+    // ==================== CoverageReport Tests ====================
+
+    #[test]
+    fn test_coverage_report_creation() {
+        let report = CoverageReport {
+            total_routes: 10,
+            covered_routes: 7,
+            coverage_percentage: 70.0,
+            routes: vec![],
+            method_coverage: HashMap::new(),
+            timestamp: "2024-01-15T10:00:00Z".to_string(),
+        };
+
+        assert_eq!(report.total_routes, 10);
+        assert_eq!(report.covered_routes, 7);
+        assert_eq!(report.coverage_percentage, 70.0);
+    }
+
+    #[test]
+    fn test_coverage_report_serialization() {
+        let report = CoverageReport {
+            total_routes: 5,
+            covered_routes: 3,
+            coverage_percentage: 60.0,
+            routes: vec![],
+            method_coverage: HashMap::new(),
+            timestamp: "2024-01-15T10:00:00Z".to_string(),
+        };
+
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(json.contains("60.0"));
+        assert!(json.contains("total_routes"));
+    }
+
+    #[test]
+    fn test_coverage_report_clone() {
+        let report = CoverageReport {
+            total_routes: 20,
+            covered_routes: 15,
+            coverage_percentage: 75.0,
+            routes: vec![],
+            method_coverage: HashMap::new(),
+            timestamp: "2024-01-15T10:00:00Z".to_string(),
+        };
+
+        let cloned = report.clone();
+        assert_eq!(cloned.total_routes, report.total_routes);
+        assert_eq!(cloned.coverage_percentage, report.coverage_percentage);
+    }
+
+    // ==================== MethodCoverage Tests ====================
+
+    #[test]
+    fn test_method_coverage_creation() {
+        let coverage = MethodCoverage {
+            total: 10,
+            covered: 8,
+            percentage: 80.0,
+        };
+
+        assert_eq!(coverage.total, 10);
+        assert_eq!(coverage.covered, 8);
+        assert_eq!(coverage.percentage, 80.0);
+    }
+
+    #[test]
+    fn test_method_coverage_serialization() {
+        let coverage = MethodCoverage {
+            total: 5,
+            covered: 5,
+            percentage: 100.0,
+        };
+
+        let json = serde_json::to_string(&coverage).unwrap();
+        assert!(json.contains("100.0"));
+    }
+
+    #[test]
+    fn test_method_coverage_clone() {
+        let coverage = MethodCoverage {
+            total: 3,
+            covered: 2,
+            percentage: 66.67,
+        };
+
+        let cloned = coverage.clone();
+        assert_eq!(cloned.total, coverage.total);
+    }
+
+    // ==================== CoverageQuery Tests ====================
+
+    #[test]
+    fn test_coverage_query_empty() {
+        let query = CoverageQuery {
+            method: None,
+            path: None,
+            uncovered_only: None,
+        };
+
+        assert!(query.method.is_none());
+        assert!(query.path.is_none());
+        assert!(query.uncovered_only.is_none());
+    }
+
+    #[test]
+    fn test_coverage_query_with_method_filter() {
+        let query = CoverageQuery {
+            method: Some("GET".to_string()),
+            path: None,
+            uncovered_only: None,
+        };
+
+        assert_eq!(query.method, Some("GET".to_string()));
+    }
+
+    #[test]
+    fn test_coverage_query_with_path_filter() {
+        let query = CoverageQuery {
+            method: None,
+            path: Some("/users".to_string()),
+            uncovered_only: None,
+        };
+
+        assert_eq!(query.path, Some("/users".to_string()));
+    }
+
+    #[test]
+    fn test_coverage_query_uncovered_only() {
+        let query = CoverageQuery {
+            method: None,
+            path: None,
+            uncovered_only: Some(true),
+        };
+
+        assert_eq!(query.uncovered_only, Some(true));
+    }
+
+    // ==================== Calculate Coverage Tests ====================
 
     #[tokio::test]
     async fn test_calculate_coverage_empty() {
@@ -351,5 +611,120 @@ mod tests {
         assert_eq!(report.routes.len(), 2);
         // Coverage will be 0% since no metrics have been recorded in this test
         assert!(report.coverage_percentage >= 0.0 && report.coverage_percentage <= 100.0);
+    }
+
+    #[tokio::test]
+    async fn test_calculate_coverage_single_route() {
+        let routes = vec![RouteInfo {
+            method: "GET".to_string(),
+            path: "/health".to_string(),
+            operation_id: Some("healthCheck".to_string()),
+            summary: None,
+            description: None,
+            parameters: vec![],
+        }];
+
+        let report = calculate_coverage(&routes).await;
+
+        assert_eq!(report.total_routes, 1);
+        assert_eq!(report.routes.len(), 1);
+        assert_eq!(report.routes[0].method, "GET");
+        assert_eq!(report.routes[0].path, "/health");
+    }
+
+    #[tokio::test]
+    async fn test_calculate_coverage_method_breakdown() {
+        let routes = vec![
+            RouteInfo {
+                method: "GET".to_string(),
+                path: "/users".to_string(),
+                operation_id: None,
+                summary: None,
+                description: None,
+                parameters: vec![],
+            },
+            RouteInfo {
+                method: "GET".to_string(),
+                path: "/users/{id}".to_string(),
+                operation_id: None,
+                summary: None,
+                description: None,
+                parameters: vec![],
+            },
+            RouteInfo {
+                method: "POST".to_string(),
+                path: "/users".to_string(),
+                operation_id: None,
+                summary: None,
+                description: None,
+                parameters: vec![],
+            },
+        ];
+
+        let report = calculate_coverage(&routes).await;
+
+        assert_eq!(report.total_routes, 3);
+        assert!(report.method_coverage.contains_key("GET"));
+        assert!(report.method_coverage.contains_key("POST"));
+        assert_eq!(report.method_coverage.get("GET").unwrap().total, 2);
+        assert_eq!(report.method_coverage.get("POST").unwrap().total, 1);
+    }
+
+    // ==================== Debug Tests ====================
+
+    #[test]
+    fn test_route_coverage_debug() {
+        let coverage = RouteCoverage {
+            method: "GET".to_string(),
+            path: "/test".to_string(),
+            operation_id: None,
+            summary: None,
+            covered: false,
+            hit_count: 0,
+            status_breakdown: HashMap::new(),
+            avg_latency_seconds: None,
+        };
+
+        let debug = format!("{:?}", coverage);
+        assert!(debug.contains("RouteCoverage"));
+    }
+
+    #[test]
+    fn test_coverage_report_debug() {
+        let report = CoverageReport {
+            total_routes: 0,
+            covered_routes: 0,
+            coverage_percentage: 0.0,
+            routes: vec![],
+            method_coverage: HashMap::new(),
+            timestamp: "test".to_string(),
+        };
+
+        let debug = format!("{:?}", report);
+        assert!(debug.contains("CoverageReport"));
+    }
+
+    #[test]
+    fn test_method_coverage_debug() {
+        let coverage = MethodCoverage {
+            total: 5,
+            covered: 3,
+            percentage: 60.0,
+        };
+
+        let debug = format!("{:?}", coverage);
+        assert!(debug.contains("MethodCoverage"));
+    }
+
+    #[test]
+    fn test_coverage_query_debug() {
+        let query = CoverageQuery {
+            method: Some("GET".to_string()),
+            path: None,
+            uncovered_only: None,
+        };
+
+        let debug = format!("{:?}", query);
+        assert!(debug.contains("CoverageQuery"));
     }
 }

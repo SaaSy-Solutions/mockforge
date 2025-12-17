@@ -176,3 +176,299 @@ impl TcpFixture {
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures::{BehaviorConfig, MatchCriteria, TcpResponse};
+
+    fn create_test_fixture(id: &str, match_all: bool) -> TcpFixture {
+        TcpFixture {
+            identifier: id.to_string(),
+            name: format!("Fixture {}", id),
+            description: "Test fixture".to_string(),
+            match_criteria: MatchCriteria {
+                match_all,
+                ..Default::default()
+            },
+            response: TcpResponse {
+                data: "response".to_string(),
+                encoding: "text".to_string(),
+                file_path: None,
+                delay_ms: 0,
+                close_after_response: false,
+                keep_alive: true,
+            },
+            behavior: BehaviorConfig::default(),
+        }
+    }
+
+    #[test]
+    fn test_registry_new() {
+        let registry = TcpSpecRegistry::new();
+        assert!(registry.get_all_fixtures().is_empty());
+    }
+
+    #[test]
+    fn test_registry_default() {
+        let registry = TcpSpecRegistry::default();
+        assert!(registry.get_all_fixtures().is_empty());
+    }
+
+    #[test]
+    fn test_registry_add_fixture() {
+        let mut registry = TcpSpecRegistry::new();
+        let fixture = create_test_fixture("test-1", true);
+
+        registry.add_fixture(fixture);
+
+        assert_eq!(registry.get_all_fixtures().len(), 1);
+    }
+
+    #[test]
+    fn test_registry_get_fixture() {
+        let mut registry = TcpSpecRegistry::new();
+        let fixture = create_test_fixture("test-1", true);
+
+        registry.add_fixture(fixture);
+
+        let retrieved = registry.get_fixture("test-1");
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().identifier, "test-1");
+    }
+
+    #[test]
+    fn test_registry_get_fixture_not_found() {
+        let registry = TcpSpecRegistry::new();
+        assert!(registry.get_fixture("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_registry_remove_fixture() {
+        let mut registry = TcpSpecRegistry::new();
+        let fixture = create_test_fixture("test-1", true);
+
+        registry.add_fixture(fixture);
+        let removed = registry.remove_fixture("test-1");
+
+        assert!(removed.is_some());
+        assert!(registry.get_fixture("test-1").is_none());
+    }
+
+    #[test]
+    fn test_registry_remove_fixture_not_found() {
+        let mut registry = TcpSpecRegistry::new();
+        let removed = registry.remove_fixture("nonexistent");
+        assert!(removed.is_none());
+    }
+
+    #[test]
+    fn test_registry_clear() {
+        let mut registry = TcpSpecRegistry::new();
+        registry.add_fixture(create_test_fixture("test-1", true));
+        registry.add_fixture(create_test_fixture("test-2", true));
+
+        registry.clear();
+
+        assert!(registry.get_all_fixtures().is_empty());
+    }
+
+    #[test]
+    fn test_registry_clone() {
+        let mut registry = TcpSpecRegistry::new();
+        registry.add_fixture(create_test_fixture("test-1", true));
+
+        let cloned = registry.clone();
+        assert_eq!(cloned.get_all_fixtures().len(), 1);
+    }
+
+    #[test]
+    fn test_registry_debug() {
+        let registry = TcpSpecRegistry::new();
+        let debug = format!("{:?}", registry);
+        assert!(debug.contains("TcpSpecRegistry"));
+    }
+
+    #[test]
+    fn test_fixture_matches_match_all() {
+        let fixture = create_test_fixture("test", true);
+        assert!(fixture.matches(b"any data"));
+        assert!(fixture.matches(b""));
+        assert!(fixture.matches(b"Hello World"));
+    }
+
+    #[test]
+    fn test_fixture_matches_min_length() {
+        let fixture = TcpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: String::new(),
+            match_criteria: MatchCriteria {
+                min_length: Some(5),
+                match_all: true,
+                ..Default::default()
+            },
+            response: TcpResponse {
+                data: "ok".to_string(),
+                encoding: "text".to_string(),
+                file_path: None,
+                delay_ms: 0,
+                close_after_response: false,
+                keep_alive: true,
+            },
+            behavior: BehaviorConfig::default(),
+        };
+
+        assert!(!fixture.matches(b"1234"));
+        assert!(fixture.matches(b"12345"));
+        assert!(fixture.matches(b"123456"));
+    }
+
+    #[test]
+    fn test_fixture_matches_max_length() {
+        let fixture = TcpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: String::new(),
+            match_criteria: MatchCriteria {
+                max_length: Some(5),
+                match_all: true,
+                ..Default::default()
+            },
+            response: TcpResponse {
+                data: "ok".to_string(),
+                encoding: "text".to_string(),
+                file_path: None,
+                delay_ms: 0,
+                close_after_response: false,
+                keep_alive: true,
+            },
+            behavior: BehaviorConfig::default(),
+        };
+
+        assert!(fixture.matches(b"12345"));
+        assert!(!fixture.matches(b"123456"));
+    }
+
+    #[test]
+    fn test_fixture_matches_text_pattern() {
+        let fixture = TcpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: String::new(),
+            match_criteria: MatchCriteria {
+                text_pattern: Some("hello.*world".to_string()),
+                ..Default::default()
+            },
+            response: TcpResponse {
+                data: "ok".to_string(),
+                encoding: "text".to_string(),
+                file_path: None,
+                delay_ms: 0,
+                close_after_response: false,
+                keep_alive: true,
+            },
+            behavior: BehaviorConfig::default(),
+        };
+
+        assert!(fixture.matches(b"hello world"));
+        assert!(fixture.matches(b"hello beautiful world"));
+        assert!(!fixture.matches(b"goodbye world"));
+    }
+
+    #[test]
+    fn test_fixture_matches_hex_pattern() {
+        let fixture = TcpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: String::new(),
+            match_criteria: MatchCriteria {
+                data_pattern: Some("48656c6c6f".to_string()), // "Hello" in hex
+                ..Default::default()
+            },
+            response: TcpResponse {
+                data: "ok".to_string(),
+                encoding: "text".to_string(),
+                file_path: None,
+                delay_ms: 0,
+                close_after_response: false,
+                keep_alive: true,
+            },
+            behavior: BehaviorConfig::default(),
+        };
+
+        assert!(fixture.matches(b"Hello"));
+        assert!(!fixture.matches(b"hello"));
+        assert!(!fixture.matches(b"World"));
+    }
+
+    #[test]
+    fn test_fixture_matches_exact_bytes() {
+        let fixture = TcpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: String::new(),
+            match_criteria: MatchCriteria {
+                exact_bytes: Some("SGVsbG8=".to_string()), // "Hello" in base64
+                ..Default::default()
+            },
+            response: TcpResponse {
+                data: "ok".to_string(),
+                encoding: "text".to_string(),
+                file_path: None,
+                delay_ms: 0,
+                close_after_response: false,
+                keep_alive: true,
+            },
+            behavior: BehaviorConfig::default(),
+        };
+
+        assert!(fixture.matches(b"Hello"));
+        assert!(!fixture.matches(b"hello"));
+    }
+
+    #[test]
+    fn test_fixture_no_match() {
+        let fixture = TcpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: String::new(),
+            match_criteria: MatchCriteria::default(), // No criteria, match_all is false
+            response: TcpResponse {
+                data: "ok".to_string(),
+                encoding: "text".to_string(),
+                file_path: None,
+                delay_ms: 0,
+                close_after_response: false,
+                keep_alive: true,
+            },
+            behavior: BehaviorConfig::default(),
+        };
+
+        // With no matching criteria and match_all=false, should not match
+        assert!(!fixture.matches(b"anything"));
+    }
+
+    #[test]
+    fn test_find_matching_fixture() {
+        let mut registry = TcpSpecRegistry::new();
+
+        // Add a fixture that matches all
+        registry.add_fixture(create_test_fixture("catch-all", true));
+
+        let matched = registry.find_matching_fixture(b"test data");
+        assert!(matched.is_some());
+        assert_eq!(matched.unwrap().identifier, "catch-all");
+    }
+
+    #[test]
+    fn test_find_matching_fixture_none() {
+        let mut registry = TcpSpecRegistry::new();
+
+        // Add a fixture that doesn't match
+        registry.add_fixture(create_test_fixture("no-match", false));
+
+        let matched = registry.find_matching_fixture(b"test data");
+        assert!(matched.is_none());
+    }
+}

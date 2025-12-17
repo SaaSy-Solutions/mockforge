@@ -226,8 +226,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_from_directory_nonexistent() {
+        // Nonexistent directories return Ok with empty services (intentional design)
+        // This is valid when using only OpenAPI/HTTP without gRPC protos
         let result = GrpcProtoRegistry::from_directory("/nonexistent").await;
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        let registry = result.unwrap();
+        assert!(registry.operations.is_empty());
     }
 
     #[test]

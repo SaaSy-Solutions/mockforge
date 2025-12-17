@@ -1866,3 +1866,516 @@ impl IntoResponse for ChaosApiError {
         (status, Json(serde_json::json!({ "error": message }))).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::LatencyConfig;
+
+    #[test]
+    fn test_profile_manager_new() {
+        let manager = ProfileManager::new();
+        let profiles = manager.get_all_profiles();
+        // Should have predefined profiles
+        assert!(!profiles.is_empty());
+    }
+
+    #[test]
+    fn test_profile_manager_default() {
+        let manager = ProfileManager::default();
+        let profiles = manager.get_all_profiles();
+        assert!(!profiles.is_empty());
+    }
+
+    #[test]
+    fn test_profile_manager_get_all_profiles() {
+        let manager = ProfileManager::new();
+        let profiles = manager.get_all_profiles();
+
+        // Should contain predefined profiles
+        let profile_names: Vec<_> = profiles.iter().map(|p| p.name.as_str()).collect();
+        assert!(profile_names.contains(&"slow_3g"));
+        assert!(profile_names.contains(&"fast_3g"));
+        assert!(profile_names.contains(&"flaky_wifi"));
+    }
+
+    #[test]
+    fn test_profile_manager_get_profile_builtin() {
+        let manager = ProfileManager::new();
+
+        // Test getting a built-in profile
+        let profile = manager.get_profile("slow_3g");
+        assert!(profile.is_some());
+        let profile = profile.unwrap();
+        assert_eq!(profile.name, "slow_3g");
+        assert!(profile.builtin);
+    }
+
+    #[test]
+    fn test_profile_manager_get_profile_not_found() {
+        let manager = ProfileManager::new();
+        let profile = manager.get_profile("nonexistent");
+        assert!(profile.is_none());
+    }
+
+    #[test]
+    fn test_profile_manager_save_and_get_custom_profile() {
+        let manager = ProfileManager::new();
+
+        // Create a custom profile
+        let custom = NetworkProfile {
+            name: "custom_test".to_string(),
+            description: "Test profile".to_string(),
+            builtin: false,
+            tags: Vec::new(),
+            chaos_config: ChaosConfig::default(),
+        };
+
+        manager.save_profile(custom.clone());
+
+        // Retrieve it
+        let retrieved = manager.get_profile("custom_test");
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.name, "custom_test");
+        assert_eq!(retrieved.description, "Test profile");
+        assert!(!retrieved.builtin);
+    }
+
+    #[test]
+    fn test_profile_manager_update_custom_profile() {
+        let manager = ProfileManager::new();
+
+        // Create and save initial profile
+        let custom = NetworkProfile {
+            name: "custom_test".to_string(),
+            description: "Initial description".to_string(),
+            builtin: false,
+            tags: Vec::new(),
+            chaos_config: ChaosConfig::default(),
+        };
+        manager.save_profile(custom);
+
+        // Update the profile
+        let updated = NetworkProfile {
+            name: "custom_test".to_string(),
+            description: "Updated description".to_string(),
+            builtin: false,
+            tags: Vec::new(),
+            chaos_config: ChaosConfig::default(),
+        };
+        manager.save_profile(updated);
+
+        // Verify update
+        let retrieved = manager.get_profile("custom_test").unwrap();
+        assert_eq!(retrieved.description, "Updated description");
+    }
+
+    #[test]
+    fn test_profile_manager_delete_profile() {
+        let manager = ProfileManager::new();
+
+        // Create and save a custom profile
+        let custom = NetworkProfile {
+            name: "to_delete".to_string(),
+            description: "Will be deleted".to_string(),
+            builtin: false,
+            tags: Vec::new(),
+            chaos_config: ChaosConfig::default(),
+        };
+        manager.save_profile(custom);
+
+        // Verify it exists
+        assert!(manager.get_profile("to_delete").is_some());
+
+        // Delete it
+        let deleted = manager.delete_profile("to_delete");
+        assert!(deleted);
+
+        // Verify it's gone
+        assert!(manager.get_profile("to_delete").is_none());
+    }
+
+    #[test]
+    fn test_profile_manager_delete_nonexistent() {
+        let manager = ProfileManager::new();
+        let deleted = manager.delete_profile("nonexistent");
+        assert!(!deleted);
+    }
+
+    #[test]
+    fn test_profile_manager_get_custom_profiles() {
+        let manager = ProfileManager::new();
+
+        // Initially should have no custom profiles
+        assert_eq!(manager.get_custom_profiles().len(), 0);
+
+        // Add custom profiles
+        let custom1 = NetworkProfile {
+            name: "custom1".to_string(),
+            description: "Custom 1".to_string(),
+            builtin: false,
+            tags: Vec::new(),
+            chaos_config: ChaosConfig::default(),
+        };
+        let custom2 = NetworkProfile {
+            name: "custom2".to_string(),
+            description: "Custom 2".to_string(),
+            builtin: false,
+            tags: Vec::new(),
+            chaos_config: ChaosConfig::default(),
+        };
+
+        manager.save_profile(custom1);
+        manager.save_profile(custom2);
+
+        // Should have 2 custom profiles
+        let customs = manager.get_custom_profiles();
+        assert_eq!(customs.len(), 2);
+
+        let names: Vec<_> = customs.iter().map(|p| p.name.as_str()).collect();
+        assert!(names.contains(&"custom1"));
+        assert!(names.contains(&"custom2"));
+    }
+
+    #[test]
+    fn test_chaos_api_error_not_found() {
+        let error = ChaosApiError::NotFound("Test error".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn test_status_response_serialize() {
+        let response = StatusResponse {
+            message: "Test message".to_string(),
+        };
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["message"], "Test message");
+    }
+
+    #[test]
+    fn test_predefined_scenario_info_serialize() {
+        let info = PredefinedScenarioInfo {
+            name: "test".to_string(),
+            description: "Test scenario".to_string(),
+            tags: vec!["tag1".to_string(), "tag2".to_string()],
+        };
+        let json = serde_json::to_value(&info).unwrap();
+        assert_eq!(json["name"], "test");
+        assert_eq!(json["description"], "Test scenario");
+        assert_eq!(json["tags"][0], "tag1");
+    }
+
+    #[test]
+    fn test_chaos_status_serialize() {
+        let status = ChaosStatus {
+            enabled: true,
+            active_scenarios: vec!["scenario1".to_string()],
+            latency_enabled: true,
+            fault_injection_enabled: false,
+            rate_limit_enabled: true,
+            traffic_shaping_enabled: false,
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["enabled"], true);
+        assert_eq!(json["active_scenarios"][0], "scenario1");
+        assert_eq!(json["latency_enabled"], true);
+    }
+
+    #[test]
+    fn test_grpc_status_codes_request_deserialize() {
+        let json = r#"{"status_codes":[3,16,5],"probability":0.5}"#;
+        let req: GrpcStatusCodesRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.status_codes, vec![3, 16, 5]);
+        assert_eq!(req.probability, 0.5);
+    }
+
+    #[test]
+    fn test_websocket_close_codes_request_deserialize() {
+        let json = r#"{"close_codes":[1002,1001],"probability":0.3}"#;
+        let req: WebSocketCloseCodesRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.close_codes, vec![1002, 1001]);
+        assert_eq!(req.probability, 0.3);
+    }
+
+    #[test]
+    fn test_graphql_error_codes_request_deserialize() {
+        let json = r#"{"error_codes":["BAD_USER_INPUT","UNAUTHENTICATED"],"probability":0.7}"#;
+        let req: GraphQLErrorCodesRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.error_codes, vec!["BAD_USER_INPUT", "UNAUTHENTICATED"]);
+        assert_eq!(req.probability, 0.7);
+    }
+
+    #[test]
+    fn test_probability_request_deserialize() {
+        let json = r#"{"probability":0.42}"#;
+        let req: ProbabilityRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.probability, 0.42);
+    }
+
+    #[test]
+    fn test_enable_request_deserialize() {
+        let json = r#"{"enabled":true}"#;
+        let req: EnableRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.enabled, true);
+
+        let json = r#"{"enabled":false}"#;
+        let req: EnableRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.enabled, false);
+    }
+
+    #[test]
+    fn test_start_recording_request_deserialize() {
+        let json = r#"{"scenario_name":"network_degradation"}"#;
+        let req: StartRecordingRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.scenario_name, "network_degradation");
+    }
+
+    #[test]
+    fn test_export_request_deserialize() {
+        let json = r#"{"path":"/tmp/recording.json"}"#;
+        let req: ExportRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.path, "/tmp/recording.json");
+    }
+
+    #[test]
+    fn test_recording_status_response_serialize() {
+        let response = RecordingStatusResponse {
+            is_recording: true,
+            scenario_name: Some("test_scenario".to_string()),
+            events_recorded: 42,
+        };
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["is_recording"], true);
+        assert_eq!(json["scenario_name"], "test_scenario");
+        assert_eq!(json["events_recorded"], 42);
+    }
+
+    #[test]
+    fn test_start_replay_request_deserialize() {
+        let json = r#"{"path":"/tmp/replay.json","speed":2.0,"loop_replay":true}"#;
+        let req: StartReplayRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.path, "/tmp/replay.json");
+        assert_eq!(req.speed, Some(2.0));
+        assert_eq!(req.loop_replay, Some(true));
+    }
+
+    #[test]
+    fn test_replay_status_response_serialize() {
+        let response = ReplayStatusResponse {
+            is_replaying: true,
+            scenario_name: Some("test".to_string()),
+            progress: 0.75,
+        };
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["is_replaying"], true);
+        assert_eq!(json["progress"], 0.75);
+    }
+
+    #[test]
+    fn test_orchestration_status_response_serialize() {
+        let response = OrchestrationStatusResponse {
+            is_running: true,
+            name: Some("test_orchestration".to_string()),
+            progress: 0.5,
+        };
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["is_running"], true);
+        assert_eq!(json["name"], "test_orchestration");
+        assert_eq!(json["progress"], 0.5);
+    }
+
+    #[test]
+    fn test_import_request_deserialize() {
+        let json = r#"{"content":"test content","format":"json"}"#;
+        let req: ImportRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.content, "test content");
+        assert_eq!(req.format, "json");
+    }
+
+    #[test]
+    fn test_schedule_summary_serialize_deserialize() {
+        let summary = ScheduleSummary {
+            id: "test_id".to_string(),
+            scenario_name: "test_scenario".to_string(),
+            enabled: true,
+            next_execution: Some("2024-01-01T00:00:00Z".to_string()),
+        };
+
+        // Test serialization
+        let json = serde_json::to_value(&summary).unwrap();
+        assert_eq!(json["id"], "test_id");
+        assert_eq!(json["scenario_name"], "test_scenario");
+        assert_eq!(json["enabled"], true);
+
+        // Test deserialization
+        let deserialized: ScheduleSummary = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.id, "test_id");
+        assert_eq!(deserialized.scenario_name, "test_scenario");
+        assert_eq!(deserialized.enabled, true);
+    }
+
+    #[test]
+    fn test_analyze_response_serialize() {
+        let response = AnalyzeResponse {
+            total_recommendations: 10,
+            high_priority: 3,
+            recommendations: vec![],
+        };
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["total_recommendations"], 10);
+        assert_eq!(json["high_priority"], 3);
+    }
+
+    #[test]
+    fn test_approve_request_deserialize() {
+        let json = r#"{"approver":"admin@example.com"}"#;
+        let req: ApproveRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.approver, "admin@example.com");
+    }
+
+    #[test]
+    fn test_reject_request_deserialize() {
+        let json = r#"{"reason":"Not applicable"}"#;
+        let req: RejectRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.reason, "Not applicable");
+    }
+
+    #[test]
+    fn test_latency_metrics_response_serialize() {
+        let response = LatencyMetricsResponse { samples: vec![] };
+        let json = serde_json::to_value(&response).unwrap();
+        assert!(json["samples"].is_array());
+    }
+
+    #[test]
+    fn test_import_profile_request_deserialize() {
+        let json = r#"{"content":"{}","format":"json"}"#;
+        let req: ImportProfileRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.content, "{}");
+        assert_eq!(req.format, "json");
+    }
+
+    #[tokio::test]
+    async fn test_chaos_api_state_creation() {
+        let config = ChaosConfig::default();
+        let (mut router, config_arc, latency_tracker, state) =
+            create_chaos_api_router(config, None);
+
+        // Verify router was created - getting a service confirms it exists
+        let _service = router.as_service::<axum::body::Body>();
+
+        // Verify config was wrapped in Arc
+        let cfg = config_arc.read().await;
+        assert!(!cfg.enabled); // Default is disabled
+        drop(cfg);
+
+        // Verify latency tracker exists
+        assert_eq!(latency_tracker.get_samples().len(), 0);
+
+        // Verify state exists and has correct components
+        assert!(state.config.read().await.enabled == false);
+    }
+
+    #[tokio::test]
+    async fn test_chaos_api_state_with_mockai() {
+        let config = ChaosConfig::default();
+        let mockai_config =
+            mockforge_core::intelligent_behavior::IntelligentBehaviorConfig::default();
+        let mockai = Arc::new(tokio::sync::RwLock::new(
+            mockforge_core::intelligent_behavior::MockAI::new(mockai_config),
+        ));
+
+        let (_router, _config_arc, _latency_tracker, state) =
+            create_chaos_api_router(config, Some(mockai.clone()));
+
+        // Verify MockAI was set
+        assert!(state.mockai.is_some());
+    }
+
+    #[test]
+    fn test_profile_manager_concurrent_access() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let manager = Arc::new(ProfileManager::new());
+        let mut handles = vec![];
+
+        // Spawn multiple threads that access the profile manager
+        for i in 0..5 {
+            let manager = manager.clone();
+            let handle = thread::spawn(move || {
+                let profile = NetworkProfile {
+                    name: format!("concurrent_{}", i),
+                    description: format!("Thread {}", i),
+                    builtin: false,
+                    tags: Vec::new(),
+                    chaos_config: ChaosConfig::default(),
+                };
+                manager.save_profile(profile.clone());
+
+                // Read it back
+                let retrieved = manager.get_profile(&format!("concurrent_{}", i));
+                assert!(retrieved.is_some());
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Verify all profiles were saved
+        let customs = manager.get_custom_profiles();
+        assert_eq!(customs.len(), 5);
+    }
+
+    #[test]
+    fn test_orchestrated_scenario_request_deserialize() {
+        let json = r#"{
+            "name": "test_orchestration",
+            "steps": [],
+            "parallel": true
+        }"#;
+        let req: OrchestratedScenarioRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.name, "test_orchestration");
+        assert_eq!(req.steps.len(), 0);
+        assert_eq!(req.parallel, Some(true));
+    }
+
+    #[test]
+    fn test_scheduled_scenario_request_deserialize() {
+        let json = r#"{
+            "id": "test_schedule",
+            "scenario": {},
+            "schedule": {}
+        }"#;
+        let req: ScheduledScenarioRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.id, "test_schedule");
+    }
+
+    #[test]
+    fn test_edge_cases_probability_values() {
+        // Test boundary values
+        let json = r#"{"probability":0.0}"#;
+        let req: ProbabilityRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.probability, 0.0);
+
+        let json = r#"{"probability":1.0}"#;
+        let req: ProbabilityRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.probability, 1.0);
+    }
+
+    #[test]
+    fn test_empty_arrays_in_requests() {
+        let json = r#"{"status_codes":[],"probability":0.5}"#;
+        let req: GrpcStatusCodesRequest = serde_json::from_str(json).unwrap();
+        assert!(req.status_codes.is_empty());
+
+        let json = r#"{"close_codes":[],"probability":0.5}"#;
+        let req: WebSocketCloseCodesRequest = serde_json::from_str(json).unwrap();
+        assert!(req.close_codes.is_empty());
+    }
+}

@@ -556,3 +556,459 @@ For more information, visit: https://docs.mockforge.dev
         }
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_minimal_metadata() -> BlueprintMetadata {
+        BlueprintMetadata {
+            manifest_version: "1.0".to_string(),
+            name: "test-blueprint".to_string(),
+            version: "1.0.0".to_string(),
+            title: "Test Blueprint".to_string(),
+            description: "A test blueprint for testing".to_string(),
+            author: "Test Author".to_string(),
+            author_email: None,
+            category: "testing".to_string(),
+            tags: vec![],
+            setup: None,
+            compatibility: None,
+            files: vec![],
+            readme: None,
+            contracts: vec![],
+        }
+    }
+
+    fn create_full_metadata() -> BlueprintMetadata {
+        BlueprintMetadata {
+            manifest_version: "1.0".to_string(),
+            name: "full-blueprint".to_string(),
+            version: "2.0.0".to_string(),
+            title: "Full Blueprint".to_string(),
+            description: "A fully configured blueprint".to_string(),
+            author: "Full Author".to_string(),
+            author_email: Some("author@example.com".to_string()),
+            category: "e-commerce".to_string(),
+            tags: vec!["api".to_string(), "mock".to_string()],
+            setup: Some(BlueprintSetup {
+                personas: vec![PersonaInfo {
+                    id: "admin".to_string(),
+                    name: "Admin User".to_string(),
+                    description: Some("Administrator persona".to_string()),
+                }],
+                reality: Some(RealityInfo {
+                    level: "standard".to_string(),
+                    description: Some("Standard reality level".to_string()),
+                }),
+                flows: vec![FlowInfo {
+                    id: "checkout".to_string(),
+                    name: "Checkout Flow".to_string(),
+                    description: Some("Complete checkout process".to_string()),
+                }],
+                scenarios: vec![ScenarioInfo {
+                    id: "happy".to_string(),
+                    name: "Happy Path".to_string(),
+                    r#type: "happy_path".to_string(),
+                    description: Some("Normal flow".to_string()),
+                    file: "happy.yaml".to_string(),
+                }],
+                playground: Some(PlaygroundInfo {
+                    enabled: true,
+                    collection_file: "playground.json".to_string(),
+                }),
+            }),
+            compatibility: Some(BlueprintCompatibility {
+                min_version: "0.3.0".to_string(),
+                max_version: Some("1.0.0".to_string()),
+                required_features: vec!["vbr".to_string()],
+                protocols: vec!["http".to_string(), "grpc".to_string()],
+            }),
+            files: vec!["config.yaml".to_string()],
+            readme: Some("README.md".to_string()),
+            contracts: vec![ContractInfo {
+                file: "schema.json".to_string(),
+                description: Some("Main API schema".to_string()),
+            }],
+        }
+    }
+
+    #[test]
+    fn test_default_true() {
+        assert!(default_true());
+    }
+
+    #[test]
+    fn test_default_min_version() {
+        assert_eq!(default_min_version(), "0.3.0");
+    }
+
+    #[test]
+    fn test_get_blueprints_dir() {
+        let dir = get_blueprints_dir();
+        assert_eq!(dir, PathBuf::from("blueprints"));
+    }
+
+    #[test]
+    fn test_blueprint_metadata_serialization() {
+        let metadata = create_minimal_metadata();
+        let json = serde_json::to_string(&metadata).unwrap();
+
+        assert!(json.contains("\"name\":\"test-blueprint\""));
+        assert!(json.contains("\"version\":\"1.0.0\""));
+        assert!(json.contains("\"category\":\"testing\""));
+    }
+
+    #[test]
+    fn test_blueprint_metadata_deserialization() {
+        let yaml = r#"
+manifest_version: "1.0"
+name: "test-blueprint"
+version: "1.0.0"
+title: "Test Blueprint"
+description: "A test blueprint"
+author: "Test Author"
+category: "testing"
+"#;
+        let metadata: BlueprintMetadata = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(metadata.name, "test-blueprint");
+        assert_eq!(metadata.version, "1.0.0");
+        assert_eq!(metadata.category, "testing");
+        assert!(metadata.tags.is_empty()); // default
+    }
+
+    #[test]
+    fn test_blueprint_metadata_full_deserialization() {
+        let yaml = r#"
+manifest_version: "1.0"
+name: "full-blueprint"
+version: "2.0.0"
+title: "Full Blueprint"
+description: "Full description"
+author: "Author"
+author_email: "author@example.com"
+category: "e-commerce"
+tags:
+  - api
+  - mock
+setup:
+  personas:
+    - id: admin
+      name: Admin User
+      description: Administrator
+  reality:
+    level: standard
+  flows:
+    - id: checkout
+      name: Checkout Flow
+  scenarios:
+    - id: happy
+      name: Happy Path
+      type: happy_path
+      file: happy.yaml
+  playground:
+    enabled: true
+    collection_file: playground.json
+compatibility:
+  min_version: "0.3.0"
+  max_version: "1.0.0"
+  required_features:
+    - vbr
+  protocols:
+    - http
+files:
+  - config.yaml
+contracts:
+  - file: schema.json
+    description: API Schema
+"#;
+        let metadata: BlueprintMetadata = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(metadata.name, "full-blueprint");
+        assert_eq!(metadata.author_email, Some("author@example.com".to_string()));
+        assert_eq!(metadata.tags.len(), 2);
+
+        let setup = metadata.setup.unwrap();
+        assert_eq!(setup.personas.len(), 1);
+        assert_eq!(setup.personas[0].id, "admin");
+        assert!(setup.reality.is_some());
+        assert_eq!(setup.flows.len(), 1);
+        assert_eq!(setup.scenarios.len(), 1);
+        assert!(setup.playground.is_some());
+
+        let compat = metadata.compatibility.unwrap();
+        assert_eq!(compat.min_version, "0.3.0");
+        assert_eq!(compat.max_version, Some("1.0.0".to_string()));
+    }
+
+    #[test]
+    fn test_persona_info_serialization() {
+        let persona = PersonaInfo {
+            id: "user".to_string(),
+            name: "Regular User".to_string(),
+            description: Some("A regular user persona".to_string()),
+        };
+
+        let json = serde_json::to_string(&persona).unwrap();
+        assert!(json.contains("\"id\":\"user\""));
+        assert!(json.contains("\"name\":\"Regular User\""));
+        assert!(json.contains("\"description\":\"A regular user persona\""));
+    }
+
+    #[test]
+    fn test_persona_info_clone() {
+        let persona = PersonaInfo {
+            id: "user".to_string(),
+            name: "Regular User".to_string(),
+            description: None,
+        };
+
+        let cloned = persona.clone();
+        assert_eq!(persona.id, cloned.id);
+        assert_eq!(persona.name, cloned.name);
+    }
+
+    #[test]
+    fn test_reality_info() {
+        let reality = RealityInfo {
+            level: "high".to_string(),
+            description: Some("High fidelity mode".to_string()),
+        };
+
+        let json = serde_json::to_string(&reality).unwrap();
+        let parsed: RealityInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.level, "high");
+        assert_eq!(parsed.description, Some("High fidelity mode".to_string()));
+    }
+
+    #[test]
+    fn test_flow_info() {
+        let flow = FlowInfo {
+            id: "login".to_string(),
+            name: "Login Flow".to_string(),
+            description: None,
+        };
+
+        let json = serde_json::to_string(&flow).unwrap();
+        assert!(json.contains("\"id\":\"login\""));
+        assert!(json.contains("\"name\":\"Login Flow\""));
+    }
+
+    #[test]
+    fn test_scenario_info() {
+        let scenario = ScenarioInfo {
+            id: "error".to_string(),
+            name: "Error Scenario".to_string(),
+            r#type: "known_failure".to_string(),
+            description: Some("Tests error handling".to_string()),
+            file: "error_scenario.yaml".to_string(),
+        };
+
+        let json = serde_json::to_string(&scenario).unwrap();
+        assert!(json.contains("\"id\":\"error\""));
+        assert!(json.contains("\"type\":\"known_failure\""));
+        assert!(json.contains("\"file\":\"error_scenario.yaml\""));
+    }
+
+    #[test]
+    fn test_contract_info() {
+        let contract = ContractInfo {
+            file: "openapi.yaml".to_string(),
+            description: Some("OpenAPI specification".to_string()),
+        };
+
+        let json = serde_json::to_string(&contract).unwrap();
+        let parsed: ContractInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.file, "openapi.yaml");
+        assert_eq!(parsed.description, Some("OpenAPI specification".to_string()));
+    }
+
+    #[test]
+    fn test_playground_info_with_default() {
+        let yaml = r#"collection_file: "test.json""#;
+        let playground: PlaygroundInfo = serde_yaml::from_str(yaml).unwrap();
+
+        assert!(playground.enabled); // default_true
+        assert_eq!(playground.collection_file, "test.json");
+    }
+
+    #[test]
+    fn test_playground_info_explicit_disabled() {
+        let yaml = r#"
+enabled: false
+collection_file: "test.json"
+"#;
+        let playground: PlaygroundInfo = serde_yaml::from_str(yaml).unwrap();
+
+        assert!(!playground.enabled);
+    }
+
+    #[test]
+    fn test_blueprint_compatibility_defaults() {
+        let yaml = r#"{}"#;
+        let compat: BlueprintCompatibility = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(compat.min_version, "0.3.0"); // default_min_version
+        assert!(compat.max_version.is_none());
+        assert!(compat.required_features.is_empty());
+        assert!(compat.protocols.is_empty());
+    }
+
+    #[test]
+    fn test_blueprint_setup_default() {
+        let yaml = r#"{}"#;
+        let setup: BlueprintSetup = serde_yaml::from_str(yaml).unwrap();
+
+        assert!(setup.personas.is_empty());
+        assert!(setup.reality.is_none());
+        assert!(setup.flows.is_empty());
+        assert!(setup.scenarios.is_empty());
+        assert!(setup.playground.is_none());
+    }
+
+    #[test]
+    fn test_generate_readme_minimal() {
+        let metadata = create_minimal_metadata();
+        let readme = generate_readme("MyProject", &metadata);
+
+        assert!(readme.contains("# MyProject"));
+        assert!(readme.contains("A test blueprint for testing"));
+        assert!(readme.contains("**Test Blueprint** blueprint"));
+        assert!(readme.contains("mockforge serve"));
+    }
+
+    #[test]
+    fn test_generate_readme_with_setup() {
+        let metadata = create_full_metadata();
+        let readme = generate_readme("FullProject", &metadata);
+
+        assert!(readme.contains("# FullProject"));
+        assert!(readme.contains("### Personas"));
+        assert!(readme.contains("1 predefined personas"));
+        assert!(readme.contains("### Sample Flows"));
+        assert!(readme.contains("### Playground Collection"));
+    }
+
+    #[test]
+    fn test_generate_readme_without_playground() {
+        let mut metadata = create_full_metadata();
+        if let Some(ref mut setup) = metadata.setup {
+            setup.playground = None;
+        }
+
+        let readme = generate_readme("TestProject", &metadata);
+
+        assert!(readme.contains("### Personas"));
+        assert!(!readme.contains("### Playground Collection"));
+    }
+
+    #[test]
+    fn test_blueprint_metadata_debug() {
+        let metadata = create_minimal_metadata();
+        let debug_str = format!("{:?}", metadata);
+
+        assert!(debug_str.contains("BlueprintMetadata"));
+        assert!(debug_str.contains("test-blueprint"));
+    }
+
+    #[test]
+    fn test_blueprint_commands_enum_variants() {
+        // Test that all variants can be constructed
+        let _list = BlueprintCommands::List {
+            detailed: true,
+            category: Some("testing".to_string()),
+        };
+
+        let _create = BlueprintCommands::Create {
+            name: "test".to_string(),
+            blueprint: "test-blueprint".to_string(),
+            output: Some(PathBuf::from("output")),
+            force: true,
+        };
+
+        let _info = BlueprintCommands::Info {
+            blueprint_id: "test".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_metadata_round_trip_yaml() {
+        let original = create_full_metadata();
+        let yaml = serde_yaml::to_string(&original).unwrap();
+        let parsed: BlueprintMetadata = serde_yaml::from_str(&yaml).unwrap();
+
+        assert_eq!(original.name, parsed.name);
+        assert_eq!(original.version, parsed.version);
+        assert_eq!(original.author_email, parsed.author_email);
+        assert_eq!(original.tags, parsed.tags);
+    }
+
+    #[test]
+    fn test_metadata_round_trip_json() {
+        let original = create_minimal_metadata();
+        let json = serde_json::to_string(&original).unwrap();
+        let parsed: BlueprintMetadata = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(original.name, parsed.name);
+        assert_eq!(original.version, parsed.version);
+        assert_eq!(original.category, parsed.category);
+    }
+
+    #[test]
+    fn test_all_structs_implement_clone() {
+        let metadata = create_full_metadata();
+        let cloned = metadata.clone();
+        assert_eq!(metadata.name, cloned.name);
+
+        let setup = metadata.setup.clone().unwrap();
+        let setup_cloned = setup.clone();
+        assert_eq!(setup.personas.len(), setup_cloned.personas.len());
+
+        if let Some(compat) = metadata.compatibility.clone() {
+            let compat_cloned = compat.clone();
+            assert_eq!(compat.min_version, compat_cloned.min_version);
+        }
+    }
+
+    #[test]
+    fn test_scenario_types() {
+        let types = ["happy_path", "known_failure", "slow_path", "edge_case"];
+
+        for scenario_type in types {
+            let scenario = ScenarioInfo {
+                id: "test".to_string(),
+                name: "Test Scenario".to_string(),
+                r#type: scenario_type.to_string(),
+                description: None,
+                file: "test.yaml".to_string(),
+            };
+
+            let json = serde_json::to_string(&scenario).unwrap();
+            assert!(json.contains(&format!("\"type\":\"{}\"", scenario_type)));
+        }
+    }
+
+    #[test]
+    fn test_metadata_with_empty_optional_arrays() {
+        let yaml = r#"
+manifest_version: "1.0"
+name: "minimal"
+version: "1.0.0"
+title: "Minimal"
+description: "Minimal blueprint"
+author: "Author"
+category: "test"
+tags: []
+files: []
+contracts: []
+"#;
+        let metadata: BlueprintMetadata = serde_yaml::from_str(yaml).unwrap();
+
+        assert!(metadata.tags.is_empty());
+        assert!(metadata.files.is_empty());
+        assert!(metadata.contracts.is_empty());
+    }
+}

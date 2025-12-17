@@ -140,3 +140,228 @@ fn calculate_checksum(file_path: &Path) -> Result<String> {
 
     Ok(format!("{:x}", hasher.finalize()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn create_test_plugin_project(dir: &Path) -> (PathBuf, PathBuf) {
+        let manifest_path = dir.join("plugin.yaml");
+        fs::write(&manifest_path, "id: test-plugin\nversion: 1.0.0\nname: Test Plugin").unwrap();
+
+        let wasm_dir = dir.join("target/wasm32-wasi/release");
+        fs::create_dir_all(&wasm_dir).unwrap();
+        let wasm_path = wasm_dir.join("test_plugin.wasm");
+        fs::write(&wasm_path, b"fake wasm content").unwrap();
+
+        (manifest_path, wasm_path)
+    }
+
+    #[test]
+    fn test_find_wasm_file_release() {
+        let temp_dir = TempDir::new().unwrap();
+        let wasm_dir = temp_dir.path().join("target/wasm32-wasi/release");
+        fs::create_dir_all(&wasm_dir).unwrap();
+
+        let wasm_path = wasm_dir.join("my_plugin.wasm");
+        fs::write(&wasm_path, b"test").unwrap();
+
+        let result = find_wasm_file(temp_dir.path(), "my-plugin");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), wasm_path);
+    }
+
+    #[test]
+    fn test_find_wasm_file_debug_fallback() {
+        let temp_dir = TempDir::new().unwrap();
+        let wasm_dir = temp_dir.path().join("target/wasm32-wasi/debug");
+        fs::create_dir_all(&wasm_dir).unwrap();
+
+        let wasm_path = wasm_dir.join("my_plugin.wasm");
+        fs::write(&wasm_path, b"test").unwrap();
+
+        let result = find_wasm_file(temp_dir.path(), "my-plugin");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), wasm_path);
+    }
+
+    #[test]
+    fn test_find_wasm_file_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = find_wasm_file(temp_dir.path(), "nonexistent");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("WASM file not found"));
+    }
+
+    #[test]
+    fn test_find_wasm_file_prefers_release() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let release_dir = temp_dir.path().join("target/wasm32-wasi/release");
+        fs::create_dir_all(&release_dir).unwrap();
+        let release_path = release_dir.join("test.wasm");
+        fs::write(&release_path, b"release").unwrap();
+
+        let debug_dir = temp_dir.path().join("target/wasm32-wasi/debug");
+        fs::create_dir_all(&debug_dir).unwrap();
+        let debug_path = debug_dir.join("test.wasm");
+        fs::write(&debug_path, b"debug").unwrap();
+
+        let result = find_wasm_file(temp_dir.path(), "test");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), release_path);
+    }
+
+    #[test]
+    fn test_calculate_checksum() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, b"test content").unwrap();
+
+        let result = calculate_checksum(&file_path);
+        assert!(result.is_ok());
+
+        let checksum = result.unwrap();
+        assert_eq!(checksum.len(), 64); // SHA-256 produces 64 hex characters
+        assert!(checksum.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_calculate_checksum_consistency() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, b"same content").unwrap();
+
+        let checksum1 = calculate_checksum(&file_path).unwrap();
+        let checksum2 = calculate_checksum(&file_path).unwrap();
+
+        assert_eq!(checksum1, checksum2);
+    }
+
+    #[test]
+    fn test_calculate_checksum_different_content() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let file1 = temp_dir.path().join("file1.txt");
+        fs::write(&file1, b"content1").unwrap();
+
+        let file2 = temp_dir.path().join("file2.txt");
+        fs::write(&file2, b"content2").unwrap();
+
+        let checksum1 = calculate_checksum(&file1).unwrap();
+        let checksum2 = calculate_checksum(&file2).unwrap();
+
+        assert_ne!(checksum1, checksum2);
+    }
+
+    #[test]
+    fn test_calculate_checksum_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("nonexistent.txt");
+
+        let result = calculate_checksum(&file_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_plugin_archive() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let manifest_path = temp_dir.path().join("plugin.yaml");
+        fs::write(&manifest_path, "id: test\nversion: 1.0.0").unwrap();
+
+        let wasm_path = temp_dir.path().join("plugin.wasm");
+        fs::write(&wasm_path, b"fake wasm").unwrap();
+
+        let output_path = temp_dir.path().join("output.zip");
+
+        let result = create_plugin_archive(&manifest_path, &wasm_path, &output_path);
+        assert!(result.is_ok());
+        assert!(output_path.exists());
+    }
+
+    #[test]
+    fn test_create_plugin_archive_invalid_manifest() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let manifest_path = temp_dir.path().join("nonexistent.yaml");
+        let wasm_path = temp_dir.path().join("plugin.wasm");
+        fs::write(&wasm_path, b"test").unwrap();
+
+        let output_path = temp_dir.path().join("output.zip");
+
+        let result = create_plugin_archive(&manifest_path, &wasm_path, &output_path);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_package_plugin() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_plugin_project(temp_dir.path());
+
+        let result = package_plugin(Some(temp_dir.path()), None).await;
+        assert!(result.is_ok());
+
+        let output_path = result.unwrap();
+        assert!(output_path.exists());
+        assert!(output_path.to_str().unwrap().ends_with("test-plugin.zip"));
+    }
+
+    #[tokio::test]
+    async fn test_package_plugin_custom_output() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_plugin_project(temp_dir.path());
+
+        let custom_output = temp_dir.path().join("custom-name.zip");
+        let result = package_plugin(Some(temp_dir.path()), Some(&custom_output)).await;
+        assert!(result.is_ok());
+
+        let output_path = result.unwrap();
+        assert_eq!(output_path, custom_output);
+        assert!(output_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_package_plugin_no_manifest() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result = package_plugin(Some(temp_dir.path()), None).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_package_plugin_no_wasm() {
+        let temp_dir = TempDir::new().unwrap();
+        let manifest_path = temp_dir.path().join("plugin.yaml");
+        fs::write(&manifest_path, "id: test-plugin\nversion: 1.0.0").unwrap();
+
+        let result = package_plugin(Some(temp_dir.path()), None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("WASM file not found"));
+    }
+
+    #[test]
+    fn test_add_file_to_zip() {
+        use std::fs::File;
+        use zip::write::{SimpleFileOptions, ZipWriter};
+        use zip::CompressionMethod;
+
+        let temp_dir = TempDir::new().unwrap();
+        let source_file = temp_dir.path().join("source.txt");
+        fs::write(&source_file, b"test content").unwrap();
+
+        let zip_path = temp_dir.path().join("test.zip");
+        let zip_file = File::create(&zip_path).unwrap();
+        let mut zip_writer = ZipWriter::new(zip_file);
+
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+        let result = add_file_to_zip(&mut zip_writer, &source_file, "archived.txt", options);
+        assert!(result.is_ok());
+
+        zip_writer.finish().unwrap();
+        assert!(zip_path.exists());
+    }
+}

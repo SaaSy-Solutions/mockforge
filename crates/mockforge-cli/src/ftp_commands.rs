@@ -270,3 +270,44 @@ async fn handle_ftp_vfs(command: FtpVfsCommands) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ftp_commands_serve_variant() {
+        let _cmd = FtpCommands::Serve {
+            port: 2121,
+            host: "127.0.0.1".to_string(),
+            config: None,
+            virtual_root: "/".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_ftp_fixtures_list_variant() {
+        let _cmd = FtpFixturesCommands::List;
+    }
+
+    #[test]
+    fn test_ftp_fixtures_load_variant() {
+        let _cmd = FtpFixturesCommands::Load {
+            directory: PathBuf::from("./fixtures/ftp"),
+        };
+    }
+
+    #[test]
+    fn test_ftp_fixtures_validate_variant() {
+        let _cmd = FtpFixturesCommands::Validate {
+            file: PathBuf::from("fixture.yaml"),
+        };
+    }
+
+    #[test]
+    fn test_ftp_vfs_list_variant() {
+        let _cmd = FtpVfsCommands::List {
+            path: "/".to_string(),
+        };
+    }
+}

@@ -247,3 +247,185 @@ pub struct JoinGroupResponse {
 }
 
 type Result<T> = std::result::Result<T, anyhow::Error>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_consumer_group_manager_new() {
+        let manager = ConsumerGroupManager::new();
+        assert!(manager.groups().is_empty());
+    }
+
+    #[test]
+    fn test_consumer_group_manager_default() {
+        let manager = ConsumerGroupManager::default();
+        assert!(manager.groups().is_empty());
+    }
+
+    #[test]
+    fn test_partition_assignment_clone() {
+        let assignment = PartitionAssignment {
+            topic: "test-topic".to_string(),
+            partitions: vec![0, 1, 2],
+        };
+
+        let cloned = assignment.clone();
+        assert_eq!(assignment.topic, cloned.topic);
+        assert_eq!(assignment.partitions, cloned.partitions);
+    }
+
+    #[test]
+    fn test_partition_assignment_debug() {
+        let assignment = PartitionAssignment {
+            topic: "test".to_string(),
+            partitions: vec![0],
+        };
+        let debug = format!("{:?}", assignment);
+        assert!(debug.contains("PartitionAssignment"));
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn test_group_member_debug() {
+        let member = GroupMember {
+            member_id: "member-1".to_string(),
+            client_id: "client-1".to_string(),
+            assignment: vec![],
+        };
+        let debug = format!("{:?}", member);
+        assert!(debug.contains("GroupMember"));
+        assert!(debug.contains("member-1"));
+    }
+
+    #[test]
+    fn test_group_coordinator_debug() {
+        let coordinator = GroupCoordinator {
+            coordinator_id: 1,
+            host: "localhost".to_string(),
+            port: 9092,
+        };
+        let debug = format!("{:?}", coordinator);
+        assert!(debug.contains("GroupCoordinator"));
+        assert!(debug.contains("localhost"));
+    }
+
+    #[test]
+    fn test_consumer_group_debug() {
+        let group = ConsumerGroup {
+            group_id: "test-group".to_string(),
+            members: HashMap::new(),
+            coordinator: GroupCoordinator {
+                coordinator_id: 1,
+                host: "localhost".to_string(),
+                port: 9092,
+            },
+            offsets: HashMap::new(),
+        };
+        let debug = format!("{:?}", group);
+        assert!(debug.contains("ConsumerGroup"));
+        assert!(debug.contains("test-group"));
+    }
+
+    #[test]
+    fn test_join_group_response_debug() {
+        let response = JoinGroupResponse {
+            generation_id: 1,
+            protocol_name: "consumer".to_string(),
+            leader: "member-1".to_string(),
+            member_id: "member-1".to_string(),
+            members: vec!["member-1".to_string()],
+        };
+        let debug = format!("{:?}", response);
+        assert!(debug.contains("JoinGroupResponse"));
+    }
+
+    #[test]
+    fn test_consumer_group_manager_debug() {
+        let manager = ConsumerGroupManager::new();
+        let debug = format!("{:?}", manager);
+        assert!(debug.contains("ConsumerGroupManager"));
+    }
+
+    #[tokio::test]
+    async fn test_join_group() {
+        let mut manager = ConsumerGroupManager::new();
+        let response = manager.join_group("group-1", "member-1", "client-1").await.unwrap();
+
+        assert_eq!(response.generation_id, 1);
+        assert_eq!(response.protocol_name, "consumer");
+        assert_eq!(response.member_id, "member-1");
+        assert!(response.members.contains(&"member-1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_join_group_multiple_members() {
+        let mut manager = ConsumerGroupManager::new();
+
+        manager.join_group("group-1", "member-1", "client-1").await.unwrap();
+        let response2 = manager.join_group("group-1", "member-2", "client-2").await.unwrap();
+
+        assert_eq!(response2.members.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_commit_offsets() {
+        let mut manager = ConsumerGroupManager::new();
+        manager.join_group("group-1", "member-1", "client-1").await.unwrap();
+
+        let mut offsets = HashMap::new();
+        offsets.insert(("topic-1".to_string(), 0), 100);
+        offsets.insert(("topic-1".to_string(), 1), 200);
+
+        manager.commit_offsets("group-1", offsets).await.unwrap();
+
+        let committed = manager.get_committed_offsets("group-1");
+        assert_eq!(committed.get(&("topic-1".to_string(), 0)), Some(&100));
+        assert_eq!(committed.get(&("topic-1".to_string(), 1)), Some(&200));
+    }
+
+    #[tokio::test]
+    async fn test_commit_offsets_nonexistent_group() {
+        let mut manager = ConsumerGroupManager::new();
+
+        let mut offsets = HashMap::new();
+        offsets.insert(("topic-1".to_string(), 0), 100);
+
+        let result = manager.commit_offsets("nonexistent", offsets).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_committed_offsets_nonexistent_group() {
+        let manager = ConsumerGroupManager::new();
+        let offsets = manager.get_committed_offsets("nonexistent");
+        assert!(offsets.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_trigger_rebalance() {
+        let mut manager = ConsumerGroupManager::new();
+        manager.join_group("group-1", "member-1", "client-1").await.unwrap();
+
+        // Add assignment
+        if let Some(group) = manager.groups.get_mut("group-1") {
+            if let Some(member) = group.members.get_mut("member-1") {
+                member.assignment.push(PartitionAssignment {
+                    topic: "test".to_string(),
+                    partitions: vec![0, 1],
+                });
+            }
+        }
+
+        // Trigger rebalance
+        manager.trigger_rebalance("group-1").await;
+
+        // Assignments should be cleared
+        if let Some(group) = manager.groups.get("group-1") {
+            if let Some(member) = group.members.get("member-1") {
+                assert!(member.assignment.is_empty());
+            }
+        }
+    }
+}

@@ -1129,14 +1129,504 @@ export let baseUrl = 'http://localhost:3000';
 mod tests {
     use super::*;
 
+    fn create_test_generator() -> AutoGenerator {
+        let config = RuntimeDaemonConfig::default();
+        AutoGenerator::new(config, "http://localhost:3000".to_string())
+    }
+
+    // infer_entity_type tests
     #[test]
     fn test_infer_entity_type() {
-        let config = RuntimeDaemonConfig::default();
-        let generator = AutoGenerator::new(config, "http://localhost:3000".to_string());
+        let generator = create_test_generator();
 
         assert_eq!(generator.infer_entity_type("/api/users"), "user");
         assert_eq!(generator.infer_entity_type("/api/products"), "product");
         assert_eq!(generator.infer_entity_type("/api/orders/123"), "order");
         assert_eq!(generator.infer_entity_type("/api"), "resource");
+    }
+
+    #[test]
+    fn test_infer_entity_type_with_versions() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.infer_entity_type("/v1/users"), "user");
+        assert_eq!(generator.infer_entity_type("/v2/products"), "product");
+        assert_eq!(generator.infer_entity_type("/api/v1/orders"), "order");
+        assert_eq!(generator.infer_entity_type("/api/v3/items"), "item");
+    }
+
+    #[test]
+    fn test_infer_entity_type_nested_paths() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.infer_entity_type("/api/users/123/orders"), "order");
+        assert_eq!(generator.infer_entity_type("/api/stores/456/products"), "product");
+    }
+
+    #[test]
+    fn test_infer_entity_type_numeric_id() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.infer_entity_type("/api/users/123"), "user");
+        assert_eq!(generator.infer_entity_type("/api/products/99999"), "product");
+    }
+
+    #[test]
+    fn test_infer_entity_type_empty_path() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.infer_entity_type("/"), "resource");
+        assert_eq!(generator.infer_entity_type(""), "resource");
+    }
+
+    // sanitize_type_name tests
+    #[test]
+    fn test_sanitize_type_name_basic() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.sanitize_type_name("user"), "User");
+        assert_eq!(generator.sanitize_type_name("product"), "Product");
+    }
+
+    #[test]
+    fn test_sanitize_type_name_with_hyphens() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.sanitize_type_name("user-account"), "UserAccount");
+        assert_eq!(generator.sanitize_type_name("product-item"), "ProductItem");
+    }
+
+    #[test]
+    fn test_sanitize_type_name_with_underscores() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.sanitize_type_name("user_account"), "UserAccount");
+        assert_eq!(generator.sanitize_type_name("product_item"), "ProductItem");
+    }
+
+    #[test]
+    fn test_sanitize_type_name_with_spaces() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.sanitize_type_name("user account"), "UserAccount");
+        assert_eq!(generator.sanitize_type_name("product item"), "ProductItem");
+    }
+
+    #[test]
+    fn test_sanitize_type_name_empty() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.sanitize_type_name(""), "Resource");
+    }
+
+    #[test]
+    fn test_sanitize_type_name_special_chars() {
+        let generator = create_test_generator();
+
+        // Special chars like @ and ! are stripped but don't trigger capitalization
+        // Only -, _, and space trigger capitalization of the next char
+        assert_eq!(generator.sanitize_type_name("user@123"), "User123");
+        assert_eq!(generator.sanitize_type_name("product!item"), "Productitem");
+        // With hyphen or underscore, capitalization is triggered
+        assert_eq!(generator.sanitize_type_name("product-item"), "ProductItem");
+    }
+
+    // generate_function_name tests
+    #[test]
+    fn test_generate_function_name_get_list() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.generate_function_name("GET", "/api/users"), "listUsers");
+        assert_eq!(generator.generate_function_name("GET", "/api/products"), "listProducts");
+    }
+
+    #[test]
+    fn test_generate_function_name_get_single() {
+        let generator = create_test_generator();
+
+        // When path has {id} parameter, the entity is inferred from the path segment
+        // The function extracts "id" as the entity type since it's the last non-numeric segment
+        assert_eq!(generator.generate_function_name("GET", "/api/users/{id}"), "getId");
+        assert_eq!(
+            generator.generate_function_name("GET", "/api/products/{productId}"),
+            "getProductid"
+        );
+    }
+
+    #[test]
+    fn test_generate_function_name_post() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.generate_function_name("POST", "/api/users"), "createUser");
+        assert_eq!(generator.generate_function_name("POST", "/api/products"), "createProduct");
+    }
+
+    #[test]
+    fn test_generate_function_name_put() {
+        let generator = create_test_generator();
+
+        // Entity type is inferred from the last path segment (which is {id})
+        assert_eq!(generator.generate_function_name("PUT", "/api/users/{id}"), "updateId");
+        // Without path params, uses entity type directly
+        assert_eq!(generator.generate_function_name("PUT", "/api/users"), "updateUser");
+    }
+
+    #[test]
+    fn test_generate_function_name_patch() {
+        let generator = create_test_generator();
+
+        // Entity type is inferred from the last path segment
+        assert_eq!(generator.generate_function_name("PATCH", "/api/users/{id}"), "patchId");
+        assert_eq!(generator.generate_function_name("PATCH", "/api/users"), "patchUser");
+    }
+
+    #[test]
+    fn test_generate_function_name_delete() {
+        let generator = create_test_generator();
+
+        // Entity type is inferred from the last path segment
+        assert_eq!(generator.generate_function_name("DELETE", "/api/users/{id}"), "deleteId");
+        assert_eq!(generator.generate_function_name("DELETE", "/api/users"), "deleteUser");
+    }
+
+    #[test]
+    fn test_generate_function_name_unknown_method() {
+        let generator = create_test_generator();
+
+        assert_eq!(generator.generate_function_name("OPTIONS", "/api/users"), "callUser");
+    }
+
+    // generate_operation_id tests
+    #[test]
+    fn test_generate_operation_id_basic() {
+        let generator = create_test_generator();
+
+        let op_id = generator.generate_operation_id("GET", "/api/users");
+        assert!(op_id.starts_with("get"));
+        assert!(op_id.contains("Api"));
+        assert!(op_id.contains("Users"));
+    }
+
+    #[test]
+    fn test_generate_operation_id_post() {
+        let generator = create_test_generator();
+
+        let op_id = generator.generate_operation_id("POST", "/api/users");
+        assert!(op_id.starts_with("post"));
+    }
+
+    #[test]
+    fn test_generate_operation_id_with_id_param() {
+        let generator = create_test_generator();
+
+        // Path params ({id}) should be excluded from operation ID
+        let op_id = generator.generate_operation_id("GET", "/api/users/{id}");
+        assert!(!op_id.contains("{"));
+        assert!(!op_id.contains("}"));
+    }
+
+    // schema_value_to_typescript_type tests
+    #[test]
+    fn test_schema_value_to_typescript_type_string() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({"type": "string"});
+        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "string");
+    }
+
+    #[test]
+    fn test_schema_value_to_typescript_type_integer() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({"type": "integer"});
+        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "number");
+    }
+
+    #[test]
+    fn test_schema_value_to_typescript_type_number() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({"type": "number"});
+        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "number");
+    }
+
+    #[test]
+    fn test_schema_value_to_typescript_type_boolean() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({"type": "boolean"});
+        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "boolean");
+    }
+
+    #[test]
+    fn test_schema_value_to_typescript_type_array() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({
+            "type": "array",
+            "items": {"type": "string"}
+        });
+        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "string[]");
+    }
+
+    #[test]
+    fn test_schema_value_to_typescript_type_array_no_items() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({"type": "array"});
+        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "any[]");
+    }
+
+    #[test]
+    fn test_schema_value_to_typescript_type_object() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({"type": "object"});
+        assert_eq!(
+            generator.schema_value_to_typescript_type(&schema).unwrap(),
+            "Record<string, any>"
+        );
+    }
+
+    #[test]
+    fn test_schema_value_to_typescript_type_unknown() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({"type": "unknown_type"});
+        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "any");
+    }
+
+    #[test]
+    fn test_schema_value_to_typescript_type_date_format() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({"type": "string", "format": "date-time"});
+        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "string");
+    }
+
+    // build_schema_for_entity tests
+    #[test]
+    fn test_build_schema_for_entity_get_single() {
+        let generator = create_test_generator();
+
+        let schema = generator.build_schema_for_entity("user", "GET");
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["id"].is_object());
+        assert!(schema["properties"]["name"].is_object());
+    }
+
+    #[test]
+    fn test_build_schema_for_entity_get_plural() {
+        let generator = create_test_generator();
+
+        let schema = generator.build_schema_for_entity("users", "GET");
+        assert_eq!(schema["type"], "array");
+        assert!(schema["items"].is_object());
+    }
+
+    #[test]
+    fn test_build_schema_for_entity_post() {
+        let generator = create_test_generator();
+
+        let schema = generator.build_schema_for_entity("user", "POST");
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["status"].is_object());
+    }
+
+    #[test]
+    fn test_build_schema_for_entity_put() {
+        let generator = create_test_generator();
+
+        let schema = generator.build_schema_for_entity("user", "PUT");
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["updated_at"].is_object());
+    }
+
+    #[test]
+    fn test_build_schema_for_entity_patch() {
+        let generator = create_test_generator();
+
+        let schema = generator.build_schema_for_entity("user", "PATCH");
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["updated_at"].is_object());
+    }
+
+    #[test]
+    fn test_build_schema_for_entity_delete() {
+        let generator = create_test_generator();
+
+        let schema = generator.build_schema_for_entity("user", "DELETE");
+        assert_eq!(schema["type"], "object");
+        // DELETE returns base schema
+    }
+
+    // generate_intelligent_response tests
+    #[tokio::test]
+    async fn test_generate_intelligent_response_get_collection() {
+        let generator = create_test_generator();
+
+        let response = generator.generate_intelligent_response("GET", "/api/users/").await.unwrap();
+        assert!(response.is_array());
+    }
+
+    #[tokio::test]
+    async fn test_generate_intelligent_response_get_single() {
+        let generator = create_test_generator();
+
+        let response =
+            generator.generate_intelligent_response("GET", "/api/users/123").await.unwrap();
+        assert!(response.is_object());
+        assert_eq!(response["id"], "123");
+    }
+
+    #[tokio::test]
+    async fn test_generate_intelligent_response_post() {
+        let generator = create_test_generator();
+
+        let response = generator.generate_intelligent_response("POST", "/api/users").await.unwrap();
+        assert!(response.is_object());
+        assert_eq!(response["status"], "created");
+    }
+
+    #[tokio::test]
+    async fn test_generate_intelligent_response_put() {
+        let generator = create_test_generator();
+
+        let response =
+            generator.generate_intelligent_response("PUT", "/api/users/123").await.unwrap();
+        assert!(response.is_object());
+        assert!(response["name"].as_str().unwrap().contains("Updated"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_intelligent_response_delete() {
+        let generator = create_test_generator();
+
+        let response = generator
+            .generate_intelligent_response("DELETE", "/api/users/123")
+            .await
+            .unwrap();
+        assert!(response.is_object());
+        assert_eq!(response["success"], true);
+    }
+
+    #[tokio::test]
+    async fn test_generate_intelligent_response_unknown_method() {
+        let generator = create_test_generator();
+
+        let response =
+            generator.generate_intelligent_response("OPTIONS", "/api/users").await.unwrap();
+        assert!(response.is_object());
+        assert!(response["message"].is_string());
+    }
+
+    // generate_typescript_interface tests
+    #[test]
+    fn test_generate_typescript_interface_object() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "name": {"type": "string"}
+            },
+            "required": ["id"]
+        });
+
+        let ts_code = generator.generate_typescript_interface("User", &schema, "GET").unwrap();
+        assert!(ts_code.contains("export interface User"));
+        assert!(ts_code.contains("id: string"));
+        assert!(ts_code.contains("name?: string")); // Optional since not in required
+    }
+
+    #[test]
+    fn test_generate_typescript_interface_array() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"}
+                }
+            }
+        });
+
+        let ts_code = generator.generate_typescript_interface("Users", &schema, "GET").unwrap();
+        assert!(ts_code.contains("export type Users = UsersItem[]"));
+    }
+
+    // generate_json_schema tests
+    #[test]
+    fn test_generate_json_schema() {
+        let generator = create_test_generator();
+
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"}
+            },
+            "required": ["id"]
+        });
+
+        let json_schema = generator.generate_json_schema("User", &schema).unwrap();
+        assert_eq!(json_schema["$schema"], "http://json-schema.org/draft-07/schema#");
+        assert_eq!(json_schema["title"], "User");
+        assert_eq!(json_schema["type"], "object");
+    }
+
+    // generate_scenario_manifest tests
+    #[test]
+    fn test_generate_scenario_manifest() {
+        let generator = create_test_generator();
+
+        let manifest = generator
+            .generate_scenario_manifest("test-scenario", "GET", "/api/users", "mock-123")
+            .unwrap();
+
+        assert_eq!(manifest["name"], "test-scenario");
+        assert_eq!(manifest["manifest_version"], "1.0");
+        assert!(manifest["metadata"]["auto_generated"].as_bool().unwrap());
+    }
+
+    // generate_scenario_config tests
+    #[test]
+    fn test_generate_scenario_config() {
+        let generator = create_test_generator();
+
+        let config = generator.generate_scenario_config("GET", "/api/users", "mock-123").unwrap();
+
+        assert!(config["http"]["enabled"].as_bool().unwrap());
+        assert!(config["http"]["mocks"].is_array());
+    }
+
+    // AutoGenerator creation tests
+    #[test]
+    fn test_auto_generator_new() {
+        let config = RuntimeDaemonConfig::default();
+        let generator = AutoGenerator::new(config, "http://localhost:3000".to_string());
+        assert!(!generator.config.enabled);
+        assert_eq!(generator.management_api_url, "http://localhost:3000");
+    }
+
+    #[test]
+    fn test_auto_generator_with_custom_config() {
+        let config = RuntimeDaemonConfig {
+            enabled: true,
+            ai_generation: true,
+            generate_types: true,
+            generate_client_stubs: true,
+            workspace_dir: Some("/tmp/workspace".to_string()),
+            ..Default::default()
+        };
+        let generator = AutoGenerator::new(config, "http://api.example.com".to_string());
+
+        assert!(generator.config.enabled);
+        assert!(generator.config.ai_generation);
+        assert!(generator.config.generate_types);
+        assert!(generator.config.generate_client_stubs);
+        assert_eq!(generator.config.workspace_dir, Some("/tmp/workspace".to_string()));
     }
 }

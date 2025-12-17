@@ -384,6 +384,199 @@ mod tests {
     use axum::http::Request;
     use tower::ServiceExt;
 
+    // ==================== ServiceStatus Tests ====================
+
+    #[test]
+    fn test_service_status() {
+        assert!(ServiceStatus::Ready.is_ready());
+        assert!(!ServiceStatus::Initializing.is_ready());
+        assert!(!ServiceStatus::ShuttingDown.is_ready());
+        assert!(!ServiceStatus::Failed.is_ready());
+
+        assert!(ServiceStatus::Ready.is_alive());
+        assert!(ServiceStatus::Initializing.is_alive());
+        assert!(ServiceStatus::ShuttingDown.is_alive());
+        assert!(!ServiceStatus::Failed.is_alive());
+    }
+
+    #[test]
+    fn test_service_status_eq() {
+        assert_eq!(ServiceStatus::Ready, ServiceStatus::Ready);
+        assert_ne!(ServiceStatus::Ready, ServiceStatus::Failed);
+        assert_eq!(ServiceStatus::Initializing, ServiceStatus::Initializing);
+    }
+
+    #[test]
+    fn test_service_status_clone() {
+        let status = ServiceStatus::Ready;
+        let cloned = status;
+        assert_eq!(status, cloned);
+    }
+
+    #[test]
+    fn test_service_status_debug() {
+        let debug = format!("{:?}", ServiceStatus::Ready);
+        assert!(debug.contains("Ready"));
+    }
+
+    // ==================== HealthManager Tests ====================
+
+    #[tokio::test]
+    async fn test_health_manager_new() {
+        let manager = HealthManager::new();
+        let status = manager.get_status().await;
+        assert_eq!(status, ServiceStatus::Initializing);
+    }
+
+    #[tokio::test]
+    async fn test_health_manager_default() {
+        let manager = HealthManager::default();
+        let status = manager.get_status().await;
+        assert_eq!(status, ServiceStatus::Initializing);
+    }
+
+    #[tokio::test]
+    async fn test_health_manager_with_init_timeout() {
+        let manager = HealthManager::with_init_timeout(Duration::from_secs(30));
+        let status = manager.get_status().await;
+        assert_eq!(status, ServiceStatus::Initializing);
+        assert!(!manager.is_init_timeout());
+    }
+
+    #[tokio::test]
+    async fn test_health_manager_set_ready() {
+        let manager = HealthManager::new();
+        manager.set_ready().await;
+        let status = manager.get_status().await;
+        assert_eq!(status, ServiceStatus::Ready);
+    }
+
+    #[tokio::test]
+    async fn test_health_manager_set_failed() {
+        let manager = HealthManager::new();
+        manager.set_failed("test error").await;
+        let status = manager.get_status().await;
+        assert_eq!(status, ServiceStatus::Failed);
+    }
+
+    #[tokio::test]
+    async fn test_health_manager_set_shutting_down() {
+        let manager = HealthManager::new();
+        manager.set_shutting_down().await;
+        let status = manager.get_status().await;
+        assert_eq!(status, ServiceStatus::ShuttingDown);
+    }
+
+    #[tokio::test]
+    async fn test_health_manager_uptime() {
+        let manager = HealthManager::new();
+        let uptime = manager.uptime_seconds();
+        // Uptime should be very small immediately after creation
+        assert!(uptime < 5);
+    }
+
+    #[tokio::test]
+    async fn test_health_manager_clone() {
+        let manager = HealthManager::new();
+        manager.set_ready().await;
+        let cloned = manager.clone();
+        let status = cloned.get_status().await;
+        assert_eq!(status, ServiceStatus::Ready);
+    }
+
+    #[tokio::test]
+    async fn test_health_manager_trigger_shutdown() {
+        let manager = HealthManager::new();
+        manager.set_ready().await;
+        manager.trigger_shutdown().await;
+        let status = manager.get_status().await;
+        assert_eq!(status, ServiceStatus::ShuttingDown);
+    }
+
+    // ==================== HealthResponse Tests ====================
+
+    #[test]
+    fn test_health_response_serialization() {
+        let response = HealthResponse {
+            status: "healthy".to_string(),
+            timestamp: "2024-01-15T10:30:00Z".to_string(),
+            uptime_seconds: 3600,
+            version: "1.0.0".to_string(),
+            details: None,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("healthy"));
+        assert!(json.contains("3600"));
+        assert!(json.contains("1.0.0"));
+    }
+
+    #[test]
+    fn test_health_response_with_details() {
+        let response = HealthResponse {
+            status: "healthy".to_string(),
+            timestamp: "2024-01-15T10:30:00Z".to_string(),
+            uptime_seconds: 3600,
+            version: "1.0.0".to_string(),
+            details: Some(HealthDetails {
+                initialization: "complete".to_string(),
+                connections: Some(10),
+                memory_bytes: Some(1024 * 1024),
+            }),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("complete"));
+        assert!(json.contains("connections"));
+    }
+
+    #[test]
+    fn test_health_response_deserialization() {
+        let json = r#"{
+            "status": "healthy",
+            "timestamp": "2024-01-15T10:30:00Z",
+            "uptime_seconds": 7200,
+            "version": "2.0.0"
+        }"#;
+
+        let response: HealthResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.status, "healthy");
+        assert_eq!(response.uptime_seconds, 7200);
+        assert_eq!(response.version, "2.0.0");
+    }
+
+    // ==================== HealthDetails Tests ====================
+
+    #[test]
+    fn test_health_details_serialization() {
+        let details = HealthDetails {
+            initialization: "complete".to_string(),
+            connections: Some(5),
+            memory_bytes: Some(2048),
+        };
+
+        let json = serde_json::to_string(&details).unwrap();
+        assert!(json.contains("complete"));
+        assert!(json.contains("5"));
+        assert!(json.contains("2048"));
+    }
+
+    #[test]
+    fn test_health_details_optional_fields() {
+        let details = HealthDetails {
+            initialization: "initializing".to_string(),
+            connections: None,
+            memory_bytes: None,
+        };
+
+        let json = serde_json::to_string(&details).unwrap();
+        assert!(json.contains("initializing"));
+        assert!(!json.contains("connections"));
+        assert!(!json.contains("memory_bytes"));
+    }
+
+    // ==================== Probe Endpoint Tests ====================
+
     #[tokio::test]
     async fn test_liveness_probe_alive() {
         let health = Arc::new(HealthManager::new());
@@ -413,6 +606,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_liveness_probe_initializing() {
+        let health = Arc::new(HealthManager::new());
+        // Initializing is still alive
+
+        let app = health_router(health.clone());
+        let response = app
+            .oneshot(Request::builder().uri("/health/live").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_liveness_probe_shutting_down() {
+        let health = Arc::new(HealthManager::new());
+        health.set_shutting_down().await;
+
+        let app = health_router(health.clone());
+        let response = app
+            .oneshot(Request::builder().uri("/health/live").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        // Shutting down is still alive
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn test_readiness_probe_ready() {
         let health = Arc::new(HealthManager::new());
         health.set_ready().await;
@@ -429,7 +651,20 @@ mod tests {
     #[tokio::test]
     async fn test_readiness_probe_initializing() {
         let health = Arc::new(HealthManager::new());
-        // Status is Initializing by default
+
+        let app = health_router(health.clone());
+        let response = app
+            .oneshot(Request::builder().uri("/health/ready").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn test_readiness_probe_shutting_down() {
+        let health = Arc::new(HealthManager::new());
+        health.set_shutting_down().await;
 
         let app = health_router(health.clone());
         let response = app
@@ -457,7 +692,6 @@ mod tests {
     #[tokio::test]
     async fn test_startup_probe_initializing() {
         let health = Arc::new(HealthManager::new());
-        // Status is Initializing by default
 
         let app = health_router(health.clone());
         let response = app
@@ -466,6 +700,22 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn test_startup_probe_shutting_down() {
+        let health = Arc::new(HealthManager::new());
+        health.set_ready().await;
+        health.set_shutting_down().await;
+
+        let app = health_router(health.clone());
+        let response = app
+            .oneshot(Request::builder().uri("/health/startup").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        // During shutdown, startup probe returns OK (service was started)
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -482,16 +732,32 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    #[test]
-    fn test_service_status() {
-        assert!(ServiceStatus::Ready.is_ready());
-        assert!(!ServiceStatus::Initializing.is_ready());
-        assert!(!ServiceStatus::ShuttingDown.is_ready());
-        assert!(!ServiceStatus::Failed.is_ready());
+    #[tokio::test]
+    async fn test_health_check_not_ready() {
+        let health = Arc::new(HealthManager::new());
 
-        assert!(ServiceStatus::Ready.is_alive());
-        assert!(ServiceStatus::Initializing.is_alive());
-        assert!(ServiceStatus::ShuttingDown.is_alive());
-        assert!(!ServiceStatus::Failed.is_alive());
+        let app = health_router(health.clone());
+        let response = app
+            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    // ==================== Router Tests ====================
+
+    #[test]
+    fn test_health_router_creation() {
+        let health = Arc::new(HealthManager::new());
+        let router = health_router(health);
+        let _ = router;
+    }
+
+    #[test]
+    fn test_health_router_with_prefix() {
+        let health = Arc::new(HealthManager::new());
+        let router = health_router_with_prefix(health, "/api/v1");
+        let _ = router;
     }
 }

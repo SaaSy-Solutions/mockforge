@@ -13,21 +13,37 @@ use super::state::AuthState;
 use super::types::{AuthClaims, AuthResult};
 
 /// Authenticate a request using various methods
+///
+/// Tries authentication methods in priority order:
+/// 1. JWT (Bearer token)
+/// 2. Basic Auth
+/// 3. OAuth2 token introspection
+/// 4. API Key
+///
+/// Returns success on first successful auth, or continues to try other methods.
 pub async fn authenticate_request(
     state: &AuthState,
     auth_header: &Option<String>,
     api_key_header: &Option<String>,
     api_key_query: &Option<String>,
 ) -> AuthResult {
+    let mut last_failure: Option<AuthResult> = None;
+
     // Try JWT/Bearer token first
     if let Some(header) = auth_header {
         if header.starts_with("Bearer ") {
             if let Some(result) = authenticate_jwt(state, header).await {
-                return result;
+                if matches!(result, AuthResult::Success(_)) {
+                    return result;
+                }
+                last_failure = Some(result);
             }
         } else if header.starts_with("Basic ") {
             if let Some(result) = authenticate_basic(state, header) {
-                return result;
+                if matches!(result, AuthResult::Success(_)) {
+                    return result;
+                }
+                last_failure = Some(result);
             }
         }
     }
@@ -36,7 +52,10 @@ pub async fn authenticate_request(
     if let Some(header) = auth_header {
         if header.starts_with("Bearer ") {
             if let Some(result) = authenticate_oauth2(state, header).await {
-                return result;
+                if matches!(result, AuthResult::Success(_)) {
+                    return result;
+                }
+                last_failure = Some(result);
             }
         }
     }
@@ -44,12 +63,15 @@ pub async fn authenticate_request(
     // Try API key authentication
     if let Some(api_key) = api_key_header.as_ref().or(api_key_query.as_ref()) {
         if let Some(result) = authenticate_api_key(state, api_key) {
-            return result;
+            if matches!(result, AuthResult::Success(_)) {
+                return result;
+            }
+            last_failure = Some(result);
         }
     }
 
-    // No authentication provided or all methods failed
-    AuthResult::None
+    // Return last failure if any auth was attempted, otherwise None
+    last_failure.unwrap_or(AuthResult::None)
 }
 
 /// Authenticate using JWT
@@ -374,5 +396,577 @@ pub fn authenticate_api_key(state: &AuthState, api_key: &str) -> Option<AuthResu
         Some(AuthResult::Success(claims))
     } else {
         Some(AuthResult::Failure("Invalid API key".to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::state::AuthState;
+    use super::*;
+    use base64::Engine;
+    use mockforge_core::config::{ApiKeyConfig, AuthConfig, BasicAuthConfig, JwtConfig};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
+    fn create_auth_state(config: AuthConfig) -> AuthState {
+        AuthState {
+            config,
+            spec: None,
+            oauth2_client: None,
+            introspection_cache: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    fn create_test_auth_state_with_jwt() -> AuthState {
+        let jwt_config = JwtConfig {
+            secret: Some("test-secret-key-for-jwt-authentication".to_string()),
+            rsa_public_key: None,
+            ecdsa_public_key: None,
+            algorithms: vec!["HS256".to_string()],
+            issuer: Some("test-issuer".to_string()),
+            audience: Some("test-audience".to_string()),
+        };
+
+        let auth_config = AuthConfig {
+            jwt: Some(jwt_config),
+            basic_auth: None,
+            oauth2: None,
+            api_key: None,
+            require_auth: false,
+        };
+
+        create_auth_state(auth_config)
+    }
+
+    fn create_test_auth_state_with_basic() -> AuthState {
+        let mut credentials = HashMap::new();
+        credentials.insert("testuser".to_string(), "testpass".to_string());
+        credentials.insert("admin".to_string(), "admin123".to_string());
+
+        let basic_config = BasicAuthConfig { credentials };
+
+        let auth_config = AuthConfig {
+            jwt: None,
+            basic_auth: Some(basic_config),
+            oauth2: None,
+            api_key: None,
+            require_auth: false,
+        };
+
+        create_auth_state(auth_config)
+    }
+
+    fn create_test_auth_state_with_api_key() -> AuthState {
+        let api_key_config = ApiKeyConfig {
+            header_name: "X-API-Key".to_string(),
+            query_name: None,
+            keys: vec![
+                "valid-api-key-123".to_string(),
+                "another-valid-key-456".to_string(),
+            ],
+        };
+
+        let auth_config = AuthConfig {
+            jwt: None,
+            basic_auth: None,
+            oauth2: None,
+            api_key: Some(api_key_config),
+            require_auth: false,
+        };
+
+        create_auth_state(auth_config)
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_request_no_auth() {
+        let state = create_auth_state(AuthConfig {
+            jwt: None,
+            basic_auth: None,
+            oauth2: None,
+            api_key: None,
+            require_auth: false,
+        });
+
+        let result = authenticate_request(&state, &None, &None, &None).await;
+        assert!(matches!(result, AuthResult::None));
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_jwt_valid() {
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use serde_json::json;
+
+        let state = create_test_auth_state_with_jwt();
+
+        // Create a valid JWT token
+        let mut claims = serde_json::Map::new();
+        claims.insert("sub".to_string(), json!("user123"));
+        claims.insert("iss".to_string(), json!("test-issuer"));
+        claims.insert("aud".to_string(), json!("test-audience"));
+        claims.insert(
+            "exp".to_string(),
+            json!((chrono::Utc::now() + chrono::Duration::hours(1)).timestamp()),
+        );
+
+        let secret = "test-secret-key-for-jwt-authentication";
+        let token =
+            encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+                .unwrap();
+
+        let auth_header = format!("Bearer {}", token);
+        let result = authenticate_jwt(&state, &auth_header).await;
+
+        assert!(result.is_some());
+        match result.unwrap() {
+            AuthResult::Success(claims) => {
+                assert_eq!(claims.sub, Some("user123".to_string()));
+                assert_eq!(claims.iss, Some("test-issuer".to_string()));
+                assert_eq!(claims.aud, Some("test-audience".to_string()));
+            }
+            _ => panic!("Expected successful authentication"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_jwt_invalid_format() {
+        let state = create_test_auth_state_with_jwt();
+        let auth_header = "Bearer invalid-token-format";
+        let result = authenticate_jwt(&state, &auth_header).await;
+
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AuthResult::Failure(_)));
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_jwt_expired() {
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use serde_json::json;
+
+        let state = create_test_auth_state_with_jwt();
+
+        // Create an expired JWT token
+        let mut claims = serde_json::Map::new();
+        claims.insert("sub".to_string(), json!("user123"));
+        claims.insert("iss".to_string(), json!("test-issuer"));
+        claims.insert("aud".to_string(), json!("test-audience"));
+        claims.insert(
+            "exp".to_string(),
+            json!((chrono::Utc::now() - chrono::Duration::hours(1)).timestamp()),
+        );
+
+        let secret = "test-secret-key-for-jwt-authentication";
+        let token =
+            encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+                .unwrap();
+
+        let auth_header = format!("Bearer {}", token);
+        let result = authenticate_jwt(&state, &auth_header).await;
+
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AuthResult::Failure(_)));
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_jwt_wrong_issuer() {
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use serde_json::json;
+
+        let state = create_test_auth_state_with_jwt();
+
+        // Create a token with wrong issuer
+        let mut claims = serde_json::Map::new();
+        claims.insert("sub".to_string(), json!("user123"));
+        claims.insert("iss".to_string(), json!("wrong-issuer"));
+        claims.insert("aud".to_string(), json!("test-audience"));
+        claims.insert(
+            "exp".to_string(),
+            json!((chrono::Utc::now() + chrono::Duration::hours(1)).timestamp()),
+        );
+
+        let secret = "test-secret-key-for-jwt-authentication";
+        let token =
+            encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+                .unwrap();
+
+        let auth_header = format!("Bearer {}", token);
+        let result = authenticate_jwt(&state, &auth_header).await;
+
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AuthResult::Failure(_)));
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_jwt_with_roles() {
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use serde_json::json;
+
+        let state = create_test_auth_state_with_jwt();
+
+        let mut claims = serde_json::Map::new();
+        claims.insert("sub".to_string(), json!("user123"));
+        claims.insert("iss".to_string(), json!("test-issuer"));
+        claims.insert("aud".to_string(), json!("test-audience"));
+        claims.insert(
+            "exp".to_string(),
+            json!((chrono::Utc::now() + chrono::Duration::hours(1)).timestamp()),
+        );
+        claims.insert("roles".to_string(), json!(["admin", "user"]));
+        claims.insert("username".to_string(), json!("testuser"));
+
+        let secret = "test-secret-key-for-jwt-authentication";
+        let token =
+            encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+                .unwrap();
+
+        let auth_header = format!("Bearer {}", token);
+        let result = authenticate_jwt(&state, &auth_header).await;
+
+        assert!(result.is_some());
+        match result.unwrap() {
+            AuthResult::Success(claims) => {
+                assert_eq!(claims.username, Some("testuser".to_string()));
+                assert_eq!(claims.roles, vec!["admin", "user"]);
+            }
+            _ => panic!("Expected successful authentication"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_jwt_no_config() {
+        let state = create_auth_state(AuthConfig {
+            jwt: None,
+            basic_auth: None,
+            oauth2: None,
+            api_key: None,
+            require_auth: false,
+        });
+
+        let auth_header = "Bearer some-token";
+        let result = authenticate_jwt(&state, &auth_header).await;
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_authenticate_basic_valid() {
+        let state = create_test_auth_state_with_basic();
+
+        // Encode "testuser:testpass" in base64
+        let credentials = base64::engine::general_purpose::STANDARD.encode(b"testuser:testpass");
+        let auth_header = format!("Basic {}", credentials);
+
+        let result = authenticate_basic(&state, &auth_header);
+
+        assert!(result.is_some());
+        match result.unwrap() {
+            AuthResult::Success(claims) => {
+                assert_eq!(claims.username, Some("testuser".to_string()));
+            }
+            _ => panic!("Expected successful authentication"),
+        }
+    }
+
+    #[test]
+    fn test_authenticate_basic_invalid_credentials() {
+        let state = create_test_auth_state_with_basic();
+
+        let credentials = base64::engine::general_purpose::STANDARD.encode(b"testuser:wrongpass");
+        let auth_header = format!("Basic {}", credentials);
+
+        let result = authenticate_basic(&state, &auth_header);
+
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AuthResult::Failure(_)));
+    }
+
+    #[test]
+    fn test_authenticate_basic_invalid_format() {
+        let state = create_test_auth_state_with_basic();
+
+        // Invalid base64
+        let auth_header = "Basic invalid-base64!!!";
+
+        let result = authenticate_basic(&state, &auth_header);
+
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AuthResult::Failure(_)));
+    }
+
+    #[test]
+    fn test_authenticate_basic_missing_colon() {
+        let state = create_test_auth_state_with_basic();
+
+        // Encode credentials without colon
+        let credentials =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b"testuser");
+        let auth_header = format!("Basic {}", credentials);
+
+        let result = authenticate_basic(&state, &auth_header);
+
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AuthResult::Failure(_)));
+    }
+
+    #[test]
+    fn test_authenticate_basic_no_config() {
+        let state = create_auth_state(AuthConfig {
+            jwt: None,
+            basic_auth: None,
+            oauth2: None,
+            api_key: None,
+            require_auth: false,
+        });
+
+        let credentials = base64::engine::general_purpose::STANDARD.encode(b"user:pass");
+        let auth_header = format!("Basic {}", credentials);
+
+        let result = authenticate_basic(&state, &auth_header);
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_authenticate_api_key_valid() {
+        let state = create_test_auth_state_with_api_key();
+
+        let result = authenticate_api_key(&state, "valid-api-key-123");
+
+        assert!(result.is_some());
+        match result.unwrap() {
+            AuthResult::Success(claims) => {
+                assert_eq!(
+                    claims.custom.get("api_key").and_then(|v| v.as_str()),
+                    Some("valid-api-key-123")
+                );
+            }
+            _ => panic!("Expected successful authentication"),
+        }
+    }
+
+    #[test]
+    fn test_authenticate_api_key_invalid() {
+        let state = create_test_auth_state_with_api_key();
+
+        let result = authenticate_api_key(&state, "invalid-key");
+
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AuthResult::Failure(_)));
+    }
+
+    #[test]
+    fn test_authenticate_api_key_no_config() {
+        let state = create_auth_state(AuthConfig {
+            jwt: None,
+            basic_auth: None,
+            oauth2: None,
+            api_key: None,
+            require_auth: false,
+        });
+
+        let result = authenticate_api_key(&state, "some-key");
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_request_with_bearer_token() {
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use serde_json::json;
+
+        let state = create_test_auth_state_with_jwt();
+
+        let mut claims = serde_json::Map::new();
+        claims.insert("sub".to_string(), json!("user123"));
+        claims.insert("iss".to_string(), json!("test-issuer"));
+        claims.insert("aud".to_string(), json!("test-audience"));
+        claims.insert(
+            "exp".to_string(),
+            json!((chrono::Utc::now() + chrono::Duration::hours(1)).timestamp()),
+        );
+
+        let secret = "test-secret-key-for-jwt-authentication";
+        let token =
+            encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+                .unwrap();
+
+        let auth_header = Some(format!("Bearer {}", token));
+        let result = authenticate_request(&state, &auth_header, &None, &None).await;
+
+        assert!(matches!(result, AuthResult::Success(_)));
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_request_with_basic_auth() {
+        let state = create_test_auth_state_with_basic();
+
+        let credentials = base64::engine::general_purpose::STANDARD.encode(b"testuser:testpass");
+        let auth_header = Some(format!("Basic {}", credentials));
+
+        let result = authenticate_request(&state, &auth_header, &None, &None).await;
+
+        assert!(matches!(result, AuthResult::Success(_)));
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_request_with_api_key_header() {
+        let state = create_test_auth_state_with_api_key();
+
+        let result =
+            authenticate_request(&state, &None, &Some("valid-api-key-123".to_string()), &None)
+                .await;
+
+        assert!(matches!(result, AuthResult::Success(_)));
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_request_with_api_key_query() {
+        let state = create_test_auth_state_with_api_key();
+
+        let result =
+            authenticate_request(&state, &None, &None, &Some("another-valid-key-456".to_string()))
+                .await;
+
+        assert!(matches!(result, AuthResult::Success(_)));
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_request_priority() {
+        // JWT should be tried first, then basic auth, then API key
+        let jwt_config = JwtConfig {
+            secret: Some("test-secret".to_string()),
+            rsa_public_key: None,
+            ecdsa_public_key: None,
+            algorithms: vec!["HS256".to_string()],
+            issuer: None,
+            audience: None,
+        };
+
+        let api_key_config = ApiKeyConfig {
+            header_name: "X-API-Key".to_string(),
+            query_name: None,
+            keys: vec!["valid-key".to_string()],
+        };
+
+        let state = create_auth_state(AuthConfig {
+            jwt: Some(jwt_config),
+            basic_auth: None,
+            oauth2: None,
+            api_key: Some(api_key_config),
+            require_auth: false,
+        });
+
+        // Provide both invalid JWT and valid API key
+        let auth_header = Some("Bearer invalid-token".to_string());
+        let api_key = Some("valid-key".to_string());
+
+        let result = authenticate_request(&state, &auth_header, &api_key, &None).await;
+
+        // Should try JWT first and fail, then try API key and succeed
+        assert!(matches!(result, AuthResult::Success(_)));
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_jwt_with_custom_claims() {
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use serde_json::json;
+
+        let state = create_test_auth_state_with_jwt();
+
+        let mut claims = serde_json::Map::new();
+        claims.insert("sub".to_string(), json!("user123"));
+        claims.insert("iss".to_string(), json!("test-issuer"));
+        claims.insert("aud".to_string(), json!("test-audience"));
+        claims.insert(
+            "exp".to_string(),
+            json!((chrono::Utc::now() + chrono::Duration::hours(1)).timestamp()),
+        );
+        claims.insert("custom_field".to_string(), json!("custom_value"));
+        claims.insert("department".to_string(), json!("engineering"));
+
+        let secret = "test-secret-key-for-jwt-authentication";
+        let token =
+            encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+                .unwrap();
+
+        let auth_header = format!("Bearer {}", token);
+        let result = authenticate_jwt(&state, &auth_header).await;
+
+        assert!(result.is_some());
+        match result.unwrap() {
+            AuthResult::Success(claims) => {
+                assert_eq!(
+                    claims.custom.get("custom_field").and_then(|v| v.as_str()),
+                    Some("custom_value")
+                );
+                assert_eq!(
+                    claims.custom.get("department").and_then(|v| v.as_str()),
+                    Some("engineering")
+                );
+            }
+            _ => panic!("Expected successful authentication"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_jwt_with_preferred_username() {
+        use jsonwebtoken::{encode, EncodingKey, Header};
+        use serde_json::json;
+
+        let state = create_test_auth_state_with_jwt();
+
+        let mut claims = serde_json::Map::new();
+        claims.insert("sub".to_string(), json!("user123"));
+        claims.insert("iss".to_string(), json!("test-issuer"));
+        claims.insert("aud".to_string(), json!("test-audience"));
+        claims.insert(
+            "exp".to_string(),
+            json!((chrono::Utc::now() + chrono::Duration::hours(1)).timestamp()),
+        );
+        claims.insert("preferred_username".to_string(), json!("preferred_user"));
+
+        let secret = "test-secret-key-for-jwt-authentication";
+        let token =
+            encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+                .unwrap();
+
+        let auth_header = format!("Bearer {}", token);
+        let result = authenticate_jwt(&state, &auth_header).await;
+
+        assert!(result.is_some());
+        match result.unwrap() {
+            AuthResult::Success(claims) => {
+                assert_eq!(claims.username, Some("preferred_user".to_string()));
+            }
+            _ => panic!("Expected successful authentication"),
+        }
+    }
+
+    #[test]
+    fn test_authenticate_basic_multiple_users() {
+        let state = create_test_auth_state_with_basic();
+
+        // Test first user
+        let creds1 = base64::engine::general_purpose::STANDARD.encode(b"testuser:testpass");
+        let result1 = authenticate_basic(&state, &format!("Basic {}", creds1));
+        assert!(matches!(result1.unwrap(), AuthResult::Success(_)));
+
+        // Test second user
+        let creds2 = base64::engine::general_purpose::STANDARD.encode(b"admin:admin123");
+        let result2 = authenticate_basic(&state, &format!("Basic {}", creds2));
+        assert!(matches!(result2.unwrap(), AuthResult::Success(_)));
+    }
+
+    #[test]
+    fn test_authenticate_basic_user_not_found() {
+        let state = create_test_auth_state_with_basic();
+
+        let credentials = base64::engine::general_purpose::STANDARD.encode(b"nonexistent:password");
+        let auth_header = format!("Basic {}", credentials);
+
+        let result = authenticate_basic(&state, &auth_header);
+
+        assert!(result.is_some());
+        assert!(matches!(result.unwrap(), AuthResult::Failure(_)));
     }
 }

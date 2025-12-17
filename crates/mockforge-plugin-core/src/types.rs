@@ -926,9 +926,800 @@ impl From<Vec<String>> for PluginError {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
     fn test_module_compiles() {
         // Basic compilation test
+    }
+
+    // PluginAuthor tests
+    #[test]
+    fn test_plugin_author_new() {
+        let author = PluginAuthor::new("John Doe");
+        assert_eq!(author.name, "John Doe");
+        assert!(author.email.is_none());
+    }
+
+    #[test]
+    fn test_plugin_author_with_email() {
+        let author = PluginAuthor::with_email("John Doe", "john@example.com");
+        assert_eq!(author.name, "John Doe");
+        assert_eq!(author.email, Some("john@example.com".to_string()));
+    }
+
+    #[test]
+    fn test_plugin_author_clone() {
+        let author = PluginAuthor::with_email("Test", "test@test.com");
+        let cloned = author.clone();
+        assert_eq!(author.name, cloned.name);
+        assert_eq!(author.email, cloned.email);
+    }
+
+    #[test]
+    fn test_plugin_author_debug() {
+        let author = PluginAuthor::new("Test");
+        let debug = format!("{:?}", author);
+        assert!(debug.contains("PluginAuthor"));
+        assert!(debug.contains("Test"));
+    }
+
+    #[test]
+    fn test_plugin_author_serialize() {
+        let author = PluginAuthor::with_email("Test", "test@example.com");
+        let json = serde_json::to_string(&author).unwrap();
+        assert!(json.contains("Test"));
+        assert!(json.contains("test@example.com"));
+    }
+
+    #[test]
+    fn test_plugin_author_deserialize() {
+        let json = r#"{"name":"Test","email":"test@example.com"}"#;
+        let author: PluginAuthor = serde_json::from_str(json).unwrap();
+        assert_eq!(author.name, "Test");
+        assert_eq!(author.email, Some("test@example.com".to_string()));
+    }
+
+    // PluginInfo tests
+    #[test]
+    fn test_plugin_info_new() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("test-plugin"),
+            PluginVersion::new(1, 0, 0),
+            "Test Plugin",
+            "A test plugin",
+            author,
+        );
+        assert_eq!(info.name, "Test Plugin");
+        assert_eq!(info.description, "A test plugin");
+        assert_eq!(info.id.as_str(), "test-plugin");
+    }
+
+    #[test]
+    fn test_plugin_info_clone() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("test-plugin"),
+            PluginVersion::new(1, 0, 0),
+            "Test Plugin",
+            "A test plugin",
+            author,
+        );
+        let cloned = info.clone();
+        assert_eq!(info.name, cloned.name);
+        assert_eq!(info.id, cloned.id);
+    }
+
+    // PluginManifest tests
+    #[test]
+    fn test_plugin_manifest_new() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("test-plugin"),
+            PluginVersion::new(1, 0, 0),
+            "Test",
+            "Test",
+            author,
+        );
+        let manifest = PluginManifest::new(info);
+        assert!(manifest.capabilities.is_empty());
+        assert!(manifest.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_plugin_manifest_with_capability() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("test"),
+            PluginVersion::new(1, 0, 0),
+            "Test",
+            "Test",
+            author,
+        );
+        let manifest = PluginManifest::new(info)
+            .with_capability("network:http")
+            .with_capability("filesystem:read");
+        assert_eq!(manifest.capabilities.len(), 2);
+        assert!(manifest.capabilities.contains(&"network:http".to_string()));
+    }
+
+    #[test]
+    fn test_plugin_manifest_with_dependency() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("test"),
+            PluginVersion::new(1, 0, 0),
+            "Test",
+            "Test",
+            author,
+        );
+        let manifest = PluginManifest::new(info)
+            .with_dependency(PluginId::new("dep-plugin"), PluginVersion::new(2, 0, 0));
+        assert_eq!(manifest.dependencies.len(), 1);
+    }
+
+    #[test]
+    fn test_plugin_manifest_id() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("my-plugin"),
+            PluginVersion::new(1, 0, 0),
+            "Test",
+            "Test",
+            author,
+        );
+        let manifest = PluginManifest::new(info);
+        assert_eq!(manifest.id().as_str(), "my-plugin");
+    }
+
+    #[test]
+    fn test_plugin_manifest_validate_success() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("valid-plugin"),
+            PluginVersion::new(1, 0, 0),
+            "Valid Plugin",
+            "A valid plugin",
+            author,
+        );
+        let manifest = PluginManifest::new(info);
+        assert!(manifest.validate().is_ok());
+    }
+
+    #[test]
+    fn test_plugin_manifest_validate_empty_id() {
+        let author = PluginAuthor::new("Author");
+        let info =
+            PluginInfo::new(PluginId::new(""), PluginVersion::new(1, 0, 0), "Test", "Test", author);
+        let manifest = PluginManifest::new(info);
+        let result = manifest.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("ID cannot be empty"));
+    }
+
+    #[test]
+    fn test_plugin_manifest_validate_empty_name() {
+        let author = PluginAuthor::new("Author");
+        let info =
+            PluginInfo::new(PluginId::new("test"), PluginVersion::new(1, 0, 0), "", "Test", author);
+        let manifest = PluginManifest::new(info);
+        let result = manifest.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("name cannot be empty"));
+    }
+
+    // PluginMetadata tests
+    #[test]
+    fn test_plugin_metadata_new() {
+        let metadata = PluginMetadata::new("A test plugin");
+        assert_eq!(metadata.description, "A test plugin");
+        assert!(metadata.capabilities.is_empty());
+        assert!(metadata.supported_prefixes.is_empty());
+    }
+
+    #[test]
+    fn test_plugin_metadata_with_capability() {
+        let metadata =
+            PluginMetadata::new("Test").with_capability("mock").with_capability("validate");
+        assert_eq!(metadata.capabilities.len(), 2);
+        assert!(metadata.capabilities.contains(&"mock".to_string()));
+    }
+
+    #[test]
+    fn test_plugin_metadata_with_prefix() {
+        let metadata = PluginMetadata::new("Test").with_prefix("/api/v1").with_prefix("/api/v2");
+        assert_eq!(metadata.supported_prefixes.len(), 2);
+        assert!(metadata.supported_prefixes.contains(&"/api/v1".to_string()));
+    }
+
+    #[test]
+    fn test_plugin_metadata_clone() {
+        let metadata = PluginMetadata::new("Test").with_capability("mock");
+        let cloned = metadata.clone();
+        assert_eq!(metadata.description, cloned.description);
+        assert_eq!(metadata.capabilities, cloned.capabilities);
+    }
+
+    // PluginId tests
+    #[test]
+    fn test_plugin_id_new() {
+        let id = PluginId::new("test-plugin");
+        assert_eq!(id.as_str(), "test-plugin");
+    }
+
+    #[test]
+    fn test_plugin_id_new_from_string() {
+        let id = PluginId::new(String::from("dynamic-id"));
+        assert_eq!(id.as_str(), "dynamic-id");
+    }
+
+    #[test]
+    fn test_plugin_id_display() {
+        let id = PluginId::new("display-test");
+        assert_eq!(format!("{}", id), "display-test");
+    }
+
+    #[test]
+    fn test_plugin_id_equality() {
+        let id1 = PluginId::new("test");
+        let id2 = PluginId::new("test");
+        let id3 = PluginId::new("different");
+        assert_eq!(id1, id2);
+        assert_ne!(id1, id3);
+    }
+
+    #[test]
+    fn test_plugin_id_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(PluginId::new("plugin-1"));
+        set.insert(PluginId::new("plugin-2"));
+        set.insert(PluginId::new("plugin-1")); // Duplicate
+        assert_eq!(set.len(), 2);
+    }
+
+    // PluginVersion tests
+    #[test]
+    fn test_plugin_version_new() {
+        let version = PluginVersion::new(1, 2, 3);
+        assert_eq!(version.major, 1);
+        assert_eq!(version.minor, 2);
+        assert_eq!(version.patch, 3);
+        assert!(version.pre_release.is_none());
+        assert!(version.build.is_none());
+    }
+
+    #[test]
+    fn test_plugin_version_parse_valid() {
+        let version = PluginVersion::parse("1.2.3").unwrap();
+        assert_eq!(version.major, 1);
+        assert_eq!(version.minor, 2);
+        assert_eq!(version.patch, 3);
+    }
+
+    #[test]
+    fn test_plugin_version_parse_invalid_format() {
+        let result = PluginVersion::parse("1.2");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid version format"));
+    }
+
+    #[test]
+    fn test_plugin_version_parse_invalid_major() {
+        let result = PluginVersion::parse("a.2.3");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_plugin_version_display() {
+        let version = PluginVersion::new(1, 2, 3);
+        assert_eq!(format!("{}", version), "1.2.3");
+    }
+
+    #[test]
+    fn test_plugin_version_display_with_prerelease() {
+        let mut version = PluginVersion::new(1, 0, 0);
+        version.pre_release = Some("alpha".to_string());
+        assert_eq!(format!("{}", version), "1.0.0-alpha");
+    }
+
+    #[test]
+    fn test_plugin_version_display_with_build() {
+        let mut version = PluginVersion::new(1, 0, 0);
+        version.build = Some("build123".to_string());
+        assert_eq!(format!("{}", version), "1.0.0+build123");
+    }
+
+    #[test]
+    fn test_plugin_version_display_full() {
+        let mut version = PluginVersion::new(2, 1, 0);
+        version.pre_release = Some("beta.1".to_string());
+        version.build = Some("20231201".to_string());
+        assert_eq!(format!("{}", version), "2.1.0-beta.1+20231201");
+    }
+
+    #[test]
+    fn test_plugin_version_equality() {
+        let v1 = PluginVersion::new(1, 0, 0);
+        let v2 = PluginVersion::new(1, 0, 0);
+        let v3 = PluginVersion::new(1, 0, 1);
+        assert_eq!(v1, v2);
+        assert_ne!(v1, v3);
+    }
+
+    #[test]
+    fn test_plugin_version_to_semver() {
+        let version = PluginVersion::new(1, 2, 3);
+        let semver = version.to_semver().unwrap();
+        assert_eq!(semver.major, 1);
+        assert_eq!(semver.minor, 2);
+        assert_eq!(semver.patch, 3);
+    }
+
+    #[test]
+    fn test_plugin_version_from_semver() {
+        let semver = semver::Version::new(2, 3, 4);
+        let version = PluginVersion::from_semver(&semver);
+        assert_eq!(version.major, 2);
+        assert_eq!(version.minor, 3);
+        assert_eq!(version.patch, 4);
+    }
+
+    // PluginCapabilities tests
+    #[test]
+    fn test_plugin_capabilities_default() {
+        let caps = PluginCapabilities::default();
+        assert!(!caps.network.allow_http);
+        assert!(caps.filesystem.read_paths.is_empty());
+        assert!(caps.custom.is_empty());
+    }
+
+    #[test]
+    fn test_plugin_capabilities_from_strings() {
+        let strings = vec![
+            "network:http".to_string(),
+            "filesystem:read".to_string(),
+            "custom:feature".to_string(),
+        ];
+        let caps = PluginCapabilities::from_strings(&strings);
+        assert!(caps.network.allow_http);
+        assert!(!caps.filesystem.read_paths.is_empty());
+        assert!(caps.custom.contains_key("custom:feature"));
+    }
+
+    #[test]
+    fn test_plugin_capabilities_has_capability() {
+        let strings = vec!["network:http".to_string()];
+        let caps = PluginCapabilities::from_strings(&strings);
+        assert!(caps.has_capability("network:http"));
+        assert!(!caps.has_capability("filesystem:write"));
+    }
+
+    #[test]
+    fn test_plugin_capabilities_has_custom_capability() {
+        let strings = vec!["custom:my-feature".to_string()];
+        let caps = PluginCapabilities::from_strings(&strings);
+        assert!(caps.has_capability("custom:my-feature"));
+        assert!(!caps.has_capability("custom:other"));
+    }
+
+    // NetworkPermissions tests
+    #[test]
+    fn test_network_permissions_default() {
+        let perms = NetworkPermissions::default();
+        assert!(!perms.allow_http);
+        assert!(perms.allowed_hosts.is_empty());
+        assert_eq!(perms.max_connections, 10);
+    }
+
+    // FilesystemPermissions tests
+    #[test]
+    fn test_filesystem_permissions_default() {
+        let perms = FilesystemPermissions::default();
+        assert!(perms.read_paths.is_empty());
+        assert!(perms.write_paths.is_empty());
+        assert!(perms.allow_temp_files);
+    }
+
+    // ResourceLimits tests
+    #[test]
+    fn test_resource_limits_default() {
+        let limits = ResourceLimits::default();
+        assert_eq!(limits.max_memory_bytes, 10 * 1024 * 1024);
+        assert_eq!(limits.max_cpu_percent, 0.5);
+        assert_eq!(limits.max_execution_time_ms, 5000);
+        assert_eq!(limits.max_concurrent_executions, 5);
+    }
+
+    // PluginContext tests
+    #[test]
+    fn test_plugin_context_new() {
+        let ctx = PluginContext::new(PluginId::new("test"), PluginVersion::new(1, 0, 0));
+        assert_eq!(ctx.plugin_id.as_str(), "test");
+        assert_eq!(ctx.timeout_ms, 5000);
+        assert!(!ctx.request_id.is_empty());
+    }
+
+    #[test]
+    fn test_plugin_context_with_timeout() {
+        let ctx = PluginContext::new(PluginId::new("test"), PluginVersion::new(1, 0, 0))
+            .with_timeout(10000);
+        assert_eq!(ctx.timeout_ms, 10000);
+    }
+
+    #[test]
+    fn test_plugin_context_with_env() {
+        let ctx = PluginContext::new(PluginId::new("test"), PluginVersion::new(1, 0, 0))
+            .with_env("KEY", "VALUE");
+        assert_eq!(ctx.environment.get("KEY"), Some(&"VALUE".to_string()));
+    }
+
+    #[test]
+    fn test_plugin_context_with_custom() {
+        let ctx = PluginContext::new(PluginId::new("test"), PluginVersion::new(1, 0, 0))
+            .with_custom("custom_key", serde_json::json!({"nested": "value"}));
+        assert!(ctx.custom.contains_key("custom_key"));
+    }
+
+    // PluginResult tests
+    #[test]
+    fn test_plugin_result_success() {
+        let result: PluginResult<String> = PluginResult::success("data".to_string(), 100);
+        assert!(result.is_success());
+        assert!(result.success);
+        assert_eq!(result.execution_time_ms, 100);
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_plugin_result_failure() {
+        let result: PluginResult<String> = PluginResult::failure("error occurred", 50);
+        assert!(!result.is_success());
+        assert!(!result.success);
+        assert!(result.data.is_none());
+        assert_eq!(result.error(), Some("error occurred"));
+    }
+
+    #[test]
+    fn test_plugin_result_unwrap() {
+        let result: PluginResult<i32> = PluginResult::success(42, 10);
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    #[should_panic(expected = "Called unwrap on failed plugin result")]
+    fn test_plugin_result_unwrap_failure() {
+        let result: PluginResult<i32> = PluginResult::failure("error", 10);
+        let _ = result.unwrap();
+    }
+
+    #[test]
+    fn test_plugin_result_data() {
+        let result: PluginResult<String> = PluginResult::success("test".to_string(), 10);
+        assert_eq!(result.data(), Some("test".to_string()));
+    }
+
+    #[test]
+    fn test_plugin_result_data_none() {
+        let result: PluginResult<String> = PluginResult::failure("error", 10);
+        assert!(result.data().is_none());
+    }
+
+    // PluginState tests
+    #[test]
+    fn test_plugin_state_display() {
+        assert_eq!(format!("{}", PluginState::Unloaded), "unloaded");
+        assert_eq!(format!("{}", PluginState::Loading), "loading");
+        assert_eq!(format!("{}", PluginState::Loaded), "loaded");
+        assert_eq!(format!("{}", PluginState::Initializing), "initializing");
+        assert_eq!(format!("{}", PluginState::Ready), "ready");
+        assert_eq!(format!("{}", PluginState::Executing), "executing");
+        assert_eq!(format!("{}", PluginState::Error), "error");
+        assert_eq!(format!("{}", PluginState::Unloading), "unloading");
+    }
+
+    #[test]
+    fn test_plugin_state_is_ready() {
+        assert!(PluginState::Ready.is_ready());
+        assert!(!PluginState::Loading.is_ready());
+        assert!(!PluginState::Error.is_ready());
+    }
+
+    #[test]
+    fn test_plugin_state_equality() {
+        assert_eq!(PluginState::Ready, PluginState::Ready);
+        assert_ne!(PluginState::Ready, PluginState::Error);
+    }
+
+    #[test]
+    fn test_plugin_state_clone() {
+        let state = PluginState::Executing;
+        let cloned = state;
+        assert_eq!(state, cloned);
+    }
+
+    // PluginHealth tests
+    #[test]
+    fn test_plugin_health_default() {
+        let health = PluginHealth::default();
+        assert_eq!(health.state, PluginState::Unloaded);
+        assert!(health.healthy);
+        assert_eq!(health.message, "Plugin initialized");
+    }
+
+    #[test]
+    fn test_plugin_health_healthy() {
+        let metrics = PluginMetrics::default();
+        let health = PluginHealth::healthy("All good".to_string(), metrics);
+        assert!(health.healthy);
+        assert_eq!(health.state, PluginState::Ready);
+        assert_eq!(health.message, "All good");
+    }
+
+    #[test]
+    fn test_plugin_health_unhealthy() {
+        let metrics = PluginMetrics::default();
+        let health = PluginHealth::unhealthy(
+            PluginState::Error,
+            "Something went wrong".to_string(),
+            metrics,
+        );
+        assert!(!health.healthy);
+        assert_eq!(health.state, PluginState::Error);
+    }
+
+    // PluginMetrics tests
+    #[test]
+    fn test_plugin_metrics_default() {
+        let metrics = PluginMetrics::default();
+        assert_eq!(metrics.total_executions, 0);
+        assert_eq!(metrics.successful_executions, 0);
+        assert_eq!(metrics.failed_executions, 0);
+        assert_eq!(metrics.avg_execution_time_ms, 0.0);
+        assert_eq!(metrics.max_execution_time_ms, 0);
+        assert_eq!(metrics.memory_usage_bytes, 0);
+        assert_eq!(metrics.peak_memory_usage_bytes, 0);
+    }
+
+    #[test]
+    fn test_plugin_metrics_clone() {
+        let mut metrics = PluginMetrics::default();
+        metrics.total_executions = 100;
+        let cloned = metrics.clone();
+        assert_eq!(metrics.total_executions, cloned.total_executions);
+    }
+
+    // ResolutionContext tests
+    #[test]
+    fn test_resolution_context_new() {
+        let ctx = ResolutionContext::new();
+        assert!(ctx.metadata.is_empty());
+        assert!(ctx.request_context.is_none());
+    }
+
+    #[test]
+    fn test_resolution_context_default() {
+        let ctx = ResolutionContext::default();
+        assert!(ctx.metadata.is_empty());
+    }
+
+    #[test]
+    fn test_resolution_context_with_request() {
+        let request = RequestMetadata::new("GET", "/api/test");
+        let ctx = ResolutionContext::new().with_request(request);
+        assert!(ctx.request_context.is_some());
+        assert_eq!(ctx.request_context.as_ref().unwrap().method, "GET");
+    }
+
+    #[test]
+    fn test_resolution_context_with_metadata() {
+        let ctx = ResolutionContext::new()
+            .with_metadata("key1", "value1")
+            .with_metadata("key2", "value2");
+        assert_eq!(ctx.metadata.get("key1"), Some(&"value1".to_string()));
+        assert_eq!(ctx.metadata.get("key2"), Some(&"value2".to_string()));
+    }
+
+    // RequestMetadata tests
+    #[test]
+    fn test_request_metadata_new() {
+        let meta = RequestMetadata::new("POST", "/api/users");
+        assert_eq!(meta.method, "POST");
+        assert_eq!(meta.path, "/api/users");
+        assert!(meta.headers.is_empty());
+        assert!(meta.query_params.is_empty());
+    }
+
+    #[test]
+    fn test_request_metadata_with_header() {
+        let meta = RequestMetadata::new("GET", "/api")
+            .with_header("Content-Type", "application/json")
+            .with_header("Authorization", "Bearer token");
+        assert_eq!(meta.headers.len(), 2);
+        assert_eq!(meta.headers.get("Content-Type"), Some(&"application/json".to_string()));
+    }
+
+    #[test]
+    fn test_request_metadata_with_query_param() {
+        let meta = RequestMetadata::new("GET", "/api/search")
+            .with_query_param("q", "test")
+            .with_query_param("limit", "10");
+        assert_eq!(meta.query_params.len(), 2);
+        assert_eq!(meta.query_params.get("q"), Some(&"test".to_string()));
+    }
+
+    #[test]
+    fn test_request_metadata_clone() {
+        let meta = RequestMetadata::new("GET", "/test").with_header("X-Custom", "value");
+        let cloned = meta.clone();
+        assert_eq!(meta.method, cloned.method);
+        assert_eq!(meta.headers, cloned.headers);
+    }
+
+    // PluginError tests (types.rs version)
+    #[test]
+    fn test_plugin_error_resolution_failed() {
+        let err = PluginError::resolution_failed("test message");
+        assert!(matches!(err, PluginError::ResolutionFailed { .. }));
+        assert!(err.to_string().contains("test message"));
+    }
+
+    #[test]
+    fn test_plugin_error_invalid_token() {
+        let err = PluginError::invalid_token("{{invalid}}");
+        assert!(matches!(err, PluginError::InvalidToken { .. }));
+        assert!(err.to_string().contains("{{invalid}}"));
+    }
+
+    #[test]
+    fn test_plugin_error_config_error() {
+        let err = PluginError::config_error("missing field");
+        assert!(matches!(err, PluginError::ConfigurationError { .. }));
+        assert!(err.to_string().contains("missing field"));
+    }
+
+    #[test]
+    fn test_plugin_error_execution() {
+        let err = PluginError::execution("runtime error");
+        assert!(matches!(err, PluginError::ExecutionError { .. }));
+        assert!(err.to_string().contains("runtime error"));
+    }
+
+    #[test]
+    fn test_plugin_error_security() {
+        let err = PluginError::security("unauthorized access");
+        assert!(matches!(err, PluginError::SecurityViolation { .. }));
+        assert!(err.to_string().contains("unauthorized access"));
+    }
+
+    #[test]
+    fn test_plugin_error_wasm() {
+        let err = PluginError::wasm("invalid module");
+        assert!(matches!(err, PluginError::WasmError { .. }));
+        assert!(err.to_string().contains("invalid module"));
+    }
+
+    #[test]
+    fn test_plugin_error_timeout_display() {
+        let err = PluginError::Timeout;
+        assert!(err.to_string().contains("timeout"));
+    }
+
+    #[test]
+    fn test_plugin_error_from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let err: PluginError = io_err.into();
+        assert!(matches!(err, PluginError::InternalError { .. }));
+    }
+
+    #[test]
+    fn test_plugin_error_from_str() {
+        let err: PluginError = "simple error".into();
+        assert!(matches!(err, PluginError::InternalError { .. }));
+        assert!(err.to_string().contains("simple error"));
+    }
+
+    #[test]
+    fn test_plugin_error_from_string() {
+        let err: PluginError = String::from("string error").into();
+        assert!(matches!(err, PluginError::InternalError { .. }));
+    }
+
+    #[test]
+    fn test_plugin_error_from_vec_strings() {
+        let errors = vec!["error 1".to_string(), "error 2".to_string()];
+        let err: PluginError = errors.into();
+        assert!(matches!(err, PluginError::InternalError { .. }));
+        let msg = err.to_string();
+        assert!(msg.contains("error 1"));
+        assert!(msg.contains("error 2"));
+    }
+
+    // PluginInstance tests
+    #[test]
+    fn test_plugin_instance_new() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("test"),
+            PluginVersion::new(1, 0, 0),
+            "Test",
+            "Test",
+            author,
+        );
+        let manifest = PluginManifest::new(info);
+        let instance = PluginInstance::new(PluginId::new("test"), manifest);
+
+        assert_eq!(instance.id.as_str(), "test");
+        assert_eq!(instance.state, PluginState::Unloaded);
+        assert!(instance.health.healthy);
+    }
+
+    #[test]
+    fn test_plugin_instance_set_state() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("test"),
+            PluginVersion::new(1, 0, 0),
+            "Test",
+            "Test",
+            author,
+        );
+        let manifest = PluginManifest::new(info);
+        let mut instance = PluginInstance::new(PluginId::new("test"), manifest);
+
+        instance.set_state(PluginState::Ready);
+        assert_eq!(instance.state, PluginState::Ready);
+        assert!(instance.is_healthy());
+    }
+
+    #[test]
+    fn test_plugin_instance_set_state_error() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("test"),
+            PluginVersion::new(1, 0, 0),
+            "Test",
+            "Test",
+            author,
+        );
+        let manifest = PluginManifest::new(info);
+        let mut instance = PluginInstance::new(PluginId::new("test"), manifest);
+
+        instance.set_state(PluginState::Error);
+        assert_eq!(instance.state, PluginState::Error);
+        assert!(!instance.is_healthy());
+    }
+
+    #[test]
+    fn test_plugin_instance_is_healthy() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("test"),
+            PluginVersion::new(1, 0, 0),
+            "Test",
+            "Test",
+            author,
+        );
+        let manifest = PluginManifest::new(info);
+        let instance = PluginInstance::new(PluginId::new("test"), manifest);
+        assert!(instance.is_healthy());
+    }
+
+    #[test]
+    fn test_plugin_instance_clone() {
+        let author = PluginAuthor::new("Author");
+        let info = PluginInfo::new(
+            PluginId::new("test"),
+            PluginVersion::new(1, 0, 0),
+            "Test",
+            "Test",
+            author,
+        );
+        let manifest = PluginManifest::new(info);
+        let instance = PluginInstance::new(PluginId::new("test"), manifest);
+        let cloned = instance.clone();
+        assert_eq!(instance.id, cloned.id);
+        assert_eq!(instance.state, cloned.state);
     }
 }

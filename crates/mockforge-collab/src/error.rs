@@ -90,3 +90,146 @@ impl From<sqlx::migrate::MigrateError> for CollabError {
         Self::DatabaseError(err.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_authentication_failed() {
+        let err = CollabError::AuthenticationFailed("invalid token".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Authentication failed"));
+        assert!(msg.contains("invalid token"));
+    }
+
+    #[test]
+    fn test_authorization_failed() {
+        let err = CollabError::AuthorizationFailed("missing permission".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Authorization failed"));
+        assert!(msg.contains("missing permission"));
+    }
+
+    #[test]
+    fn test_workspace_not_found() {
+        let err = CollabError::WorkspaceNotFound("ws-123".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Workspace not found"));
+        assert!(msg.contains("ws-123"));
+    }
+
+    #[test]
+    fn test_user_not_found() {
+        let err = CollabError::UserNotFound("user-456".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("User not found"));
+        assert!(msg.contains("user-456"));
+    }
+
+    #[test]
+    fn test_conflict_detected() {
+        let err = CollabError::ConflictDetected("concurrent edit".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Conflict detected"));
+        assert!(msg.contains("concurrent edit"));
+    }
+
+    #[test]
+    fn test_sync_error() {
+        let err = CollabError::SyncError("sync failed".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Sync error"));
+        assert!(msg.contains("sync failed"));
+    }
+
+    #[test]
+    fn test_database_error() {
+        let err = CollabError::DatabaseError("connection refused".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Database error"));
+        assert!(msg.contains("connection refused"));
+    }
+
+    #[test]
+    fn test_websocket_error() {
+        let err = CollabError::WebSocketError("connection closed".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("WebSocket error"));
+        assert!(msg.contains("connection closed"));
+    }
+
+    #[test]
+    fn test_serialization_error() {
+        let err = CollabError::SerializationError("invalid json".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Serialization error"));
+        assert!(msg.contains("invalid json"));
+    }
+
+    #[test]
+    fn test_invalid_input() {
+        let err = CollabError::InvalidInput("empty name".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Invalid input"));
+        assert!(msg.contains("empty name"));
+    }
+
+    #[test]
+    fn test_already_exists() {
+        let err = CollabError::AlreadyExists("workspace-name".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("already exists"));
+        assert!(msg.contains("workspace-name"));
+    }
+
+    #[test]
+    fn test_timeout() {
+        let err = CollabError::Timeout("operation timed out".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("timeout"));
+        assert!(msg.contains("operation timed out"));
+    }
+
+    #[test]
+    fn test_connection_error() {
+        let err = CollabError::ConnectionError("host unreachable".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Connection error"));
+        assert!(msg.contains("host unreachable"));
+    }
+
+    #[test]
+    fn test_version_mismatch() {
+        let err = CollabError::VersionMismatch {
+            expected: 10,
+            actual: 8,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("Version mismatch"));
+        assert!(msg.contains("10"));
+        assert!(msg.contains("8"));
+    }
+
+    #[test]
+    fn test_internal_error() {
+        let err = CollabError::Internal("unexpected failure".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Internal error"));
+        assert!(msg.contains("unexpected failure"));
+    }
+
+    #[test]
+    fn test_from_serde_json_error() {
+        let json_err: serde_json::Error = serde_json::from_str::<String>("invalid").unwrap_err();
+        let err: CollabError = json_err.into();
+        assert!(matches!(err, CollabError::SerializationError(_)));
+    }
+
+    #[test]
+    fn test_error_debug() {
+        let err = CollabError::AuthenticationFailed("test".to_string());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("AuthenticationFailed"));
+    }
+}

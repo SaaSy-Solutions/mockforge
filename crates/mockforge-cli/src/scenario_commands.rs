@@ -2032,3 +2032,359 @@ pub async fn handle_drift_learning_command(command: DriftLearningCommands) -> an
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    // Tests for calculate_checksum
+    #[test]
+    fn test_calculate_checksum_empty() {
+        let data = b"";
+        let checksum = calculate_checksum(data);
+        // SHA256 of empty string
+        assert_eq!(checksum, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    }
+
+    #[test]
+    fn test_calculate_checksum_hello_world() {
+        let data = b"hello world";
+        let checksum = calculate_checksum(data);
+        // Known SHA256 of "hello world"
+        assert_eq!(checksum, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9");
+    }
+
+    #[test]
+    fn test_calculate_checksum_different_data() {
+        let data1 = b"test1";
+        let data2 = b"test2";
+        let checksum1 = calculate_checksum(data1);
+        let checksum2 = calculate_checksum(data2);
+        assert_ne!(checksum1, checksum2);
+    }
+
+    #[test]
+    fn test_calculate_checksum_same_data() {
+        let data = b"consistent data";
+        let checksum1 = calculate_checksum(data);
+        let checksum2 = calculate_checksum(data);
+        assert_eq!(checksum1, checksum2);
+    }
+
+    #[test]
+    fn test_calculate_checksum_binary_data() {
+        let data = &[0u8, 1, 2, 3, 255];
+        let checksum = calculate_checksum(data);
+        assert_eq!(checksum.len(), 64); // SHA256 produces 64 hex characters
+    }
+
+    // Tests for get_config_path
+    #[test]
+    fn test_get_config_path_default() {
+        let path = get_config_path();
+        let path_str = path.to_string_lossy();
+        assert!(path_str.ends_with("mockforge.yaml") || path_str.ends_with("mockforge.yml"));
+    }
+
+    #[test]
+    fn test_get_config_path_returns_pathbuf() {
+        let path = get_config_path();
+        assert!(path.is_absolute() || path.is_relative());
+    }
+
+    // Tests for learning_mode_to_drift_mode
+    #[test]
+    fn test_learning_mode_to_drift_mode_behavioral() {
+        let result = learning_mode_to_drift_mode("behavioral");
+        assert!(result.is_ok());
+        match result.unwrap() {
+            mockforge_core::config::DriftLearningMode::Behavioral => (),
+            _ => panic!("Expected Behavioral mode"),
+        }
+    }
+
+    #[test]
+    fn test_learning_mode_to_drift_mode_statistical() {
+        let result = learning_mode_to_drift_mode("statistical");
+        assert!(result.is_ok());
+        match result.unwrap() {
+            mockforge_core::config::DriftLearningMode::Statistical => (),
+            _ => panic!("Expected Statistical mode"),
+        }
+    }
+
+    #[test]
+    fn test_learning_mode_to_drift_mode_hybrid() {
+        let result = learning_mode_to_drift_mode("hybrid");
+        assert!(result.is_ok());
+        match result.unwrap() {
+            mockforge_core::config::DriftLearningMode::Hybrid => (),
+            _ => panic!("Expected Hybrid mode"),
+        }
+    }
+
+    #[test]
+    fn test_learning_mode_to_drift_mode_invalid() {
+        let result = learning_mode_to_drift_mode("invalid_mode");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Unknown learning mode"));
+    }
+
+    #[test]
+    fn test_learning_mode_to_drift_mode_case_sensitive() {
+        // Mode names should be case-sensitive
+        let result = learning_mode_to_drift_mode("Behavioral");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_learning_mode_to_drift_mode_empty() {
+        let result = learning_mode_to_drift_mode("");
+        assert!(result.is_err());
+    }
+
+    // Tests for ScenarioCommands enum variants
+    #[test]
+    fn test_scenario_commands_install_variant() {
+        // Test that the enum has the Install variant with expected fields
+        let _cmd = ScenarioCommands::Install {
+            source: "test-source".to_string(),
+            force: false,
+            skip_validation: false,
+            checksum: None,
+        };
+    }
+
+    #[test]
+    fn test_scenario_commands_uninstall_variant() {
+        let _cmd = ScenarioCommands::Uninstall {
+            name: "test-scenario".to_string(),
+            version: Some("1.0.0".to_string()),
+        };
+    }
+
+    #[test]
+    fn test_scenario_commands_list_variant() {
+        let _cmd = ScenarioCommands::List { detailed: true };
+    }
+
+    #[test]
+    fn test_scenario_commands_info_variant() {
+        let _cmd = ScenarioCommands::Info {
+            name: "test".to_string(),
+            version: Some("1.0.0".to_string()),
+        };
+    }
+
+    #[test]
+    fn test_scenario_commands_preview_variant() {
+        let _cmd = ScenarioCommands::Preview {
+            source: "https://example.com/scenario".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_scenario_commands_use_variant() {
+        let _cmd = ScenarioCommands::Use {
+            name: "test".to_string(),
+            version: None,
+            merge_strategy: "prefer-existing".to_string(),
+            auto_align: false,
+        };
+    }
+
+    #[test]
+    fn test_scenario_commands_search_variant() {
+        let _cmd = ScenarioCommands::Search {
+            query: "ecommerce".to_string(),
+            category: Some("retail".to_string()),
+            limit: 10,
+        };
+    }
+
+    #[test]
+    fn test_scenario_commands_publish_variant() {
+        let _cmd = ScenarioCommands::Publish {
+            path: "./scenario".to_string(),
+            registry: Some("https://registry.example.com".to_string()),
+        };
+    }
+
+    #[test]
+    fn test_scenario_commands_update_variant() {
+        let _cmd = ScenarioCommands::Update {
+            name: Some("test".to_string()),
+            all: false,
+        };
+    }
+
+    // Tests for PackCommands enum variants
+    #[test]
+    fn test_pack_commands_list_variant() {
+        let _cmd = PackCommands::List;
+    }
+
+    #[test]
+    fn test_pack_commands_install_variant() {
+        let _cmd = PackCommands::Install {
+            manifest: "pack.yaml".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_pack_commands_info_variant() {
+        let _cmd = PackCommands::Info {
+            name: "test-pack".to_string(),
+        };
+    }
+
+    // Tests for ReviewCommands enum variants
+    #[test]
+    fn test_review_commands_submit_variant() {
+        let _cmd = ReviewCommands::Submit {
+            scenario_name: "test".to_string(),
+            scenario_version: Some("1.0.0".to_string()),
+            rating: 5,
+            title: Some("Great!".to_string()),
+            comment: "Excellent scenario".to_string(),
+            reviewer: "john".to_string(),
+            reviewer_email: Some("john@example.com".to_string()),
+            verified: true,
+        };
+    }
+
+    #[test]
+    fn test_review_commands_list_variant() {
+        let _cmd = ReviewCommands::List {
+            scenario_name: "test".to_string(),
+            page: Some(0),
+            per_page: Some(20),
+        };
+    }
+
+    // Tests for BehaviorRuleCommands enum variants
+    #[test]
+    fn test_behavior_rule_commands_add_variant() {
+        let _cmd = BehaviorRuleCommands::Add {
+            name: "test-rule".to_string(),
+            rule_type: "declarative".to_string(),
+            condition: "latency".to_string(),
+            threshold: Some("400".to_string()),
+            endpoint: "/api/*".to_string(),
+            action: "modify-conversion-rate".to_string(),
+            parameter: Some("0.8".to_string()),
+            priority: 100,
+            script: None,
+            script_language: None,
+        };
+    }
+
+    #[test]
+    fn test_behavior_rule_commands_list_variant() {
+        let _cmd = BehaviorRuleCommands::List;
+    }
+
+    #[test]
+    fn test_behavior_rule_commands_remove_variant() {
+        let _cmd = BehaviorRuleCommands::Remove {
+            name: "test-rule".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_behavior_rule_commands_enable_disable_status() {
+        let _enable = BehaviorRuleCommands::Enable;
+        let _disable = BehaviorRuleCommands::Disable;
+        let _status = BehaviorRuleCommands::Status;
+    }
+
+    // Tests for DriftLearningCommands enum variants
+    #[test]
+    fn test_drift_learning_commands_enable_variant() {
+        let _cmd = DriftLearningCommands::Enable {
+            sensitivity: 0.2,
+            min_samples: 10,
+            mode: "behavioral".to_string(),
+            persona_adaptation: true,
+            traffic_mirroring: true,
+        };
+    }
+
+    #[test]
+    fn test_drift_learning_commands_disable_variant() {
+        let _cmd = DriftLearningCommands::Disable;
+    }
+
+    #[test]
+    fn test_drift_learning_commands_status_variant() {
+        let _cmd = DriftLearningCommands::Status;
+    }
+
+    #[test]
+    fn test_drift_learning_commands_endpoint_variant() {
+        let _cmd = DriftLearningCommands::Endpoint {
+            endpoint: "/api/users".to_string(),
+            enable: true,
+        };
+    }
+
+    #[test]
+    fn test_drift_learning_commands_persona_variant() {
+        let _cmd = DriftLearningCommands::Persona {
+            persona_id: "persona-1".to_string(),
+            enable: false,
+        };
+    }
+
+    // Tests for RealityProfileCommands enum variants
+    #[test]
+    fn test_reality_profile_commands_install_variant() {
+        let _cmd = RealityProfileCommands::Install {
+            pack_name: "ecommerce-peak-season".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_reality_profile_commands_list_variant() {
+        let _cmd = RealityProfileCommands::List;
+    }
+
+    #[test]
+    fn test_reality_profile_commands_apply_variant() {
+        let _cmd = RealityProfileCommands::Apply {
+            pack_name: "test-pack".to_string(),
+            workspace: "default".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_reality_profile_commands_info_variant() {
+        let _cmd = RealityProfileCommands::Info {
+            pack_name: "test-pack".to_string(),
+        };
+    }
+
+    // Tests for StudioPackCommands enum variants
+    #[test]
+    fn test_studio_pack_commands_install_variant() {
+        let _cmd = StudioPackCommands::Install {
+            pack_name: "fintech-fraud-lab".to_string(),
+            workspace: "default".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_studio_pack_commands_list_variant() {
+        let _cmd = StudioPackCommands::List;
+    }
+
+    #[test]
+    fn test_studio_pack_commands_create_variant() {
+        let _cmd = StudioPackCommands::Create {
+            name: "my-pack".to_string(),
+            output: Some("./output.yaml".to_string()),
+        };
+    }
+}

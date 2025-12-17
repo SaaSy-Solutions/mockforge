@@ -1814,7 +1814,7 @@ mod tests {
         let result = manager.sync_workspace(&mut workspace).await;
         assert!(result.is_ok());
         assert!(manager.last_sync_duration_ms.is_some());
-        assert!(manager.last_sync_duration_ms.unwrap() >= 0);
+        let _ = manager.last_sync_duration_ms.unwrap(); // Duration is u64, always >= 0
     }
 
     #[tokio::test]

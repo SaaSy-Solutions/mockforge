@@ -8,18 +8,24 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     Form, Json,
 };
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
-use ring::signature::{UnparsedPublicKey, VerificationAlgorithm, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_2048_8192_SHA512};
+use ring::signature::{
+    UnparsedPublicKey, VerificationAlgorithm, RSA_PKCS1_2048_8192_SHA256,
+    RSA_PKCS1_2048_8192_SHA512,
+};
 use rustls_pemfile;
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Sha512, Digest};
+use sha2::{Digest, Sha256, Sha512};
 use x509_parser::prelude::*;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
-    models::{AuditEventType, Organization, Plan, SAMLAssertionId, SSOConfiguration, SSOSession, User, record_audit_event},
+    middleware::{resolve_org_context, AuthUser},
+    models::{
+        record_audit_event, AuditEventType, Organization, Plan, SAMLAssertionId, SSOConfiguration,
+        SSOSession, User,
+    },
     AppState,
 };
 
@@ -93,18 +99,23 @@ pub async fn create_sso_config(
     // Check if organization is on Team plan
     if org.plan() != Plan::Team {
         return Err(ApiError::InvalidRequest(
-            "SSO is only available for Team plans. Please upgrade to Team plan to enable SSO.".to_string(),
+            "SSO is only available for Team plans. Please upgrade to Team plan to enable SSO."
+                .to_string(),
         ));
     }
 
     // Validate provider
     use crate::models::sso::SSOProvider;
-    let provider = SSOProvider::from_str(&request.provider)
-        .ok_or_else(|| ApiError::InvalidRequest("Invalid SSO provider. Must be 'saml' or 'oidc'".to_string()))?;
+    let provider = SSOProvider::from_str(&request.provider).ok_or_else(|| {
+        ApiError::InvalidRequest("Invalid SSO provider. Must be 'saml' or 'oidc'".to_string())
+    })?;
 
     // Validate SAML fields if provider is SAML
     if provider == SSOProvider::Saml {
-        if request.saml_entity_id.is_none() || request.saml_sso_url.is_none() || request.saml_x509_cert.is_none() {
+        if request.saml_entity_id.is_none()
+            || request.saml_sso_url.is_none()
+            || request.saml_x509_cert.is_none()
+        {
             return Err(ApiError::InvalidRequest(
                 "SAML configuration requires entity_id, sso_url, and x509_cert".to_string(),
             ));
@@ -130,13 +141,12 @@ pub async fn create_sso_config(
     .map_err(|e| ApiError::Database(e))?;
 
     // Record audit log
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
     record_audit_event(
         pool,
@@ -262,16 +272,16 @@ pub async fn enable_sso(
 
     // Check if organization is on Team plan
     if org.plan() != Plan::Team {
-        return Err(ApiError::InvalidRequest(
-            "SSO is only available for Team plans".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("SSO is only available for Team plans".to_string()));
     }
 
     // Check if SSO is configured
     let config = SSOConfiguration::find_by_org(pool, org_ctx.org_id)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest("SSO not configured. Please configure SSO first.".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::InvalidRequest("SSO not configured. Please configure SSO first.".to_string())
+        })?;
 
     // Enable SSO
     SSOConfiguration::enable(pool, org_ctx.org_id)
@@ -279,13 +289,12 @@ pub async fn enable_sso(
         .map_err(|e| ApiError::Database(e))?;
 
     // Record audit log
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
     record_audit_event(
         pool,
@@ -339,13 +348,12 @@ pub async fn disable_sso(
         .map_err(|e| ApiError::Database(e))?;
 
     // Record audit log
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
     record_audit_event(
         pool,
@@ -399,13 +407,12 @@ pub async fn delete_sso_config(
         .map_err(|e| ApiError::Database(e))?;
 
     // Record audit log
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
     record_audit_event(
         pool,
@@ -444,13 +451,16 @@ pub async fn get_saml_metadata(
     let config = SSOConfiguration::find_by_org(pool, org.id)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest("SSO not configured for this organization".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::InvalidRequest("SSO not configured for this organization".to_string())
+        })?;
 
     // Generate SAML metadata XML
-    let app_base_url = std::env::var("APP_BASE_URL")
-        .unwrap_or_else(|_| "https://app.mockforge.dev".to_string());
+    let app_base_url =
+        std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://app.mockforge.dev".to_string());
 
-    let entity_id = config.saml_entity_id
+    let entity_id = config
+        .saml_entity_id
         .unwrap_or_else(|| format!("{}/saml/metadata/{}", app_base_url, org_slug));
 
     let acs_url = format!("{}/api/v1/sso/saml/acs/{}", app_base_url, org_slug);
@@ -467,7 +477,10 @@ pub async fn get_saml_metadata(
     </SPSSODescriptor>
 </EntityDescriptor>"#,
         entity_id,
-        config.saml_name_id_format.as_deref().unwrap_or("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"),
+        config
+            .saml_name_id_format
+            .as_deref()
+            .unwrap_or("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"),
         acs_url,
         slo_url
     );
@@ -495,33 +508,37 @@ pub async fn initiate_saml_login(
 
     // Check if organization is on Team plan
     if org.plan() != Plan::Team {
-        return Err(ApiError::InvalidRequest(
-            "SSO is only available for Team plans".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("SSO is only available for Team plans".to_string()));
     }
 
     // Get SSO configuration
     let config = SSOConfiguration::find_by_org(pool, org.id)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest("SSO not configured for this organization".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::InvalidRequest("SSO not configured for this organization".to_string())
+        })?;
 
     if !config.enabled {
-        return Err(ApiError::InvalidRequest("SSO is not enabled for this organization".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "SSO is not enabled for this organization".to_string(),
+        ));
     }
 
     // Get SAML SSO URL
-    let sso_url = config.saml_sso_url
+    let sso_url = config
+        .saml_sso_url
         .ok_or_else(|| ApiError::InvalidRequest("SAML SSO URL not configured".to_string()))?;
 
     // Generate SAML AuthnRequest
     // In a production implementation, you would use a SAML library to generate a proper AuthnRequest
     // For now, we'll create a simple redirect with a SAML request parameter
-    let app_base_url = std::env::var("APP_BASE_URL")
-        .unwrap_or_else(|_| "https://app.mockforge.dev".to_string());
+    let app_base_url =
+        std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://app.mockforge.dev".to_string());
 
     let acs_url = format!("{}/api/v1/sso/saml/acs/{}", app_base_url, org_slug);
-    let entity_id = config.saml_entity_id
+    let entity_id = config
+        .saml_entity_id
         .unwrap_or_else(|| format!("{}/saml/metadata/{}", app_base_url, org_slug));
 
     // Generate a simple SAML AuthnRequest (base64 encoded)
@@ -567,11 +584,13 @@ pub async fn saml_acs(
     }
 
     // Decode SAML response
-    let saml_response = form.SAMLResponse
+    let saml_response = form
+        .SAMLResponse
         .ok_or_else(|| ApiError::InvalidRequest("SAMLResponse parameter missing".to_string()))?;
 
-    let decoded_response = general_purpose::STANDARD.decode(&saml_response)
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to decode SAML response: {}", e)))?;
+    let decoded_response = general_purpose::STANDARD.decode(&saml_response).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to decode SAML response: {}", e))
+    })?;
 
     // Verify SAML response signature before parsing (security-critical)
     if config.require_signed_responses {
@@ -579,43 +598,48 @@ pub async fn saml_acs(
     }
 
     // Parse and verify SAML response with full security checks
-    let user_info = parse_saml_response(&decoded_response, &config, &org)
-        .await?;
+    let user_info = parse_saml_response(&decoded_response, &config, &org).await?;
 
     // Validate timestamps (NotBefore/NotOnOrAfter)
-    validate_saml_timestamps(&user_info)
-        .map_err(|e| {
-            tracing::error!("SAML timestamp validation failed for org_id={}: {}", org.id, e);
-            e
-        })?;
+    validate_saml_timestamps(&user_info).map_err(|e| {
+        tracing::error!("SAML timestamp validation failed for org_id={}: {}", org.id, e);
+        e
+    })?;
 
     // Check for replay attacks (assertion ID tracking)
     if let Some(assertion_id) = &user_info.assertion_id {
-        let is_replay = SAMLAssertionId::is_used(pool, assertion_id, org.id)
-            .await
-            .map_err(|e| {
-                tracing::error!("Database error checking assertion ID for org_id={}: {:?}", org.id, e);
+        let is_replay =
+            SAMLAssertionId::is_used(pool, assertion_id, org.id).await.map_err(|e| {
+                tracing::error!(
+                    "Database error checking assertion ID for org_id={}: {:?}",
+                    org.id,
+                    e
+                );
                 ApiError::Database(e)
             })?;
 
         if is_replay {
-            tracing::warn!("Replay attack detected: assertion_id={} already used for org_id={}", assertion_id, org.id);
+            tracing::warn!(
+                "Replay attack detected: assertion_id={} already used for org_id={}",
+                assertion_id,
+                org.id
+            );
             return Err(ApiError::InvalidRequest(
-                "This SAML assertion has already been used. Replay attacks are not allowed.".to_string()
+                "This SAML assertion has already been used. Replay attacks are not allowed."
+                    .to_string(),
             ));
         }
     }
 
     // Find or create user
-    let user = find_or_create_user_from_saml(pool, &user_info, &org)
-        .await?;
+    let user = find_or_create_user_from_saml(pool, &user_info, &org).await?;
 
     // Record assertion ID to prevent replay attacks
     if let Some(assertion_id) = &user_info.assertion_id {
-        let expires_at = user_info.not_on_or_after
+        let expires_at = user_info
+            .not_on_or_after
             .unwrap_or_else(|| chrono::Utc::now() + chrono::Duration::hours(1));
-        let issued_at = user_info.issued_at
-            .unwrap_or_else(|| chrono::Utc::now());
+        let issued_at = user_info.issued_at.unwrap_or_else(|| chrono::Utc::now());
 
         SAMLAssertionId::record_used(
             pool,
@@ -632,7 +656,12 @@ pub async fn saml_acs(
             ApiError::Database(e)
         })?;
 
-        tracing::debug!("Recorded assertion ID {} for org_id={}, user_id={}", assertion_id, org.id, user.id);
+        tracing::debug!(
+            "Recorded assertion ID {} for org_id={}, user_id={}",
+            assertion_id,
+            org.id,
+            user.id
+        );
     }
 
     // Create SSO session
@@ -653,14 +682,11 @@ pub async fn saml_acs(
         .map_err(|e| ApiError::Internal(e))?;
 
     // Redirect to app with token
-    let app_base_url = std::env::var("APP_BASE_URL")
-        .unwrap_or_else(|_| "https://app.mockforge.dev".to_string());
+    let app_base_url =
+        std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://app.mockforge.dev".to_string());
 
-    let redirect_url = format!("{}/auth/sso/callback?token={}&org_slug={}",
-        app_base_url,
-        token,
-        org_slug
-    );
+    let redirect_url =
+        format!("{}/auth/sso/callback?token={}&org_slug={}", app_base_url, token, org_slug);
 
     Ok(Redirect::to(&redirect_url).into_response())
 }
@@ -696,8 +722,9 @@ pub async fn saml_slo(
     // Handle logout request or response
     if let Some(saml_request) = form.SAMLRequest {
         // IdP-initiated logout request
-        let decoded = general_purpose::STANDARD.decode(&saml_request)
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to decode SAML logout request: {}", e)))?;
+        let decoded = general_purpose::STANDARD.decode(&saml_request).map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Failed to decode SAML logout request: {}", e))
+        })?;
 
         // Parse logout request and invalidate sessions
         let session_index = parse_saml_logout_request(&decoded)?;
@@ -716,14 +743,16 @@ pub async fn saml_slo(
         let app_base_url = std::env::var("APP_BASE_URL")
             .unwrap_or_else(|_| "https://app.mockforge.dev".to_string());
 
-        let slo_url = config.saml_slo_url
+        let slo_url = config
+            .saml_slo_url
             .ok_or_else(|| ApiError::InvalidRequest("SAML SLO URL not configured".to_string()))?;
 
         let logout_response = generate_saml_logout_response(&slo_url);
         let encoded_response = general_purpose::STANDARD.encode(logout_response.as_bytes());
 
         // Redirect back to IdP with logout response
-        let redirect_url = format!("{}?SAMLResponse={}", slo_url, urlencoding::encode(&encoded_response));
+        let redirect_url =
+            format!("{}?SAMLResponse={}", slo_url, urlencoding::encode(&encoded_response));
         Ok(Redirect::to(&redirect_url).into_response())
     } else {
         // Logout response from IdP (SP-initiated logout completed)
@@ -780,8 +809,9 @@ async fn parse_saml_response(
     org: &Organization,
 ) -> Result<SAMLUserInfo, ApiError> {
     // Convert to string for parsing
-    let xml_str = std::str::from_utf8(response_xml)
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Invalid UTF-8 in SAML response: {}", e)))?;
+    let xml_str = std::str::from_utf8(response_xml).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Invalid UTF-8 in SAML response: {}", e))
+    })?;
 
     // Use quick-xml to parse the SAML response
     // For now, we'll use the existing regex-based extraction which works well
@@ -793,12 +823,10 @@ async fn parse_saml_response(
         .or_else(|| extract_xml_value(xml_str, "saml2:NameID"));
 
     // Extract email from NameID or attributes
-    let email = name_id.clone()
+    let email = name_id
+        .clone()
         .filter(|v| v.contains('@'))
-        .or_else(|| {
-            extract_xml_value(xml_str, "AttributeValue")
-                .filter(|v| v.contains('@'))
-        });
+        .or_else(|| extract_xml_value(xml_str, "AttributeValue").filter(|v| v.contains('@')));
 
     // Extract SessionIndex
     let session_index = extract_xml_value(xml_str, "SessionIndex")
@@ -855,15 +883,14 @@ async fn parse_saml_response(
     }
 
     // Extract common attributes
-    let first_name = extract_xml_value(xml_str, "FirstName")
-        .or_else(|| extract_xml_value(xml_str, "givenName"));
-    let last_name = extract_xml_value(xml_str, "LastName")
-        .or_else(|| extract_xml_value(xml_str, "surname"));
+    let first_name =
+        extract_xml_value(xml_str, "FirstName").or_else(|| extract_xml_value(xml_str, "givenName"));
+    let last_name =
+        extract_xml_value(xml_str, "LastName").or_else(|| extract_xml_value(xml_str, "surname"));
 
     // Generate username from email if not provided
     let username = extract_xml_value(xml_str, "Username")
         .or_else(|| email.as_ref().map(|e| e.split('@').next().unwrap_or("user").to_string()));
-
 
     Ok(SAMLUserInfo {
         assertion_id,
@@ -886,11 +913,10 @@ fn verify_saml_signature(xml: &[u8], config: &SSOConfiguration) -> Result<(), Ap
     tracing::debug!("Verifying SAML signature for org_id={}", config.org_id);
 
     // Get X.509 certificate from config
-    let cert_pem = config.saml_x509_cert.as_ref()
-        .ok_or_else(|| {
-            tracing::error!("X.509 certificate not configured for org_id={}", config.org_id);
-            ApiError::InvalidRequest("SAML X.509 certificate not configured".to_string())
-        })?;
+    let cert_pem = config.saml_x509_cert.as_ref().ok_or_else(|| {
+        tracing::error!("X.509 certificate not configured for org_id={}", config.org_id);
+        ApiError::InvalidRequest("SAML X.509 certificate not configured".to_string())
+    })?;
 
     // Parse certificate (PEM format)
     let cert_pem_bytes = cert_pem.as_bytes().to_vec();
@@ -909,32 +935,32 @@ fn verify_saml_signature(xml: &[u8], config: &SSOConfiguration) -> Result<(), Ap
 
     // Parse the first certificate to verify it's valid
     let first_cert = certs[0].clone();
-    let (_, cert) = X509Certificate::from_der(&first_cert)
-        .map_err(|e| {
-            tracing::error!("Failed to parse X.509 certificate DER: {:?}", e);
-            ApiError::Internal(anyhow::anyhow!("Invalid X.509 certificate format"))
-        })?;
+    let (_, cert) = X509Certificate::from_der(&first_cert).map_err(|e| {
+        tracing::error!("Failed to parse X.509 certificate DER: {:?}", e);
+        ApiError::Internal(anyhow::anyhow!("Invalid X.509 certificate format"))
+    })?;
 
     // Verify certificate is valid (not expired, proper format)
-    cert.validity()
-        .time_to_expiration()
-        .ok_or_else(|| {
-            tracing::warn!("SAML certificate expired or invalid for org_id={}", config.org_id);
-            ApiError::InvalidRequest("SAML certificate has expired or is invalid".to_string())
-        })?;
+    cert.validity().time_to_expiration().ok_or_else(|| {
+        tracing::warn!("SAML certificate expired or invalid for org_id={}", config.org_id);
+        ApiError::InvalidRequest("SAML certificate has expired or is invalid".to_string())
+    })?;
 
     // Convert XML to string for parsing
-    let xml_str = std::str::from_utf8(xml)
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Invalid UTF-8 in SAML response: {}", e)))?;
+    let xml_str = std::str::from_utf8(xml).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Invalid UTF-8 in SAML response: {}", e))
+    })?;
 
     // Check if Signature element exists
-    let has_response_signature = xml_str.contains("<ds:Signature") ||
-                                 xml_str.contains("<Signature") ||
-                                 xml_str.contains("xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\"");
+    let has_response_signature = xml_str.contains("<ds:Signature")
+        || xml_str.contains("<Signature")
+        || xml_str.contains("xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\"");
 
     if !has_response_signature && config.require_signed_responses {
         tracing::error!("SAML response missing signature for org_id={}", config.org_id);
-        return Err(ApiError::InvalidRequest("SAML response is not signed but signature is required".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "SAML response is not signed but signature is required".to_string(),
+        ));
     }
 
     // Extract public key from certificate for signature verification
@@ -942,30 +968,38 @@ fn verify_saml_signature(xml: &[u8], config: &SSOConfiguration) -> Result<(), Ap
 
     // Verify response signature if present
     if has_response_signature {
-        verify_xml_signature(xml_str, &first_cert, public_key)
-            .map_err(|e| {
-                tracing::error!("SAML response signature verification failed for org_id={}: {}", config.org_id, e);
-                ApiError::InvalidRequest(format!("SAML response signature verification failed: {}", e))
-            })?;
+        verify_xml_signature(xml_str, &first_cert, public_key).map_err(|e| {
+            tracing::error!(
+                "SAML response signature verification failed for org_id={}: {}",
+                config.org_id,
+                e
+            );
+            ApiError::InvalidRequest(format!("SAML response signature verification failed: {}", e))
+        })?;
     }
 
     // Verify assertion signatures if required
     if config.require_signed_assertions {
         // Check for assertion signatures (typically inside Assertion elements)
-        let has_assertion_signature = xml_str.contains("<Assertion") &&
-                                      (xml_str.contains("<ds:Signature") || xml_str.contains("<Signature"));
+        let has_assertion_signature = xml_str.contains("<Assertion")
+            && (xml_str.contains("<ds:Signature") || xml_str.contains("<Signature"));
 
         if !has_assertion_signature {
             tracing::error!("SAML assertion missing signature for org_id={}", config.org_id);
-            return Err(ApiError::InvalidRequest("SAML assertion is not signed but signature is required".to_string()));
+            return Err(ApiError::InvalidRequest(
+                "SAML assertion is not signed but signature is required".to_string(),
+            ));
         }
 
         // Verify assertion signature (same certificate used for assertions)
-        verify_xml_signature(xml_str, &first_cert, public_key)
-            .map_err(|e| {
-                tracing::error!("SAML assertion signature verification failed for org_id={}: {}", config.org_id, e);
-                ApiError::InvalidRequest(format!("SAML assertion signature verification failed: {}", e))
-            })?;
+        verify_xml_signature(xml_str, &first_cert, public_key).map_err(|e| {
+            tracing::error!(
+                "SAML assertion signature verification failed for org_id={}: {}",
+                config.org_id,
+                e
+            );
+            ApiError::InvalidRequest(format!("SAML assertion signature verification failed: {}", e))
+        })?;
     }
 
     tracing::info!("SAML signature validation passed for org_id={}", config.org_id);
@@ -984,16 +1018,17 @@ fn verify_xml_signature(
         .ok_or_else(|| "Signature value not found in XML".to_string())?;
 
     // Extract SignedInfo element (the canonicalized content that was signed)
-    let signed_info = extract_signed_info(xml)
-        .ok_or_else(|| "SignedInfo not found in XML".to_string())?;
+    let signed_info =
+        extract_signed_info(xml).ok_or_else(|| "SignedInfo not found in XML".to_string())?;
 
     // Decode base64 signature
-    let signature_bytes = general_purpose::STANDARD.decode(&signature_value)
+    let signature_bytes = general_purpose::STANDARD
+        .decode(&signature_value)
         .map_err(|e| format!("Failed to decode signature: {}", e))?;
 
     // Determine signature algorithm from SignedInfo
-    let algorithm_str = extract_signature_algorithm(xml)
-        .unwrap_or_else(|| "rsa-sha256".to_string()); // Default to RSA-SHA256
+    let algorithm_str =
+        extract_signature_algorithm(xml).unwrap_or_else(|| "rsa-sha256".to_string()); // Default to RSA-SHA256
 
     // Hash the SignedInfo using the appropriate algorithm
     let signed_info_bytes = signed_info.as_bytes();
@@ -1020,10 +1055,12 @@ fn verify_xml_signature(
     // Use the certificate's DER-encoded public key directly
     // ring's UnparsedPublicKey can work with the raw public key bytes
     let verification_alg: &dyn VerificationAlgorithm = match algorithm_str.as_str() {
-        "rsa-sha256" | "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256" |
-        "http://www.w3.org/2000/09/xmldsig#rsa-sha256" => &RSA_PKCS1_2048_8192_SHA256,
-        "rsa-sha512" | "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512" |
-        "http://www.w3.org/2000/09/xmldsig#rsa-sha512" => &RSA_PKCS1_2048_8192_SHA512,
+        "rsa-sha256"
+        | "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+        | "http://www.w3.org/2000/09/xmldsig#rsa-sha256" => &RSA_PKCS1_2048_8192_SHA256,
+        "rsa-sha512"
+        | "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512"
+        | "http://www.w3.org/2000/09/xmldsig#rsa-sha512" => &RSA_PKCS1_2048_8192_SHA512,
         _ => &RSA_PKCS1_2048_8192_SHA256,
     };
 
@@ -1036,7 +1073,8 @@ fn verify_xml_signature(
     // Note: XML signature verification typically requires canonicalization of the SignedInfo
     // and handling of references. This is a simplified verification that works for
     // basic SAML scenarios. For full compliance, consider using a dedicated XML signature library.
-    public_key_unparsed.verify(&hash, &signature_bytes)
+    public_key_unparsed
+        .verify(&hash, &signature_bytes)
         .map_err(|e| format!("Signature verification failed: {:?}", e))?;
 
     Ok(())
@@ -1102,7 +1140,6 @@ fn extract_signature_algorithm(xml: &str) -> Option<String> {
     None
 }
 
-
 /// Extract value from XML by tag name (fallback parser for simple cases)
 /// Primary parsing is done in parse_saml_response using quick-xml
 fn extract_xml_value(xml: &str, tag: &str) -> Option<String> {
@@ -1149,9 +1186,7 @@ fn generate_saml_logout_response(slo_url: &str) -> String {
     Destination="{}"
     StatusCode="urn:oasis:names:tc:SAML:2.0:status:Success"/>
 "#,
-        response_id,
-        issue_instant,
-        slo_url
+        response_id, issue_instant, slo_url
     )
 }
 
@@ -1163,9 +1198,7 @@ async fn find_or_create_user_from_saml(
 ) -> Result<User, ApiError> {
     // Try to find user by email
     let user = if let Some(email) = &user_info.email {
-        User::find_by_email(pool, email)
-            .await
-            .map_err(|e| ApiError::Database(e))?
+        User::find_by_email(pool, email).await.map_err(|e| ApiError::Database(e))?
     } else {
         None
     };
@@ -1190,15 +1223,14 @@ async fn find_or_create_user_from_saml(
         user
     } else {
         // Create new user from SAML attributes
-        let email = user_info.email.as_ref()
-            .ok_or_else(|| ApiError::InvalidRequest("Email not found in SAML assertion".to_string()))?;
+        let email = user_info.email.as_ref().ok_or_else(|| {
+            ApiError::InvalidRequest("Email not found in SAML assertion".to_string())
+        })?;
 
-        let username = user_info.username.as_ref()
-            .cloned()
-            .unwrap_or_else(|| {
-                // Generate username from email
-                email.split('@').next().unwrap_or("user").to_string()
-            });
+        let username = user_info.username.as_ref().cloned().unwrap_or_else(|| {
+            // Generate username from email
+            email.split('@').next().unwrap_or("user").to_string()
+        });
 
         // Generate a random password (user won't need it for SSO login)
         let password_hash = crate::auth::hash_password(&uuid::Uuid::new_v4().to_string())
@@ -1241,9 +1273,10 @@ fn validate_saml_timestamps(user_info: &SAMLUserInfo) -> Result<(), ApiError> {
         let tolerance = chrono::Duration::minutes(5);
         if now < not_before - tolerance {
             tracing::warn!("SAML assertion not yet valid: not_before={}, now={}", not_before, now);
-            return Err(ApiError::InvalidRequest(
-                format!("SAML assertion is not yet valid. Valid from: {}", not_before)
-            ));
+            return Err(ApiError::InvalidRequest(format!(
+                "SAML assertion is not yet valid. Valid from: {}",
+                not_before
+            )));
         }
     }
 
@@ -1252,19 +1285,28 @@ fn validate_saml_timestamps(user_info: &SAMLUserInfo) -> Result<(), ApiError> {
         // Allow 5 minute clock skew tolerance
         let tolerance = chrono::Duration::minutes(5);
         if now > not_on_or_after + tolerance {
-            tracing::warn!("SAML assertion expired: not_on_or_after={}, now={}", not_on_or_after, now);
-            return Err(ApiError::InvalidRequest(
-                format!("SAML assertion has expired. Expired at: {}", not_on_or_after)
-            ));
+            tracing::warn!(
+                "SAML assertion expired: not_on_or_after={}, now={}",
+                not_on_or_after,
+                now
+            );
+            return Err(ApiError::InvalidRequest(format!(
+                "SAML assertion has expired. Expired at: {}",
+                not_on_or_after
+            )));
         }
     } else {
         // If no expiration time, default to 5 minutes validity
         if let Some(issued_at) = user_info.issued_at {
             let max_validity = issued_at + chrono::Duration::minutes(5);
             if now > max_validity {
-                tracing::warn!("SAML assertion exceeded default validity: issued_at={}, now={}", issued_at, now);
+                tracing::warn!(
+                    "SAML assertion exceeded default validity: issued_at={}, now={}",
+                    issued_at,
+                    now
+                );
                 return Err(ApiError::InvalidRequest(
-                    "SAML assertion has exceeded maximum validity period (5 minutes)".to_string()
+                    "SAML assertion has exceeded maximum validity period (5 minutes)".to_string(),
                 ));
             }
         }

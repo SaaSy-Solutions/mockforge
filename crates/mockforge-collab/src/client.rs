@@ -509,3 +509,264 @@ impl Drop for CollabClient {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_client_config_default() {
+        let config = ClientConfig::default();
+
+        assert_eq!(config.server_url, "");
+        assert_eq!(config.auth_token, "");
+        assert_eq!(config.max_reconnect_attempts, None);
+        assert_eq!(config.max_queue_size, 1000);
+        assert_eq!(config.initial_backoff_ms, 1000);
+        assert_eq!(config.max_backoff_ms, 30000);
+    }
+
+    #[test]
+    fn test_client_config_clone() {
+        let config = ClientConfig {
+            server_url: "ws://localhost:8080".to_string(),
+            auth_token: "token123".to_string(),
+            max_reconnect_attempts: Some(5),
+            max_queue_size: 500,
+            initial_backoff_ms: 500,
+            max_backoff_ms: 10000,
+        };
+
+        let cloned = config.clone();
+
+        assert_eq!(config.server_url, cloned.server_url);
+        assert_eq!(config.auth_token, cloned.auth_token);
+        assert_eq!(config.max_reconnect_attempts, cloned.max_reconnect_attempts);
+        assert_eq!(config.max_queue_size, cloned.max_queue_size);
+    }
+
+    #[test]
+    fn test_client_config_serialization() {
+        let config = ClientConfig {
+            server_url: "ws://localhost:8080".to_string(),
+            auth_token: "token123".to_string(),
+            max_reconnect_attempts: Some(3),
+            max_queue_size: 200,
+            initial_backoff_ms: 1500,
+            max_backoff_ms: 20000,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: ClientConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(config.server_url, deserialized.server_url);
+        assert_eq!(config.auth_token, deserialized.auth_token);
+        assert_eq!(config.max_reconnect_attempts, deserialized.max_reconnect_attempts);
+    }
+
+    #[test]
+    fn test_connection_state_equality() {
+        assert_eq!(ConnectionState::Disconnected, ConnectionState::Disconnected);
+        assert_eq!(ConnectionState::Connecting, ConnectionState::Connecting);
+        assert_eq!(ConnectionState::Connected, ConnectionState::Connected);
+        assert_eq!(ConnectionState::Reconnecting, ConnectionState::Reconnecting);
+
+        assert_ne!(ConnectionState::Disconnected, ConnectionState::Connected);
+        assert_ne!(ConnectionState::Connecting, ConnectionState::Reconnecting);
+    }
+
+    #[test]
+    fn test_connection_state_copy() {
+        let state = ConnectionState::Connected;
+        let copied = state;
+
+        assert_eq!(state, copied);
+    }
+
+    #[test]
+    fn test_connection_state_debug() {
+        let state = ConnectionState::Connected;
+        let debug_str = format!("{:?}", state);
+
+        assert!(debug_str.contains("Connected"));
+    }
+
+    #[tokio::test]
+    async fn test_connect_with_empty_url() {
+        let config = ClientConfig {
+            server_url: "".to_string(),
+            auth_token: "token".to_string(),
+            ..Default::default()
+        };
+
+        let result = CollabClient::connect(config).await;
+        assert!(result.is_err());
+
+        if let Err(e) = result {
+            match e {
+                CollabError::InvalidInput(msg) => {
+                    assert!(msg.contains("server_url"));
+                }
+                _ => panic!("Expected InvalidInput error"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_to_workspace_invalid_id() {
+        // We can't fully test client connection without a real server
+        // but we can test utility functions
+        let workspace_id = "invalid-uuid";
+        let result = Uuid::parse_str(workspace_id);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_to_workspace_valid_id() {
+        let workspace_id = Uuid::new_v4().to_string();
+        let result = Uuid::parse_str(&workspace_id);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_client_config_with_max_attempts() {
+        let config = ClientConfig {
+            max_reconnect_attempts: Some(10),
+            ..Default::default()
+        };
+
+        assert_eq!(config.max_reconnect_attempts, Some(10));
+    }
+
+    #[test]
+    fn test_client_config_unlimited_attempts() {
+        let config = ClientConfig {
+            max_reconnect_attempts: None,
+            ..Default::default()
+        };
+
+        assert_eq!(config.max_reconnect_attempts, None);
+    }
+
+    #[test]
+    fn test_client_config_queue_size() {
+        let config = ClientConfig {
+            max_queue_size: 5000,
+            ..Default::default()
+        };
+
+        assert_eq!(config.max_queue_size, 5000);
+    }
+
+    #[test]
+    fn test_client_config_backoff_values() {
+        let config = ClientConfig {
+            initial_backoff_ms: 2000,
+            max_backoff_ms: 60000,
+            ..Default::default()
+        };
+
+        assert_eq!(config.initial_backoff_ms, 2000);
+        assert_eq!(config.max_backoff_ms, 60000);
+    }
+
+    #[test]
+    fn test_sync_message_subscribe() {
+        let workspace_id = Uuid::new_v4();
+        let msg = SyncMessage::Subscribe { workspace_id };
+
+        let json = serde_json::to_string(&msg).unwrap();
+        let deserialized: SyncMessage = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            SyncMessage::Subscribe {
+                workspace_id: ws_id,
+            } => {
+                assert_eq!(ws_id, workspace_id);
+            }
+            _ => panic!("Expected Subscribe message"),
+        }
+    }
+
+    #[test]
+    fn test_sync_message_unsubscribe() {
+        let workspace_id = Uuid::new_v4();
+        let msg = SyncMessage::Unsubscribe { workspace_id };
+
+        let json = serde_json::to_string(&msg).unwrap();
+        let deserialized: SyncMessage = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            SyncMessage::Unsubscribe {
+                workspace_id: ws_id,
+            } => {
+                assert_eq!(ws_id, workspace_id);
+            }
+            _ => panic!("Expected Unsubscribe message"),
+        }
+    }
+
+    #[test]
+    fn test_sync_message_ping() {
+        let msg = SyncMessage::Ping;
+        let json = serde_json::to_string(&msg).unwrap();
+        let deserialized: SyncMessage = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            SyncMessage::Ping => {}
+            _ => panic!("Expected Ping message"),
+        }
+    }
+
+    #[test]
+    fn test_sync_message_pong() {
+        let msg = SyncMessage::Pong;
+        let json = serde_json::to_string(&msg).unwrap();
+        let deserialized: SyncMessage = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            SyncMessage::Pong => {}
+            _ => panic!("Expected Pong message"),
+        }
+    }
+
+    #[test]
+    fn test_sync_message_error() {
+        let msg = SyncMessage::Error {
+            message: "Test error".to_string(),
+        };
+
+        let json = serde_json::to_string(&msg).unwrap();
+        let deserialized: SyncMessage = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            SyncMessage::Error { message } => {
+                assert_eq!(message, "Test error");
+            }
+            _ => panic!("Expected Error message"),
+        }
+    }
+
+    #[test]
+    fn test_sync_message_state_request() {
+        let workspace_id = Uuid::new_v4();
+        let msg = SyncMessage::StateRequest {
+            workspace_id,
+            version: 42,
+        };
+
+        let json = serde_json::to_string(&msg).unwrap();
+        let deserialized: SyncMessage = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            SyncMessage::StateRequest {
+                workspace_id: ws_id,
+                version,
+            } => {
+                assert_eq!(ws_id, workspace_id);
+                assert_eq!(version, 42);
+            }
+            _ => panic!("Expected StateRequest message"),
+        }
+    }
+}

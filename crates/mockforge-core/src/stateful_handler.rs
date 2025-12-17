@@ -651,6 +651,395 @@ pub struct StatefulResponse {
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // StateInstance tests
+    // =========================================================================
+
+    #[test]
+    fn test_state_instance_new() {
+        let instance =
+            StateInstance::new("order-123".to_string(), "order".to_string(), "pending".to_string());
+        assert_eq!(instance.resource_id, "order-123");
+        assert_eq!(instance.resource_type, "order");
+        assert_eq!(instance.current_state, "pending");
+        assert!(instance.state_data.is_empty());
+    }
+
+    #[test]
+    fn test_state_instance_transition_to() {
+        let mut instance =
+            StateInstance::new("order-123".to_string(), "order".to_string(), "pending".to_string());
+        instance.transition_to("confirmed".to_string());
+        assert_eq!(instance.current_state, "confirmed");
+
+        instance.transition_to("shipped".to_string());
+        assert_eq!(instance.current_state, "shipped");
+    }
+
+    #[test]
+    fn test_state_instance_clone() {
+        let instance =
+            StateInstance::new("order-123".to_string(), "order".to_string(), "pending".to_string());
+        let cloned = instance.clone();
+        assert_eq!(cloned.resource_id, instance.resource_id);
+        assert_eq!(cloned.current_state, instance.current_state);
+    }
+
+    #[test]
+    fn test_state_instance_debug() {
+        let instance =
+            StateInstance::new("order-123".to_string(), "order".to_string(), "pending".to_string());
+        let debug_str = format!("{:?}", instance);
+        assert!(debug_str.contains("order-123"));
+        assert!(debug_str.contains("pending"));
+    }
+
+    // =========================================================================
+    // StateMachineManager tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_state_machine_manager_new() {
+        let manager = StateMachineManager::new();
+        let instances = manager.instances.read().await;
+        assert!(instances.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_state_machine_manager_get_or_create_new() {
+        let manager = StateMachineManager::new();
+        let instance = manager
+            .get_or_create_instance(
+                "order-123".to_string(),
+                "order".to_string(),
+                "pending".to_string(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(instance.resource_id, "order-123");
+        assert_eq!(instance.current_state, "pending");
+    }
+
+    #[tokio::test]
+    async fn test_state_machine_manager_get_or_create_existing() {
+        let manager = StateMachineManager::new();
+
+        // Create initial instance
+        let instance1 = manager
+            .get_or_create_instance(
+                "order-123".to_string(),
+                "order".to_string(),
+                "pending".to_string(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(instance1.current_state, "pending");
+
+        // Get the same instance - should return existing with same state
+        let instance2 = manager
+            .get_or_create_instance(
+                "order-123".to_string(),
+                "order".to_string(),
+                "confirmed".to_string(), // Different initial state - should be ignored
+            )
+            .await
+            .unwrap();
+        assert_eq!(instance2.current_state, "pending"); // Still pending
+    }
+
+    #[tokio::test]
+    async fn test_state_machine_manager_update_instance() {
+        let manager = StateMachineManager::new();
+
+        // Create initial instance
+        let mut instance = manager
+            .get_or_create_instance(
+                "order-123".to_string(),
+                "order".to_string(),
+                "pending".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Update state
+        instance.transition_to("confirmed".to_string());
+        manager.update_instance("order-123".to_string(), instance).await.unwrap();
+
+        // Verify update
+        let updated = manager
+            .get_or_create_instance(
+                "order-123".to_string(),
+                "order".to_string(),
+                "pending".to_string(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(updated.current_state, "confirmed");
+    }
+
+    // =========================================================================
+    // StatefulConfig tests
+    // =========================================================================
+
+    #[test]
+    fn test_stateful_config_serialize_deserialize() {
+        let config = StatefulConfig {
+            resource_id_extract: ResourceIdExtract::PathParam {
+                param: "order_id".to_string(),
+            },
+            resource_type: "order".to_string(),
+            state_responses: {
+                let mut map = HashMap::new();
+                map.insert(
+                    "pending".to_string(),
+                    StateResponse {
+                        status_code: 200,
+                        headers: HashMap::new(),
+                        body_template: "{\"status\": \"pending\"}".to_string(),
+                        content_type: "application/json".to_string(),
+                    },
+                );
+                map
+            },
+            transitions: vec![],
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: StatefulConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.resource_type, "order");
+    }
+
+    #[test]
+    fn test_stateful_config_debug() {
+        let config = StatefulConfig {
+            resource_id_extract: ResourceIdExtract::PathParam {
+                param: "order_id".to_string(),
+            },
+            resource_type: "order".to_string(),
+            state_responses: HashMap::new(),
+            transitions: vec![],
+        };
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("order"));
+    }
+
+    #[test]
+    fn test_stateful_config_clone() {
+        let config = StatefulConfig {
+            resource_id_extract: ResourceIdExtract::PathParam {
+                param: "id".to_string(),
+            },
+            resource_type: "user".to_string(),
+            state_responses: HashMap::new(),
+            transitions: vec![],
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.resource_type, "user");
+    }
+
+    // =========================================================================
+    // ResourceIdExtract tests
+    // =========================================================================
+
+    #[test]
+    fn test_resource_id_extract_path_param() {
+        let extract = ResourceIdExtract::PathParam {
+            param: "order_id".to_string(),
+        };
+        let json = serde_json::to_string(&extract).unwrap();
+        assert!(json.contains("path_param"));
+    }
+
+    #[test]
+    fn test_resource_id_extract_json_path() {
+        let extract = ResourceIdExtract::JsonPath {
+            path: "$.order.id".to_string(),
+        };
+        let json = serde_json::to_string(&extract).unwrap();
+        assert!(json.contains("json_path"));
+    }
+
+    #[test]
+    fn test_resource_id_extract_header() {
+        let extract = ResourceIdExtract::Header {
+            name: "X-Order-ID".to_string(),
+        };
+        let json = serde_json::to_string(&extract).unwrap();
+        assert!(json.contains("header"));
+    }
+
+    #[test]
+    fn test_resource_id_extract_query_param() {
+        let extract = ResourceIdExtract::QueryParam {
+            param: "order_id".to_string(),
+        };
+        let json = serde_json::to_string(&extract).unwrap();
+        assert!(json.contains("query_param"));
+    }
+
+    #[test]
+    fn test_resource_id_extract_composite() {
+        let extract = ResourceIdExtract::Composite {
+            extractors: vec![
+                ResourceIdExtract::PathParam {
+                    param: "id".to_string(),
+                },
+                ResourceIdExtract::Header {
+                    name: "X-ID".to_string(),
+                },
+            ],
+        };
+        let json = serde_json::to_string(&extract).unwrap();
+        assert!(json.contains("composite"));
+    }
+
+    // =========================================================================
+    // StateResponse tests
+    // =========================================================================
+
+    #[test]
+    fn test_state_response_serialize_deserialize() {
+        let response = StateResponse {
+            status_code: 200,
+            headers: {
+                let mut h = HashMap::new();
+                h.insert("X-State".to_string(), "pending".to_string());
+                h
+            },
+            body_template: "{\"state\": \"{{state}}\"}".to_string(),
+            content_type: "application/json".to_string(),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        let deserialized: StateResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.status_code, 200);
+        assert_eq!(deserialized.content_type, "application/json");
+    }
+
+    #[test]
+    fn test_state_response_clone() {
+        let response = StateResponse {
+            status_code: 201,
+            headers: HashMap::new(),
+            body_template: "{}".to_string(),
+            content_type: "text/plain".to_string(),
+        };
+        let cloned = response.clone();
+        assert_eq!(cloned.status_code, 201);
+    }
+
+    #[test]
+    fn test_state_response_debug() {
+        let response = StateResponse {
+            status_code: 404,
+            headers: HashMap::new(),
+            body_template: "Not found".to_string(),
+            content_type: "text/plain".to_string(),
+        };
+        let debug_str = format!("{:?}", response);
+        assert!(debug_str.contains("404"));
+    }
+
+    // =========================================================================
+    // TransitionTrigger tests
+    // =========================================================================
+
+    #[test]
+    fn test_transition_trigger_serialize_deserialize() {
+        let trigger = TransitionTrigger {
+            method: Method::POST,
+            path_pattern: "/orders/{id}/confirm".to_string(),
+            from_state: "pending".to_string(),
+            to_state: "confirmed".to_string(),
+            condition: None,
+        };
+        let json = serde_json::to_string(&trigger).unwrap();
+        let deserialized: TransitionTrigger = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.from_state, "pending");
+        assert_eq!(deserialized.to_state, "confirmed");
+    }
+
+    #[test]
+    fn test_transition_trigger_with_condition() {
+        let trigger = TransitionTrigger {
+            method: Method::POST,
+            path_pattern: "/orders/{id}/ship".to_string(),
+            from_state: "confirmed".to_string(),
+            to_state: "shipped".to_string(),
+            condition: Some("$.payment.verified".to_string()),
+        };
+        let json = serde_json::to_string(&trigger).unwrap();
+        assert!(json.contains("payment.verified"));
+    }
+
+    #[test]
+    fn test_transition_trigger_clone() {
+        let trigger = TransitionTrigger {
+            method: Method::DELETE,
+            path_pattern: "/orders/{id}".to_string(),
+            from_state: "pending".to_string(),
+            to_state: "cancelled".to_string(),
+            condition: None,
+        };
+        let cloned = trigger.clone();
+        assert_eq!(cloned.method, Method::DELETE);
+    }
+
+    // =========================================================================
+    // StatefulResponseHandler tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_stateful_response_handler_new() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let configs = handler.configs.read().await;
+        assert!(configs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_stateful_response_handler_add_config() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let config = StatefulConfig {
+            resource_id_extract: ResourceIdExtract::PathParam {
+                param: "id".to_string(),
+            },
+            resource_type: "order".to_string(),
+            state_responses: HashMap::new(),
+            transitions: vec![],
+        };
+
+        handler.add_config("/orders/{id}".to_string(), config).await;
+
+        let configs = handler.configs.read().await;
+        assert!(configs.contains_key("/orders/{id}"));
+    }
+
+    #[tokio::test]
+    async fn test_stateful_response_handler_can_handle_true() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let config = StatefulConfig {
+            resource_id_extract: ResourceIdExtract::PathParam {
+                param: "id".to_string(),
+            },
+            resource_type: "order".to_string(),
+            state_responses: HashMap::new(),
+            transitions: vec![],
+        };
+
+        handler.add_config("/orders/{id}".to_string(), config).await;
+
+        assert!(handler.can_handle(&Method::GET, "/orders/123").await);
+    }
+
+    #[tokio::test]
+    async fn test_stateful_response_handler_can_handle_false() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        assert!(!handler.can_handle(&Method::GET, "/orders/123").await);
+    }
+
+    // =========================================================================
+    // Path matching tests
+    // =========================================================================
+
     #[test]
     fn test_path_matching() {
         let handler = StatefulResponseHandler::new().unwrap();
@@ -658,5 +1047,605 @@ mod tests {
         assert!(handler.path_matches("/orders/{id}", "/orders/123"));
         assert!(handler.path_matches("/api/*", "/api/users"));
         assert!(!handler.path_matches("/orders/{id}", "/orders/123/items"));
+    }
+
+    #[test]
+    fn test_path_matching_exact() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        assert!(handler.path_matches("/api/health", "/api/health"));
+        assert!(!handler.path_matches("/api/health", "/api/health/check"));
+    }
+
+    #[test]
+    fn test_path_matching_multiple_params() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        assert!(handler.path_matches("/users/{user_id}/orders/{order_id}", "/users/1/orders/2"));
+    }
+
+    #[test]
+    fn test_path_matching_wildcard() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        assert!(handler.path_matches("/api/*", "/api/anything"));
+        assert!(handler.path_matches("/api/*", "/api/users/123"));
+    }
+
+    // =========================================================================
+    // Resource ID extraction tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_extract_resource_id_from_path() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let extract = ResourceIdExtract::PathParam {
+            param: "order_id".to_string(),
+        };
+        let uri: Uri = "/orders/12345".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        let id = handler.extract_resource_id(&extract, &uri, &headers, None).unwrap();
+        assert_eq!(id, "12345");
+    }
+
+    #[tokio::test]
+    async fn test_extract_resource_id_from_header() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let extract = ResourceIdExtract::Header {
+            name: "x-order-id".to_string(),
+        };
+        let uri: Uri = "/orders".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-order-id", "order-abc".parse().unwrap());
+
+        let id = handler.extract_resource_id(&extract, &uri, &headers, None).unwrap();
+        assert_eq!(id, "order-abc");
+    }
+
+    #[tokio::test]
+    async fn test_extract_resource_id_from_query_param() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let extract = ResourceIdExtract::QueryParam {
+            param: "id".to_string(),
+        };
+        let uri: Uri = "/orders?id=query-123".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        let id = handler.extract_resource_id(&extract, &uri, &headers, None).unwrap();
+        assert_eq!(id, "query-123");
+    }
+
+    #[tokio::test]
+    async fn test_extract_resource_id_from_json_body() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let extract = ResourceIdExtract::JsonPath {
+            path: "$.order.id".to_string(),
+        };
+        let uri: Uri = "/orders".parse().unwrap();
+        let headers = HeaderMap::new();
+        let body = br#"{"order": {"id": "json-456"}}"#;
+
+        let id = handler.extract_resource_id(&extract, &uri, &headers, Some(body)).unwrap();
+        assert_eq!(id, "json-456");
+    }
+
+    #[tokio::test]
+    async fn test_extract_resource_id_composite() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let extract = ResourceIdExtract::Composite {
+            extractors: vec![
+                ResourceIdExtract::Header {
+                    name: "x-id".to_string(),
+                },
+                ResourceIdExtract::PathParam {
+                    param: "id".to_string(),
+                },
+            ],
+        };
+        let uri: Uri = "/orders/fallback-123".parse().unwrap();
+        let headers = HeaderMap::new(); // No header, should fall back to path
+
+        let id = handler.extract_resource_id(&extract, &uri, &headers, None).unwrap();
+        assert_eq!(id, "fallback-123");
+    }
+
+    #[tokio::test]
+    async fn test_extract_resource_id_header_not_found() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let extract = ResourceIdExtract::Header {
+            name: "x-missing".to_string(),
+        };
+        let uri: Uri = "/orders".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        let result = handler.extract_resource_id(&extract, &uri, &headers, None);
+        assert!(result.is_err());
+    }
+
+    // =========================================================================
+    // JSON path extraction tests
+    // =========================================================================
+
+    #[test]
+    fn test_extract_json_path_simple() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let json: Value = serde_json::json!({"id": "123"});
+        let result = handler.extract_json_path(&json, "$.id").unwrap();
+        assert_eq!(result, "123");
+    }
+
+    #[test]
+    fn test_extract_json_path_nested() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let json: Value = serde_json::json!({"order": {"details": {"id": "456"}}});
+        let result = handler.extract_json_path(&json, "$.order.details.id").unwrap();
+        assert_eq!(result, "456");
+    }
+
+    #[test]
+    fn test_extract_json_path_number() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let json: Value = serde_json::json!({"count": 42});
+        let result = handler.extract_json_path(&json, "$.count").unwrap();
+        assert_eq!(result, "42");
+    }
+
+    #[test]
+    fn test_extract_json_path_array_index() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let json: Value = serde_json::json!({"items": ["a", "b", "c"]});
+        let result = handler.extract_json_path(&json, "$.items.1").unwrap();
+        assert_eq!(result, "b");
+    }
+
+    #[test]
+    fn test_extract_json_path_not_found() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let json: Value = serde_json::json!({"other": "value"});
+        let result = handler.extract_json_path(&json, "$.missing");
+        assert!(result.is_err());
+    }
+
+    // =========================================================================
+    // Body template rendering tests
+    // =========================================================================
+
+    #[test]
+    fn test_render_body_template_state() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let instance =
+            StateInstance::new("order-123".to_string(), "order".to_string(), "pending".to_string());
+        let template = r#"{"status": "{{state}}"}"#;
+        let result = handler.render_body_template(template, &instance).unwrap();
+        assert_eq!(result, r#"{"status": "pending"}"#);
+    }
+
+    #[test]
+    fn test_render_body_template_resource_id() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let instance =
+            StateInstance::new("order-456".to_string(), "order".to_string(), "shipped".to_string());
+        let template = r#"{"id": "{{resource_id}}"}"#;
+        let result = handler.render_body_template(template, &instance).unwrap();
+        assert_eq!(result, r#"{"id": "order-456"}"#);
+    }
+
+    #[test]
+    fn test_render_body_template_state_data() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let mut instance =
+            StateInstance::new("order-789".to_string(), "order".to_string(), "shipped".to_string());
+        instance
+            .state_data
+            .insert("carrier".to_string(), Value::String("FedEx".to_string()));
+        let template = r#"{"carrier": "{{state_data.carrier}}"}"#;
+        let result = handler.render_body_template(template, &instance).unwrap();
+        assert_eq!(result, r#"{"carrier": "FedEx"}"#);
+    }
+
+    #[test]
+    fn test_render_body_template_multiple_placeholders() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let instance = StateInstance::new(
+            "order-abc".to_string(),
+            "order".to_string(),
+            "confirmed".to_string(),
+        );
+        let template = r#"{"id": "{{resource_id}}", "status": "{{state}}"}"#;
+        let result = handler.render_body_template(template, &instance).unwrap();
+        assert_eq!(result, r#"{"id": "order-abc", "status": "confirmed"}"#);
+    }
+
+    // =========================================================================
+    // Process request tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_process_request_no_config() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let uri: Uri = "/orders/123".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        let result = handler.process_request(&Method::GET, &uri, &headers, None).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_process_request_with_config() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let mut state_responses = HashMap::new();
+        state_responses.insert(
+            "initial".to_string(),
+            StateResponse {
+                status_code: 200,
+                headers: HashMap::new(),
+                body_template: r#"{"state": "{{state}}", "id": "{{resource_id}}"}"#.to_string(),
+                content_type: "application/json".to_string(),
+            },
+        );
+
+        let config = StatefulConfig {
+            resource_id_extract: ResourceIdExtract::PathParam {
+                param: "id".to_string(),
+            },
+            resource_type: "order".to_string(),
+            state_responses,
+            transitions: vec![],
+        };
+
+        handler.add_config("/orders/{id}".to_string(), config).await;
+
+        let uri: Uri = "/orders/test-123".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        let result = handler.process_request(&Method::GET, &uri, &headers, None).await.unwrap();
+        assert!(result.is_some());
+
+        let response = result.unwrap();
+        assert_eq!(response.status_code, 200);
+        assert_eq!(response.state, "initial");
+        assert_eq!(response.resource_id, "test-123");
+        assert!(response.body.contains("test-123"));
+    }
+
+    #[tokio::test]
+    async fn test_process_request_with_transition() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let mut state_responses = HashMap::new();
+        state_responses.insert(
+            "initial".to_string(),
+            StateResponse {
+                status_code: 200,
+                headers: HashMap::new(),
+                body_template: r#"{"state": "{{state}}"}"#.to_string(),
+                content_type: "application/json".to_string(),
+            },
+        );
+        state_responses.insert(
+            "confirmed".to_string(),
+            StateResponse {
+                status_code: 200,
+                headers: HashMap::new(),
+                body_template: r#"{"state": "{{state}}"}"#.to_string(),
+                content_type: "application/json".to_string(),
+            },
+        );
+
+        let config = StatefulConfig {
+            resource_id_extract: ResourceIdExtract::PathParam {
+                param: "id".to_string(),
+            },
+            resource_type: "order".to_string(),
+            state_responses,
+            transitions: vec![TransitionTrigger {
+                method: Method::POST,
+                path_pattern: "/orders/{id}".to_string(),
+                from_state: "initial".to_string(),
+                to_state: "confirmed".to_string(),
+                condition: None,
+            }],
+        };
+
+        handler.add_config("/orders/{id}".to_string(), config).await;
+
+        // First request - should be in initial state
+        let uri: Uri = "/orders/order-1".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        let result = handler.process_request(&Method::GET, &uri, &headers, None).await.unwrap();
+        assert_eq!(result.unwrap().state, "initial");
+
+        // POST to trigger transition
+        let result = handler.process_request(&Method::POST, &uri, &headers, None).await.unwrap();
+        assert_eq!(result.unwrap().state, "confirmed");
+
+        // Subsequent GET should show confirmed state
+        let result = handler.process_request(&Method::GET, &uri, &headers, None).await.unwrap();
+        assert_eq!(result.unwrap().state, "confirmed");
+    }
+
+    // =========================================================================
+    // Stub state processing tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_process_stub_state() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let extract = ResourceIdExtract::PathParam {
+            param: "id".to_string(),
+        };
+        let uri: Uri = "/users/user-123".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        let result = handler
+            .process_stub_state(
+                &Method::GET,
+                &uri,
+                &headers,
+                None,
+                "user",
+                &extract,
+                "active",
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let info = result.unwrap();
+        assert_eq!(info.resource_id, "user-123");
+        assert_eq!(info.current_state, "active");
+    }
+
+    #[tokio::test]
+    async fn test_process_stub_state_with_transition() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let extract = ResourceIdExtract::PathParam {
+            param: "id".to_string(),
+        };
+        let uri: Uri = "/users/user-456".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        // Create initial state
+        let _ = handler
+            .process_stub_state(
+                &Method::GET,
+                &uri,
+                &headers,
+                None,
+                "user",
+                &extract,
+                "active",
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Now process with transition
+        let transitions = vec![TransitionTrigger {
+            method: Method::DELETE,
+            path_pattern: "/users/{id}".to_string(),
+            from_state: "active".to_string(),
+            to_state: "deleted".to_string(),
+            condition: None,
+        }];
+
+        let result = handler
+            .process_stub_state(
+                &Method::DELETE,
+                &uri,
+                &headers,
+                None,
+                "user",
+                &extract,
+                "active",
+                Some(&transitions),
+            )
+            .await
+            .unwrap();
+
+        let info = result.unwrap();
+        assert_eq!(info.current_state, "deleted");
+    }
+
+    // =========================================================================
+    // Get/Update resource state tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_get_resource_state_not_found() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let result = handler.get_resource_state("nonexistent", "order").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_resource_state_exists() {
+        let handler = StatefulResponseHandler::new().unwrap();
+
+        // Create a resource via stub processing
+        let extract = ResourceIdExtract::PathParam {
+            param: "id".to_string(),
+        };
+        let uri: Uri = "/orders/order-999".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        handler
+            .process_stub_state(
+                &Method::GET,
+                &uri,
+                &headers,
+                None,
+                "order",
+                &extract,
+                "pending",
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Now get the state
+        let result = handler.get_resource_state("order-999", "order").await.unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().current_state, "pending");
+    }
+
+    #[tokio::test]
+    async fn test_update_resource_state() {
+        let handler = StatefulResponseHandler::new().unwrap();
+
+        // Create a resource via stub processing
+        let extract = ResourceIdExtract::PathParam {
+            param: "id".to_string(),
+        };
+        let uri: Uri = "/orders/order-update".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        handler
+            .process_stub_state(
+                &Method::GET,
+                &uri,
+                &headers,
+                None,
+                "order",
+                &extract,
+                "pending",
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Update the state
+        handler.update_resource_state("order-update", "order", "shipped").await.unwrap();
+
+        // Verify update
+        let result = handler.get_resource_state("order-update", "order").await.unwrap();
+        assert_eq!(result.unwrap().current_state, "shipped");
+    }
+
+    #[tokio::test]
+    async fn test_update_resource_state_not_found() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let result = handler.update_resource_state("nonexistent", "order", "shipped").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_resource_state_wrong_type() {
+        let handler = StatefulResponseHandler::new().unwrap();
+
+        // Create a resource with type "order"
+        let extract = ResourceIdExtract::PathParam {
+            param: "id".to_string(),
+        };
+        let uri: Uri = "/orders/order-type-test".parse().unwrap();
+        let headers = HeaderMap::new();
+
+        handler
+            .process_stub_state(
+                &Method::GET,
+                &uri,
+                &headers,
+                None,
+                "order",
+                &extract,
+                "pending",
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Try to update with wrong type
+        let result = handler.update_resource_state("order-type-test", "user", "active").await;
+        assert!(result.is_err());
+    }
+
+    // =========================================================================
+    // Condition evaluation tests
+    // =========================================================================
+
+    #[test]
+    fn test_evaluate_condition_json_path_truthy() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let headers = HeaderMap::new();
+        let body = br#"{"verified": "true"}"#;
+        let result = handler.evaluate_condition("$.verified", &headers, Some(body)).unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_evaluate_condition_json_path_falsy() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let headers = HeaderMap::new();
+        let body = br#"{"verified": "false"}"#;
+        let result = handler.evaluate_condition("$.verified", &headers, Some(body)).unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_evaluate_condition_non_jsonpath() {
+        let handler = StatefulResponseHandler::new().unwrap();
+        let headers = HeaderMap::new();
+        let result = handler.evaluate_condition("some_condition", &headers, None).unwrap();
+        assert!(result); // Non-JSONPath conditions default to true
+    }
+
+    // =========================================================================
+    // StateInfo tests
+    // =========================================================================
+
+    #[test]
+    fn test_state_info_clone() {
+        let info = StateInfo {
+            resource_id: "res-1".to_string(),
+            current_state: "active".to_string(),
+            state_data: HashMap::new(),
+        };
+        let cloned = info.clone();
+        assert_eq!(cloned.resource_id, "res-1");
+    }
+
+    #[test]
+    fn test_state_info_debug() {
+        let info = StateInfo {
+            resource_id: "res-2".to_string(),
+            current_state: "inactive".to_string(),
+            state_data: HashMap::new(),
+        };
+        let debug_str = format!("{:?}", info);
+        assert!(debug_str.contains("res-2"));
+        assert!(debug_str.contains("inactive"));
+    }
+
+    // =========================================================================
+    // StatefulResponse tests
+    // =========================================================================
+
+    #[test]
+    fn test_stateful_response_clone() {
+        let response = StatefulResponse {
+            status_code: 200,
+            headers: HashMap::new(),
+            body: "{}".to_string(),
+            content_type: "application/json".to_string(),
+            state: "active".to_string(),
+            resource_id: "res-3".to_string(),
+        };
+        let cloned = response.clone();
+        assert_eq!(cloned.status_code, 200);
+        assert_eq!(cloned.state, "active");
+    }
+
+    #[test]
+    fn test_stateful_response_debug() {
+        let response = StatefulResponse {
+            status_code: 404,
+            headers: HashMap::new(),
+            body: "Not found".to_string(),
+            content_type: "text/plain".to_string(),
+            state: "deleted".to_string(),
+            resource_id: "res-4".to_string(),
+        };
+        let debug_str = format!("{:?}", response);
+        assert!(debug_str.contains("404"));
+        assert!(debug_str.contains("deleted"));
     }
 }

@@ -72,3 +72,121 @@ resource_limits:
         plugin_type.as_str()
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_generate_manifest_template_auth() {
+        let manifest = generate_manifest_template(PluginType::Auth);
+        assert!(manifest.contains("plugin_type: auth"));
+        assert!(manifest.contains("My auth Plugin"));
+        assert!(manifest.contains("id: my-plugin"));
+        assert!(manifest.contains("capabilities:"));
+        assert!(manifest.contains("resource_limits:"));
+    }
+
+    #[test]
+    fn test_generate_manifest_template_template() {
+        let manifest = generate_manifest_template(PluginType::Template);
+        assert!(manifest.contains("plugin_type: template"));
+        assert!(manifest.contains("A custom template plugin"));
+    }
+
+    #[test]
+    fn test_generate_manifest_template_response() {
+        let manifest = generate_manifest_template(PluginType::Response);
+        assert!(manifest.contains("plugin_type: response"));
+    }
+
+    #[test]
+    fn test_generate_manifest_template_datasource() {
+        let manifest = generate_manifest_template(PluginType::DataSource);
+        assert!(manifest.contains("plugin_type: datasource"));
+    }
+
+    #[test]
+    fn test_generate_manifest_template_structure() {
+        let manifest = generate_manifest_template(PluginType::Auth);
+
+        // Check YAML structure
+        assert!(manifest.contains("id:"));
+        assert!(manifest.contains("version:"));
+        assert!(manifest.contains("name:"));
+        assert!(manifest.contains("description:"));
+        assert!(manifest.contains("author:"));
+        assert!(manifest.contains("  name:"));
+        assert!(manifest.contains("  email:"));
+        assert!(manifest.contains("plugin_type:"));
+        assert!(manifest.contains("capabilities:"));
+        assert!(manifest.contains("  network: false"));
+        assert!(manifest.contains("  filesystem: false"));
+        assert!(manifest.contains("resource_limits:"));
+        assert!(manifest.contains("  max_memory_bytes: 10485760"));
+        assert!(manifest.contains("  max_cpu_time_ms: 5000"));
+    }
+
+    #[tokio::test]
+    async fn test_init_manifest_creates_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("test.yaml");
+
+        let result = init_manifest("auth", Some(&output_path)).await;
+        assert!(result.is_ok());
+        assert!(output_path.exists());
+
+        let content = std::fs::read_to_string(&output_path).unwrap();
+        assert!(content.contains("plugin_type: auth"));
+    }
+
+    #[tokio::test]
+    async fn test_init_manifest_default_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+
+        std::env::set_current_dir(&temp_dir).unwrap();
+
+        let result = init_manifest("template", None).await;
+        assert!(result.is_ok());
+
+        let default_path = temp_dir.path().join("plugin.yaml");
+        assert!(default_path.exists());
+
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_init_manifest_file_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("exists.yaml");
+
+        std::fs::write(&output_path, "existing content").unwrap();
+
+        let result = init_manifest("auth", Some(&output_path)).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already exists"));
+    }
+
+    #[tokio::test]
+    async fn test_init_manifest_invalid_plugin_type() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("test.yaml");
+
+        let result = init_manifest("invalid-type", Some(&output_path)).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_init_manifest_all_plugin_types() {
+        let temp_dir = TempDir::new().unwrap();
+
+        for plugin_type in &["auth", "template", "response", "datasource"] {
+            let output_path = temp_dir.path().join(format!("{}.yaml", plugin_type));
+            let result = init_manifest(plugin_type, Some(&output_path)).await;
+            assert!(result.is_ok(), "Failed for plugin type: {}", plugin_type);
+            assert!(output_path.exists());
+        }
+    }
+}

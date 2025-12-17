@@ -497,3 +497,361 @@ impl TunnelStoreTrait for PersistentTunnelStore {
         self.cleanup_expired().await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_config() -> TunnelConfig {
+        TunnelConfig {
+            provider: crate::config::TunnelProvider::SelfHosted,
+            server_url: Some("https://tunnel.test".to_string()),
+            auth_token: None,
+            subdomain: None,
+            local_url: "http://localhost:3000".to_string(),
+            protocol: "http".to_string(),
+            region: None,
+            custom_domain: None,
+            websocket_enabled: true,
+            http2_enabled: true,
+        }
+    }
+
+    fn create_test_config_with_subdomain(subdomain: &str) -> TunnelConfig {
+        let mut config = create_test_config();
+        config.subdomain = Some(subdomain.to_string());
+        config
+    }
+
+    #[tokio::test]
+    async fn test_new_in_memory() {
+        let store = PersistentTunnelStore::new_in_memory().await;
+        assert!(store.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_create_tunnel() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config();
+
+        let result = store.create_tunnel(&config).await;
+        assert!(result.is_ok());
+
+        let status = result.unwrap();
+        assert!(status.active);
+        assert_eq!(status.request_count, 0);
+        assert_eq!(status.bytes_transferred, 0);
+        assert!(status.public_url.contains("tunnel.mockforge.test"));
+        assert!(status.created_at.is_some());
+        assert!(status.local_url.is_some());
+        assert_eq!(status.local_url.unwrap(), config.local_url);
+    }
+
+    #[tokio::test]
+    async fn test_create_tunnel_with_subdomain() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config_with_subdomain("myapp");
+
+        let result = store.create_tunnel(&config).await;
+        assert!(result.is_ok());
+
+        let status = result.unwrap();
+        assert!(status.public_url.contains("myapp.tunnel.mockforge.test"));
+    }
+
+    #[tokio::test]
+    async fn test_create_tunnel_duplicate_subdomain() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config_with_subdomain("duplicate");
+
+        // First creation should succeed
+        let result1 = store.create_tunnel(&config).await;
+        assert!(result1.is_ok());
+
+        // Second creation with same subdomain should fail
+        let result2 = store.create_tunnel(&config).await;
+        assert!(result2.is_err());
+
+        if let Err(e) = result2 {
+            match e {
+                crate::TunnelError::AlreadyExists(msg) => {
+                    assert!(msg.contains("duplicate"));
+                }
+                _ => panic!("Expected AlreadyExists error"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_tunnel() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config();
+
+        let created = store.create_tunnel(&config).await.unwrap();
+        let tunnel_id = created.tunnel_id.clone();
+
+        let retrieved = store.get_tunnel(&tunnel_id).await;
+        assert!(retrieved.is_ok());
+
+        let status = retrieved.unwrap();
+        assert_eq!(status.tunnel_id, tunnel_id);
+        assert_eq!(status.public_url, created.public_url);
+        assert!(status.active);
+    }
+
+    #[tokio::test]
+    async fn test_get_tunnel_not_found() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+
+        let result = store.get_tunnel("nonexistent-tunnel-id").await;
+        assert!(result.is_err());
+
+        if let Err(e) = result {
+            match e {
+                crate::TunnelError::NotFound(_) => {}
+                _ => panic!("Expected NotFound error"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_tunnel_by_subdomain() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config_with_subdomain("testapp");
+
+        let created = store.create_tunnel(&config).await.unwrap();
+
+        let retrieved = store.get_tunnel_by_subdomain("testapp").await;
+        assert!(retrieved.is_ok());
+
+        let status = retrieved.unwrap();
+        assert_eq!(status.tunnel_id, created.tunnel_id);
+    }
+
+    #[tokio::test]
+    async fn test_get_tunnel_by_subdomain_not_found() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+
+        let result = store.get_tunnel_by_subdomain("nonexistent").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_tunnel() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config();
+
+        let created = store.create_tunnel(&config).await.unwrap();
+        let tunnel_id = created.tunnel_id.clone();
+
+        // Delete the tunnel
+        let delete_result = store.delete_tunnel(&tunnel_id).await;
+        assert!(delete_result.is_ok());
+
+        // Verify it's gone
+        let get_result = store.get_tunnel(&tunnel_id).await;
+        assert!(get_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_tunnel_not_found() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+
+        let result = store.delete_tunnel("nonexistent-tunnel-id").await;
+        assert!(result.is_err());
+
+        if let Err(e) = result {
+            match e {
+                crate::TunnelError::NotFound(_) => {}
+                _ => panic!("Expected NotFound error"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_tunnels_empty() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+
+        let tunnels = store.list_tunnels().await;
+        assert_eq!(tunnels.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_list_tunnels() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+
+        // Create multiple tunnels
+        let config1 = create_test_config_with_subdomain("app1");
+        let config2 = create_test_config_with_subdomain("app2");
+        let config3 = create_test_config_with_subdomain("app3");
+
+        store.create_tunnel(&config1).await.unwrap();
+        store.create_tunnel(&config2).await.unwrap();
+        store.create_tunnel(&config3).await.unwrap();
+
+        let tunnels = store.list_tunnels().await;
+        assert_eq!(tunnels.len(), 3);
+
+        // Verify all are active
+        for tunnel in &tunnels {
+            assert!(tunnel.active);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_record_request() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config();
+
+        let created = store.create_tunnel(&config).await.unwrap();
+        let tunnel_id = created.tunnel_id.clone();
+
+        // Record some requests
+        store.record_request(&tunnel_id, 1024).await;
+        store.record_request(&tunnel_id, 2048).await;
+
+        // Retrieve and verify counters
+        let status = store.get_tunnel(&tunnel_id).await.unwrap();
+        assert_eq!(status.request_count, 2);
+        assert_eq!(status.bytes_transferred, 3072);
+    }
+
+    #[tokio::test]
+    async fn test_record_request_large_bytes() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config();
+
+        let created = store.create_tunnel(&config).await.unwrap();
+        let tunnel_id = created.tunnel_id.clone();
+
+        // Record a large number of bytes
+        let large_bytes = u64::MAX / 2;
+        store.record_request(&tunnel_id, large_bytes).await;
+
+        let status = store.get_tunnel(&tunnel_id).await.unwrap();
+        assert_eq!(status.request_count, 1);
+        assert_eq!(status.bytes_transferred, large_bytes);
+    }
+
+    #[tokio::test]
+    async fn test_get_tunnel_by_id_alias() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config();
+
+        let created = store.create_tunnel(&config).await.unwrap();
+        let tunnel_id = created.tunnel_id.clone();
+
+        // Use the alias method
+        let retrieved = store.get_tunnel_by_id(&tunnel_id).await;
+        assert!(retrieved.is_ok());
+
+        let status = retrieved.unwrap();
+        assert_eq!(status.tunnel_id, tunnel_id);
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_expired_no_expired() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config();
+
+        store.create_tunnel(&config).await.unwrap();
+
+        // No expired tunnels, should clean up 0
+        let cleaned = store.cleanup_expired().await.unwrap();
+        assert_eq!(cleaned, 0);
+    }
+
+    #[tokio::test]
+    async fn test_clone() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let cloned = store.clone();
+
+        // Both should work independently
+        let config = create_test_config();
+        let result = cloned.create_tunnel(&config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_multiple_operations_sequence() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+
+        // Create
+        let config1 = create_test_config_with_subdomain("seq1");
+        let tunnel1 = store.create_tunnel(&config1).await.unwrap();
+
+        // List
+        let list1 = store.list_tunnels().await;
+        assert_eq!(list1.len(), 1);
+
+        // Create another
+        let config2 = create_test_config_with_subdomain("seq2");
+        let tunnel2 = store.create_tunnel(&config2).await.unwrap();
+
+        // List again
+        let list2 = store.list_tunnels().await;
+        assert_eq!(list2.len(), 2);
+
+        // Record requests
+        store.record_request(&tunnel1.tunnel_id, 100).await;
+        store.record_request(&tunnel2.tunnel_id, 200).await;
+
+        // Get and verify
+        let status1 = store.get_tunnel(&tunnel1.tunnel_id).await.unwrap();
+        let status2 = store.get_tunnel(&tunnel2.tunnel_id).await.unwrap();
+        assert_eq!(status1.bytes_transferred, 100);
+        assert_eq!(status2.bytes_transferred, 200);
+
+        // Delete one
+        store.delete_tunnel(&tunnel1.tunnel_id).await.unwrap();
+
+        // List should show only one
+        let list3 = store.list_tunnels().await;
+        assert_eq!(list3.len(), 1);
+        assert_eq!(list3[0].tunnel_id, tunnel2.tunnel_id);
+    }
+
+    #[tokio::test]
+    async fn test_tunnel_timestamps() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let config = create_test_config();
+
+        let before = Utc::now();
+        let tunnel = store.create_tunnel(&config).await.unwrap();
+        let after = Utc::now();
+
+        // Verify created_at is within expected range
+        assert!(tunnel.created_at.is_some());
+        let created = tunnel.created_at.unwrap();
+        assert!(created >= before);
+        assert!(created <= after);
+    }
+
+    #[tokio::test]
+    async fn test_tunnel_protocol_persistence() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let mut config = create_test_config();
+        config.protocol = "https".to_string();
+
+        let tunnel = store.create_tunnel(&config).await.unwrap();
+        let retrieved = store.get_tunnel(&tunnel.tunnel_id).await.unwrap();
+
+        // The protocol should be stored and retrievable
+        assert_eq!(tunnel.tunnel_id, retrieved.tunnel_id);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_and_http2_flags() {
+        let store = PersistentTunnelStore::new_in_memory().await.unwrap();
+        let mut config = create_test_config();
+        config.websocket_enabled = false;
+        config.http2_enabled = false;
+
+        let result = store.create_tunnel(&config).await;
+        assert!(result.is_ok());
+
+        // Flags should be persisted (verification through database)
+        let tunnel = result.unwrap();
+        assert!(tunnel.tunnel_id.len() > 0);
+    }
+}

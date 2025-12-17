@@ -102,9 +102,7 @@ impl AuditLog {
         offset: Option<i64>,
         event_type: Option<AuditEventType>,
     ) -> sqlx::Result<Vec<Self>> {
-        let mut query = sqlx::QueryBuilder::new(
-            "SELECT * FROM audit_logs WHERE org_id = $1"
-        );
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM audit_logs WHERE org_id = $1");
 
         if let Some(event_type) = event_type {
             query.push(" AND event_type = $2");
@@ -123,9 +121,7 @@ impl AuditLog {
             query.push_bind(offset);
         }
 
-        query.build_query_as::<Self>()
-            .fetch_all(pool)
-            .await
+        query.build_query_as::<Self>().fetch_all(pool).await
     }
 
     /// Get audit logs for a specific user within an organization
@@ -136,7 +132,7 @@ impl AuditLog {
         limit: Option<i64>,
     ) -> sqlx::Result<Vec<Self>> {
         let mut query = sqlx::QueryBuilder::new(
-            "SELECT * FROM audit_logs WHERE org_id = $1 AND user_id = $2 ORDER BY created_at DESC"
+            "SELECT * FROM audit_logs WHERE org_id = $1 AND user_id = $2 ORDER BY created_at DESC",
         );
 
         if let Some(limit) = limit {
@@ -144,16 +140,11 @@ impl AuditLog {
             query.push_bind(limit);
         }
 
-        query.build_query_as::<Self>()
-            .fetch_all(pool)
-            .await
+        query.build_query_as::<Self>().fetch_all(pool).await
     }
 
     /// Clean up old audit logs (older than N days)
-    pub async fn cleanup_old(
-        pool: &sqlx::PgPool,
-        days: i64,
-    ) -> sqlx::Result<u64> {
+    pub async fn cleanup_old(pool: &sqlx::PgPool, days: i64) -> sqlx::Result<u64> {
         let cutoff = Utc::now() - chrono::Duration::days(days);
         let result = sqlx::query("DELETE FROM audit_logs WHERE created_at < $1")
             .bind(cutoff)

@@ -174,3 +174,331 @@ impl StateVariable {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{RecordedRequest, RecordedResponse};
+
+    fn create_test_request() -> RecordedRequest {
+        RecordedRequest {
+            id: "req_001".to_string(),
+            protocol: crate::models::Protocol::Http,
+            timestamp: chrono::Utc::now(),
+            method: "GET".to_string(),
+            path: "/api/users".to_string(),
+            query_params: None,
+            headers: "{}".to_string(),
+            body: None,
+            body_encoding: "utf8".to_string(),
+            client_ip: None,
+            trace_id: None,
+            span_id: None,
+            duration_ms: None,
+            status_code: None,
+            tags: None,
+        }
+    }
+
+    fn create_test_response() -> RecordedResponse {
+        RecordedResponse {
+            request_id: "req_001".to_string(),
+            status_code: 200,
+            headers: "{}".to_string(),
+            body: Some(r#"{"id": 1, "name": "Test"}"#.to_string()),
+            body_encoding: "utf8".to_string(),
+            size_bytes: 26,
+            timestamp: chrono::Utc::now(),
+        }
+    }
+
+    #[test]
+    fn test_behavioral_scenario_new() {
+        let scenario = BehavioralScenario::new("scenario_1", "Test Scenario");
+
+        assert_eq!(scenario.id, "scenario_1");
+        assert_eq!(scenario.name, "Test Scenario");
+        assert!(scenario.description.is_none());
+        assert!(scenario.steps.is_empty());
+        assert!(scenario.state_variables.is_empty());
+        assert!(scenario.strict_mode); // default true
+        assert!(scenario.metadata.is_empty());
+        assert!(scenario.tags.is_empty());
+    }
+
+    #[test]
+    fn test_behavioral_scenario_with_description() {
+        let scenario = BehavioralScenario::new("scenario_1", "Test Scenario")
+            .with_description("A test scenario description");
+
+        assert_eq!(scenario.description, Some("A test scenario description".to_string()));
+    }
+
+    #[test]
+    fn test_behavioral_scenario_with_strict_mode() {
+        let scenario =
+            BehavioralScenario::new("scenario_1", "Test Scenario").with_strict_mode(false);
+
+        assert!(!scenario.strict_mode);
+    }
+
+    #[test]
+    fn test_behavioral_scenario_with_tags() {
+        let tags = vec!["checkout".to_string(), "critical".to_string()];
+        let scenario =
+            BehavioralScenario::new("scenario_1", "Test Scenario").with_tags(tags.clone());
+
+        assert_eq!(scenario.tags, tags);
+    }
+
+    #[test]
+    fn test_behavioral_scenario_add_step() {
+        let step =
+            BehavioralScenarioStep::new("step_1", create_test_request(), create_test_response());
+
+        let scenario = BehavioralScenario::new("scenario_1", "Test Scenario").add_step(step);
+
+        assert_eq!(scenario.steps.len(), 1);
+        assert_eq!(scenario.steps[0].step_id, "step_1");
+    }
+
+    #[test]
+    fn test_behavioral_scenario_add_state_variable() {
+        let variable = StateVariable::new("user_id", "$.id", "step_1");
+
+        let scenario =
+            BehavioralScenario::new("scenario_1", "Test Scenario").add_state_variable(variable);
+
+        assert_eq!(scenario.state_variables.len(), 1);
+        assert!(scenario.state_variables.contains_key("user_id"));
+    }
+
+    #[test]
+    fn test_behavioral_scenario_step_new() {
+        let step =
+            BehavioralScenarioStep::new("step_1", create_test_request(), create_test_response());
+
+        assert_eq!(step.step_id, "step_1");
+        assert!(step.label.is_none());
+        assert!(step.timing_ms.is_none());
+        assert!(step.extracts.is_empty());
+        assert!(step.depends_on.is_empty());
+    }
+
+    #[test]
+    fn test_behavioral_scenario_step_with_label() {
+        let step =
+            BehavioralScenarioStep::new("step_1", create_test_request(), create_test_response())
+                .with_label("login");
+
+        assert_eq!(step.label, Some("login".to_string()));
+    }
+
+    #[test]
+    fn test_behavioral_scenario_step_with_timing() {
+        let step =
+            BehavioralScenarioStep::new("step_1", create_test_request(), create_test_response())
+                .with_timing(500);
+
+        assert_eq!(step.timing_ms, Some(500));
+    }
+
+    #[test]
+    fn test_behavioral_scenario_step_add_extract() {
+        let step =
+            BehavioralScenarioStep::new("step_1", create_test_request(), create_test_response())
+                .add_extract("user_id", "$.data.user.id");
+
+        assert_eq!(step.extracts.len(), 1);
+        assert_eq!(step.extracts.get("user_id"), Some(&"$.data.user.id".to_string()));
+    }
+
+    #[test]
+    fn test_behavioral_scenario_step_add_dependency() {
+        let step =
+            BehavioralScenarioStep::new("step_2", create_test_request(), create_test_response())
+                .add_dependency("step_1");
+
+        assert_eq!(step.depends_on.len(), 1);
+        assert_eq!(step.depends_on[0], "step_1");
+    }
+
+    #[test]
+    fn test_behavioral_scenario_step_builder_chain() {
+        let step =
+            BehavioralScenarioStep::new("step_1", create_test_request(), create_test_response())
+                .with_label("checkout")
+                .with_timing(100)
+                .add_extract("cart_id", "$.cart.id")
+                .add_dependency("step_0");
+
+        assert_eq!(step.label, Some("checkout".to_string()));
+        assert_eq!(step.timing_ms, Some(100));
+        assert_eq!(step.extracts.len(), 1);
+        assert_eq!(step.depends_on.len(), 1);
+    }
+
+    #[test]
+    fn test_state_variable_new() {
+        let variable = StateVariable::new("user_id", "$.data.id", "step_1");
+
+        assert_eq!(variable.name, "user_id");
+        assert_eq!(variable.json_path, "$.data.id");
+        assert_eq!(variable.extracted_from_step, "step_1");
+        assert!(variable.default_value.is_none());
+    }
+
+    #[test]
+    fn test_state_variable_with_default() {
+        let variable = StateVariable::new("user_id", "$.data.id", "step_1")
+            .with_default(serde_json::json!("default_user"));
+
+        assert_eq!(variable.default_value, Some(serde_json::json!("default_user")));
+    }
+
+    #[test]
+    fn test_state_variable_with_default_number() {
+        let variable = StateVariable::new("count", "$.data.count", "step_1")
+            .with_default(serde_json::json!(0));
+
+        assert_eq!(variable.default_value, Some(serde_json::json!(0)));
+    }
+
+    #[test]
+    fn test_behavioral_scenario_serialization() {
+        let scenario = BehavioralScenario::new("scenario_1", "Test Scenario")
+            .with_description("A test")
+            .with_strict_mode(true)
+            .with_tags(vec!["test".to_string()]);
+
+        let json = serde_json::to_string(&scenario).unwrap();
+
+        assert!(json.contains("\"id\":\"scenario_1\""));
+        assert!(json.contains("\"name\":\"Test Scenario\""));
+        assert!(json.contains("\"strict_mode\":true"));
+    }
+
+    #[test]
+    fn test_behavioral_scenario_deserialization() {
+        let json = r#"{
+            "id": "scenario_1",
+            "name": "Test Scenario",
+            "description": "A test",
+            "steps": [],
+            "state_variables": {},
+            "strict_mode": false,
+            "metadata": {},
+            "tags": ["checkout"]
+        }"#;
+
+        let scenario: BehavioralScenario = serde_json::from_str(json).unwrap();
+
+        assert_eq!(scenario.id, "scenario_1");
+        assert_eq!(scenario.name, "Test Scenario");
+        assert_eq!(scenario.description, Some("A test".to_string()));
+        assert!(!scenario.strict_mode);
+        assert_eq!(scenario.tags, vec!["checkout".to_string()]);
+    }
+
+    #[test]
+    fn test_state_variable_serialization() {
+        let variable = StateVariable::new("user_id", "$.id", "step_1")
+            .with_default(serde_json::json!("anonymous"));
+
+        let json = serde_json::to_string(&variable).unwrap();
+
+        assert!(json.contains("\"name\":\"user_id\""));
+        assert!(json.contains("\"json_path\":\"$.id\""));
+        assert!(json.contains("\"extracted_from_step\":\"step_1\""));
+        assert!(json.contains("\"default_value\":\"anonymous\""));
+    }
+
+    #[test]
+    fn test_state_variable_deserialization() {
+        let json = r#"{
+            "name": "token",
+            "json_path": "$.access_token",
+            "extracted_from_step": "login_step",
+            "default_value": null
+        }"#;
+
+        let variable: StateVariable = serde_json::from_str(json).unwrap();
+
+        assert_eq!(variable.name, "token");
+        assert_eq!(variable.json_path, "$.access_token");
+        assert_eq!(variable.extracted_from_step, "login_step");
+        assert!(variable.default_value.is_none());
+    }
+
+    #[test]
+    fn test_behavioral_scenario_clone() {
+        let scenario = BehavioralScenario::new("scenario_1", "Test Scenario")
+            .with_description("A test")
+            .with_tags(vec!["tag1".to_string()]);
+
+        let cloned = scenario.clone();
+
+        assert_eq!(scenario.id, cloned.id);
+        assert_eq!(scenario.name, cloned.name);
+        assert_eq!(scenario.description, cloned.description);
+        assert_eq!(scenario.tags, cloned.tags);
+    }
+
+    #[test]
+    fn test_behavioral_scenario_step_clone() {
+        let step =
+            BehavioralScenarioStep::new("step_1", create_test_request(), create_test_response())
+                .with_label("test");
+
+        let cloned = step.clone();
+
+        assert_eq!(step.step_id, cloned.step_id);
+        assert_eq!(step.label, cloned.label);
+    }
+
+    #[test]
+    fn test_state_variable_clone() {
+        let variable = StateVariable::new("user_id", "$.id", "step_1");
+        let cloned = variable.clone();
+
+        assert_eq!(variable.name, cloned.name);
+        assert_eq!(variable.json_path, cloned.json_path);
+    }
+
+    #[test]
+    fn test_full_scenario_with_steps() {
+        let request1 = create_test_request();
+        let response1 = create_test_response();
+        let request2 = create_test_request();
+        let response2 = create_test_response();
+
+        let step1 = BehavioralScenarioStep::new("step_1", request1, response1)
+            .with_label("get_user")
+            .add_extract("user_id", "$.id");
+
+        let step2 = BehavioralScenarioStep::new("step_2", request2, response2)
+            .with_label("update_user")
+            .with_timing(50)
+            .add_dependency("step_1");
+
+        let variable = StateVariable::new("user_id", "$.id", "step_1");
+
+        let scenario = BehavioralScenario::new("user_flow", "User Flow")
+            .with_description("Test user CRUD operations")
+            .add_step(step1)
+            .add_step(step2)
+            .add_state_variable(variable)
+            .with_tags(vec!["user".to_string(), "crud".to_string()]);
+
+        assert_eq!(scenario.steps.len(), 2);
+        assert_eq!(scenario.state_variables.len(), 1);
+        assert_eq!(scenario.tags.len(), 2);
+
+        // Verify serialization round-trip
+        let json = serde_json::to_string(&scenario).unwrap();
+        let parsed: BehavioralScenario = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.steps.len(), 2);
+        assert_eq!(parsed.state_variables.len(), 1);
+    }
+}

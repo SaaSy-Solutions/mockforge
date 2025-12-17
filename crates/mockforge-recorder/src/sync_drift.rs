@@ -287,3 +287,322 @@ impl SyncDriftEvaluator {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::diff::{Difference, DifferenceType};
+    use mockforge_core::{
+        contract_drift::{types::DriftBudget, DriftBudgetEngine},
+        incidents::IncidentManager,
+    };
+
+    async fn create_test_database() -> Arc<RecorderDatabase> {
+        Arc::new(RecorderDatabase::new_in_memory().await.unwrap())
+    }
+
+    fn create_test_summary(total_differences: usize) -> crate::diff::ComparisonSummary {
+        crate::diff::ComparisonSummary {
+            total_differences,
+            added_fields: 0,
+            removed_fields: 0,
+            changed_fields: total_differences,
+            type_changes: 0,
+        }
+    }
+
+    fn create_test_change(
+        request_id: &str,
+        path: &str,
+        method: &str,
+        differences: Vec<Difference>,
+    ) -> DetectedChange {
+        let matches = differences.is_empty();
+        DetectedChange {
+            request_id: request_id.to_string(),
+            path: path.to_string(),
+            method: method.to_string(),
+            comparison: crate::diff::ComparisonResult {
+                matches,
+                status_match: matches,
+                headers_match: matches,
+                body_match: matches,
+                differences: differences.clone(),
+                summary: create_test_summary(differences.len()),
+            },
+            updated: false,
+        }
+    }
+
+    fn create_test_drift_engine() -> Arc<DriftBudgetEngine> {
+        use mockforge_core::contract_drift::types::DriftBudgetConfig;
+        Arc::new(DriftBudgetEngine::new(DriftBudgetConfig::default()))
+    }
+
+    fn create_test_incident_manager() -> Arc<IncidentManager> {
+        use mockforge_core::incidents::IncidentStore;
+        Arc::new(IncidentManager::new(Arc::new(IncidentStore::new())))
+    }
+
+    #[tokio::test]
+    async fn test_sync_drift_evaluator_creation() {
+        let database = create_test_database().await;
+        let drift_engine = create_test_drift_engine();
+        let incident_manager = create_test_incident_manager();
+
+        let evaluator = SyncDriftEvaluator::new(drift_engine, incident_manager, database);
+
+        // Should create successfully
+        assert!(std::mem::size_of_val(&evaluator) > 0);
+    }
+
+    #[tokio::test]
+    async fn test_evaluate_sync_changes_empty() {
+        let database = create_test_database().await;
+        let drift_engine = create_test_drift_engine();
+        let incident_manager = create_test_incident_manager();
+
+        let evaluator = SyncDriftEvaluator::new(drift_engine, incident_manager, database);
+
+        let changes = vec![];
+        let result = evaluator
+            .evaluate_sync_changes(&changes, "test_cycle", None, None, None)
+            .await
+            .unwrap();
+
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_determine_severity_critical() {
+        let database = create_test_database().await;
+        let drift_engine = create_test_drift_engine();
+        let incident_manager = create_test_incident_manager();
+
+        let evaluator = SyncDriftEvaluator::new(drift_engine, incident_manager, database);
+
+        let drift_result = DriftResult {
+            budget_exceeded: true,
+            breaking_changes: 6,
+            potentially_breaking_changes: 0,
+            non_breaking_changes: 0,
+            breaking_mismatches: vec![],
+            potentially_breaking_mismatches: vec![],
+            non_breaking_mismatches: vec![],
+            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+                endpoint: "/test".to_string(),
+                method: "GET".to_string(),
+                breaking_changes: 6,
+                non_breaking_changes: 0,
+                total_changes: 6,
+                budget_exceeded: true,
+                last_updated: chrono::Utc::now().timestamp(),
+            },
+            should_create_incident: true,
+            fitness_test_results: vec![],
+            consumer_impact: None,
+        };
+
+        let severity = evaluator.determine_severity(&drift_result);
+        assert!(matches!(severity, IncidentSeverity::Critical));
+    }
+
+    #[tokio::test]
+    async fn test_determine_severity_high() {
+        let database = create_test_database().await;
+        let drift_engine = create_test_drift_engine();
+        let incident_manager = create_test_incident_manager();
+
+        let evaluator = SyncDriftEvaluator::new(drift_engine, incident_manager, database);
+
+        let drift_result = DriftResult {
+            budget_exceeded: true,
+            breaking_changes: 3,
+            potentially_breaking_changes: 0,
+            non_breaking_changes: 0,
+            breaking_mismatches: vec![],
+            potentially_breaking_mismatches: vec![],
+            non_breaking_mismatches: vec![],
+            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+                endpoint: "/test".to_string(),
+                method: "GET".to_string(),
+                breaking_changes: 3,
+                non_breaking_changes: 0,
+                total_changes: 3,
+                budget_exceeded: true,
+                last_updated: chrono::Utc::now().timestamp(),
+            },
+            should_create_incident: true,
+            fitness_test_results: vec![],
+            consumer_impact: None,
+        };
+
+        let severity = evaluator.determine_severity(&drift_result);
+        assert!(matches!(severity, IncidentSeverity::High));
+    }
+
+    #[tokio::test]
+    async fn test_determine_severity_medium_breaking() {
+        let database = create_test_database().await;
+        let drift_engine = create_test_drift_engine();
+        let incident_manager = create_test_incident_manager();
+
+        let evaluator = SyncDriftEvaluator::new(drift_engine, incident_manager, database);
+
+        let drift_result = DriftResult {
+            budget_exceeded: true,
+            breaking_changes: 1,
+            potentially_breaking_changes: 0,
+            non_breaking_changes: 0,
+            breaking_mismatches: vec![],
+            potentially_breaking_mismatches: vec![],
+            non_breaking_mismatches: vec![],
+            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+                endpoint: "/test".to_string(),
+                method: "GET".to_string(),
+                breaking_changes: 1,
+                non_breaking_changes: 0,
+                total_changes: 1,
+                budget_exceeded: true,
+                last_updated: chrono::Utc::now().timestamp(),
+            },
+            should_create_incident: true,
+            fitness_test_results: vec![],
+            consumer_impact: None,
+        };
+
+        let severity = evaluator.determine_severity(&drift_result);
+        assert!(matches!(severity, IncidentSeverity::Medium));
+    }
+
+    #[tokio::test]
+    async fn test_determine_severity_medium_non_breaking() {
+        let database = create_test_database().await;
+        let drift_engine = create_test_drift_engine();
+        let incident_manager = create_test_incident_manager();
+
+        let evaluator = SyncDriftEvaluator::new(drift_engine, incident_manager, database);
+
+        let drift_result = DriftResult {
+            budget_exceeded: false,
+            breaking_changes: 0,
+            potentially_breaking_changes: 0,
+            non_breaking_changes: 11,
+            breaking_mismatches: vec![],
+            potentially_breaking_mismatches: vec![],
+            non_breaking_mismatches: vec![],
+            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+                endpoint: "/test".to_string(),
+                method: "GET".to_string(),
+                breaking_changes: 0,
+                non_breaking_changes: 11,
+                total_changes: 11,
+                budget_exceeded: false,
+                last_updated: chrono::Utc::now().timestamp(),
+            },
+            should_create_incident: false,
+            fitness_test_results: vec![],
+            consumer_impact: None,
+        };
+
+        let severity = evaluator.determine_severity(&drift_result);
+        assert!(matches!(severity, IncidentSeverity::Medium));
+    }
+
+    #[tokio::test]
+    async fn test_determine_severity_low() {
+        let database = create_test_database().await;
+        let drift_engine = create_test_drift_engine();
+        let incident_manager = create_test_incident_manager();
+
+        let evaluator = SyncDriftEvaluator::new(drift_engine, incident_manager, database);
+
+        let drift_result = DriftResult {
+            budget_exceeded: false,
+            breaking_changes: 0,
+            potentially_breaking_changes: 0,
+            non_breaking_changes: 5,
+            breaking_mismatches: vec![],
+            potentially_breaking_mismatches: vec![],
+            non_breaking_mismatches: vec![],
+            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+                endpoint: "/test".to_string(),
+                method: "GET".to_string(),
+                breaking_changes: 0,
+                non_breaking_changes: 5,
+                total_changes: 5,
+                budget_exceeded: false,
+                last_updated: chrono::Utc::now().timestamp(),
+            },
+            should_create_incident: false,
+            fitness_test_results: vec![],
+            consumer_impact: None,
+        };
+
+        let severity = evaluator.determine_severity(&drift_result);
+        assert!(matches!(severity, IncidentSeverity::Low));
+    }
+
+    #[test]
+    fn test_detected_change_creation() {
+        let change = create_test_change(
+            "req-1",
+            "/api/users",
+            "GET",
+            vec![Difference::new(
+                "$.status".to_string(),
+                DifferenceType::Changed {
+                    path: "$.status".to_string(),
+                    original: "200".to_string(),
+                    current: "404".to_string(),
+                },
+            )],
+        );
+
+        assert_eq!(change.request_id, "req-1");
+        assert_eq!(change.path, "/api/users");
+        assert_eq!(change.method, "GET");
+        assert_eq!(change.comparison.differences.len(), 1);
+        assert!(!change.updated);
+    }
+
+    #[test]
+    fn test_breaking_change_detection_missing_field() {
+        let diff = Difference::new(
+            "$.user.email".to_string(),
+            DifferenceType::Removed {
+                path: "$.user.email".to_string(),
+                value: "test@example.com".to_string(),
+            },
+        );
+
+        assert!(diff.description.to_lowercase().contains("removed"));
+    }
+
+    #[test]
+    fn test_breaking_change_detection_type_change() {
+        let diff = Difference::new(
+            "$.count".to_string(),
+            DifferenceType::TypeChanged {
+                path: "$.count".to_string(),
+                original_type: "number".to_string(),
+                current_type: "string".to_string(),
+            },
+        );
+
+        assert!(diff.description.to_lowercase().contains("type"));
+    }
+
+    #[test]
+    fn test_breaking_change_detection_removed() {
+        let diff = Difference::new(
+            "$.deprecated_field".to_string(),
+            DifferenceType::Removed {
+                path: "$.deprecated_field".to_string(),
+                value: "value".to_string(),
+            },
+        );
+
+        assert!(diff.description.to_lowercase().contains("removed"));
+    }
+}

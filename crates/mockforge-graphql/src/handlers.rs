@@ -503,4 +503,210 @@ mod tests {
         ctx.set_data("custom_key".to_string(), json!({"test": "value"}));
         assert_eq!(ctx.get_data("custom_key"), Some(&json!({"test": "value"})));
     }
+
+    #[test]
+    fn test_operation_type_eq() {
+        assert_eq!(OperationType::Query, OperationType::Query);
+        assert_ne!(OperationType::Query, OperationType::Mutation);
+        assert_ne!(OperationType::Mutation, OperationType::Subscription);
+    }
+
+    #[test]
+    fn test_operation_type_clone() {
+        let op = OperationType::Query;
+        let cloned = op.clone();
+        assert_eq!(op, cloned);
+    }
+
+    #[test]
+    fn test_handler_error_display() {
+        let err = HandlerError::SendError("test error".to_string());
+        assert!(err.to_string().contains("Send error"));
+
+        let err = HandlerError::OperationError("op error".to_string());
+        assert!(err.to_string().contains("Operation error"));
+
+        let err = HandlerError::UpstreamError("upstream error".to_string());
+        assert!(err.to_string().contains("Upstream error"));
+
+        let err = HandlerError::Generic("generic error".to_string());
+        assert!(err.to_string().contains("generic error"));
+    }
+
+    #[test]
+    fn test_handler_error_from_json() {
+        let json_err = serde_json::from_str::<i32>("not a number").unwrap_err();
+        let err: HandlerError = json_err.into();
+        assert!(matches!(err, HandlerError::JsonError(_)));
+    }
+
+    #[test]
+    fn test_variable_matcher_default() {
+        let matcher = VariableMatcher::default();
+        assert!(matcher.matches(&Variables::default()));
+    }
+
+    #[test]
+    fn test_variable_pattern_regex() {
+        let pattern = VariablePattern::Regex(r"^user-\d+$".to_string());
+        assert!(pattern.matches(Some(&Value::String("user-123".to_string()))));
+        assert!(!pattern.matches(Some(&Value::String("invalid".to_string()))));
+        assert!(!pattern.matches(None));
+    }
+
+    #[test]
+    fn test_variable_matcher_multiple_patterns() {
+        let matcher = VariableMatcher::new()
+            .with_pattern("id".to_string(), VariablePattern::Present)
+            .with_pattern("name".to_string(), VariablePattern::Any);
+
+        let mut vars = Variables::default();
+        vars.insert(Name::new("id"), Value::String("123".to_string()));
+
+        assert!(matcher.matches(&vars));
+    }
+
+    #[test]
+    fn test_variable_matcher_fails_on_missing() {
+        let matcher =
+            VariableMatcher::new().with_pattern("required".to_string(), VariablePattern::Present);
+
+        let vars = Variables::default();
+        assert!(!matcher.matches(&vars));
+    }
+
+    #[test]
+    fn test_graphql_context_get_variable() {
+        let mut vars = Variables::default();
+        vars.insert(Name::new("userId"), Value::String("123".to_string()));
+
+        let ctx = GraphQLContext::new(
+            Some("getUser".to_string()),
+            OperationType::Query,
+            "query { user { id } }".to_string(),
+            vars,
+        );
+
+        assert!(ctx.get_variable("userId").is_some());
+        assert!(ctx.get_variable("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_handler_registry_default() {
+        let registry = HandlerRegistry::default();
+        assert!(registry.upstream_url().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handler_registry_no_match() {
+        let mut registry = HandlerRegistry::new();
+        registry.register(TestHandler {
+            operation_name: "getUser".to_string(),
+        });
+
+        let ctx = GraphQLContext::new(
+            Some("getProduct".to_string()),
+            OperationType::Query,
+            "query { product { id } }".to_string(),
+            Variables::default(),
+        );
+
+        let result = registry.execute_operation(&ctx).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handler_registry_after_operation() {
+        let mut registry = HandlerRegistry::new();
+        registry.register(TestHandler {
+            operation_name: "getUser".to_string(),
+        });
+
+        let ctx = GraphQLContext::new(
+            Some("getUser".to_string()),
+            OperationType::Query,
+            "query { user { id } }".to_string(),
+            Variables::default(),
+        );
+
+        let response = Response::new(Value::Null);
+        let result = registry.after_operation(&ctx, response).await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_handler_registry_get_handlers() {
+        let mut registry = HandlerRegistry::new();
+        registry.register(TestHandler {
+            operation_name: "getUser".to_string(),
+        });
+        registry.register(TestHandler {
+            operation_name: "getProduct".to_string(),
+        });
+
+        let handlers = registry.get_handlers(Some("getUser"), &OperationType::Query);
+        assert_eq!(handlers.len(), 1);
+
+        let handlers = registry.get_handlers(Some("unknown"), &OperationType::Query);
+        assert_eq!(handlers.len(), 0);
+    }
+
+    #[test]
+    fn test_handler_priority() {
+        struct PriorityHandler {
+            priority: i32,
+        }
+
+        #[async_trait]
+        impl GraphQLHandler for PriorityHandler {
+            fn priority(&self) -> i32 {
+                self.priority
+            }
+        }
+
+        let handler = PriorityHandler { priority: 10 };
+        assert_eq!(handler.priority(), 10);
+    }
+
+    #[test]
+    fn test_context_all_operation_types() {
+        let query_ctx = GraphQLContext::new(
+            Some("op".to_string()),
+            OperationType::Query,
+            "query".to_string(),
+            Variables::default(),
+        );
+        assert_eq!(query_ctx.operation_type, OperationType::Query);
+
+        let mutation_ctx = GraphQLContext::new(
+            Some("op".to_string()),
+            OperationType::Mutation,
+            "mutation".to_string(),
+            Variables::default(),
+        );
+        assert_eq!(mutation_ctx.operation_type, OperationType::Mutation);
+
+        let subscription_ctx = GraphQLContext::new(
+            Some("op".to_string()),
+            OperationType::Subscription,
+            "subscription".to_string(),
+            Variables::default(),
+        );
+        assert_eq!(subscription_ctx.operation_type, OperationType::Subscription);
+    }
+
+    #[test]
+    fn test_variable_pattern_debug() {
+        let pattern = VariablePattern::Any;
+        let debug = format!("{:?}", pattern);
+        assert!(debug.contains("Any"));
+    }
+
+    #[test]
+    fn test_variable_matcher_debug() {
+        let matcher = VariableMatcher::new();
+        let debug = format!("{:?}", matcher);
+        assert!(debug.contains("VariableMatcher"));
+    }
 }

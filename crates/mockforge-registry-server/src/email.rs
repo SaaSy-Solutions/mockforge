@@ -16,7 +16,7 @@ pub struct EmailConfig {
     pub provider: EmailProvider,
     pub from_email: String,
     pub from_name: String,
-    pub api_key: Option<String>, // For Postmark/Brevo
+    pub api_key: Option<String>,   // For Postmark/Brevo
     pub smtp_host: Option<String>, // For SMTP fallback
     pub smtp_port: Option<u16>,
     pub smtp_username: Option<String>,
@@ -71,20 +71,16 @@ impl EmailService {
 
     /// Create email service from environment variables
     pub fn from_env() -> Self {
-        let provider = std::env::var("EMAIL_PROVIDER")
-            .unwrap_or_else(|_| "disabled".to_string());
+        let provider = std::env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "disabled".to_string());
 
         let config = EmailConfig {
             provider: EmailProvider::from_str(&provider),
             from_email: std::env::var("EMAIL_FROM")
                 .unwrap_or_else(|_| "noreply@mockforge.dev".to_string()),
-            from_name: std::env::var("EMAIL_FROM_NAME")
-                .unwrap_or_else(|_| "MockForge".to_string()),
+            from_name: std::env::var("EMAIL_FROM_NAME").unwrap_or_else(|_| "MockForge".to_string()),
             api_key: std::env::var("EMAIL_API_KEY").ok(),
             smtp_host: std::env::var("SMTP_HOST").ok(),
-            smtp_port: std::env::var("SMTP_PORT")
-                .ok()
-                .and_then(|p| p.parse().ok()),
+            smtp_port: std::env::var("SMTP_PORT").ok().and_then(|p| p.parse().ok()),
             smtp_username: std::env::var("SMTP_USERNAME").ok(),
             smtp_password: std::env::var("SMTP_PASSWORD").ok(),
         };
@@ -112,8 +108,7 @@ impl EmailService {
 
     /// Send email via Postmark API
     async fn send_via_postmark(&self, message: EmailMessage) -> Result<()> {
-        let api_key = self.config.api_key.as_ref()
-            .context("Postmark requires EMAIL_API_KEY")?;
+        let api_key = self.config.api_key.as_ref().context("Postmark requires EMAIL_API_KEY")?;
 
         #[derive(Serialize)]
         struct PostmarkRequest {
@@ -132,7 +127,8 @@ impl EmailService {
             TextBody: message.text_body,
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.postmarkapp.com/email")
             .header("X-Postmark-Server-Token", api_key)
             .header("Content-Type", "application/json")
@@ -151,8 +147,7 @@ impl EmailService {
 
     /// Send email via Brevo API
     async fn send_via_brevo(&self, message: EmailMessage) -> Result<()> {
-        let api_key = self.config.api_key.as_ref()
-            .context("Brevo requires EMAIL_API_KEY")?;
+        let api_key = self.config.api_key.as_ref().context("Brevo requires EMAIL_API_KEY")?;
 
         #[derive(Serialize)]
         struct BrevoSender {
@@ -185,7 +180,8 @@ impl EmailService {
             textContent: message.text_body,
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.brevo.com/v3/smtp/email")
             .header("api-key", api_key)
             .header("Content-Type", "application/json")
@@ -295,9 +291,8 @@ Privacy: https://mockforge.dev/privacy
         amount: Option<f64>,
         period_end: Option<chrono::DateTime<chrono::Utc>>,
     ) -> EmailMessage {
-        let amount_text = amount
-            .map(|a| format!("${:.2}", a))
-            .unwrap_or_else(|| "your plan".to_string());
+        let amount_text =
+            amount.map(|a| format!("${:.2}", a)).unwrap_or_else(|| "your plan".to_string());
 
         let period_text = period_end
             .map(|d| format!("Your subscription renews on {}", d.format("%B %d, %Y")))
@@ -403,7 +398,9 @@ Privacy: https://mockforge.dev/privacy
     ) -> EmailMessage {
         let retry_text = retry_date
             .map(|d| format!("We'll automatically retry on {}.", d.format("%B %d, %Y")))
-            .unwrap_or_else(|| "Please update your payment method to continue service.".to_string());
+            .unwrap_or_else(|| {
+                "Please update your payment method to continue service.".to_string()
+            });
 
         let html_body = format!(
             r#"
@@ -503,7 +500,13 @@ Privacy: https://mockforge.dev/privacy
         access_until: Option<chrono::DateTime<chrono::Utc>>,
     ) -> EmailMessage {
         let access_text = access_until
-            .map(|d| format!("You'll continue to have access to {} features until {}.", plan, d.format("%B %d, %Y")))
+            .map(|d| {
+                format!(
+                    "You'll continue to have access to {} features until {}.",
+                    plan,
+                    d.format("%B %d, %Y")
+                )
+            })
             .unwrap_or_else(|| format!("Your {} subscription has been canceled.", plan));
 
         let html_body = format!(
@@ -684,7 +687,8 @@ Privacy: https://mockforge.dev/privacy
     ) -> EmailMessage {
         let verification_url = format!(
             "{}/verify-email?token={}",
-            std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://app.mockforge.dev".to_string()),
+            std::env::var("APP_BASE_URL")
+                .unwrap_or_else(|_| "https://app.mockforge.dev".to_string()),
             verification_token
         );
 
@@ -867,7 +871,8 @@ Privacy: https://mockforge.dev/privacy
     ) -> EmailMessage {
         let reset_url = format!(
             "{}/reset-password?token={}",
-            std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://app.mockforge.dev".to_string()),
+            std::env::var("APP_BASE_URL")
+                .unwrap_or_else(|_| "https://app.mockforge.dev".to_string()),
             reset_token
         );
 
@@ -969,24 +974,28 @@ Privacy: https://mockforge.dev/privacy
             _ => ("#6c757d", "Deployment Status Update", "ℹ️"),
         };
 
-        let deployment_link = deployment_url.map(|url| {
-            format!(
-                r#"<p style="text-align: center;">
+        let deployment_link = deployment_url
+            .map(|url| {
+                format!(
+                    r#"<p style="text-align: center;">
             <a href="{}" class="button">View Deployment</a>
         </p>"#,
-                url
-            )
-        }).unwrap_or_else(String::new);
+                    url
+                )
+            })
+            .unwrap_or_else(String::new);
 
-        let error_section = error_message.map(|msg| {
-            format!(
-                r#"<div class="warning">
+        let error_section = error_message
+            .map(|msg| {
+                format!(
+                    r#"<div class="warning">
             <strong>Error Details:</strong><br>
             <pre style="white-space: pre-wrap; font-size: 12px;">{}</pre>
         </div>"#,
-                msg
-            )
-        }).unwrap_or_else(String::new);
+                    msg
+                )
+            })
+            .unwrap_or_else(String::new);
 
         let html_body = format!(
             r#"
@@ -1059,7 +1068,9 @@ Privacy: https://mockforge.dev/privacy
             username,
             deployment_name,
             status,
-            deployment_url.map(|url| format!("View deployment: {}", url)).unwrap_or_else(String::new),
+            deployment_url
+                .map(|url| format!("View deployment: {}", url))
+                .unwrap_or_else(String::new),
             error_message.map(|msg| format!("Error: {}", msg)).unwrap_or_else(String::new),
             chrono::Utc::now().year()
         );
@@ -1070,5 +1081,527 @@ Privacy: https://mockforge.dev/privacy
             html_body,
             text_body,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_email_provider_from_str() {
+        assert!(matches!(EmailProvider::from_str("postmark"), EmailProvider::Postmark));
+        assert!(matches!(EmailProvider::from_str("POSTMARK"), EmailProvider::Postmark));
+        assert!(matches!(EmailProvider::from_str("brevo"), EmailProvider::Brevo));
+        assert!(matches!(EmailProvider::from_str("sendinblue"), EmailProvider::Brevo));
+        assert!(matches!(EmailProvider::from_str("smtp"), EmailProvider::Smtp));
+        assert!(matches!(EmailProvider::from_str("disabled"), EmailProvider::Disabled));
+        assert!(matches!(EmailProvider::from_str("unknown"), EmailProvider::Disabled));
+    }
+
+    #[test]
+    fn test_email_service_new() {
+        let config = EmailConfig {
+            provider: EmailProvider::Disabled,
+            from_email: "test@example.com".to_string(),
+            from_name: "Test".to_string(),
+            api_key: None,
+            smtp_host: None,
+            smtp_port: None,
+            smtp_username: None,
+            smtp_password: None,
+        };
+
+        let service = EmailService::new(config.clone());
+        assert!(matches!(service.config.provider, EmailProvider::Disabled));
+        assert_eq!(service.config.from_email, "test@example.com");
+        assert_eq!(service.config.from_name, "Test");
+    }
+
+    #[tokio::test]
+    async fn test_send_email_disabled_provider() {
+        let config = EmailConfig {
+            provider: EmailProvider::Disabled,
+            from_email: "test@example.com".to_string(),
+            from_name: "Test".to_string(),
+            api_key: None,
+            smtp_host: None,
+            smtp_port: None,
+            smtp_username: None,
+            smtp_password: None,
+        };
+
+        let service = EmailService::new(config);
+        let message = EmailMessage {
+            to: "recipient@example.com".to_string(),
+            subject: "Test".to_string(),
+            html_body: "<p>Test</p>".to_string(),
+            text_body: "Test".to_string(),
+        };
+
+        // Should succeed without error when disabled
+        let result = service.send(message).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_email_smtp_provider() {
+        let config = EmailConfig {
+            provider: EmailProvider::Smtp,
+            from_email: "test@example.com".to_string(),
+            from_name: "Test".to_string(),
+            api_key: None,
+            smtp_host: Some("localhost".to_string()),
+            smtp_port: Some(587),
+            smtp_username: Some("user".to_string()),
+            smtp_password: Some("pass".to_string()),
+        };
+
+        let service = EmailService::new(config);
+        let message = EmailMessage {
+            to: "recipient@example.com".to_string(),
+            subject: "Test".to_string(),
+            html_body: "<p>Test</p>".to_string(),
+            text_body: "Test".to_string(),
+        };
+
+        // Should succeed (SMTP not implemented, just logs warning)
+        let result = service.send(message).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_email_postmark_missing_api_key() {
+        let config = EmailConfig {
+            provider: EmailProvider::Postmark,
+            from_email: "test@example.com".to_string(),
+            from_name: "Test".to_string(),
+            api_key: None,
+            smtp_host: None,
+            smtp_port: None,
+            smtp_username: None,
+            smtp_password: None,
+        };
+
+        let service = EmailService::new(config);
+        let message = EmailMessage {
+            to: "recipient@example.com".to_string(),
+            subject: "Test".to_string(),
+            html_body: "<p>Test</p>".to_string(),
+            text_body: "Test".to_string(),
+        };
+
+        // Should fail due to missing API key
+        let result = service.send(message).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires EMAIL_API_KEY"));
+    }
+
+    #[tokio::test]
+    async fn test_send_email_brevo_missing_api_key() {
+        let config = EmailConfig {
+            provider: EmailProvider::Brevo,
+            from_email: "test@example.com".to_string(),
+            from_name: "Test".to_string(),
+            api_key: None,
+            smtp_host: None,
+            smtp_port: None,
+            smtp_username: None,
+            smtp_password: None,
+        };
+
+        let service = EmailService::new(config);
+        let message = EmailMessage {
+            to: "recipient@example.com".to_string(),
+            subject: "Test".to_string(),
+            html_body: "<p>Test</p>".to_string(),
+            text_body: "Test".to_string(),
+        };
+
+        // Should fail due to missing API key
+        let result = service.send(message).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires EMAIL_API_KEY"));
+    }
+
+    #[test]
+    fn test_generate_welcome_email() {
+        let email = EmailService::generate_welcome_email("testuser", "test@example.com");
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.subject.contains("Welcome to MockForge Cloud"));
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("Welcome to MockForge Cloud"));
+        assert!(email.html_body.contains("https://app.mockforge.dev"));
+        assert!(email.text_body.contains("testuser"));
+        assert!(email.text_body.contains("Welcome to MockForge Cloud"));
+
+        // Check for current year in both HTML and text
+        let current_year = chrono::Utc::now().year();
+        assert!(email.html_body.contains(&current_year.to_string()));
+        assert!(email.text_body.contains(&current_year.to_string()));
+    }
+
+    #[test]
+    fn test_generate_subscription_confirmation_with_amount() {
+        let period_end = chrono::Utc::now() + chrono::Duration::days(30);
+        let email = EmailService::generate_subscription_confirmation(
+            "testuser",
+            "test@example.com",
+            "Pro",
+            Some(29.99),
+            Some(period_end),
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.subject.contains("Subscription Confirmed"));
+        assert!(email.subject.contains("Pro"));
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("Pro"));
+        assert!(email.html_body.contains("$29.99"));
+        assert!(email.html_body.contains("renews on"));
+        assert!(email.text_body.contains("testuser"));
+        assert!(email.text_body.contains("Pro"));
+        assert!(email.text_body.contains("$29.99"));
+    }
+
+    #[test]
+    fn test_generate_subscription_confirmation_without_amount() {
+        let email = EmailService::generate_subscription_confirmation(
+            "testuser",
+            "test@example.com",
+            "Free",
+            None,
+            None,
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.subject.contains("Subscription Confirmed"));
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("Free"));
+        assert!(email.html_body.contains("your plan"));
+        assert!(email.html_body.contains("subscription is active"));
+    }
+
+    #[test]
+    fn test_generate_payment_failed_with_retry() {
+        let retry_date = chrono::Utc::now() + chrono::Duration::days(3);
+        let email = EmailService::generate_payment_failed(
+            "testuser",
+            "test@example.com",
+            "Pro",
+            29.99,
+            Some(retry_date),
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.subject, "Payment Failed - Action Required");
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("Pro"));
+        assert!(email.html_body.contains("$29.99"));
+        assert!(email.html_body.contains("automatically retry"));
+        assert!(email.text_body.contains("testuser"));
+        assert!(email.text_body.contains("$29.99"));
+    }
+
+    #[test]
+    fn test_generate_payment_failed_without_retry() {
+        let email = EmailService::generate_payment_failed(
+            "testuser",
+            "test@example.com",
+            "Pro",
+            29.99,
+            None,
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("$29.99"));
+        assert!(email.html_body.contains("update your payment method"));
+    }
+
+    #[test]
+    fn test_generate_subscription_canceled_with_access() {
+        let access_until = chrono::Utc::now() + chrono::Duration::days(15);
+        let email = EmailService::generate_subscription_canceled(
+            "testuser",
+            "test@example.com",
+            "Pro",
+            Some(access_until),
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.subject, "Subscription Canceled");
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("Pro"));
+        assert!(email.html_body.contains("continue to have access"));
+        assert!(email.text_body.contains("testuser"));
+        assert!(email.text_body.contains("Pro"));
+    }
+
+    #[test]
+    fn test_generate_subscription_canceled_without_access() {
+        let email = EmailService::generate_subscription_canceled(
+            "testuser",
+            "test@example.com",
+            "Pro",
+            None,
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("Pro"));
+        assert!(email.html_body.contains("canceled"));
+    }
+
+    #[test]
+    fn test_generate_support_confirmation() {
+        let email = EmailService::generate_support_confirmation(
+            "testuser",
+            "test@example.com",
+            "TICKET-12345",
+            "Help with API integration",
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.subject.contains("Support Request Received"));
+        assert!(email.subject.contains("TICKET-12345"));
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("TICKET-12345"));
+        assert!(email.html_body.contains("Help with API integration"));
+        assert!(email.text_body.contains("testuser"));
+        assert!(email.text_body.contains("TICKET-12345"));
+        assert!(email.text_body.contains("Help with API integration"));
+    }
+
+    #[test]
+    fn test_generate_verification_email() {
+        std::env::set_var("APP_BASE_URL", "https://test.mockforge.dev");
+
+        let email = EmailService::generate_verification_email(
+            "testuser",
+            "test@example.com",
+            "abc123token",
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.subject.contains("Verify Your Email Address"));
+        assert!(email.html_body.contains("testuser"));
+        assert!(email
+            .html_body
+            .contains("https://test.mockforge.dev/verify-email?token=abc123token"));
+        assert!(email.html_body.contains("24 hours"));
+        assert!(email.text_body.contains("testuser"));
+        assert!(email
+            .text_body
+            .contains("https://test.mockforge.dev/verify-email?token=abc123token"));
+
+        std::env::remove_var("APP_BASE_URL");
+    }
+
+    #[test]
+    fn test_generate_verification_email_default_url() {
+        std::env::remove_var("APP_BASE_URL");
+
+        let email = EmailService::generate_verification_email(
+            "testuser",
+            "test@example.com",
+            "abc123token",
+        );
+
+        assert!(email
+            .html_body
+            .contains("https://app.mockforge.dev/verify-email?token=abc123token"));
+    }
+
+    #[test]
+    fn test_generate_token_rotation_reminder() {
+        let email = EmailService::generate_token_rotation_reminder(
+            "testuser",
+            "test@example.com",
+            "Production API Key",
+            120,
+            "https://app.mockforge.dev/tokens/rotate/123",
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.subject.contains("Action Required"));
+        assert!(email.subject.contains("Production API Key"));
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("Production API Key"));
+        assert!(email.html_body.contains("120 days"));
+        assert!(email.html_body.contains("https://app.mockforge.dev/tokens/rotate/123"));
+        assert!(email.text_body.contains("120 days"));
+        assert!(email.text_body.contains("Production API Key"));
+    }
+
+    #[test]
+    fn test_generate_password_reset_email() {
+        std::env::set_var("APP_BASE_URL", "https://test.mockforge.dev");
+
+        let email = EmailService::generate_password_reset_email(
+            "testuser",
+            "test@example.com",
+            "reset123token",
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.subject.contains("Reset Your Password"));
+        assert!(email.html_body.contains("testuser"));
+        assert!(email
+            .html_body
+            .contains("https://test.mockforge.dev/reset-password?token=reset123token"));
+        assert!(email.html_body.contains("1 hour"));
+        assert!(email.text_body.contains("testuser"));
+        assert!(email
+            .text_body
+            .contains("https://test.mockforge.dev/reset-password?token=reset123token"));
+
+        std::env::remove_var("APP_BASE_URL");
+    }
+
+    #[test]
+    fn test_generate_deployment_status_email_active() {
+        let email = EmailService::generate_deployment_status_email(
+            "testuser",
+            "test@example.com",
+            "my-api-mock",
+            "active",
+            Some("https://my-api-mock.mockforge.app"),
+            None,
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.subject.contains("✅"));
+        assert!(email.subject.contains("my-api-mock"));
+        assert!(email.subject.contains("active"));
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("my-api-mock"));
+        assert!(email.html_body.contains("active"));
+        assert!(email.html_body.contains("https://my-api-mock.mockforge.app"));
+        assert!(!email.html_body.contains("Error Details"));
+    }
+
+    #[test]
+    fn test_generate_deployment_status_email_failed() {
+        let email = EmailService::generate_deployment_status_email(
+            "testuser",
+            "test@example.com",
+            "my-api-mock",
+            "failed",
+            None,
+            Some("Build failed: missing dependency"),
+        );
+
+        assert_eq!(email.to, "test@example.com");
+        assert!(email.subject.contains("❌"));
+        assert!(email.subject.contains("my-api-mock"));
+        assert!(email.subject.contains("failed"));
+        assert!(email.html_body.contains("testuser"));
+        assert!(email.html_body.contains("my-api-mock"));
+        assert!(email.html_body.contains("failed"));
+        assert!(email.html_body.contains("Error Details"));
+        assert!(email.html_body.contains("Build failed: missing dependency"));
+        assert!(email.text_body.contains("Build failed: missing dependency"));
+    }
+
+    #[test]
+    fn test_generate_deployment_status_email_deploying() {
+        let email = EmailService::generate_deployment_status_email(
+            "testuser",
+            "test@example.com",
+            "my-api-mock",
+            "deploying",
+            Some("https://my-api-mock.mockforge.app"),
+            None,
+        );
+
+        assert!(email.subject.contains("⏳"));
+        assert!(email.subject.contains("deploying"));
+        assert!(email.html_body.contains("my-api-mock"));
+        assert!(email.html_body.contains("deploying"));
+    }
+
+    #[test]
+    fn test_email_message_clone() {
+        let message = EmailMessage {
+            to: "test@example.com".to_string(),
+            subject: "Test".to_string(),
+            html_body: "<p>Test</p>".to_string(),
+            text_body: "Test".to_string(),
+        };
+
+        let cloned = message.clone();
+        assert_eq!(message.to, cloned.to);
+        assert_eq!(message.subject, cloned.subject);
+        assert_eq!(message.html_body, cloned.html_body);
+        assert_eq!(message.text_body, cloned.text_body);
+    }
+
+    #[test]
+    fn test_email_config_clone() {
+        let config = EmailConfig {
+            provider: EmailProvider::Postmark,
+            from_email: "test@example.com".to_string(),
+            from_name: "Test".to_string(),
+            api_key: Some("key123".to_string()),
+            smtp_host: Some("localhost".to_string()),
+            smtp_port: Some(587),
+            smtp_username: Some("user".to_string()),
+            smtp_password: Some("pass".to_string()),
+        };
+
+        let cloned = config.clone();
+        assert_eq!(config.from_email, cloned.from_email);
+        assert_eq!(config.from_name, cloned.from_name);
+        assert_eq!(config.api_key, cloned.api_key);
+        assert_eq!(config.smtp_host, cloned.smtp_host);
+    }
+
+    #[test]
+    fn test_email_templates_contain_required_links() {
+        // Verify all email templates contain necessary links
+        let welcome = EmailService::generate_welcome_email("user", "test@example.com");
+        assert!(welcome.html_body.contains("mockforge.dev/terms"));
+        assert!(welcome.html_body.contains("mockforge.dev/privacy"));
+        assert!(welcome.text_body.contains("mockforge.dev/terms"));
+        assert!(welcome.text_body.contains("mockforge.dev/privacy"));
+
+        let subscription = EmailService::generate_subscription_confirmation(
+            "user",
+            "test@example.com",
+            "Pro",
+            Some(29.99),
+            None,
+        );
+        assert!(subscription.html_body.contains("app.mockforge.dev/billing"));
+
+        let payment_failed =
+            EmailService::generate_payment_failed("user", "test@example.com", "Pro", 29.99, None);
+        assert!(payment_failed.html_body.contains("app.mockforge.dev/billing"));
+
+        let canceled =
+            EmailService::generate_subscription_canceled("user", "test@example.com", "Pro", None);
+        assert!(canceled.html_body.contains("app.mockforge.dev/billing"));
+    }
+
+    #[test]
+    fn test_email_subject_lines() {
+        // Verify subject lines are appropriate
+        let welcome = EmailService::generate_welcome_email("user", "test@example.com");
+        assert!(welcome.subject.len() < 100); // Reasonable length
+        assert!(welcome.subject.contains("MockForge"));
+
+        let verification =
+            EmailService::generate_verification_email("user", "test@example.com", "token");
+        assert!(verification.subject.contains("Verify"));
+
+        let reset =
+            EmailService::generate_password_reset_email("user", "test@example.com", "token");
+        assert!(reset.subject.contains("Reset"));
+
+        let support =
+            EmailService::generate_support_confirmation("user", "test@example.com", "123", "Help");
+        assert!(support.subject.contains("123"));
     }
 }

@@ -34,7 +34,7 @@ pub enum FlowCommands {
         flow_id: String,
 
         /// Show detailed information
-        #[arg(short, long)]
+        #[arg(long)]
         verbose: bool,
     },
 

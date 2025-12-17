@@ -239,3 +239,193 @@ impl QoSHandler {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_qos_from_u8() {
+        assert_eq!(QoS::from_u8(0), Some(QoS::AtMostOnce));
+        assert_eq!(QoS::from_u8(1), Some(QoS::AtLeastOnce));
+        assert_eq!(QoS::from_u8(2), Some(QoS::ExactlyOnce));
+        assert_eq!(QoS::from_u8(3), None);
+        assert_eq!(QoS::from_u8(255), None);
+    }
+
+    #[test]
+    fn test_qos_as_u8() {
+        assert_eq!(QoS::AtMostOnce.as_u8(), 0);
+        assert_eq!(QoS::AtLeastOnce.as_u8(), 1);
+        assert_eq!(QoS::ExactlyOnce.as_u8(), 2);
+    }
+
+    #[test]
+    fn test_qos_equality() {
+        assert_eq!(QoS::AtMostOnce, QoS::AtMostOnce);
+        assert_ne!(QoS::AtMostOnce, QoS::AtLeastOnce);
+    }
+
+    #[test]
+    fn test_qos_clone() {
+        let qos = QoS::ExactlyOnce;
+        let cloned = qos;
+        assert_eq!(qos, cloned);
+    }
+
+    #[test]
+    fn test_qos_debug() {
+        let debug = format!("{:?}", QoS::AtLeastOnce);
+        assert!(debug.contains("AtLeastOnce"));
+    }
+
+    #[test]
+    fn test_message_state_clone() {
+        let msg = MessageState {
+            packet_id: 123,
+            topic: "test/topic".to_string(),
+            payload: b"hello".to_vec(),
+            qos: QoS::AtLeastOnce,
+            retained: false,
+            timestamp: 1234567890,
+        };
+
+        let cloned = msg.clone();
+        assert_eq!(msg.packet_id, cloned.packet_id);
+        assert_eq!(msg.topic, cloned.topic);
+        assert_eq!(msg.payload, cloned.payload);
+        assert_eq!(msg.qos, cloned.qos);
+    }
+
+    #[test]
+    fn test_message_state_debug() {
+        let msg = MessageState {
+            packet_id: 1,
+            topic: "test".to_string(),
+            payload: vec![],
+            qos: QoS::AtMostOnce,
+            retained: true,
+            timestamp: 0,
+        };
+        let debug = format!("{:?}", msg);
+        assert!(debug.contains("MessageState"));
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn test_qos_handler_new() {
+        let handler = QoSHandler::new();
+        assert_eq!(handler.max_retries, 3);
+    }
+
+    #[test]
+    fn test_qos_handler_default() {
+        let handler = QoSHandler::default();
+        assert_eq!(handler.max_retries, 3);
+    }
+
+    fn create_test_message(packet_id: u16, qos: QoS) -> MessageState {
+        MessageState {
+            packet_id,
+            topic: "test/topic".to_string(),
+            payload: b"test payload".to_vec(),
+            qos,
+            retained: false,
+            timestamp: 1234567890,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_qos0() {
+        let handler = QoSHandler::new();
+        let msg = create_test_message(1, QoS::AtMostOnce);
+        let result = handler.handle_qo_s0(msg).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_qos1() {
+        let handler = QoSHandler::new();
+        let msg = create_test_message(100, QoS::AtLeastOnce);
+        let result = handler.handle_qo_s1(msg, "client-1").await;
+        assert!(result.is_ok());
+
+        // Verify message is stored in pending
+        let pending = handler.qos1_pending.read().await;
+        assert!(pending.contains_key(&100));
+    }
+
+    #[tokio::test]
+    async fn test_handle_puback() {
+        let handler = QoSHandler::new();
+        let msg = create_test_message(100, QoS::AtLeastOnce);
+        handler.handle_qo_s1(msg, "client-1").await.unwrap();
+
+        // Handle PUBACK
+        let result = handler.handle_puback(100).await;
+        assert!(result.is_ok());
+
+        // Verify message is removed from pending
+        let pending = handler.qos1_pending.read().await;
+        assert!(!pending.contains_key(&100));
+    }
+
+    #[tokio::test]
+    async fn test_handle_puback_unknown() {
+        let handler = QoSHandler::new();
+        // PUBACK for unknown packet should not fail
+        let result = handler.handle_puback(999).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_qos2() {
+        let handler = QoSHandler::new();
+        let msg = create_test_message(200, QoS::ExactlyOnce);
+        let result = handler.handle_qo_s2(msg, "client-1").await;
+        assert!(result.is_ok());
+
+        // Verify state is stored
+        let states = handler.qos2_states.read().await;
+        assert!(states.contains_key(&200));
+    }
+
+    #[tokio::test]
+    async fn test_handle_pubcomp() {
+        let handler = QoSHandler::new();
+        let msg = create_test_message(200, QoS::ExactlyOnce);
+        handler.handle_qo_s2(msg, "client-1").await.unwrap();
+
+        let result = handler.handle_pubcomp(200).await;
+        assert!(result.is_ok());
+
+        // Verify state is removed
+        let states = handler.qos2_states.read().await;
+        assert!(!states.contains_key(&200));
+    }
+
+    #[tokio::test]
+    async fn test_handle_pubcomp_unknown() {
+        let handler = QoSHandler::new();
+        // PUBCOMP for unknown packet should not fail
+        let result = handler.handle_pubcomp(999).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_retry_pending_messages() {
+        let handler = QoSHandler::new();
+        let msg = create_test_message(100, QoS::AtLeastOnce);
+        handler.handle_qo_s1(msg, "client-1").await.unwrap();
+
+        // Retry should not fail
+        let result = handler.retry_pending_messages().await;
+        assert!(result.is_ok());
+
+        // Check retry count incremented
+        let pending = handler.qos1_pending.read().await;
+        if let Some(msg) = pending.get(&100) {
+            assert_eq!(msg.retry_count, 1);
+        }
+    }
+}

@@ -900,3 +900,803 @@ fn parse_delete_query(query: &str, params: &[Value]) -> Result<(String, String, 
 
     Err(Error::generic("Invalid DELETE query".to_string()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::StorageBackend;
+
+    // Helper functions for testing
+    async fn create_test_table(db: &dyn VirtualDatabase) -> Result<()> {
+        let create_sql = "CREATE TABLE IF NOT EXISTS test_users (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT,
+            age INTEGER
+        )";
+        db.create_table(create_sql).await
+    }
+
+    // SqliteDatabase tests
+    #[tokio::test]
+    async fn test_sqlite_database_creation() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let result = SqliteDatabase::new(&db_path).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_database_connection_info() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = SqliteDatabase::new(&db_path).await.unwrap();
+        let info = db.connection_info();
+        assert!(info.contains("SQLite"));
+        assert!(info.contains("test.db"));
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_database_initialize() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let mut db = SqliteDatabase::new(&db_path).await.unwrap();
+        let result = db.initialize().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_create_table() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = SqliteDatabase::new(&db_path).await.unwrap();
+        let result = create_test_table(&db).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_table_exists() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = SqliteDatabase::new(&db_path).await.unwrap();
+        create_test_table(&db).await.unwrap();
+
+        let exists = db.table_exists("test_users").await.unwrap();
+        assert!(exists);
+
+        let not_exists = db.table_exists("nonexistent_table").await.unwrap();
+        assert!(!not_exists);
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_execute_insert() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = SqliteDatabase::new(&db_path).await.unwrap();
+        create_test_table(&db).await.unwrap();
+
+        let query = "INSERT INTO test_users (id, name, email, age) VALUES (?, ?, ?, ?)";
+        let params = vec![
+            Value::String("1".to_string()),
+            Value::String("John Doe".to_string()),
+            Value::String("john@example.com".to_string()),
+            Value::Number(30.into()),
+        ];
+
+        let result = db.execute(query, &params).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_execute_with_id() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = SqliteDatabase::new(&db_path).await.unwrap();
+        create_test_table(&db).await.unwrap();
+
+        let query = "INSERT INTO test_users (id, name, email) VALUES (?, ?, ?)";
+        let params = vec![
+            Value::String("test-id".to_string()),
+            Value::String("Jane Doe".to_string()),
+            Value::String("jane@example.com".to_string()),
+        ];
+
+        let result = db.execute_with_id(query, &params).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_query_select() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = SqliteDatabase::new(&db_path).await.unwrap();
+        create_test_table(&db).await.unwrap();
+
+        // Insert test data
+        let insert_query = "INSERT INTO test_users (id, name, email) VALUES (?, ?, ?)";
+        db.execute(
+            insert_query,
+            &[
+                Value::String("1".to_string()),
+                Value::String("Test User".to_string()),
+                Value::String("test@example.com".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Query data
+        let select_query = "SELECT * FROM test_users WHERE id = ?";
+        let results = db.query(select_query, &[Value::String("1".to_string())]).await;
+        assert!(results.is_ok());
+        let rows = results.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].get("id").unwrap().as_str().unwrap(), "1");
+        assert_eq!(rows[0].get("name").unwrap().as_str().unwrap(), "Test User");
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_execute_update() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = SqliteDatabase::new(&db_path).await.unwrap();
+        create_test_table(&db).await.unwrap();
+
+        // Insert
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("Original Name".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Update
+        let update_result = db
+            .execute(
+                "UPDATE test_users SET name = ? WHERE id = ?",
+                &[
+                    Value::String("Updated Name".to_string()),
+                    Value::String("1".to_string()),
+                ],
+            )
+            .await;
+
+        assert!(update_result.is_ok());
+        assert_eq!(update_result.unwrap(), 1);
+
+        // Verify update
+        let rows = db
+            .query("SELECT name FROM test_users WHERE id = ?", &[Value::String("1".to_string())])
+            .await
+            .unwrap();
+        assert_eq!(rows[0].get("name").unwrap().as_str().unwrap(), "Updated Name");
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_execute_delete() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = SqliteDatabase::new(&db_path).await.unwrap();
+        create_test_table(&db).await.unwrap();
+
+        // Insert
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("Test".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Delete
+        let delete_result = db
+            .execute("DELETE FROM test_users WHERE id = ?", &[Value::String("1".to_string())])
+            .await;
+        assert!(delete_result.is_ok());
+        assert_eq!(delete_result.unwrap(), 1);
+
+        // Verify deletion
+        let rows = db
+            .query("SELECT * FROM test_users WHERE id = ?", &[Value::String("1".to_string())])
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_close() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let mut db = SqliteDatabase::new(&db_path).await.unwrap();
+        let result = db.close().await;
+        assert!(result.is_ok());
+    }
+
+    // JsonDatabase tests
+    #[tokio::test]
+    async fn test_json_database_creation() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let result = JsonDatabase::new(&db_path).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_json_database_connection_info() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let db = JsonDatabase::new(&db_path).await.unwrap();
+        let info = db.connection_info();
+        assert!(info.contains("JSON"));
+        assert!(info.contains("test.json"));
+    }
+
+    #[tokio::test]
+    async fn test_json_database_initialize() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let mut db = JsonDatabase::new(&db_path).await.unwrap();
+        let result = db.initialize().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_json_create_table() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let db = JsonDatabase::new(&db_path).await.unwrap();
+        let result = db.create_table("CREATE TABLE test_users (id TEXT, name TEXT)").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_json_table_exists() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let db = JsonDatabase::new(&db_path).await.unwrap();
+
+        // Table doesn't exist initially
+        assert!(!db.table_exists("test_users").await.unwrap());
+
+        // Insert a record (creates the table)
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("Test".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Now table should exist
+        assert!(db.table_exists("test_users").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_json_execute_insert() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let db = JsonDatabase::new(&db_path).await.unwrap();
+
+        let query = "INSERT INTO test_users (id, name, email) VALUES (?, ?, ?)";
+        let params = vec![
+            Value::String("1".to_string()),
+            Value::String("John Doe".to_string()),
+            Value::String("john@example.com".to_string()),
+        ];
+
+        let result = db.execute(query, &params).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_json_execute_with_id() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let db = JsonDatabase::new(&db_path).await.unwrap();
+
+        let query = "INSERT INTO test_users (name, email) VALUES (?, ?)";
+        let params = vec![
+            Value::String("Jane Doe".to_string()),
+            Value::String("jane@example.com".to_string()),
+        ];
+
+        let result = db.execute_with_id(query, &params).await;
+        assert!(result.is_ok());
+        // Should return auto-generated ID
+        assert!(!result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_json_query_select() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let db = JsonDatabase::new(&db_path).await.unwrap();
+
+        // Insert test data
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("Test User".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Query data
+        let results = db
+            .query("SELECT * FROM test_users WHERE id = ?", &[Value::String("1".to_string())])
+            .await;
+        assert!(results.is_ok());
+        let rows = results.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].get("id").unwrap().as_str().unwrap(), "1");
+    }
+
+    #[tokio::test]
+    async fn test_json_query_count() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let db = JsonDatabase::new(&db_path).await.unwrap();
+
+        // Insert multiple records
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("User 1".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("2".to_string()),
+                Value::String("User 2".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Query count
+        let results = db.query("SELECT COUNT(*) FROM test_users", &[]).await;
+        assert!(results.is_ok());
+        let rows = results.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].get("count").unwrap().as_u64().unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_json_execute_update() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let db = JsonDatabase::new(&db_path).await.unwrap();
+
+        // Insert
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("Original".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Update
+        let update_result = db
+            .execute(
+                "UPDATE test_users SET name = ? WHERE id = ?",
+                &[
+                    Value::String("Updated".to_string()),
+                    Value::String("1".to_string()),
+                ],
+            )
+            .await;
+
+        assert!(update_result.is_ok());
+        assert_eq!(update_result.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_json_execute_delete() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let db = JsonDatabase::new(&db_path).await.unwrap();
+
+        // Insert
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("Test".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Delete
+        let delete_result = db
+            .execute("DELETE FROM test_users WHERE id = ?", &[Value::String("1".to_string())])
+            .await;
+        assert!(delete_result.is_ok());
+        assert_eq!(delete_result.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_json_close() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let mut db = JsonDatabase::new(&db_path).await.unwrap();
+        let result = db.close().await;
+        assert!(result.is_ok());
+    }
+
+    // InMemoryDatabase tests
+    #[tokio::test]
+    async fn test_inmemory_database_creation() {
+        let result = InMemoryDatabase::new().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_database_connection_info() {
+        let db = InMemoryDatabase::new().await.unwrap();
+        let info = db.connection_info();
+        assert_eq!(info, "In-Memory");
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_database_initialize() {
+        let mut db = InMemoryDatabase::new().await.unwrap();
+        let result = db.initialize().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_create_table() {
+        let db = InMemoryDatabase::new().await.unwrap();
+        let result = db.create_table("CREATE TABLE test_users (id TEXT, name TEXT)").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_table_exists() {
+        let db = InMemoryDatabase::new().await.unwrap();
+
+        // Create table
+        db.create_table("CREATE TABLE test_users (id TEXT)").await.unwrap();
+
+        // Table should exist
+        assert!(db.table_exists("test_users").await.unwrap());
+        assert!(!db.table_exists("nonexistent").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_execute_insert() {
+        let db = InMemoryDatabase::new().await.unwrap();
+
+        let query = "INSERT INTO test_users (id, name) VALUES (?, ?)";
+        let params = vec![
+            Value::String("1".to_string()),
+            Value::String("John Doe".to_string()),
+        ];
+
+        let result = db.execute(query, &params).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_execute_with_id() {
+        let db = InMemoryDatabase::new().await.unwrap();
+
+        let query = "INSERT INTO test_users (name) VALUES (?)";
+        let params = vec![Value::String("Jane Doe".to_string())];
+
+        let result = db.execute_with_id(query, &params).await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_query_select() {
+        let db = InMemoryDatabase::new().await.unwrap();
+
+        // Insert
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("Test User".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Query
+        let results = db
+            .query("SELECT * FROM test_users WHERE id = ?", &[Value::String("1".to_string())])
+            .await;
+        assert!(results.is_ok());
+        let rows = results.unwrap();
+        assert_eq!(rows.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_query_count() {
+        let db = InMemoryDatabase::new().await.unwrap();
+
+        // Insert multiple
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("User 1".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("2".to_string()),
+                Value::String("User 2".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Count
+        let results = db.query("SELECT COUNT(*) FROM test_users", &[]).await;
+        assert!(results.is_ok());
+        let rows = results.unwrap();
+        assert_eq!(rows[0].get("count").unwrap().as_u64().unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_execute_update() {
+        let db = InMemoryDatabase::new().await.unwrap();
+
+        // Insert
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("Original".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Update
+        let result = db
+            .execute(
+                "UPDATE test_users SET name = ? WHERE id = ?",
+                &[
+                    Value::String("Updated".to_string()),
+                    Value::String("1".to_string()),
+                ],
+            )
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_execute_delete() {
+        let db = InMemoryDatabase::new().await.unwrap();
+
+        // Insert
+        db.execute(
+            "INSERT INTO test_users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("1".to_string()),
+                Value::String("Test".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        // Delete
+        let result = db
+            .execute("DELETE FROM test_users WHERE id = ?", &[Value::String("1".to_string())])
+            .await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_close() {
+        let mut db = InMemoryDatabase::new().await.unwrap();
+        let result = db.close().await;
+        assert!(result.is_ok());
+    }
+
+    // create_database tests
+    #[tokio::test]
+    async fn test_create_database_sqlite() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let backend = StorageBackend::Sqlite {
+            path: db_path.clone(),
+        };
+        let result = create_database(&backend).await;
+        assert!(result.is_ok());
+        let db = result.unwrap();
+        assert!(db.connection_info().contains("SQLite"));
+    }
+
+    #[tokio::test]
+    async fn test_create_database_json() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let backend = StorageBackend::Json {
+            path: db_path.clone(),
+        };
+        let result = create_database(&backend).await;
+        assert!(result.is_ok());
+        let db = result.unwrap();
+        assert!(db.connection_info().contains("JSON"));
+    }
+
+    #[tokio::test]
+    async fn test_create_database_memory() {
+        let backend = StorageBackend::Memory;
+        let result = create_database(&backend).await;
+        assert!(result.is_ok());
+        let db = result.unwrap();
+        assert_eq!(db.connection_info(), "In-Memory");
+    }
+
+    // Helper function tests
+    #[test]
+    fn test_extract_table_name_from_select() {
+        let query = "SELECT * FROM users";
+        let result = extract_table_name_from_select(query);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "users");
+    }
+
+    #[test]
+    fn test_extract_table_name_from_select_with_where() {
+        let query = "SELECT * FROM products WHERE price > 10";
+        let result = extract_table_name_from_select(query);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "products");
+    }
+
+    #[test]
+    fn test_extract_table_name_from_select_invalid() {
+        let query = "SELECT * users";
+        let result = extract_table_name_from_select(query);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_insert_query() {
+        let query = "INSERT INTO users (id, name) VALUES (?, ?)";
+        let params = vec![
+            Value::String("1".to_string()),
+            Value::String("John".to_string()),
+        ];
+        let result = parse_insert_query(query, &params);
+        assert!(result.is_ok());
+        let (table_name, record) = result.unwrap();
+        assert_eq!(table_name, "users");
+        assert_eq!(record.len(), 2);
+        assert_eq!(record.get("id").unwrap().as_str().unwrap(), "1");
+    }
+
+    #[test]
+    fn test_parse_insert_query_invalid() {
+        let query = "INSERT users VALUES (?)";
+        let params = vec![Value::String("1".to_string())];
+        let result = parse_insert_query(query, &params);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_update_query() {
+        let query = "UPDATE users SET name = ? WHERE id = ?";
+        let params = vec![
+            Value::String("John".to_string()),
+            Value::String("1".to_string()),
+        ];
+        let result = parse_update_query(query, &params);
+        assert!(result.is_ok());
+        let (table_name, updates, _where_clause, _where_params) = result.unwrap();
+        assert_eq!(table_name, "users");
+        assert_eq!(updates.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_delete_query() {
+        let query = "DELETE FROM users WHERE id = ?";
+        let params = vec![Value::String("1".to_string())];
+        let result = parse_delete_query(query, &params);
+        assert!(result.is_ok());
+        let (table_name, _where_clause, where_params) = result.unwrap();
+        assert_eq!(table_name, "users");
+        assert_eq!(where_params.len(), 1);
+    }
+
+    #[test]
+    fn test_matches_value() {
+        assert!(matches_value(
+            Some(&Value::String("test".to_string())),
+            &Value::String("test".to_string())
+        ));
+        assert!(!matches_value(
+            Some(&Value::String("test".to_string())),
+            &Value::String("other".to_string())
+        ));
+        assert!(matches_value(None, &Value::Null));
+        assert!(!matches_value(None, &Value::String("test".to_string())));
+    }
+
+    #[tokio::test]
+    async fn test_json_pagination() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.json");
+        let db = JsonDatabase::new(&db_path).await.unwrap();
+
+        // Insert multiple records
+        for i in 1..=5 {
+            db.execute(
+                "INSERT INTO test_users (id, name) VALUES (?, ?)",
+                &[
+                    Value::String(i.to_string()),
+                    Value::String(format!("User {}", i)),
+                ],
+            )
+            .await
+            .unwrap();
+        }
+
+        // Query with LIMIT
+        let results = db.query("SELECT * FROM test_users LIMIT 2", &[]).await.unwrap();
+        assert_eq!(results.len(), 2);
+
+        // Query with LIMIT and OFFSET
+        let results = db.query("SELECT * FROM test_users LIMIT 2 OFFSET 2", &[]).await.unwrap();
+        assert_eq!(results.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_inmemory_pagination() {
+        let db = InMemoryDatabase::new().await.unwrap();
+
+        // Insert multiple records
+        for i in 1..=5 {
+            db.execute(
+                "INSERT INTO test_users (id, name) VALUES (?, ?)",
+                &[
+                    Value::String(i.to_string()),
+                    Value::String(format!("User {}", i)),
+                ],
+            )
+            .await
+            .unwrap();
+        }
+
+        // Query with LIMIT
+        let results = db.query("SELECT * FROM test_users LIMIT 2", &[]).await.unwrap();
+        assert_eq!(results.len(), 2);
+
+        // Query with LIMIT and OFFSET
+        let results = db.query("SELECT * FROM test_users LIMIT 2 OFFSET 2", &[]).await.unwrap();
+        assert_eq!(results.len(), 2);
+    }
+}

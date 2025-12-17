@@ -84,3 +84,234 @@ impl ConstraintValidator {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::{InMemoryDatabase, VirtualDatabase};
+
+    async fn setup_test_db() -> InMemoryDatabase {
+        let mut db = InMemoryDatabase::new().await.unwrap();
+        db.initialize().await.unwrap();
+
+        // Create a test users table
+        db.create_table("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT)")
+            .await
+            .unwrap();
+
+        // Create a test orders table with foreign key reference
+        db.create_table(
+            "CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, user_id TEXT, total REAL)",
+        )
+        .await
+        .unwrap();
+
+        db
+    }
+
+    #[tokio::test]
+    async fn test_validate_foreign_key_success() {
+        let db = setup_test_db().await;
+
+        // Insert a user
+        db.execute(
+            "INSERT INTO users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("user-1".to_string()),
+                Value::String("John".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        let validator = ConstraintValidator;
+        let result = validator
+            .validate_foreign_key(
+                &db,
+                "orders",
+                "user_id",
+                &Value::String("user-1".to_string()),
+                "users",
+                "id",
+            )
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_foreign_key_failure() {
+        let db = setup_test_db().await;
+
+        let validator = ConstraintValidator;
+        let result = validator
+            .validate_foreign_key(
+                &db,
+                "orders",
+                "user_id",
+                &Value::String("nonexistent-user".to_string()),
+                "users",
+                "id",
+            )
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Foreign key constraint violation"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_unique_no_duplicates() {
+        let db = setup_test_db().await;
+
+        // Insert a user
+        db.execute(
+            "INSERT INTO users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("user-1".to_string()),
+                Value::String("John".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        let validator = ConstraintValidator;
+        let mut values = HashMap::new();
+        values.insert("name".to_string(), Value::String("Jane".to_string()));
+
+        let result = validator
+            .validate_unique(&db, "users", &["name".to_string()], &values, None)
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_unique_with_duplicate() {
+        let db = setup_test_db().await;
+
+        // Insert a user
+        db.execute(
+            "INSERT INTO users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("user-1".to_string()),
+                Value::String("John".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        let validator = ConstraintValidator;
+        let mut values = HashMap::new();
+        values.insert("name".to_string(), Value::String("John".to_string()));
+
+        let result = validator
+            .validate_unique(&db, "users", &["name".to_string()], &values, None)
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Unique constraint violation"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_unique_with_exclude_id() {
+        let db = setup_test_db().await;
+
+        // Insert a user
+        db.execute(
+            "INSERT INTO users (id, name) VALUES (?, ?)",
+            &[
+                Value::String("user-1".to_string()),
+                Value::String("John".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        let validator = ConstraintValidator;
+        let mut values = HashMap::new();
+        values.insert("name".to_string(), Value::String("John".to_string()));
+
+        // Should pass when excluding the same record
+        let result = validator
+            .validate_unique(
+                &db,
+                "users",
+                &["name".to_string()],
+                &values,
+                Some(&Value::String("user-1".to_string())),
+            )
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_unique_empty_fields() {
+        let db = setup_test_db().await;
+
+        let validator = ConstraintValidator;
+        let values = HashMap::new();
+
+        let result = validator.validate_unique(&db, "users", &[], &values, None).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_unique_missing_value() {
+        let db = setup_test_db().await;
+
+        let validator = ConstraintValidator;
+        let values = HashMap::new(); // No values provided
+
+        let result = validator
+            .validate_unique(&db, "users", &["name".to_string()], &values, None)
+            .await;
+
+        // Should pass because no values to check
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_validate_unique_multiple_fields() {
+        let db = setup_test_db().await;
+
+        // Create a table with composite unique constraint
+        db.create_table(
+            "CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, category TEXT, sku TEXT)",
+        )
+        .await
+        .unwrap();
+
+        // Insert a product
+        db.execute(
+            "INSERT INTO products (id, category, sku) VALUES (?, ?, ?)",
+            &[
+                Value::String("prod-1".to_string()),
+                Value::String("electronics".to_string()),
+                Value::String("SKU-001".to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+
+        let validator = ConstraintValidator;
+        let mut values = HashMap::new();
+        values.insert("category".to_string(), Value::String("electronics".to_string()));
+        values.insert("sku".to_string(), Value::String("SKU-002".to_string())); // Different SKU
+
+        let result = validator
+            .validate_unique(
+                &db,
+                "products",
+                &["category".to_string(), "sku".to_string()],
+                &values,
+                None,
+            )
+            .await;
+
+        assert!(result.is_ok());
+    }
+}

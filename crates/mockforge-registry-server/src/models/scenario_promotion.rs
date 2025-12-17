@@ -250,7 +250,11 @@ impl ScenarioPromotion {
     }
 
     /// Mark promotion as failed
-    pub async fn mark_failed(pool: &sqlx::PgPool, id: Uuid, error_message: &str) -> sqlx::Result<Self> {
+    pub async fn mark_failed(
+        pool: &sqlx::PgPool,
+        id: Uuid,
+        error_message: &str,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             UPDATE scenario_promotions

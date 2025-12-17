@@ -424,6 +424,13 @@ mod tests {
     }
 
     #[test]
+    fn test_registry_default() {
+        let registry = SmtpSpecRegistry::default();
+        assert_eq!(registry.protocol(), Protocol::Smtp);
+        assert_eq!(registry.max_mailbox_size, 1000);
+    }
+
+    #[test]
     fn test_mailbox_operations() {
         let registry = SmtpSpecRegistry::new();
 
@@ -470,5 +477,267 @@ mod tests {
 
         let emails = registry.get_emails().unwrap();
         assert_eq!(emails.len(), 2); // Should only keep the last 2
+    }
+
+    #[test]
+    fn test_get_email_by_id() {
+        let registry = SmtpSpecRegistry::new();
+
+        let email = StoredEmail {
+            id: "unique-id-123".to_string(),
+            from: "sender@example.com".to_string(),
+            to: vec!["recipient@example.com".to_string()],
+            subject: "Test".to_string(),
+            body: "Test body".to_string(),
+            headers: HashMap::new(),
+            received_at: chrono::Utc::now(),
+            raw: None,
+        };
+
+        registry.store_email(email).unwrap();
+
+        let found = registry.get_email_by_id("unique-id-123").unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "unique-id-123");
+
+        let not_found = registry.get_email_by_id("nonexistent").unwrap();
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn test_mailbox_stats() {
+        let registry = SmtpSpecRegistry::with_mailbox_size(100);
+
+        let stats = registry.get_mailbox_stats().unwrap();
+        assert_eq!(stats.total_emails, 0);
+        assert_eq!(stats.max_capacity, 100);
+
+        for i in 0..5 {
+            let email = StoredEmail {
+                id: format!("test-{}", i),
+                from: "sender@example.com".to_string(),
+                to: vec!["recipient@example.com".to_string()],
+                subject: format!("Test {}", i),
+                body: "Test body".to_string(),
+                headers: HashMap::new(),
+                received_at: chrono::Utc::now(),
+                raw: None,
+            };
+            registry.store_email(email).unwrap();
+        }
+
+        let stats = registry.get_mailbox_stats().unwrap();
+        assert_eq!(stats.total_emails, 5);
+    }
+
+    #[test]
+    fn test_email_search_filters_default() {
+        let filters = EmailSearchFilters::default();
+        assert!(filters.sender.is_none());
+        assert!(filters.recipient.is_none());
+        assert!(filters.subject.is_none());
+        assert!(filters.body.is_none());
+        assert!(!filters.use_regex);
+        assert!(!filters.case_sensitive);
+    }
+
+    #[test]
+    fn test_search_emails_by_sender() {
+        let registry = SmtpSpecRegistry::new();
+
+        // Add test emails
+        for i in 0..3 {
+            let email = StoredEmail {
+                id: format!("test-{}", i),
+                from: format!("sender{}@example.com", i),
+                to: vec!["recipient@example.com".to_string()],
+                subject: "Test".to_string(),
+                body: "Test body".to_string(),
+                headers: HashMap::new(),
+                received_at: chrono::Utc::now(),
+                raw: None,
+            };
+            registry.store_email(email).unwrap();
+        }
+
+        let filters = EmailSearchFilters {
+            sender: Some("sender1".to_string()),
+            ..Default::default()
+        };
+        let results = registry.search_emails(filters).unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].from.contains("sender1"));
+    }
+
+    #[test]
+    fn test_search_emails_by_subject() {
+        let registry = SmtpSpecRegistry::new();
+
+        let email1 = StoredEmail {
+            id: "test-1".to_string(),
+            from: "sender@example.com".to_string(),
+            to: vec!["recipient@example.com".to_string()],
+            subject: "Important update".to_string(),
+            body: "Test body".to_string(),
+            headers: HashMap::new(),
+            received_at: chrono::Utc::now(),
+            raw: None,
+        };
+        let email2 = StoredEmail {
+            id: "test-2".to_string(),
+            from: "sender@example.com".to_string(),
+            to: vec!["recipient@example.com".to_string()],
+            subject: "Newsletter".to_string(),
+            body: "Test body".to_string(),
+            headers: HashMap::new(),
+            received_at: chrono::Utc::now(),
+            raw: None,
+        };
+
+        registry.store_email(email1).unwrap();
+        registry.store_email(email2).unwrap();
+
+        let filters = EmailSearchFilters {
+            subject: Some("Important".to_string()),
+            ..Default::default()
+        };
+        let results = registry.search_emails(filters).unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].subject.contains("Important"));
+    }
+
+    #[test]
+    fn test_search_emails_with_regex() {
+        let registry = SmtpSpecRegistry::new();
+
+        let email = StoredEmail {
+            id: "test-1".to_string(),
+            from: "admin@example.com".to_string(),
+            to: vec!["recipient@example.com".to_string()],
+            subject: "Test".to_string(),
+            body: "Test body".to_string(),
+            headers: HashMap::new(),
+            received_at: chrono::Utc::now(),
+            raw: None,
+        };
+        registry.store_email(email).unwrap();
+
+        let filters = EmailSearchFilters {
+            sender: Some(r"^admin@.*\.com$".to_string()),
+            use_regex: true,
+            ..Default::default()
+        };
+        let results = registry.search_emails(filters).unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_operations_empty() {
+        let registry = SmtpSpecRegistry::new();
+        let ops = registry.operations();
+        assert!(ops.is_empty());
+    }
+
+    #[test]
+    fn test_find_operation_not_found() {
+        let registry = SmtpSpecRegistry::new();
+        let op = registry.find_operation("SEND", "/nonexistent");
+        assert!(op.is_none());
+    }
+
+    #[test]
+    fn test_validate_request_missing_from() {
+        let registry = SmtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Smtp,
+            pattern: mockforge_core::protocol_abstraction::MessagePattern::OneWay,
+            operation: "SEND".to_string(),
+            path: "/".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: HashMap::from([("to".to_string(), "recipient@example.com".to_string())]),
+            body: None,
+            client_ip: None,
+        };
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(!result.valid);
+    }
+
+    #[test]
+    fn test_validate_request_missing_to() {
+        let registry = SmtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Smtp,
+            pattern: mockforge_core::protocol_abstraction::MessagePattern::OneWay,
+            operation: "SEND".to_string(),
+            path: "/".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: HashMap::from([("from".to_string(), "sender@example.com".to_string())]),
+            body: None,
+            client_ip: None,
+        };
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(!result.valid);
+    }
+
+    #[test]
+    fn test_validate_request_valid() {
+        let registry = SmtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Smtp,
+            pattern: mockforge_core::protocol_abstraction::MessagePattern::OneWay,
+            operation: "SEND".to_string(),
+            path: "/".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: HashMap::from([
+                ("from".to_string(), "sender@example.com".to_string()),
+                ("to".to_string(), "recipient@example.com".to_string()),
+            ]),
+            body: None,
+            client_ip: None,
+        };
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(result.valid);
+    }
+
+    #[test]
+    fn test_validate_request_wrong_protocol() {
+        let registry = SmtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Http,
+            pattern: mockforge_core::protocol_abstraction::MessagePattern::OneWay,
+            operation: "SEND".to_string(),
+            path: "/".to_string(),
+            topic: None,
+            routing_key: None,
+            partition: None,
+            qos: None,
+            metadata: HashMap::new(),
+            body: None,
+            client_ip: None,
+        };
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(!result.valid);
+    }
+
+    #[test]
+    fn test_load_fixtures_nonexistent_dir() {
+        let mut registry = SmtpSpecRegistry::new();
+        let result = registry.load_fixtures("/nonexistent/path");
+        // Should succeed but not load any fixtures
+        assert!(result.is_ok());
+        assert_eq!(registry.fixtures.len(), 0);
     }
 }

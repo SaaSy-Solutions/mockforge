@@ -622,11 +622,92 @@ impl WsHandler for PassthroughHandler {
 mod tests {
     use super::*;
 
+    // ==================== WsMessage Tests ====================
+
+    #[test]
+    fn test_ws_message_text_from_axum() {
+        let axum_msg = Message::Text("hello".to_string().into());
+        let ws_msg: WsMessage = axum_msg.into();
+        match ws_msg {
+            WsMessage::Text(text) => assert_eq!(text, "hello"),
+            _ => panic!("Expected Text message"),
+        }
+    }
+
+    #[test]
+    fn test_ws_message_binary_from_axum() {
+        let data = vec![1, 2, 3, 4];
+        let axum_msg = Message::Binary(data.clone().into());
+        let ws_msg: WsMessage = axum_msg.into();
+        match ws_msg {
+            WsMessage::Binary(bytes) => assert_eq!(bytes, data),
+            _ => panic!("Expected Binary message"),
+        }
+    }
+
+    #[test]
+    fn test_ws_message_ping_from_axum() {
+        let data = vec![1, 2];
+        let axum_msg = Message::Ping(data.clone().into());
+        let ws_msg: WsMessage = axum_msg.into();
+        match ws_msg {
+            WsMessage::Ping(bytes) => assert_eq!(bytes, data),
+            _ => panic!("Expected Ping message"),
+        }
+    }
+
+    #[test]
+    fn test_ws_message_pong_from_axum() {
+        let data = vec![3, 4];
+        let axum_msg = Message::Pong(data.clone().into());
+        let ws_msg: WsMessage = axum_msg.into();
+        match ws_msg {
+            WsMessage::Pong(bytes) => assert_eq!(bytes, data),
+            _ => panic!("Expected Pong message"),
+        }
+    }
+
+    #[test]
+    fn test_ws_message_close_from_axum() {
+        let axum_msg = Message::Close(None);
+        let ws_msg: WsMessage = axum_msg.into();
+        assert!(matches!(ws_msg, WsMessage::Close));
+    }
+
+    #[test]
+    fn test_ws_message_text_to_axum() {
+        let ws_msg = WsMessage::Text("hello".to_string());
+        let axum_msg: Message = ws_msg.into();
+        assert!(matches!(axum_msg, Message::Text(_)));
+    }
+
+    #[test]
+    fn test_ws_message_binary_to_axum() {
+        let ws_msg = WsMessage::Binary(vec![1, 2, 3]);
+        let axum_msg: Message = ws_msg.into();
+        assert!(matches!(axum_msg, Message::Binary(_)));
+    }
+
+    #[test]
+    fn test_ws_message_close_to_axum() {
+        let ws_msg = WsMessage::Close;
+        let axum_msg: Message = ws_msg.into();
+        assert!(matches!(axum_msg, Message::Close(_)));
+    }
+
+    // ==================== MessagePattern Tests ====================
+
     #[test]
     fn test_message_pattern_regex() {
         let pattern = MessagePattern::regex(r"^hello").unwrap();
         assert!(pattern.matches("hello world"));
         assert!(!pattern.matches("goodbye world"));
+    }
+
+    #[test]
+    fn test_message_pattern_regex_invalid() {
+        let result = MessagePattern::regex(r"[invalid");
+        assert!(result.is_err());
     }
 
     #[test]
@@ -642,6 +723,57 @@ mod tests {
         assert!(pattern.matches(r#"{"type": "message"}"#));
         assert!(!pattern.matches(r#"{"name": "test"}"#));
     }
+
+    #[test]
+    fn test_message_pattern_jsonpath_nested() {
+        let pattern = MessagePattern::jsonpath("$.user.name");
+        assert!(pattern.matches(r#"{"user": {"name": "John"}}"#));
+        assert!(!pattern.matches(r#"{"user": {"email": "john@example.com"}}"#));
+    }
+
+    #[test]
+    fn test_message_pattern_jsonpath_invalid_json() {
+        let pattern = MessagePattern::jsonpath("$.type");
+        assert!(!pattern.matches("not json"));
+    }
+
+    #[test]
+    fn test_message_pattern_any() {
+        let pattern = MessagePattern::any();
+        assert!(pattern.matches("anything"));
+        assert!(pattern.matches(""));
+        assert!(pattern.matches(r#"{"json": true}"#));
+    }
+
+    #[test]
+    fn test_message_pattern_extract() {
+        let pattern = MessagePattern::jsonpath("$.type");
+        let result = pattern.extract(r#"{"type": "greeting", "data": "hello"}"#, "$.type");
+        assert_eq!(result, Some(serde_json::json!("greeting")));
+    }
+
+    #[test]
+    fn test_message_pattern_extract_nested() {
+        let pattern = MessagePattern::any();
+        let result = pattern.extract(r#"{"user": {"id": 123}}"#, "$.user.id");
+        assert_eq!(result, Some(serde_json::json!(123)));
+    }
+
+    #[test]
+    fn test_message_pattern_extract_not_found() {
+        let pattern = MessagePattern::any();
+        let result = pattern.extract(r#"{"type": "message"}"#, "$.nonexistent");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_message_pattern_extract_invalid_json() {
+        let pattern = MessagePattern::any();
+        let result = pattern.extract("not json", "$.type");
+        assert!(result.is_none());
+    }
+
+    // ==================== RoomManager Tests ====================
 
     #[tokio::test]
     async fn test_room_manager() {
@@ -676,6 +808,66 @@ mod tests {
         assert_eq!(conn1_rooms.len(), 0);
     }
 
+    #[tokio::test]
+    async fn test_room_manager_default() {
+        let manager = RoomManager::default();
+        // Should work the same as new()
+        manager.join("conn1", "room1").await.unwrap();
+        let members = manager.get_room_members("room1").await;
+        assert_eq!(members.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_room_manager_empty_room() {
+        let manager = RoomManager::new();
+        let members = manager.get_room_members("nonexistent").await;
+        assert!(members.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_room_manager_empty_connection() {
+        let manager = RoomManager::new();
+        let rooms = manager.get_connection_rooms("nonexistent").await;
+        assert!(rooms.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_room_manager_leave_nonexistent() {
+        let manager = RoomManager::new();
+        // Should not error when leaving a room we're not in
+        let result = manager.leave("conn1", "room1").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_room_manager_broadcaster() {
+        let manager = RoomManager::new();
+        manager.join("conn1", "room1").await.unwrap();
+
+        let broadcaster = manager.get_broadcaster("room1").await;
+        let mut receiver = broadcaster.subscribe();
+
+        // Send a message
+        broadcaster.send("hello".to_string()).unwrap();
+
+        // Receive it
+        let msg = receiver.recv().await.unwrap();
+        assert_eq!(msg, "hello");
+    }
+
+    #[tokio::test]
+    async fn test_room_manager_room_cleanup_on_last_leave() {
+        let manager = RoomManager::new();
+        manager.join("conn1", "room1").await.unwrap();
+        manager.leave("conn1", "room1").await.unwrap();
+
+        // Room should be cleaned up
+        let members = manager.get_room_members("room1").await;
+        assert!(members.is_empty());
+    }
+
+    // ==================== MessageRouter Tests ====================
+
     #[test]
     fn test_message_router() {
         let mut router = MessageRouter::new();
@@ -687,5 +879,289 @@ mod tests {
         assert_eq!(router.route("ping"), Some("pong".to_string()));
         assert_eq!(router.route("hello world"), Some("hi there!".to_string()));
         assert_eq!(router.route("goodbye"), None);
+    }
+
+    #[test]
+    fn test_message_router_default() {
+        let router = MessageRouter::default();
+        // Empty router returns None for all messages
+        assert_eq!(router.route("anything"), None);
+    }
+
+    #[test]
+    fn test_message_router_first_match_wins() {
+        let mut router = MessageRouter::new();
+        router
+            .on(MessagePattern::any(), |_| Some("first".to_string()))
+            .on(MessagePattern::any(), |_| Some("second".to_string()));
+
+        assert_eq!(router.route("test"), Some("first".to_string()));
+    }
+
+    #[test]
+    fn test_message_router_handler_returns_none() {
+        let mut router = MessageRouter::new();
+        router
+            .on(MessagePattern::exact("skip"), |_| None)
+            .on(MessagePattern::any(), |_| Some("fallback".to_string()));
+
+        // First pattern matches but returns None, so it continues to next
+        assert_eq!(router.route("skip"), Some("fallback".to_string()));
+    }
+
+    // ==================== HandlerRegistry Tests ====================
+
+    struct TestHandler;
+
+    #[async_trait]
+    impl WsHandler for TestHandler {
+        async fn on_message(&self, _ctx: &mut WsContext, _msg: WsMessage) -> HandlerResult<()> {
+            Ok(())
+        }
+    }
+
+    struct PathSpecificHandler {
+        path: String,
+    }
+
+    #[async_trait]
+    impl WsHandler for PathSpecificHandler {
+        async fn on_message(&self, _ctx: &mut WsContext, _msg: WsMessage) -> HandlerResult<()> {
+            Ok(())
+        }
+
+        fn handles_path(&self, path: &str) -> bool {
+            path == self.path
+        }
+    }
+
+    #[test]
+    fn test_handler_registry_new() {
+        let registry = HandlerRegistry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+    }
+
+    #[test]
+    fn test_handler_registry_default() {
+        let registry = HandlerRegistry::default();
+        assert!(registry.is_empty());
+    }
+
+    #[test]
+    fn test_handler_registry_register() {
+        let mut registry = HandlerRegistry::new();
+        registry.register(TestHandler);
+        assert!(!registry.is_empty());
+        assert_eq!(registry.len(), 1);
+    }
+
+    #[test]
+    fn test_handler_registry_get_handlers() {
+        let mut registry = HandlerRegistry::new();
+        registry.register(TestHandler);
+
+        let handlers = registry.get_handlers("/any/path");
+        assert_eq!(handlers.len(), 1);
+    }
+
+    #[test]
+    fn test_handler_registry_path_filtering() {
+        let mut registry = HandlerRegistry::new();
+        registry.register(PathSpecificHandler {
+            path: "/ws/chat".to_string(),
+        });
+        registry.register(PathSpecificHandler {
+            path: "/ws/events".to_string(),
+        });
+
+        let chat_handlers = registry.get_handlers("/ws/chat");
+        assert_eq!(chat_handlers.len(), 1);
+
+        let events_handlers = registry.get_handlers("/ws/events");
+        assert_eq!(events_handlers.len(), 1);
+
+        let other_handlers = registry.get_handlers("/ws/other");
+        assert!(other_handlers.is_empty());
+    }
+
+    #[test]
+    fn test_handler_registry_has_handler_for() {
+        let mut registry = HandlerRegistry::new();
+        registry.register(PathSpecificHandler {
+            path: "/ws/chat".to_string(),
+        });
+
+        assert!(registry.has_handler_for("/ws/chat"));
+        assert!(!registry.has_handler_for("/ws/other"));
+    }
+
+    #[test]
+    fn test_handler_registry_clear() {
+        let mut registry = HandlerRegistry::new();
+        registry.register(TestHandler);
+        registry.register(TestHandler);
+        assert_eq!(registry.len(), 2);
+
+        registry.clear();
+        assert!(registry.is_empty());
+    }
+
+    #[test]
+    fn test_handler_registry_with_hot_reload() {
+        let registry = HandlerRegistry::with_hot_reload();
+        assert!(registry.is_hot_reload_enabled());
+    }
+
+    // ==================== PassthroughConfig Tests ====================
+
+    #[test]
+    fn test_passthrough_config_new() {
+        let config =
+            PassthroughConfig::new(MessagePattern::any(), "ws://upstream:8080".to_string());
+        assert_eq!(config.upstream_url, "ws://upstream:8080");
+    }
+
+    #[test]
+    fn test_passthrough_config_regex() {
+        let config =
+            PassthroughConfig::regex(r"^forward", "ws://upstream:8080".to_string()).unwrap();
+        assert!(config.pattern.matches("forward this"));
+        assert!(!config.pattern.matches("don't forward"));
+    }
+
+    #[test]
+    fn test_passthrough_config_regex_invalid() {
+        let result = PassthroughConfig::regex(r"[invalid", "ws://upstream:8080".to_string());
+        assert!(result.is_err());
+    }
+
+    // ==================== PassthroughHandler Tests ====================
+
+    #[test]
+    fn test_passthrough_handler_should_passthrough() {
+        let config =
+            PassthroughConfig::regex(r"^proxy:", "ws://upstream:8080".to_string()).unwrap();
+        let handler = PassthroughHandler::new(config);
+
+        assert!(handler.should_passthrough("proxy:hello"));
+        assert!(!handler.should_passthrough("hello"));
+    }
+
+    #[test]
+    fn test_passthrough_handler_upstream_url() {
+        let config =
+            PassthroughConfig::new(MessagePattern::any(), "ws://upstream:8080".to_string());
+        let handler = PassthroughHandler::new(config);
+
+        assert_eq!(handler.upstream_url(), "ws://upstream:8080");
+    }
+
+    // ==================== HandlerError Tests ====================
+
+    #[test]
+    fn test_handler_error_send_error() {
+        let err = HandlerError::SendError("connection closed".to_string());
+        assert!(err.to_string().contains("send message"));
+        assert!(err.to_string().contains("connection closed"));
+    }
+
+    #[test]
+    fn test_handler_error_json_error() {
+        let json_err = serde_json::from_str::<serde_json::Value>("invalid").unwrap_err();
+        let err = HandlerError::JsonError(json_err);
+        assert!(err.to_string().contains("JSON"));
+    }
+
+    #[test]
+    fn test_handler_error_pattern_error() {
+        let err = HandlerError::PatternError("invalid regex".to_string());
+        assert!(err.to_string().contains("Pattern"));
+    }
+
+    #[test]
+    fn test_handler_error_room_error() {
+        let err = HandlerError::RoomError("room full".to_string());
+        assert!(err.to_string().contains("Room"));
+    }
+
+    #[test]
+    fn test_handler_error_connection_error() {
+        let err = HandlerError::ConnectionError("timeout".to_string());
+        assert!(err.to_string().contains("Connection"));
+    }
+
+    #[test]
+    fn test_handler_error_generic() {
+        let err = HandlerError::Generic("something went wrong".to_string());
+        assert!(err.to_string().contains("something went wrong"));
+    }
+
+    // ==================== WsContext Tests ====================
+
+    #[tokio::test]
+    async fn test_ws_context_metadata() {
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let ctx = WsContext::new("conn123".to_string(), "/ws".to_string(), RoomManager::new(), tx);
+
+        // Set and get metadata
+        ctx.set_metadata("user", serde_json::json!({"id": 1})).await;
+        let value = ctx.get_metadata("user").await;
+        assert_eq!(value, Some(serde_json::json!({"id": 1})));
+
+        // Get nonexistent key
+        let missing = ctx.get_metadata("nonexistent").await;
+        assert!(missing.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_ws_context_send_text() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let ctx = WsContext::new("conn123".to_string(), "/ws".to_string(), RoomManager::new(), tx);
+
+        ctx.send_text("hello").await.unwrap();
+
+        let msg = rx.recv().await.unwrap();
+        assert!(matches!(msg, Message::Text(_)));
+    }
+
+    #[tokio::test]
+    async fn test_ws_context_send_binary() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let ctx = WsContext::new("conn123".to_string(), "/ws".to_string(), RoomManager::new(), tx);
+
+        ctx.send_binary(vec![1, 2, 3]).await.unwrap();
+
+        let msg = rx.recv().await.unwrap();
+        assert!(matches!(msg, Message::Binary(_)));
+    }
+
+    #[tokio::test]
+    async fn test_ws_context_send_json() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let ctx = WsContext::new("conn123".to_string(), "/ws".to_string(), RoomManager::new(), tx);
+
+        ctx.send_json(&serde_json::json!({"type": "test"})).await.unwrap();
+
+        let msg = rx.recv().await.unwrap();
+        assert!(matches!(msg, Message::Text(_)));
+    }
+
+    #[tokio::test]
+    async fn test_ws_context_rooms() {
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let ctx = WsContext::new("conn123".to_string(), "/ws".to_string(), RoomManager::new(), tx);
+
+        // Join rooms
+        ctx.join_room("chat").await.unwrap();
+        ctx.join_room("notifications").await.unwrap();
+
+        let rooms = ctx.get_rooms().await;
+        assert_eq!(rooms.len(), 2);
+
+        // Leave room
+        ctx.leave_room("chat").await.unwrap();
+        let rooms = ctx.get_rooms().await;
+        assert_eq!(rooms.len(), 1);
     }
 }

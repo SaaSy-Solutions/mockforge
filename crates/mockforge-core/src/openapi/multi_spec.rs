@@ -76,11 +76,57 @@ pub enum MergeConflictError {
         /// Files containing this component
         files: Vec<PathBuf>,
     },
+    /// Multiple conflicts detected
+    MultipleConflicts {
+        /// All detected conflicts
+        conflicts: Vec<Conflict>,
+    },
 }
 
 impl std::fmt::Display for MergeConflictError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            MergeConflictError::MultipleConflicts { conflicts } => {
+                writeln!(f, "Found {} spec conflict(s):\n", conflicts.len())?;
+                for (i, conflict) in conflicts.iter().enumerate() {
+                    match conflict {
+                        Conflict::RouteConflict {
+                            method,
+                            path,
+                            files,
+                        } => {
+                            writeln!(f, "  {}. {} {} defined in:", i + 1, method, path)?;
+                            for file in files {
+                                writeln!(f, "     - {}", file.display())?;
+                            }
+                        }
+                        Conflict::ComponentConflict {
+                            component_type,
+                            key,
+                            files,
+                        } => {
+                            writeln!(
+                                f,
+                                "  {}. components.{}.{} defined in:",
+                                i + 1,
+                                component_type,
+                                key
+                            )?;
+                            for file in files {
+                                writeln!(f, "     - {}", file.display())?;
+                            }
+                        }
+                    }
+                }
+                writeln!(f)?;
+                write!(
+                    f,
+                    "Resolution options:\n\
+                     - Use --merge-conflicts=first to keep the first definition\n\
+                     - Use --merge-conflicts=last to keep the last definition\n\
+                     - Remove duplicate routes/components from conflicting spec files"
+                )
+            }
             MergeConflictError::RouteConflict {
                 method,
                 path,
@@ -101,8 +147,9 @@ impl std::fmt::Display for MergeConflictError {
             } => {
                 write!(
                     f,
-                    "Conflict: components.{} defined differently in {}",
+                    "Conflict: components.{}.{} defined differently in {}",
                     component_type,
+                    key,
                     files.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(" and ")
                 )
             }
@@ -397,31 +444,10 @@ pub fn merge_specs(
     match conflict_strategy {
         ConflictStrategy::Error => {
             if !conflicts.is_empty() {
-                // Return the first conflict as an error
-                match &conflicts[0] {
-                    Conflict::RouteConflict {
-                        method,
-                        path,
-                        files,
-                    } => {
-                        return Err(MergeConflictError::RouteConflict {
-                            method: method.clone(),
-                            path: path.clone(),
-                            files: files.clone(),
-                        });
-                    }
-                    Conflict::ComponentConflict {
-                        component_type,
-                        key,
-                        files,
-                    } => {
-                        return Err(MergeConflictError::ComponentConflict {
-                            component_type: component_type.clone(),
-                            key: key.clone(),
-                            files: files.clone(),
-                        });
-                    }
-                }
+                // Return all conflicts as an error for comprehensive feedback
+                return Err(MergeConflictError::MultipleConflicts {
+                    conflicts: conflicts.clone(),
+                });
             }
         }
         ConflictStrategy::First | ConflictStrategy::Last => {

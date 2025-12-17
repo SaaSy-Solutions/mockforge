@@ -477,3 +477,303 @@ impl Default for BulkheadConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // CorruptionType tests
+    #[test]
+    fn test_corruption_type_variants() {
+        let none = CorruptionType::None;
+        let random_bytes = CorruptionType::RandomBytes;
+        let truncate = CorruptionType::Truncate;
+        let bit_flip = CorruptionType::BitFlip;
+
+        assert!(matches!(none, CorruptionType::None));
+        assert!(matches!(random_bytes, CorruptionType::RandomBytes));
+        assert!(matches!(truncate, CorruptionType::Truncate));
+        assert!(matches!(bit_flip, CorruptionType::BitFlip));
+    }
+
+    #[test]
+    fn test_corruption_type_serialize() {
+        let ct = CorruptionType::RandomBytes;
+        let json = serde_json::to_string(&ct).unwrap();
+        assert!(json.contains("random_bytes"));
+    }
+
+    #[test]
+    fn test_corruption_type_deserialize() {
+        let json = r#""bit_flip""#;
+        let ct: CorruptionType = serde_json::from_str(json).unwrap();
+        assert!(matches!(ct, CorruptionType::BitFlip));
+    }
+
+    // ErrorPattern tests
+    #[test]
+    fn test_error_pattern_default() {
+        let pattern = ErrorPattern::default();
+        assert!(
+            matches!(pattern, ErrorPattern::Random { probability } if (probability - 0.1).abs() < f64::EPSILON)
+        );
+    }
+
+    #[test]
+    fn test_error_pattern_burst() {
+        let pattern = ErrorPattern::Burst {
+            count: 5,
+            interval_ms: 1000,
+        };
+        if let ErrorPattern::Burst { count, interval_ms } = pattern {
+            assert_eq!(count, 5);
+            assert_eq!(interval_ms, 1000);
+        } else {
+            panic!("Expected Burst pattern");
+        }
+    }
+
+    #[test]
+    fn test_error_pattern_sequential() {
+        let pattern = ErrorPattern::Sequential {
+            sequence: vec![500, 502, 503],
+        };
+        if let ErrorPattern::Sequential { sequence } = pattern {
+            assert_eq!(sequence.len(), 3);
+            assert!(sequence.contains(&500));
+        } else {
+            panic!("Expected Sequential pattern");
+        }
+    }
+
+    #[test]
+    fn test_error_pattern_serialize() {
+        let pattern = ErrorPattern::Burst {
+            count: 3,
+            interval_ms: 500,
+        };
+        let json = serde_json::to_string(&pattern).unwrap();
+        assert!(json.contains("burst"));
+        assert!(json.contains("count"));
+    }
+
+    // ChaosConfig tests
+    #[test]
+    fn test_chaos_config_default() {
+        let config = ChaosConfig::default();
+        assert!(!config.enabled);
+        assert!(config.latency.is_none());
+        assert!(config.fault_injection.is_none());
+        assert!(config.rate_limit.is_none());
+        assert!(config.traffic_shaping.is_none());
+        assert!(config.circuit_breaker.is_none());
+        assert!(config.bulkhead.is_none());
+    }
+
+    #[test]
+    fn test_chaos_config_with_latency() {
+        let config = ChaosConfig {
+            enabled: true,
+            latency: Some(LatencyConfig::default()),
+            ..Default::default()
+        };
+        assert!(config.enabled);
+        assert!(config.latency.is_some());
+    }
+
+    #[test]
+    fn test_chaos_config_serialize() {
+        let config = ChaosConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("enabled"));
+    }
+
+    // LatencyConfig tests
+    #[test]
+    fn test_latency_config_default() {
+        let config = LatencyConfig::default();
+        assert!(!config.enabled);
+        assert!(config.fixed_delay_ms.is_none());
+        assert!(config.random_delay_range_ms.is_none());
+        assert_eq!(config.jitter_percent, 0.0);
+        assert_eq!(config.probability, 1.0);
+    }
+
+    #[test]
+    fn test_latency_config_with_fixed_delay() {
+        let config = LatencyConfig {
+            enabled: true,
+            fixed_delay_ms: Some(100),
+            ..Default::default()
+        };
+        assert_eq!(config.fixed_delay_ms, Some(100));
+    }
+
+    #[test]
+    fn test_latency_config_with_random_range() {
+        let config = LatencyConfig {
+            enabled: true,
+            random_delay_range_ms: Some((50, 150)),
+            ..Default::default()
+        };
+        let (min, max) = config.random_delay_range_ms.unwrap();
+        assert_eq!(min, 50);
+        assert_eq!(max, 150);
+    }
+
+    // FaultInjectionConfig tests
+    #[test]
+    fn test_fault_injection_config_default() {
+        let config = FaultInjectionConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.http_errors, vec![500, 502, 503, 504]);
+        assert_eq!(config.http_error_probability, 0.1);
+        assert!(!config.connection_errors);
+        assert_eq!(config.corruption_type, CorruptionType::None);
+        assert!(!config.mockai_enabled);
+    }
+
+    #[test]
+    fn test_fault_injection_config_with_errors() {
+        let config = FaultInjectionConfig {
+            enabled: true,
+            http_errors: vec![400, 401, 403, 404],
+            http_error_probability: 0.5,
+            ..Default::default()
+        };
+        assert_eq!(config.http_errors.len(), 4);
+        assert!(config.http_errors.contains(&401));
+    }
+
+    // RateLimitConfig tests
+    #[test]
+    fn test_rate_limit_config_default() {
+        let config = RateLimitConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.requests_per_second, 100);
+        assert_eq!(config.burst_size, 10);
+        assert!(!config.per_ip);
+        assert!(!config.per_endpoint);
+    }
+
+    // TrafficShapingConfig tests
+    #[test]
+    fn test_traffic_shaping_config_default() {
+        let config = TrafficShapingConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.bandwidth_limit_bps, 0);
+        assert_eq!(config.packet_loss_percent, 0.0);
+        assert_eq!(config.max_connections, 0);
+        assert_eq!(config.connection_timeout_ms, 30000);
+    }
+
+    // CircuitBreakerConfig tests
+    #[test]
+    fn test_circuit_breaker_config_default() {
+        let config = CircuitBreakerConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.failure_threshold, 5);
+        assert_eq!(config.success_threshold, 2);
+        assert_eq!(config.timeout_ms, 60000);
+        assert_eq!(config.half_open_max_requests, 3);
+        assert_eq!(config.failure_rate_threshold, 50.0);
+    }
+
+    // BulkheadConfig tests
+    #[test]
+    fn test_bulkhead_config_default() {
+        let config = BulkheadConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.max_concurrent_requests, 100);
+        assert_eq!(config.max_queue_size, 10);
+        assert_eq!(config.queue_timeout_ms, 5000);
+    }
+
+    // NetworkProfile tests
+    #[test]
+    fn test_network_profile_new() {
+        let profile = NetworkProfile::new(
+            "test-profile".to_string(),
+            "A test profile".to_string(),
+            ChaosConfig::default(),
+        );
+        assert_eq!(profile.name, "test-profile");
+        assert_eq!(profile.description, "A test profile");
+        assert!(profile.tags.is_empty());
+        assert!(!profile.builtin);
+    }
+
+    #[test]
+    fn test_network_profile_predefined() {
+        let profiles = NetworkProfile::predefined_profiles();
+        assert!(!profiles.is_empty());
+
+        // Check that we have common profiles
+        let names: Vec<_> = profiles.iter().map(|p| p.name.as_str()).collect();
+        assert!(names.contains(&"slow_3g"));
+        assert!(names.contains(&"fast_3g"));
+        assert!(names.contains(&"flaky_wifi"));
+        assert!(names.contains(&"cable"));
+        assert!(names.contains(&"dialup"));
+    }
+
+    #[test]
+    fn test_network_profile_predefined_are_builtin() {
+        let profiles = NetworkProfile::predefined_profiles();
+        for profile in &profiles {
+            assert!(profile.builtin, "Profile {} should be builtin", profile.name);
+            assert!(profile.chaos_config.enabled, "Profile {} should be enabled", profile.name);
+        }
+    }
+
+    #[test]
+    fn test_network_profile_slow_3g_has_latency() {
+        let profiles = NetworkProfile::predefined_profiles();
+        let slow_3g = profiles.iter().find(|p| p.name == "slow_3g").unwrap();
+
+        assert!(slow_3g.chaos_config.latency.is_some());
+        let latency = slow_3g.chaos_config.latency.as_ref().unwrap();
+        assert!(latency.enabled);
+        assert_eq!(latency.fixed_delay_ms, Some(400));
+    }
+
+    #[test]
+    fn test_network_profile_flaky_wifi_has_fault_injection() {
+        let profiles = NetworkProfile::predefined_profiles();
+        let flaky_wifi = profiles.iter().find(|p| p.name == "flaky_wifi").unwrap();
+
+        assert!(flaky_wifi.chaos_config.fault_injection.is_some());
+        let fault = flaky_wifi.chaos_config.fault_injection.as_ref().unwrap();
+        assert!(fault.enabled);
+        assert!(fault.connection_errors);
+    }
+
+    #[test]
+    fn test_network_profile_serialize() {
+        let profile =
+            NetworkProfile::new("test".to_string(), "desc".to_string(), ChaosConfig::default());
+        let json = serde_json::to_string(&profile).unwrap();
+        assert!(json.contains("test"));
+        assert!(json.contains("desc"));
+    }
+
+    #[test]
+    fn test_network_profile_deserialize() {
+        let json = r#"{"name":"test","description":"desc","chaos_config":{"enabled":false},"tags":[],"builtin":false}"#;
+        let profile: NetworkProfile = serde_json::from_str(json).unwrap();
+        assert_eq!(profile.name, "test");
+        assert!(!profile.builtin);
+    }
+
+    #[test]
+    fn test_network_profile_clone() {
+        let profile = NetworkProfile::new(
+            "clone-test".to_string(),
+            "Clone test".to_string(),
+            ChaosConfig::default(),
+        );
+        let cloned = profile.clone();
+        assert_eq!(profile.name, cloned.name);
+        assert_eq!(profile.description, cloned.description);
+    }
+}

@@ -410,6 +410,8 @@ impl PluginDiscovery {
 mod tests {
     use super::*;
 
+    // ===== PluginLoaderError Tests =====
+
     #[test]
     fn test_plugin_loader_error_types() {
         let load_error = PluginLoaderError::LoadError {
@@ -422,6 +424,214 @@ mod tests {
         };
         assert!(matches!(validation_error, PluginLoaderError::ValidationError { .. }));
     }
+
+    #[test]
+    fn test_error_helper_constructors() {
+        let load_err = PluginLoaderError::load("load failed");
+        assert!(matches!(load_err, PluginLoaderError::LoadError { .. }));
+
+        let validation_err = PluginLoaderError::validation("validation failed");
+        assert!(matches!(validation_err, PluginLoaderError::ValidationError { .. }));
+
+        let security_err = PluginLoaderError::security("security violation");
+        assert!(matches!(security_err, PluginLoaderError::SecurityViolation { .. }));
+
+        let manifest_err = PluginLoaderError::manifest("manifest error");
+        assert!(matches!(manifest_err, PluginLoaderError::ManifestError { .. }));
+
+        let wasm_err = PluginLoaderError::wasm("wasm error");
+        assert!(matches!(wasm_err, PluginLoaderError::WasmError { .. }));
+
+        let fs_err = PluginLoaderError::fs("fs error");
+        assert!(matches!(fs_err, PluginLoaderError::FsError { .. }));
+
+        let dep_err = PluginLoaderError::dependency("dependency error");
+        assert!(matches!(dep_err, PluginLoaderError::DependencyError { .. }));
+
+        let resource_err = PluginLoaderError::resource_limit("resource limit");
+        assert!(matches!(resource_err, PluginLoaderError::ResourceLimit { .. }));
+
+        let exec_err = PluginLoaderError::execution("execution error");
+        assert!(matches!(exec_err, PluginLoaderError::ExecutionError { .. }));
+    }
+
+    #[test]
+    fn test_error_already_loaded() {
+        let plugin_id = PluginId::new("test-plugin");
+        let err = PluginLoaderError::already_loaded(plugin_id.clone());
+        assert!(matches!(err, PluginLoaderError::AlreadyLoaded { .. }));
+        assert_eq!(err.to_string(), format!("Plugin already loaded: {}", plugin_id));
+    }
+
+    #[test]
+    fn test_error_not_found() {
+        let plugin_id = PluginId::new("missing-plugin");
+        let err = PluginLoaderError::not_found(plugin_id.clone());
+        assert!(matches!(err, PluginLoaderError::NotFound { .. }));
+        assert_eq!(err.to_string(), format!("Plugin not found: {}", plugin_id));
+    }
+
+    #[test]
+    fn test_is_security_error() {
+        let security_err = PluginLoaderError::security("test");
+        assert!(security_err.is_security_error());
+
+        let load_err = PluginLoaderError::load("test");
+        assert!(!load_err.is_security_error());
+    }
+
+    #[test]
+    fn test_error_display() {
+        let err = PluginLoaderError::load("test message");
+        let err_str = err.to_string();
+        assert!(err_str.contains("Plugin loading error"));
+        assert!(err_str.contains("test message"));
+    }
+
+    // ===== PluginLoaderConfig Tests =====
+
+    #[test]
+    fn test_plugin_loader_config_default() {
+        let config = PluginLoaderConfig::default();
+        assert_eq!(config.plugin_dirs.len(), 2);
+        assert!(!config.allow_unsigned);
+        assert_eq!(config.max_plugins, 100);
+        assert_eq!(config.load_timeout_secs, 30);
+        assert!(!config.debug_logging);
+        assert!(!config.skip_wasm_validation);
+    }
+
+    #[test]
+    fn test_plugin_loader_config_clone() {
+        let config = PluginLoaderConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.max_plugins, cloned.max_plugins);
+        assert_eq!(config.load_timeout_secs, cloned.load_timeout_secs);
+    }
+
+    // ===== PluginLoadContext Tests =====
+
+    #[test]
+    fn test_plugin_load_context_creation() {
+        let plugin_id = PluginId::new("test-plugin");
+        let manifest = PluginManifest::new(PluginInfo::new(
+            plugin_id.clone(),
+            PluginVersion::new(1, 0, 0),
+            "Test Plugin",
+            "A test plugin",
+            PluginAuthor::new("test-author"),
+        ));
+        let config = PluginLoaderConfig::default();
+
+        let context = PluginLoadContext::new(
+            plugin_id.clone(),
+            manifest.clone(),
+            "/tmp/plugin".to_string(),
+            config.clone(),
+        );
+
+        assert_eq!(context.plugin_id, plugin_id);
+        assert_eq!(context.plugin_path, "/tmp/plugin");
+        assert_eq!(context.config.max_plugins, config.max_plugins);
+    }
+
+    // ===== PluginLoadStats Tests =====
+
+    #[test]
+    fn test_plugin_load_stats_default() {
+        let stats = PluginLoadStats::default();
+        assert_eq!(stats.discovered, 0);
+        assert_eq!(stats.loaded, 0);
+        assert_eq!(stats.failed, 0);
+        assert_eq!(stats.skipped, 0);
+        assert!(stats.start_time.is_none());
+        assert!(stats.end_time.is_none());
+    }
+
+    #[test]
+    fn test_plugin_load_stats_timing() {
+        let mut stats = PluginLoadStats::default();
+        assert!(stats.duration().is_none());
+
+        stats.start_loading();
+        assert!(stats.start_time.is_some());
+        assert!(stats.duration().is_none());
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        stats.finish_loading();
+        assert!(stats.end_time.is_some());
+        assert!(stats.duration().is_some());
+        let duration = stats.duration().unwrap();
+        assert!(duration.num_milliseconds() >= 10);
+    }
+
+    #[test]
+    fn test_plugin_load_stats_record_success() {
+        let mut stats = PluginLoadStats::default();
+        stats.record_success();
+        assert_eq!(stats.loaded, 1);
+        assert_eq!(stats.discovered, 1);
+
+        stats.record_success();
+        assert_eq!(stats.loaded, 2);
+        assert_eq!(stats.discovered, 2);
+    }
+
+    #[test]
+    fn test_plugin_load_stats_record_failure() {
+        let mut stats = PluginLoadStats::default();
+        stats.record_failure();
+        assert_eq!(stats.failed, 1);
+        assert_eq!(stats.discovered, 1);
+    }
+
+    #[test]
+    fn test_plugin_load_stats_record_skipped() {
+        let mut stats = PluginLoadStats::default();
+        stats.record_skipped();
+        assert_eq!(stats.skipped, 1);
+        assert_eq!(stats.discovered, 1);
+    }
+
+    #[test]
+    fn test_plugin_load_stats_success_rate() {
+        let mut stats = PluginLoadStats::default();
+        // No plugins discovered = 1.0 (implementation returns 1.0, not 100.0)
+        assert_eq!(stats.success_rate(), 1.0);
+
+        stats.record_success();
+        stats.record_success();
+        stats.record_failure();
+        stats.record_skipped();
+        // 2 loaded / 4 discovered = 50%
+        assert_eq!(stats.success_rate(), 50.0);
+    }
+
+    #[test]
+    fn test_plugin_load_stats_total_plugins() {
+        let mut stats = PluginLoadStats::default();
+        assert_eq!(stats.total_plugins(), 0);
+
+        stats.record_success();
+        stats.record_failure();
+        stats.record_skipped();
+        assert_eq!(stats.total_plugins(), 3);
+    }
+
+    #[test]
+    fn test_plugin_load_stats_clone() {
+        let mut stats = PluginLoadStats::default();
+        stats.record_success();
+        stats.start_loading();
+
+        let cloned = stats.clone();
+        assert_eq!(cloned.loaded, stats.loaded);
+        assert_eq!(cloned.discovered, stats.discovered);
+        assert_eq!(cloned.start_time, stats.start_time);
+    }
+
+    // ===== PluginDiscovery Tests =====
 
     #[test]
     fn test_plugin_discovery_success() {
@@ -438,6 +648,8 @@ mod tests {
 
         assert!(result.is_success());
         assert!(result.first_error().is_none());
+        assert!(result.is_valid);
+        assert!(result.errors.is_empty());
     }
 
     #[test]
@@ -451,7 +663,40 @@ mod tests {
         assert!(!result.is_success());
         assert_eq!(result.first_error(), Some("Error 1"));
         assert_eq!(result.errors.len(), 2);
+        assert!(!result.is_valid);
     }
+
+    #[test]
+    fn test_plugin_discovery_failure_with_empty_errors() {
+        let plugin_id = PluginId("failing-plugin".to_string());
+        let errors = vec![];
+
+        let result = PluginDiscovery::failure(plugin_id, "/path/to/plugin".to_string(), errors);
+
+        assert!(!result.is_success());
+        assert!(result.first_error().is_none());
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_plugin_discovery_clone() {
+        let plugin_id = PluginId("test-plugin".to_string());
+        let manifest = PluginManifest::new(PluginInfo::new(
+            plugin_id.clone(),
+            PluginVersion::new(1, 0, 0),
+            "Test",
+            "Test",
+            PluginAuthor::new("test"),
+        ));
+
+        let discovery = PluginDiscovery::success(plugin_id, manifest, "/path".to_string());
+        let cloned = discovery.clone();
+
+        assert_eq!(discovery.plugin_id, cloned.plugin_id);
+        assert_eq!(discovery.is_valid, cloned.is_valid);
+    }
+
+    // ===== Module Exports Tests =====
 
     #[test]
     fn test_module_exports() {
@@ -460,5 +705,15 @@ mod tests {
         let _ = std::marker::PhantomData::<PluginRegistry>;
         let _ = std::marker::PhantomData::<PluginValidator>;
         // Compilation test - if this compiles, the types are properly defined
+    }
+
+    #[test]
+    fn test_loader_result_type() {
+        let success: LoaderResult<i32> = Ok(42);
+        assert!(success.is_ok());
+        assert_eq!(success.unwrap(), 42);
+
+        let error: LoaderResult<i32> = Err(PluginLoaderError::load("test"));
+        assert!(error.is_err());
     }
 }

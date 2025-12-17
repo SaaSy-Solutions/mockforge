@@ -237,4 +237,224 @@ mod tests {
         assert_eq!(detection.format, ImportFormat::Unknown);
         assert_eq!(detection.confidence, 0.0);
     }
+
+    // ImportFormat tests
+    #[test]
+    fn test_import_format_clone() {
+        let format = ImportFormat::Postman;
+        let cloned = format.clone();
+        assert_eq!(format, cloned);
+    }
+
+    #[test]
+    fn test_import_format_debug() {
+        let format = ImportFormat::Curl;
+        let debug = format!("{:?}", format);
+        assert!(debug.contains("Curl"));
+    }
+
+    #[test]
+    fn test_import_format_equality() {
+        assert_eq!(ImportFormat::Postman, ImportFormat::Postman);
+        assert_ne!(ImportFormat::Postman, ImportFormat::Insomnia);
+        assert_ne!(ImportFormat::Curl, ImportFormat::Unknown);
+    }
+
+    // FormatDetection tests
+    #[test]
+    fn test_format_detection_debug() {
+        let detection = FormatDetection {
+            format: ImportFormat::Postman,
+            confidence: 0.95,
+            details: "Postman detected".to_string(),
+        };
+        let debug = format!("{:?}", detection);
+        assert!(debug.contains("FormatDetection"));
+        assert!(debug.contains("Postman"));
+    }
+
+    // Postman detection edge cases
+    #[test]
+    fn test_detect_postman_with_schema_only() {
+        let postman_json = r#"{
+            "info": {
+                "name": "Test Collection",
+                "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+            },
+            "item": []
+        }"#;
+
+        let detection = detect_format(postman_json, None);
+        assert_eq!(detection.format, ImportFormat::Postman);
+    }
+
+    #[test]
+    fn test_detect_postman_with_postman_id_only() {
+        let postman_json = r#"{
+            "info": {
+                "_postman_id": "12345",
+                "name": "Test Collection"
+            },
+            "item": []
+        }"#;
+
+        let detection = detect_format(postman_json, None);
+        assert_eq!(detection.format, ImportFormat::Postman);
+    }
+
+    // Insomnia detection edge cases
+    #[test]
+    fn test_detect_insomnia_v3_format() {
+        let insomnia_json = r#"{
+            "__export_format": 3,
+            "resources": []
+        }"#;
+
+        let detection = detect_format(insomnia_json, None);
+        assert_eq!(detection.format, ImportFormat::Insomnia);
+    }
+
+    #[test]
+    fn test_detect_insomnia_type_and_resources() {
+        let insomnia_json = r#"{
+            "_type": "export",
+            "resources": []
+        }"#;
+
+        let detection = detect_format(insomnia_json, None);
+        assert_eq!(detection.format, ImportFormat::Insomnia);
+    }
+
+    #[test]
+    fn test_detect_insomnia_yaml() {
+        let insomnia_yaml = "__export_format: 4\nresources: []";
+        let path = Path::new("export.yaml");
+
+        let detection = detect_format(insomnia_yaml, Some(path));
+        assert_eq!(detection.format, ImportFormat::Insomnia);
+    }
+
+    // Curl detection edge cases
+    #[test]
+    fn test_detect_curl_with_options() {
+        let curl_content = r#"curl -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"name": "test"}' \
+            https://api.example.com/users"#;
+
+        let detection = detect_format(curl_content, None);
+        assert_eq!(detection.format, ImportFormat::Curl);
+    }
+
+    #[test]
+    fn test_detect_curl_with_tab() {
+        let curl_content = "curl\t-X GET https://api.example.com/users";
+        let detection = detect_format(curl_content, None);
+        assert_eq!(detection.format, ImportFormat::Curl);
+    }
+
+    #[test]
+    fn test_detect_curl_in_script() {
+        let script_content = r#"#!/bin/bash
+response=$(curl https://api.example.com/users)
+echo $response"#;
+
+        let detection = detect_format(script_content, None);
+        assert_eq!(detection.format, ImportFormat::Curl);
+    }
+
+    #[test]
+    fn test_detect_curl_from_txt_file() {
+        let curl_content = "curl -X GET https://api.example.com/users";
+        let path = Path::new("requests.txt");
+
+        let detection = detect_format(curl_content, Some(path));
+        assert_eq!(detection.format, ImportFormat::Curl);
+    }
+
+    // File extension-based detection
+    #[test]
+    fn test_detect_from_json_file_postman() {
+        let postman_json = r#"{
+            "info": {
+                "_postman_id": "12345",
+                "name": "Test"
+            },
+            "item": []
+        }"#;
+        let path = Path::new("collection.json");
+
+        let detection = detect_format(postman_json, Some(path));
+        assert_eq!(detection.format, ImportFormat::Postman);
+    }
+
+    #[test]
+    fn test_detect_from_json_file_insomnia() {
+        let insomnia_json = r#"{
+            "__export_format": 4,
+            "resources": []
+        }"#;
+        let path = Path::new("export.json");
+
+        let detection = detect_format(insomnia_json, Some(path));
+        assert_eq!(detection.format, ImportFormat::Insomnia);
+    }
+
+    #[test]
+    fn test_detect_unknown_json_format() {
+        let unknown_json = r#"{"key": "value", "number": 123}"#;
+        let path = Path::new("data.json");
+
+        let detection = detect_format(unknown_json, Some(path));
+        assert_eq!(detection.format, ImportFormat::Unknown);
+    }
+
+    // Edge cases
+    #[test]
+    fn test_detect_empty_content() {
+        let detection = detect_format("", None);
+        assert_eq!(detection.format, ImportFormat::Unknown);
+    }
+
+    #[test]
+    fn test_detect_invalid_json() {
+        let invalid_json = "{ invalid json }";
+        let detection = detect_format(invalid_json, None);
+        assert_eq!(detection.format, ImportFormat::Unknown);
+    }
+
+    #[test]
+    fn test_detect_whitespace_only() {
+        let whitespace = "   \n\t  ";
+        let detection = detect_format(whitespace, None);
+        assert_eq!(detection.format, ImportFormat::Unknown);
+    }
+
+    #[test]
+    fn test_detect_curl_without_url() {
+        // curl without http/https shouldn't be detected
+        let no_url = "curl --version";
+        let detection = detect_format(no_url, None);
+        // May or may not detect as curl depending on implementation
+        // Just ensure it doesn't crash
+        assert!(matches!(detection.format, ImportFormat::Curl | ImportFormat::Unknown));
+    }
+
+    #[test]
+    fn test_detect_insomnia_old_format() {
+        let old_insomnia = r#"{
+            "__export_format": 2,
+            "resources": []
+        }"#;
+        // Format version 2 is less than 3, should not detect
+        let detection = detect_format(old_insomnia, None);
+        assert_eq!(detection.format, ImportFormat::Unknown);
+    }
+
+    #[test]
+    fn test_format_detection_details_present() {
+        let curl_content = "curl -X GET https://api.example.com/users";
+        let detection = detect_format(curl_content, None);
+        assert!(!detection.details.is_empty());
+    }
 }

@@ -136,6 +136,31 @@ impl Federation {
 mod tests {
     use super::*;
 
+    fn create_test_federation() -> Federation {
+        Federation {
+            id: Uuid::new_v4(),
+            name: "test".to_string(),
+            description: "Test federation".to_string(),
+            org_id: Uuid::new_v4(),
+            services: vec![
+                ServiceBoundary::new(
+                    "auth".to_string(),
+                    Uuid::new_v4(),
+                    "/auth".to_string(),
+                    ServiceRealityLevel::Real,
+                ),
+                ServiceBoundary::new(
+                    "payments".to_string(),
+                    Uuid::new_v4(),
+                    "/payments".to_string(),
+                    ServiceRealityLevel::MockV3,
+                ),
+            ],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
     #[test]
     fn test_federation_from_config() {
         let config = FederationConfig {
@@ -157,32 +182,246 @@ mod tests {
     }
 
     #[test]
-    fn test_find_service_by_path() {
-        let mut federation = Federation {
-            id: Uuid::new_v4(),
+    fn test_federation_from_config_multiple_services() {
+        let config = FederationConfig {
+            name: "multi-service".to_string(),
+            description: "Multiple services".to_string(),
+            services: vec![
+                FederationService {
+                    name: "auth".to_string(),
+                    workspace_id: Uuid::new_v4().to_string(),
+                    base_path: "/auth".to_string(),
+                    reality_level: "real".to_string(),
+                    config: HashMap::new(),
+                    dependencies: Vec::new(),
+                },
+                FederationService {
+                    name: "payments".to_string(),
+                    workspace_id: Uuid::new_v4().to_string(),
+                    base_path: "/payments".to_string(),
+                    reality_level: "mock_v3".to_string(),
+                    config: HashMap::new(),
+                    dependencies: vec!["auth".to_string()],
+                },
+            ],
+        };
+
+        let federation = Federation::from_config(Uuid::new_v4(), config).unwrap();
+        assert_eq!(federation.services.len(), 2);
+        assert_eq!(federation.services[1].dependencies, vec!["auth".to_string()]);
+    }
+
+    #[test]
+    fn test_federation_from_config_invalid_workspace_id() {
+        let config = FederationConfig {
             name: "test".to_string(),
             description: String::new(),
-            org_id: Uuid::new_v4(),
-            services: vec![
-                ServiceBoundary::new(
-                    "auth".to_string(),
-                    Uuid::new_v4(),
-                    "/auth".to_string(),
-                    ServiceRealityLevel::Real,
-                ),
-                ServiceBoundary::new(
-                    "payments".to_string(),
-                    Uuid::new_v4(),
-                    "/payments".to_string(),
-                    ServiceRealityLevel::MockV3,
-                ),
-            ],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            services: vec![FederationService {
+                name: "auth".to_string(),
+                workspace_id: "invalid-uuid".to_string(),
+                base_path: "/auth".to_string(),
+                reality_level: "real".to_string(),
+                config: HashMap::new(),
+                dependencies: Vec::new(),
+            }],
         };
+
+        let result = Federation::from_config(Uuid::new_v4(), config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid workspace_id"));
+    }
+
+    #[test]
+    fn test_federation_from_config_invalid_reality_level() {
+        let config = FederationConfig {
+            name: "test".to_string(),
+            description: String::new(),
+            services: vec![FederationService {
+                name: "auth".to_string(),
+                workspace_id: Uuid::new_v4().to_string(),
+                base_path: "/auth".to_string(),
+                reality_level: "invalid_level".to_string(),
+                config: HashMap::new(),
+                dependencies: Vec::new(),
+            }],
+        };
+
+        let result = Federation::from_config(Uuid::new_v4(), config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid reality_level"));
+    }
+
+    #[test]
+    fn test_find_service_by_path() {
+        let federation = create_test_federation();
 
         assert!(federation.find_service_by_path("/auth").is_some());
         assert!(federation.find_service_by_path("/payments").is_some());
         assert!(federation.find_service_by_path("/unknown").is_none());
+    }
+
+    #[test]
+    fn test_find_service_by_path_nested() {
+        let federation = create_test_federation();
+
+        let service = federation.find_service_by_path("/auth/login").unwrap();
+        assert_eq!(service.name, "auth");
+
+        let service = federation.find_service_by_path("/payments/process").unwrap();
+        assert_eq!(service.name, "payments");
+    }
+
+    #[test]
+    fn test_find_service_by_path_longest_match() {
+        let mut federation = create_test_federation();
+        federation.services.push(ServiceBoundary::new(
+            "auth-admin".to_string(),
+            Uuid::new_v4(),
+            "/auth/admin".to_string(),
+            ServiceRealityLevel::MockV3,
+        ));
+
+        // Should match the longer /auth/admin path
+        let service = federation.find_service_by_path("/auth/admin/users").unwrap();
+        assert_eq!(service.name, "auth-admin");
+
+        // Should match /auth (shorter path)
+        let service = federation.find_service_by_path("/auth/login").unwrap();
+        assert_eq!(service.name, "auth");
+    }
+
+    #[test]
+    fn test_get_service() {
+        let federation = create_test_federation();
+
+        let service = federation.get_service("auth").unwrap();
+        assert_eq!(service.name, "auth");
+
+        let service = federation.get_service("payments").unwrap();
+        assert_eq!(service.name, "payments");
+
+        assert!(federation.get_service("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_add_service() {
+        let mut federation = create_test_federation();
+        let initial_count = federation.services.len();
+
+        federation.add_service(ServiceBoundary::new(
+            "inventory".to_string(),
+            Uuid::new_v4(),
+            "/inventory".to_string(),
+            ServiceRealityLevel::Blended,
+        ));
+
+        assert_eq!(federation.services.len(), initial_count + 1);
+        assert!(federation.get_service("inventory").is_some());
+    }
+
+    #[test]
+    fn test_add_service_updates_timestamp() {
+        let mut federation = create_test_federation();
+        let original_updated = federation.updated_at;
+
+        // Small delay to ensure timestamp changes
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        federation.add_service(ServiceBoundary::new(
+            "new".to_string(),
+            Uuid::new_v4(),
+            "/new".to_string(),
+            ServiceRealityLevel::Real,
+        ));
+
+        assert!(federation.updated_at > original_updated);
+    }
+
+    #[test]
+    fn test_remove_service() {
+        let mut federation = create_test_federation();
+        let initial_count = federation.services.len();
+
+        assert!(federation.remove_service("auth"));
+        assert_eq!(federation.services.len(), initial_count - 1);
+        assert!(federation.get_service("auth").is_none());
+    }
+
+    #[test]
+    fn test_remove_service_not_found() {
+        let mut federation = create_test_federation();
+        let initial_count = federation.services.len();
+
+        assert!(!federation.remove_service("nonexistent"));
+        assert_eq!(federation.services.len(), initial_count);
+    }
+
+    #[test]
+    fn test_remove_service_updates_timestamp() {
+        let mut federation = create_test_federation();
+        let original_updated = federation.updated_at;
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        federation.remove_service("auth");
+        assert!(federation.updated_at > original_updated);
+    }
+
+    // FederationConfig tests
+    #[test]
+    fn test_federation_config_serialize() {
+        let config = FederationConfig {
+            name: "test".to_string(),
+            description: "Test federation".to_string(),
+            services: vec![],
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("\"name\":\"test\""));
+        assert!(json.contains("\"description\":\"Test federation\""));
+    }
+
+    #[test]
+    fn test_federation_config_deserialize() {
+        let json = r#"{"name":"test","description":"","services":[]}"#;
+        let config: FederationConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.name, "test");
+        assert!(config.services.is_empty());
+    }
+
+    // FederationService tests
+    #[test]
+    fn test_federation_service_debug() {
+        let service = FederationService {
+            name: "auth".to_string(),
+            workspace_id: Uuid::new_v4().to_string(),
+            base_path: "/auth".to_string(),
+            reality_level: "real".to_string(),
+            config: HashMap::new(),
+            dependencies: Vec::new(),
+        };
+
+        let debug = format!("{:?}", service);
+        assert!(debug.contains("auth"));
+    }
+
+    // Federation serialization tests
+    #[test]
+    fn test_federation_serialize() {
+        let federation = create_test_federation();
+        let json = serde_json::to_string(&federation).unwrap();
+        assert!(json.contains("test"));
+        assert!(json.contains("auth"));
+        assert!(json.contains("payments"));
+    }
+
+    #[test]
+    fn test_federation_clone() {
+        let federation = create_test_federation();
+        let cloned = federation.clone();
+
+        assert_eq!(federation.id, cloned.id);
+        assert_eq!(federation.name, cloned.name);
+        assert_eq!(federation.services.len(), cloned.services.len());
     }
 }

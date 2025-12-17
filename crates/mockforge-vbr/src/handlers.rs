@@ -995,3 +995,512 @@ pub async fn reset_handler(
 
     Ok(Json(json!({"message": "Database reset successfully"})))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::{InMemoryDatabase, VirtualDatabase};
+    use crate::entities::{Entity, EntityRegistry};
+    use crate::migration::MigrationManager;
+    use crate::schema::VbrSchemaDefinition;
+    use mockforge_data::{FieldDefinition, SchemaDefinition};
+    use std::sync::Arc;
+
+    async fn setup_test_database() -> (Arc<dyn VirtualDatabase + Send + Sync>, EntityRegistry) {
+        let mut db = InMemoryDatabase::new().await.unwrap();
+        db.initialize().await.unwrap();
+        let registry = EntityRegistry::new();
+        (Arc::new(db), registry)
+    }
+
+    async fn create_test_entity(
+        database: &dyn VirtualDatabase,
+        registry: &mut EntityRegistry,
+        entity_name: &str,
+    ) {
+        let base_schema = SchemaDefinition::new(entity_name.to_string())
+            .with_field(FieldDefinition::new("id".to_string(), "string".to_string()))
+            .with_field(FieldDefinition::new("name".to_string(), "string".to_string()));
+
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new(entity_name.to_string(), vbr_schema);
+
+        let manager = MigrationManager::new();
+        let create_sql = manager.generate_create_table(&entity).unwrap();
+        database.create_table(&create_sql).await.unwrap();
+
+        registry.register(entity).unwrap();
+    }
+
+    fn create_test_context(
+        database: Arc<dyn VirtualDatabase + Send + Sync>,
+        registry: EntityRegistry,
+    ) -> HandlerContext {
+        HandlerContext {
+            database,
+            registry,
+            session_manager: None,
+            snapshots_dir: None,
+        }
+    }
+
+    // Helper function tests
+    #[test]
+    fn test_build_where_clause_empty() {
+        let params = HashMap::new();
+        let base_schema = SchemaDefinition::new("Test".to_string());
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("Test".to_string(), vbr_schema);
+
+        let (where_clause, bind_values) = build_where_clause(&params, &entity);
+        assert_eq!(where_clause, "");
+        assert_eq!(bind_values.len(), 0);
+    }
+
+    #[test]
+    fn test_build_where_clause_with_params() {
+        let mut params = HashMap::new();
+        params.insert("name".to_string(), "John".to_string());
+
+        let base_schema = SchemaDefinition::new("User".to_string())
+            .with_field(FieldDefinition::new("name".to_string(), "string".to_string()));
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("User".to_string(), vbr_schema);
+
+        let (where_clause, bind_values) = build_where_clause(&params, &entity);
+        assert!(where_clause.contains("WHERE"));
+        assert!(where_clause.contains("name = ?"));
+        assert_eq!(bind_values.len(), 1);
+    }
+
+    #[test]
+    fn test_build_where_clause_ignores_pagination() {
+        let mut params = HashMap::new();
+        params.insert("limit".to_string(), "10".to_string());
+        params.insert("offset".to_string(), "5".to_string());
+        params.insert("sort".to_string(), "name".to_string());
+
+        let base_schema = SchemaDefinition::new("Test".to_string());
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("Test".to_string(), vbr_schema);
+
+        let (where_clause, bind_values) = build_where_clause(&params, &entity);
+        assert_eq!(where_clause, "");
+        assert_eq!(bind_values.len(), 0);
+    }
+
+    #[test]
+    fn test_build_order_by_no_sort() {
+        let params = HashMap::new();
+        let base_schema = SchemaDefinition::new("Test".to_string());
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("Test".to_string(), vbr_schema);
+
+        let order_by = build_order_by(&params, &entity);
+        assert_eq!(order_by, "");
+    }
+
+    #[test]
+    fn test_build_order_by_with_sort() {
+        let mut params = HashMap::new();
+        params.insert("sort".to_string(), "name".to_string());
+
+        let base_schema = SchemaDefinition::new("User".to_string())
+            .with_field(FieldDefinition::new("name".to_string(), "string".to_string()));
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("User".to_string(), vbr_schema);
+
+        let order_by = build_order_by(&params, &entity);
+        assert_eq!(order_by, "ORDER BY name ASC");
+    }
+
+    #[test]
+    fn test_build_order_by_with_sort_desc() {
+        let mut params = HashMap::new();
+        params.insert("sort".to_string(), "name".to_string());
+        params.insert("order".to_string(), "DESC".to_string());
+
+        let base_schema = SchemaDefinition::new("User".to_string())
+            .with_field(FieldDefinition::new("name".to_string(), "string".to_string()));
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("User".to_string(), vbr_schema);
+
+        let order_by = build_order_by(&params, &entity);
+        assert_eq!(order_by, "ORDER BY name DESC");
+    }
+
+    #[test]
+    fn test_build_order_by_invalid_field() {
+        let mut params = HashMap::new();
+        params.insert("sort".to_string(), "invalid_field".to_string());
+
+        let base_schema = SchemaDefinition::new("User".to_string())
+            .with_field(FieldDefinition::new("name".to_string(), "string".to_string()));
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("User".to_string(), vbr_schema);
+
+        let order_by = build_order_by(&params, &entity);
+        assert_eq!(order_by, "");
+    }
+
+    #[test]
+    fn test_build_order_by_invalid_order() {
+        let mut params = HashMap::new();
+        params.insert("sort".to_string(), "name".to_string());
+        params.insert("order".to_string(), "INVALID".to_string());
+
+        let base_schema = SchemaDefinition::new("User".to_string())
+            .with_field(FieldDefinition::new("name".to_string(), "string".to_string()));
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("User".to_string(), vbr_schema);
+
+        let order_by = build_order_by(&params, &entity);
+        assert_eq!(order_by, "");
+    }
+
+    #[test]
+    fn test_get_pagination_no_params() {
+        let params = HashMap::new();
+        let (limit, offset) = get_pagination(&params);
+        assert_eq!(limit, None);
+        assert_eq!(offset, None);
+    }
+
+    #[test]
+    fn test_get_pagination_with_limit() {
+        let mut params = HashMap::new();
+        params.insert("limit".to_string(), "10".to_string());
+
+        let (limit, offset) = get_pagination(&params);
+        assert_eq!(limit, Some(10));
+        assert_eq!(offset, None);
+    }
+
+    #[test]
+    fn test_get_pagination_with_limit_and_offset() {
+        let mut params = HashMap::new();
+        params.insert("limit".to_string(), "20".to_string());
+        params.insert("offset".to_string(), "5".to_string());
+
+        let (limit, offset) = get_pagination(&params);
+        assert_eq!(limit, Some(20));
+        assert_eq!(offset, Some(5));
+    }
+
+    #[test]
+    fn test_get_pagination_invalid_values() {
+        let mut params = HashMap::new();
+        params.insert("limit".to_string(), "abc".to_string());
+        params.insert("offset".to_string(), "xyz".to_string());
+
+        let (limit, offset) = get_pagination(&params);
+        assert_eq!(limit, None);
+        assert_eq!(offset, None);
+    }
+
+    // HandlerContext tests
+    #[test]
+    fn test_handler_context_clone() {
+        let (database, registry) = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async { setup_test_database().await });
+
+        let context = create_test_context(database, registry);
+        let cloned = context.clone();
+
+        assert!(Arc::ptr_eq(&context.database, &cloned.database));
+    }
+
+    // get_entity_info tests
+    #[tokio::test]
+    async fn test_get_entity_info_success() {
+        let (database, mut registry) = setup_test_database().await;
+        create_test_entity(database.as_ref(), &mut registry, "User").await;
+
+        let result = get_entity_info(&registry, "User");
+        assert!(result.is_ok());
+        let (entity, table_name) = result.unwrap();
+        assert_eq!(entity.name(), "User");
+        assert_eq!(table_name, "users");
+    }
+
+    #[tokio::test]
+    async fn test_get_entity_info_not_found() {
+        let (_database, registry) = setup_test_database().await;
+
+        let result = get_entity_info(&registry, "NonExistent");
+        assert!(result.is_err());
+        let (status, _) = result.unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    // apply_auto_generation tests
+    #[tokio::test]
+    async fn test_apply_auto_generation_uuid() {
+        let (database, _registry) = setup_test_database().await;
+        let mut data = json!({});
+        let base_schema = SchemaDefinition::new("Test".to_string());
+        let mut vbr_schema = VbrSchemaDefinition::new(base_schema);
+        vbr_schema
+            .auto_generation
+            .insert("id".to_string(), crate::schema::AutoGenerationRule::Uuid);
+
+        apply_auto_generation(&mut data, &vbr_schema, "Test", database.as_ref())
+            .await
+            .unwrap();
+
+        assert!(data.as_object().unwrap().contains_key("id"));
+        assert!(data["id"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_apply_auto_generation_timestamp() {
+        let (database, _registry) = setup_test_database().await;
+        let mut data = json!({});
+        let base_schema = SchemaDefinition::new("Test".to_string());
+        let mut vbr_schema = VbrSchemaDefinition::new(base_schema);
+        vbr_schema
+            .auto_generation
+            .insert("created_at".to_string(), crate::schema::AutoGenerationRule::Timestamp);
+
+        apply_auto_generation(&mut data, &vbr_schema, "Test", database.as_ref())
+            .await
+            .unwrap();
+
+        assert!(data.as_object().unwrap().contains_key("created_at"));
+        assert!(data["created_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_apply_auto_generation_date() {
+        let (database, _registry) = setup_test_database().await;
+        let mut data = json!({});
+        let base_schema = SchemaDefinition::new("Test".to_string());
+        let mut vbr_schema = VbrSchemaDefinition::new(base_schema);
+        vbr_schema
+            .auto_generation
+            .insert("date_field".to_string(), crate::schema::AutoGenerationRule::Date);
+
+        apply_auto_generation(&mut data, &vbr_schema, "Test", database.as_ref())
+            .await
+            .unwrap();
+
+        assert!(data.as_object().unwrap().contains_key("date_field"));
+        assert!(data["date_field"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_apply_auto_generation_skips_existing() {
+        let (database, _registry) = setup_test_database().await;
+        let mut data = json!({"id": "existing-id"});
+        let base_schema = SchemaDefinition::new("Test".to_string());
+        let mut vbr_schema = VbrSchemaDefinition::new(base_schema);
+        vbr_schema
+            .auto_generation
+            .insert("id".to_string(), crate::schema::AutoGenerationRule::Uuid);
+
+        apply_auto_generation(&mut data, &vbr_schema, "Test", database.as_ref())
+            .await
+            .unwrap();
+
+        assert_eq!(data["id"], "existing-id");
+    }
+
+    // CreateSnapshotRequest tests
+    #[test]
+    fn test_create_snapshot_request_deserialize() {
+        let json = r#"{"name": "test-snapshot", "description": "Test description"}"#;
+        let request: CreateSnapshotRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.name, "test-snapshot");
+        assert_eq!(request.description, Some("Test description".to_string()));
+    }
+
+    #[test]
+    fn test_create_snapshot_request_deserialize_no_description() {
+        let json = r#"{"name": "test-snapshot"}"#;
+        let request: CreateSnapshotRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.name, "test-snapshot");
+        assert_eq!(request.description, None);
+    }
+
+    // Integration tests for handlers
+    #[tokio::test]
+    async fn test_list_handler_empty() {
+        let (database, mut registry) = setup_test_database().await;
+        create_test_entity(database.as_ref(), &mut registry, "User").await;
+
+        let context = create_test_context(database, registry);
+        let params = HashMap::new();
+
+        let result =
+            list_handler(Path("User".to_string()), Query(params), Extension(context)).await;
+
+        assert!(result.is_ok());
+        let json_value = result.unwrap().0;
+        assert!(json_value["data"].is_array());
+        assert_eq!(json_value["total"], 0);
+    }
+
+    #[tokio::test]
+    async fn test_list_handler_entity_not_found() {
+        let (database, registry) = setup_test_database().await;
+        let context = create_test_context(database, registry);
+        let params = HashMap::new();
+
+        let result =
+            list_handler(Path("NonExistent".to_string()), Query(params), Extension(context)).await;
+
+        assert!(result.is_err());
+        let (status, _) = result.unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_get_handler_not_found() {
+        let (database, mut registry) = setup_test_database().await;
+        create_test_entity(database.as_ref(), &mut registry, "User").await;
+
+        let context = create_test_context(database, registry);
+
+        let result = get_handler(
+            Path(("User".to_string(), "nonexistent-id".to_string())),
+            Extension(context),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let (status, _) = result.unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_create_handler_invalid_body() {
+        let (database, mut registry) = setup_test_database().await;
+        create_test_entity(database.as_ref(), &mut registry, "User").await;
+
+        let context = create_test_context(database, registry);
+        let body = json!("not an object");
+
+        let result = create_handler(Path("User".to_string()), Extension(context), Json(body)).await;
+
+        assert!(result.is_err());
+        let (status, _) = result.unwrap_err();
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_update_handler_not_found() {
+        let (database, mut registry) = setup_test_database().await;
+        create_test_entity(database.as_ref(), &mut registry, "User").await;
+
+        let context = create_test_context(database, registry);
+        let body = json!({"name": "Updated"});
+
+        let result = update_handler(
+            Path(("User".to_string(), "nonexistent-id".to_string())),
+            Extension(context),
+            Json(body),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let (status, _) = result.unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_update_handler_invalid_body() {
+        let (database, mut registry) = setup_test_database().await;
+        create_test_entity(database.as_ref(), &mut registry, "User").await;
+
+        let context = create_test_context(database, registry);
+        let body = json!("not an object");
+
+        let result = update_handler(
+            Path(("User".to_string(), "some-id".to_string())),
+            Extension(context),
+            Json(body),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let (status, _) = result.unwrap_err();
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_delete_handler_not_found() {
+        let (database, mut registry) = setup_test_database().await;
+        create_test_entity(database.as_ref(), &mut registry, "User").await;
+
+        let context = create_test_context(database, registry);
+
+        let result = delete_handler(
+            Path(("User".to_string(), "nonexistent-id".to_string())),
+            Extension(context),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let (status, _) = result.unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_get_relationship_handler_entity_not_found() {
+        let (database, registry) = setup_test_database().await;
+        let context = create_test_context(database, registry);
+        let params = HashMap::new();
+
+        let result = get_relationship_handler(
+            Path(("User".to_string(), "123".to_string(), "orders".to_string())),
+            Query(params),
+            Extension(context),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let (status, _) = result.unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_handlers_no_directory() {
+        let (database, registry) = setup_test_database().await;
+        let context = create_test_context(database, registry);
+
+        // Test create_snapshot_handler without snapshots_dir
+        let body = CreateSnapshotRequest {
+            name: "test".to_string(),
+            description: None,
+        };
+        let result = create_snapshot_handler(Extension(context.clone()), Json(body)).await;
+        assert!(result.is_err());
+
+        // Test list_snapshots_handler without snapshots_dir
+        let result = list_snapshots_handler(Extension(context.clone())).await;
+        assert!(result.is_err());
+
+        // Test restore_snapshot_handler without snapshots_dir
+        let result =
+            restore_snapshot_handler(Path("test".to_string()), Extension(context.clone())).await;
+        assert!(result.is_err());
+
+        // Test delete_snapshot_handler without snapshots_dir
+        let result = delete_snapshot_handler(Path("test".to_string()), Extension(context)).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_reset_handler_success() {
+        let (database, mut registry) = setup_test_database().await;
+        create_test_entity(database.as_ref(), &mut registry, "User").await;
+
+        let context = create_test_context(database, registry);
+
+        let result = reset_handler(Extension(context)).await;
+        assert!(result.is_ok());
+        let json_value = result.unwrap().0;
+        assert!(json_value["message"].as_str().unwrap().contains("reset successfully"));
+    }
+}

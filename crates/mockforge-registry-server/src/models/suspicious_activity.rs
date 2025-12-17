@@ -81,9 +81,8 @@ impl SuspiciousActivity {
         severity: Option<&str>,
         limit: Option<i64>,
     ) -> sqlx::Result<Vec<Self>> {
-        let mut query = sqlx::QueryBuilder::new(
-            "SELECT * FROM suspicious_activities WHERE resolved = FALSE"
-        );
+        let mut query =
+            sqlx::QueryBuilder::new("SELECT * FROM suspicious_activities WHERE resolved = FALSE");
 
         if let Some(org_id) = org_id {
             query.push(" AND org_id = ");
@@ -107,9 +106,7 @@ impl SuspiciousActivity {
             query.push_bind(limit);
         }
 
-        query.build_query_as::<Self>()
-            .fetch_all(pool)
-            .await
+        query.build_query_as::<Self>().fetch_all(pool).await
     }
 
     /// Mark activity as resolved
@@ -129,15 +126,14 @@ impl SuspiciousActivity {
     }
 
     /// Clean up old resolved activities (older than N days)
-    pub async fn cleanup_old(
-        pool: &sqlx::PgPool,
-        days: i64,
-    ) -> sqlx::Result<u64> {
+    pub async fn cleanup_old(pool: &sqlx::PgPool, days: i64) -> sqlx::Result<u64> {
         let cutoff = Utc::now() - chrono::Duration::days(days);
-        let result = sqlx::query("DELETE FROM suspicious_activities WHERE resolved = TRUE AND resolved_at < $1")
-            .bind(cutoff)
-            .execute(pool)
-            .await?;
+        let result = sqlx::query(
+            "DELETE FROM suspicious_activities WHERE resolved = TRUE AND resolved_at < $1",
+        )
+        .bind(cutoff)
+        .execute(pool)
+        .await?;
         Ok(result.rows_affected())
     }
 }

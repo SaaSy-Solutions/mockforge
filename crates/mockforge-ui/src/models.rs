@@ -1001,6 +1001,8 @@ pub struct ServerInfo {
 mod tests {
     use super::*;
 
+    // ==================== ApiResponse Tests ====================
+
     #[test]
     fn test_api_response_success() {
         let data = "test data".to_string();
@@ -1020,6 +1022,15 @@ mod tests {
         assert!(response.data.is_none());
         assert_eq!(response.error, Some(error_msg));
     }
+
+    #[test]
+    fn test_api_response_success_with_int() {
+        let response = ApiResponse::success(42);
+        assert!(response.success);
+        assert_eq!(response.data, Some(42));
+    }
+
+    // ==================== HealthCheck Tests ====================
 
     #[test]
     fn test_health_check_healthy() {
@@ -1049,6 +1060,8 @@ mod tests {
         assert_eq!(health.services.get("http"), Some(&"running".to_string()));
     }
 
+    // ==================== LogFilter Tests ====================
+
     #[test]
     fn test_log_filter_default() {
         let filter = LogFilter::default();
@@ -1058,6 +1071,22 @@ mod tests {
         assert_eq!(filter.hours_ago, Some(24));
         assert_eq!(filter.limit, Some(100));
     }
+
+    #[test]
+    fn test_log_filter_custom() {
+        let filter = LogFilter {
+            method: Some("POST".to_string()),
+            path_pattern: Some("/api/.*".to_string()),
+            status_code: Some(200),
+            hours_ago: Some(48),
+            limit: Some(500),
+        };
+
+        assert_eq!(filter.method.as_deref(), Some("POST"));
+        assert_eq!(filter.status_code, Some(200));
+    }
+
+    // ==================== ServerStatus Tests ====================
 
     #[test]
     fn test_server_status() {
@@ -1075,6 +1104,25 @@ mod tests {
         assert!(status.running);
         assert_eq!(status.active_connections, 10);
     }
+
+    #[test]
+    fn test_server_status_serialization() {
+        let status = ServerStatus {
+            server_type: "gRPC".to_string(),
+            address: None,
+            running: false,
+            start_time: None,
+            uptime_seconds: None,
+            active_connections: 0,
+            total_requests: 0,
+        };
+
+        let json = serde_json::to_string(&status).unwrap();
+        let deserialized: ServerStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.server_type, "gRPC");
+    }
+
+    // ==================== RouteInfo Tests ====================
 
     #[test]
     fn test_route_info() {
@@ -1095,11 +1143,322 @@ mod tests {
     }
 
     #[test]
+    fn test_route_info_clone() {
+        let route = RouteInfo {
+            method: Some("POST".to_string()),
+            path: "/api/items".to_string(),
+            priority: 50,
+            has_fixtures: false,
+            latency_ms: None,
+            request_count: 0,
+            last_request: None,
+            error_count: 0,
+        };
+
+        let cloned = route.clone();
+        assert_eq!(cloned.path, route.path);
+        assert_eq!(cloned.priority, route.priority);
+    }
+
+    // ==================== RequestLog Tests ====================
+
+    #[test]
+    fn test_request_log() {
+        let log = RequestLog {
+            id: "req-123".to_string(),
+            timestamp: chrono::Utc::now(),
+            method: "GET".to_string(),
+            path: "/api/data".to_string(),
+            status_code: 200,
+            response_time_ms: 45,
+            client_ip: Some("192.168.1.1".to_string()),
+            user_agent: Some("curl/7.64.0".to_string()),
+            headers: HashMap::new(),
+            response_size_bytes: 1024,
+            error_message: None,
+        };
+
+        assert_eq!(log.id, "req-123");
+        assert_eq!(log.status_code, 200);
+    }
+
+    // ==================== SystemInfo Tests ====================
+
+    #[test]
+    fn test_system_info() {
+        let info = SystemInfo {
+            version: "0.3.8".to_string(),
+            uptime_seconds: 86400,
+            memory_usage_mb: 256,
+            cpu_usage_percent: 25.5,
+            active_threads: 8,
+            total_routes: 50,
+            total_fixtures: 100,
+        };
+
+        assert_eq!(info.version, "0.3.8");
+        assert_eq!(info.total_routes, 50);
+    }
+
+    // ==================== LatencyProfile Tests ====================
+
+    #[test]
+    fn test_latency_profile() {
+        let profile = LatencyProfile {
+            name: "slow_network".to_string(),
+            base_ms: 200,
+            jitter_ms: 50,
+            tag_overrides: HashMap::from([("critical".to_string(), 50)]),
+        };
+
+        assert_eq!(profile.name, "slow_network");
+        assert_eq!(profile.base_ms, 200);
+    }
+
+    // ==================== FaultConfig Tests ====================
+
+    #[test]
+    fn test_fault_config() {
+        let config = FaultConfig {
+            enabled: true,
+            failure_rate: 0.1,
+            status_codes: vec![500, 503],
+            active_failures: 5,
+        };
+
+        assert!(config.enabled);
+        assert!(config.failure_rate > 0.0);
+        assert_eq!(config.status_codes.len(), 2);
+    }
+
+    // ==================== ProxyConfig Tests ====================
+
+    #[test]
+    fn test_proxy_config() {
+        let config = ProxyConfig {
+            enabled: true,
+            upstream_url: Some("https://api.example.com".to_string()),
+            timeout_seconds: 30,
+            requests_proxied: 1000,
+        };
+
+        assert!(config.enabled);
+        assert!(config.upstream_url.is_some());
+    }
+
+    // ==================== BandwidthConfig Tests ====================
+
+    #[test]
+    fn test_bandwidth_config() {
+        let config = BandwidthConfig {
+            enabled: true,
+            max_bytes_per_sec: 1_000_000,
+            burst_capacity_bytes: 10_000,
+            tag_overrides: HashMap::new(),
+        };
+
+        assert!(config.enabled);
+        assert_eq!(config.max_bytes_per_sec, 1_000_000);
+    }
+
+    // ==================== BurstLossConfig Tests ====================
+
+    #[test]
+    fn test_burst_loss_config() {
+        let config = BurstLossConfig {
+            enabled: false,
+            burst_probability: 0.05,
+            burst_duration_ms: 1000,
+            loss_rate_during_burst: 0.3,
+            recovery_time_ms: 5000,
+            tag_overrides: HashMap::new(),
+        };
+
+        assert!(!config.enabled);
+        assert_eq!(config.burst_duration_ms, 1000);
+    }
+
+    // ==================== SimpleMetricsData Tests ====================
+
+    #[test]
+    fn test_simple_metrics_data() {
+        let metrics = SimpleMetricsData {
+            total_requests: 10000,
+            active_requests: 5,
+            average_response_time: 45.5,
+            error_rate: 0.02,
+        };
+
+        assert_eq!(metrics.total_requests, 10000);
+        assert!(metrics.error_rate < 0.05);
+    }
+
+    // ==================== ConfigUpdate Tests ====================
+
+    #[test]
+    fn test_config_update() {
+        let update = ConfigUpdate {
+            config_type: "latency".to_string(),
+            data: serde_json::json!({"base_ms": 100}),
+        };
+
+        assert_eq!(update.config_type, "latency");
+    }
+
+    // ==================== RouteUpdate Tests ====================
+
+    #[test]
+    fn test_route_update() {
+        let update = RouteUpdate {
+            path: "/api/users".to_string(),
+            method: Some("POST".to_string()),
+            operation: "create".to_string(),
+            data: Some(serde_json::json!({"fixture": "user.json"})),
+        };
+
+        assert_eq!(update.path, "/api/users");
+        assert_eq!(update.operation, "create");
+    }
+
+    // ==================== ValidationSettings Tests ====================
+
+    #[test]
+    fn test_validation_settings() {
+        let settings = ValidationSettings {
+            mode: "enforce".to_string(),
+            aggregate_errors: true,
+            validate_responses: true,
+            overrides: HashMap::new(),
+        };
+
+        assert_eq!(settings.mode, "enforce");
+        assert!(settings.validate_responses);
+    }
+
+    // ==================== LogEntry Tests ====================
+
+    #[test]
+    fn test_log_entry() {
+        let entry = LogEntry {
+            timestamp: chrono::Utc::now(),
+            status: 200,
+            method: "GET".to_string(),
+            url: "/api/test".to_string(),
+            response_time: 50,
+            size: 1024,
+        };
+
+        assert_eq!(entry.status, 200);
+        assert_eq!(entry.method, "GET");
+    }
+
+    // ==================== WorkspaceSummary Tests ====================
+
+    #[test]
+    fn test_workspace_summary() {
+        let summary = WorkspaceSummary {
+            id: "ws-123".to_string(),
+            name: "My Workspace".to_string(),
+            description: Some("Test workspace".to_string()),
+            active: true,
+            folder_count: 5,
+            request_count: 20,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        assert_eq!(summary.name, "My Workspace");
+        assert!(summary.active);
+    }
+
+    // ==================== FolderSummary Tests ====================
+
+    #[test]
+    fn test_folder_summary() {
+        let folder = FolderSummary {
+            id: "folder-123".to_string(),
+            name: "API Tests".to_string(),
+            description: None,
+            parent_id: None,
+            subfolder_count: 3,
+            request_count: 10,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        assert_eq!(folder.name, "API Tests");
+        assert!(folder.parent_id.is_none());
+    }
+
+    // ==================== RequestSummary Tests ====================
+
+    #[test]
+    fn test_request_summary() {
+        let request = RequestSummary {
+            id: "req-123".to_string(),
+            name: "Get Users".to_string(),
+            description: Some("Fetch all users".to_string()),
+            method: "GET".to_string(),
+            path: "/api/users".to_string(),
+            status_code: 200,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        assert_eq!(request.method, "GET");
+        assert_eq!(request.status_code, 200);
+    }
+
+    // ==================== CreateWorkspaceRequest Tests ====================
+
+    #[test]
+    fn test_create_workspace_request() {
+        let request = CreateWorkspaceRequest {
+            name: "New Workspace".to_string(),
+            description: Some("A new workspace".to_string()),
+        };
+
+        assert_eq!(request.name, "New Workspace");
+    }
+
+    // ==================== CreateFolderRequest Tests ====================
+
+    #[test]
+    fn test_create_folder_request() {
+        let request = CreateFolderRequest {
+            name: "New Folder".to_string(),
+            description: None,
+            parent_id: Some("parent-123".to_string()),
+        };
+
+        assert_eq!(request.name, "New Folder");
+        assert!(request.parent_id.is_some());
+    }
+
+    // ==================== SyncConfig Tests ====================
+
+    #[test]
     fn test_sync_direction_conversion() {
         let manual = mockforge_core::workspace::SyncDirection::Manual;
         let ui_manual: SyncDirection = manual.into();
         assert!(matches!(ui_manual, SyncDirection::Manual));
     }
+
+    #[test]
+    fn test_sync_direction_workspace_to_directory() {
+        let dir = mockforge_core::workspace::SyncDirection::WorkspaceToDirectory;
+        let ui_dir: SyncDirection = dir.into();
+        assert!(matches!(ui_dir, SyncDirection::WorkspaceToDirectory));
+    }
+
+    #[test]
+    fn test_sync_direction_bidirectional() {
+        let bidir = mockforge_core::workspace::SyncDirection::Bidirectional;
+        let ui_bidir: SyncDirection = bidir.into();
+        assert!(matches!(ui_bidir, SyncDirection::Bidirectional));
+    }
+
+    // ==================== EnvironmentColor Tests ====================
 
     #[test]
     fn test_environment_color() {
@@ -1110,5 +1469,221 @@ mod tests {
 
         assert_eq!(color.hex, "#FF5733");
         assert_eq!(color.name, Some("Orange".to_string()));
+    }
+
+    #[test]
+    fn test_environment_color_without_name() {
+        let color = EnvironmentColor {
+            hex: "#00FF00".to_string(),
+            name: None,
+        };
+
+        assert_eq!(color.hex, "#00FF00");
+        assert!(color.name.is_none());
+    }
+
+    // ==================== EnvironmentSummary Tests ====================
+
+    #[test]
+    fn test_environment_summary() {
+        let env = EnvironmentSummary {
+            id: "env-123".to_string(),
+            name: "Production".to_string(),
+            description: Some("Production environment".to_string()),
+            color: Some(EnvironmentColor {
+                hex: "#FF0000".to_string(),
+                name: Some("Red".to_string()),
+            }),
+            variable_count: 10,
+            active: true,
+            is_global: false,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        assert_eq!(env.name, "Production");
+        assert!(env.active);
+        assert!(!env.is_global);
+    }
+
+    // ==================== AutocompleteSuggestion Tests ====================
+
+    #[test]
+    fn test_autocomplete_suggestion() {
+        let suggestion = AutocompleteSuggestion {
+            text: "{{base_url}}".to_string(),
+            kind: "variable".to_string(),
+            description: Some("Base URL variable".to_string()),
+        };
+
+        assert_eq!(suggestion.kind, "variable");
+    }
+
+    // ==================== TimeSeriesPoint Tests ====================
+
+    #[test]
+    fn test_time_series_point() {
+        let point = TimeSeriesPoint {
+            timestamp: chrono::Utc::now(),
+            value: 123.45,
+        };
+
+        assert!((point.value - 123.45).abs() < f64::EPSILON);
+    }
+
+    // ==================== RestartStatus Tests ====================
+
+    #[test]
+    fn test_restart_status() {
+        let status = RestartStatus {
+            restarting: true,
+            progress: 0.5,
+            message: "Restarting services...".to_string(),
+        };
+
+        assert!(status.restarting);
+        assert!((status.progress - 0.5).abs() < f64::EPSILON);
+    }
+
+    // ==================== SmokeTestResult Tests ====================
+
+    #[test]
+    fn test_smoke_test_result_passed() {
+        let result = SmokeTestResult {
+            test_name: "Health Check".to_string(),
+            passed: true,
+            response_time_ms: Some(50),
+            error_message: None,
+        };
+
+        assert!(result.passed);
+        assert!(result.error_message.is_none());
+    }
+
+    #[test]
+    fn test_smoke_test_result_failed() {
+        let result = SmokeTestResult {
+            test_name: "Database Connection".to_string(),
+            passed: false,
+            response_time_ms: None,
+            error_message: Some("Connection timeout".to_string()),
+        };
+
+        assert!(!result.passed);
+        assert!(result.error_message.is_some());
+    }
+
+    // ==================== ConfigurationState Tests ====================
+
+    #[test]
+    fn test_configuration_state_valid() {
+        let state = ConfigurationState {
+            valid: true,
+            errors: vec![],
+            warnings: vec!["Deprecated setting used".to_string()],
+        };
+
+        assert!(state.valid);
+        assert!(state.errors.is_empty());
+        assert!(!state.warnings.is_empty());
+    }
+
+    // ==================== ImportHistoryEntry Tests ====================
+
+    #[test]
+    fn test_import_history_entry() {
+        let entry = ImportHistoryEntry {
+            id: "import-123".to_string(),
+            format: "postman".to_string(),
+            timestamp: chrono::Utc::now(),
+            routes_count: 25,
+            variables_count: 5,
+            warnings_count: 2,
+            success: true,
+            filename: Some("collection.json".to_string()),
+            environment: Some("development".to_string()),
+            base_url: Some("https://api.example.com".to_string()),
+            error_message: None,
+        };
+
+        assert!(entry.success);
+        assert_eq!(entry.routes_count, 25);
+    }
+
+    // ==================== FixtureInfo Tests ====================
+
+    #[test]
+    fn test_fixture_info() {
+        let fixture = FixtureInfo {
+            id: "fixture-123".to_string(),
+            name: "users.json".to_string(),
+            path: "/fixtures/users.json".to_string(),
+            size_bytes: 2048,
+            last_modified: chrono::Utc::now(),
+            content_type: Some("application/json".to_string()),
+        };
+
+        assert_eq!(fixture.name, "users.json");
+        assert_eq!(fixture.size_bytes, 2048);
+    }
+
+    // ==================== ImportRoute Tests ====================
+
+    #[test]
+    fn test_import_route() {
+        let route = ImportRoute {
+            method: "POST".to_string(),
+            path: "/api/users".to_string(),
+            headers: HashMap::from([("Content-Type".to_string(), "application/json".to_string())]),
+            body: Some(r#"{"name": "test"}"#.to_string()),
+            response: ImportResponse {
+                status: 201,
+                headers: HashMap::new(),
+                body: serde_json::json!({"id": 1}),
+            },
+        };
+
+        assert_eq!(route.method, "POST");
+        assert_eq!(route.response.status, 201);
+    }
+
+    // ==================== ServerInfo Tests ====================
+
+    #[test]
+    fn test_server_info() {
+        let info = ServerInfo {
+            version: "0.3.8".to_string(),
+            build_time: "2024-01-01T00:00:00Z".to_string(),
+            git_sha: "abc123".to_string(),
+            http_server: Some("0.0.0.0:3000".to_string()),
+            ws_server: Some("0.0.0.0:3001".to_string()),
+            grpc_server: None,
+            graphql_server: None,
+            api_enabled: true,
+            admin_port: 8080,
+        };
+
+        assert_eq!(info.version, "0.3.8");
+        assert!(info.api_enabled);
+    }
+
+    // ==================== Serialization Tests ====================
+
+    #[test]
+    fn test_log_filter_serialization() {
+        let filter = LogFilter::default();
+        let json = serde_json::to_string(&filter).unwrap();
+        let deserialized: LogFilter = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.hours_ago, filter.hours_ago);
+    }
+
+    #[test]
+    fn test_health_check_serialization() {
+        let health = HealthCheck::healthy().with_service("api".to_string(), "ok".to_string());
+        let json = serde_json::to_string(&health).unwrap();
+        let deserialized: HealthCheck = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.status, "healthy");
     }
 }

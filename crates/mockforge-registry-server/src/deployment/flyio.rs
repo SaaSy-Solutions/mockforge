@@ -108,10 +108,7 @@ impl FlyioClient {
             anyhow::bail!("Failed to create Fly.io app: {} - {}", status, error_text);
         }
 
-        let app: FlyioApp = response
-            .json()
-            .await
-            .context("Failed to parse Fly.io app response")?;
+        let app: FlyioApp = response.json().await.context("Failed to parse Fly.io app response")?;
 
         Ok(app)
     }
@@ -146,10 +143,8 @@ impl FlyioClient {
             anyhow::bail!("Failed to create Fly.io machine: {} - {}", status, error_text);
         }
 
-        let machine: FlyioMachine = response
-            .json()
-            .await
-            .context("Failed to parse Fly.io machine response")?;
+        let machine: FlyioMachine =
+            response.json().await.context("Failed to parse Fly.io machine response")?;
 
         Ok(machine)
     }
@@ -172,10 +167,8 @@ impl FlyioClient {
             anyhow::bail!("Failed to get Fly.io machine: {} - {}", status, error_text);
         }
 
-        let machine: FlyioMachine = response
-            .json()
-            .await
-            .context("Failed to parse Fly.io machine response")?;
+        let machine: FlyioMachine =
+            response.json().await.context("Failed to parse Fly.io machine response")?;
 
         Ok(machine)
     }
@@ -219,10 +212,7 @@ impl FlyioClient {
             anyhow::bail!("Failed to get Fly.io app: {} - {}", status, error_text);
         }
 
-        let app: FlyioApp = response
-            .json()
-            .await
-            .context("Failed to parse Fly.io app response")?;
+        let app: FlyioApp = response.json().await.context("Failed to parse Fly.io app response")?;
 
         Ok(app)
     }
@@ -245,10 +235,8 @@ impl FlyioClient {
             anyhow::bail!("Failed to list Fly.io machines: {} - {}", status, error_text);
         }
 
-        let machines: Vec<FlyioMachine> = response
-            .json()
-            .await
-            .context("Failed to parse Fly.io machines response")?;
+        let machines: Vec<FlyioMachine> =
+            response.json().await.context("Failed to parse Fly.io machines response")?;
 
         Ok(machines)
     }

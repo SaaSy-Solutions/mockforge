@@ -68,6 +68,15 @@ pub struct ClaimsConfig {
     pub custom: HashMap<String, serde_json::Value>,
 }
 
+impl Default for ClaimsConfig {
+    fn default() -> Self {
+        Self {
+            default: vec!["sub".to_string(), "iss".to_string(), "exp".to_string()],
+            custom: HashMap::new(),
+        }
+    }
+}
+
 /// Multi-tenant configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiTenantConfig {
@@ -539,4 +548,548 @@ pub fn oidc_router() -> axum::Router {
     Router::new()
         .route("/.well-known/openid-configuration", get(get_oidc_discovery))
         .route("/.well-known/jwks.json", get(get_jwks))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::engine::general_purpose;
+    use base64::Engine;
+    use jsonwebtoken::Algorithm;
+    use serde_json::json;
+
+    #[test]
+    fn test_default_key_use() {
+        assert_eq!(default_key_use(), "sig");
+    }
+
+    #[test]
+    fn test_oidc_config_default() {
+        let config = OidcConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.issuer, "https://mockforge.example.com");
+        assert!(config.jwks.keys.is_empty());
+        assert_eq!(config.claims.default, vec!["sub", "iss", "exp"]);
+        assert!(config.claims.custom.is_empty());
+        assert!(config.multi_tenant.is_none());
+    }
+
+    #[test]
+    fn test_jwk_key_serialization() {
+        let key = JwkKey {
+            kid: "test-key".to_string(),
+            alg: "RS256".to_string(),
+            public_key: "public-key-data".to_string(),
+            private_key: Some("private-key-data".to_string()),
+            kty: "RSA".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let serialized = serde_json::to_value(&key).unwrap();
+        assert_eq!(serialized["kid"], "test-key");
+        assert_eq!(serialized["alg"], "RS256");
+        assert_eq!(serialized["kty"], "RSA");
+        // Private key should be skipped
+        assert!(serialized.get("private_key").is_none());
+    }
+
+    #[test]
+    fn test_oidc_state_new_with_hs256_key() {
+        let config = OidcConfig {
+            enabled: true,
+            issuer: "https://test.example.com".to_string(),
+            jwks: JwksConfig {
+                keys: vec![JwkKey {
+                    kid: "test-hs256".to_string(),
+                    alg: "HS256".to_string(),
+                    public_key: "test-secret-key".to_string(),
+                    private_key: Some("test-secret-key".to_string()),
+                    kty: "oct".to_string(),
+                    use_: "sig".to_string(),
+                }],
+            },
+            claims: ClaimsConfig {
+                default: vec!["sub".to_string(), "iss".to_string()],
+                custom: HashMap::new(),
+            },
+            multi_tenant: None,
+        };
+
+        let state = OidcState::new(config.clone()).unwrap();
+        assert_eq!(state.config.issuer, "https://test.example.com");
+
+        let signing_keys = state.signing_keys.blocking_read();
+        assert_eq!(signing_keys.len(), 1);
+        assert!(signing_keys.contains_key("test-hs256"));
+    }
+
+    #[test]
+    fn test_oidc_state_new_with_unsupported_algorithm() {
+        let config = OidcConfig {
+            enabled: true,
+            issuer: "https://test.example.com".to_string(),
+            jwks: JwksConfig {
+                keys: vec![JwkKey {
+                    kid: "test-unsupported".to_string(),
+                    alg: "UNSUPPORTED".to_string(),
+                    public_key: "key-data".to_string(),
+                    private_key: Some("key-data".to_string()),
+                    kty: "oct".to_string(),
+                    use_: "sig".to_string(),
+                }],
+            },
+            claims: ClaimsConfig::default(),
+            multi_tenant: None,
+        };
+
+        let result = OidcState::new(config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_oidc_state_default_mock() {
+        std::env::remove_var("MOCKFORGE_OIDC_ISSUER");
+        std::env::remove_var("MOCKFORGE_BASE_URL");
+        std::env::remove_var("MOCKFORGE_OIDC_SECRET");
+
+        let state = OidcState::default_mock().unwrap();
+        assert!(state.config.enabled);
+        assert_eq!(state.config.issuer, "https://mockforge.example.com");
+
+        let signing_keys = state.signing_keys.blocking_read();
+        assert_eq!(signing_keys.len(), 1);
+        assert!(signing_keys.contains_key("default"));
+    }
+
+    #[test]
+    fn test_oidc_state_default_mock_with_env() {
+        std::env::set_var("MOCKFORGE_OIDC_ISSUER", "https://custom.example.com");
+        std::env::set_var("MOCKFORGE_OIDC_SECRET", "custom-secret");
+
+        let state = OidcState::default_mock().unwrap();
+        assert_eq!(state.config.issuer, "https://custom.example.com");
+
+        std::env::remove_var("MOCKFORGE_OIDC_ISSUER");
+        std::env::remove_var("MOCKFORGE_OIDC_SECRET");
+    }
+
+    #[test]
+    fn test_load_oidc_state_disabled() {
+        std::env::set_var("MOCKFORGE_OIDC_ENABLED", "false");
+        let result = load_oidc_state();
+        assert!(result.is_none());
+        std::env::remove_var("MOCKFORGE_OIDC_ENABLED");
+    }
+
+    #[test]
+    fn test_load_oidc_state_from_json_config() {
+        let config_json = json!({
+            "enabled": true,
+            "issuer": "https://json-config.example.com",
+            "jwks": {
+                "keys": [{
+                    "kid": "json-key",
+                    "alg": "HS256",
+                    "public_key": "json-secret",
+                    "private_key": "json-secret",
+                    "kty": "oct",
+                    "use": "sig"
+                }]
+            },
+            "claims": {
+                "default": ["sub", "iss"],
+                "custom": {}
+            }
+        });
+
+        std::env::set_var("MOCKFORGE_OIDC_CONFIG", config_json.to_string());
+        let state = load_oidc_state();
+        assert!(state.is_some());
+
+        if let Some(state) = state {
+            assert_eq!(state.config.issuer, "https://json-config.example.com");
+        }
+
+        std::env::remove_var("MOCKFORGE_OIDC_CONFIG");
+    }
+
+    #[tokio::test]
+    async fn test_get_oidc_discovery() {
+        std::env::set_var("MOCKFORGE_BASE_URL", "https://test.mockforge.com");
+        let response = get_oidc_discovery().await;
+        let discovery = response.0;
+
+        assert_eq!(discovery.issuer, "https://test.mockforge.com");
+        assert_eq!(discovery.authorization_endpoint, "https://test.mockforge.com/oauth2/authorize");
+        assert_eq!(discovery.token_endpoint, "https://test.mockforge.com/oauth2/token");
+        assert_eq!(discovery.userinfo_endpoint, "https://test.mockforge.com/oauth2/userinfo");
+        assert_eq!(discovery.jwks_uri, "https://test.mockforge.com/.well-known/jwks.json");
+        assert!(discovery.response_types_supported.contains(&"code".to_string()));
+        assert!(discovery.scopes_supported.contains(&"openid".to_string()));
+        assert!(discovery.grant_types_supported.contains(&"authorization_code".to_string()));
+
+        std::env::remove_var("MOCKFORGE_BASE_URL");
+    }
+
+    #[tokio::test]
+    async fn test_get_jwks_empty() {
+        let response = get_jwks().await;
+        let jwks = response.0;
+        assert!(jwks.keys.is_empty());
+    }
+
+    #[test]
+    fn test_get_jwks_from_state() {
+        let state = OidcState::default_mock().unwrap();
+        let result = get_jwks_from_state(&state);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_generate_signed_jwt_basic() {
+        let mut claims = HashMap::new();
+        claims.insert("sub".to_string(), json!("user123"));
+
+        let secret = "test-secret-key";
+        let encoding_key = EncodingKey::from_secret(secret.as_bytes());
+
+        let token = generate_signed_jwt(
+            claims,
+            Some("test-kid".to_string()),
+            Algorithm::HS256,
+            &encoding_key,
+            Some(3600),
+            Some("https://test.issuer.com".to_string()),
+            Some("test-audience".to_string()),
+        );
+
+        assert!(token.is_ok());
+        let token_str = token.unwrap();
+        assert!(!token_str.is_empty());
+
+        // Verify the token can be decoded
+        use jsonwebtoken::{decode, DecodingKey, Validation};
+        let decoding_key = DecodingKey::from_secret(secret.as_bytes());
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.set_issuer(&["https://test.issuer.com"]);
+        validation.set_audience(&["test-audience"]);
+
+        let decoded =
+            decode::<HashMap<String, serde_json::Value>>(&token_str, &decoding_key, &validation);
+        assert!(decoded.is_ok());
+
+        let claims = decoded.unwrap().claims;
+        assert_eq!(claims.get("sub").unwrap(), "user123");
+        assert_eq!(claims.get("iss").unwrap(), "https://test.issuer.com");
+        assert_eq!(claims.get("aud").unwrap(), "test-audience");
+        assert!(claims.contains_key("iat"));
+        assert!(claims.contains_key("exp"));
+    }
+
+    #[test]
+    fn test_generate_signed_jwt_without_expiration() {
+        let mut claims = HashMap::new();
+        claims.insert("sub".to_string(), json!("user123"));
+
+        let secret = "test-secret-key";
+        let encoding_key = EncodingKey::from_secret(secret.as_bytes());
+
+        let token =
+            generate_signed_jwt(claims, None, Algorithm::HS256, &encoding_key, None, None, None);
+
+        assert!(token.is_ok());
+        let token_str = token.unwrap();
+
+        // Verify the token has iat but no exp
+        let parts: Vec<&str> = token_str.split('.').collect();
+        assert_eq!(parts.len(), 3);
+
+        let payload = general_purpose::STANDARD_NO_PAD.decode(parts[1]).unwrap();
+        let payload_json: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+        assert!(payload_json.get("iat").is_some());
+    }
+
+    #[test]
+    fn test_generate_oidc_token_basic() {
+        let state = OidcState::default_mock().unwrap();
+
+        let token = generate_oidc_token(&state, "user123".to_string(), None, Some(3600), None);
+
+        assert!(token.is_ok());
+        let token_str = token.unwrap();
+        assert!(!token_str.is_empty());
+
+        // Decode and verify claims
+        let parts: Vec<&str> = token_str.split('.').collect();
+        let payload = general_purpose::STANDARD_NO_PAD.decode(parts[1]).unwrap();
+        let claims: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+
+        assert_eq!(claims.get("sub").unwrap(), "user123");
+        assert_eq!(claims.get("iss").unwrap(), &state.config.issuer);
+        assert!(claims.get("exp").is_some());
+        assert!(claims.get("iat").is_some());
+    }
+
+    #[test]
+    fn test_generate_oidc_token_with_additional_claims() {
+        let state = OidcState::default_mock().unwrap();
+
+        let mut additional = HashMap::new();
+        additional.insert("email".to_string(), json!("user@example.com"));
+        additional.insert("role".to_string(), json!("admin"));
+
+        let token =
+            generate_oidc_token(&state, "user123".to_string(), Some(additional), Some(3600), None);
+
+        assert!(token.is_ok());
+        let token_str = token.unwrap();
+
+        let parts: Vec<&str> = token_str.split('.').collect();
+        let payload = general_purpose::STANDARD_NO_PAD.decode(parts[1]).unwrap();
+        let claims: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+
+        assert_eq!(claims.get("email").unwrap(), "user@example.com");
+        assert_eq!(claims.get("role").unwrap(), "admin");
+    }
+
+    #[test]
+    fn test_generate_oidc_token_with_multi_tenant() {
+        let config = OidcConfig {
+            enabled: true,
+            issuer: "https://test.example.com".to_string(),
+            jwks: JwksConfig {
+                keys: vec![JwkKey {
+                    kid: "test-key".to_string(),
+                    alg: "HS256".to_string(),
+                    public_key: "secret".to_string(),
+                    private_key: Some("secret".to_string()),
+                    kty: "oct".to_string(),
+                    use_: "sig".to_string(),
+                }],
+            },
+            claims: ClaimsConfig {
+                default: vec!["sub".to_string()],
+                custom: HashMap::new(),
+            },
+            multi_tenant: Some(MultiTenantConfig {
+                enabled: true,
+                org_id_claim: "org_id".to_string(),
+                tenant_id_claim: Some("tenant_id".to_string()),
+            }),
+        };
+
+        let state = OidcState::new(config).unwrap();
+
+        let tenant_context = TenantContext {
+            org_id: Some("org-123".to_string()),
+            tenant_id: Some("tenant-456".to_string()),
+        };
+
+        let token = generate_oidc_token(
+            &state,
+            "user123".to_string(),
+            None,
+            Some(3600),
+            Some(tenant_context),
+        );
+
+        assert!(token.is_ok());
+        let token_str = token.unwrap();
+
+        let parts: Vec<&str> = token_str.split('.').collect();
+        let payload = general_purpose::STANDARD_NO_PAD.decode(parts[1]).unwrap();
+        let claims: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+
+        assert_eq!(claims.get("org_id").unwrap(), "org-123");
+        assert_eq!(claims.get("tenant_id").unwrap(), "tenant-456");
+    }
+
+    #[test]
+    fn test_generate_oidc_token_multi_tenant_defaults() {
+        let config = OidcConfig {
+            enabled: true,
+            issuer: "https://test.example.com".to_string(),
+            jwks: JwksConfig {
+                keys: vec![JwkKey {
+                    kid: "test-key".to_string(),
+                    alg: "HS256".to_string(),
+                    public_key: "secret".to_string(),
+                    private_key: Some("secret".to_string()),
+                    kty: "oct".to_string(),
+                    use_: "sig".to_string(),
+                }],
+            },
+            claims: ClaimsConfig::default(),
+            multi_tenant: Some(MultiTenantConfig {
+                enabled: true,
+                org_id_claim: "org_id".to_string(),
+                tenant_id_claim: Some("tenant_id".to_string()),
+            }),
+        };
+
+        let state = OidcState::new(config).unwrap();
+
+        // No tenant context provided
+        let token = generate_oidc_token(&state, "user123".to_string(), None, Some(3600), None);
+
+        assert!(token.is_ok());
+        let token_str = token.unwrap();
+
+        let parts: Vec<&str> = token_str.split('.').collect();
+        let payload = general_purpose::STANDARD_NO_PAD.decode(parts[1]).unwrap();
+        let claims: serde_json::Value = serde_json::from_slice(&payload).unwrap();
+
+        // Should have default values
+        assert_eq!(claims.get("org_id").unwrap(), "org-default");
+        assert_eq!(claims.get("tenant_id").unwrap(), "tenant-default");
+    }
+
+    #[test]
+    fn test_generate_oidc_token_no_signing_keys() {
+        let config = OidcConfig {
+            enabled: true,
+            issuer: "https://test.example.com".to_string(),
+            jwks: JwksConfig { keys: vec![] },
+            claims: ClaimsConfig::default(),
+            multi_tenant: None,
+        };
+
+        let state = OidcState::new(config).unwrap();
+
+        let token = generate_oidc_token(&state, "user123".to_string(), None, Some(3600), None);
+
+        assert!(token.is_err());
+    }
+
+    #[test]
+    fn test_tenant_context_creation() {
+        let context = TenantContext {
+            org_id: Some("org-1".to_string()),
+            tenant_id: Some("tenant-1".to_string()),
+        };
+
+        assert_eq!(context.org_id.unwrap(), "org-1");
+        assert_eq!(context.tenant_id.unwrap(), "tenant-1");
+    }
+
+    #[test]
+    fn test_claims_config_serialization() {
+        let config = ClaimsConfig {
+            default: vec!["sub".to_string(), "iss".to_string()],
+            custom: {
+                let mut map = HashMap::new();
+                map.insert("custom_claim".to_string(), json!("custom_value"));
+                map
+            },
+        };
+
+        let serialized = serde_json::to_value(&config).unwrap();
+        assert_eq!(serialized["default"].as_array().unwrap().len(), 2);
+        assert_eq!(serialized["custom"]["custom_claim"], "custom_value");
+    }
+
+    #[test]
+    fn test_multi_tenant_config_serialization() {
+        let config = MultiTenantConfig {
+            enabled: true,
+            org_id_claim: "organization_id".to_string(),
+            tenant_id_claim: Some("tenant".to_string()),
+        };
+
+        let serialized = serde_json::to_value(&config).unwrap();
+        assert_eq!(serialized["enabled"], true);
+        assert_eq!(serialized["org_id_claim"], "organization_id");
+        assert_eq!(serialized["tenant_id_claim"], "tenant");
+    }
+
+    #[test]
+    fn test_oidc_discovery_document_serialization() {
+        let doc = OidcDiscoveryDocument {
+            issuer: "https://example.com".to_string(),
+            authorization_endpoint: "https://example.com/auth".to_string(),
+            token_endpoint: "https://example.com/token".to_string(),
+            userinfo_endpoint: "https://example.com/userinfo".to_string(),
+            jwks_uri: "https://example.com/jwks".to_string(),
+            response_types_supported: vec!["code".to_string()],
+            subject_types_supported: vec!["public".to_string()],
+            id_token_signing_alg_values_supported: vec!["RS256".to_string()],
+            scopes_supported: vec!["openid".to_string()],
+            claims_supported: vec!["sub".to_string()],
+            grant_types_supported: vec!["authorization_code".to_string()],
+        };
+
+        let serialized = serde_json::to_value(&doc).unwrap();
+        assert_eq!(serialized["issuer"], "https://example.com");
+        assert_eq!(serialized["jwks_uri"], "https://example.com/jwks");
+    }
+
+    #[test]
+    fn test_jwks_response_serialization() {
+        let response = JwksResponse {
+            keys: vec![JwkPublicKey {
+                kid: "key1".to_string(),
+                kty: "RSA".to_string(),
+                alg: "RS256".to_string(),
+                use_: "sig".to_string(),
+                n: Some("modulus".to_string()),
+                e: Some("exponent".to_string()),
+                crv: None,
+                x: None,
+                y: None,
+            }],
+        };
+
+        let serialized = serde_json::to_value(&response).unwrap();
+        assert_eq!(serialized["keys"][0]["kid"], "key1");
+        assert_eq!(serialized["keys"][0]["kty"], "RSA");
+        assert_eq!(serialized["keys"][0]["use"], "sig");
+    }
+
+    #[test]
+    fn test_jwk_public_key_rsa() {
+        let key = JwkPublicKey {
+            kid: "rsa-key".to_string(),
+            kty: "RSA".to_string(),
+            alg: "RS256".to_string(),
+            use_: "sig".to_string(),
+            n: Some("modulus-data".to_string()),
+            e: Some("exponent-data".to_string()),
+            crv: None,
+            x: None,
+            y: None,
+        };
+
+        let serialized = serde_json::to_value(&key).unwrap();
+        assert_eq!(serialized["kty"], "RSA");
+        assert_eq!(serialized["n"], "modulus-data");
+        assert_eq!(serialized["e"], "exponent-data");
+        // EC fields should not be present
+        assert!(serialized.get("crv").is_none());
+        assert!(serialized.get("x").is_none());
+        assert!(serialized.get("y").is_none());
+    }
+
+    #[test]
+    fn test_jwk_public_key_ec() {
+        let key = JwkPublicKey {
+            kid: "ec-key".to_string(),
+            kty: "EC".to_string(),
+            alg: "ES256".to_string(),
+            use_: "sig".to_string(),
+            n: None,
+            e: None,
+            crv: Some("P-256".to_string()),
+            x: Some("x-coordinate".to_string()),
+            y: Some("y-coordinate".to_string()),
+        };
+
+        let serialized = serde_json::to_value(&key).unwrap();
+        assert_eq!(serialized["kty"], "EC");
+        assert_eq!(serialized["crv"], "P-256");
+        assert_eq!(serialized["x"], "x-coordinate");
+        assert_eq!(serialized["y"], "y-coordinate");
+        // RSA fields should not be present
+        assert!(serialized.get("n").is_none());
+        assert!(serialized.get("e").is_none());
+    }
 }

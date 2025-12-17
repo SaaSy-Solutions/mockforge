@@ -240,3 +240,141 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_components_none() {
+        let components = parse_components(None);
+        assert!(components.unified_state);
+        assert!(components.vbr_state);
+        assert!(components.recorder_state);
+        assert!(components.workspace_config);
+        assert!(components.protocols.is_empty());
+    }
+
+    #[test]
+    fn test_parse_components_empty_vec() {
+        let components = parse_components(Some(vec![]));
+        // Empty vec means all components
+        assert!(components.unified_state);
+        assert!(components.vbr_state);
+        assert!(components.recorder_state);
+        assert!(components.workspace_config);
+    }
+
+    #[test]
+    fn test_parse_components_single_underscore() {
+        let components = parse_components(Some(vec!["unified_state".to_string()]));
+        assert!(components.unified_state);
+        assert!(!components.vbr_state);
+        assert!(!components.recorder_state);
+        assert!(!components.workspace_config);
+    }
+
+    #[test]
+    fn test_parse_components_single_dash() {
+        let components = parse_components(Some(vec!["vbr-state".to_string()]));
+        assert!(!components.unified_state);
+        assert!(components.vbr_state);
+        assert!(!components.recorder_state);
+        assert!(!components.workspace_config);
+    }
+
+    #[test]
+    fn test_parse_components_multiple() {
+        let components =
+            parse_components(Some(vec!["unified_state".to_string(), "recorder-state".to_string()]));
+        assert!(components.unified_state);
+        assert!(!components.vbr_state);
+        assert!(components.recorder_state);
+        assert!(!components.workspace_config);
+    }
+
+    #[test]
+    fn test_parse_components_case_insensitive() {
+        let components = parse_components(Some(vec!["UNIFIED_STATE".to_string()]));
+        assert!(components.unified_state);
+    }
+
+    #[test]
+    fn test_parse_components_workspace_config() {
+        let components = parse_components(Some(vec!["workspace_config".to_string()]));
+        assert!(!components.unified_state);
+        assert!(!components.vbr_state);
+        assert!(!components.recorder_state);
+        assert!(components.workspace_config);
+    }
+
+    #[test]
+    fn test_parse_components_workspace_config_dash() {
+        let components = parse_components(Some(vec!["workspace-config".to_string()]));
+        assert!(components.workspace_config);
+    }
+
+    #[test]
+    fn test_parse_components_all_explicit() {
+        let components = parse_components(Some(vec![
+            "unified_state".to_string(),
+            "vbr_state".to_string(),
+            "recorder_state".to_string(),
+            "workspace_config".to_string(),
+        ]));
+        assert!(components.unified_state);
+        assert!(components.vbr_state);
+        assert!(components.recorder_state);
+        assert!(components.workspace_config);
+    }
+
+    #[test]
+    fn test_snapshot_commands_enum_variants() {
+        // Test that all enum variants exist and can be constructed
+        let _save = SnapshotCommands::Save {
+            name: "test".to_string(),
+            description: Some("test description".to_string()),
+            workspace: "default".to_string(),
+            components: None,
+        };
+
+        let _load = SnapshotCommands::Load {
+            name: "test".to_string(),
+            workspace: "default".to_string(),
+            components: None,
+            dry_run: false,
+        };
+
+        let _list = SnapshotCommands::List {
+            workspace: "default".to_string(),
+        };
+
+        let _delete = SnapshotCommands::Delete {
+            name: "test".to_string(),
+            workspace: "default".to_string(),
+        };
+
+        let _info = SnapshotCommands::Info {
+            name: "test".to_string(),
+            workspace: "default".to_string(),
+        };
+
+        let _validate = SnapshotCommands::Validate {
+            name: "test".to_string(),
+            workspace: "default".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_snapshot_commands_debug() {
+        let cmd = SnapshotCommands::Save {
+            name: "test".to_string(),
+            description: None,
+            workspace: "default".to_string(),
+            components: None,
+        };
+        let debug_str = format!("{:?}", cmd);
+        assert!(debug_str.contains("Save"));
+        assert!(debug_str.contains("test"));
+    }
+}

@@ -162,3 +162,190 @@ impl Error {
         format!("{self}").replace('\n', " | ")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_server_already_started_error() {
+        let err = Error::ServerAlreadyStarted(3000);
+        let msg = format!("{err}");
+        assert!(msg.contains("3000"));
+        assert!(msg.contains("already running"));
+        assert!(msg.contains("stop()"));
+    }
+
+    #[test]
+    fn test_server_not_started_error() {
+        let err = Error::ServerNotStarted;
+        let msg = format!("{err}");
+        assert!(msg.contains("not been started"));
+        assert!(msg.contains("start()"));
+    }
+
+    #[test]
+    fn test_port_in_use_error() {
+        let err = Error::PortInUse(8080);
+        let msg = format!("{err}");
+        assert!(msg.contains("8080"));
+        assert!(msg.contains("already in use"));
+        assert!(msg.contains("auto_port()"));
+    }
+
+    #[test]
+    fn test_port_discovery_failed_error() {
+        let err = Error::PortDiscoveryFailed("No ports available in range".to_string());
+        let msg = format!("{err}");
+        assert!(msg.contains("Port discovery failed"));
+        assert!(msg.contains("No ports available"));
+        assert!(msg.contains("port_range"));
+    }
+
+    #[test]
+    fn test_invalid_config_error() {
+        let err = Error::InvalidConfig("Invalid host address".to_string());
+        let msg = format!("{err}");
+        assert!(msg.contains("Invalid configuration"));
+        assert!(msg.contains("Invalid host address"));
+        assert!(msg.contains("configuration file"));
+    }
+
+    #[test]
+    fn test_invalid_stub_error() {
+        let err = Error::InvalidStub("Missing response body".to_string());
+        let msg = format!("{err}");
+        assert!(msg.contains("Invalid stub"));
+        assert!(msg.contains("Missing response body"));
+        assert!(msg.contains("properly set"));
+    }
+
+    #[test]
+    fn test_stub_not_found_error_with_available() {
+        let err = Error::stub_not_found(
+            "GET",
+            "/api/missing",
+            vec!["GET /api/users".to_string(), "POST /api/orders".to_string()],
+        );
+        let msg = format!("{err}");
+        assert!(msg.contains("GET"));
+        assert!(msg.contains("/api/missing"));
+        assert!(msg.contains("GET /api/users"));
+        assert!(msg.contains("POST /api/orders"));
+    }
+
+    #[test]
+    fn test_stub_not_found_error_no_available() {
+        let err = Error::stub_not_found("DELETE", "/api/users/1", vec![]);
+        let msg = format!("{err}");
+        assert!(msg.contains("DELETE"));
+        assert!(msg.contains("/api/users/1"));
+        assert!(msg.contains("none"));
+    }
+
+    #[test]
+    fn test_startup_timeout_error() {
+        let err = Error::StartupTimeout { timeout_secs: 30 };
+        let msg = format!("{err}");
+        assert!(msg.contains("30 seconds"));
+        assert!(msg.contains("failed to start"));
+    }
+
+    #[test]
+    fn test_shutdown_timeout_error() {
+        let err = Error::ShutdownTimeout { timeout_secs: 10 };
+        let msg = format!("{err}");
+        assert!(msg.contains("10 seconds"));
+        assert!(msg.contains("failed to stop"));
+        assert!(msg.contains("connections"));
+    }
+
+    #[test]
+    fn test_admin_api_error() {
+        let err = Error::admin_api_error("create_mock", "Invalid JSON payload", "/api/mocks");
+        let msg = format!("{err}");
+        assert!(msg.contains("create_mock"));
+        assert!(msg.contains("Invalid JSON payload"));
+        assert!(msg.contains("/api/mocks"));
+    }
+
+    #[test]
+    fn test_general_error() {
+        let err = Error::General("Something went wrong".to_string());
+        let msg = format!("{err}");
+        assert_eq!(msg, "Something went wrong");
+    }
+
+    #[test]
+    fn test_to_log_string_single_line() {
+        let err = Error::General("Simple error".to_string());
+        let log_str = err.to_log_string();
+        assert_eq!(log_str, "Simple error");
+        assert!(!log_str.contains('\n'));
+    }
+
+    #[test]
+    fn test_to_log_string_multiline() {
+        let err = Error::InvalidConfig("Line 1\nLine 2\nLine 3".to_string());
+        let log_str = err.to_log_string();
+        assert!(!log_str.contains('\n'));
+        assert!(log_str.contains(" | "));
+        assert!(log_str.contains("Line 1"));
+        assert!(log_str.contains("Line 2"));
+        assert!(log_str.contains("Line 3"));
+    }
+
+    #[test]
+    fn test_http_error_conversion() {
+        let http_err = axum::http::Error::from(axum::http::status::InvalidStatusCode);
+        let err = Error::from(http_err);
+        let msg = format!("{err}");
+        assert!(msg.contains("HTTP error"));
+    }
+
+    #[test]
+    fn test_io_error_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let err = Error::from(io_err);
+        let msg = format!("{err}");
+        assert!(msg.contains("IO error"));
+        assert!(msg.contains("file not found"));
+    }
+
+    #[test]
+    fn test_json_error_conversion() {
+        let json_str = "{invalid json";
+        let json_err = serde_json::from_str::<serde_json::Value>(json_str).unwrap_err();
+        let err = Error::from(json_err);
+        let msg = format!("{err}");
+        assert!(msg.contains("JSON serialization error"));
+    }
+
+    #[test]
+    fn test_error_debug_format() {
+        let err = Error::ServerNotStarted;
+        let debug_str = format!("{err:?}");
+        assert!(debug_str.contains("ServerNotStarted"));
+    }
+
+    #[test]
+    fn test_stub_not_found_with_single_available() {
+        let err = Error::stub_not_found("POST", "/api/create", vec!["GET /api/list".to_string()]);
+        let msg = format!("{err}");
+        assert!(msg.contains("GET /api/list"));
+        assert!(!msg.contains(", ")); // No comma for single item
+    }
+
+    #[test]
+    fn test_result_type_ok() {
+        let result: Result<i32> = Ok(42);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_result_type_err() {
+        let result: Result<i32> = Err(Error::ServerNotStarted);
+        assert!(result.is_err());
+    }
+}

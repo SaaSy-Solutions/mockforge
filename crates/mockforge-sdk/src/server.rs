@@ -258,3 +258,267 @@ impl Drop for MockServer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_mock_server_new() {
+        let builder = MockServer::new();
+        // Should return a MockServerBuilder
+        assert_eq!(std::mem::size_of_val(&builder), std::mem::size_of::<MockServerBuilder>());
+    }
+
+    #[test]
+    fn test_mock_server_default() {
+        let server = MockServer::default();
+        assert_eq!(server.port, 0);
+        assert!(!server.is_running());
+        assert!(server.routes.is_empty());
+    }
+
+    #[test]
+    fn test_mock_server_port() {
+        let server = MockServer::default();
+        assert_eq!(server.port(), 0);
+    }
+
+    #[test]
+    fn test_mock_server_url() {
+        let mut server = MockServer::default();
+        server.port = 8080;
+        server.address = "127.0.0.1:8080".parse().unwrap();
+        assert_eq!(server.url(), "http://127.0.0.1:8080");
+    }
+
+    #[test]
+    fn test_mock_server_is_running_false() {
+        let server = MockServer::default();
+        assert!(!server.is_running());
+    }
+
+    #[tokio::test]
+    async fn test_from_config_valid() {
+        let server_config = ServerConfig::default();
+        let core_config = Config::default();
+
+        let result = MockServer::from_config(server_config, core_config).await;
+        assert!(result.is_ok());
+
+        let server = result.unwrap();
+        assert!(!server.is_running());
+        assert!(server.routes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_from_config_invalid_address() {
+        let mut server_config = ServerConfig::default();
+        server_config.http.host = "invalid host with spaces".to_string();
+        let core_config = Config::default();
+
+        let result = MockServer::from_config(server_config, core_config).await;
+        assert!(result.is_err());
+        match result {
+            Err(Error::InvalidConfig(msg)) => {
+                assert!(msg.contains("Invalid address"));
+            }
+            _ => panic!("Expected InvalidConfig error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_add_stub() {
+        let mut server = MockServer::default();
+        let stub = ResponseStub::new("GET", "/api/test", json!({"test": true}));
+
+        let result = server.add_stub(stub.clone()).await;
+        assert!(result.is_ok());
+        assert_eq!(server.routes.len(), 1);
+
+        let route = &server.routes[0];
+        assert_eq!(route.path, "/api/test");
+        assert_eq!(route.method, "GET");
+        assert_eq!(route.response.status, 200);
+    }
+
+    #[tokio::test]
+    async fn test_add_stub_with_custom_status() {
+        let mut server = MockServer::default();
+        let stub = ResponseStub::new("POST", "/api/create", json!({"created": true}))
+            .status(201);
+
+        let result = server.add_stub(stub).await;
+        assert!(result.is_ok());
+        assert_eq!(server.routes.len(), 1);
+
+        let route = &server.routes[0];
+        assert_eq!(route.response.status, 201);
+    }
+
+    #[tokio::test]
+    async fn test_add_stub_with_headers() {
+        let mut server = MockServer::default();
+        let stub = ResponseStub::new("GET", "/api/test", json!({}))
+            .header("Content-Type", "application/json")
+            .header("X-Custom", "value");
+
+        let result = server.add_stub(stub).await;
+        assert!(result.is_ok());
+
+        let route = &server.routes[0];
+        assert_eq!(route.response.headers.get("Content-Type"), Some(&"application/json".to_string()));
+        assert_eq!(route.response.headers.get("X-Custom"), Some(&"value".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_stub_response() {
+        let mut server = MockServer::default();
+
+        let result = server.stub_response("GET", "/api/users", json!({"users": []})).await;
+        assert!(result.is_ok());
+        assert_eq!(server.routes.len(), 1);
+
+        let route = &server.routes[0];
+        assert_eq!(route.path, "/api/users");
+        assert_eq!(route.method, "GET");
+    }
+
+    #[tokio::test]
+    async fn test_clear_stubs() {
+        let mut server = MockServer::default();
+
+        server.stub_response("GET", "/api/test1", json!({})).await.unwrap();
+        server.stub_response("POST", "/api/test2", json!({})).await.unwrap();
+        assert_eq!(server.routes.len(), 2);
+
+        let result = server.clear_stubs().await;
+        assert!(result.is_ok());
+        assert_eq!(server.routes.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_stubs() {
+        let mut server = MockServer::default();
+
+        server.stub_response("GET", "/api/users", json!({"users": []})).await.unwrap();
+        server.stub_response("POST", "/api/users", json!({"created": true})).await.unwrap();
+        server.stub_response("DELETE", "/api/users/1", json!({"deleted": true})).await.unwrap();
+
+        assert_eq!(server.routes.len(), 3);
+
+        assert_eq!(server.routes[0].method, "GET");
+        assert_eq!(server.routes[1].method, "POST");
+        assert_eq!(server.routes[2].method, "DELETE");
+    }
+
+    #[test]
+    fn test_build_simple_router_empty() {
+        let server = MockServer::default();
+        let router = server.build_simple_router();
+        // Router should be created without panicking
+        assert_eq!(std::mem::size_of_val(&router), std::mem::size_of::<Router>());
+    }
+
+    #[tokio::test]
+    async fn test_build_simple_router_with_routes() {
+        let mut server = MockServer::default();
+        server.stub_response("GET", "/test", json!({"test": true})).await.unwrap();
+        server.stub_response("POST", "/create", json!({"created": true})).await.unwrap();
+
+        let router = server.build_simple_router();
+        // Router should be built with the routes
+        assert_eq!(std::mem::size_of_val(&router), std::mem::size_of::<Router>());
+    }
+
+    #[tokio::test]
+    async fn test_start_server_already_started() {
+        let mut server = MockServer::default();
+        server.port = 0; // Use port 0 for OS assignment
+        server.address = "127.0.0.1:0".parse().unwrap();
+
+        // Start the server
+        let result = server.start().await;
+        assert!(result.is_ok());
+        assert!(server.is_running());
+
+        // Try to start again
+        let result2 = server.start().await;
+        assert!(result2.is_err());
+        match result2 {
+            Err(Error::ServerAlreadyStarted(_)) => (),
+            _ => panic!("Expected ServerAlreadyStarted error"),
+        }
+
+        // Clean up
+        let _ = server.stop().await;
+    }
+
+    #[test]
+    fn test_server_debug_format() {
+        let server = MockServer::default();
+        let debug_str = format!("{server:?}");
+        assert!(debug_str.contains("MockServer"));
+    }
+
+    #[tokio::test]
+    async fn test_route_config_conversion() {
+        let mut server = MockServer::default();
+        let stub = ResponseStub::new("PUT", "/api/update", json!({"updated": true}))
+            .status(200)
+            .header("X-Version", "1.0");
+
+        server.add_stub(stub).await.unwrap();
+
+        let route = &server.routes[0];
+        assert_eq!(route.path, "/api/update");
+        assert_eq!(route.method, "PUT");
+        assert_eq!(route.response.status, 200);
+        assert_eq!(route.response.headers.get("X-Version"), Some(&"1.0".to_string()));
+        assert!(route.response.body.is_some());
+        assert_eq!(route.response.body, Some(json!({"updated": true})));
+    }
+
+    #[tokio::test]
+    async fn test_server_with_different_methods() {
+        let mut server = MockServer::default();
+
+        server.stub_response("GET", "/test", json!({})).await.unwrap();
+        server.stub_response("POST", "/test", json!({})).await.unwrap();
+        server.stub_response("PUT", "/test", json!({})).await.unwrap();
+        server.stub_response("DELETE", "/test", json!({})).await.unwrap();
+        server.stub_response("PATCH", "/test", json!({})).await.unwrap();
+
+        assert_eq!(server.routes.len(), 5);
+
+        // Verify all methods are different
+        let methods: Vec<_> = server.routes.iter().map(|r| r.method.as_str()).collect();
+        assert!(methods.contains(&"GET"));
+        assert!(methods.contains(&"POST"));
+        assert!(methods.contains(&"PUT"));
+        assert!(methods.contains(&"DELETE"));
+        assert!(methods.contains(&"PATCH"));
+    }
+
+    #[tokio::test]
+    async fn test_server_url_format() {
+        let mut server = MockServer::default();
+        server.port = 3000;
+        server.address = "127.0.0.1:3000".parse().unwrap();
+
+        let url = server.url();
+        assert_eq!(url, "http://127.0.0.1:3000");
+        assert!(url.starts_with("http://"));
+    }
+
+    #[tokio::test]
+    async fn test_server_with_ipv6_address() {
+        let mut server = MockServer::default();
+        server.port = 8080;
+        server.address = "[::1]:8080".parse().unwrap();
+
+        let url = server.url();
+        assert_eq!(url, "http://[::1]:8080");
+    }
+}

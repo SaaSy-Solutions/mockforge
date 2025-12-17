@@ -515,3 +515,71 @@ async fn get_workspace_stats(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_workspace_commands_list_variant() {
+        let _cmd = WorkspaceCommands::List {
+            admin_url: "http://localhost:9080".to_string(),
+            format: "table".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_workspace_commands_create_variant() {
+        let _cmd = WorkspaceCommands::Create {
+            workspace_id: "test-workspace".to_string(),
+            name: "Test Workspace".to_string(),
+            description: Some("A test workspace".to_string()),
+            admin_url: "http://localhost:9080".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_workspace_commands_info_variant() {
+        let _cmd = WorkspaceCommands::Info {
+            workspace_id: "my-workspace".to_string(),
+            admin_url: "http://localhost:9080".to_string(),
+            format: "table".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_workspace_commands_delete_variant() {
+        let _cmd = WorkspaceCommands::Delete {
+            workspace_id: "old-workspace".to_string(),
+            yes: false,
+            admin_url: "http://localhost:9080".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_workspace_list_json_format() {
+        let _cmd = WorkspaceCommands::List {
+            admin_url: "http://localhost:9080".to_string(),
+            format: "json".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_workspace_create_without_description() {
+        let _cmd = WorkspaceCommands::Create {
+            workspace_id: "simple-workspace".to_string(),
+            name: "Simple Workspace".to_string(),
+            description: None,
+            admin_url: "http://localhost:9080".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_workspace_delete_with_confirmation_skip() {
+        let _cmd = WorkspaceCommands::Delete {
+            workspace_id: "workspace-to-delete".to_string(),
+            yes: true,
+            admin_url: "http://localhost:9080".to_string(),
+        };
+    }
+}

@@ -113,3 +113,59 @@ impl Database {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_database_connect_optional_none() {
+        let db = Database::connect_optional(None).await.unwrap();
+        assert!(!db.is_connected());
+    }
+
+    #[tokio::test]
+    async fn test_database_connect_optional_empty_string() {
+        let db = Database::connect_optional(Some("")).await.unwrap();
+        assert!(!db.is_connected());
+    }
+
+    #[tokio::test]
+    async fn test_database_pool_returns_none_when_not_connected() {
+        let db = Database::connect_optional(None).await.unwrap();
+        assert!(db.pool().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_database_migrate_skips_when_not_connected() {
+        let db = Database::connect_optional(None).await.unwrap();
+        // Should succeed even without a connection
+        let result = db.migrate_if_connected().await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_database_is_connected_returns_false_by_default() {
+        // Without database feature, is_connected always returns false
+        #[cfg(not(feature = "database"))]
+        {
+            let db = Database {
+                _phantom: std::marker::PhantomData,
+            };
+            assert!(!db.is_connected());
+        }
+    }
+
+    #[test]
+    fn test_database_clone() {
+        // Database should be Clone
+        #[cfg(not(feature = "database"))]
+        {
+            let db = Database {
+                _phantom: std::marker::PhantomData,
+            };
+            let cloned = db.clone();
+            assert!(!cloned.is_connected());
+        }
+    }
+}

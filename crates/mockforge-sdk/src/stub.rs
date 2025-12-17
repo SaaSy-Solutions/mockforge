@@ -402,13 +402,29 @@ impl DynamicStub {
     }
 }
 
-/// Builder for creating response stubs
+/// Builder for creating `ResponseStub` instances with a fluent API
+///
+/// Provides a convenient way to construct response stubs with method chaining.
+///
+/// # Examples
+///
+/// ```rust
+/// use mockforge_sdk::StubBuilder;
+/// use serde_json::json;
+///
+/// let stub = StubBuilder::new("GET", "/api/users")
+///     .status(200)
+///     .header("Content-Type", "application/json")
+///     .body(json!({"users": []}))
+///     .latency(100)
+///     .build();
+/// ```
 pub struct StubBuilder {
     method: String,
     path: String,
     status: u16,
     headers: HashMap<String, String>,
-    body: Value,
+    body: Option<Value>,
     latency_ms: Option<u64>,
     state_machine: Option<StateMachineConfig>,
     fault_injection: Option<StubFaultInjectionConfig>,
@@ -416,13 +432,17 @@ pub struct StubBuilder {
 
 impl StubBuilder {
     /// Create a new stub builder
+    ///
+    /// # Arguments
+    /// * `method` - HTTP method (GET, POST, PUT, DELETE, etc.)
+    /// * `path` - URL path pattern
     pub fn new(method: impl Into<String>, path: impl Into<String>) -> Self {
         Self {
             method: method.into(),
             path: path.into(),
             status: 200,
             headers: HashMap::new(),
-            body: Value::Null,
+            body: None,
             latency_ms: None,
             state_machine: None,
             fault_injection: None,
@@ -445,7 +465,7 @@ impl StubBuilder {
     /// Set the response body
     #[must_use]
     pub fn body(mut self, body: Value) -> Self {
-        self.body = body;
+        self.body = Some(body);
         self
     }
 
@@ -478,10 +498,502 @@ impl StubBuilder {
             path: self.path,
             status: self.status,
             headers: self.headers,
-            body: self.body,
+            body: self.body.unwrap_or(Value::Null),
             latency_ms: self.latency_ms,
             state_machine: self.state_machine,
             fault_injection: self.fault_injection,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ==================== RequestContext Tests ====================
+
+    #[test]
+    fn test_request_context_creation() {
+        let ctx = RequestContext {
+            method: "GET".to_string(),
+            path: "/api/users".to_string(),
+            path_params: HashMap::from([("id".to_string(), "123".to_string())]),
+            query_params: HashMap::from([("page".to_string(), "1".to_string())]),
+            headers: HashMap::from([("content-type".to_string(), "application/json".to_string())]),
+            body: Some(json!({"name": "test"})),
+        };
+
+        assert_eq!(ctx.method, "GET");
+        assert_eq!(ctx.path, "/api/users");
+        assert_eq!(ctx.path_params.get("id"), Some(&"123".to_string()));
+    }
+
+    #[test]
+    fn test_request_context_clone() {
+        let ctx = RequestContext {
+            method: "POST".to_string(),
+            path: "/api/users".to_string(),
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+
+        let cloned = ctx.clone();
+        assert_eq!(ctx.method, cloned.method);
+        assert_eq!(ctx.path, cloned.path);
+    }
+
+    // ==================== StateMachineConfig Tests ====================
+
+    #[test]
+    fn test_state_machine_config_serialize() {
+        let config = StateMachineConfig {
+            resource_type: "order".to_string(),
+            resource_id_extract: ResourceIdExtractConfig::PathParam {
+                param: "order_id".to_string(),
+            },
+            initial_state: "pending".to_string(),
+            state_responses: None,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("order"));
+        assert!(json.contains("pending"));
+    }
+
+    #[test]
+    fn test_state_machine_config_with_responses() {
+        let mut responses = HashMap::new();
+        responses.insert(
+            "confirmed".to_string(),
+            StateResponseOverride {
+                status: Some(200),
+                body: Some(json!({"status": "confirmed"})),
+                headers: None,
+            },
+        );
+
+        let config = StateMachineConfig {
+            resource_type: "order".to_string(),
+            resource_id_extract: ResourceIdExtractConfig::PathParam {
+                param: "order_id".to_string(),
+            },
+            initial_state: "pending".to_string(),
+            state_responses: Some(responses),
+        };
+
+        assert!(config.state_responses.is_some());
+    }
+
+    // ==================== ResourceIdExtractConfig Tests ====================
+
+    #[test]
+    fn test_resource_id_extract_path_param() {
+        let config = ResourceIdExtractConfig::PathParam {
+            param: "user_id".to_string(),
+        };
+        let core = config.to_core();
+        match core {
+            CoreResourceIdExtract::PathParam { param } => assert_eq!(param, "user_id"),
+            _ => panic!("Expected PathParam"),
+        }
+    }
+
+    #[test]
+    fn test_resource_id_extract_json_path() {
+        let config = ResourceIdExtractConfig::JsonPath {
+            path: "$.data.id".to_string(),
+        };
+        let core = config.to_core();
+        match core {
+            CoreResourceIdExtract::JsonPath { path } => assert_eq!(path, "$.data.id"),
+            _ => panic!("Expected JsonPath"),
+        }
+    }
+
+    #[test]
+    fn test_resource_id_extract_header() {
+        let config = ResourceIdExtractConfig::Header {
+            name: "X-Resource-Id".to_string(),
+        };
+        let core = config.to_core();
+        match core {
+            CoreResourceIdExtract::Header { name } => assert_eq!(name, "X-Resource-Id"),
+            _ => panic!("Expected Header"),
+        }
+    }
+
+    #[test]
+    fn test_resource_id_extract_query_param() {
+        let config = ResourceIdExtractConfig::QueryParam {
+            param: "id".to_string(),
+        };
+        let core = config.to_core();
+        match core {
+            CoreResourceIdExtract::QueryParam { param } => assert_eq!(param, "id"),
+            _ => panic!("Expected QueryParam"),
+        }
+    }
+
+    // ==================== StateResponseOverride Tests ====================
+
+    #[test]
+    fn test_state_response_override_status_only() {
+        let override_config = StateResponseOverride {
+            status: Some(404),
+            body: None,
+            headers: None,
+        };
+        assert_eq!(override_config.status, Some(404));
+    }
+
+    #[test]
+    fn test_state_response_override_full() {
+        let mut headers = HashMap::new();
+        headers.insert("X-Custom".to_string(), "value".to_string());
+
+        let override_config = StateResponseOverride {
+            status: Some(200),
+            body: Some(json!({"data": "test"})),
+            headers: Some(headers),
+        };
+
+        assert_eq!(override_config.status, Some(200));
+        assert!(override_config.body.is_some());
+        assert!(override_config.headers.is_some());
+    }
+
+    // ==================== StubFaultInjectionConfig Tests ====================
+
+    #[test]
+    fn test_stub_fault_injection_default() {
+        let config = StubFaultInjectionConfig::default();
+        assert!(!config.enabled);
+        assert!(config.http_errors.is_none());
+        assert!(!config.timeout_error);
+        assert!(!config.connection_error);
+    }
+
+    #[test]
+    fn test_stub_fault_injection_http_error() {
+        let config = StubFaultInjectionConfig::http_error(vec![500, 502, 503]);
+        assert!(config.enabled);
+        assert_eq!(config.http_errors, Some(vec![500, 502, 503]));
+        assert_eq!(config.http_error_probability, Some(1.0));
+    }
+
+    #[test]
+    fn test_stub_fault_injection_timeout() {
+        let config = StubFaultInjectionConfig::timeout(5000);
+        assert!(config.enabled);
+        assert!(config.timeout_error);
+        assert_eq!(config.timeout_ms, Some(5000));
+        assert_eq!(config.timeout_probability, Some(1.0));
+    }
+
+    #[test]
+    fn test_stub_fault_injection_connection_error() {
+        let config = StubFaultInjectionConfig::connection_error();
+        assert!(config.enabled);
+        assert!(config.connection_error);
+        assert_eq!(config.connection_error_probability, Some(1.0));
+    }
+
+    // ==================== ResponseStub Tests ====================
+
+    #[test]
+    fn test_response_stub_new() {
+        let stub = ResponseStub::new("GET", "/api/users", json!({"users": []}));
+        assert_eq!(stub.method, "GET");
+        assert_eq!(stub.path, "/api/users");
+        assert_eq!(stub.status, 200);
+        assert!(stub.headers.is_empty());
+        assert!(stub.latency_ms.is_none());
+    }
+
+    #[test]
+    fn test_response_stub_status() {
+        let stub = ResponseStub::new("GET", "/api/users", json!({})).status(404);
+        assert_eq!(stub.status, 404);
+    }
+
+    #[test]
+    fn test_response_stub_header() {
+        let stub = ResponseStub::new("GET", "/api/users", json!({}))
+            .header("Content-Type", "application/json")
+            .header("X-Custom", "value");
+
+        assert_eq!(stub.headers.get("Content-Type"), Some(&"application/json".to_string()));
+        assert_eq!(stub.headers.get("X-Custom"), Some(&"value".to_string()));
+    }
+
+    #[test]
+    fn test_response_stub_latency() {
+        let stub = ResponseStub::new("GET", "/api/users", json!({})).latency(100);
+        assert_eq!(stub.latency_ms, Some(100));
+    }
+
+    #[test]
+    fn test_response_stub_with_state_machine() {
+        let state_config = StateMachineConfig {
+            resource_type: "user".to_string(),
+            resource_id_extract: ResourceIdExtractConfig::PathParam {
+                param: "user_id".to_string(),
+            },
+            initial_state: "active".to_string(),
+            state_responses: None,
+        };
+
+        let stub = ResponseStub::new("GET", "/api/users/{user_id}", json!({}))
+            .with_state_machine(state_config);
+
+        assert!(stub.has_state_machine());
+        assert!(stub.state_machine().is_some());
+    }
+
+    #[test]
+    fn test_response_stub_no_state_machine() {
+        let stub = ResponseStub::new("GET", "/api/users", json!({}));
+        assert!(!stub.has_state_machine());
+        assert!(stub.state_machine().is_none());
+    }
+
+    #[test]
+    fn test_response_stub_apply_state_override() {
+        let mut state_responses = HashMap::new();
+        state_responses.insert(
+            "inactive".to_string(),
+            StateResponseOverride {
+                status: Some(403),
+                body: Some(json!({"error": "User is inactive"})),
+                headers: Some(HashMap::from([("X-State".to_string(), "inactive".to_string())])),
+            },
+        );
+
+        let state_config = StateMachineConfig {
+            resource_type: "user".to_string(),
+            resource_id_extract: ResourceIdExtractConfig::PathParam {
+                param: "user_id".to_string(),
+            },
+            initial_state: "active".to_string(),
+            state_responses: Some(state_responses),
+        };
+
+        let stub = ResponseStub::new("GET", "/api/users/{user_id}", json!({"status": "ok"}))
+            .with_state_machine(state_config);
+
+        // Apply inactive state override
+        let overridden = stub.apply_state_override("inactive");
+        assert_eq!(overridden.status, 403);
+        assert_eq!(overridden.body, json!({"error": "User is inactive"}));
+        assert_eq!(overridden.headers.get("X-State"), Some(&"inactive".to_string()));
+    }
+
+    #[test]
+    fn test_response_stub_apply_state_override_no_match() {
+        let state_config = StateMachineConfig {
+            resource_type: "user".to_string(),
+            resource_id_extract: ResourceIdExtractConfig::PathParam {
+                param: "user_id".to_string(),
+            },
+            initial_state: "active".to_string(),
+            state_responses: None,
+        };
+
+        let stub = ResponseStub::new("GET", "/api/users/{user_id}", json!({"original": true}))
+            .status(200)
+            .with_state_machine(state_config);
+
+        // State override with no matching state should return original
+        let overridden = stub.apply_state_override("unknown");
+        assert_eq!(overridden.status, 200);
+        assert_eq!(overridden.body, json!({"original": true}));
+    }
+
+    #[test]
+    fn test_response_stub_with_fault_injection() {
+        let fault_config = StubFaultInjectionConfig::http_error(vec![500]);
+        let stub = ResponseStub::new("GET", "/api/users", json!({}))
+            .with_fault_injection(fault_config);
+
+        assert!(stub.has_fault_injection());
+        assert!(stub.fault_injection().is_some());
+    }
+
+    #[test]
+    fn test_response_stub_no_fault_injection() {
+        let stub = ResponseStub::new("GET", "/api/users", json!({}));
+        assert!(!stub.has_fault_injection());
+    }
+
+    #[test]
+    fn test_response_stub_serialize() {
+        let stub = ResponseStub::new("POST", "/api/orders", json!({"id": 1}))
+            .status(201)
+            .header("Location", "/api/orders/1")
+            .latency(50);
+
+        let json = serde_json::to_string(&stub).unwrap();
+        assert!(json.contains("POST"));
+        assert!(json.contains("/api/orders"));
+        assert!(json.contains("201"));
+    }
+
+    // ==================== DynamicStub Tests ====================
+
+    #[test]
+    fn test_dynamic_stub_new() {
+        let stub = DynamicStub::new("GET", "/api/users", |ctx| {
+            json!({"path": ctx.path.clone()})
+        });
+
+        assert_eq!(stub.method, "GET");
+        assert_eq!(stub.path, "/api/users");
+    }
+
+    #[tokio::test]
+    async fn test_dynamic_stub_status() {
+        let stub = DynamicStub::new("GET", "/test", |_| json!({}));
+        assert_eq!(stub.get_status().await, 200);
+
+        stub.set_status(404).await;
+        assert_eq!(stub.get_status().await, 404);
+    }
+
+    #[tokio::test]
+    async fn test_dynamic_stub_headers() {
+        let stub = DynamicStub::new("GET", "/test", |_| json!({}));
+
+        stub.add_header("X-Custom".to_string(), "value".to_string()).await;
+
+        let headers = stub.get_headers().await;
+        assert_eq!(headers.get("X-Custom"), Some(&"value".to_string()));
+
+        stub.remove_header("X-Custom").await;
+        let headers = stub.get_headers().await;
+        assert!(headers.get("X-Custom").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_dynamic_stub_with_headers() {
+        let stub = DynamicStub::new("GET", "/test", |_| json!({}));
+        stub.add_header("X-Test".to_string(), "test-value".to_string()).await;
+
+        let has_header = stub.with_headers(|headers| headers.contains_key("X-Test")).await;
+        assert!(has_header);
+    }
+
+    #[test]
+    fn test_dynamic_stub_generate_response() {
+        let stub = DynamicStub::new("GET", "/api/users/{id}", |ctx| {
+            let id = ctx.path_params.get("id").cloned().unwrap_or_default();
+            json!({"user_id": id})
+        });
+
+        let ctx = RequestContext {
+            method: "GET".to_string(),
+            path: "/api/users/123".to_string(),
+            path_params: HashMap::from([("id".to_string(), "123".to_string())]),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+
+        let response = stub.generate_response(&ctx);
+        assert_eq!(response, json!({"user_id": "123"}));
+    }
+
+    #[test]
+    fn test_dynamic_stub_with_latency() {
+        let stub = DynamicStub::new("GET", "/test", |_| json!({})).with_latency(100);
+        assert_eq!(stub.latency_ms, Some(100));
+    }
+
+    // ==================== StubBuilder Tests ====================
+
+    #[test]
+    fn test_stub_builder_basic() {
+        let stub = StubBuilder::new("GET", "/api/users")
+            .body(json!({"users": []}))
+            .build();
+
+        assert_eq!(stub.method, "GET");
+        assert_eq!(stub.path, "/api/users");
+        assert_eq!(stub.status, 200);
+    }
+
+    #[test]
+    fn test_stub_builder_status() {
+        let stub = StubBuilder::new("GET", "/api/users")
+            .status(404)
+            .build();
+
+        assert_eq!(stub.status, 404);
+    }
+
+    #[test]
+    fn test_stub_builder_headers() {
+        let stub = StubBuilder::new("GET", "/api/users")
+            .header("Content-Type", "application/json")
+            .header("X-Custom", "value")
+            .build();
+
+        assert_eq!(stub.headers.len(), 2);
+    }
+
+    #[test]
+    fn test_stub_builder_latency() {
+        let stub = StubBuilder::new("GET", "/api/users")
+            .latency(500)
+            .build();
+
+        assert_eq!(stub.latency_ms, Some(500));
+    }
+
+    #[test]
+    fn test_stub_builder_state_machine() {
+        let config = StateMachineConfig {
+            resource_type: "order".to_string(),
+            resource_id_extract: ResourceIdExtractConfig::PathParam {
+                param: "order_id".to_string(),
+            },
+            initial_state: "pending".to_string(),
+            state_responses: None,
+        };
+
+        let stub = StubBuilder::new("GET", "/api/orders/{order_id}")
+            .state_machine(config)
+            .build();
+
+        assert!(stub.state_machine.is_some());
+    }
+
+    #[test]
+    fn test_stub_builder_fault_injection() {
+        let fault = StubFaultInjectionConfig::http_error(vec![500]);
+
+        let stub = StubBuilder::new("GET", "/api/users")
+            .fault_injection(fault)
+            .build();
+
+        assert!(stub.fault_injection.is_some());
+    }
+
+    #[test]
+    fn test_stub_builder_full_chain() {
+        let stub = StubBuilder::new("POST", "/api/orders")
+            .status(201)
+            .header("Location", "/api/orders/1")
+            .body(json!({"id": 1, "status": "created"}))
+            .latency(100)
+            .build();
+
+        assert_eq!(stub.method, "POST");
+        assert_eq!(stub.path, "/api/orders");
+        assert_eq!(stub.status, 201);
+        assert_eq!(stub.headers.get("Location"), Some(&"/api/orders/1".to_string()));
+        assert_eq!(stub.latency_ms, Some(100));
     }
 }

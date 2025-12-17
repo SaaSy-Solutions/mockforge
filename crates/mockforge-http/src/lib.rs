@@ -1331,6 +1331,9 @@ async fn serve_with_tls(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use axum_server::tls_rustls::RustlsConfig;
 
+    // Initialize the rustls crypto provider (must be called before TLS operations)
+    tls::init_crypto_provider();
+
     info!("Loading TLS configuration for HTTPS server");
 
     // Load TLS server configuration (supports mTLS)

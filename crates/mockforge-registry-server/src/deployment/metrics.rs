@@ -1,14 +1,14 @@
 //! Metrics collection for deployed mock services
 
 use anyhow::{Context, Result};
-use chrono::{Utc, NaiveDate, Datelike};
+use chrono::{Datelike, NaiveDate, Utc};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::models::{HostedMock, DeploymentMetrics};
+use crate::models::{DeploymentMetrics, HostedMock};
 
 /// Metrics collector that gathers usage metrics from deployed services
 pub struct MetricsCollector {
@@ -53,7 +53,7 @@ impl MetricsCollector {
             WHERE status = 'active'
             AND deployment_url IS NOT NULL
             AND deleted_at IS NULL
-            "#
+            "#,
         )
         .fetch_all(pool)
         .await
@@ -77,26 +77,19 @@ impl MetricsCollector {
         // Try to fetch metrics from /metrics endpoint
         let metrics_url = format!("{}/metrics", base_url);
 
-        let response = self.client
-            .get(&metrics_url)
-            .send()
-            .await;
+        let response = self.client.get(&metrics_url).send().await;
 
         // If metrics endpoint doesn't exist, we'll estimate from logs
         // For now, we'll just update basic counters
-        let period_start = NaiveDate::from_ymd_opt(
-            Utc::now().year(),
-            Utc::now().month(),
-            1,
-        )
-        .ok_or_else(|| anyhow::anyhow!("Invalid date"))?;
+        let period_start = NaiveDate::from_ymd_opt(Utc::now().year(), Utc::now().month(), 1)
+            .ok_or_else(|| anyhow::anyhow!("Invalid date"))?;
 
         // Get or create metrics record for this period
         let metrics = sqlx::query_as::<_, DeploymentMetrics>(
             r#"
             SELECT * FROM deployment_metrics
             WHERE hosted_mock_id = $1 AND period_start = $2
-            "#
+            "#,
         )
         .bind(deployment.id)
         .bind(period_start)
@@ -116,7 +109,7 @@ impl MetricsCollector {
                 SET
                     updated_at = NOW()
                 WHERE id = $1
-                "#
+                "#,
             )
             .bind(metrics.id)
             .execute(pool)
@@ -135,7 +128,7 @@ impl MetricsCollector {
                     status_4xx_count,
                     status_5xx_count
                 ) VALUES ($1, $2, 0, 0, 0, 0, 0, 0)
-                "#
+                "#,
             )
             .bind(deployment.id)
             .bind(period_start)

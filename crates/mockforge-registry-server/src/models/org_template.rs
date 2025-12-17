@@ -115,11 +115,13 @@ impl OrgTemplate {
     ) -> sqlx::Result<Self> {
         // If setting as default, unset other defaults
         if is_default == Some(true) {
-            sqlx::query("UPDATE org_templates SET is_default = FALSE WHERE org_id = $1 AND id != $2")
-                .bind(self.org_id)
-                .bind(self.id)
-                .execute(pool)
-                .await?;
+            sqlx::query(
+                "UPDATE org_templates SET is_default = FALSE WHERE org_id = $1 AND id != $2",
+            )
+            .bind(self.org_id)
+            .bind(self.id)
+            .execute(pool)
+            .await?;
         }
 
         sqlx::query_as::<_, Self>(

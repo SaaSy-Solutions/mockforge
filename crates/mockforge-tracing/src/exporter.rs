@@ -193,6 +193,30 @@ pub type JaegerExporterError = ExporterError;
 mod tests {
     use super::*;
 
+    // ==================== ExporterType Tests ====================
+
+    #[test]
+    fn test_exporter_type_debug() {
+        assert_eq!(format!("{:?}", ExporterType::Jaeger), "Jaeger");
+        assert_eq!(format!("{:?}", ExporterType::Otlp), "Otlp");
+    }
+
+    #[test]
+    fn test_exporter_type_clone() {
+        let exporter = ExporterType::Jaeger;
+        let cloned = exporter.clone();
+        assert_eq!(exporter, cloned);
+    }
+
+    #[test]
+    fn test_exporter_type_eq() {
+        assert_eq!(ExporterType::Jaeger, ExporterType::Jaeger);
+        assert_eq!(ExporterType::Otlp, ExporterType::Otlp);
+        assert_ne!(ExporterType::Jaeger, ExporterType::Otlp);
+    }
+
+    // ==================== JaegerExporter Tests ====================
+
     #[test]
     fn test_jaeger_default_config() {
         let exporter = JaegerExporter::default();
@@ -230,6 +254,43 @@ mod tests {
         let exporter = JaegerExporter::new("".to_string());
         assert!(exporter.validate().is_err());
     }
+
+    #[test]
+    fn test_jaeger_zero_batch_size() {
+        let exporter = JaegerExporter::new("http://localhost:14268/api/traces".to_string())
+            .with_max_batch_size(0);
+        let result = exporter.validate();
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), ExporterError::InvalidConfig(_)));
+    }
+
+    #[test]
+    fn test_jaeger_debug() {
+        let exporter = JaegerExporter::default();
+        let debug_str = format!("{:?}", exporter);
+        assert!(debug_str.contains("JaegerExporter"));
+        assert!(debug_str.contains("endpoint"));
+    }
+
+    #[test]
+    fn test_jaeger_clone() {
+        let exporter =
+            JaegerExporter::new("http://test:14268".to_string()).with_max_batch_size(100);
+        let cloned = exporter.clone();
+        assert_eq!(cloned.endpoint, exporter.endpoint);
+        assert_eq!(cloned.max_batch_size, exporter.max_batch_size);
+    }
+
+    #[test]
+    fn test_jaeger_queue_equals_batch() {
+        // Queue size equal to batch size should be valid
+        let exporter = JaegerExporter::new("http://localhost:14268/api/traces".to_string())
+            .with_max_batch_size(512)
+            .with_max_queue_size(512);
+        assert!(exporter.validate().is_ok());
+    }
+
+    // ==================== OtlpExporter Tests ====================
 
     #[test]
     fn test_otlp_default_config() {
@@ -277,5 +338,160 @@ mod tests {
             .with_header("X-Tenant-ID".to_string(), "tenant1".to_string());
 
         assert_eq!(exporter.headers.len(), 2);
+    }
+
+    #[test]
+    fn test_otlp_https_endpoint() {
+        let exporter = OtlpExporter::new("https://secure-collector:4317".to_string());
+        assert!(exporter.validate().is_ok());
+    }
+
+    #[test]
+    fn test_otlp_debug() {
+        let exporter = OtlpExporter::default();
+        let debug_str = format!("{:?}", exporter);
+        assert!(debug_str.contains("OtlpExporter"));
+        assert!(debug_str.contains("endpoint"));
+    }
+
+    #[test]
+    fn test_otlp_clone() {
+        let exporter = OtlpExporter::new("http://test:4317".to_string())
+            .with_protocol(OtlpProtocol::HttpProtobuf)
+            .with_compression(OtlpCompression::Gzip);
+        let cloned = exporter.clone();
+        assert_eq!(cloned.endpoint, exporter.endpoint);
+        assert_eq!(cloned.protocol, exporter.protocol);
+        assert_eq!(cloned.compression, exporter.compression);
+    }
+
+    // ==================== OtlpProtocol Tests ====================
+
+    #[test]
+    fn test_otlp_protocol_debug() {
+        assert_eq!(format!("{:?}", OtlpProtocol::Grpc), "Grpc");
+        assert_eq!(format!("{:?}", OtlpProtocol::HttpProtobuf), "HttpProtobuf");
+    }
+
+    #[test]
+    fn test_otlp_protocol_clone() {
+        let proto = OtlpProtocol::Grpc;
+        let cloned = proto.clone();
+        assert_eq!(proto, cloned);
+    }
+
+    #[test]
+    fn test_otlp_protocol_copy() {
+        let proto = OtlpProtocol::HttpProtobuf;
+        let copied = proto;
+        assert_eq!(OtlpProtocol::HttpProtobuf, copied);
+    }
+
+    #[test]
+    fn test_otlp_protocol_eq() {
+        assert_eq!(OtlpProtocol::Grpc, OtlpProtocol::Grpc);
+        assert_ne!(OtlpProtocol::Grpc, OtlpProtocol::HttpProtobuf);
+    }
+
+    // ==================== OtlpCompression Tests ====================
+
+    #[test]
+    fn test_otlp_compression_debug() {
+        assert_eq!(format!("{:?}", OtlpCompression::Gzip), "Gzip");
+    }
+
+    #[test]
+    fn test_otlp_compression_clone() {
+        let comp = OtlpCompression::Gzip;
+        let cloned = comp.clone();
+        assert_eq!(comp, cloned);
+    }
+
+    #[test]
+    fn test_otlp_compression_copy() {
+        let comp = OtlpCompression::Gzip;
+        let copied = comp;
+        assert_eq!(OtlpCompression::Gzip, copied);
+    }
+
+    #[test]
+    fn test_otlp_compression_eq() {
+        assert_eq!(OtlpCompression::Gzip, OtlpCompression::Gzip);
+    }
+
+    // ==================== ExporterError Tests ====================
+
+    #[test]
+    fn test_exporter_error_invalid_endpoint() {
+        let error = ExporterError::InvalidEndpoint("test error".to_string());
+        let error_str = format!("{}", error);
+        assert!(error_str.contains("Invalid endpoint"));
+        assert!(error_str.contains("test error"));
+    }
+
+    #[test]
+    fn test_exporter_error_invalid_config() {
+        let error = ExporterError::InvalidConfig("config error".to_string());
+        let error_str = format!("{}", error);
+        assert!(error_str.contains("Invalid configuration"));
+        assert!(error_str.contains("config error"));
+    }
+
+    #[test]
+    fn test_exporter_error_export_failed() {
+        let error = ExporterError::ExportFailed("export error".to_string());
+        let error_str = format!("{}", error);
+        assert!(error_str.contains("Export failed"));
+        assert!(error_str.contains("export error"));
+    }
+
+    #[test]
+    fn test_exporter_error_debug() {
+        let error = ExporterError::InvalidEndpoint("test".to_string());
+        let debug_str = format!("{:?}", error);
+        assert!(debug_str.contains("InvalidEndpoint"));
+    }
+
+    #[test]
+    fn test_jaeger_exporter_error_alias() {
+        // Test the type alias for backwards compatibility
+        let error: JaegerExporterError = ExporterError::InvalidEndpoint("test".to_string());
+        assert!(matches!(error, ExporterError::InvalidEndpoint(_)));
+    }
+
+    // ==================== Validation Edge Cases ====================
+
+    #[test]
+    fn test_jaeger_validation_error_messages() {
+        let exporter = JaegerExporter::new("".to_string());
+        if let Err(e) = exporter.validate() {
+            let error_msg = format!("{}", e);
+            assert!(error_msg.contains("empty"));
+        } else {
+            panic!("Expected validation error");
+        }
+    }
+
+    #[test]
+    fn test_otlp_validation_error_messages() {
+        let exporter = OtlpExporter::new("invalid-url".to_string());
+        if let Err(e) = exporter.validate() {
+            let error_msg = format!("{}", e);
+            assert!(error_msg.contains("http://") || error_msg.contains("https://"));
+        } else {
+            panic!("Expected validation error");
+        }
+    }
+
+    #[test]
+    fn test_otlp_no_compression() {
+        let exporter = OtlpExporter::new("http://localhost:4317".to_string());
+        assert!(exporter.compression.is_none());
+    }
+
+    #[test]
+    fn test_jaeger_default_batch_timeout() {
+        let exporter = JaegerExporter::default();
+        assert_eq!(exporter.batch_timeout, Duration::from_secs(5));
     }
 }

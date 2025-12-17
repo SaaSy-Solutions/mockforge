@@ -126,3 +126,171 @@ impl TunnelConfig {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tunnel_provider_default() {
+        let provider = TunnelProvider::default();
+        assert_eq!(provider, TunnelProvider::SelfHosted);
+    }
+
+    #[test]
+    fn test_tunnel_provider_eq() {
+        assert_eq!(TunnelProvider::Cloud, TunnelProvider::Cloud);
+        assert_ne!(TunnelProvider::Cloud, TunnelProvider::Ngrok);
+    }
+
+    #[test]
+    fn test_tunnel_provider_clone() {
+        let provider = TunnelProvider::Cloudflare;
+        let cloned = provider.clone();
+        assert_eq!(provider, cloned);
+    }
+
+    #[test]
+    fn test_tunnel_provider_debug() {
+        let provider = TunnelProvider::Localtunnel;
+        let debug = format!("{:?}", provider);
+        assert!(debug.contains("Localtunnel"));
+    }
+
+    #[test]
+    fn test_tunnel_provider_serialize() {
+        let provider = TunnelProvider::Cloud;
+        let json = serde_json::to_string(&provider).unwrap();
+        assert_eq!(json, "\"cloud\"");
+    }
+
+    #[test]
+    fn test_tunnel_provider_serialize_self() {
+        let provider = TunnelProvider::SelfHosted;
+        let json = serde_json::to_string(&provider).unwrap();
+        assert_eq!(json, "\"self\"");
+    }
+
+    #[test]
+    fn test_tunnel_provider_deserialize() {
+        let provider: TunnelProvider = serde_json::from_str("\"ngrok\"").unwrap();
+        assert_eq!(provider, TunnelProvider::Ngrok);
+    }
+
+    #[test]
+    fn test_tunnel_config_default() {
+        let config = TunnelConfig::default();
+        assert_eq!(config.provider, TunnelProvider::SelfHosted);
+        assert!(config.server_url.is_none());
+        assert!(config.auth_token.is_none());
+        assert!(config.subdomain.is_none());
+        assert_eq!(config.local_url, "http://localhost:3000");
+        assert_eq!(config.protocol, "http");
+        assert!(config.region.is_none());
+        assert!(config.custom_domain.is_none());
+        assert!(config.websocket_enabled);
+        assert!(config.http2_enabled);
+    }
+
+    #[test]
+    fn test_tunnel_config_new() {
+        let config = TunnelConfig::new("http://localhost:8080");
+        assert_eq!(config.local_url, "http://localhost:8080");
+        assert_eq!(config.provider, TunnelProvider::SelfHosted);
+    }
+
+    #[test]
+    fn test_tunnel_config_with_provider() {
+        let config =
+            TunnelConfig::new("http://localhost:8080").with_provider(TunnelProvider::Cloudflare);
+        assert_eq!(config.provider, TunnelProvider::Cloudflare);
+    }
+
+    #[test]
+    fn test_tunnel_config_with_auth_token() {
+        let config = TunnelConfig::new("http://localhost:8080").with_auth_token("my-secret-token");
+        assert_eq!(config.auth_token, Some("my-secret-token".to_string()));
+    }
+
+    #[test]
+    fn test_tunnel_config_with_subdomain() {
+        let config = TunnelConfig::new("http://localhost:8080").with_subdomain("myapp");
+        assert_eq!(config.subdomain, Some("myapp".to_string()));
+    }
+
+    #[test]
+    fn test_tunnel_config_with_custom_domain() {
+        let config =
+            TunnelConfig::new("http://localhost:8080").with_custom_domain("api.example.com");
+        assert_eq!(config.custom_domain, Some("api.example.com".to_string()));
+    }
+
+    #[test]
+    fn test_tunnel_config_builder_chain() {
+        let config = TunnelConfig::new("http://localhost:3000")
+            .with_provider(TunnelProvider::SelfHosted)
+            .with_auth_token("token123")
+            .with_subdomain("test")
+            .with_custom_domain("test.example.com");
+
+        assert_eq!(config.local_url, "http://localhost:3000");
+        assert_eq!(config.provider, TunnelProvider::SelfHosted);
+        assert_eq!(config.auth_token, Some("token123".to_string()));
+        assert_eq!(config.subdomain, Some("test".to_string()));
+        assert_eq!(config.custom_domain, Some("test.example.com".to_string()));
+    }
+
+    #[test]
+    fn test_tunnel_config_clone() {
+        let config = TunnelConfig::new("http://localhost:8080")
+            .with_provider(TunnelProvider::Ngrok)
+            .with_auth_token("secret");
+
+        let cloned = config.clone();
+        assert_eq!(config.local_url, cloned.local_url);
+        assert_eq!(config.provider, cloned.provider);
+        assert_eq!(config.auth_token, cloned.auth_token);
+    }
+
+    #[test]
+    fn test_tunnel_config_debug() {
+        let config = TunnelConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("TunnelConfig"));
+        assert!(debug.contains("localhost"));
+    }
+
+    #[test]
+    fn test_tunnel_config_serialize() {
+        let config = TunnelConfig::new("http://localhost:8080");
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("\"local_url\":\"http://localhost:8080\""));
+    }
+
+    #[test]
+    fn test_tunnel_config_deserialize() {
+        let json = r#"{
+            "provider": "cloud",
+            "local_url": "http://localhost:5000",
+            "protocol": "https",
+            "websocket_enabled": false,
+            "http2_enabled": true
+        }"#;
+
+        let config: TunnelConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.provider, TunnelProvider::Cloud);
+        assert_eq!(config.local_url, "http://localhost:5000");
+        assert_eq!(config.protocol, "https");
+        assert!(!config.websocket_enabled);
+        assert!(config.http2_enabled);
+    }
+
+    #[test]
+    fn test_tunnel_config_serialize_skip_none() {
+        let config = TunnelConfig::new("http://localhost:8080");
+        let json = serde_json::to_string(&config).unwrap();
+        // Optional None fields should be skipped
+        assert!(!json.contains("server_url"));
+        assert!(!json.contains("auth_token"));
+    }
+}

@@ -512,3 +512,174 @@ fn parse_domain(s: &str) -> std::result::Result<Domain, String> {
         _ => Err(format!("Unknown domain: {}", s)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    // StudioPackInstaller tests
+    #[test]
+    fn test_studio_pack_installer_new() {
+        let packs_dir = PathBuf::from("/tmp/packs");
+        let installer = StudioPackInstaller::new(packs_dir.clone());
+        assert_eq!(installer.packs_dir, packs_dir);
+        assert!(installer.scenario_installer.is_none());
+        assert!(installer.persona_registry.is_none());
+        assert!(installer.consistency_engine.is_none());
+        assert!(installer.drift_budget_engine.is_none());
+        assert!(installer.continuum_engine.is_none());
+    }
+
+    #[test]
+    fn test_studio_pack_installer_with_dependencies_none() {
+        let packs_dir = PathBuf::from("/tmp/packs");
+        let installer =
+            StudioPackInstaller::with_dependencies(packs_dir.clone(), None, None, None, None, None);
+        assert_eq!(installer.packs_dir, packs_dir);
+        assert!(installer.scenario_installer.is_none());
+    }
+
+    // StudioPackInstallResult tests
+    #[test]
+    fn test_studio_pack_install_result_new() {
+        let result = StudioPackInstallResult {
+            pack_name: "test-pack".to_string(),
+            pack_version: "1.0.0".to_string(),
+            scenarios_installed: 5,
+            personas_configured: 3,
+            chaos_rules_applied: 2,
+            contract_diffs_configured: 1,
+            reality_blends_configured: 4,
+            workspace_config_applied: true,
+            errors: vec![],
+        };
+
+        assert_eq!(result.pack_name, "test-pack");
+        assert_eq!(result.pack_version, "1.0.0");
+        assert_eq!(result.scenarios_installed, 5);
+        assert_eq!(result.personas_configured, 3);
+        assert_eq!(result.chaos_rules_applied, 2);
+        assert_eq!(result.contract_diffs_configured, 1);
+        assert_eq!(result.reality_blends_configured, 4);
+        assert!(result.workspace_config_applied);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_studio_pack_install_result_with_errors() {
+        let result = StudioPackInstallResult {
+            pack_name: "error-pack".to_string(),
+            pack_version: "0.1.0".to_string(),
+            scenarios_installed: 0,
+            personas_configured: 0,
+            chaos_rules_applied: 0,
+            contract_diffs_configured: 0,
+            reality_blends_configured: 0,
+            workspace_config_applied: false,
+            errors: vec![
+                "Failed to install scenario".to_string(),
+                "Invalid chaos rule".to_string(),
+            ],
+        };
+
+        assert_eq!(result.errors.len(), 2);
+        assert!(result.errors.contains(&"Failed to install scenario".to_string()));
+    }
+
+    #[test]
+    fn test_studio_pack_install_result_clone() {
+        let result = StudioPackInstallResult {
+            pack_name: "clone-pack".to_string(),
+            pack_version: "2.0.0".to_string(),
+            scenarios_installed: 10,
+            personas_configured: 5,
+            chaos_rules_applied: 3,
+            contract_diffs_configured: 2,
+            reality_blends_configured: 1,
+            workspace_config_applied: true,
+            errors: vec!["error1".to_string()],
+        };
+
+        let cloned = result.clone();
+        assert_eq!(result.pack_name, cloned.pack_name);
+        assert_eq!(result.scenarios_installed, cloned.scenarios_installed);
+        assert_eq!(result.errors, cloned.errors);
+    }
+
+    #[test]
+    fn test_studio_pack_install_result_debug() {
+        let result = StudioPackInstallResult {
+            pack_name: "debug-pack".to_string(),
+            pack_version: "1.0.0".to_string(),
+            scenarios_installed: 1,
+            personas_configured: 1,
+            chaos_rules_applied: 1,
+            contract_diffs_configured: 1,
+            reality_blends_configured: 1,
+            workspace_config_applied: false,
+            errors: vec![],
+        };
+
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("StudioPackInstallResult"));
+        assert!(debug.contains("debug-pack"));
+    }
+
+    // parse_domain tests
+    #[test]
+    fn test_parse_domain_finance() {
+        assert!(matches!(parse_domain("finance"), Ok(Domain::Finance)));
+        assert!(matches!(parse_domain("fintech"), Ok(Domain::Finance)));
+        assert!(matches!(parse_domain("financial"), Ok(Domain::Finance)));
+        assert!(matches!(parse_domain("FINANCE"), Ok(Domain::Finance)));
+    }
+
+    #[test]
+    fn test_parse_domain_ecommerce() {
+        assert!(matches!(parse_domain("ecommerce"), Ok(Domain::Ecommerce)));
+        assert!(matches!(parse_domain("e-commerce"), Ok(Domain::Ecommerce)));
+        assert!(matches!(parse_domain("retail"), Ok(Domain::Ecommerce)));
+        assert!(matches!(parse_domain("ECOMMERCE"), Ok(Domain::Ecommerce)));
+    }
+
+    #[test]
+    fn test_parse_domain_healthcare() {
+        assert!(matches!(parse_domain("healthcare"), Ok(Domain::Healthcare)));
+        assert!(matches!(parse_domain("health"), Ok(Domain::Healthcare)));
+        assert!(matches!(parse_domain("medical"), Ok(Domain::Healthcare)));
+    }
+
+    #[test]
+    fn test_parse_domain_iot() {
+        assert!(matches!(parse_domain("iot"), Ok(Domain::Iot)));
+        assert!(matches!(parse_domain("internet_of_things"), Ok(Domain::Iot)));
+        assert!(matches!(parse_domain("IOT"), Ok(Domain::Iot)));
+    }
+
+    #[test]
+    fn test_parse_domain_social() {
+        assert!(matches!(parse_domain("social"), Ok(Domain::Social)));
+        assert!(matches!(parse_domain("SOCIAL"), Ok(Domain::Social)));
+    }
+
+    #[test]
+    fn test_parse_domain_general() {
+        assert!(matches!(parse_domain("general"), Ok(Domain::General)));
+        assert!(matches!(parse_domain("default"), Ok(Domain::General)));
+        assert!(matches!(parse_domain("generic"), Ok(Domain::General)));
+    }
+
+    #[test]
+    fn test_parse_domain_unknown() {
+        let result = parse_domain("unknown_domain");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown domain"));
+    }
+
+    #[test]
+    fn test_parse_domain_case_insensitive() {
+        assert!(matches!(parse_domain("FiNaNcE"), Ok(Domain::Finance)));
+        assert!(matches!(parse_domain("HeAlThCaRe"), Ok(Domain::Healthcare)));
+    }
+}

@@ -1,6 +1,6 @@
 //! Subscription and billing models
 
-use chrono::{DateTime, Utc, NaiveDate, Datelike};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -59,7 +59,7 @@ pub struct Subscription {
     pub stripe_subscription_id: String,
     pub stripe_customer_id: String,
     pub price_id: String,
-    pub plan: String, // Stored as VARCHAR, converted via methods
+    pub plan: String,   // Stored as VARCHAR, converted via methods
     pub status: String, // Stored as VARCHAR, converted via methods
     pub current_period_start: DateTime<Utc>,
     pub current_period_end: DateTime<Utc>,
@@ -150,12 +150,10 @@ impl Subscription {
         pool: &sqlx::PgPool,
         stripe_subscription_id: &str,
     ) -> sqlx::Result<Option<Self>> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM subscriptions WHERE stripe_subscription_id = $1",
-        )
-        .bind(stripe_subscription_id)
-        .fetch_optional(pool)
-        .await
+        sqlx::query_as::<_, Self>("SELECT * FROM subscriptions WHERE stripe_subscription_id = $1")
+            .bind(stripe_subscription_id)
+            .fetch_optional(pool)
+            .await
     }
 
     /// Update subscription status
@@ -164,13 +162,11 @@ impl Subscription {
         subscription_id: Uuid,
         status: SubscriptionStatus,
     ) -> sqlx::Result<()> {
-        sqlx::query(
-            "UPDATE subscriptions SET status = $1, updated_at = NOW() WHERE id = $2",
-        )
-        .bind(status.to_string())
-        .bind(subscription_id)
-        .execute(pool)
-        .await?;
+        sqlx::query("UPDATE subscriptions SET status = $1, updated_at = NOW() WHERE id = $2")
+            .bind(status.to_string())
+            .bind(subscription_id)
+            .execute(pool)
+            .await?;
 
         Ok(())
     }
@@ -211,16 +207,10 @@ pub struct UsageCounter {
 
 impl UsageCounter {
     /// Get or create usage counter for current month
-    pub async fn get_or_create_current(
-        pool: &sqlx::PgPool,
-        org_id: Uuid,
-    ) -> sqlx::Result<Self> {
+    pub async fn get_or_create_current(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Self> {
         let period_start = chrono::Utc::now().date_naive();
-        let period_start = NaiveDate::from_ymd_opt(
-            period_start.year(),
-            period_start.month(),
-            1,
-        ).unwrap_or(period_start);
+        let period_start = NaiveDate::from_ymd_opt(period_start.year(), period_start.month(), 1)
+            .unwrap_or(period_start);
 
         sqlx::query_as::<_, Self>(
             r#"
@@ -276,11 +266,7 @@ impl UsageCounter {
     }
 
     /// Update storage bytes (absolute value, not increment)
-    pub async fn update_storage(
-        pool: &sqlx::PgPool,
-        org_id: Uuid,
-        bytes: i64,
-    ) -> sqlx::Result<()> {
+    pub async fn update_storage(pool: &sqlx::PgPool, org_id: Uuid, bytes: i64) -> sqlx::Result<()> {
         let counter = Self::get_or_create_current(pool, org_id).await?;
 
         sqlx::query(
@@ -329,15 +315,280 @@ impl UsageCounter {
     }
 
     /// Get all usage counters for an org
-    pub async fn get_all_for_org(
-        pool: &sqlx::PgPool,
-        org_id: Uuid,
-    ) -> sqlx::Result<Vec<Self>> {
+    pub async fn get_all_for_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM usage_counters WHERE org_id = $1 ORDER BY period_start DESC",
         )
         .bind(org_id)
         .fetch_all(pool)
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_subscription_status_to_string() {
+        assert_eq!(SubscriptionStatus::Active.to_string(), "active");
+        assert_eq!(SubscriptionStatus::Trialing.to_string(), "trialing");
+        assert_eq!(SubscriptionStatus::PastDue.to_string(), "past_due");
+        assert_eq!(SubscriptionStatus::Canceled.to_string(), "canceled");
+        assert_eq!(SubscriptionStatus::Unpaid.to_string(), "unpaid");
+        assert_eq!(SubscriptionStatus::Incomplete.to_string(), "incomplete");
+        assert_eq!(SubscriptionStatus::IncompleteExpired.to_string(), "incomplete_expired");
+    }
+
+    #[test]
+    fn test_subscription_status_from_string() {
+        assert_eq!(SubscriptionStatus::from_string("active"), SubscriptionStatus::Active);
+        assert_eq!(SubscriptionStatus::from_string("trialing"), SubscriptionStatus::Trialing);
+        assert_eq!(SubscriptionStatus::from_string("past_due"), SubscriptionStatus::PastDue);
+        assert_eq!(SubscriptionStatus::from_string("canceled"), SubscriptionStatus::Canceled);
+        assert_eq!(SubscriptionStatus::from_string("unpaid"), SubscriptionStatus::Unpaid);
+        assert_eq!(SubscriptionStatus::from_string("incomplete"), SubscriptionStatus::Incomplete);
+        assert_eq!(
+            SubscriptionStatus::from_string("incomplete_expired"),
+            SubscriptionStatus::IncompleteExpired
+        );
+
+        // Unknown status should default to Canceled
+        assert_eq!(SubscriptionStatus::from_string("unknown"), SubscriptionStatus::Canceled);
+        assert_eq!(SubscriptionStatus::from_string(""), SubscriptionStatus::Canceled);
+    }
+
+    #[test]
+    fn test_subscription_status_is_active() {
+        assert!(SubscriptionStatus::Active.is_active());
+        assert!(SubscriptionStatus::Trialing.is_active());
+        assert!(!SubscriptionStatus::PastDue.is_active());
+        assert!(!SubscriptionStatus::Canceled.is_active());
+        assert!(!SubscriptionStatus::Unpaid.is_active());
+        assert!(!SubscriptionStatus::Incomplete.is_active());
+        assert!(!SubscriptionStatus::IncompleteExpired.is_active());
+    }
+
+    #[test]
+    fn test_subscription_status_serialization() {
+        let status = SubscriptionStatus::Active;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, "\"active\"");
+
+        let status = SubscriptionStatus::PastDue;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, "\"past_due\"");
+    }
+
+    #[test]
+    fn test_subscription_status_deserialization() {
+        let status: SubscriptionStatus = serde_json::from_str("\"active\"").unwrap();
+        assert_eq!(status, SubscriptionStatus::Active);
+
+        let status: SubscriptionStatus = serde_json::from_str("\"trialing\"").unwrap();
+        assert_eq!(status, SubscriptionStatus::Trialing);
+
+        let status: SubscriptionStatus = serde_json::from_str("\"past_due\"").unwrap();
+        assert_eq!(status, SubscriptionStatus::PastDue);
+    }
+
+    #[test]
+    fn test_subscription_status_equality() {
+        assert_eq!(SubscriptionStatus::Active, SubscriptionStatus::Active);
+        assert_ne!(SubscriptionStatus::Active, SubscriptionStatus::Canceled);
+    }
+
+    #[test]
+    fn test_subscription_status_copy_and_clone() {
+        let status1 = SubscriptionStatus::Active;
+        let status2 = status1;
+        let status3 = status1.clone();
+
+        assert_eq!(status1, status2);
+        assert_eq!(status1, status3);
+    }
+
+    #[test]
+    fn test_subscription_plan_method() {
+        let subscription = Subscription {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            stripe_subscription_id: "sub_123".to_string(),
+            stripe_customer_id: "cus_123".to_string(),
+            price_id: "price_123".to_string(),
+            plan: "free".to_string(),
+            status: "active".to_string(),
+            current_period_start: Utc::now(),
+            current_period_end: Utc::now(),
+            cancel_at_period_end: false,
+            canceled_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert_eq!(subscription.plan(), Plan::Free);
+
+        let subscription = Subscription {
+            plan: "pro".to_string(),
+            ..subscription
+        };
+        assert_eq!(subscription.plan(), Plan::Pro);
+
+        let subscription = Subscription {
+            plan: "team".to_string(),
+            ..subscription
+        };
+        assert_eq!(subscription.plan(), Plan::Team);
+
+        // Invalid plan should default to Free
+        let subscription = Subscription {
+            plan: "invalid".to_string(),
+            ..subscription
+        };
+        assert_eq!(subscription.plan(), Plan::Free);
+    }
+
+    #[test]
+    fn test_subscription_status_method() {
+        let subscription = Subscription {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            stripe_subscription_id: "sub_123".to_string(),
+            stripe_customer_id: "cus_123".to_string(),
+            price_id: "price_123".to_string(),
+            plan: "pro".to_string(),
+            status: "active".to_string(),
+            current_period_start: Utc::now(),
+            current_period_end: Utc::now(),
+            cancel_at_period_end: false,
+            canceled_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert_eq!(subscription.status(), SubscriptionStatus::Active);
+
+        let subscription = Subscription {
+            status: "canceled".to_string(),
+            ..subscription
+        };
+        assert_eq!(subscription.status(), SubscriptionStatus::Canceled);
+    }
+
+    #[test]
+    fn test_subscription_serialization() {
+        let subscription = Subscription {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            stripe_subscription_id: "sub_123".to_string(),
+            stripe_customer_id: "cus_123".to_string(),
+            price_id: "price_123".to_string(),
+            plan: "pro".to_string(),
+            status: "active".to_string(),
+            current_period_start: Utc::now(),
+            current_period_end: Utc::now(),
+            cancel_at_period_end: false,
+            canceled_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let json = serde_json::to_string(&subscription).unwrap();
+        assert!(json.contains("sub_123"));
+        assert!(json.contains("cus_123"));
+        assert!(json.contains("price_123"));
+        assert!(json.contains("pro"));
+        assert!(json.contains("active"));
+    }
+
+    #[test]
+    fn test_usage_counter_serialization() {
+        let usage = UsageCounter {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            period_start: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            requests: 1000,
+            egress_bytes: 50000,
+            storage_bytes: 10000,
+            ai_tokens_used: 5000,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let json = serde_json::to_string(&usage).unwrap();
+        assert!(json.contains("1000"));
+        assert!(json.contains("50000"));
+        assert!(json.contains("10000"));
+        assert!(json.contains("5000"));
+    }
+
+    #[test]
+    fn test_usage_counter_clone() {
+        let usage = UsageCounter {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            period_start: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            requests: 1000,
+            egress_bytes: 50000,
+            storage_bytes: 10000,
+            ai_tokens_used: 5000,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let cloned = usage.clone();
+        assert_eq!(usage.id, cloned.id);
+        assert_eq!(usage.requests, cloned.requests);
+        assert_eq!(usage.egress_bytes, cloned.egress_bytes);
+        assert_eq!(usage.storage_bytes, cloned.storage_bytes);
+        assert_eq!(usage.ai_tokens_used, cloned.ai_tokens_used);
+    }
+
+    #[test]
+    fn test_subscription_clone() {
+        let subscription = Subscription {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            stripe_subscription_id: "sub_123".to_string(),
+            stripe_customer_id: "cus_123".to_string(),
+            price_id: "price_123".to_string(),
+            plan: "pro".to_string(),
+            status: "active".to_string(),
+            current_period_start: Utc::now(),
+            current_period_end: Utc::now(),
+            cancel_at_period_end: false,
+            canceled_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let cloned = subscription.clone();
+        assert_eq!(subscription.id, cloned.id);
+        assert_eq!(subscription.stripe_subscription_id, cloned.stripe_subscription_id);
+        assert_eq!(subscription.cancel_at_period_end, cloned.cancel_at_period_end);
+    }
+
+    #[test]
+    fn test_subscription_with_cancellation() {
+        let now = Utc::now();
+        let subscription = Subscription {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            stripe_subscription_id: "sub_123".to_string(),
+            stripe_customer_id: "cus_123".to_string(),
+            price_id: "price_123".to_string(),
+            plan: "pro".to_string(),
+            status: "active".to_string(),
+            current_period_start: now,
+            current_period_end: now,
+            cancel_at_period_end: true,
+            canceled_at: Some(now),
+            created_at: now,
+            updated_at: now,
+        };
+
+        assert!(subscription.cancel_at_period_end);
+        assert!(subscription.canceled_at.is_some());
+        assert_eq!(subscription.status(), SubscriptionStatus::Active);
     }
 }

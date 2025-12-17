@@ -335,3 +335,410 @@ fn value_to_sql_default(value: &serde_json::Value) -> Result<String> {
         _ => Err(Error::generic("Unsupported default value type".to_string())),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::{InMemoryDatabase, VirtualDatabase};
+    use crate::schema::{
+        AutoGenerationRule, CascadeAction, ForeignKeyDefinition, IndexDefinition,
+        ManyToManyDefinition,
+    };
+    use mockforge_data::{FieldDefinition, SchemaDefinition};
+
+    fn create_test_entity(name: &str) -> Entity {
+        let base_schema = SchemaDefinition::new(name.to_string())
+            .with_field(FieldDefinition::new("id".to_string(), "string".to_string()))
+            .with_field(FieldDefinition::new("name".to_string(), "string".to_string()));
+
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        Entity::new(name.to_string(), vbr_schema)
+    }
+
+    // MigrationManager tests
+    #[test]
+    fn test_migration_manager_new() {
+        let manager = MigrationManager::new();
+        assert_eq!(manager.version, 0);
+    }
+
+    #[test]
+    fn test_migration_manager_default() {
+        let manager = MigrationManager::default();
+        assert_eq!(manager.version, 0);
+    }
+
+    #[test]
+    fn test_generate_create_table() {
+        let manager = MigrationManager::new();
+        let entity = create_test_entity("User");
+
+        let result = manager.generate_create_table(&entity);
+        assert!(result.is_ok());
+
+        let sql = result.unwrap();
+        assert!(sql.contains("CREATE TABLE IF NOT EXISTS users"));
+        assert!(sql.contains("id TEXT"));
+        assert!(sql.contains("name TEXT"));
+        assert!(sql.contains("PRIMARY KEY (id)"));
+    }
+
+    #[test]
+    fn test_generate_create_table_with_multiple_fields() {
+        let manager = MigrationManager::new();
+
+        let base_schema = SchemaDefinition::new("Product".to_string())
+            .with_field(FieldDefinition::new("id".to_string(), "string".to_string()))
+            .with_field(FieldDefinition::new("name".to_string(), "string".to_string()))
+            .with_field(FieldDefinition::new("price".to_string(), "number".to_string()))
+            .with_field(FieldDefinition::new("in_stock".to_string(), "boolean".to_string()));
+
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("Product".to_string(), vbr_schema);
+
+        let sql = manager.generate_create_table(&entity).unwrap();
+        assert!(sql.contains("name TEXT"));
+        assert!(sql.contains("price REAL"));
+        assert!(sql.contains("in_stock INTEGER"));
+    }
+
+    #[test]
+    fn test_generate_foreign_keys() {
+        let manager = MigrationManager::new();
+
+        let base_schema = SchemaDefinition::new("Order".to_string())
+            .with_field(FieldDefinition::new("id".to_string(), "string".to_string()));
+
+        let mut vbr_schema = VbrSchemaDefinition::new(base_schema);
+        vbr_schema.foreign_keys.push(ForeignKeyDefinition {
+            field: "user_id".to_string(),
+            target_entity: "User".to_string(),
+            target_field: "id".to_string(),
+            on_delete: CascadeAction::Cascade,
+            on_update: CascadeAction::NoAction,
+        });
+
+        let entity = Entity::new("Order".to_string(), vbr_schema);
+
+        let fk_statements = manager.generate_foreign_keys(&entity);
+        assert_eq!(fk_statements.len(), 1);
+        assert!(fk_statements[0].contains("FOREIGN KEY"));
+        assert!(fk_statements[0].contains("user_id"));
+        assert!(fk_statements[0].contains("CASCADE"));
+    }
+
+    #[test]
+    fn test_generate_indexes() {
+        let manager = MigrationManager::new();
+
+        let base_schema = SchemaDefinition::new("User".to_string());
+        let mut vbr_schema = VbrSchemaDefinition::new(base_schema);
+
+        vbr_schema.indexes.push(IndexDefinition {
+            name: "idx_email".to_string(),
+            fields: vec!["email".to_string()],
+            unique: true,
+        });
+
+        let entity = Entity::new("User".to_string(), vbr_schema);
+
+        let index_statements = manager.generate_indexes(&entity);
+        assert_eq!(index_statements.len(), 1);
+        assert!(index_statements[0].contains("CREATE UNIQUE INDEX"));
+        assert!(index_statements[0].contains("idx_email"));
+        assert!(index_statements[0].contains("email"));
+    }
+
+    #[test]
+    fn test_generate_indexes_non_unique() {
+        let manager = MigrationManager::new();
+
+        let base_schema = SchemaDefinition::new("Product".to_string());
+        let mut vbr_schema = VbrSchemaDefinition::new(base_schema);
+
+        vbr_schema.indexes.push(IndexDefinition {
+            name: "idx_category".to_string(),
+            fields: vec!["category".to_string()],
+            unique: false,
+        });
+
+        let entity = Entity::new("Product".to_string(), vbr_schema);
+
+        let index_statements = manager.generate_indexes(&entity);
+        assert_eq!(index_statements.len(), 1);
+        assert!(index_statements[0].contains("CREATE INDEX"));
+        assert!(!index_statements[0].contains("UNIQUE"));
+    }
+
+    #[test]
+    fn test_generate_junction_table() {
+        let manager = MigrationManager::new();
+
+        let m2m = ManyToManyDefinition::new("User".to_string(), "Role".to_string());
+
+        let result = manager.generate_junction_table(&m2m);
+        assert!(result.is_ok());
+
+        let sql = result.unwrap();
+        assert!(sql.contains("CREATE TABLE IF NOT EXISTS"));
+        assert!(sql.contains("user_id"));
+        assert!(sql.contains("role_id"));
+        assert!(sql.contains("PRIMARY KEY"));
+        assert!(sql.contains("FOREIGN KEY"));
+    }
+
+    #[test]
+    fn test_generate_junction_table_custom() {
+        let manager = MigrationManager::new();
+
+        let m2m = ManyToManyDefinition::new("User".to_string(), "Role".to_string())
+            .with_junction_table("user_role_mapping".to_string())
+            .with_fields("usr_id".to_string(), "rol_id".to_string());
+
+        let sql = manager.generate_junction_table(&m2m).unwrap();
+        assert!(sql.contains("user_role_mapping"));
+        assert!(sql.contains("usr_id"));
+        assert!(sql.contains("rol_id"));
+    }
+
+    #[test]
+    fn test_generate_all_junction_tables() {
+        let manager = MigrationManager::new();
+        let mut registry = EntityRegistry::new();
+
+        // Create entities with M2M relationships
+        let base_schema1 = SchemaDefinition::new("User".to_string());
+        let mut vbr_schema1 = VbrSchemaDefinition::new(base_schema1);
+        vbr_schema1
+            .many_to_many
+            .push(ManyToManyDefinition::new("User".to_string(), "Role".to_string()));
+        let entity1 = Entity::new("User".to_string(), vbr_schema1);
+        registry.register(entity1).unwrap();
+
+        let base_schema2 = SchemaDefinition::new("Role".to_string());
+        let vbr_schema2 = VbrSchemaDefinition::new(base_schema2);
+        let entity2 = Entity::new("Role".to_string(), vbr_schema2);
+        registry.register(entity2).unwrap();
+
+        let result = manager.generate_all_junction_tables(&registry);
+        assert!(result.is_ok());
+
+        let junction_tables = result.unwrap();
+        assert_eq!(junction_tables.len(), 1);
+    }
+
+    #[test]
+    fn test_generate_all_junction_tables_no_duplicates() {
+        let manager = MigrationManager::new();
+        let mut registry = EntityRegistry::new();
+
+        // Both entities define the same M2M relationship
+        let base_schema1 = SchemaDefinition::new("User".to_string());
+        let mut vbr_schema1 = VbrSchemaDefinition::new(base_schema1);
+        vbr_schema1
+            .many_to_many
+            .push(ManyToManyDefinition::new("User".to_string(), "Role".to_string()));
+        let entity1 = Entity::new("User".to_string(), vbr_schema1);
+        registry.register(entity1).unwrap();
+
+        let base_schema2 = SchemaDefinition::new("Role".to_string());
+        let mut vbr_schema2 = VbrSchemaDefinition::new(base_schema2);
+        vbr_schema2
+            .many_to_many
+            .push(ManyToManyDefinition::new("Role".to_string(), "User".to_string()));
+        let entity2 = Entity::new("Role".to_string(), vbr_schema2);
+        registry.register(entity2).unwrap();
+
+        let junction_tables = manager.generate_all_junction_tables(&registry).unwrap();
+        // Should only create one junction table, not two
+        assert_eq!(junction_tables.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_migrate() {
+        let manager = MigrationManager::new();
+        let mut database = InMemoryDatabase::new().await.unwrap();
+        database.initialize().await.unwrap();
+
+        let entity = create_test_entity("User");
+        let entities = vec![entity];
+
+        let result = manager.migrate(&entities, &mut database).await;
+        assert!(result.is_ok());
+
+        // Verify table was created
+        assert!(database.table_exists("users").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_create_table_for_entity() {
+        let mut database = InMemoryDatabase::new().await.unwrap();
+        database.initialize().await.unwrap();
+
+        let entity = create_test_entity("Product");
+
+        let result = create_table_for_entity(&database, &entity).await;
+        assert!(result.is_ok());
+
+        // Verify table was created
+        assert!(database.table_exists("products").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_create_junction_tables() {
+        let mut database = InMemoryDatabase::new().await.unwrap();
+        database.initialize().await.unwrap();
+
+        let mut registry = EntityRegistry::new();
+
+        // Create entities with M2M relationship
+        let base_schema1 = SchemaDefinition::new("User".to_string());
+        let mut vbr_schema1 = VbrSchemaDefinition::new(base_schema1);
+        vbr_schema1
+            .many_to_many
+            .push(ManyToManyDefinition::new("User".to_string(), "Group".to_string()));
+        let entity1 = Entity::new("User".to_string(), vbr_schema1);
+        registry.register(entity1).unwrap();
+
+        let result = create_junction_tables(&database, &registry).await;
+        assert!(result.is_ok());
+    }
+
+    // Helper function tests
+    #[test]
+    fn test_rust_type_to_sql_type() {
+        assert_eq!(rust_type_to_sql_type("string").unwrap(), "TEXT");
+        assert_eq!(rust_type_to_sql_type("String").unwrap(), "TEXT");
+        assert_eq!(rust_type_to_sql_type("integer").unwrap(), "INTEGER");
+        assert_eq!(rust_type_to_sql_type("int").unwrap(), "INTEGER");
+        assert_eq!(rust_type_to_sql_type("i32").unwrap(), "INTEGER");
+        assert_eq!(rust_type_to_sql_type("float").unwrap(), "REAL");
+        assert_eq!(rust_type_to_sql_type("f64").unwrap(), "REAL");
+        assert_eq!(rust_type_to_sql_type("boolean").unwrap(), "INTEGER");
+        assert_eq!(rust_type_to_sql_type("bool").unwrap(), "INTEGER");
+        assert_eq!(rust_type_to_sql_type("date").unwrap(), "TEXT");
+        assert_eq!(rust_type_to_sql_type("datetime").unwrap(), "TEXT");
+        assert_eq!(rust_type_to_sql_type("unknown_type").unwrap(), "TEXT");
+    }
+
+    #[test]
+    fn test_cascade_action_to_sql() {
+        assert_eq!(cascade_action_to_sql(CascadeAction::NoAction), "NO ACTION");
+        assert_eq!(cascade_action_to_sql(CascadeAction::Cascade), "CASCADE");
+        assert_eq!(cascade_action_to_sql(CascadeAction::SetNull), "SET NULL");
+        assert_eq!(cascade_action_to_sql(CascadeAction::SetDefault), "SET DEFAULT");
+        assert_eq!(cascade_action_to_sql(CascadeAction::Restrict), "RESTRICT");
+    }
+
+    #[test]
+    fn test_value_to_sql_default() {
+        // String
+        let result = value_to_sql_default(&serde_json::json!("test")).unwrap();
+        assert_eq!(result, "'test'");
+
+        // String with quotes
+        let result = value_to_sql_default(&serde_json::json!("it's")).unwrap();
+        assert_eq!(result, "'it''s'");
+
+        // Number
+        let result = value_to_sql_default(&serde_json::json!(42)).unwrap();
+        assert_eq!(result, "42");
+
+        // Boolean true
+        let result = value_to_sql_default(&serde_json::json!(true)).unwrap();
+        assert_eq!(result, "1");
+
+        // Boolean false
+        let result = value_to_sql_default(&serde_json::json!(false)).unwrap();
+        assert_eq!(result, "0");
+
+        // Null
+        let result = value_to_sql_default(&serde_json::json!(null)).unwrap();
+        assert_eq!(result, "NULL");
+
+        // Unsupported type (array)
+        let result = value_to_sql_default(&serde_json::json!([]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_field_to_column_definition_with_auto_generation() {
+        let manager = MigrationManager::new();
+
+        let base_schema = SchemaDefinition::new("User".to_string())
+            .with_field(FieldDefinition::new("id".to_string(), "string".to_string()));
+
+        let mut vbr_schema = VbrSchemaDefinition::new(base_schema);
+        vbr_schema.auto_generation.insert("id".to_string(), AutoGenerationRule::Uuid);
+
+        // Access field from base schema
+        let field = &vbr_schema.base.fields[0];
+        let result = manager.field_to_column_definition(field, &vbr_schema);
+        assert!(result.is_ok());
+
+        let column_def = result.unwrap();
+        assert!(column_def.contains("id"));
+        assert!(column_def.contains("TEXT"));
+    }
+
+    #[test]
+    fn test_field_to_column_definition_with_default() {
+        let manager = MigrationManager::new();
+
+        let mut field = FieldDefinition::new("status".to_string(), "string".to_string());
+        field.default = Some(serde_json::json!("active"));
+        let base_schema = SchemaDefinition::new("User".to_string()).with_field(field);
+
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let field_ref = &vbr_schema.base.fields[0];
+
+        let column_def = manager.field_to_column_definition(field_ref, &vbr_schema).unwrap();
+        assert!(column_def.contains("DEFAULT 'active'"));
+    }
+
+    #[test]
+    fn test_field_to_column_definition_required() {
+        let manager = MigrationManager::new();
+
+        let base_schema = SchemaDefinition::new("User".to_string())
+            .with_field(FieldDefinition::new("email".to_string(), "string".to_string()));
+
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let field = &vbr_schema.base.fields[0];
+
+        let column_def = manager.field_to_column_definition(field, &vbr_schema).unwrap();
+        assert!(column_def.contains("NOT NULL"));
+    }
+
+    #[test]
+    fn test_generate_create_table_with_composite_primary_key() {
+        let manager = MigrationManager::new();
+
+        let base_schema = SchemaDefinition::new("UserRole".to_string());
+        let vbr_schema = VbrSchemaDefinition::new(base_schema)
+            .with_primary_key(vec!["user_id".to_string(), "role_id".to_string()]);
+
+        let entity = Entity::new("UserRole".to_string(), vbr_schema);
+
+        let sql = manager.generate_create_table(&entity).unwrap();
+        assert!(sql.contains("PRIMARY KEY (user_id, role_id)"));
+    }
+
+    #[test]
+    fn test_generate_create_table_with_auto_increment() {
+        let manager = MigrationManager::new();
+
+        let base_schema = SchemaDefinition::new("Counter".to_string())
+            .with_field(FieldDefinition::new("id".to_string(), "integer".to_string()));
+
+        let mut vbr_schema = VbrSchemaDefinition::new(base_schema);
+        vbr_schema
+            .auto_generation
+            .insert("id".to_string(), AutoGenerationRule::AutoIncrement);
+
+        let entity = Entity::new("Counter".to_string(), vbr_schema);
+
+        let sql = manager.generate_create_table(&entity).unwrap();
+        assert!(sql.contains("AUTOINCREMENT"));
+    }
+}

@@ -454,6 +454,8 @@ impl CacheStats {
 mod tests {
     use super::*;
 
+    // ===== PluginSource Tests =====
+
     #[test]
     fn test_plugin_source_parse_url() {
         let source = PluginSource::parse("https://example.com/plugin.zip").unwrap();
@@ -469,6 +471,12 @@ mod tests {
     #[test]
     fn test_plugin_source_parse_git_ssh() {
         let source = PluginSource::parse("git@github.com:user/repo.git").unwrap();
+        assert!(matches!(source, PluginSource::Git(_)));
+    }
+
+    #[test]
+    fn test_plugin_source_parse_gitlab() {
+        let source = PluginSource::parse("https://gitlab.com/user/repo").unwrap();
         assert!(matches!(source, PluginSource::Git(_)));
     }
 
@@ -496,10 +504,214 @@ mod tests {
     }
 
     #[test]
+    fn test_plugin_source_parse_registry_without_version() {
+        let source = PluginSource::parse("my-plugin").unwrap();
+        if let PluginSource::Registry { name, version } = source {
+            assert_eq!(name, "my-plugin");
+            assert!(version.is_none());
+        } else {
+            panic!("Expected Registry source");
+        }
+    }
+
+    #[test]
+    fn test_plugin_source_parse_url_with_checksum() {
+        let source = PluginSource::parse("https://example.com/plugin.zip").unwrap();
+        if let PluginSource::Url { url, checksum } = source {
+            assert_eq!(url, "https://example.com/plugin.zip");
+            assert!(checksum.is_none());
+        } else {
+            panic!("Expected URL source");
+        }
+    }
+
+    #[test]
+    fn test_plugin_source_parse_empty_string() {
+        let source = PluginSource::parse("").unwrap();
+        // Empty string should be treated as registry name
+        assert!(matches!(source, PluginSource::Registry { .. }));
+    }
+
+    #[test]
+    fn test_plugin_source_parse_whitespace() {
+        let source = PluginSource::parse("  https://example.com/plugin.zip  ").unwrap();
+        assert!(matches!(source, PluginSource::Url { .. }));
+    }
+
+    #[test]
+    fn test_plugin_source_display() {
+        let source = PluginSource::Local(PathBuf::from("/tmp/plugin"));
+        assert_eq!(source.to_string(), "local:/tmp/plugin");
+
+        let source = PluginSource::Url {
+            url: "https://example.com/plugin.zip".to_string(),
+            checksum: None,
+        };
+        assert_eq!(source.to_string(), "url:https://example.com/plugin.zip");
+
+        let source = PluginSource::Registry {
+            name: "my-plugin".to_string(),
+            version: Some("1.0.0".to_string()),
+        };
+        assert_eq!(source.to_string(), "registry:my-plugin@1.0.0");
+
+        let source = PluginSource::Registry {
+            name: "my-plugin".to_string(),
+            version: None,
+        };
+        assert_eq!(source.to_string(), "registry:my-plugin");
+    }
+
+    #[test]
+    fn test_plugin_source_clone() {
+        let source = PluginSource::Local(PathBuf::from("/tmp"));
+        let cloned = source.clone();
+        assert_eq!(source.to_string(), cloned.to_string());
+    }
+
+    // ===== InstallOptions Tests =====
+
+    #[test]
+    fn test_install_options_default() {
+        let options = InstallOptions::default();
+        assert!(!options.force);
+        assert!(!options.skip_validation);
+        assert!(options.verify_signature);
+        assert!(options.expected_checksum.is_none());
+    }
+
+    #[test]
+    fn test_install_options_with_force() {
+        let options = InstallOptions {
+            force: true,
+            ..Default::default()
+        };
+        assert!(options.force);
+    }
+
+    #[test]
+    fn test_install_options_with_checksum() {
+        let options = InstallOptions {
+            expected_checksum: Some("abc123".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(options.expected_checksum, Some("abc123".to_string()));
+    }
+
+    #[test]
+    fn test_install_options_skip_validation() {
+        let options = InstallOptions {
+            skip_validation: true,
+            verify_signature: false,
+            ..Default::default()
+        };
+        assert!(options.skip_validation);
+        assert!(!options.verify_signature);
+    }
+
+    #[test]
+    fn test_install_options_clone() {
+        let options = InstallOptions {
+            force: true,
+            skip_validation: false,
+            verify_signature: true,
+            expected_checksum: Some("test".to_string()),
+        };
+        let cloned = options.clone();
+        assert_eq!(options.force, cloned.force);
+        assert_eq!(options.expected_checksum, cloned.expected_checksum);
+    }
+
+    // ===== CacheStats Tests =====
+
+    #[test]
     fn test_cache_stats_formatting() {
         assert_eq!(CacheStats::format_size(512), "512 bytes");
         assert_eq!(CacheStats::format_size(1024), "1.00 KB");
         assert_eq!(CacheStats::format_size(1024 * 1024), "1.00 MB");
         assert_eq!(CacheStats::format_size(1024 * 1024 * 1024), "1.00 GB");
+    }
+
+    #[test]
+    fn test_cache_stats_edge_cases() {
+        assert_eq!(CacheStats::format_size(0), "0 bytes");
+        assert_eq!(CacheStats::format_size(1), "1 bytes");
+        assert_eq!(CacheStats::format_size(1023), "1023 bytes");
+        assert_eq!(CacheStats::format_size(1025), "1.00 KB");
+    }
+
+    #[test]
+    fn test_cache_stats_large_values() {
+        let tb = 1024u64 * 1024 * 1024 * 1024;
+        assert!(CacheStats::format_size(tb).contains("GB"));
+    }
+
+    #[test]
+    fn test_cache_stats_formatted_methods() {
+        let stats = CacheStats {
+            download_cache_size: 1024 * 1024,
+            git_cache_size: 2 * 1024 * 1024,
+            total_size: 3 * 1024 * 1024,
+        };
+
+        assert_eq!(stats.download_cache_formatted(), "1.00 MB");
+        assert_eq!(stats.git_cache_formatted(), "2.00 MB");
+        assert_eq!(stats.total_formatted(), "3.00 MB");
+    }
+
+    #[test]
+    fn test_cache_stats_total_calculation() {
+        let stats = CacheStats {
+            download_cache_size: 100,
+            git_cache_size: 200,
+            total_size: 300,
+        };
+
+        assert_eq!(stats.total_size, stats.download_cache_size + stats.git_cache_size);
+    }
+
+    #[test]
+    fn test_cache_stats_clone() {
+        let stats = CacheStats {
+            download_cache_size: 1024,
+            git_cache_size: 2048,
+            total_size: 3072,
+        };
+
+        let cloned = stats.clone();
+        assert_eq!(stats.download_cache_size, cloned.download_cache_size);
+        assert_eq!(stats.git_cache_size, cloned.git_cache_size);
+        assert_eq!(stats.total_size, cloned.total_size);
+    }
+
+    // ===== Edge Cases and Error Handling =====
+
+    #[test]
+    fn test_plugin_source_parse_http_url() {
+        let source = PluginSource::parse("http://example.com/plugin.zip").unwrap();
+        assert!(matches!(source, PluginSource::Url { .. }));
+    }
+
+    #[test]
+    fn test_plugin_source_parse_windows_path() {
+        let source = PluginSource::parse("C:\\Users\\plugin").unwrap();
+        assert!(matches!(source, PluginSource::Local(_)));
+    }
+
+    #[test]
+    fn test_plugin_source_parse_registry_with_special_chars() {
+        let source = PluginSource::parse("my-plugin-name_v2@2.0.0-beta").unwrap();
+        if let PluginSource::Registry { name, version } = source {
+            assert_eq!(name, "my-plugin-name_v2");
+            assert_eq!(version, Some("2.0.0-beta".to_string()));
+        } else {
+            panic!("Expected Registry source");
+        }
+    }
+
+    #[test]
+    fn test_plugin_source_parse_github_dotgit_in_url() {
+        let source = PluginSource::parse("https://github.com/user/repo.git").unwrap();
+        assert!(matches!(source, PluginSource::Git(_)));
     }
 }

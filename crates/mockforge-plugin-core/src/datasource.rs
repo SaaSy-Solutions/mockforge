@@ -1020,9 +1020,699 @@ pub mod helpers {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    // ==================== DataSourcePluginConfig Tests ====================
 
     #[test]
-    fn test_module_compiles() {
-        // Basic compilation test
+    fn test_data_source_plugin_config_default() {
+        let config = DataSourcePluginConfig::default();
+
+        assert!(config.config.is_empty());
+        assert!(config.enabled);
+        assert_eq!(config.data_source_type, "unknown");
+        assert!(config.connection_string.is_none());
+        assert_eq!(config.connection_timeout_secs, 30);
+        assert_eq!(config.query_timeout_secs, 30);
+        assert_eq!(config.max_connections, 10);
+        assert!(config.credentials.is_none());
+        assert!(config.ssl_config.is_none());
+        assert!(config.settings.is_empty());
+    }
+
+    #[test]
+    fn test_data_source_plugin_config_custom() {
+        let config = DataSourcePluginConfig {
+            config: HashMap::from([("key".to_string(), Value::String("value".to_string()))]),
+            enabled: false,
+            data_source_type: "postgresql".to_string(),
+            connection_string: Some("postgres://localhost:5432".to_string()),
+            connection_timeout_secs: 60,
+            query_timeout_secs: 120,
+            max_connections: 20,
+            credentials: Some(DataSourceCredentials::user_pass("user", "pass")),
+            ssl_config: Some(SslConfig::default()),
+            settings: HashMap::new(),
+        };
+
+        assert!(!config.config.is_empty());
+        assert!(!config.enabled);
+        assert_eq!(config.data_source_type, "postgresql");
+        assert!(config.connection_string.is_some());
+    }
+
+    #[test]
+    fn test_data_source_plugin_config_clone() {
+        let config = DataSourcePluginConfig::default();
+        let cloned = config.clone();
+
+        assert_eq!(cloned.data_source_type, config.data_source_type);
+        assert_eq!(cloned.enabled, config.enabled);
+    }
+
+    #[test]
+    fn test_data_source_plugin_config_serialization() {
+        let config = DataSourcePluginConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: DataSourcePluginConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.data_source_type, config.data_source_type);
+    }
+
+    // ==================== DataSourceCredentials Tests ====================
+
+    #[test]
+    fn test_credentials_user_pass() {
+        let creds = DataSourceCredentials::user_pass("admin", "secret123");
+
+        assert_eq!(creds.username.as_deref(), Some("admin"));
+        assert_eq!(creds.password.as_deref(), Some("secret123"));
+        assert!(creds.api_key.is_none());
+        assert!(creds.bearer_token.is_none());
+    }
+
+    #[test]
+    fn test_credentials_api_key() {
+        let creds = DataSourceCredentials::api_key("my-api-key-12345");
+
+        assert!(creds.username.is_none());
+        assert!(creds.password.is_none());
+        assert_eq!(creds.api_key.as_deref(), Some("my-api-key-12345"));
+        assert!(creds.bearer_token.is_none());
+    }
+
+    #[test]
+    fn test_credentials_bearer_token() {
+        let creds = DataSourceCredentials::bearer_token("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9");
+
+        assert!(creds.username.is_none());
+        assert!(creds.password.is_none());
+        assert!(creds.api_key.is_none());
+        assert_eq!(creds.bearer_token.as_deref(), Some("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"));
+    }
+
+    #[test]
+    fn test_credentials_clone() {
+        let creds = DataSourceCredentials::api_key("test");
+        let cloned = creds.clone();
+
+        assert_eq!(cloned.api_key, creds.api_key);
+    }
+
+    // ==================== SslConfig Tests ====================
+
+    #[test]
+    fn test_ssl_config_default() {
+        let config = SslConfig::default();
+
+        assert!(!config.enabled);
+        assert!(config.ca_cert_path.is_none());
+        assert!(config.client_cert_path.is_none());
+        assert!(config.client_key_path.is_none());
+        assert!(!config.skip_verify);
+        assert!(config.custom.is_empty());
+    }
+
+    #[test]
+    fn test_ssl_config_custom() {
+        let config = SslConfig {
+            enabled: true,
+            ca_cert_path: Some("/certs/ca.pem".to_string()),
+            client_cert_path: Some("/certs/client.pem".to_string()),
+            client_key_path: Some("/certs/client.key".to_string()),
+            skip_verify: false,
+            custom: HashMap::new(),
+        };
+
+        assert!(config.enabled);
+        assert_eq!(config.ca_cert_path.as_deref(), Some("/certs/ca.pem"));
+    }
+
+    // ==================== DataConnection Tests ====================
+
+    #[test]
+    fn test_data_connection_new() {
+        let conn = DataConnection::new("postgresql", Value::Null);
+
+        assert!(!conn.id.is_empty());
+        assert_eq!(conn.connection_type, "postgresql");
+        assert!(conn.metadata.is_empty());
+    }
+
+    #[test]
+    fn test_data_connection_mark_used() {
+        let mut conn = DataConnection::new("mysql", Value::Null);
+        let original_last_used = conn.last_used;
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        conn.mark_used();
+
+        assert!(conn.last_used >= original_last_used);
+    }
+
+    #[test]
+    fn test_data_connection_with_metadata() {
+        let conn = DataConnection::new("api", Value::Null)
+            .with_metadata("version", Value::String("v1".to_string()));
+
+        assert!(conn.metadata("version").is_some());
+        assert!(conn.metadata("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_data_connection_is_stale() {
+        let conn = DataConnection::new("test", Value::Null);
+
+        // Should not be stale with a 1 hour max age
+        assert!(!conn.is_stale(chrono::Duration::hours(1)));
+
+        // Should be stale with 0 duration
+        assert!(conn.is_stale(chrono::Duration::zero()));
+    }
+
+    #[test]
+    fn test_data_connection_clone() {
+        let conn = DataConnection::new("sqlite", Value::Null);
+        let cloned = conn.clone();
+
+        assert_eq!(cloned.id, conn.id);
+        assert_eq!(cloned.connection_type, conn.connection_type);
+    }
+
+    // ==================== DataQuery Tests ====================
+
+    #[test]
+    fn test_data_query_select() {
+        let query = DataQuery::select("SELECT * FROM users");
+
+        assert!(matches!(query.query_type, QueryType::Select));
+        assert_eq!(query.query, "SELECT * FROM users");
+    }
+
+    #[test]
+    fn test_data_query_insert() {
+        let query = DataQuery::insert("INSERT INTO users VALUES (?)");
+
+        assert!(matches!(query.query_type, QueryType::Insert));
+    }
+
+    #[test]
+    fn test_data_query_update() {
+        let query = DataQuery::update("UPDATE users SET name = ?");
+
+        assert!(matches!(query.query_type, QueryType::Update));
+    }
+
+    #[test]
+    fn test_data_query_delete() {
+        let query = DataQuery::delete("DELETE FROM users WHERE id = ?");
+
+        assert!(matches!(query.query_type, QueryType::Delete));
+    }
+
+    #[test]
+    fn test_data_query_with_parameter() {
+        let query = DataQuery::select("SELECT * FROM users WHERE id = :id")
+            .with_parameter("id", Value::Number(42.into()));
+
+        assert!(query.parameters.contains_key("id"));
+    }
+
+    #[test]
+    fn test_data_query_with_limit() {
+        let query = DataQuery::select("SELECT * FROM users").with_limit(10);
+
+        assert_eq!(query.limit, Some(10));
+    }
+
+    #[test]
+    fn test_data_query_with_offset() {
+        let query = DataQuery::select("SELECT * FROM users").with_offset(20);
+
+        assert_eq!(query.offset, Some(20));
+    }
+
+    #[test]
+    fn test_data_query_with_sort() {
+        let query = DataQuery::select("SELECT * FROM users").with_sort(SortField::asc("name"));
+
+        assert!(query.sort.is_some());
+        assert_eq!(query.sort.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_data_query_with_filter() {
+        let query = DataQuery::select("SELECT * FROM users")
+            .with_filter(QueryFilter::equals("status", Value::String("active".to_string())));
+
+        assert_eq!(query.filters.len(), 1);
+    }
+
+    #[test]
+    fn test_data_query_with_option() {
+        let query = DataQuery::select("SELECT * FROM users")
+            .with_option("timeout", Value::Number(30.into()));
+
+        assert!(query.options.contains_key("timeout"));
+    }
+
+    #[test]
+    fn test_data_query_chained() {
+        let query = DataQuery::select("SELECT * FROM users")
+            .with_parameter("status", Value::String("active".to_string()))
+            .with_limit(50)
+            .with_offset(0)
+            .with_sort(SortField::desc("created_at"));
+
+        assert!(!query.parameters.is_empty());
+        assert_eq!(query.limit, Some(50));
+        assert_eq!(query.offset, Some(0));
+        assert!(query.sort.is_some());
+    }
+
+    // ==================== QueryType Tests ====================
+
+    #[test]
+    fn test_query_type_display_select() {
+        assert_eq!(format!("{}", QueryType::Select), "SELECT");
+    }
+
+    #[test]
+    fn test_query_type_display_insert() {
+        assert_eq!(format!("{}", QueryType::Insert), "INSERT");
+    }
+
+    #[test]
+    fn test_query_type_display_update() {
+        assert_eq!(format!("{}", QueryType::Update), "UPDATE");
+    }
+
+    #[test]
+    fn test_query_type_display_delete() {
+        assert_eq!(format!("{}", QueryType::Delete), "DELETE");
+    }
+
+    #[test]
+    fn test_query_type_display_custom() {
+        assert_eq!(format!("{}", QueryType::Custom("MERGE".to_string())), "MERGE");
+    }
+
+    // ==================== SortField Tests ====================
+
+    #[test]
+    fn test_sort_field_asc() {
+        let sort = SortField::asc("name");
+
+        assert_eq!(sort.field, "name");
+        assert!(matches!(sort.direction, SortDirection::Ascending));
+    }
+
+    #[test]
+    fn test_sort_field_desc() {
+        let sort = SortField::desc("created_at");
+
+        assert_eq!(sort.field, "created_at");
+        assert!(matches!(sort.direction, SortDirection::Descending));
+    }
+
+    // ==================== QueryFilter Tests ====================
+
+    #[test]
+    fn test_query_filter_equals() {
+        let filter = QueryFilter::equals("status", Value::String("active".to_string()));
+
+        assert_eq!(filter.field, "status");
+        assert!(matches!(filter.operator, FilterOperator::Equals));
+    }
+
+    #[test]
+    fn test_query_filter_greater_than() {
+        let filter = QueryFilter::greater_than("age", Value::Number(18.into()));
+
+        assert!(matches!(filter.operator, FilterOperator::GreaterThan));
+    }
+
+    #[test]
+    fn test_query_filter_less_than() {
+        let filter = QueryFilter::less_than("price", Value::Number(100.into()));
+
+        assert!(matches!(filter.operator, FilterOperator::LessThan));
+    }
+
+    #[test]
+    fn test_query_filter_contains() {
+        let filter = QueryFilter::contains("name", Value::String("test".to_string()));
+
+        assert!(matches!(filter.operator, FilterOperator::Contains));
+    }
+
+    #[test]
+    fn test_query_filter_and() {
+        let filter = QueryFilter::equals("status", Value::String("active".to_string())).and();
+
+        assert!(matches!(filter.logical_op, Some(LogicalOperator::And)));
+    }
+
+    #[test]
+    fn test_query_filter_or() {
+        let filter = QueryFilter::equals("status", Value::String("pending".to_string())).or();
+
+        assert!(matches!(filter.logical_op, Some(LogicalOperator::Or)));
+    }
+
+    // ==================== DataResult Tests ====================
+
+    #[test]
+    fn test_data_result_empty() {
+        let result = DataResult::empty();
+
+        assert!(result.rows.is_empty());
+        assert!(result.columns.is_empty());
+        assert_eq!(result.total_count, Some(0));
+        assert_eq!(result.execution_time_ms, 0);
+    }
+
+    #[test]
+    fn test_data_result_with_rows() {
+        let rows = vec![
+            DataRow::new(vec![Value::String("test".to_string())]),
+            DataRow::new(vec![Value::String("test2".to_string())]),
+        ];
+        let columns = vec![ColumnInfo::new("name", DataType::Text)];
+
+        let result = DataResult::with_rows(rows, columns);
+
+        assert_eq!(result.row_count(), 2);
+        assert_eq!(result.column_count(), 1);
+    }
+
+    #[test]
+    fn test_data_result_with_metadata() {
+        let result = DataResult::empty().with_metadata("source", Value::String("test".to_string()));
+
+        assert!(result.metadata.contains_key("source"));
+    }
+
+    #[test]
+    fn test_data_result_with_execution_time() {
+        let result = DataResult::empty().with_execution_time(150);
+
+        assert_eq!(result.execution_time_ms, 150);
+    }
+
+    #[test]
+    fn test_data_result_to_json_array() {
+        let rows = vec![DataRow::new(vec![Value::String("John".to_string())])];
+        let columns = vec![ColumnInfo::new("name", DataType::Text)];
+        let result = DataResult::with_rows(rows, columns);
+
+        let json = result.to_json_array().unwrap();
+        assert!(json.is_array());
+    }
+
+    // ==================== DataRow Tests ====================
+
+    #[test]
+    fn test_data_row_new() {
+        let row = DataRow::new(vec![Value::Number(1.into()), Value::String("test".to_string())]);
+
+        assert_eq!(row.values.len(), 2);
+        assert!(row.metadata.is_empty());
+    }
+
+    #[test]
+    fn test_data_row_get() {
+        let row = DataRow::new(vec![Value::Number(42.into())]);
+
+        assert!(row.get(0).is_some());
+        assert!(row.get(1).is_none());
+    }
+
+    #[test]
+    fn test_data_row_get_by_name() {
+        let row = DataRow::new(vec![Value::String("John".to_string())]);
+        let columns = vec![ColumnInfo::new("name", DataType::Text)];
+
+        assert!(row.get_by_name("name", &columns).is_some());
+        assert!(row.get_by_name("nonexistent", &columns).is_none());
+    }
+
+    #[test]
+    fn test_data_row_to_json() {
+        let row = DataRow::new(vec![Value::String("John".to_string()), Value::Number(30.into())]);
+        let columns = vec![
+            ColumnInfo::new("name", DataType::Text),
+            ColumnInfo::new("age", DataType::Integer),
+        ];
+
+        let json = row.to_json(&columns).unwrap();
+        assert!(json.is_object());
+    }
+
+    // ==================== ColumnInfo Tests ====================
+
+    #[test]
+    fn test_column_info_new() {
+        let col = ColumnInfo::new("id", DataType::Integer);
+
+        assert_eq!(col.name, "id");
+        assert!(col.nullable);
+        assert!(col.description.is_none());
+    }
+
+    #[test]
+    fn test_column_info_nullable() {
+        let col = ColumnInfo::new("id", DataType::Integer).nullable(false);
+
+        assert!(!col.nullable);
+    }
+
+    #[test]
+    fn test_column_info_description() {
+        let col = ColumnInfo::new("id", DataType::Integer).description("Primary key");
+
+        assert_eq!(col.description.as_deref(), Some("Primary key"));
+    }
+
+    #[test]
+    fn test_column_info_with_metadata() {
+        let col =
+            ColumnInfo::new("id", DataType::Integer).with_metadata("index", Value::Bool(true));
+
+        assert!(col.metadata.contains_key("index"));
+    }
+
+    // ==================== DataType Tests ====================
+
+    #[test]
+    fn test_data_type_display_text() {
+        assert_eq!(format!("{}", DataType::Text), "TEXT");
+    }
+
+    #[test]
+    fn test_data_type_display_integer() {
+        assert_eq!(format!("{}", DataType::Integer), "INTEGER");
+    }
+
+    #[test]
+    fn test_data_type_display_float() {
+        assert_eq!(format!("{}", DataType::Float), "FLOAT");
+    }
+
+    #[test]
+    fn test_data_type_display_boolean() {
+        assert_eq!(format!("{}", DataType::Boolean), "BOOLEAN");
+    }
+
+    #[test]
+    fn test_data_type_display_datetime() {
+        assert_eq!(format!("{}", DataType::DateTime), "DATETIME");
+    }
+
+    #[test]
+    fn test_data_type_display_custom() {
+        assert_eq!(format!("{}", DataType::Custom("MONEY".to_string())), "MONEY");
+    }
+
+    // ==================== Schema Tests ====================
+
+    #[test]
+    fn test_schema_default() {
+        let schema = Schema::default();
+
+        assert!(schema.name.is_none());
+        assert!(schema.tables.is_empty());
+    }
+
+    #[test]
+    fn test_schema_new() {
+        let schema = Schema::new();
+
+        assert!(schema.tables.is_empty());
+    }
+
+    #[test]
+    fn test_schema_with_table() {
+        let schema = Schema::new().with_table(TableInfo::new("users"));
+
+        assert_eq!(schema.tables.len(), 1);
+    }
+
+    #[test]
+    fn test_schema_get_table() {
+        let schema = Schema::new().with_table(TableInfo::new("users"));
+
+        assert!(schema.get_table("users").is_some());
+        assert!(schema.get_table("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_schema_table_names() {
+        let schema = Schema::new()
+            .with_table(TableInfo::new("users"))
+            .with_table(TableInfo::new("orders"));
+
+        let names = schema.table_names();
+        assert!(names.contains(&"users"));
+        assert!(names.contains(&"orders"));
+    }
+
+    // ==================== TableInfo Tests ====================
+
+    #[test]
+    fn test_table_info_new() {
+        let table = TableInfo::new("users");
+
+        assert_eq!(table.name, "users");
+        assert!(table.columns.is_empty());
+        assert!(table.primary_keys.is_empty());
+    }
+
+    #[test]
+    fn test_table_info_with_column() {
+        let table = TableInfo::new("users").with_column(ColumnInfo::new("id", DataType::Integer));
+
+        assert_eq!(table.columns.len(), 1);
+    }
+
+    #[test]
+    fn test_table_info_with_primary_key() {
+        let table = TableInfo::new("users").with_primary_key("id");
+
+        assert!(table.is_primary_key("id"));
+        assert!(!table.is_primary_key("name"));
+    }
+
+    #[test]
+    fn test_table_info_with_foreign_key() {
+        let fk = ForeignKey {
+            column: "user_id".to_string(),
+            referenced_table: "users".to_string(),
+            referenced_column: "id".to_string(),
+            name: Some("fk_orders_user".to_string()),
+        };
+
+        let table = TableInfo::new("orders").with_foreign_key(fk);
+
+        assert_eq!(table.foreign_keys.len(), 1);
+    }
+
+    #[test]
+    fn test_table_info_description() {
+        let table = TableInfo::new("users").description("Stores user information");
+
+        assert_eq!(table.description.as_deref(), Some("Stores user information"));
+    }
+
+    #[test]
+    fn test_table_info_row_count() {
+        let table = TableInfo::new("users").row_count(1000);
+
+        assert_eq!(table.row_count, Some(1000));
+    }
+
+    #[test]
+    fn test_table_info_get_column() {
+        let table = TableInfo::new("users")
+            .with_column(ColumnInfo::new("id", DataType::Integer))
+            .with_column(ColumnInfo::new("name", DataType::Text));
+
+        assert!(table.get_column("id").is_some());
+        assert!(table.get_column("nonexistent").is_none());
+    }
+
+    // ==================== ForeignKey Tests ====================
+
+    #[test]
+    fn test_foreign_key_creation() {
+        let fk = ForeignKey {
+            column: "user_id".to_string(),
+            referenced_table: "users".to_string(),
+            referenced_column: "id".to_string(),
+            name: None,
+        };
+
+        assert_eq!(fk.column, "user_id");
+        assert_eq!(fk.referenced_table, "users");
+    }
+
+    // ==================== ConnectionTestResult Tests ====================
+
+    #[test]
+    fn test_connection_test_result_success() {
+        let result = ConnectionTestResult::success("Connection successful");
+
+        assert!(result.success);
+        assert_eq!(result.message, "Connection successful");
+    }
+
+    #[test]
+    fn test_connection_test_result_failure() {
+        let result = ConnectionTestResult::failure("Connection refused");
+
+        assert!(!result.success);
+        assert_eq!(result.message, "Connection refused");
+    }
+
+    #[test]
+    fn test_connection_test_result_with_latency() {
+        let result = ConnectionTestResult::success("OK").with_latency(50);
+
+        assert_eq!(result.latency_ms, Some(50));
+    }
+
+    #[test]
+    fn test_connection_test_result_with_metadata() {
+        let result = ConnectionTestResult::success("OK")
+            .with_metadata("version", Value::String("5.7".to_string()));
+
+        assert!(result.metadata.contains_key("version"));
+    }
+
+    // ==================== Helper Functions Tests ====================
+
+    #[test]
+    fn test_helpers_create_memory_data_source() {
+        let rows = helpers::create_memory_data_source();
+
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].values.len(), 3);
+    }
+
+    #[test]
+    fn test_helpers_create_sample_columns() {
+        let columns = helpers::create_sample_columns();
+
+        assert_eq!(columns.len(), 3);
+        assert_eq!(columns[0].name, "first_name");
+    }
+
+    #[test]
+    fn test_helpers_create_sample_schema() {
+        let schema = helpers::create_sample_schema();
+
+        assert!(schema.get_table("users").is_some());
+        let users = schema.get_table("users").unwrap();
+        assert!(users.is_primary_key("id"));
     }
 }

@@ -510,3 +510,237 @@ fn parse_role(role_str: &str) -> Result<UserRole, String> {
         _ => Err(format!("Invalid role: {}", role_str)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_role_valid() {
+        assert!(matches!(parse_role("admin"), Ok(UserRole::Admin)));
+        assert!(matches!(parse_role("Admin"), Ok(UserRole::Admin)));
+        assert!(matches!(parse_role("ADMIN"), Ok(UserRole::Admin)));
+        assert!(matches!(parse_role("editor"), Ok(UserRole::Editor)));
+        assert!(matches!(parse_role("Editor"), Ok(UserRole::Editor)));
+        assert!(matches!(parse_role("viewer"), Ok(UserRole::Viewer)));
+        assert!(matches!(parse_role("Viewer"), Ok(UserRole::Viewer)));
+    }
+
+    #[test]
+    fn test_parse_role_invalid() {
+        assert!(parse_role("invalid").is_err());
+        assert!(parse_role("").is_err());
+        assert!(parse_role("super_admin").is_err());
+        assert!(parse_role("moderator").is_err());
+
+        let err = parse_role("invalid").unwrap_err();
+        assert!(err.contains("Invalid role"));
+    }
+
+    #[test]
+    fn test_rate_limiter_creation() {
+        let limiter = RateLimiter::new(5, 60);
+        // Just verify it can be created
+        assert_eq!(limiter.max_attempts, 5);
+        assert_eq!(limiter.window_seconds, 60);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_check_success() {
+        let limiter = RateLimiter::new(5, 60);
+        let result = limiter.check_rate_limit("test_user").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_exceeds_limit() {
+        let limiter = RateLimiter::new(3, 60);
+
+        // First 3 attempts should succeed
+        for _ in 0..3 {
+            assert!(limiter.check_rate_limit("test_user").await.is_ok());
+        }
+
+        // 4th attempt should fail
+        let result = limiter.check_rate_limit("test_user").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Too many"));
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_reset() {
+        let limiter = RateLimiter::new(2, 60);
+
+        // Use up the limit
+        limiter.check_rate_limit("test_user").await.ok();
+        limiter.check_rate_limit("test_user").await.ok();
+
+        // Should fail now
+        assert!(limiter.check_rate_limit("test_user").await.is_err());
+
+        // Reset
+        limiter.reset_rate_limit("test_user").await;
+
+        // Should work again
+        assert!(limiter.check_rate_limit("test_user").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_different_users() {
+        let limiter = RateLimiter::new(2, 60);
+
+        // Use up limit for user1
+        limiter.check_rate_limit("user1").await.ok();
+        limiter.check_rate_limit("user1").await.ok();
+
+        // user1 should be limited
+        assert!(limiter.check_rate_limit("user1").await.is_err());
+
+        // user2 should still work
+        assert!(limiter.check_rate_limit("user2").await.is_ok());
+    }
+
+    #[test]
+    fn test_account_lockout_creation() {
+        let lockout = AccountLockout::new(5, 900);
+        assert_eq!(lockout.max_attempts, 5);
+        assert_eq!(lockout.lockout_duration_seconds, 900);
+    }
+
+    #[test]
+    fn test_database_user_creation() {
+        let user = DatabaseUser {
+            id: "test-id".to_string(),
+            username: "testuser".to_string(),
+            password_hash: "hash".to_string(),
+            role: UserRole::Editor,
+            email: Some("test@example.com".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_login_at: None,
+            failed_login_attempts: 0,
+            locked_until: None,
+        };
+
+        assert_eq!(user.id, "test-id");
+        assert_eq!(user.username, "testuser");
+        assert_eq!(user.failed_login_attempts, 0);
+        assert!(user.locked_until.is_none());
+    }
+
+    #[test]
+    fn test_database_user_with_lockout() {
+        let now = Utc::now();
+        let locked_until = now + chrono::Duration::seconds(900);
+
+        let user = DatabaseUser {
+            id: "test-id".to_string(),
+            username: "testuser".to_string(),
+            password_hash: "hash".to_string(),
+            role: UserRole::Viewer,
+            email: None,
+            created_at: now,
+            updated_at: now,
+            last_login_at: Some(now),
+            failed_login_attempts: 5,
+            locked_until: Some(locked_until),
+        };
+
+        assert_eq!(user.failed_login_attempts, 5);
+        assert!(user.locked_until.is_some());
+        assert!(user.locked_until.unwrap() > now);
+    }
+
+    #[test]
+    fn test_database_user_clone() {
+        let user = DatabaseUser {
+            id: "test-id".to_string(),
+            username: "testuser".to_string(),
+            password_hash: "hash".to_string(),
+            role: UserRole::Admin,
+            email: Some("test@example.com".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_login_at: None,
+            failed_login_attempts: 0,
+            locked_until: None,
+        };
+
+        let cloned = user.clone();
+        assert_eq!(cloned.id, user.id);
+        assert_eq!(cloned.username, user.username);
+        assert_eq!(cloned.role, user.role);
+    }
+
+    // Note: Full database integration tests would require database-auth feature
+    // and an actual database connection. These tests focus on the non-database
+    // logic that can be tested without a database.
+
+    #[test]
+    fn test_all_user_roles_supported() {
+        let roles = vec!["admin", "editor", "viewer"];
+        for role in roles {
+            assert!(parse_role(role).is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_concurrent_access() {
+        let limiter = Arc::new(RateLimiter::new(10, 60));
+        let mut handles = vec![];
+
+        // Spawn multiple tasks accessing rate limiter concurrently
+        for i in 0..5 {
+            let limiter_clone = limiter.clone();
+            let handle = tokio::spawn(async move {
+                limiter_clone.check_rate_limit(&format!("user{}", i)).await
+            });
+            handles.push(handle);
+        }
+
+        // All should succeed (different users)
+        for handle in handles {
+            let result = handle.await.unwrap();
+            assert!(result.is_ok());
+        }
+    }
+
+    #[test]
+    fn test_rate_limiter_clone() {
+        let limiter1 = RateLimiter::new(5, 60);
+        let limiter2 = limiter1.clone();
+
+        assert_eq!(limiter1.max_attempts, limiter2.max_attempts);
+        assert_eq!(limiter1.window_seconds, limiter2.window_seconds);
+    }
+
+    #[test]
+    fn test_account_lockout_clone() {
+        let lockout1 = AccountLockout::new(5, 900);
+        let lockout2 = lockout1.clone();
+
+        assert_eq!(lockout1.max_attempts, lockout2.max_attempts);
+        assert_eq!(lockout1.lockout_duration_seconds, lockout2.lockout_duration_seconds);
+    }
+
+    #[test]
+    fn test_database_user_debug() {
+        let user = DatabaseUser {
+            id: "test-id".to_string(),
+            username: "testuser".to_string(),
+            password_hash: "hash".to_string(),
+            role: UserRole::Viewer,
+            email: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_login_at: None,
+            failed_login_attempts: 0,
+            locked_until: None,
+        };
+
+        let debug_str = format!("{:?}", user);
+        assert!(debug_str.contains("test-id"));
+        assert!(debug_str.contains("testuser"));
+    }
+}

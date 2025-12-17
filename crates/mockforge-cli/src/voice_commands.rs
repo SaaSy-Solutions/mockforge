@@ -757,3 +757,271 @@ async fn handle_create_workspace(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_voice_commands_variants() {
+        // Test Create command construction
+        let create = VoiceCommands::Create {
+            output: Some(PathBuf::from("test.yaml")),
+            serve: false,
+            port: 3000,
+            command: Some("test command".to_string()),
+        };
+
+        match create {
+            VoiceCommands::Create {
+                output,
+                serve,
+                port,
+                command,
+            } => {
+                assert_eq!(output, Some(PathBuf::from("test.yaml")));
+                assert!(!serve);
+                assert_eq!(port, 3000);
+                assert_eq!(command, Some("test command".to_string()));
+            }
+            _ => panic!("Expected Create variant"),
+        }
+    }
+
+    #[test]
+    fn test_voice_commands_interactive() {
+        let interactive = VoiceCommands::Interactive {
+            output: None,
+            serve: true,
+            port: 8080,
+        };
+
+        match interactive {
+            VoiceCommands::Interactive {
+                output,
+                serve,
+                port,
+            } => {
+                assert_eq!(output, None);
+                assert!(serve);
+                assert_eq!(port, 8080);
+            }
+            _ => panic!("Expected Interactive variant"),
+        }
+    }
+
+    #[test]
+    fn test_voice_commands_transpile_hook() {
+        let transpile = VoiceCommands::TranspileHook {
+            description: Some("test hook".to_string()),
+            output: Some(PathBuf::from("hook.yaml")),
+            format: "yaml".to_string(),
+        };
+
+        match transpile {
+            VoiceCommands::TranspileHook {
+                description,
+                output,
+                format,
+            } => {
+                assert_eq!(description, Some("test hook".to_string()));
+                assert_eq!(output, Some(PathBuf::from("hook.yaml")));
+                assert_eq!(format, "yaml");
+            }
+            _ => panic!("Expected TranspileHook variant"),
+        }
+    }
+
+    #[test]
+    fn test_voice_commands_create_workspace() {
+        let workspace = VoiceCommands::CreateWorkspace {
+            command: Some("create workspace".to_string()),
+            yes: true,
+        };
+
+        match workspace {
+            VoiceCommands::CreateWorkspace { command, yes } => {
+                assert_eq!(command, Some("create workspace".to_string()));
+                assert!(yes);
+            }
+            _ => panic!("Expected CreateWorkspace variant"),
+        }
+    }
+
+    #[test]
+    fn test_voice_commands_debug_format() {
+        let create = VoiceCommands::Create {
+            output: Some(PathBuf::from("api.yaml")),
+            serve: true,
+            port: 3000,
+            command: None,
+        };
+
+        let debug_str = format!("{:?}", create);
+        assert!(debug_str.contains("Create"));
+        assert!(debug_str.contains("api.yaml"));
+    }
+
+    #[test]
+    fn test_create_with_default_port() {
+        let create = VoiceCommands::Create {
+            output: None,
+            serve: false,
+            port: 3000,
+            command: None,
+        };
+
+        match create {
+            VoiceCommands::Create { port, .. } => {
+                assert_eq!(port, 3000);
+            }
+            _ => panic!("Expected Create variant"),
+        }
+    }
+
+    #[test]
+    fn test_transpile_hook_format_options() {
+        let yaml_hook = VoiceCommands::TranspileHook {
+            description: None,
+            output: None,
+            format: "yaml".to_string(),
+        };
+
+        match yaml_hook {
+            VoiceCommands::TranspileHook { format, .. } => {
+                assert_eq!(format, "yaml");
+            }
+            _ => panic!("Expected TranspileHook variant"),
+        }
+
+        let json_hook = VoiceCommands::TranspileHook {
+            description: None,
+            output: None,
+            format: "json".to_string(),
+        };
+
+        match json_hook {
+            VoiceCommands::TranspileHook { format, .. } => {
+                assert_eq!(format, "json");
+            }
+            _ => panic!("Expected TranspileHook variant"),
+        }
+    }
+
+    #[test]
+    fn test_interactive_with_custom_port() {
+        let custom_port = 9999;
+        let interactive = VoiceCommands::Interactive {
+            output: Some(PathBuf::from("output.json")),
+            serve: false,
+            port: custom_port,
+        };
+
+        match interactive {
+            VoiceCommands::Interactive { port, .. } => {
+                assert_eq!(port, custom_port);
+            }
+            _ => panic!("Expected Interactive variant"),
+        }
+    }
+
+    #[test]
+    fn test_create_workspace_without_auto_confirm() {
+        let workspace = VoiceCommands::CreateWorkspace {
+            command: None,
+            yes: false,
+        };
+
+        match workspace {
+            VoiceCommands::CreateWorkspace { yes, .. } => {
+                assert!(!yes);
+            }
+            _ => panic!("Expected CreateWorkspace variant"),
+        }
+    }
+
+    #[test]
+    fn test_pathbuf_handling() {
+        let path = PathBuf::from("/tmp/test.yaml");
+        let create = VoiceCommands::Create {
+            output: Some(path.clone()),
+            serve: false,
+            port: 3000,
+            command: None,
+        };
+
+        match create {
+            VoiceCommands::Create { output, .. } => {
+                assert_eq!(output, Some(path));
+            }
+            _ => panic!("Expected Create variant"),
+        }
+    }
+
+    #[test]
+    fn test_optional_command_text() {
+        let with_command = VoiceCommands::Create {
+            output: None,
+            serve: false,
+            port: 3000,
+            command: Some("create API".to_string()),
+        };
+
+        match with_command {
+            VoiceCommands::Create { command, .. } => {
+                assert!(command.is_some());
+                assert_eq!(command.unwrap(), "create API");
+            }
+            _ => panic!("Expected Create variant"),
+        }
+
+        let without_command = VoiceCommands::Create {
+            output: None,
+            serve: false,
+            port: 3000,
+            command: None,
+        };
+
+        match without_command {
+            VoiceCommands::Create { command, .. } => {
+                assert!(command.is_none());
+            }
+            _ => panic!("Expected Create variant"),
+        }
+    }
+
+    #[test]
+    fn test_serve_flag_combinations() {
+        // serve without output
+        let create1 = VoiceCommands::Create {
+            output: None,
+            serve: true,
+            port: 3000,
+            command: None,
+        };
+
+        match create1 {
+            VoiceCommands::Create { output, serve, .. } => {
+                assert!(output.is_none());
+                assert!(serve);
+            }
+            _ => panic!("Expected Create variant"),
+        }
+
+        // serve with output
+        let create2 = VoiceCommands::Create {
+            output: Some(PathBuf::from("api.yaml")),
+            serve: true,
+            port: 3000,
+            command: None,
+        };
+
+        match create2 {
+            VoiceCommands::Create { output, serve, .. } => {
+                assert!(output.is_some());
+                assert!(serve);
+            }
+            _ => panic!("Expected Create variant"),
+        }
+    }
+}

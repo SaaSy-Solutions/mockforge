@@ -576,3 +576,623 @@ impl PersonaGraph {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // PersonaNode tests
+    // =========================================================================
+
+    #[test]
+    fn test_persona_node_new() {
+        let node = PersonaNode::new("user-123".to_string(), "user".to_string());
+        assert_eq!(node.persona_id, "user-123");
+        assert_eq!(node.entity_type, "user");
+        assert!(node.relationships.is_empty());
+        assert!(node.metadata.is_empty());
+    }
+
+    #[test]
+    fn test_persona_node_add_relationship() {
+        let mut node = PersonaNode::new("user-123".to_string(), "user".to_string());
+        node.add_relationship("has_orders".to_string(), "order-1".to_string());
+        node.add_relationship("has_orders".to_string(), "order-2".to_string());
+
+        let related = node.get_related("has_orders");
+        assert_eq!(related.len(), 2);
+        assert!(related.contains(&"order-1".to_string()));
+        assert!(related.contains(&"order-2".to_string()));
+    }
+
+    #[test]
+    fn test_persona_node_get_related_empty() {
+        let node = PersonaNode::new("user-123".to_string(), "user".to_string());
+        let related = node.get_related("has_orders");
+        assert!(related.is_empty());
+    }
+
+    #[test]
+    fn test_persona_node_get_relationship_types() {
+        let mut node = PersonaNode::new("user-123".to_string(), "user".to_string());
+        node.add_relationship("has_orders".to_string(), "order-1".to_string());
+        node.add_relationship("has_payments".to_string(), "payment-1".to_string());
+
+        let types = node.get_relationship_types();
+        assert_eq!(types.len(), 2);
+        assert!(types.contains(&"has_orders".to_string()));
+        assert!(types.contains(&"has_payments".to_string()));
+    }
+
+    #[test]
+    fn test_persona_node_clone() {
+        let mut node = PersonaNode::new("user-123".to_string(), "user".to_string());
+        node.add_relationship("has_orders".to_string(), "order-1".to_string());
+
+        let cloned = node.clone();
+        assert_eq!(cloned.persona_id, node.persona_id);
+        assert_eq!(cloned.entity_type, node.entity_type);
+        assert_eq!(cloned.relationships, node.relationships);
+    }
+
+    #[test]
+    fn test_persona_node_debug() {
+        let node = PersonaNode::new("user-123".to_string(), "user".to_string());
+        let debug_str = format!("{:?}", node);
+        assert!(debug_str.contains("user-123"));
+        assert!(debug_str.contains("user"));
+    }
+
+    #[test]
+    fn test_persona_node_serialize_deserialize() {
+        let mut node = PersonaNode::new("user-123".to_string(), "user".to_string());
+        node.add_relationship("has_orders".to_string(), "order-1".to_string());
+
+        let json = serde_json::to_string(&node).unwrap();
+        let deserialized: PersonaNode = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.persona_id, "user-123");
+        assert_eq!(deserialized.entity_type, "user");
+    }
+
+    // =========================================================================
+    // Edge tests
+    // =========================================================================
+
+    #[test]
+    fn test_edge_creation() {
+        let edge = Edge {
+            from: "user-123".to_string(),
+            to: "order-456".to_string(),
+            relationship_type: "has_orders".to_string(),
+            weight: 1.0,
+        };
+        assert_eq!(edge.from, "user-123");
+        assert_eq!(edge.to, "order-456");
+        assert_eq!(edge.relationship_type, "has_orders");
+        assert!((edge.weight - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_edge_clone() {
+        let edge = Edge {
+            from: "a".to_string(),
+            to: "b".to_string(),
+            relationship_type: "rel".to_string(),
+            weight: 2.5,
+        };
+        let cloned = edge.clone();
+        assert_eq!(cloned.from, edge.from);
+        assert!((cloned.weight - 2.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_edge_debug() {
+        let edge = Edge {
+            from: "a".to_string(),
+            to: "b".to_string(),
+            relationship_type: "rel".to_string(),
+            weight: 1.0,
+        };
+        let debug_str = format!("{:?}", edge);
+        assert!(debug_str.contains("from"));
+        assert!(debug_str.contains("to"));
+    }
+
+    #[test]
+    fn test_edge_serialize_default_weight() {
+        let edge = Edge {
+            from: "a".to_string(),
+            to: "b".to_string(),
+            relationship_type: "rel".to_string(),
+            weight: 1.0,
+        };
+        let json = serde_json::to_string(&edge).unwrap();
+        let deserialized: Edge = serde_json::from_str(&json).unwrap();
+        assert!((deserialized.weight - 1.0).abs() < f64::EPSILON);
+    }
+
+    // =========================================================================
+    // PersonaGraph tests
+    // =========================================================================
+
+    #[test]
+    fn test_persona_graph_new() {
+        let graph = PersonaGraph::new();
+        let stats = graph.get_stats();
+        assert_eq!(stats.node_count, 0);
+        assert_eq!(stats.edge_count, 0);
+    }
+
+    #[test]
+    fn test_persona_graph_default() {
+        let graph = PersonaGraph::default();
+        assert_eq!(graph.get_stats().node_count, 0);
+    }
+
+    #[test]
+    fn test_persona_graph_add_node() {
+        let graph = PersonaGraph::new();
+        let node = PersonaNode::new("user-123".to_string(), "user".to_string());
+        graph.add_node(node);
+
+        let stats = graph.get_stats();
+        assert_eq!(stats.node_count, 1);
+    }
+
+    #[test]
+    fn test_persona_graph_get_node() {
+        let graph = PersonaGraph::new();
+        let node = PersonaNode::new("user-123".to_string(), "user".to_string());
+        graph.add_node(node);
+
+        let retrieved = graph.get_node("user-123");
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().persona_id, "user-123");
+    }
+
+    #[test]
+    fn test_persona_graph_get_node_not_found() {
+        let graph = PersonaGraph::new();
+        assert!(graph.get_node("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_persona_graph_add_edge() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+
+        let stats = graph.get_stats();
+        assert_eq!(stats.edge_count, 1);
+    }
+
+    #[test]
+    fn test_persona_graph_get_edges_from() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+        graph.add_node(PersonaNode::new("order-2".to_string(), "order".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+        graph.add_edge("user-1".to_string(), "order-2".to_string(), "has_orders".to_string());
+
+        let edges = graph.get_edges_from("user-1");
+        assert_eq!(edges.len(), 2);
+    }
+
+    #[test]
+    fn test_persona_graph_get_edges_to() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("user-2".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+        graph.add_edge("user-2".to_string(), "order-1".to_string(), "has_orders".to_string());
+
+        let edges = graph.get_edges_to("order-1");
+        assert_eq!(edges.len(), 2);
+    }
+
+    #[test]
+    fn test_persona_graph_find_related_bfs() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+        graph.add_node(PersonaNode::new("payment-1".to_string(), "payment".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+        graph.add_edge("order-1".to_string(), "payment-1".to_string(), "has_payments".to_string());
+
+        let related = graph.find_related_bfs("user-1", None, None);
+        assert_eq!(related.len(), 2);
+        assert!(related.contains(&"order-1".to_string()));
+        assert!(related.contains(&"payment-1".to_string()));
+    }
+
+    #[test]
+    fn test_persona_graph_find_related_bfs_with_depth_limit() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+        graph.add_node(PersonaNode::new("payment-1".to_string(), "payment".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+        graph.add_edge("order-1".to_string(), "payment-1".to_string(), "has_payments".to_string());
+
+        let related = graph.find_related_bfs("user-1", None, Some(1));
+        assert_eq!(related.len(), 1);
+        assert!(related.contains(&"order-1".to_string()));
+    }
+
+    #[test]
+    fn test_persona_graph_find_related_bfs_with_type_filter() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+        graph.add_node(PersonaNode::new("account-1".to_string(), "account".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+        graph.add_edge("user-1".to_string(), "account-1".to_string(), "has_accounts".to_string());
+
+        let filter = vec!["has_orders".to_string()];
+        let related = graph.find_related_bfs("user-1", Some(&filter), None);
+        assert_eq!(related.len(), 1);
+        assert!(related.contains(&"order-1".to_string()));
+    }
+
+    #[test]
+    fn test_persona_graph_find_related_dfs() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+        graph.add_node(PersonaNode::new("payment-1".to_string(), "payment".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+        graph.add_edge("order-1".to_string(), "payment-1".to_string(), "has_payments".to_string());
+
+        let related = graph.find_related_dfs("user-1", None, None);
+        assert_eq!(related.len(), 2);
+    }
+
+    #[test]
+    fn test_persona_graph_find_related_dfs_with_depth_limit() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("a".to_string(), "node".to_string()));
+        graph.add_node(PersonaNode::new("b".to_string(), "node".to_string()));
+        graph.add_node(PersonaNode::new("c".to_string(), "node".to_string()));
+        graph.add_node(PersonaNode::new("d".to_string(), "node".to_string()));
+
+        graph.add_edge("a".to_string(), "b".to_string(), "linked".to_string());
+        graph.add_edge("b".to_string(), "c".to_string(), "linked".to_string());
+        graph.add_edge("c".to_string(), "d".to_string(), "linked".to_string());
+
+        // DFS implementation: max_depth=2 means we can go 0->1->2, but depth 2 is the cutoff
+        // So we get nodes at depth 1 only (b), not c at depth 2
+        let related = graph.find_related_dfs("a", None, Some(2));
+        assert_eq!(related.len(), 1); // only b, depth 2 is the cutoff
+        assert!(related.contains(&"b".to_string()));
+    }
+
+    #[test]
+    fn test_persona_graph_get_subgraph() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+        graph.add_node(PersonaNode::new("isolated".to_string(), "node".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+
+        let (nodes, edges) = graph.get_subgraph("user-1");
+        assert_eq!(nodes.len(), 2); // user-1 and order-1
+        assert_eq!(edges.len(), 1);
+    }
+
+    #[test]
+    fn test_persona_graph_get_all_nodes() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("a".to_string(), "node".to_string()));
+        graph.add_node(PersonaNode::new("b".to_string(), "node".to_string()));
+        graph.add_node(PersonaNode::new("c".to_string(), "node".to_string()));
+
+        let nodes = graph.get_all_nodes();
+        assert_eq!(nodes.len(), 3);
+    }
+
+    #[test]
+    fn test_persona_graph_remove_node() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+
+        graph.remove_node("order-1");
+
+        assert!(graph.get_node("order-1").is_none());
+        assert_eq!(graph.get_edges_from("user-1").len(), 0);
+    }
+
+    #[test]
+    fn test_persona_graph_clear() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+
+        graph.clear();
+
+        let stats = graph.get_stats();
+        assert_eq!(stats.node_count, 0);
+        assert_eq!(stats.edge_count, 0);
+    }
+
+    #[test]
+    fn test_persona_graph_get_stats() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+        graph.add_node(PersonaNode::new("order-2".to_string(), "order".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+        graph.add_edge("user-1".to_string(), "order-2".to_string(), "has_orders".to_string());
+
+        let stats = graph.get_stats();
+        assert_eq!(stats.node_count, 3);
+        assert_eq!(stats.edge_count, 2);
+        assert_eq!(*stats.relationship_types.get("has_orders").unwrap(), 2);
+    }
+
+    // =========================================================================
+    // Link entity types tests
+    // =========================================================================
+
+    #[test]
+    fn test_persona_graph_link_entity_types_user_order() {
+        let graph = PersonaGraph::new();
+        graph.link_entity_types("user-1", "user", "order-1", "order");
+
+        let node = graph.get_node("user-1").unwrap();
+        assert_eq!(node.entity_type, "user");
+
+        let related = node.get_related("has_orders");
+        assert!(related.contains(&"order-1".to_string()));
+    }
+
+    #[test]
+    fn test_persona_graph_link_entity_types_order_payment() {
+        let graph = PersonaGraph::new();
+        graph.link_entity_types("order-1", "order", "payment-1", "payment");
+
+        let related = graph.get_node("order-1").unwrap().get_related("has_payments");
+        assert!(related.contains(&"payment-1".to_string()));
+    }
+
+    #[test]
+    fn test_persona_graph_link_entity_types_generic() {
+        let graph = PersonaGraph::new();
+        graph.link_entity_types("foo-1", "foo", "bar-1", "bars");
+
+        let node = graph.get_node("foo-1").unwrap();
+        // Generic relationship: has_bar (from "bars" -> "bar")
+        let related = node.get_related("has_bar");
+        assert!(related.contains(&"bar-1".to_string()));
+    }
+
+    #[test]
+    fn test_persona_graph_link_entity_types_creates_nodes() {
+        let graph = PersonaGraph::new();
+        graph.link_entity_types("new-user", "user", "new-order", "order");
+
+        assert!(graph.get_node("new-user").is_some());
+        assert!(graph.get_node("new-order").is_some());
+    }
+
+    // =========================================================================
+    // Find related by entity type tests
+    // =========================================================================
+
+    #[test]
+    fn test_persona_graph_find_related_by_entity_type() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+        graph.add_node(PersonaNode::new("order-2".to_string(), "order".to_string()));
+        graph.add_node(PersonaNode::new("payment-1".to_string(), "payment".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+        graph.add_edge("user-1".to_string(), "order-2".to_string(), "has_orders".to_string());
+        graph.add_edge("user-1".to_string(), "payment-1".to_string(), "has_payments".to_string());
+
+        let orders = graph.find_related_by_entity_type("user-1", "order", None);
+        assert_eq!(orders.len(), 2);
+    }
+
+    #[test]
+    fn test_persona_graph_find_related_by_entity_type_with_filter() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+
+        let orders = graph.find_related_by_entity_type("user-1", "order", Some("has_orders"));
+        assert_eq!(orders.len(), 1);
+    }
+
+    // =========================================================================
+    // Get or create node with links tests
+    // =========================================================================
+
+    #[test]
+    fn test_persona_graph_get_or_create_node_new() {
+        let graph = PersonaGraph::new();
+        let node = graph.get_or_create_node_with_links("user-new", "user", None, None);
+        assert_eq!(node.persona_id, "user-new");
+        assert!(graph.get_node("user-new").is_some());
+    }
+
+    #[test]
+    fn test_persona_graph_get_or_create_node_existing() {
+        let graph = PersonaGraph::new();
+        let node1 = PersonaNode::new("user-existing".to_string(), "user".to_string());
+        graph.add_node(node1);
+
+        let node2 = graph.get_or_create_node_with_links("user-existing", "user", None, None);
+        assert_eq!(node2.persona_id, "user-existing");
+    }
+
+    #[test]
+    fn test_persona_graph_get_or_create_node_with_link() {
+        let graph = PersonaGraph::new();
+        let _node = graph.get_or_create_node_with_links(
+            "user-link",
+            "user",
+            Some("order-link"),
+            Some("order"),
+        );
+
+        assert!(graph.get_node("user-link").is_some());
+        assert!(graph.get_node("order-link").is_some());
+        assert_eq!(graph.get_edges_from("user-link").len(), 1);
+    }
+
+    // =========================================================================
+    // GraphStats tests
+    // =========================================================================
+
+    #[test]
+    fn test_graph_stats_clone() {
+        let stats = GraphStats {
+            node_count: 5,
+            edge_count: 10,
+            relationship_types: {
+                let mut map = HashMap::new();
+                map.insert("has_orders".to_string(), 5);
+                map
+            },
+        };
+        let cloned = stats.clone();
+        assert_eq!(cloned.node_count, 5);
+        assert_eq!(cloned.edge_count, 10);
+    }
+
+    #[test]
+    fn test_graph_stats_debug() {
+        let stats = GraphStats {
+            node_count: 3,
+            edge_count: 2,
+            relationship_types: HashMap::new(),
+        };
+        let debug_str = format!("{:?}", stats);
+        assert!(debug_str.contains("node_count"));
+        assert!(debug_str.contains("edge_count"));
+    }
+
+    #[test]
+    fn test_graph_stats_serialize() {
+        let stats = GraphStats {
+            node_count: 1,
+            edge_count: 2,
+            relationship_types: HashMap::new(),
+        };
+        let json = serde_json::to_string(&stats).unwrap();
+        assert!(json.contains("node_count"));
+    }
+
+    // =========================================================================
+    // Visualization tests
+    // =========================================================================
+
+    #[test]
+    fn test_visualization_node_creation() {
+        let node = VisualizationNode {
+            id: "user-1".to_string(),
+            entity_type: "user".to_string(),
+            label: "User 1".to_string(),
+            position: Some((0.0, 0.0)),
+        };
+        assert_eq!(node.id, "user-1");
+    }
+
+    #[test]
+    fn test_visualization_edge_creation() {
+        let edge = VisualizationEdge {
+            from: "a".to_string(),
+            to: "b".to_string(),
+            relationship_type: "linked".to_string(),
+            label: "Linked".to_string(),
+        };
+        assert_eq!(edge.from, "a");
+    }
+
+    #[test]
+    fn test_persona_graph_to_visualization() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+        graph.add_node(PersonaNode::new("order-1".to_string(), "order".to_string()));
+        graph.add_edge("user-1".to_string(), "order-1".to_string(), "has_orders".to_string());
+
+        let viz = graph.to_visualization();
+        assert_eq!(viz.nodes.len(), 2);
+        assert_eq!(viz.edges.len(), 1);
+    }
+
+    #[test]
+    fn test_visualization_serialize() {
+        let viz = GraphVisualization {
+            nodes: vec![VisualizationNode {
+                id: "test".to_string(),
+                entity_type: "node".to_string(),
+                label: "Test".to_string(),
+                position: None,
+            }],
+            edges: vec![],
+        };
+        let json = serde_json::to_string(&viz).unwrap();
+        assert!(json.contains("test"));
+    }
+
+    // =========================================================================
+    // Cycle detection tests
+    // =========================================================================
+
+    #[test]
+    fn test_persona_graph_handles_cycles() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("a".to_string(), "node".to_string()));
+        graph.add_node(PersonaNode::new("b".to_string(), "node".to_string()));
+        graph.add_node(PersonaNode::new("c".to_string(), "node".to_string()));
+
+        // Create a cycle: a -> b -> c -> a
+        graph.add_edge("a".to_string(), "b".to_string(), "linked".to_string());
+        graph.add_edge("b".to_string(), "c".to_string(), "linked".to_string());
+        graph.add_edge("c".to_string(), "a".to_string(), "linked".to_string());
+
+        // BFS should not loop infinitely
+        let related = graph.find_related_bfs("a", None, None);
+        assert_eq!(related.len(), 2); // b and c (not a again)
+
+        // DFS should not loop infinitely
+        let related_dfs = graph.find_related_dfs("a", None, None);
+        assert_eq!(related_dfs.len(), 2);
+    }
+
+    // =========================================================================
+    // Clone tests
+    // =========================================================================
+
+    #[test]
+    fn test_persona_graph_clone() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+
+        let cloned = graph.clone();
+        // Both graphs share the same underlying data via Arc
+        assert!(cloned.get_node("user-1").is_some());
+    }
+}

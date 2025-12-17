@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
+    middleware::{resolve_org_context, AuthUser},
     models::{OrgMember, OrgRole, OrgTemplate},
     AppState,
 };

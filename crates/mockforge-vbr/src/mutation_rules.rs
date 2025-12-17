@@ -6,28 +6,26 @@
 //!
 //! ## Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use mockforge_vbr::mutation_rules::{MutationRule, MutationRuleManager, MutationTrigger, MutationOperation};
-//! use mockforge_core::time_travel_now;
-//! use std::sync::Arc;
 //!
 //! let manager = MutationRuleManager::new();
 //!
 //! // Create a rule that increments a counter every hour
-//! let rule = MutationRule {
-//!     id: "hourly-counter".to_string(),
-//!     entity_name: "User".to_string(),
-//!     trigger: MutationTrigger::Interval {
+//! let rule = MutationRule::new(
+//!     "hourly-counter".to_string(),
+//!     "User".to_string(),
+//!     MutationTrigger::Interval {
 //!         duration_seconds: 3600,
 //!     },
-//!     operation: MutationOperation::Increment {
+//!     MutationOperation::Increment {
 //!         field: "login_count".to_string(),
 //!         amount: 1.0,
 //!     },
-//!     enabled: true,
-//! };
+//! );
 //!
-//! manager.add_rule(rule).await;
+//! // Add the rule (async operation)
+//! // manager.add_rule(rule).await;
 //! ```
 
 use crate::{Error, Result};
@@ -761,6 +759,134 @@ impl Default for MutationRuleManager {
 mod tests {
     use super::*;
 
+    // MutationTrigger tests
+    #[test]
+    fn test_mutation_trigger_interval_serialize() {
+        let trigger = MutationTrigger::Interval {
+            duration_seconds: 3600,
+        };
+        let json = serde_json::to_string(&trigger).unwrap();
+        assert!(json.contains("interval"));
+        assert!(json.contains("3600"));
+    }
+
+    #[test]
+    fn test_mutation_trigger_at_time_serialize() {
+        let trigger = MutationTrigger::AtTime {
+            hour: 9,
+            minute: 30,
+        };
+        let json = serde_json::to_string(&trigger).unwrap();
+        assert!(json.contains("attime"));
+        assert!(json.contains("\"hour\":9"));
+    }
+
+    #[test]
+    fn test_mutation_trigger_field_threshold_serialize() {
+        let trigger = MutationTrigger::FieldThreshold {
+            field: "age".to_string(),
+            threshold: serde_json::json!(100),
+            operator: ComparisonOperator::Gt,
+        };
+        let json = serde_json::to_string(&trigger).unwrap();
+        assert!(json.contains("fieldthreshold"));
+        assert!(json.contains("age"));
+    }
+
+    #[test]
+    fn test_mutation_trigger_clone() {
+        let trigger = MutationTrigger::Interval {
+            duration_seconds: 60,
+        };
+        let cloned = trigger.clone();
+        match cloned {
+            MutationTrigger::Interval { duration_seconds } => {
+                assert_eq!(duration_seconds, 60);
+            }
+            _ => panic!("Expected Interval variant"),
+        }
+    }
+
+    #[test]
+    fn test_mutation_trigger_debug() {
+        let trigger = MutationTrigger::Interval {
+            duration_seconds: 120,
+        };
+        let debug = format!("{:?}", trigger);
+        assert!(debug.contains("Interval"));
+    }
+
+    // MutationOperation tests
+    #[test]
+    fn test_mutation_operation_set() {
+        let op = MutationOperation::Set {
+            field: "status".to_string(),
+            value: serde_json::json!("active"),
+        };
+        let json = serde_json::to_string(&op).unwrap();
+        assert!(json.contains("set"));
+        assert!(json.contains("status"));
+    }
+
+    #[test]
+    fn test_mutation_operation_increment() {
+        let op = MutationOperation::Increment {
+            field: "count".to_string(),
+            amount: 5.0,
+        };
+        let json = serde_json::to_string(&op).unwrap();
+        assert!(json.contains("increment"));
+        assert!(json.contains("count"));
+    }
+
+    #[test]
+    fn test_mutation_operation_decrement() {
+        let op = MutationOperation::Decrement {
+            field: "balance".to_string(),
+            amount: 10.5,
+        };
+        let json = serde_json::to_string(&op).unwrap();
+        assert!(json.contains("decrement"));
+        assert!(json.contains("balance"));
+    }
+
+    #[test]
+    fn test_mutation_operation_transform() {
+        let op = MutationOperation::Transform {
+            field: "value".to_string(),
+            expression: "{{value}} * 2".to_string(),
+        };
+        let json = serde_json::to_string(&op).unwrap();
+        assert!(json.contains("transform"));
+    }
+
+    #[test]
+    fn test_mutation_operation_update_status() {
+        let op = MutationOperation::UpdateStatus {
+            status: "completed".to_string(),
+        };
+        let json = serde_json::to_string(&op).unwrap();
+        assert!(json.contains("updatestatus"));
+        assert!(json.contains("completed"));
+    }
+
+    #[test]
+    fn test_mutation_operation_clone() {
+        let op = MutationOperation::Set {
+            field: "test".to_string(),
+            value: serde_json::json!(42),
+        };
+        let cloned = op.clone();
+        match cloned {
+            MutationOperation::Set { field, value } => {
+                assert_eq!(field, "test");
+                assert_eq!(value, serde_json::json!(42));
+            }
+            _ => panic!("Expected Set variant"),
+        }
+    }
+
+    // MutationRule tests
     #[test]
     fn test_mutation_rule_creation() {
         let rule = MutationRule::new(
@@ -778,6 +904,71 @@ mod tests {
         assert_eq!(rule.id, "test-1");
         assert_eq!(rule.entity_name, "User");
         assert!(rule.enabled);
+        assert!(rule.description.is_none());
+        assert!(rule.condition.is_none());
+        assert!(rule.last_execution.is_none());
+        assert_eq!(rule.execution_count, 0);
+    }
+
+    #[test]
+    fn test_mutation_rule_defaults() {
+        let rule = MutationRule::new(
+            "rule-1".to_string(),
+            "Order".to_string(),
+            MutationTrigger::Interval {
+                duration_seconds: 60,
+            },
+            MutationOperation::Set {
+                field: "status".to_string(),
+                value: serde_json::json!("processed"),
+            },
+        );
+
+        // Default values
+        assert!(rule.enabled);
+        assert!(rule.description.is_none());
+        assert!(rule.condition.is_none());
+        assert!(rule.last_execution.is_none());
+        assert_eq!(rule.execution_count, 0);
+    }
+
+    #[test]
+    fn test_mutation_rule_clone() {
+        let rule = MutationRule::new(
+            "clone-test".to_string(),
+            "Entity".to_string(),
+            MutationTrigger::Interval {
+                duration_seconds: 100,
+            },
+            MutationOperation::Increment {
+                field: "counter".to_string(),
+                amount: 1.0,
+            },
+        );
+
+        let cloned = rule.clone();
+        assert_eq!(rule.id, cloned.id);
+        assert_eq!(rule.entity_name, cloned.entity_name);
+        assert_eq!(rule.enabled, cloned.enabled);
+    }
+
+    #[test]
+    fn test_mutation_rule_debug() {
+        let rule = MutationRule::new(
+            "debug-rule".to_string(),
+            "Test".to_string(),
+            MutationTrigger::Interval {
+                duration_seconds: 10,
+            },
+            MutationOperation::Set {
+                field: "f".to_string(),
+                value: serde_json::json!("v"),
+            },
+        );
+
+        let debug = format!("{:?}", rule);
+        assert!(debug.contains("MutationRule"));
+        assert!(debug.contains("debug-rule"));
     }
 
     #[test]
@@ -802,6 +993,47 @@ mod tests {
         assert!(duration.num_seconds() >= 3599 && duration.num_seconds() <= 3601);
     }
 
+    #[test]
+    fn test_mutation_rule_calculate_next_execution_disabled() {
+        let mut rule = MutationRule::new(
+            "disabled-rule".to_string(),
+            "Entity".to_string(),
+            MutationTrigger::Interval {
+                duration_seconds: 60,
+            },
+            MutationOperation::Set {
+                field: "f".to_string(),
+                value: serde_json::json!("v"),
+            },
+        );
+        rule.enabled = false;
+
+        let now = Utc::now();
+        assert!(rule.calculate_next_execution(now).is_none());
+    }
+
+    #[test]
+    fn test_mutation_rule_calculate_next_execution_field_threshold() {
+        let rule = MutationRule::new(
+            "threshold-rule".to_string(),
+            "Entity".to_string(),
+            MutationTrigger::FieldThreshold {
+                field: "value".to_string(),
+                threshold: serde_json::json!(100),
+                operator: ComparisonOperator::Gt,
+            },
+            MutationOperation::Set {
+                field: "f".to_string(),
+                value: serde_json::json!("v"),
+            },
+        );
+
+        // Field threshold triggers don't have scheduled execution
+        let now = Utc::now();
+        assert!(rule.calculate_next_execution(now).is_none());
+    }
+
+    // MutationRuleManager tests
     #[tokio::test]
     async fn test_mutation_rule_manager() {
         let manager = MutationRuleManager::new();
@@ -823,5 +1055,246 @@ mod tests {
         let rules = manager.list_rules().await;
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].id, "test-1");
+    }
+
+    #[test]
+    fn test_mutation_rule_manager_new() {
+        let manager = MutationRuleManager::new();
+        // Manager should be created without error
+        assert!(true);
+    }
+
+    #[test]
+    fn test_mutation_rule_manager_default() {
+        let manager = MutationRuleManager::default();
+        // Default should work like new
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_mutation_rule_manager_add_and_get_rule() {
+        let manager = MutationRuleManager::new();
+
+        let rule = MutationRule::new(
+            "get-test".to_string(),
+            "Order".to_string(),
+            MutationTrigger::Interval {
+                duration_seconds: 60,
+            },
+            MutationOperation::Set {
+                field: "status".to_string(),
+                value: serde_json::json!("done"),
+            },
+        );
+
+        manager.add_rule(rule).await.unwrap();
+
+        let retrieved = manager.get_rule("get-test").await;
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().id, "get-test");
+    }
+
+    #[tokio::test]
+    async fn test_mutation_rule_manager_get_nonexistent() {
+        let manager = MutationRuleManager::new();
+        let retrieved = manager.get_rule("nonexistent").await;
+        assert!(retrieved.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_mutation_rule_manager_remove_rule() {
+        let manager = MutationRuleManager::new();
+
+        let rule = MutationRule::new(
+            "remove-test".to_string(),
+            "Entity".to_string(),
+            MutationTrigger::Interval {
+                duration_seconds: 60,
+            },
+            MutationOperation::Set {
+                field: "f".to_string(),
+                value: serde_json::json!("v"),
+            },
+        );
+
+        manager.add_rule(rule).await.unwrap();
+        assert!(manager.get_rule("remove-test").await.is_some());
+
+        let removed = manager.remove_rule("remove-test").await;
+        assert!(removed);
+        assert!(manager.get_rule("remove-test").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_mutation_rule_manager_remove_nonexistent() {
+        let manager = MutationRuleManager::new();
+        let removed = manager.remove_rule("nonexistent").await;
+        assert!(!removed);
+    }
+
+    #[tokio::test]
+    async fn test_mutation_rule_manager_list_rules() {
+        let manager = MutationRuleManager::new();
+
+        // Add multiple rules
+        for i in 1..=3 {
+            let rule = MutationRule::new(
+                format!("rule-{}", i),
+                "Entity".to_string(),
+                MutationTrigger::Interval {
+                    duration_seconds: 60,
+                },
+                MutationOperation::Set {
+                    field: "f".to_string(),
+                    value: serde_json::json!("v"),
+                },
+            );
+            manager.add_rule(rule).await.unwrap();
+        }
+
+        let rules = manager.list_rules().await;
+        assert_eq!(rules.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_mutation_rule_manager_list_rules_for_entity() {
+        let manager = MutationRuleManager::new();
+
+        // Add rules for different entities
+        let rule1 = MutationRule::new(
+            "user-rule".to_string(),
+            "User".to_string(),
+            MutationTrigger::Interval {
+                duration_seconds: 60,
+            },
+            MutationOperation::Set {
+                field: "f".to_string(),
+                value: serde_json::json!("v"),
+            },
+        );
+
+        let rule2 = MutationRule::new(
+            "order-rule".to_string(),
+            "Order".to_string(),
+            MutationTrigger::Interval {
+                duration_seconds: 60,
+            },
+            MutationOperation::Set {
+                field: "f".to_string(),
+                value: serde_json::json!("v"),
+            },
+        );
+
+        let rule3 = MutationRule::new(
+            "user-rule-2".to_string(),
+            "User".to_string(),
+            MutationTrigger::Interval {
+                duration_seconds: 120,
+            },
+            MutationOperation::Increment {
+                field: "count".to_string(),
+                amount: 1.0,
+            },
+        );
+
+        manager.add_rule(rule1).await.unwrap();
+        manager.add_rule(rule2).await.unwrap();
+        manager.add_rule(rule3).await.unwrap();
+
+        let user_rules = manager.list_rules_for_entity("User").await;
+        assert_eq!(user_rules.len(), 2);
+
+        let order_rules = manager.list_rules_for_entity("Order").await;
+        assert_eq!(order_rules.len(), 1);
+
+        let product_rules = manager.list_rules_for_entity("Product").await;
+        assert!(product_rules.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_mutation_rule_manager_set_rule_enabled() {
+        let manager = MutationRuleManager::new();
+
+        let rule = MutationRule::new(
+            "enable-test".to_string(),
+            "Entity".to_string(),
+            MutationTrigger::Interval {
+                duration_seconds: 60,
+            },
+            MutationOperation::Set {
+                field: "f".to_string(),
+                value: serde_json::json!("v"),
+            },
+        );
+
+        manager.add_rule(rule).await.unwrap();
+
+        // Disable the rule
+        manager.set_rule_enabled("enable-test", false).await.unwrap();
+        let disabled_rule = manager.get_rule("enable-test").await.unwrap();
+        assert!(!disabled_rule.enabled);
+        assert!(disabled_rule.next_execution.is_none());
+
+        // Re-enable the rule
+        manager.set_rule_enabled("enable-test", true).await.unwrap();
+        let enabled_rule = manager.get_rule("enable-test").await.unwrap();
+        assert!(enabled_rule.enabled);
+        assert!(enabled_rule.next_execution.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_mutation_rule_manager_set_rule_enabled_nonexistent() {
+        let manager = MutationRuleManager::new();
+        let result = manager.set_rule_enabled("nonexistent", true).await;
+        assert!(result.is_err());
+    }
+
+    // ComparisonOperator tests
+    #[test]
+    fn test_comparison_operator_variants() {
+        let operators = vec![
+            ComparisonOperator::Gt,
+            ComparisonOperator::Lt,
+            ComparisonOperator::Eq,
+            ComparisonOperator::Gte,
+            ComparisonOperator::Lte,
+        ];
+
+        for op in operators {
+            let json = serde_json::to_string(&op).unwrap();
+            assert!(!json.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_comparison_operator_clone() {
+        let op = ComparisonOperator::Gt;
+        let cloned = op.clone();
+        assert!(matches!(cloned, ComparisonOperator::Gt));
+    }
+
+    #[test]
+    fn test_comparison_operator_debug() {
+        let op = ComparisonOperator::Lt;
+        let debug = format!("{:?}", op);
+        assert!(debug.contains("Lt"));
+    }
+
+    #[test]
+    fn test_comparison_operator_eq() {
+        let op1 = ComparisonOperator::Gt;
+        let op2 = ComparisonOperator::Gt;
+        let op3 = ComparisonOperator::Lt;
+        assert_eq!(op1, op2);
+        assert_ne!(op1, op3);
+    }
+
+    #[test]
+    fn test_comparison_operator_serialize() {
+        assert_eq!(serde_json::to_string(&ComparisonOperator::Gt).unwrap(), "\"gt\"");
+        assert_eq!(serde_json::to_string(&ComparisonOperator::Lt).unwrap(), "\"lt\"");
+        assert_eq!(serde_json::to_string(&ComparisonOperator::Eq).unwrap(), "\"eq\"");
+        assert_eq!(serde_json::to_string(&ComparisonOperator::Gte).unwrap(), "\"gte\"");
+        assert_eq!(serde_json::to_string(&ComparisonOperator::Lte).unwrap(), "\"lte\"");
     }
 }

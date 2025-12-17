@@ -483,3 +483,481 @@ pub async fn reset_database(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::InMemoryDatabase;
+    use crate::entities::{Entity, EntityRegistry};
+    use crate::migration::MigrationManager;
+    use crate::schema::VbrSchemaDefinition;
+    use mockforge_data::{FieldDefinition, SchemaDefinition};
+    use std::sync::Arc;
+
+    async fn setup_test_env(
+    ) -> (Arc<dyn VirtualDatabase + Send + Sync>, EntityRegistry, tempfile::TempDir) {
+        let mut db = InMemoryDatabase::new().await.unwrap();
+        db.initialize().await.unwrap();
+        let mut registry = EntityRegistry::new();
+
+        // Create a test entity
+        let base_schema = SchemaDefinition::new("User".to_string())
+            .with_field(FieldDefinition::new("id".to_string(), "string".to_string()))
+            .with_field(FieldDefinition::new("name".to_string(), "string".to_string()));
+
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("User".to_string(), vbr_schema);
+
+        let manager = MigrationManager::new();
+        let create_sql = manager.generate_create_table(&entity).unwrap();
+        db.create_table(&create_sql).await.unwrap();
+
+        registry.register(entity).unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        (Arc::new(db), registry, temp_dir)
+    }
+
+    // TimeTravelSnapshotState tests
+    #[test]
+    fn test_time_travel_snapshot_state_serialize() {
+        let state = TimeTravelSnapshotState {
+            enabled: true,
+            current_time: Some(chrono::Utc::now()),
+            scale_factor: 1.0,
+            cron_jobs: vec![],
+            mutation_rules: vec![],
+        };
+
+        let json = serde_json::to_string(&state).unwrap();
+        assert!(json.contains("enabled"));
+        assert!(json.contains("scale_factor"));
+    }
+
+    #[test]
+    fn test_time_travel_snapshot_state_deserialize() {
+        let json = r#"{
+            "enabled": true,
+            "current_time": "2024-01-01T00:00:00Z",
+            "scale_factor": 2.0,
+            "cron_jobs": [],
+            "mutation_rules": []
+        }"#;
+
+        let state: TimeTravelSnapshotState = serde_json::from_str(json).unwrap();
+        assert!(state.enabled);
+        assert_eq!(state.scale_factor, 2.0);
+    }
+
+    #[test]
+    fn test_time_travel_snapshot_state_clone() {
+        let state = TimeTravelSnapshotState {
+            enabled: false,
+            current_time: None,
+            scale_factor: 1.5,
+            cron_jobs: vec![],
+            mutation_rules: vec![],
+        };
+
+        let cloned = state.clone();
+        assert_eq!(state.enabled, cloned.enabled);
+        assert_eq!(state.scale_factor, cloned.scale_factor);
+    }
+
+    // SnapshotMetadata tests
+    #[test]
+    fn test_snapshot_metadata_serialize() {
+        let metadata = SnapshotMetadata {
+            name: "test-snapshot".to_string(),
+            created_at: chrono::Utc::now(),
+            description: Some("Test description".to_string()),
+            entity_counts: HashMap::new(),
+            database_size: Some(1024),
+            storage_backend: "In-Memory".to_string(),
+            time_travel_state: None,
+        };
+
+        let json = serde_json::to_string(&metadata).unwrap();
+        assert!(json.contains("test-snapshot"));
+        assert!(json.contains("In-Memory"));
+    }
+
+    #[test]
+    fn test_snapshot_metadata_deserialize() {
+        let json = r#"{
+            "name": "test",
+            "created_at": "2024-01-01T00:00:00Z",
+            "description": null,
+            "entity_counts": {},
+            "database_size": null,
+            "storage_backend": "SQLite",
+            "time_travel_state": null
+        }"#;
+
+        let metadata: SnapshotMetadata = serde_json::from_str(json).unwrap();
+        assert_eq!(metadata.name, "test");
+        assert_eq!(metadata.storage_backend, "SQLite");
+    }
+
+    #[test]
+    fn test_snapshot_metadata_clone() {
+        let metadata = SnapshotMetadata {
+            name: "snap1".to_string(),
+            created_at: chrono::Utc::now(),
+            description: None,
+            entity_counts: HashMap::new(),
+            database_size: None,
+            storage_backend: "Memory".to_string(),
+            time_travel_state: None,
+        };
+
+        let cloned = metadata.clone();
+        assert_eq!(metadata.name, cloned.name);
+        assert_eq!(metadata.storage_backend, cloned.storage_backend);
+    }
+
+    // SnapshotManager tests
+    #[test]
+    fn test_snapshot_manager_new() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SnapshotManager::new(temp_dir.path());
+        assert_eq!(manager.snapshots_dir, temp_dir.path());
+    }
+
+    #[test]
+    fn test_snapshot_path() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SnapshotManager::new(temp_dir.path());
+        let path = manager.snapshot_path("test-snapshot");
+        assert!(path.ends_with("test-snapshot"));
+    }
+
+    #[test]
+    fn test_metadata_path() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SnapshotManager::new(temp_dir.path());
+        let path = manager.metadata_path("test-snapshot");
+        assert!(path.ends_with("metadata.json"));
+    }
+
+    #[tokio::test]
+    async fn test_create_snapshot() {
+        let (database, registry, temp_dir) = setup_test_env().await;
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        // Insert test data
+        database
+            .execute(
+                "INSERT INTO users (id, name) VALUES (?, ?)",
+                &[
+                    serde_json::Value::String("1".to_string()),
+                    serde_json::Value::String("Test User".to_string()),
+                ],
+            )
+            .await
+            .unwrap();
+
+        let result = manager
+            .create_snapshot(
+                "test-snapshot",
+                Some("Test description".to_string()),
+                database.as_ref(),
+                &registry,
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let metadata = result.unwrap();
+        assert_eq!(metadata.name, "test-snapshot");
+        assert_eq!(metadata.description, Some("Test description".to_string()));
+        assert!(metadata.entity_counts.contains_key("User"));
+    }
+
+    #[tokio::test]
+    async fn test_create_snapshot_with_time_travel() {
+        let (database, registry, temp_dir) = setup_test_env().await;
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        let time_travel_state = TimeTravelSnapshotState {
+            enabled: true,
+            current_time: Some(chrono::Utc::now()),
+            scale_factor: 2.0,
+            cron_jobs: vec![],
+            mutation_rules: vec![],
+        };
+
+        let result = manager
+            .create_snapshot_with_time_travel(
+                "tt-snapshot",
+                None,
+                database.as_ref(),
+                &registry,
+                true,
+                Some(time_travel_state),
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let metadata = result.unwrap();
+        assert!(metadata.time_travel_state.is_some());
+        assert_eq!(metadata.time_travel_state.unwrap().scale_factor, 2.0);
+    }
+
+    #[tokio::test]
+    async fn test_list_snapshots_empty() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        let result = manager.list_snapshots().await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_list_snapshots() {
+        let (database, registry, temp_dir) = setup_test_env().await;
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        // Create multiple snapshots
+        manager
+            .create_snapshot("snap1", None, database.as_ref(), &registry)
+            .await
+            .unwrap();
+        manager
+            .create_snapshot("snap2", None, database.as_ref(), &registry)
+            .await
+            .unwrap();
+
+        let result = manager.list_snapshots().await;
+        assert!(result.is_ok());
+        let snapshots = result.unwrap();
+        assert_eq!(snapshots.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_snapshot_metadata() {
+        let (database, registry, temp_dir) = setup_test_env().await;
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        manager
+            .create_snapshot("test", None, database.as_ref(), &registry)
+            .await
+            .unwrap();
+
+        let result = manager.get_snapshot_metadata("test").await;
+        assert!(result.is_ok());
+        let metadata = result.unwrap();
+        assert_eq!(metadata.name, "test");
+    }
+
+    #[tokio::test]
+    async fn test_get_snapshot_metadata_not_found() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        let result = manager.get_snapshot_metadata("nonexistent").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_snapshot() {
+        let (database, registry, temp_dir) = setup_test_env().await;
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        manager
+            .create_snapshot("to-delete", None, database.as_ref(), &registry)
+            .await
+            .unwrap();
+
+        let result = manager.delete_snapshot("to-delete").await;
+        assert!(result.is_ok());
+
+        // Verify it's gone
+        let snapshots = manager.list_snapshots().await.unwrap();
+        assert_eq!(snapshots.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_delete_snapshot_not_found() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        let result = manager.delete_snapshot("nonexistent").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_restore_snapshot() {
+        let (database, registry, temp_dir) = setup_test_env().await;
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        // Insert test data and create snapshot
+        database
+            .execute(
+                "INSERT INTO users (id, name) VALUES (?, ?)",
+                &[
+                    serde_json::Value::String("1".to_string()),
+                    serde_json::Value::String("Original".to_string()),
+                ],
+            )
+            .await
+            .unwrap();
+
+        manager
+            .create_snapshot("backup", None, database.as_ref(), &registry)
+            .await
+            .unwrap();
+
+        // Modify data
+        database
+            .execute(
+                "UPDATE users SET name = ? WHERE id = ?",
+                &[
+                    serde_json::Value::String("Modified".to_string()),
+                    serde_json::Value::String("1".to_string()),
+                ],
+            )
+            .await
+            .unwrap();
+
+        // Restore snapshot
+        let result = manager.restore_snapshot("backup", database.as_ref(), &registry).await;
+        assert!(result.is_ok());
+
+        // Verify restoration
+        let rows = database
+            .query(
+                "SELECT * FROM users WHERE id = ?",
+                &[serde_json::Value::String("1".to_string())],
+            )
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].get("name").unwrap().as_str().unwrap(), "Original");
+    }
+
+    #[tokio::test]
+    async fn test_restore_snapshot_not_found() {
+        let (database, registry, temp_dir) = setup_test_env().await;
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        let result = manager.restore_snapshot("nonexistent", database.as_ref(), &registry).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_reset_database() {
+        let (database, registry, _temp_dir) = setup_test_env().await;
+
+        // Insert test data
+        database
+            .execute(
+                "INSERT INTO users (id, name) VALUES (?, ?)",
+                &[
+                    serde_json::Value::String("1".to_string()),
+                    serde_json::Value::String("Test".to_string()),
+                ],
+            )
+            .await
+            .unwrap();
+
+        // Verify data exists
+        let rows = database.query("SELECT * FROM users", &[]).await.unwrap();
+        assert_eq!(rows.len(), 1);
+
+        // Reset database
+        let result = reset_database(database.as_ref(), &registry).await;
+        assert!(result.is_ok());
+
+        // Verify data is cleared
+        let rows = database.query("SELECT * FROM users", &[]).await.unwrap();
+        assert_eq!(rows.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_ordering() {
+        let (database, registry, temp_dir) = setup_test_env().await;
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        // Create snapshots with slight delay to ensure different timestamps
+        manager
+            .create_snapshot("first", None, database.as_ref(), &registry)
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        manager
+            .create_snapshot("second", None, database.as_ref(), &registry)
+            .await
+            .unwrap();
+
+        // List should be sorted by creation time (newest first)
+        let snapshots = manager.list_snapshots().await.unwrap();
+        assert_eq!(snapshots.len(), 2);
+        assert_eq!(snapshots[0].name, "second");
+        assert_eq!(snapshots[1].name, "first");
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_entity_counts() {
+        let (database, mut registry, temp_dir) = setup_test_env().await;
+
+        // Add another entity
+        let base_schema = SchemaDefinition::new("Product".to_string())
+            .with_field(FieldDefinition::new("id".to_string(), "string".to_string()));
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("Product".to_string(), vbr_schema);
+
+        let manager_m = MigrationManager::new();
+        let create_sql = manager_m.generate_create_table(&entity).unwrap();
+        database.create_table(&create_sql).await.unwrap();
+        registry.register(entity).unwrap();
+
+        // Insert data
+        database
+            .execute(
+                "INSERT INTO users (id, name) VALUES (?, ?)",
+                &[
+                    serde_json::Value::String("1".to_string()),
+                    serde_json::Value::String("User1".to_string()),
+                ],
+            )
+            .await
+            .unwrap();
+
+        database
+            .execute(
+                "INSERT INTO products (id) VALUES (?)",
+                &[serde_json::Value::String("1".to_string())],
+            )
+            .await
+            .unwrap();
+        database
+            .execute(
+                "INSERT INTO products (id) VALUES (?)",
+                &[serde_json::Value::String("2".to_string())],
+            )
+            .await
+            .unwrap();
+
+        let manager = SnapshotManager::new(temp_dir.path());
+        let metadata = manager
+            .create_snapshot("multi-entity", None, database.as_ref(), &registry)
+            .await
+            .unwrap();
+
+        assert_eq!(metadata.entity_counts.get("User").unwrap(), &1);
+        assert_eq!(metadata.entity_counts.get("Product").unwrap(), &2);
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_with_empty_tables() {
+        let (database, registry, temp_dir) = setup_test_env().await;
+        let manager = SnapshotManager::new(temp_dir.path());
+
+        let result = manager.create_snapshot("empty", None, database.as_ref(), &registry).await;
+        assert!(result.is_ok());
+
+        let metadata = result.unwrap();
+        assert_eq!(metadata.entity_counts.get("User").unwrap(), &0);
+    }
+}

@@ -588,6 +588,10 @@ pub mod utils {
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // DatasetValidationResult tests
+    // =========================================================================
+
     #[test]
     fn test_dataset_validation_result_creation() {
         let result = DatasetValidationResult {
@@ -628,6 +632,57 @@ mod tests {
     }
 
     #[test]
+    fn test_dataset_validation_result_clone() {
+        let result = DatasetValidationResult {
+            valid: true,
+            errors: vec!["err".to_string()],
+            warnings: vec!["warn".to_string()],
+            total_rows_validated: 50,
+        };
+        let cloned = result.clone();
+        assert_eq!(cloned.total_rows_validated, 50);
+        assert_eq!(cloned.errors.len(), 1);
+    }
+
+    #[test]
+    fn test_dataset_validation_result_serialize() {
+        let result = DatasetValidationResult {
+            valid: true,
+            errors: vec![],
+            warnings: vec![],
+            total_rows_validated: 25,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("true"));
+        assert!(json.contains("25"));
+    }
+
+    #[test]
+    fn test_dataset_validation_result_deserialize() {
+        let json =
+            r#"{"valid": false, "errors": ["e1"], "warnings": [], "total_rows_validated": 10}"#;
+        let result: DatasetValidationResult = serde_json::from_str(json).unwrap();
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+    }
+
+    #[test]
+    fn test_dataset_validation_result_debug() {
+        let result = DatasetValidationResult {
+            valid: true,
+            errors: vec![],
+            warnings: vec![],
+            total_rows_validated: 0,
+        };
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("valid"));
+    }
+
+    // =========================================================================
+    // DatasetMetadata tests
+    // =========================================================================
+
+    #[test]
     fn test_dataset_metadata_creation() {
         let config = DataConfig::default();
         let metadata = DatasetMetadata {
@@ -647,5 +702,388 @@ mod tests {
         assert_eq!(metadata.row_count, 100);
         assert!(metadata.description.is_some());
         assert_eq!(metadata.generation_time_ms, 1000);
+    }
+
+    #[test]
+    fn test_dataset_metadata_default() {
+        let metadata = DatasetMetadata::default();
+        assert!(metadata.name.is_empty());
+        assert!(metadata.description.is_none());
+        assert_eq!(metadata.row_count, 0);
+        assert!(metadata.tags.is_empty());
+    }
+
+    #[test]
+    fn test_dataset_metadata_new() {
+        let result = GenerationResult {
+            data: vec![serde_json::json!({"id": 1}), serde_json::json!({"id": 2})],
+            count: 2,
+            generation_time_ms: 100,
+            warnings: vec![],
+        };
+        let config = DataConfig::default();
+        let metadata = DatasetMetadata::new(
+            "my_dataset".to_string(),
+            "TestSchema".to_string(),
+            &result,
+            config,
+        );
+
+        assert_eq!(metadata.name, "my_dataset");
+        assert_eq!(metadata.schema_name, "TestSchema");
+        assert_eq!(metadata.row_count, 2);
+        assert_eq!(metadata.generation_time_ms, 100);
+    }
+
+    #[test]
+    fn test_dataset_metadata_with_description() {
+        let metadata = DatasetMetadata::default().with_description("A test dataset".to_string());
+        assert_eq!(metadata.description, Some("A test dataset".to_string()));
+    }
+
+    #[test]
+    fn test_dataset_metadata_with_tag() {
+        let metadata = DatasetMetadata::default()
+            .with_tag("env".to_string(), "test".to_string())
+            .with_tag("version".to_string(), "1.0".to_string());
+        assert_eq!(metadata.tags.get("env"), Some(&"test".to_string()));
+        assert_eq!(metadata.tags.get("version"), Some(&"1.0".to_string()));
+    }
+
+    #[test]
+    fn test_dataset_metadata_with_file_size() {
+        let metadata = DatasetMetadata::default().with_file_size(2048);
+        assert_eq!(metadata.file_size_bytes, Some(2048));
+    }
+
+    #[test]
+    fn test_dataset_metadata_clone() {
+        let metadata = DatasetMetadata {
+            name: "cloneable".to_string(),
+            ..Default::default()
+        };
+        let cloned = metadata.clone();
+        assert_eq!(cloned.name, "cloneable");
+    }
+
+    #[test]
+    fn test_dataset_metadata_serialize() {
+        let metadata = DatasetMetadata::default();
+        let json = serde_json::to_string(&metadata).unwrap();
+        assert!(json.contains("name"));
+        assert!(json.contains("row_count"));
+    }
+
+    // =========================================================================
+    // Dataset tests
+    // =========================================================================
+
+    #[test]
+    fn test_dataset_new() {
+        let metadata = DatasetMetadata::default();
+        let data = vec![
+            serde_json::json!({"id": 1, "name": "Alice"}),
+            serde_json::json!({"id": 2, "name": "Bob"}),
+        ];
+        let dataset = Dataset::new(metadata, data);
+        assert_eq!(dataset.row_count(), 2);
+    }
+
+    #[test]
+    fn test_dataset_from_generation_result() {
+        let result = GenerationResult {
+            data: vec![serde_json::json!({"id": 1})],
+            count: 1,
+            generation_time_ms: 50,
+            warnings: vec![],
+        };
+        let config = DataConfig::default();
+        let dataset = Dataset::from_generation_result(
+            "test_dataset".to_string(),
+            "TestSchema".to_string(),
+            result,
+            config,
+        );
+        assert_eq!(dataset.metadata.name, "test_dataset");
+        assert_eq!(dataset.row_count(), 1);
+    }
+
+    #[test]
+    fn test_dataset_to_json_string() {
+        let metadata = DatasetMetadata::default();
+        let data = vec![serde_json::json!({"id": 1}), serde_json::json!({"id": 2})];
+        let dataset = Dataset::new(metadata, data);
+        let json = dataset.to_json_string().unwrap();
+        assert!(json.contains("id"));
+        assert!(json.contains("1"));
+        assert!(json.contains("2"));
+    }
+
+    #[test]
+    fn test_dataset_to_jsonl_string() {
+        let metadata = DatasetMetadata::default();
+        let data = vec![serde_json::json!({"id": 1}), serde_json::json!({"id": 2})];
+        let dataset = Dataset::new(metadata, data);
+        let jsonl = dataset.to_jsonl_string().unwrap();
+        let lines: Vec<&str> = jsonl.split('\n').collect();
+        assert_eq!(lines.len(), 2);
+    }
+
+    #[test]
+    fn test_dataset_to_csv_string() {
+        let metadata = DatasetMetadata::default();
+        let data = vec![
+            serde_json::json!({"id": 1, "name": "Alice"}),
+            serde_json::json!({"id": 2, "name": "Bob"}),
+        ];
+        let dataset = Dataset::new(metadata, data);
+        let csv = dataset.to_csv_string().unwrap();
+        assert!(csv.contains("id") || csv.contains("name")); // Headers
+        assert!(csv.contains("Alice") || csv.contains("Bob")); // Data
+    }
+
+    #[test]
+    fn test_dataset_to_csv_string_empty() {
+        let metadata = DatasetMetadata::default();
+        let dataset = Dataset::new(metadata, vec![]);
+        let csv = dataset.to_csv_string().unwrap();
+        assert!(csv.is_empty());
+    }
+
+    #[test]
+    fn test_dataset_to_yaml_string() {
+        let metadata = DatasetMetadata::default();
+        let data = vec![serde_json::json!({"id": 1})];
+        let dataset = Dataset::new(metadata, data);
+        let yaml = dataset.to_yaml_string().unwrap();
+        assert!(yaml.contains("id"));
+    }
+
+    #[test]
+    fn test_dataset_row_count() {
+        let metadata = DatasetMetadata::default();
+        let data = vec![
+            serde_json::json!({}),
+            serde_json::json!({}),
+            serde_json::json!({}),
+        ];
+        let dataset = Dataset::new(metadata, data);
+        assert_eq!(dataset.row_count(), 3);
+    }
+
+    #[test]
+    fn test_dataset_sample() {
+        let metadata = DatasetMetadata::default();
+        let data: Vec<serde_json::Value> = (0..10).map(|i| serde_json::json!({"id": i})).collect();
+        let dataset = Dataset::new(metadata, data);
+
+        let sample = dataset.sample(3);
+        assert_eq!(sample.len(), 3);
+
+        let big_sample = dataset.sample(100);
+        assert_eq!(big_sample.len(), 10); // Capped at dataset size
+    }
+
+    #[test]
+    fn test_dataset_filter() {
+        let metadata = DatasetMetadata {
+            name: "filterable".to_string(),
+            ..Default::default()
+        };
+        let data = vec![
+            serde_json::json!({"id": 1, "active": true}),
+            serde_json::json!({"id": 2, "active": false}),
+            serde_json::json!({"id": 3, "active": true}),
+        ];
+        let dataset = Dataset::new(metadata, data);
+
+        let filtered =
+            dataset.filter(|row| row.get("active").and_then(|v| v.as_bool()).unwrap_or(false));
+
+        assert_eq!(filtered.row_count(), 2);
+        assert_eq!(filtered.metadata.row_count, 2);
+    }
+
+    #[test]
+    fn test_dataset_map() {
+        let metadata = DatasetMetadata::default();
+        let data = vec![
+            serde_json::json!({"value": 1}),
+            serde_json::json!({"value": 2}),
+        ];
+        let dataset = Dataset::new(metadata, data);
+
+        let mapped = dataset.map(|row| {
+            let mut new_row = row.clone();
+            if let Some(obj) = new_row.as_object_mut() {
+                obj.insert("doubled".to_string(), serde_json::json!(true));
+            }
+            new_row
+        });
+
+        assert_eq!(mapped.row_count(), 2);
+        assert!(mapped.data[0].get("doubled").is_some());
+    }
+
+    #[test]
+    fn test_dataset_debug() {
+        let metadata = DatasetMetadata {
+            name: "debug_test".to_string(),
+            ..Default::default()
+        };
+        let dataset = Dataset::new(metadata, vec![]);
+        let debug_str = format!("{:?}", dataset);
+        assert!(debug_str.contains("metadata"));
+    }
+
+    // =========================================================================
+    // DatasetCollection tests
+    // =========================================================================
+
+    #[test]
+    fn test_dataset_collection_new() {
+        let collection = DatasetCollection::new();
+        assert_eq!(collection.size(), 0);
+    }
+
+    #[test]
+    fn test_dataset_collection_default() {
+        let collection = DatasetCollection::default();
+        assert_eq!(collection.size(), 0);
+    }
+
+    #[test]
+    fn test_dataset_collection_add_dataset() {
+        let mut collection = DatasetCollection::new();
+        let dataset = Dataset::new(
+            DatasetMetadata {
+                name: "test1".to_string(),
+                ..Default::default()
+            },
+            vec![],
+        );
+        collection.add_dataset(dataset).unwrap();
+        assert_eq!(collection.size(), 1);
+    }
+
+    #[test]
+    fn test_dataset_collection_get_dataset() {
+        let mut collection = DatasetCollection::new();
+        let dataset = Dataset::new(
+            DatasetMetadata {
+                name: "findme".to_string(),
+                ..Default::default()
+            },
+            vec![serde_json::json!({"id": 1})],
+        );
+        collection.add_dataset(dataset).unwrap();
+
+        let found = collection.get_dataset("findme");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().row_count(), 1);
+    }
+
+    #[test]
+    fn test_dataset_collection_get_dataset_not_found() {
+        let collection = DatasetCollection::new();
+        assert!(collection.get_dataset("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_dataset_collection_remove_dataset() {
+        let mut collection = DatasetCollection::new();
+        let dataset = Dataset::new(
+            DatasetMetadata {
+                name: "removable".to_string(),
+                ..Default::default()
+            },
+            vec![],
+        );
+        collection.add_dataset(dataset).unwrap();
+
+        let removed = collection.remove_dataset("removable");
+        assert!(removed.is_some());
+        assert_eq!(collection.size(), 0);
+    }
+
+    #[test]
+    fn test_dataset_collection_list_datasets() {
+        let mut collection = DatasetCollection::new();
+        collection
+            .add_dataset(Dataset::new(
+                DatasetMetadata {
+                    name: "a".to_string(),
+                    ..Default::default()
+                },
+                vec![],
+            ))
+            .unwrap();
+        collection
+            .add_dataset(Dataset::new(
+                DatasetMetadata {
+                    name: "b".to_string(),
+                    ..Default::default()
+                },
+                vec![],
+            ))
+            .unwrap();
+
+        let names = collection.list_datasets();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"a".to_string()));
+        assert!(names.contains(&"b".to_string()));
+    }
+
+    #[test]
+    fn test_dataset_collection_size() {
+        let mut collection = DatasetCollection::new();
+        assert_eq!(collection.size(), 0);
+
+        collection
+            .add_dataset(Dataset::new(
+                DatasetMetadata {
+                    name: "x".to_string(),
+                    ..Default::default()
+                },
+                vec![],
+            ))
+            .unwrap();
+        assert_eq!(collection.size(), 1);
+    }
+
+    #[test]
+    fn test_dataset_collection_statistics() {
+        let mut collection = DatasetCollection::new();
+        collection
+            .add_dataset(Dataset::new(
+                DatasetMetadata {
+                    name: "ds1".to_string(),
+                    schema_name: "Schema1".to_string(),
+                    ..Default::default()
+                },
+                vec![serde_json::json!({}), serde_json::json!({})],
+            ))
+            .unwrap();
+        collection
+            .add_dataset(Dataset::new(
+                DatasetMetadata {
+                    name: "ds2".to_string(),
+                    schema_name: "Schema2".to_string(),
+                    ..Default::default()
+                },
+                vec![serde_json::json!({})],
+            ))
+            .unwrap();
+
+        let stats = collection.statistics();
+        assert_eq!(stats.get("total_datasets").and_then(|v| v.as_u64()), Some(2));
+        assert_eq!(stats.get("total_rows").and_then(|v| v.as_u64()), Some(3));
+    }
+
+    #[test]
+    fn test_dataset_collection_debug() {
+        let collection = DatasetCollection::new();
+        let debug_str = format!("{:?}", collection);
+        assert!(debug_str.contains("datasets"));
     }
 }

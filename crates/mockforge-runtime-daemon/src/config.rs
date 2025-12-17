@@ -135,3 +135,145 @@ fn default_true() -> bool {
 fn default_false() -> bool {
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_runtime_daemon_config_default() {
+        let config = RuntimeDaemonConfig::default();
+        assert!(!config.enabled);
+        assert!(config.auto_create_on_404);
+        assert!(!config.ai_generation);
+        assert!(!config.generate_types);
+        assert!(!config.generate_client_stubs);
+        assert!(!config.update_openapi);
+        assert!(!config.create_scenario);
+        assert!(config.workspace_dir.is_none());
+    }
+
+    #[test]
+    fn test_runtime_daemon_config_default_exclude_patterns() {
+        let config = RuntimeDaemonConfig::default();
+        assert_eq!(config.exclude_patterns.len(), 3);
+        assert!(config.exclude_patterns.contains(&"/health".to_string()));
+        assert!(config.exclude_patterns.contains(&"/metrics".to_string()));
+        assert!(config.exclude_patterns.contains(&"/__mockforge".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_daemon_config_clone() {
+        let config = RuntimeDaemonConfig {
+            enabled: true,
+            auto_create_on_404: false,
+            ai_generation: true,
+            generate_types: true,
+            generate_client_stubs: true,
+            update_openapi: true,
+            create_scenario: true,
+            workspace_dir: Some("/tmp/mocks".to_string()),
+            exclude_patterns: vec!["/custom".to_string()],
+        };
+
+        let cloned = config.clone();
+        assert_eq!(config.enabled, cloned.enabled);
+        assert_eq!(config.ai_generation, cloned.ai_generation);
+        assert_eq!(config.workspace_dir, cloned.workspace_dir);
+        assert_eq!(config.exclude_patterns, cloned.exclude_patterns);
+    }
+
+    #[test]
+    fn test_runtime_daemon_config_debug() {
+        let config = RuntimeDaemonConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("RuntimeDaemonConfig"));
+        assert!(debug.contains("enabled"));
+    }
+
+    #[test]
+    fn test_runtime_daemon_config_serialize() {
+        let config = RuntimeDaemonConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("\"enabled\":false"));
+        assert!(json.contains("\"auto_create_on_404\":true"));
+    }
+
+    #[test]
+    fn test_runtime_daemon_config_deserialize() {
+        let json = r#"{
+            "enabled": true,
+            "auto_create_on_404": false,
+            "ai_generation": true,
+            "workspace_dir": "/custom/path"
+        }"#;
+
+        let config: RuntimeDaemonConfig = serde_json::from_str(json).unwrap();
+        assert!(config.enabled);
+        assert!(!config.auto_create_on_404);
+        assert!(config.ai_generation);
+        assert_eq!(config.workspace_dir, Some("/custom/path".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_daemon_config_deserialize_defaults() {
+        let json = r#"{}"#;
+        let config: RuntimeDaemonConfig = serde_json::from_str(json).unwrap();
+        // Should use default values
+        assert!(!config.enabled);
+        assert!(config.auto_create_on_404);
+        assert!(!config.ai_generation);
+    }
+
+    #[test]
+    fn test_runtime_daemon_config_with_custom_exclude() {
+        let config = RuntimeDaemonConfig {
+            exclude_patterns: vec![
+                "/internal".to_string(),
+                "/admin".to_string(),
+                "secret".to_string(),
+            ],
+            ..Default::default()
+        };
+
+        assert_eq!(config.exclude_patterns.len(), 3);
+        assert!(config.exclude_patterns.contains(&"/internal".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_daemon_config_all_features_enabled() {
+        let config = RuntimeDaemonConfig {
+            enabled: true,
+            auto_create_on_404: true,
+            ai_generation: true,
+            generate_types: true,
+            generate_client_stubs: true,
+            update_openapi: true,
+            create_scenario: true,
+            workspace_dir: Some("./workspace".to_string()),
+            exclude_patterns: vec![],
+        };
+
+        assert!(config.enabled);
+        assert!(config.ai_generation);
+        assert!(config.generate_types);
+        assert!(config.generate_client_stubs);
+        assert!(config.update_openapi);
+        assert!(config.create_scenario);
+    }
+
+    #[test]
+    fn test_default_enabled_function() {
+        assert!(!default_enabled());
+    }
+
+    #[test]
+    fn test_default_true_function() {
+        assert!(default_true());
+    }
+
+    #[test]
+    fn test_default_false_function() {
+        assert!(!default_false());
+    }
+}

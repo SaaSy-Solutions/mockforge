@@ -48,7 +48,6 @@ pub struct OrgContext {
     pub org: Organization,
 }
 
-
 /// Helper function to resolve org context from State and AuthUser
 /// Use this in handlers instead of the extractor if you need more control
 ///
@@ -62,18 +61,16 @@ pub async fn resolve_org_context(
     let pool = state.db.pool();
 
     // Check if org_id was set by API token auth (for faster lookup)
-    let api_token_org_id = request_extensions
-        .and_then(|ext| {
-            // Try to get org_id from extensions
-            ext.get::<String>()
-                .and_then(|s| {
-                    if s.starts_with("org_id:") {
-                        Uuid::parse_str(&s[7..]).ok()
-                    } else {
-                        None
-                    }
-                })
-        });
+    let api_token_org_id = request_extensions.and_then(|ext| {
+        // Try to get org_id from extensions
+        ext.get::<String>().and_then(|s| {
+            if s.starts_with("org_id:") {
+                Uuid::parse_str(&s[7..]).ok()
+            } else {
+                None
+            }
+        })
+    });
 
     // Try to get org from API token first, then header, then default
     let org = if let Some(org_id) = api_token_org_id {
@@ -92,11 +89,8 @@ pub async fn resolve_org_context(
         org
     } else if let Some(org_id_header) = headers.get("X-Organization-Id") {
         // Resolve by ID
-        let org_id_str = org_id_header
-            .to_str()
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
-        let org_id = Uuid::parse_str(org_id_str)
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        let org_id_str = org_id_header.to_str().map_err(|_| StatusCode::BAD_REQUEST)?;
+        let org_id = Uuid::parse_str(org_id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
 
         // Try cache first
         let org = Organization::find_by_id(pool, org_id)
@@ -112,9 +106,7 @@ pub async fn resolve_org_context(
         org
     } else if let Some(org_slug_header) = headers.get("X-Organization-Slug") {
         // Resolve by slug
-        let slug = org_slug_header
-            .to_str()
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        let slug = org_slug_header.to_str().map_err(|_| StatusCode::BAD_REQUEST)?;
 
         let org = Organization::find_by_slug(pool, slug)
             .await
@@ -135,9 +127,7 @@ pub async fn resolve_org_context(
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        orgs.into_iter()
-            .find(|o| o.owner_id == user_id)
-            .ok_or(StatusCode::NOT_FOUND)?
+        orgs.into_iter().find(|o| o.owner_id == user_id).ok_or(StatusCode::NOT_FOUND)?
     };
 
     Ok(OrgContext {

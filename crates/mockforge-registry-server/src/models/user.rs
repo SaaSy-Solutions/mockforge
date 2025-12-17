@@ -54,10 +54,7 @@ impl User {
     }
 
     /// Find multiple users by IDs (batch lookup to avoid N+1 queries)
-    pub async fn find_by_ids(
-        pool: &sqlx::PgPool,
-        ids: &[Uuid],
-    ) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_ids(pool: &sqlx::PgPool, ids: &[Uuid]) -> sqlx::Result<Vec<Self>> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -130,10 +127,7 @@ impl User {
     }
 
     /// Disable 2FA for a user
-    pub async fn disable_2fa(
-        pool: &sqlx::PgPool,
-        user_id: Uuid,
-    ) -> sqlx::Result<()> {
+    pub async fn disable_2fa(pool: &sqlx::PgPool, user_id: Uuid) -> sqlx::Result<()> {
         sqlx::query(
             r#"
             UPDATE users
@@ -152,10 +146,7 @@ impl User {
     }
 
     /// Update 2FA verified timestamp
-    pub async fn update_2fa_verified(
-        pool: &sqlx::PgPool,
-        user_id: Uuid,
-    ) -> sqlx::Result<()> {
+    pub async fn update_2fa_verified(pool: &sqlx::PgPool, user_id: Uuid) -> sqlx::Result<()> {
         sqlx::query(
             "UPDATE users SET two_factor_verified_at = NOW(), updated_at = NOW() WHERE id = $1",
         )
@@ -172,9 +163,8 @@ impl User {
         code_index: usize,
     ) -> sqlx::Result<()> {
         // Get current backup codes
-        let user = Self::find_by_id(pool, user_id)
-            .await?
-            .ok_or_else(|| sqlx::Error::RowNotFound)?;
+        let user =
+            Self::find_by_id(pool, user_id).await?.ok_or_else(|| sqlx::Error::RowNotFound)?;
 
         if let Some(mut codes) = user.two_factor_backup_codes {
             if code_index < codes.len() {

@@ -1014,3 +1014,270 @@ fn parse_duration(s: &str) -> Result<chrono::Duration> {
         _ => anyhow::bail!("Unknown unit: {}. Use s, m, h, d, week, month, or year", unit),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // parse_duration tests
+    #[test]
+    fn test_parse_duration_seconds() {
+        let result = parse_duration("30s");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().num_seconds(), 30);
+    }
+
+    #[test]
+    fn test_parse_duration_minutes() {
+        let result = parse_duration("15m");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().num_minutes(), 15);
+    }
+
+    #[test]
+    fn test_parse_duration_hours() {
+        let result = parse_duration("2h");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().num_hours(), 2);
+    }
+
+    #[test]
+    fn test_parse_duration_days() {
+        let result = parse_duration("7d");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().num_days(), 7);
+    }
+
+    #[test]
+    fn test_parse_duration_weeks() {
+        let result = parse_duration("2w");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().num_days(), 14);
+    }
+
+    #[test]
+    fn test_parse_duration_verbose_units() {
+        assert!(parse_duration("10seconds").is_ok());
+        assert!(parse_duration("5minutes").is_ok());
+        assert!(parse_duration("3hours").is_ok());
+        assert!(parse_duration("1week").is_ok());
+    }
+
+    #[test]
+    fn test_parse_duration_invalid_unit() {
+        let result = parse_duration("5x");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unknown unit"));
+    }
+
+    #[test]
+    fn test_parse_duration_no_unit() {
+        let result = parse_duration("42");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No unit specified"));
+    }
+
+    #[test]
+    fn test_parse_duration_invalid_number() {
+        let result = parse_duration("abcs");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_duration_negative() {
+        // The implementation strips the leading '-' sign (for relative time notation)
+        // so -10m is parsed as 10m
+        let result = parse_duration("-10m");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().num_minutes(), 10);
+    }
+
+    // TimeCommands enum tests
+    #[test]
+    fn test_time_commands_status() {
+        let _cmd = TimeCommands::Status;
+    }
+
+    #[test]
+    fn test_time_commands_enable() {
+        let _cmd = TimeCommands::Enable {
+            time: Some("2025-01-01T00:00:00Z".to_string()),
+            scale: Some(1.0),
+        };
+    }
+
+    #[test]
+    fn test_time_commands_enable_default() {
+        let _cmd = TimeCommands::Enable {
+            time: None,
+            scale: None,
+        };
+    }
+
+    #[test]
+    fn test_time_commands_disable() {
+        let _cmd = TimeCommands::Disable;
+    }
+
+    #[test]
+    fn test_time_commands_advance() {
+        let _cmd = TimeCommands::Advance {
+            duration: "1h".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_time_commands_set() {
+        let _cmd = TimeCommands::Set {
+            time: "2025-06-01T12:00:00Z".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_time_commands_scale() {
+        let _cmd = TimeCommands::Scale { factor: 2.0 };
+    }
+
+    #[test]
+    fn test_time_commands_reset() {
+        let _cmd = TimeCommands::Reset;
+    }
+
+    #[test]
+    fn test_time_commands_save() {
+        let _cmd = TimeCommands::Save {
+            name: "my-scenario".to_string(),
+            description: Some("Test scenario".to_string()),
+            output: Some("./scenarios/test.json".to_string()),
+        };
+    }
+
+    #[test]
+    fn test_time_commands_load() {
+        let _cmd = TimeCommands::Load {
+            name: "my-scenario".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_time_commands_list() {
+        let _cmd = TimeCommands::List {
+            dir: Some("./scenarios".to_string()),
+        };
+    }
+
+    // CronCommands enum tests
+    #[test]
+    fn test_cron_commands_list() {
+        let _cmd = CronCommands::List;
+    }
+
+    #[test]
+    fn test_cron_commands_create() {
+        let _cmd = CronCommands::Create {
+            id: "job-1".to_string(),
+            name: "Daily Job".to_string(),
+            schedule: "0 3 * * *".to_string(),
+            description: Some("Run daily at 3am".to_string()),
+            action_type: "callback".to_string(),
+            action_metadata: Some("./action.json".to_string()),
+        };
+    }
+
+    #[test]
+    fn test_cron_commands_get() {
+        let _cmd = CronCommands::Get {
+            id: "job-1".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_cron_commands_delete() {
+        let _cmd = CronCommands::Delete {
+            id: "job-1".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_cron_commands_enable() {
+        let _cmd = CronCommands::Enable {
+            id: "job-1".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_cron_commands_disable() {
+        let _cmd = CronCommands::Disable {
+            id: "job-1".to_string(),
+        };
+    }
+
+    // MutationCommands enum tests
+    #[test]
+    fn test_mutation_commands_list() {
+        let _cmd = MutationCommands::List;
+    }
+
+    #[test]
+    fn test_mutation_commands_create() {
+        let _cmd = MutationCommands::Create {
+            id: "rule-1".to_string(),
+            entity: "Product".to_string(),
+            trigger_type: "interval".to_string(),
+            trigger_config: "./trigger.json".to_string(),
+            operation_type: "increment".to_string(),
+            operation_config: "./operation.json".to_string(),
+            description: Some("Increment stock".to_string()),
+        };
+    }
+
+    #[test]
+    fn test_mutation_commands_get() {
+        let _cmd = MutationCommands::Get {
+            id: "rule-1".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_mutation_commands_delete() {
+        let _cmd = MutationCommands::Delete {
+            id: "rule-1".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_mutation_commands_enable() {
+        let _cmd = MutationCommands::Enable {
+            id: "rule-1".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_mutation_commands_disable() {
+        let _cmd = MutationCommands::Disable {
+            id: "rule-1".to_string(),
+        };
+    }
+
+    // parse_duration edge cases
+    #[test]
+    fn test_parse_duration_zero() {
+        let result = parse_duration("0s");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().num_seconds(), 0);
+    }
+
+    #[test]
+    fn test_parse_duration_large_value() {
+        let result = parse_duration("365d");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().num_days(), 365);
+    }
+
+    #[test]
+    fn test_parse_duration_whitespace_in_unit() {
+        let result = parse_duration("5 h");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().num_hours(), 5);
+    }
+}

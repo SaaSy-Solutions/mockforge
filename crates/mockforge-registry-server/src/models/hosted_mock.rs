@@ -143,12 +143,10 @@ impl HostedMock {
 
     /// Find by ID
     pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM hosted_mocks WHERE id = $1 AND deleted_at IS NULL",
-        )
-        .bind(id)
-        .fetch_optional(pool)
-        .await
+        sqlx::query_as::<_, Self>("SELECT * FROM hosted_mocks WHERE id = $1 AND deleted_at IS NULL")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
     }
 
     /// Find by slug and org
@@ -167,10 +165,7 @@ impl HostedMock {
     }
 
     /// Find all mocks for an organization
-    pub async fn find_by_org(
-        pool: &sqlx::PgPool,
-        org_id: Uuid,
-    ) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM hosted_mocks WHERE org_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
         )
@@ -180,10 +175,7 @@ impl HostedMock {
     }
 
     /// Find all mocks for a project
-    pub async fn find_by_project(
-        pool: &sqlx::PgPool,
-        project_id: Uuid,
-    ) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_project(pool: &sqlx::PgPool, project_id: Uuid) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM hosted_mocks WHERE project_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
         )
@@ -346,8 +338,8 @@ impl DeploymentMetrics {
     ) -> sqlx::Result<Self> {
         use chrono::Datelike;
         let now = chrono::Utc::now().date_naive();
-        let period_start = chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1)
-            .unwrap_or(now);
+        let period_start =
+            chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap_or(now);
 
         // Try to get existing
         if let Some(metrics) = sqlx::query_as::<_, Self>(

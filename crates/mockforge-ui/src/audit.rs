@@ -279,3 +279,557 @@ pub fn init_global_audit_store(max_logs: usize) -> Arc<AuditLogStore> {
 pub fn get_global_audit_store() -> Option<Arc<AuditLogStore>> {
     GLOBAL_AUDIT_STORE.get().cloned()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_audit_log_store_creation() {
+        let store = AuditLogStore::new(100);
+        let stats = store.get_stats().await;
+        assert_eq!(stats.total_actions, 0);
+        assert_eq!(stats.successful_actions, 0);
+        assert_eq!(stats.failed_actions, 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_log_store_default() {
+        let store = AuditLogStore::default();
+        let stats = store.get_stats().await;
+        assert_eq!(stats.total_actions, 0);
+    }
+
+    #[tokio::test]
+    async fn test_record_audit_log() {
+        let store = AuditLogStore::new(100);
+
+        let log = create_audit_log(
+            AdminActionType::ConfigLatencyUpdated,
+            "Updated latency config".to_string(),
+            Some("/api/config/latency".to_string()),
+            true,
+            None,
+            None,
+        );
+
+        store.record(log).await;
+
+        let stats = store.get_stats().await;
+        assert_eq!(stats.total_actions, 1);
+        assert_eq!(stats.successful_actions, 1);
+        assert_eq!(stats.failed_actions, 0);
+    }
+
+    #[tokio::test]
+    async fn test_record_failed_audit_log() {
+        let store = AuditLogStore::new(100);
+
+        let log = create_audit_log(
+            AdminActionType::ConfigLatencyUpdated,
+            "Failed to update latency config".to_string(),
+            Some("/api/config/latency".to_string()),
+            false,
+            Some("Permission denied".to_string()),
+            None,
+        );
+
+        store.record(log).await;
+
+        let stats = store.get_stats().await;
+        assert_eq!(stats.total_actions, 1);
+        assert_eq!(stats.successful_actions, 0);
+        assert_eq!(stats.failed_actions, 1);
+    }
+
+    #[tokio::test]
+    async fn test_audit_log_with_metadata() {
+        let store = AuditLogStore::new(100);
+
+        let metadata = serde_json::json!({
+            "old_value": 100,
+            "new_value": 200,
+            "reason": "Performance optimization"
+        });
+
+        let log = create_audit_log(
+            AdminActionType::ConfigLatencyUpdated,
+            "Updated latency config".to_string(),
+            Some("/api/config/latency".to_string()),
+            true,
+            None,
+            Some(metadata.clone()),
+        );
+
+        store.record(log).await;
+
+        let logs = store.get_logs(None, None, None, None).await;
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].metadata, Some(metadata));
+    }
+
+    #[tokio::test]
+    async fn test_max_logs_limit() {
+        let store = AuditLogStore::new(5);
+
+        // Add 10 logs
+        for i in 0..10 {
+            let log = create_audit_log(
+                AdminActionType::ConfigLatencyUpdated,
+                format!("Action {}", i),
+                None,
+                true,
+                None,
+                None,
+            );
+            store.record(log).await;
+        }
+
+        let logs = store.get_logs(None, None, None, None).await;
+        assert_eq!(logs.len(), 5, "Should only keep last 5 logs");
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_filtering_by_action_type() {
+        let store = AuditLogStore::new(100);
+
+        // Add different action types
+        store
+            .record(create_audit_log(
+                AdminActionType::ConfigLatencyUpdated,
+                "Latency updated".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+
+        store
+            .record(create_audit_log(
+                AdminActionType::FixtureCreated,
+                "Fixture created".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+
+        store
+            .record(create_audit_log(
+                AdminActionType::ConfigLatencyUpdated,
+                "Latency updated again".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+
+        let logs = store
+            .get_logs(Some(AdminActionType::ConfigLatencyUpdated), None, None, None)
+            .await;
+        assert_eq!(logs.len(), 2);
+        assert!(logs.iter().all(|log| log.action_type == AdminActionType::ConfigLatencyUpdated));
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_filtering_by_user() {
+        let store = AuditLogStore::new(100);
+
+        let mut log1 = create_audit_log(
+            AdminActionType::ConfigLatencyUpdated,
+            "Action by user1".to_string(),
+            None,
+            true,
+            None,
+            None,
+        );
+        log1.user_id = Some("user1".to_string());
+        store.record(log1).await;
+
+        let mut log2 = create_audit_log(
+            AdminActionType::FixtureCreated,
+            "Action by user2".to_string(),
+            None,
+            true,
+            None,
+            None,
+        );
+        log2.user_id = Some("user2".to_string());
+        store.record(log2).await;
+
+        let mut log3 = create_audit_log(
+            AdminActionType::ConfigFaultsUpdated,
+            "Action by user1".to_string(),
+            None,
+            true,
+            None,
+            None,
+        );
+        log3.user_id = Some("user1".to_string());
+        store.record(log3).await;
+
+        let logs = store.get_logs(None, Some("user1"), None, None).await;
+        assert_eq!(logs.len(), 2);
+        assert!(logs.iter().all(|log| log.user_id.as_deref() == Some("user1")));
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_with_limit_and_offset() {
+        let store = AuditLogStore::new(100);
+
+        // Add 10 logs
+        for i in 0..10 {
+            let log = create_audit_log(
+                AdminActionType::ConfigLatencyUpdated,
+                format!("Action {}", i),
+                None,
+                true,
+                None,
+                None,
+            );
+            store.record(log).await;
+        }
+
+        // Get logs with limit
+        let logs = store.get_logs(None, None, Some(5), None).await;
+        assert_eq!(logs.len(), 5);
+
+        // Get logs with offset
+        let logs = store.get_logs(None, None, Some(3), Some(2)).await;
+        assert_eq!(logs.len(), 3);
+
+        // Get logs with offset beyond limit
+        let logs = store.get_logs(None, None, Some(5), Some(8)).await;
+        assert_eq!(logs.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_logs_sorted_by_timestamp_newest_first() {
+        let store = AuditLogStore::new(100);
+
+        // Add logs with delays
+        for i in 0..5 {
+            let log = create_audit_log(
+                AdminActionType::ConfigLatencyUpdated,
+                format!("Action {}", i),
+                None,
+                true,
+                None,
+                None,
+            );
+            store.record(log).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        }
+
+        let logs = store.get_logs(None, None, None, None).await;
+        assert_eq!(logs.len(), 5);
+
+        // Verify newest first
+        for i in 0..logs.len() - 1 {
+            assert!(logs[i].timestamp >= logs[i + 1].timestamp);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_clear_logs() {
+        let store = AuditLogStore::new(100);
+
+        // Add logs
+        for _ in 0..5 {
+            store
+                .record(create_audit_log(
+                    AdminActionType::ConfigLatencyUpdated,
+                    "Action".to_string(),
+                    None,
+                    true,
+                    None,
+                    None,
+                ))
+                .await;
+        }
+
+        let stats_before = store.get_stats().await;
+        assert_eq!(stats_before.total_actions, 5);
+
+        store.clear().await;
+
+        let stats_after = store.get_stats().await;
+        assert_eq!(stats_after.total_actions, 0);
+    }
+
+    #[tokio::test]
+    async fn test_audit_stats_actions_by_type() {
+        let store = AuditLogStore::new(100);
+
+        // Add various action types
+        store
+            .record(create_audit_log(
+                AdminActionType::ConfigLatencyUpdated,
+                "".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+        store
+            .record(create_audit_log(
+                AdminActionType::ConfigLatencyUpdated,
+                "".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+        store
+            .record(create_audit_log(
+                AdminActionType::FixtureCreated,
+                "".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+        store
+            .record(create_audit_log(
+                AdminActionType::RouteEnabled,
+                "".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+        store
+            .record(create_audit_log(
+                AdminActionType::FixtureCreated,
+                "".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+
+        let stats = store.get_stats().await;
+        assert_eq!(stats.total_actions, 5);
+        assert_eq!(stats.actions_by_type.get("ConfigLatencyUpdated"), Some(&2));
+        assert_eq!(stats.actions_by_type.get("FixtureCreated"), Some(&2));
+        assert_eq!(stats.actions_by_type.get("RouteEnabled"), Some(&1));
+    }
+
+    #[tokio::test]
+    async fn test_audit_stats_most_recent_timestamp() {
+        let store = AuditLogStore::new(100);
+
+        // Add first log
+        store
+            .record(create_audit_log(
+                AdminActionType::ConfigLatencyUpdated,
+                "First".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+
+        let stats1 = store.get_stats().await;
+        let first_timestamp = stats1.most_recent_timestamp.unwrap();
+
+        // Wait a bit and add another log
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        store
+            .record(create_audit_log(
+                AdminActionType::FixtureCreated,
+                "Second".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+
+        let stats2 = store.get_stats().await;
+        let second_timestamp = stats2.most_recent_timestamp.unwrap();
+
+        assert!(second_timestamp > first_timestamp);
+    }
+
+    #[test]
+    fn test_create_audit_log_helper() {
+        let log = create_audit_log(
+            AdminActionType::UserCreated,
+            "Created new user".to_string(),
+            Some("users/123".to_string()),
+            true,
+            None,
+            Some(serde_json::json!({"username": "testuser"})),
+        );
+
+        assert_eq!(log.action_type, AdminActionType::UserCreated);
+        assert_eq!(log.description, "Created new user");
+        assert_eq!(log.resource, Some("users/123".to_string()));
+        assert!(log.success);
+        assert_eq!(log.error_message, None);
+        assert!(log.metadata.is_some());
+        assert_eq!(log.user_id, None);
+        assert_eq!(log.username, None);
+        assert_eq!(log.ip_address, None);
+        assert_eq!(log.user_agent, None);
+    }
+
+    #[test]
+    fn test_admin_action_type_serialization() {
+        let action = AdminActionType::ConfigLatencyUpdated;
+        let serialized = serde_json::to_string(&action).unwrap();
+        assert_eq!(serialized, "\"config_latency_updated\"");
+
+        let deserialized: AdminActionType = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, action);
+    }
+
+    #[test]
+    fn test_audit_log_serialization() {
+        let log = AdminAuditLog {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            action_type: AdminActionType::FixtureCreated,
+            user_id: Some("user123".to_string()),
+            username: Some("testuser".to_string()),
+            ip_address: Some("192.168.1.1".to_string()),
+            user_agent: Some("Mozilla/5.0".to_string()),
+            description: "Created fixture".to_string(),
+            resource: Some("/fixtures/test".to_string()),
+            success: true,
+            error_message: None,
+            metadata: Some(serde_json::json!({"key": "value"})),
+        };
+
+        let serialized = serde_json::to_string(&log).unwrap();
+        let deserialized: AdminAuditLog = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.id, log.id);
+        assert_eq!(deserialized.action_type, log.action_type);
+        assert_eq!(deserialized.user_id, log.user_id);
+        assert_eq!(deserialized.description, log.description);
+    }
+
+    #[test]
+    fn test_all_admin_action_types_covered() {
+        // Test that all action types can be serialized and deserialized
+        let actions = vec![
+            AdminActionType::ConfigLatencyUpdated,
+            AdminActionType::ConfigFaultsUpdated,
+            AdminActionType::ConfigProxyUpdated,
+            AdminActionType::ConfigTrafficShapingUpdated,
+            AdminActionType::ConfigValidationUpdated,
+            AdminActionType::ServerRestarted,
+            AdminActionType::ServerShutdown,
+            AdminActionType::ServerStatusChecked,
+            AdminActionType::LogsCleared,
+            AdminActionType::LogsExported,
+            AdminActionType::LogsFiltered,
+            AdminActionType::FixtureCreated,
+            AdminActionType::FixtureUpdated,
+            AdminActionType::FixtureDeleted,
+            AdminActionType::FixtureBulkDeleted,
+            AdminActionType::FixtureMoved,
+            AdminActionType::RouteEnabled,
+            AdminActionType::RouteDisabled,
+            AdminActionType::RouteCreated,
+            AdminActionType::RouteDeleted,
+            AdminActionType::RouteUpdated,
+            AdminActionType::ServiceEnabled,
+            AdminActionType::ServiceDisabled,
+            AdminActionType::ServiceConfigUpdated,
+            AdminActionType::MetricsExported,
+            AdminActionType::MetricsConfigUpdated,
+            AdminActionType::UserCreated,
+            AdminActionType::UserUpdated,
+            AdminActionType::UserDeleted,
+            AdminActionType::RoleChanged,
+            AdminActionType::PermissionGranted,
+            AdminActionType::PermissionRevoked,
+            AdminActionType::SystemConfigBackedUp,
+            AdminActionType::SystemConfigRestored,
+            AdminActionType::SystemHealthChecked,
+            AdminActionType::ApiKeyCreated,
+            AdminActionType::ApiKeyDeleted,
+            AdminActionType::ApiKeyRotated,
+            AdminActionType::SecurityPolicyUpdated,
+        ];
+
+        for action in actions {
+            let serialized = serde_json::to_string(&action).unwrap();
+            let deserialized: AdminActionType = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(deserialized, action);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_global_audit_store_initialization() {
+        let store1 = init_global_audit_store(100);
+        let store2 = get_global_audit_store();
+
+        assert!(store2.is_some());
+
+        // Both should point to the same store
+        let store2 = store2.unwrap();
+
+        // Add log via store1
+        store1
+            .record(create_audit_log(
+                AdminActionType::ConfigLatencyUpdated,
+                "Test".to_string(),
+                None,
+                true,
+                None,
+                None,
+            ))
+            .await;
+
+        // Should be visible via store2
+        let stats = store2.get_stats().await;
+        assert_eq!(stats.total_actions, 1);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_audit_log_writes() {
+        let store = Arc::new(AuditLogStore::new(1000));
+        let mut handles = vec![];
+
+        // Spawn multiple tasks writing logs concurrently
+        for i in 0..10 {
+            let store_clone = store.clone();
+            let handle = tokio::spawn(async move {
+                for j in 0..10 {
+                    let log = create_audit_log(
+                        AdminActionType::ConfigLatencyUpdated,
+                        format!("Task {} - Log {}", i, j),
+                        None,
+                        true,
+                        None,
+                        None,
+                    );
+                    store_clone.record(log).await;
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        let stats = store.get_stats().await;
+        assert_eq!(stats.total_actions, 100);
+    }
+}

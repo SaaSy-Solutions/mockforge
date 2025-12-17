@@ -67,6 +67,7 @@ async fn test_billing_subscriptions_spec_generation() {
         max_error_rate: 0.05,
         auth_header: None,
         custom_headers: HashMap::new(),
+        skip_tls_verify: false,
     };
 
     // Generate the k6 script

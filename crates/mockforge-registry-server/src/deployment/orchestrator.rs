@@ -11,8 +11,10 @@ use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::models::{HostedMock, DeploymentLog, DeploymentStatus, HealthStatus};
-use crate::deployment::flyio::{FlyioClient, FlyioMachineConfig, FlyioService, FlyioPort, FlyioCheck};
+use crate::deployment::flyio::{
+    FlyioCheck, FlyioClient, FlyioMachineConfig, FlyioPort, FlyioService,
+};
+use crate::models::{DeploymentLog, DeploymentStatus, HealthStatus, HostedMock};
 
 /// Deployment orchestrator that manages hosted mock deployments
 pub struct DeploymentOrchestrator {
@@ -63,7 +65,7 @@ impl DeploymentOrchestrator {
             AND deleted_at IS NULL
             ORDER BY created_at ASC
             LIMIT 10
-            "#
+            "#,
         )
         .fetch_all(pool)
         .await
@@ -108,15 +110,9 @@ impl DeploymentOrchestrator {
             .await
             .context("Failed to update deployment status")?;
 
-        DeploymentLog::create(
-            pool,
-            deployment.id,
-            "info",
-            "Starting deployment",
-            None,
-        )
-        .await
-        .context("Failed to create deployment log")?;
+        DeploymentLog::create(pool, deployment.id, "info", "Starting deployment", None)
+            .await
+            .context("Failed to create deployment log")?;
 
         // Deploy using Fly.io if configured
         if let Some(ref flyio_client) = self.flyio_client {
@@ -149,12 +145,21 @@ impl DeploymentOrchestrator {
     /// Deploy to Fly.io
     async fn deploy_to_flyio(&self, client: &FlyioClient, deployment: &HostedMock) -> Result<()> {
         let pool = self.db.as_ref();
-        let org_slug = self.flyio_org_slug.as_deref()
+        let org_slug = self
+            .flyio_org_slug
+            .as_deref()
             .ok_or_else(|| anyhow::anyhow!("FLYIO_ORG_SLUG not configured"))?;
 
         // Generate app name (must be unique globally on Fly.io)
-        let app_name = format!("mockforge-{}-{}",
-            deployment.org_id.to_string().replace("-", "").chars().take(8).collect::<String>(),
+        let app_name = format!(
+            "mockforge-{}-{}",
+            deployment
+                .org_id
+                .to_string()
+                .replace("-", "")
+                .chars()
+                .take(8)
+                .collect::<String>(),
             deployment.slug
         );
 
@@ -180,10 +185,10 @@ impl DeploymentOrchestrator {
                 .await?;
                 app
             }
-            Err(_) => {
-                client.create_app(&app_name, org_slug).await
-                    .context("Failed to create Fly.io app")?
-            }
+            Err(_) => client
+                .create_app(&app_name, org_slug)
+                .await
+                .context("Failed to create Fly.io app")?,
         };
 
         // Build machine config
@@ -216,14 +221,17 @@ impl DeploymentOrchestrator {
         }];
 
         let mut checks = HashMap::new();
-        checks.insert("alive".to_string(), FlyioCheck {
-            grace_period: "10s".to_string(),
-            interval: "15s".to_string(),
-            method: "GET".to_string(),
-            timeout: "2s".to_string(),
-            tls_skip_verify: false,
-            path: Some("/health/live".to_string()),
-        });
+        checks.insert(
+            "alive".to_string(),
+            FlyioCheck {
+                grace_period: "10s".to_string(),
+                interval: "15s".to_string(),
+                method: "GET".to_string(),
+                timeout: "2s".to_string(),
+                tls_skip_verify: false,
+                path: Some("/health/live".to_string()),
+            },
+        );
 
         let machine_config = FlyioMachineConfig {
             image,
@@ -232,17 +240,11 @@ impl DeploymentOrchestrator {
             checks: Some(checks),
         };
 
-        DeploymentLog::create(
-            pool,
-            deployment.id,
-            "info",
-            "Creating Fly.io machine",
-            None,
-        )
-        .await?;
+        DeploymentLog::create(pool, deployment.id, "info", "Creating Fly.io machine", None).await?;
 
         // Create machine
-        let machine = client.create_machine(&app_name, machine_config, &deployment.region)
+        let machine = client
+            .create_machine(&app_name, machine_config, &deployment.region)
             .await
             .context("Failed to create Fly.io machine")?;
 
@@ -265,7 +267,7 @@ impl DeploymentOrchestrator {
                 ),
                 updated_at = NOW()
             WHERE id = $5
-            "#
+            "#,
         )
         .bind(&deployment_url)
         .bind(&internal_url)
@@ -308,7 +310,7 @@ impl DeploymentOrchestrator {
                 health_check_url = $2,
                 updated_at = NOW()
             WHERE id = $3
-            "#
+            "#,
         )
         .bind(&deployment_url)
         .bind(&health_check_url)
@@ -339,23 +341,14 @@ impl DeploymentOrchestrator {
             .ok_or_else(|| anyhow::anyhow!("Deployment not found"))?;
 
         // Update status to deleting
-        HostedMock::update_status(pool, deployment_id, DeploymentStatus::Deleting, None)
-            .await?;
+        HostedMock::update_status(pool, deployment_id, DeploymentStatus::Deleting, None).await?;
 
-        DeploymentLog::create(
-            pool,
-            deployment_id,
-            "info",
-            "Starting deletion",
-            None,
-        )
-        .await?;
+        DeploymentLog::create(pool, deployment_id, "info", "Starting deletion", None).await?;
 
         // Delete from Fly.io if deployed there
         if let Some(ref flyio_client) = self.flyio_client {
-            if let Some(machine_id) = deployment.metadata_json
-                .get("flyio_machine_id")
-                .and_then(|v| v.as_str())
+            if let Some(machine_id) =
+                deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str())
             {
                 // Extract app name from deployment URL
                 if let Some(ref deployment_url) = deployment.deployment_url {
@@ -374,20 +367,13 @@ impl DeploymentOrchestrator {
             UPDATE hosted_mocks
             SET deleted_at = NOW()
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(deployment_id)
         .execute(pool)
         .await?;
 
-        DeploymentLog::create(
-            pool,
-            deployment_id,
-            "info",
-            "Deletion completed",
-            None,
-        )
-        .await?;
+        DeploymentLog::create(pool, deployment_id, "info", "Deletion completed", None).await?;
 
         Ok(())
     }

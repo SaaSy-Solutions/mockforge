@@ -139,7 +139,11 @@ impl Cache {
     }
 
     /// Invalidate marketplace content cache
-    pub async fn invalidate_marketplace(&self, content_type: &str, content_id: &Uuid) -> Result<()> {
+    pub async fn invalidate_marketplace(
+        &self,
+        content_type: &str,
+        content_id: &Uuid,
+    ) -> Result<()> {
         let key = match content_type {
             "plugin" => format!("{}:{}", keys::PLUGIN, content_id),
             "template" => format!("{}:{}", keys::TEMPLATE, content_id),
@@ -217,4 +221,171 @@ pub fn template_cache_key(template_id: &Uuid) -> String {
 /// Helper function to generate scenario cache key
 pub fn scenario_cache_key(scenario_id: &Uuid) -> String {
     format!("{}:{}", keys::SCENARIO, scenario_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Cache key prefix constants tests
+    #[test]
+    fn test_key_constants() {
+        assert_eq!(keys::ORG, "cache:org:");
+        assert_eq!(keys::USER, "cache:user:");
+        assert_eq!(keys::ORG_SETTING, "cache:org_setting:");
+        assert_eq!(keys::USER_SETTING, "cache:user_setting:");
+        assert_eq!(keys::SUBSCRIPTION, "cache:subscription:");
+        assert_eq!(keys::PLUGIN, "cache:plugin:");
+        assert_eq!(keys::TEMPLATE, "cache:template:");
+        assert_eq!(keys::SCENARIO, "cache:scenario:");
+        assert_eq!(keys::ORG_MEMBERS, "cache:org_members:");
+    }
+
+    // TTL constants tests
+    #[test]
+    fn test_ttl_short() {
+        assert_eq!(ttl::SHORT, 60);
+    }
+
+    #[test]
+    fn test_ttl_medium() {
+        assert_eq!(ttl::MEDIUM, 300);
+    }
+
+    #[test]
+    fn test_ttl_long() {
+        assert_eq!(ttl::LONG, 900);
+    }
+
+    #[test]
+    fn test_ttl_very_long() {
+        assert_eq!(ttl::VERY_LONG, 3600);
+    }
+
+    #[test]
+    fn test_ttl_org() {
+        assert_eq!(ttl::ORG, ttl::MEDIUM);
+    }
+
+    #[test]
+    fn test_ttl_user() {
+        assert_eq!(ttl::USER, ttl::MEDIUM);
+    }
+
+    #[test]
+    fn test_ttl_settings() {
+        assert_eq!(ttl::SETTINGS, ttl::LONG);
+    }
+
+    #[test]
+    fn test_ttl_subscription() {
+        assert_eq!(ttl::SUBSCRIPTION, ttl::MEDIUM);
+    }
+
+    #[test]
+    fn test_ttl_marketplace() {
+        assert_eq!(ttl::MARKETPLACE, ttl::LONG);
+    }
+
+    #[test]
+    fn test_ttl_org_members() {
+        assert_eq!(ttl::ORG_MEMBERS, ttl::MEDIUM);
+    }
+
+    // Cache key helper function tests
+    #[test]
+    fn test_org_cache_key() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let key = org_cache_key(&id);
+        assert_eq!(key, "cache:org::550e8400-e29b-41d4-a716-446655440000");
+    }
+
+    #[test]
+    fn test_user_cache_key() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
+        let key = user_cache_key(&id);
+        assert_eq!(key, "cache:user::550e8400-e29b-41d4-a716-446655440001");
+    }
+
+    #[test]
+    fn test_org_setting_cache_key() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440002").unwrap();
+        let key = org_setting_cache_key(&id, "theme");
+        assert_eq!(key, "cache:org_setting::550e8400-e29b-41d4-a716-446655440002:theme");
+    }
+
+    #[test]
+    fn test_user_setting_cache_key() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440003").unwrap();
+        let key = user_setting_cache_key(&id, "notifications");
+        assert_eq!(key, "cache:user_setting::550e8400-e29b-41d4-a716-446655440003:notifications");
+    }
+
+    #[test]
+    fn test_subscription_cache_key() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440004").unwrap();
+        let key = subscription_cache_key(&id);
+        assert_eq!(key, "cache:subscription::550e8400-e29b-41d4-a716-446655440004");
+    }
+
+    #[test]
+    fn test_org_members_cache_key() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440005").unwrap();
+        let key = org_members_cache_key(&id);
+        assert_eq!(key, "cache:org_members::550e8400-e29b-41d4-a716-446655440005");
+    }
+
+    #[test]
+    fn test_plugin_cache_key() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440006").unwrap();
+        let key = plugin_cache_key(&id);
+        assert_eq!(key, "cache:plugin::550e8400-e29b-41d4-a716-446655440006");
+    }
+
+    #[test]
+    fn test_template_cache_key() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440007").unwrap();
+        let key = template_cache_key(&id);
+        assert_eq!(key, "cache:template::550e8400-e29b-41d4-a716-446655440007");
+    }
+
+    #[test]
+    fn test_scenario_cache_key() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440008").unwrap();
+        let key = scenario_cache_key(&id);
+        assert_eq!(key, "cache:scenario::550e8400-e29b-41d4-a716-446655440008");
+    }
+
+    // Test key uniqueness
+    #[test]
+    fn test_cache_keys_are_unique() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+
+        let org_key = org_cache_key(&id);
+        let user_key = user_cache_key(&id);
+        let plugin_key = plugin_cache_key(&id);
+        let template_key = template_cache_key(&id);
+        let scenario_key = scenario_cache_key(&id);
+        let subscription_key = subscription_cache_key(&id);
+
+        // All keys should be different even for same UUID
+        assert_ne!(org_key, user_key);
+        assert_ne!(org_key, plugin_key);
+        assert_ne!(plugin_key, template_key);
+        assert_ne!(template_key, scenario_key);
+        assert_ne!(subscription_key, org_key);
+    }
+
+    // Test setting key variations
+    #[test]
+    fn test_setting_keys_with_different_settings() {
+        let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+
+        let theme_key = org_setting_cache_key(&id, "theme");
+        let lang_key = org_setting_cache_key(&id, "language");
+
+        assert_ne!(theme_key, lang_key);
+        assert!(theme_key.contains("theme"));
+        assert!(lang_key.contains("language"));
+    }
 }

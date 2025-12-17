@@ -42,9 +42,8 @@ mod route_registry_concurrency {
         // Verify all routes were added by checking we can find them
         let reg = registry.lock().unwrap();
         // Try to find routes we added - if they exist, they were added successfully
-        let found = reg.find_http_routes(&HttpMethod::GET, "/api/route_0_0");
-        // At least one route should be found (we added many)
-        assert!(!found.is_empty() || true); // Just verify no panic
+        // Just verify no panic by calling the method
+        let _ = reg.find_http_routes(&HttpMethod::GET, "/api/route_0_0");
     }
 
     #[test]
@@ -474,11 +473,9 @@ mod stress_tests {
             handle.join().unwrap();
         }
 
-        // Verify final state by checking we can find routes
+        // Verify final state by checking we can find routes (no panic)
         let reg = registry.lock().unwrap();
-        let found = reg.find_http_routes(&HttpMethod::GET, "/api/route_0_0");
-        // Should be able to find at least one route
-        assert!(!found.is_empty() || true); // Just verify no panic
+        let _ = reg.find_http_routes(&HttpMethod::GET, "/api/route_0_0");
     }
 
     #[test]

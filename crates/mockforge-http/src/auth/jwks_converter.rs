@@ -168,3 +168,404 @@ pub fn convert_jwk_key_simple(jwk_key: &JwkKey) -> Result<JwkPublicKey, Error> {
         _ => Err(Error::generic(format!("Unsupported key type: {}", jwk_key.kty))),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rsa_pem_to_jwk() {
+        let result = rsa_pem_to_jwk("test-pem", "test-kid", "RS256");
+        assert!(result.is_ok());
+
+        let jwk = result.unwrap();
+        assert_eq!(jwk.kid, "test-kid");
+        assert_eq!(jwk.kty, "RSA");
+        assert_eq!(jwk.alg, "RS256");
+        assert_eq!(jwk.use_, "sig");
+        assert!(jwk.n.is_none());
+        assert!(jwk.e.is_none());
+        assert!(jwk.crv.is_none());
+    }
+
+    #[test]
+    fn test_ecdsa_pem_to_jwk_es256() {
+        let result = ecdsa_pem_to_jwk("test-pem", "test-kid", "ES256");
+        assert!(result.is_ok());
+
+        let jwk = result.unwrap();
+        assert_eq!(jwk.kid, "test-kid");
+        assert_eq!(jwk.kty, "EC");
+        assert_eq!(jwk.alg, "ES256");
+        assert_eq!(jwk.use_, "sig");
+        assert_eq!(jwk.crv, Some("P-256".to_string()));
+        assert!(jwk.n.is_none());
+        assert!(jwk.e.is_none());
+    }
+
+    #[test]
+    fn test_ecdsa_pem_to_jwk_es384() {
+        let result = ecdsa_pem_to_jwk("test-pem", "test-kid", "ES384");
+        assert!(result.is_ok());
+
+        let jwk = result.unwrap();
+        assert_eq!(jwk.crv, Some("P-384".to_string()));
+    }
+
+    #[test]
+    fn test_ecdsa_pem_to_jwk_es512() {
+        let result = ecdsa_pem_to_jwk("test-pem", "test-kid", "ES512");
+        assert!(result.is_ok());
+
+        let jwk = result.unwrap();
+        assert_eq!(jwk.crv, Some("P-521".to_string()));
+    }
+
+    #[test]
+    fn test_ecdsa_pem_to_jwk_unknown_alg() {
+        let result = ecdsa_pem_to_jwk("test-pem", "test-kid", "UNKNOWN");
+        assert!(result.is_ok());
+
+        let jwk = result.unwrap();
+        assert_eq!(jwk.crv, Some("P-256".to_string())); // Default
+    }
+
+    #[test]
+    fn test_hmac_to_jwk() {
+        let result = hmac_to_jwk("test-secret", "test-kid", "HS256");
+        assert!(result.is_ok());
+
+        let jwk = result.unwrap();
+        assert_eq!(jwk.kid, "test-kid");
+        assert_eq!(jwk.kty, "oct");
+        assert_eq!(jwk.alg, "HS256");
+        assert_eq!(jwk.use_, "sig");
+        assert!(jwk.n.is_none());
+        assert!(jwk.e.is_none());
+        assert!(jwk.crv.is_none());
+        assert!(jwk.x.is_none());
+        assert!(jwk.y.is_none());
+    }
+
+    #[test]
+    fn test_jwk_key_to_public_rsa() {
+        let jwk_key = JwkKey {
+            kid: "rsa-key".to_string(),
+            alg: "RS256".to_string(),
+            public_key: "rsa-pem-data".to_string(),
+            private_key: Some("private-key".to_string()),
+            kty: "RSA".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = jwk_key_to_public(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.kid, "rsa-key");
+        assert_eq!(public_key.kty, "RSA");
+        assert_eq!(public_key.alg, "RS256");
+    }
+
+    #[test]
+    fn test_jwk_key_to_public_ec() {
+        let jwk_key = JwkKey {
+            kid: "ec-key".to_string(),
+            alg: "ES256".to_string(),
+            public_key: "ec-pem-data".to_string(),
+            private_key: Some("private-key".to_string()),
+            kty: "EC".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = jwk_key_to_public(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.kid, "ec-key");
+        assert_eq!(public_key.kty, "EC");
+        assert_eq!(public_key.alg, "ES256");
+        assert_eq!(public_key.crv, Some("P-256".to_string()));
+    }
+
+    #[test]
+    fn test_jwk_key_to_public_oct() {
+        let jwk_key = JwkKey {
+            kid: "hmac-key".to_string(),
+            alg: "HS256".to_string(),
+            public_key: "secret".to_string(),
+            private_key: Some("secret".to_string()),
+            kty: "oct".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = jwk_key_to_public(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.kid, "hmac-key");
+        assert_eq!(public_key.kty, "oct");
+        assert_eq!(public_key.alg, "HS256");
+    }
+
+    #[test]
+    fn test_jwk_key_to_public_unsupported() {
+        let jwk_key = JwkKey {
+            kid: "unknown-key".to_string(),
+            alg: "UNKNOWN".to_string(),
+            public_key: "data".to_string(),
+            private_key: None,
+            kty: "UNSUPPORTED".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = jwk_key_to_public(&jwk_key);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_rsa_json() {
+        let jwk_json = r#"{"n": "modulus-value", "e": "exponent-value"}"#;
+        let jwk_key = JwkKey {
+            kid: "rsa-json-key".to_string(),
+            alg: "RS256".to_string(),
+            public_key: jwk_json.to_string(),
+            private_key: None,
+            kty: "RSA".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.kid, "rsa-json-key");
+        assert_eq!(public_key.kty, "RSA");
+        assert_eq!(public_key.n, Some("modulus-value".to_string()));
+        assert_eq!(public_key.e, Some("exponent-value".to_string()));
+        assert!(public_key.crv.is_none());
+        assert!(public_key.x.is_none());
+        assert!(public_key.y.is_none());
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_ec_json() {
+        let jwk_json = r#"{"x": "x-coordinate", "y": "y-coordinate", "crv": "P-256"}"#;
+        let jwk_key = JwkKey {
+            kid: "ec-json-key".to_string(),
+            alg: "ES256".to_string(),
+            public_key: jwk_json.to_string(),
+            private_key: None,
+            kty: "EC".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.kid, "ec-json-key");
+        assert_eq!(public_key.kty, "EC");
+        assert_eq!(public_key.x, Some("x-coordinate".to_string()));
+        assert_eq!(public_key.y, Some("y-coordinate".to_string()));
+        assert_eq!(public_key.crv, Some("P-256".to_string()));
+        assert!(public_key.n.is_none());
+        assert!(public_key.e.is_none());
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_rsa_pem() {
+        let jwk_key = JwkKey {
+            kid: "rsa-pem-key".to_string(),
+            alg: "RS256".to_string(),
+            public_key: "-----BEGIN PUBLIC KEY-----\ndata\n-----END PUBLIC KEY-----".to_string(),
+            private_key: None,
+            kty: "RSA".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.kid, "rsa-pem-key");
+        assert_eq!(public_key.kty, "RSA");
+        // PEM format means n/e won't be extracted without ASN.1 parsing
+        assert!(public_key.n.is_none());
+        assert!(public_key.e.is_none());
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_ec_pem_es256() {
+        let jwk_key = JwkKey {
+            kid: "ec-pem-key-256".to_string(),
+            alg: "ES256".to_string(),
+            public_key: "-----BEGIN PUBLIC KEY-----\ndata\n-----END PUBLIC KEY-----".to_string(),
+            private_key: None,
+            kty: "EC".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.kid, "ec-pem-key-256");
+        assert_eq!(public_key.kty, "EC");
+        assert_eq!(public_key.crv, Some("P-256".to_string()));
+        // PEM format means x/y won't be extracted without ASN.1 parsing
+        assert!(public_key.x.is_none());
+        assert!(public_key.y.is_none());
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_ec_pem_es384() {
+        let jwk_key = JwkKey {
+            kid: "ec-pem-key-384".to_string(),
+            alg: "ES384".to_string(),
+            public_key: "pem-data".to_string(),
+            private_key: None,
+            kty: "EC".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.crv, Some("P-384".to_string()));
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_ec_pem_es512() {
+        let jwk_key = JwkKey {
+            kid: "ec-pem-key-512".to_string(),
+            alg: "ES512".to_string(),
+            public_key: "pem-data".to_string(),
+            private_key: None,
+            kty: "EC".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.crv, Some("P-521".to_string()));
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_oct() {
+        let jwk_key = JwkKey {
+            kid: "oct-key".to_string(),
+            alg: "HS256".to_string(),
+            public_key: "secret-data".to_string(),
+            private_key: Some("secret-data".to_string()),
+            kty: "oct".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.kid, "oct-key");
+        assert_eq!(public_key.kty, "oct");
+        assert_eq!(public_key.alg, "HS256");
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_unsupported() {
+        let jwk_key = JwkKey {
+            kid: "unsupported-key".to_string(),
+            alg: "UNKNOWN".to_string(),
+            public_key: "data".to_string(),
+            private_key: None,
+            kty: "UNSUPPORTED".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_invalid_json() {
+        let jwk_key = JwkKey {
+            kid: "invalid-json-key".to_string(),
+            alg: "RS256".to_string(),
+            public_key: "not-valid-json-{".to_string(),
+            private_key: None,
+            kty: "RSA".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_ok());
+        // Should fall back to PEM processing
+        let public_key = result.unwrap();
+        assert_eq!(public_key.kty, "RSA");
+    }
+
+    #[test]
+    fn test_rsa_multiple_algorithms() {
+        for alg in &["RS256", "RS384", "RS512"] {
+            let result = rsa_pem_to_jwk("pem", "kid", alg);
+            assert!(result.is_ok());
+            let jwk = result.unwrap();
+            assert_eq!(jwk.alg, *alg);
+            assert_eq!(jwk.kty, "RSA");
+        }
+    }
+
+    #[test]
+    fn test_hmac_multiple_algorithms() {
+        for alg in &["HS256", "HS384", "HS512"] {
+            let result = hmac_to_jwk("secret", "kid", alg);
+            assert!(result.is_ok());
+            let jwk = result.unwrap();
+            assert_eq!(jwk.alg, *alg);
+            assert_eq!(jwk.kty, "oct");
+        }
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_rsa_json_without_exponent() {
+        let jwk_json = r#"{"n": "modulus-only"}"#;
+        let jwk_key = JwkKey {
+            kid: "rsa-no-e".to_string(),
+            alg: "RS256".to_string(),
+            public_key: jwk_json.to_string(),
+            private_key: None,
+            kty: "RSA".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.n, Some("modulus-only".to_string()));
+        assert!(public_key.e.is_none());
+    }
+
+    #[test]
+    fn test_convert_jwk_key_simple_ec_json_without_y() {
+        let jwk_json = r#"{"x": "x-only"}"#;
+        let jwk_key = JwkKey {
+            kid: "ec-no-y".to_string(),
+            alg: "ES256".to_string(),
+            public_key: jwk_json.to_string(),
+            private_key: None,
+            kty: "EC".to_string(),
+            use_: "sig".to_string(),
+        };
+
+        let result = convert_jwk_key_simple(&jwk_key);
+        assert!(result.is_ok());
+
+        let public_key = result.unwrap();
+        assert_eq!(public_key.x, Some("x-only".to_string()));
+        assert!(public_key.y.is_none());
+    }
+}

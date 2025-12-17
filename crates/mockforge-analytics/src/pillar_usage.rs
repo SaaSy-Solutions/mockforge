@@ -1293,3 +1293,289 @@ impl AnalyticsDatabase {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pillar_as_str() {
+        assert_eq!(Pillar::Reality.as_str(), "reality");
+        assert_eq!(Pillar::Contracts.as_str(), "contracts");
+        assert_eq!(Pillar::DevX.as_str(), "devx");
+        assert_eq!(Pillar::Cloud.as_str(), "cloud");
+        assert_eq!(Pillar::Ai.as_str(), "ai");
+    }
+
+    #[test]
+    fn test_pillar_from_str() {
+        assert_eq!(Pillar::from_str("reality"), Some(Pillar::Reality));
+        assert_eq!(Pillar::from_str("contracts"), Some(Pillar::Contracts));
+        assert_eq!(Pillar::from_str("devx"), Some(Pillar::DevX));
+        assert_eq!(Pillar::from_str("cloud"), Some(Pillar::Cloud));
+        assert_eq!(Pillar::from_str("ai"), Some(Pillar::Ai));
+        assert_eq!(Pillar::from_str("unknown"), None);
+    }
+
+    #[test]
+    fn test_pillar_from_str_case_insensitive() {
+        assert_eq!(Pillar::from_str("REALITY"), Some(Pillar::Reality));
+        assert_eq!(Pillar::from_str("Reality"), Some(Pillar::Reality));
+        assert_eq!(Pillar::from_str("DEVX"), Some(Pillar::DevX));
+        assert_eq!(Pillar::from_str("AI"), Some(Pillar::Ai));
+    }
+
+    #[test]
+    fn test_pillar_display() {
+        assert_eq!(format!("{}", Pillar::Reality), "reality");
+        assert_eq!(format!("{}", Pillar::Contracts), "contracts");
+        assert_eq!(format!("{}", Pillar::DevX), "devx");
+        assert_eq!(format!("{}", Pillar::Cloud), "cloud");
+        assert_eq!(format!("{}", Pillar::Ai), "ai");
+    }
+
+    #[test]
+    fn test_pillar_serialize() {
+        let pillar = Pillar::Reality;
+        let json = serde_json::to_string(&pillar).unwrap();
+        assert_eq!(json, "\"reality\"");
+    }
+
+    #[test]
+    fn test_pillar_deserialize() {
+        let pillar: Pillar = serde_json::from_str("\"contracts\"").unwrap();
+        assert_eq!(pillar, Pillar::Contracts);
+    }
+
+    #[test]
+    fn test_pillar_clone() {
+        let pillar = Pillar::DevX;
+        let cloned = pillar;
+        assert_eq!(pillar, cloned);
+    }
+
+    #[test]
+    fn test_pillar_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(Pillar::Reality);
+        set.insert(Pillar::Contracts);
+        set.insert(Pillar::Reality); // duplicate
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_pillar_usage_event_serialize() {
+        let event = PillarUsageEvent {
+            workspace_id: Some("ws-123".to_string()),
+            org_id: None,
+            pillar: Pillar::Reality,
+            metric_name: "blended_reality_ratio".to_string(),
+            metric_value: serde_json::json!({"ratio": 0.75}),
+            timestamp: Utc::now(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("ws-123"));
+        assert!(json.contains("reality"));
+        assert!(json.contains("blended_reality_ratio"));
+    }
+
+    #[test]
+    fn test_pillar_usage_event_deserialize() {
+        let json = r#"{
+            "workspace_id": "ws-456",
+            "org_id": null,
+            "pillar": "contracts",
+            "metric_name": "validation_mode",
+            "metric_value": {"mode": "enforce"},
+            "timestamp": "2024-01-15T12:00:00Z"
+        }"#;
+        let event: PillarUsageEvent = serde_json::from_str(json).unwrap();
+        assert_eq!(event.workspace_id, Some("ws-456".to_string()));
+        assert_eq!(event.pillar, Pillar::Contracts);
+        assert_eq!(event.metric_name, "validation_mode");
+    }
+
+    #[test]
+    fn test_reality_pillar_metrics_serialize() {
+        let metrics = RealityPillarMetrics {
+            blended_reality_percent: 75.0,
+            smart_personas_percent: 60.0,
+            static_fixtures_percent: 40.0,
+            avg_reality_level: 3.5,
+            chaos_enabled_count: 5,
+            total_scenarios: 100,
+        };
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("blended_reality_percent"));
+        assert!(json.contains("75.0"));
+    }
+
+    #[test]
+    fn test_contracts_pillar_metrics_serialize() {
+        let metrics = ContractsPillarMetrics {
+            validation_disabled_percent: 10.0,
+            validation_warn_percent: 30.0,
+            validation_enforce_percent: 60.0,
+            drift_budget_configured_count: 15,
+            drift_incidents_count: 3,
+            contract_sync_cycles: 42,
+        };
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("validation_enforce_percent"));
+        assert!(json.contains("60.0"));
+    }
+
+    #[test]
+    fn test_devx_pillar_metrics_serialize() {
+        let metrics = DevXPillarMetrics {
+            sdk_installations: 100,
+            client_generations: 50,
+            playground_sessions: 200,
+            cli_commands: 1000,
+        };
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("sdk_installations"));
+        assert!(json.contains("100"));
+    }
+
+    #[test]
+    fn test_cloud_pillar_metrics_serialize() {
+        let metrics = CloudPillarMetrics {
+            shared_scenarios_count: 25,
+            marketplace_downloads: 500,
+            org_templates_used: 10,
+            collaborative_workspaces: 5,
+        };
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("marketplace_downloads"));
+        assert!(json.contains("500"));
+    }
+
+    #[test]
+    fn test_ai_pillar_metrics_serialize() {
+        let metrics = AiPillarMetrics {
+            ai_generated_mocks: 100,
+            ai_contract_diffs: 50,
+            voice_commands: 25,
+            llm_assisted_operations: 175,
+        };
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("ai_generated_mocks"));
+        assert!(json.contains("100"));
+    }
+
+    #[test]
+    fn test_pillar_usage_metrics_serialize() {
+        let metrics = PillarUsageMetrics {
+            workspace_id: Some("ws-123".to_string()),
+            org_id: None,
+            time_range: "3600s".to_string(),
+            reality: Some(RealityPillarMetrics {
+                blended_reality_percent: 50.0,
+                smart_personas_percent: 75.0,
+                static_fixtures_percent: 25.0,
+                avg_reality_level: 4.0,
+                chaos_enabled_count: 2,
+                total_scenarios: 50,
+            }),
+            contracts: None,
+            devx: None,
+            cloud: None,
+            ai: None,
+        };
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("ws-123"));
+        assert!(json.contains("3600s"));
+        assert!(json.contains("blended_reality_percent"));
+    }
+
+    #[test]
+    fn test_pillar_usage_metrics_all_pillars() {
+        let metrics = PillarUsageMetrics {
+            workspace_id: Some("ws-all".to_string()),
+            org_id: Some("org-1".to_string()),
+            time_range: "86400s".to_string(),
+            reality: Some(RealityPillarMetrics {
+                blended_reality_percent: 80.0,
+                smart_personas_percent: 90.0,
+                static_fixtures_percent: 10.0,
+                avg_reality_level: 4.5,
+                chaos_enabled_count: 10,
+                total_scenarios: 200,
+            }),
+            contracts: Some(ContractsPillarMetrics {
+                validation_disabled_percent: 5.0,
+                validation_warn_percent: 15.0,
+                validation_enforce_percent: 80.0,
+                drift_budget_configured_count: 30,
+                drift_incidents_count: 2,
+                contract_sync_cycles: 100,
+            }),
+            devx: Some(DevXPillarMetrics {
+                sdk_installations: 500,
+                client_generations: 200,
+                playground_sessions: 1000,
+                cli_commands: 5000,
+            }),
+            cloud: Some(CloudPillarMetrics {
+                shared_scenarios_count: 50,
+                marketplace_downloads: 1000,
+                org_templates_used: 20,
+                collaborative_workspaces: 15,
+            }),
+            ai: Some(AiPillarMetrics {
+                ai_generated_mocks: 300,
+                ai_contract_diffs: 100,
+                voice_commands: 50,
+                llm_assisted_operations: 450,
+            }),
+        };
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("org-1"));
+        // Check all pillar sections are present
+        assert!(json.contains("reality"));
+        assert!(json.contains("contracts"));
+        assert!(json.contains("devx"));
+        assert!(json.contains("cloud"));
+        assert!(json.contains("ai"));
+    }
+
+    #[test]
+    fn test_pillar_debug() {
+        let pillar = Pillar::Reality;
+        let debug = format!("{:?}", pillar);
+        assert!(debug.contains("Reality"));
+    }
+
+    #[test]
+    fn test_reality_pillar_metrics_clone() {
+        let metrics = RealityPillarMetrics {
+            blended_reality_percent: 50.0,
+            smart_personas_percent: 60.0,
+            static_fixtures_percent: 40.0,
+            avg_reality_level: 3.0,
+            chaos_enabled_count: 1,
+            total_scenarios: 10,
+        };
+        let cloned = metrics.clone();
+        assert_eq!(metrics.blended_reality_percent, cloned.blended_reality_percent);
+        assert_eq!(metrics.total_scenarios, cloned.total_scenarios);
+    }
+
+    #[test]
+    fn test_pillar_usage_event_clone() {
+        let event = PillarUsageEvent {
+            workspace_id: Some("ws-test".to_string()),
+            org_id: None,
+            pillar: Pillar::Ai,
+            metric_name: "ai_generation".to_string(),
+            metric_value: serde_json::json!({"type": "mock"}),
+            timestamp: Utc::now(),
+        };
+        let cloned = event.clone();
+        assert_eq!(event.workspace_id, cloned.workspace_id);
+        assert_eq!(event.pillar, cloned.pillar);
+        assert_eq!(event.metric_name, cloned.metric_name);
+    }
+}

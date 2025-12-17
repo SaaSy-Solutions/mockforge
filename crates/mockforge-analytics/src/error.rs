@@ -60,3 +60,91 @@ impl From<&str> for AnalyticsError {
         Self::Other(s.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_analytics_error_from_string() {
+        let error: AnalyticsError = "test error".into();
+        assert!(matches!(error, AnalyticsError::Other(_)));
+        assert_eq!(error.to_string(), "test error");
+    }
+
+    #[test]
+    fn test_analytics_error_from_owned_string() {
+        let error: AnalyticsError = String::from("owned error").into();
+        assert!(matches!(error, AnalyticsError::Other(_)));
+        assert_eq!(error.to_string(), "owned error");
+    }
+
+    #[test]
+    fn test_analytics_error_migration() {
+        let error = AnalyticsError::Migration("migration failed".to_string());
+        assert!(error.to_string().contains("Migration error"));
+        assert!(error.to_string().contains("migration failed"));
+    }
+
+    #[test]
+    fn test_analytics_error_invalid_config() {
+        let error = AnalyticsError::InvalidConfig("bad config".to_string());
+        assert!(error.to_string().contains("Invalid configuration"));
+        assert!(error.to_string().contains("bad config"));
+    }
+
+    #[test]
+    fn test_analytics_error_query() {
+        let error = AnalyticsError::Query("query failed".to_string());
+        assert!(error.to_string().contains("Query error"));
+        assert!(error.to_string().contains("query failed"));
+    }
+
+    #[test]
+    fn test_analytics_error_export() {
+        let error = AnalyticsError::Export("export failed".to_string());
+        assert!(error.to_string().contains("Export error"));
+        assert!(error.to_string().contains("export failed"));
+    }
+
+    #[test]
+    fn test_analytics_error_invalid_input() {
+        let error = AnalyticsError::InvalidInput("bad input".to_string());
+        assert!(error.to_string().contains("Invalid input"));
+        assert!(error.to_string().contains("bad input"));
+    }
+
+    #[test]
+    fn test_analytics_error_other() {
+        let error = AnalyticsError::Other("other error".to_string());
+        assert_eq!(error.to_string(), "other error");
+    }
+
+    #[test]
+    fn test_analytics_error_debug() {
+        let error = AnalyticsError::Query("test".to_string());
+        let debug = format!("{:?}", error);
+        assert!(debug.contains("Query"));
+    }
+
+    #[test]
+    fn test_analytics_error_from_serde_json() {
+        let json_error = serde_json::from_str::<i32>("not a number").unwrap_err();
+        let error: AnalyticsError = json_error.into();
+        assert!(matches!(error, AnalyticsError::Serialization(_)));
+        assert!(error.to_string().contains("Serialization error"));
+    }
+
+    #[test]
+    fn test_result_type_ok() {
+        let result: Result<i32> = Ok(42);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_result_type_err() {
+        let result: Result<i32> = Err(AnalyticsError::Query("failed".to_string()));
+        assert!(result.is_err());
+    }
+}

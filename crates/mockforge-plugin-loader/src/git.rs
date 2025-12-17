@@ -534,6 +534,8 @@ impl GitPluginLoader {
 mod tests {
     use super::*;
 
+    // ===== GitRef Tests =====
+
     #[test]
     fn test_git_ref_parse() {
         assert_eq!(GitRef::parse("v1.0.0"), GitRef::Tag("v1.0.0".to_string()));
@@ -544,6 +546,59 @@ mod tests {
         );
         assert_eq!(GitRef::parse(""), GitRef::Default);
     }
+
+    #[test]
+    fn test_git_ref_parse_version_tags() {
+        assert_eq!(GitRef::parse("v1.0.0"), GitRef::Tag("v1.0.0".to_string()));
+        assert_eq!(GitRef::parse("v2.3.4"), GitRef::Tag("v2.3.4".to_string()));
+        assert_eq!(GitRef::parse("v0.1.0-alpha"), GitRef::Tag("v0.1.0-alpha".to_string()));
+    }
+
+    #[test]
+    fn test_git_ref_parse_branches() {
+        assert_eq!(GitRef::parse("main"), GitRef::Branch("main".to_string()));
+        assert_eq!(GitRef::parse("develop"), GitRef::Branch("develop".to_string()));
+        assert_eq!(
+            GitRef::parse("feature/new-thing"),
+            GitRef::Branch("feature/new-thing".to_string())
+        );
+    }
+
+    #[test]
+    fn test_git_ref_parse_commit() {
+        let commit = "abc123def456789012345678901234567890abcd";
+        assert_eq!(GitRef::parse(commit), GitRef::Commit(commit.to_string()));
+    }
+
+    #[test]
+    fn test_git_ref_parse_short_hash_as_branch() {
+        // Short commit hashes (not 40 chars) should be treated as branches
+        assert_eq!(GitRef::parse("abc123"), GitRef::Branch("abc123".to_string()));
+    }
+
+    #[test]
+    fn test_git_ref_equality() {
+        assert_eq!(GitRef::Tag("v1.0.0".to_string()), GitRef::Tag("v1.0.0".to_string()));
+        assert_ne!(GitRef::Tag("v1.0.0".to_string()), GitRef::Tag("v2.0.0".to_string()));
+        assert_ne!(GitRef::Tag("v1.0.0".to_string()), GitRef::Branch("v1.0.0".to_string()));
+    }
+
+    #[test]
+    fn test_git_ref_clone() {
+        let git_ref = GitRef::Tag("v1.0.0".to_string());
+        let cloned = git_ref.clone();
+        assert_eq!(git_ref, cloned);
+    }
+
+    #[test]
+    fn test_git_ref_display() {
+        assert_eq!(GitRef::Tag("v1.0.0".to_string()).to_string(), "tag:v1.0.0");
+        assert_eq!(GitRef::Branch("main".to_string()).to_string(), "branch:main");
+        assert_eq!(GitRef::Commit("abc123".to_string()).to_string(), "commit:abc123");
+        assert_eq!(GitRef::Default.to_string(), "default");
+    }
+
+    // ===== GitPluginSource Tests =====
 
     #[test]
     fn test_git_plugin_source_parse() {
@@ -568,11 +623,39 @@ mod tests {
     }
 
     #[test]
-    fn test_git_ref_display() {
-        assert_eq!(GitRef::Tag("v1.0.0".to_string()).to_string(), "tag:v1.0.0");
-        assert_eq!(GitRef::Branch("main".to_string()).to_string(), "branch:main");
-        assert_eq!(GitRef::Commit("abc123".to_string()).to_string(), "commit:abc123");
-        assert_eq!(GitRef::Default.to_string(), "default");
+    fn test_git_plugin_source_parse_ssh_url() {
+        let source = GitPluginSource::parse("git@github.com:user/repo.git").unwrap();
+        assert_eq!(source.url, "git@github.com:user/repo.git");
+        assert_eq!(source.git_ref, GitRef::Default);
+    }
+
+    #[test]
+    fn test_git_plugin_source_parse_with_commit() {
+        let commit = "abc123def456789012345678901234567890abcd";
+        let source =
+            GitPluginSource::parse(&format!("https://github.com/user/repo#{}", commit)).unwrap();
+        assert_eq!(source.git_ref, GitRef::Commit(commit.to_string()));
+    }
+
+    #[test]
+    fn test_git_plugin_source_parse_with_subdirectory_only() {
+        let source = GitPluginSource::parse("https://github.com/user/repo#:subdir").unwrap();
+        assert_eq!(source.git_ref, GitRef::Default);
+        assert_eq!(source.subdirectory, Some("subdir".to_string()));
+    }
+
+    #[test]
+    fn test_git_plugin_source_clone() {
+        let source = GitPluginSource {
+            url: "https://github.com/user/repo".to_string(),
+            git_ref: GitRef::Tag("v1.0.0".to_string()),
+            subdirectory: Some("plugins".to_string()),
+        };
+
+        let cloned = source.clone();
+        assert_eq!(source.url, cloned.url);
+        assert_eq!(source.git_ref, cloned.git_ref);
+        assert_eq!(source.subdirectory, cloned.subdirectory);
     }
 
     #[test]
@@ -583,5 +666,76 @@ mod tests {
             subdirectory: Some("plugins".to_string()),
         };
         assert_eq!(source.to_string(), "https://github.com/user/repo#tag:v1.0.0:plugins");
+    }
+
+    #[test]
+    fn test_git_plugin_source_display_without_subdirectory() {
+        let source = GitPluginSource {
+            url: "https://github.com/user/repo".to_string(),
+            git_ref: GitRef::Branch("main".to_string()),
+            subdirectory: None,
+        };
+        assert_eq!(source.to_string(), "https://github.com/user/repo#branch:main");
+    }
+
+    // ===== GitPluginConfig Tests =====
+
+    #[test]
+    fn test_git_plugin_config_default() {
+        let config = GitPluginConfig::default();
+        assert!(config.shallow_clone);
+        assert!(!config.include_submodules);
+        assert!(config.cache_dir.to_string_lossy().contains("mockforge"));
+        assert!(config.cache_dir.to_string_lossy().contains("git-plugins"));
+    }
+
+    #[test]
+    fn test_git_plugin_config_clone() {
+        let config = GitPluginConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.shallow_clone, cloned.shallow_clone);
+        assert_eq!(config.include_submodules, cloned.include_submodules);
+        assert_eq!(config.cache_dir, cloned.cache_dir);
+    }
+
+    #[test]
+    fn test_git_plugin_config_custom() {
+        let config = GitPluginConfig {
+            cache_dir: PathBuf::from("/tmp/custom-cache"),
+            shallow_clone: false,
+            include_submodules: true,
+        };
+
+        assert!(!config.shallow_clone);
+        assert!(config.include_submodules);
+        assert_eq!(config.cache_dir, PathBuf::from("/tmp/custom-cache"));
+    }
+
+    // ===== Edge Cases =====
+
+    #[test]
+    fn test_git_ref_parse_empty_string() {
+        assert_eq!(GitRef::parse(""), GitRef::Default);
+    }
+
+    #[test]
+    fn test_git_plugin_source_parse_gitlab() {
+        let source = GitPluginSource::parse("https://gitlab.com/group/project").unwrap();
+        assert_eq!(source.url, "https://gitlab.com/group/project");
+    }
+
+    #[test]
+    fn test_git_plugin_source_parse_complex_subdirectory() {
+        let source =
+            GitPluginSource::parse("https://github.com/user/repo#v1.0.0:path/to/plugin").unwrap();
+        assert_eq!(source.subdirectory, Some("path/to/plugin".to_string()));
+    }
+
+    #[test]
+    fn test_git_ref_debug() {
+        let git_ref = GitRef::Tag("v1.0.0".to_string());
+        let debug_str = format!("{:?}", git_ref);
+        assert!(debug_str.contains("Tag"));
+        assert!(debug_str.contains("v1.0.0"));
     }
 }

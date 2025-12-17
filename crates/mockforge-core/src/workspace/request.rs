@@ -1671,9 +1671,6 @@ mod tests {
         let result =
             processor.execute_request(&mut workspace, &request.id, &context).await.unwrap();
         assert!(result.success);
-        // Duration should be >= 0ms (can be 0 for very fast executions)
-        // The important thing is that it's not using the cached path (duration_ms = 1)
-        assert!(result.duration_ms >= 0);
         // Verify it's not the cached response duration (which would be 1)
         // If duration_ms is 0 or >= 1 but not exactly 1, it's not cached
         assert!(result.duration_ms != 1 || result.duration_ms == 0);
@@ -2113,8 +2110,8 @@ mod tests {
         // Test get_performance_summary (lines 991-993)
         let processor = RequestProcessor::new();
         let summary = processor.get_performance_summary().await;
-        // Should return a summary without panicking
-        assert!(summary.total_requests >= 0);
+        // Should return a summary without panicking - total_requests is u64 and always >= 0
+        let _ = summary.total_requests;
     }
 
     #[tokio::test]
@@ -2122,8 +2119,8 @@ mod tests {
         // Test get_cache_stats (lines 996-999)
         let processor = RequestProcessor::new();
         let (response_stats, validation_stats) = processor.get_cache_stats().await;
-        // Should return stats without panicking
-        assert!(response_stats.hits >= 0);
-        assert!(validation_stats.hits >= 0);
+        // Should return stats without panicking - hits are u64 and always >= 0
+        let _ = response_stats.hits;
+        let _ = validation_stats.hits;
     }
 }

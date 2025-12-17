@@ -1242,3 +1242,322 @@ fn get_api_key() -> Result<String> {
         "No API key found. Run 'mockforge cloud login' or set MOCKFORGE_API_KEY environment variable"
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    // CloudCommands enum tests
+    #[test]
+    fn test_cloud_commands_login_variant() {
+        let _cmd = CloudCommands::Login {
+            token: Some("test-token".to_string()),
+            provider: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_cloud_commands_login_with_provider() {
+        let _cmd = CloudCommands::Login {
+            token: None,
+            provider: Some("github".to_string()),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_cloud_commands_whoami_variant() {
+        let _cmd = CloudCommands::Whoami {
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_cloud_commands_logout_variant() {
+        let _cmd = CloudCommands::Logout {};
+    }
+
+    // SyncCommands enum tests
+    #[test]
+    fn test_sync_commands_start_variant() {
+        let _cmd = SyncCommands::Start {
+            workspace: Some("my-workspace".to_string()),
+            all: false,
+            project: Some("my-project".to_string()),
+            watch: true,
+            strategy: "merge".to_string(),
+            direction: "both".to_string(),
+            local_dir: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_sync_commands_start_all() {
+        let _cmd = SyncCommands::Start {
+            workspace: None,
+            all: true,
+            project: None,
+            watch: false,
+            strategy: "local".to_string(),
+            direction: "up".to_string(),
+            local_dir: Some(PathBuf::from(".")),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_sync_commands_status_variant() {
+        let _cmd = SyncCommands::Status {
+            workspace: Some("workspace-1".to_string()),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_sync_commands_history_variant() {
+        let _cmd = SyncCommands::History {
+            workspace: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+            limit: 50,
+        };
+    }
+
+    #[test]
+    fn test_sync_commands_pending_variant() {
+        let _cmd = SyncCommands::Pending {
+            workspace: Some("workspace-1".to_string()),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    // CloudWorkspaceCommands enum tests
+    #[test]
+    fn test_cloud_workspace_commands_list_variant() {
+        let _cmd = CloudWorkspaceCommands::List {
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_cloud_workspace_commands_create_variant() {
+        let _cmd = CloudWorkspaceCommands::Create {
+            workspace_id: "new-workspace".to_string(),
+            name: "New Workspace".to_string(),
+            description: Some("Test workspace".to_string()),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_cloud_workspace_commands_link_variant() {
+        let _cmd = CloudWorkspaceCommands::Link {
+            local_workspace: PathBuf::from("./workspace"),
+            cloud_workspace_id: "cloud-123".to_string(),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_cloud_workspace_commands_unlink_variant() {
+        let _cmd = CloudWorkspaceCommands::Unlink {
+            local_workspace: PathBuf::from("./workspace"),
+        };
+    }
+
+    #[test]
+    fn test_cloud_workspace_commands_info_variant() {
+        let _cmd = CloudWorkspaceCommands::Info {
+            workspace_id: "workspace-123".to_string(),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    // TeamCommands enum tests
+    #[test]
+    fn test_team_commands_members_variant() {
+        let _cmd = TeamCommands::Members {
+            workspace: "team-workspace".to_string(),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_team_commands_invite_variant() {
+        let _cmd = TeamCommands::Invite {
+            email: "user@example.com".to_string(),
+            workspace: "team-workspace".to_string(),
+            role: "editor".to_string(),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_team_commands_invite_admin() {
+        let _cmd = TeamCommands::Invite {
+            email: "admin@example.com".to_string(),
+            workspace: "team-workspace".to_string(),
+            role: "admin".to_string(),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_team_commands_remove_variant() {
+        let _cmd = TeamCommands::Remove {
+            email: "user@example.com".to_string(),
+            workspace: "team-workspace".to_string(),
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    // get_api_key tests with environment variable
+    #[test]
+    fn test_get_api_key_from_env() {
+        // Set environment variable
+        std::env::set_var("MOCKFORGE_API_KEY", "test-api-key");
+
+        let result = get_api_key();
+
+        // Clean up
+        std::env::remove_var("MOCKFORGE_API_KEY");
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "test-api-key");
+    }
+
+    #[test]
+    fn test_get_api_key_not_found() {
+        // Make sure env var is not set
+        std::env::remove_var("MOCKFORGE_API_KEY");
+
+        // Use a temp dir to ensure no config file exists
+        let _temp_dir = TempDir::new().unwrap();
+
+        let result = get_api_key();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("No API key found"));
+    }
+
+    // Activity command variant tests
+    #[test]
+    fn test_cloud_commands_activity_variant() {
+        let _cmd = CloudCommands::Activity {
+            workspace: Some("workspace-1".to_string()),
+            service_url: "https://api.mockforge.dev".to_string(),
+            limit: 20,
+        };
+    }
+
+    #[test]
+    fn test_cloud_commands_activity_no_workspace() {
+        let _cmd = CloudCommands::Activity {
+            workspace: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+            limit: 50,
+        };
+    }
+
+    // Sync direction tests
+    #[test]
+    fn test_sync_commands_direction_up() {
+        let _cmd = SyncCommands::Start {
+            workspace: Some("test".to_string()),
+            all: false,
+            project: None,
+            watch: false,
+            strategy: "merge".to_string(),
+            direction: "up".to_string(),
+            local_dir: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_sync_commands_direction_down() {
+        let _cmd = SyncCommands::Start {
+            workspace: Some("test".to_string()),
+            all: false,
+            project: None,
+            watch: false,
+            strategy: "merge".to_string(),
+            direction: "down".to_string(),
+            local_dir: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_sync_commands_direction_both() {
+        let _cmd = SyncCommands::Start {
+            workspace: Some("test".to_string()),
+            all: false,
+            project: None,
+            watch: false,
+            strategy: "merge".to_string(),
+            direction: "both".to_string(),
+            local_dir: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    // Conflict strategy tests
+    #[test]
+    fn test_sync_commands_strategy_local() {
+        let _cmd = SyncCommands::Start {
+            workspace: Some("test".to_string()),
+            all: false,
+            project: None,
+            watch: false,
+            strategy: "local".to_string(),
+            direction: "both".to_string(),
+            local_dir: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_sync_commands_strategy_remote() {
+        let _cmd = SyncCommands::Start {
+            workspace: Some("test".to_string()),
+            all: false,
+            project: None,
+            watch: false,
+            strategy: "remote".to_string(),
+            direction: "both".to_string(),
+            local_dir: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_sync_commands_strategy_merge() {
+        let _cmd = SyncCommands::Start {
+            workspace: Some("test".to_string()),
+            all: false,
+            project: None,
+            watch: false,
+            strategy: "merge".to_string(),
+            direction: "both".to_string(),
+            local_dir: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_sync_commands_strategy_manual() {
+        let _cmd = SyncCommands::Start {
+            workspace: Some("test".to_string()),
+            all: false,
+            project: None,
+            watch: false,
+            strategy: "manual".to_string(),
+            direction: "both".to_string(),
+            local_dir: None,
+            service_url: "https://api.mockforge.dev".to_string(),
+        };
+    }
+}

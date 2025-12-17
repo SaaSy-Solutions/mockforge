@@ -181,3 +181,321 @@ impl ExchangeManager {
         self.exchanges.remove(name).is_some()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::messages::MessageProperties;
+
+    fn create_test_binding(queue: &str, routing_key: &str) -> Binding {
+        Binding {
+            exchange: "test-exchange".to_string(),
+            queue: queue.to_string(),
+            routing_key: routing_key.to_string(),
+            arguments: HashMap::new(),
+        }
+    }
+
+    fn create_test_message(routing_key: &str) -> Message {
+        Message {
+            properties: MessageProperties::default(),
+            body: b"test".to_vec(),
+            routing_key: routing_key.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_exchange_type_serialize() {
+        let json = serde_json::to_string(&ExchangeType::Direct).unwrap();
+        assert_eq!(json, "\"direct\"");
+
+        let json = serde_json::to_string(&ExchangeType::Fanout).unwrap();
+        assert_eq!(json, "\"fanout\"");
+
+        let json = serde_json::to_string(&ExchangeType::Topic).unwrap();
+        assert_eq!(json, "\"topic\"");
+
+        let json = serde_json::to_string(&ExchangeType::Headers).unwrap();
+        assert_eq!(json, "\"headers\"");
+    }
+
+    #[test]
+    fn test_exchange_type_deserialize() {
+        let exchange_type: ExchangeType = serde_json::from_str("\"direct\"").unwrap();
+        assert_eq!(exchange_type, ExchangeType::Direct);
+
+        let exchange_type: ExchangeType = serde_json::from_str("\"fanout\"").unwrap();
+        assert_eq!(exchange_type, ExchangeType::Fanout);
+    }
+
+    #[test]
+    fn test_exchange_type_eq() {
+        assert_eq!(ExchangeType::Direct, ExchangeType::Direct);
+        assert_ne!(ExchangeType::Direct, ExchangeType::Fanout);
+    }
+
+    #[test]
+    fn test_exchange_route_direct() {
+        let exchange = Exchange {
+            name: "test-exchange".to_string(),
+            exchange_type: ExchangeType::Direct,
+            durable: false,
+            auto_delete: false,
+            arguments: HashMap::new(),
+            bindings: vec![
+                create_test_binding("queue1", "key1"),
+                create_test_binding("queue2", "key2"),
+                create_test_binding("queue3", "key1"),
+            ],
+        };
+
+        let message = create_test_message("key1");
+        let queues = exchange.route_message(&message, "key1");
+        assert_eq!(queues.len(), 2);
+        assert!(queues.contains(&"queue1".to_string()));
+        assert!(queues.contains(&"queue3".to_string()));
+    }
+
+    #[test]
+    fn test_exchange_route_fanout() {
+        let exchange = Exchange {
+            name: "test-exchange".to_string(),
+            exchange_type: ExchangeType::Fanout,
+            durable: false,
+            auto_delete: false,
+            arguments: HashMap::new(),
+            bindings: vec![
+                create_test_binding("queue1", ""),
+                create_test_binding("queue2", ""),
+                create_test_binding("queue3", ""),
+            ],
+        };
+
+        let message = create_test_message("any-key");
+        let queues = exchange.route_message(&message, "any-key");
+        assert_eq!(queues.len(), 3);
+    }
+
+    #[test]
+    fn test_exchange_route_topic_exact_match() {
+        let exchange = Exchange {
+            name: "test-exchange".to_string(),
+            exchange_type: ExchangeType::Topic,
+            durable: false,
+            auto_delete: false,
+            arguments: HashMap::new(),
+            bindings: vec![
+                create_test_binding("queue1", "user.created"),
+                create_test_binding("queue2", "order.created"),
+            ],
+        };
+
+        let message = create_test_message("user.created");
+        let queues = exchange.route_message(&message, "user.created");
+        assert_eq!(queues.len(), 1);
+        assert!(queues.contains(&"queue1".to_string()));
+    }
+
+    #[test]
+    fn test_exchange_route_topic_wildcard() {
+        let exchange = Exchange {
+            name: "test-exchange".to_string(),
+            exchange_type: ExchangeType::Topic,
+            durable: false,
+            auto_delete: false,
+            arguments: HashMap::new(),
+            bindings: vec![
+                create_test_binding("queue1", "user.*"),
+                create_test_binding("queue2", "*.created"),
+            ],
+        };
+
+        let message = create_test_message("user.created");
+        let queues = exchange.route_message(&message, "user.created");
+        // Both patterns should match
+        assert!(queues.len() >= 1);
+    }
+
+    #[test]
+    fn test_exchange_route_topic_hash_wildcard() {
+        let exchange = Exchange {
+            name: "test-exchange".to_string(),
+            exchange_type: ExchangeType::Topic,
+            durable: false,
+            auto_delete: false,
+            arguments: HashMap::new(),
+            bindings: vec![create_test_binding("queue1", "user.#")],
+        };
+
+        let message = create_test_message("user.created.v1");
+        let queues = exchange.route_message(&message, "user.created.v1");
+        assert_eq!(queues.len(), 1);
+    }
+
+    #[test]
+    fn test_matches_topic_pattern_exact() {
+        let routing = vec!["user", "created"];
+        let pattern = vec!["user", "created"];
+        assert!(Exchange::matches_topic_pattern(&routing, &pattern));
+    }
+
+    #[test]
+    fn test_matches_topic_pattern_star() {
+        let routing = vec!["user", "created"];
+        let pattern = vec!["user", "*"];
+        assert!(Exchange::matches_topic_pattern(&routing, &pattern));
+    }
+
+    #[test]
+    fn test_matches_topic_pattern_hash() {
+        let routing = vec!["user", "created", "v1"];
+        let pattern = vec!["user", "#"];
+        assert!(Exchange::matches_topic_pattern(&routing, &pattern));
+    }
+
+    #[test]
+    fn test_matches_topic_pattern_no_match() {
+        let routing = vec!["user", "created"];
+        let pattern = vec!["order", "created"];
+        assert!(!Exchange::matches_topic_pattern(&routing, &pattern));
+    }
+
+    #[test]
+    fn test_exchange_route_headers_all() {
+        let mut binding_args = HashMap::new();
+        binding_args.insert("x-match".to_string(), "all".to_string());
+        binding_args.insert("type".to_string(), "user".to_string());
+        binding_args.insert("action".to_string(), "created".to_string());
+
+        let exchange = Exchange {
+            name: "test-exchange".to_string(),
+            exchange_type: ExchangeType::Headers,
+            durable: false,
+            auto_delete: false,
+            arguments: HashMap::new(),
+            bindings: vec![Binding {
+                exchange: "test-exchange".to_string(),
+                queue: "queue1".to_string(),
+                routing_key: String::new(),
+                arguments: binding_args,
+            }],
+        };
+
+        let mut headers = HashMap::new();
+        headers.insert("type".to_string(), "user".to_string());
+        headers.insert("action".to_string(), "created".to_string());
+
+        let mut props = MessageProperties::default();
+        props.headers = headers;
+
+        let message = Message {
+            properties: props,
+            body: b"test".to_vec(),
+            routing_key: String::new(),
+        };
+
+        let queues = exchange.route_message(&message, "");
+        assert_eq!(queues.len(), 1);
+    }
+
+    #[test]
+    fn test_exchange_route_headers_any() {
+        let mut binding_args = HashMap::new();
+        binding_args.insert("x-match".to_string(), "any".to_string());
+        binding_args.insert("type".to_string(), "user".to_string());
+        binding_args.insert("action".to_string(), "nonexistent".to_string());
+
+        let exchange = Exchange {
+            name: "test-exchange".to_string(),
+            exchange_type: ExchangeType::Headers,
+            durable: false,
+            auto_delete: false,
+            arguments: HashMap::new(),
+            bindings: vec![Binding {
+                exchange: "test-exchange".to_string(),
+                queue: "queue1".to_string(),
+                routing_key: String::new(),
+                arguments: binding_args,
+            }],
+        };
+
+        let mut headers = HashMap::new();
+        headers.insert("type".to_string(), "user".to_string());
+
+        let mut props = MessageProperties::default();
+        props.headers = headers;
+
+        let message = Message {
+            properties: props,
+            body: b"test".to_vec(),
+            routing_key: String::new(),
+        };
+
+        let queues = exchange.route_message(&message, "");
+        assert_eq!(queues.len(), 1); // "any" matches if type matches
+    }
+
+    #[test]
+    fn test_exchange_manager_new() {
+        let manager = ExchangeManager::new();
+        assert!(manager.list_exchanges().is_empty());
+    }
+
+    #[test]
+    fn test_exchange_manager_default() {
+        let manager = ExchangeManager::default();
+        assert!(manager.list_exchanges().is_empty());
+    }
+
+    #[test]
+    fn test_exchange_manager_declare() {
+        let mut manager = ExchangeManager::new();
+        manager.declare_exchange("test".to_string(), ExchangeType::Direct, true, false);
+
+        let exchange = manager.get_exchange("test");
+        assert!(exchange.is_some());
+        assert_eq!(exchange.unwrap().exchange_type, ExchangeType::Direct);
+    }
+
+    #[test]
+    fn test_exchange_manager_list() {
+        let mut manager = ExchangeManager::new();
+        manager.declare_exchange("ex1".to_string(), ExchangeType::Direct, false, false);
+        manager.declare_exchange("ex2".to_string(), ExchangeType::Fanout, false, false);
+
+        let exchanges = manager.list_exchanges();
+        assert_eq!(exchanges.len(), 2);
+    }
+
+    #[test]
+    fn test_exchange_manager_delete() {
+        let mut manager = ExchangeManager::new();
+        manager.declare_exchange("test".to_string(), ExchangeType::Direct, false, false);
+
+        assert!(manager.delete_exchange("test"));
+        assert!(manager.get_exchange("test").is_none());
+        assert!(!manager.delete_exchange("nonexistent"));
+    }
+
+    #[test]
+    fn test_exchange_manager_get_nonexistent() {
+        let manager = ExchangeManager::new();
+        assert!(manager.get_exchange("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_exchange_clone() {
+        let exchange = Exchange {
+            name: "test".to_string(),
+            exchange_type: ExchangeType::Direct,
+            durable: true,
+            auto_delete: false,
+            arguments: HashMap::new(),
+            bindings: vec![],
+        };
+
+        let cloned = exchange.clone();
+        assert_eq!(exchange.name, cloned.name);
+        assert_eq!(exchange.exchange_type, cloned.exchange_type);
+    }
+}

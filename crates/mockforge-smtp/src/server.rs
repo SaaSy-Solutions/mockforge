@@ -420,10 +420,43 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_email_address_whitespace() {
+        assert_eq!(extract_email_address("  user@example.com  "), "user@example.com");
+    }
+
+    #[test]
+    fn test_extract_email_address_no_brackets() {
+        assert_eq!(extract_email_address("plain@email.com"), "plain@email.com");
+    }
+
+    #[test]
+    fn test_extract_email_address_mail_from_format() {
+        assert_eq!(extract_email_address("FROM:<sender@domain.com>"), "sender@domain.com");
+    }
+
+    #[test]
     fn test_extract_subject() {
         let data =
             "From: sender@example.com\nSubject: Test Email\nTo: recipient@example.com\n\nBody text";
         assert_eq!(extract_subject(data), "Test Email");
+    }
+
+    #[test]
+    fn test_extract_subject_not_found() {
+        let data = "From: sender@example.com\nTo: recipient@example.com\n\nBody text";
+        assert_eq!(extract_subject(data), "");
+    }
+
+    #[test]
+    fn test_extract_subject_lowercase() {
+        let data = "subject: lowercase subject\nFrom: sender@example.com";
+        assert_eq!(extract_subject(data), "lowercase subject");
+    }
+
+    #[test]
+    fn test_extract_subject_mixed_case() {
+        let data = "SUBJECT: UPPERCASE SUBJECT\nFrom: sender@example.com";
+        assert_eq!(extract_subject(data), "UPPERCASE SUBJECT");
     }
 
     #[test]
@@ -438,5 +471,66 @@ mod tests {
         state.reset();
         assert!(state.mail_from.is_none());
         assert_eq!(state.rcpt_to.len(), 0);
+    }
+
+    #[test]
+    fn test_session_state_new() {
+        let state = SessionState::new();
+        assert!(state.mail_from.is_none());
+        assert!(state.rcpt_to.is_empty());
+        assert!(state.data.is_empty());
+        assert!(!state.in_data_mode);
+    }
+
+    #[test]
+    fn test_session_state_reset() {
+        let mut state = SessionState::new();
+        state.mail_from = Some("test@example.com".to_string());
+        state.rcpt_to.push("recipient1@example.com".to_string());
+        state.rcpt_to.push("recipient2@example.com".to_string());
+        state.data = "Email body content".to_string();
+        state.in_data_mode = true;
+
+        state.reset();
+
+        assert!(state.mail_from.is_none());
+        assert!(state.rcpt_to.is_empty());
+        assert!(state.data.is_empty());
+        assert!(!state.in_data_mode);
+    }
+
+    #[test]
+    fn test_session_state_multiple_recipients() {
+        let mut state = SessionState::new();
+        state.rcpt_to.push("a@example.com".to_string());
+        state.rcpt_to.push("b@example.com".to_string());
+        state.rcpt_to.push("c@example.com".to_string());
+        assert_eq!(state.rcpt_to.len(), 3);
+    }
+
+    #[test]
+    fn test_session_state_data_accumulation() {
+        let mut state = SessionState::new();
+        state.data.push_str("Line 1\n");
+        state.data.push_str("Line 2\n");
+        state.data.push_str("Line 3\n");
+        assert_eq!(state.data, "Line 1\nLine 2\nLine 3\n");
+    }
+
+    #[tokio::test]
+    async fn test_smtp_server_new() {
+        let config = SmtpConfig::default();
+        let registry = Arc::new(SmtpSpecRegistry::new());
+        let server = SmtpServer::new(config, registry);
+        assert!(server.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_smtp_server_with_middleware() {
+        let config = SmtpConfig::default();
+        let registry = Arc::new(SmtpSpecRegistry::new());
+        let middleware = Arc::new(MiddlewareChain::new());
+        let server = SmtpServer::with_middleware(config, registry, middleware);
+        assert!(server.is_ok());
     }
 }

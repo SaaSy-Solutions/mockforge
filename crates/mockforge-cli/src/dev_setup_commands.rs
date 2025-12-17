@@ -1605,3 +1605,381 @@ fn verify_typescript_compilation(tsconfig_path: &Path) -> anyhow::Result<()> {
         Err(_) => Err(anyhow::anyhow!("Failed to run tsc")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    // Framework tests
+    #[test]
+    fn test_framework_from_str_react() {
+        assert_eq!(Framework::from_str("react"), Some(Framework::React));
+        assert_eq!(Framework::from_str("React"), Some(Framework::React));
+        assert_eq!(Framework::from_str("REACT"), Some(Framework::React));
+    }
+
+    #[test]
+    fn test_framework_from_str_vue() {
+        assert_eq!(Framework::from_str("vue"), Some(Framework::Vue));
+        assert_eq!(Framework::from_str("Vue"), Some(Framework::Vue));
+    }
+
+    #[test]
+    fn test_framework_from_str_angular() {
+        assert_eq!(Framework::from_str("angular"), Some(Framework::Angular));
+        assert_eq!(Framework::from_str("Angular"), Some(Framework::Angular));
+    }
+
+    #[test]
+    fn test_framework_from_str_svelte() {
+        assert_eq!(Framework::from_str("svelte"), Some(Framework::Svelte));
+        assert_eq!(Framework::from_str("Svelte"), Some(Framework::Svelte));
+    }
+
+    #[test]
+    fn test_framework_from_str_next() {
+        assert_eq!(Framework::from_str("next"), Some(Framework::Next));
+        assert_eq!(Framework::from_str("Next"), Some(Framework::Next));
+    }
+
+    #[test]
+    fn test_framework_from_str_nuxt() {
+        assert_eq!(Framework::from_str("nuxt"), Some(Framework::Nuxt));
+        assert_eq!(Framework::from_str("Nuxt"), Some(Framework::Nuxt));
+    }
+
+    #[test]
+    fn test_framework_from_str_invalid() {
+        assert_eq!(Framework::from_str("invalid"), None);
+        assert_eq!(Framework::from_str(""), None);
+        assert_eq!(Framework::from_str("reactjs"), None);
+    }
+
+    #[test]
+    fn test_framework_name() {
+        assert_eq!(Framework::React.name(), "react");
+        assert_eq!(Framework::Vue.name(), "vue");
+        assert_eq!(Framework::Angular.name(), "angular");
+        assert_eq!(Framework::Svelte.name(), "svelte");
+        assert_eq!(Framework::Next.name(), "next");
+        assert_eq!(Framework::Nuxt.name(), "nuxt");
+    }
+
+    #[test]
+    fn test_framework_sdk_package() {
+        assert_eq!(Framework::React.sdk_package(), "@mockforge/sdk");
+        assert_eq!(Framework::Vue.sdk_package(), "@mockforge/sdk");
+        assert_eq!(Framework::Angular.sdk_package(), "@mockforge/sdk");
+        assert_eq!(Framework::Svelte.sdk_package(), "@mockforge/sdk");
+        assert_eq!(Framework::Next.sdk_package(), "@mockforge/sdk");
+        assert_eq!(Framework::Nuxt.sdk_package(), "@mockforge/sdk");
+    }
+
+    // detect_project_root tests
+    #[test]
+    fn test_detect_project_root_with_package_json() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("package.json"), "{}").unwrap();
+
+        // Change to temp dir and test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).ok();
+        let result = detect_project_root();
+        std::env::set_current_dir(original_dir).ok();
+
+        assert!(result.is_ok());
+        let root = result.unwrap();
+        assert!(root.join("package.json").exists());
+    }
+
+    #[test]
+    fn test_detect_project_root_returns_pathbuf() {
+        let result = detect_project_root();
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert!(path.is_absolute() || path.is_relative());
+    }
+
+    // find_package_json tests
+    #[test]
+    fn test_find_package_json_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("package.json"), "{}").unwrap();
+
+        let result = find_package_json(temp_dir.path());
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), temp_dir.path().join("package.json"));
+    }
+
+    #[test]
+    fn test_find_package_json_not_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = find_package_json(temp_dir.path());
+        assert!(result.is_none());
+    }
+
+    // find_tsconfig tests
+    #[test]
+    fn test_find_tsconfig_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("tsconfig.json"), "{}").unwrap();
+
+        let result = find_tsconfig(temp_dir.path());
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), temp_dir.path().join("tsconfig.json"));
+    }
+
+    #[test]
+    fn test_find_tsconfig_app_json() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("tsconfig.app.json"), "{}").unwrap();
+
+        let result = find_tsconfig(temp_dir.path());
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_find_tsconfig_base_json() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("tsconfig.base.json"), "{}").unwrap();
+
+        let result = find_tsconfig(temp_dir.path());
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_find_tsconfig_not_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = find_tsconfig(temp_dir.path());
+        assert!(result.is_none());
+    }
+
+    // is_valid_openapi_spec tests
+    #[test]
+    fn test_is_valid_openapi_spec_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let spec_path = temp_dir.path().join("openapi.json");
+        fs::write(
+            &spec_path,
+            r#"{"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0.0"}, "paths": {}}"#,
+        )
+        .unwrap();
+
+        let result = is_valid_openapi_spec(&spec_path);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_is_valid_openapi_spec_swagger() {
+        let temp_dir = TempDir::new().unwrap();
+        let spec_path = temp_dir.path().join("swagger.json");
+        fs::write(
+            &spec_path,
+            r#"{"swagger": "2.0", "info": {"title": "Test", "version": "1.0.0"}, "paths": {}}"#,
+        )
+        .unwrap();
+
+        let result = is_valid_openapi_spec(&spec_path);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_is_valid_openapi_spec_yaml() {
+        let temp_dir = TempDir::new().unwrap();
+        let spec_path = temp_dir.path().join("openapi.yaml");
+        fs::write(&spec_path, "openapi: 3.0.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}")
+            .unwrap();
+
+        let result = is_valid_openapi_spec(&spec_path);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_is_valid_openapi_spec_invalid_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let spec_path = temp_dir.path().join("invalid.json");
+        fs::write(&spec_path, r#"{"not": "openapi"}"#).unwrap();
+
+        let result = is_valid_openapi_spec(&spec_path);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn test_is_valid_openapi_spec_file_not_found() {
+        let path = PathBuf::from("/nonexistent/spec.yaml");
+        let result = is_valid_openapi_spec(&path);
+        assert!(result.is_err());
+    }
+
+    // check_existing_client_code tests
+    #[test]
+    fn test_check_existing_client_code_none() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = check_existing_client_code(temp_dir.path());
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_check_existing_client_code_with_files() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("client.ts"), "// client code").unwrap();
+        fs::write(temp_dir.path().join("hooks.ts"), "// hooks code").unwrap();
+
+        let result = check_existing_client_code(temp_dir.path());
+        assert!(result.is_ok());
+        let files = result.unwrap();
+        assert!(files.contains(&"client.ts".to_string()));
+        assert!(files.contains(&"hooks.ts".to_string()));
+    }
+
+    #[test]
+    fn test_check_existing_client_code_directory_not_exists() {
+        let path = PathBuf::from("/nonexistent/directory");
+        let result = check_existing_client_code(&path);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    // DevSetupArgs tests
+    #[test]
+    fn test_dev_setup_args_default_values() {
+        // Test that default values are correct
+        let args = DevSetupArgs {
+            framework: "react".to_string(),
+            base_url: "http://localhost:3000".to_string(),
+            reality_level: "moderate".to_string(),
+            spec: None,
+            output: PathBuf::from("./src/mockforge"),
+            force: false,
+        };
+
+        assert_eq!(args.framework, "react");
+        assert_eq!(args.base_url, "http://localhost:3000");
+        assert_eq!(args.reality_level, "moderate");
+        assert!(!args.force);
+    }
+
+    #[test]
+    fn test_dev_setup_args_with_spec() {
+        let args = DevSetupArgs {
+            framework: "vue".to_string(),
+            base_url: "http://localhost:3000".to_string(),
+            reality_level: "moderate".to_string(),
+            spec: Some(PathBuf::from("./openapi.yaml")),
+            output: PathBuf::from("./src/mockforge"),
+            force: false,
+        };
+
+        assert!(args.spec.is_some());
+        assert_eq!(args.spec.unwrap(), PathBuf::from("./openapi.yaml"));
+    }
+
+    #[test]
+    fn test_dev_setup_args_with_force() {
+        let args = DevSetupArgs {
+            framework: "angular".to_string(),
+            base_url: "http://localhost:3000".to_string(),
+            reality_level: "moderate".to_string(),
+            spec: None,
+            output: PathBuf::from("./src/mockforge"),
+            force: true,
+        };
+
+        assert!(args.force);
+    }
+
+    // Framework enum tests
+    #[test]
+    fn test_framework_debug() {
+        let framework = Framework::React;
+        let debug = format!("{:?}", framework);
+        assert!(debug.contains("React"));
+    }
+
+    #[test]
+    fn test_framework_clone() {
+        let framework = Framework::Vue;
+        let cloned = framework;
+        assert_eq!(framework as i32, cloned as i32);
+    }
+
+    #[test]
+    fn test_framework_copy() {
+        let framework = Framework::Angular;
+        let copied = framework;
+        // Both should be usable
+        assert_eq!(framework.name(), "angular");
+        assert_eq!(copied.name(), "angular");
+    }
+
+    #[test]
+    fn test_framework_partial_eq() {
+        assert_eq!(Framework::React, Framework::React);
+        assert_ne!(Framework::React, Framework::Vue);
+        assert_ne!(Framework::Vue, Framework::Angular);
+    }
+
+    #[test]
+    fn test_framework_eq() {
+        let f1 = Framework::Svelte;
+        let f2 = Framework::Svelte;
+        assert_eq!(f1, f2);
+    }
+
+    // Integration tests for detect_mockforge_workspace
+    #[test]
+    fn test_detect_mockforge_workspace_no_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = detect_mockforge_workspace(temp_dir.path());
+        assert!(result.is_ok());
+        let (base_url, reality_level) = result.unwrap();
+        assert!(base_url.is_none());
+        assert!(reality_level.is_none());
+    }
+
+    #[test]
+    fn test_detect_mockforge_workspace_with_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_content = r#"
+http:
+  host: localhost
+  port: 8080
+reality:
+  level: high
+"#;
+        fs::write(temp_dir.path().join("mockforge.yaml"), config_content).unwrap();
+
+        let result = detect_mockforge_workspace(temp_dir.path());
+        assert!(result.is_ok());
+        let (base_url, reality_level) = result.unwrap();
+        assert!(base_url.is_some());
+        assert_eq!(base_url.unwrap(), "http://localhost:8080");
+        assert!(reality_level.is_some());
+        assert_eq!(reality_level.unwrap(), "high");
+    }
+
+    #[test]
+    fn test_detect_mockforge_workspace_converts_0_0_0_0() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_content = r#"
+http:
+  host: 0.0.0.0
+  port: 3000
+"#;
+        fs::write(temp_dir.path().join("mockforge.yaml"), config_content).unwrap();
+
+        let result = detect_mockforge_workspace(temp_dir.path());
+        assert!(result.is_ok());
+        let (base_url, _) = result.unwrap();
+        assert!(base_url.is_some());
+        // 0.0.0.0 should be converted to localhost
+        assert_eq!(base_url.unwrap(), "http://localhost:3000");
+    }
+}

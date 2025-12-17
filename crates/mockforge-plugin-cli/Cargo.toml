@@ -53,3 +53,6 @@ indicatif = "0.17"
 
 # Date/time
 chrono = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

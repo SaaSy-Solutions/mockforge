@@ -195,4 +195,40 @@ mod tests {
         assert!(port >= 30000);
         assert!(port < 30100);
     }
+
+    #[test]
+    fn test_find_available_port_from_different_start() {
+        let port = find_available_port(40000).expect("Failed to find available port");
+        assert!(port >= 40000);
+        assert!(port < 40100);
+    }
+
+    #[test]
+    fn test_find_available_port_high_range() {
+        let port = find_available_port(60000).expect("Failed to find available port");
+        assert!(port >= 60000);
+        assert!(port < 60100);
+    }
+
+    #[test]
+    fn test_is_port_available_high_port() {
+        // High ports are usually available
+        let available = is_port_available(59999);
+        // This might be true or false depending on system state
+        // Just ensure it doesn't panic
+        let _ = available;
+    }
+
+    #[test]
+    fn test_multiple_port_allocations() {
+        // Find multiple available ports
+        let port1 = find_available_port(31000).expect("Failed to find port 1");
+        let port2 = find_available_port(32000).expect("Failed to find port 2");
+        let port3 = find_available_port(33000).expect("Failed to find port 3");
+
+        // Ports should be in their respective ranges
+        assert!(port1 >= 31000 && port1 < 31100);
+        assert!(port2 >= 32000 && port2 < 32100);
+        assert!(port3 >= 33000 && port3 < 33100);
+    }
 }

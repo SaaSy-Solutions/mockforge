@@ -247,6 +247,72 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    fn create_test_manifest() -> ScenarioManifest {
+        ScenarioManifest::new(
+            "test-scenario".to_string(),
+            "1.0.0".to_string(),
+            "Test Scenario".to_string(),
+            "A test scenario for unit tests".to_string(),
+        )
+    }
+
+    fn create_test_installed_scenario() -> InstalledScenario {
+        InstalledScenario::new(
+            "test-scenario".to_string(),
+            "1.0.0".to_string(),
+            PathBuf::from("/tmp/test"),
+            "file:///test".to_string(),
+            create_test_manifest(),
+        )
+    }
+
+    // ==================== InstalledScenario Tests ====================
+
+    #[test]
+    fn test_installed_scenario_new() {
+        let scenario = create_test_installed_scenario();
+
+        assert_eq!(scenario.name, "test-scenario");
+        assert_eq!(scenario.version, "1.0.0");
+        assert_eq!(scenario.path, PathBuf::from("/tmp/test"));
+        assert_eq!(scenario.source, "file:///test");
+        assert!(scenario.installed_at > 0);
+        assert!(scenario.updated_at.is_none());
+    }
+
+    #[test]
+    fn test_installed_scenario_id() {
+        let scenario = create_test_installed_scenario();
+
+        assert_eq!(scenario.id(), "test-scenario@1.0.0");
+    }
+
+    #[test]
+    fn test_installed_scenario_mark_updated() {
+        let mut scenario = create_test_installed_scenario();
+        let original_installed_at = scenario.installed_at;
+
+        scenario.mark_updated("1.1.0".to_string());
+
+        assert_eq!(scenario.version, "1.1.0");
+        assert!(scenario.updated_at.is_some());
+        assert!(scenario.updated_at.unwrap() >= original_installed_at);
+    }
+
+    #[test]
+    fn test_installed_scenario_serialization() {
+        let scenario = create_test_installed_scenario();
+
+        let json = serde_json::to_string(&scenario).unwrap();
+        let deserialized: InstalledScenario = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.name, scenario.name);
+        assert_eq!(deserialized.version, scenario.version);
+        assert_eq!(deserialized.source, scenario.source);
+    }
+
+    // ==================== ScenarioStorage Tests ====================
+
     #[tokio::test]
     async fn test_storage_creation() {
         let storage = ScenarioStorage::new().unwrap();
@@ -257,5 +323,223 @@ mod tests {
     async fn test_storage_init() {
         let storage = ScenarioStorage::new().unwrap();
         storage.init().await.unwrap();
+    }
+
+    #[test]
+    fn test_storage_default() {
+        let storage = ScenarioStorage::default();
+        assert!(storage.scenarios_dir().ends_with("scenarios"));
+    }
+
+    #[test]
+    fn test_storage_scenario_path() {
+        let storage = ScenarioStorage::new().unwrap();
+
+        let path = storage.scenario_path("my-scenario", "1.0.0");
+
+        assert!(path.ends_with("scenarios/my-scenario/1.0.0"));
+    }
+
+    #[test]
+    fn test_storage_list_empty() {
+        let storage = ScenarioStorage::new().unwrap();
+
+        let scenarios = storage.list();
+        assert!(scenarios.is_empty());
+    }
+
+    #[test]
+    fn test_storage_get_nonexistent() {
+        let storage = ScenarioStorage::new().unwrap();
+
+        let result = storage.get("nonexistent", "1.0.0");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_storage_get_latest_nonexistent() {
+        let storage = ScenarioStorage::new().unwrap();
+
+        let result = storage.get_latest("nonexistent");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_metadata_file_path() {
+        let storage = ScenarioStorage::new().unwrap();
+
+        // Access metadata_file_path through scenario_path + manipulation
+        // Since metadata_file_path is private, we test indirectly through save/load
+        let path = storage.scenario_path("test", "1.0.0");
+        assert!(path.to_string_lossy().contains("test"));
+        assert!(path.to_string_lossy().contains("1.0.0"));
+    }
+
+    #[test]
+    fn test_metadata_file_path_sanitization() {
+        let storage = ScenarioStorage::new().unwrap();
+
+        // Paths with special characters should be sanitized
+        let path = storage.scenario_path("test/scenario", "v1.0/beta");
+        // The scenario_path doesn't sanitize, but metadata_file_path does
+        assert!(path.ends_with("test/scenario/v1.0/beta"));
+    }
+
+    // Integration test with temp directory
+    #[tokio::test]
+    async fn test_storage_save_and_retrieve() {
+        let temp_dir = TempDir::new().unwrap();
+        let scenarios_dir = temp_dir.path().join("scenarios");
+        let metadata_dir = temp_dir.path().join("metadata");
+
+        let mut storage = ScenarioStorage {
+            scenarios_dir,
+            metadata_dir,
+            cache: HashMap::new(),
+        };
+
+        // Save a scenario
+        let scenario = InstalledScenario::new(
+            "test-scenario".to_string(),
+            "1.0.0".to_string(),
+            temp_dir.path().join("test"),
+            "test://source".to_string(),
+            create_test_manifest(),
+        );
+
+        storage.save(scenario.clone()).await.unwrap();
+
+        // Retrieve by exact version
+        let retrieved = storage.get("test-scenario", "1.0.0");
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().name, "test-scenario");
+    }
+
+    #[tokio::test]
+    async fn test_storage_save_multiple_versions() {
+        let temp_dir = TempDir::new().unwrap();
+        let scenarios_dir = temp_dir.path().join("scenarios");
+        let metadata_dir = temp_dir.path().join("metadata");
+
+        let mut storage = ScenarioStorage {
+            scenarios_dir,
+            metadata_dir,
+            cache: HashMap::new(),
+        };
+
+        // Save multiple versions
+        for version in ["1.0.0", "1.1.0", "2.0.0"] {
+            let mut manifest = create_test_manifest();
+            manifest.version = version.to_string();
+
+            let scenario = InstalledScenario::new(
+                "test-scenario".to_string(),
+                version.to_string(),
+                temp_dir.path().join(version),
+                "test://source".to_string(),
+                manifest,
+            );
+
+            storage.save(scenario).await.unwrap();
+        }
+
+        // List should have 3 scenarios
+        assert_eq!(storage.list().len(), 3);
+
+        // Get latest should return 2.0.0
+        let latest = storage.get_latest("test-scenario");
+        assert!(latest.is_some());
+        assert_eq!(latest.unwrap().version, "2.0.0");
+    }
+
+    #[tokio::test]
+    async fn test_storage_remove() {
+        let temp_dir = TempDir::new().unwrap();
+        let scenarios_dir = temp_dir.path().join("scenarios");
+        let metadata_dir = temp_dir.path().join("metadata");
+
+        let mut storage = ScenarioStorage {
+            scenarios_dir,
+            metadata_dir,
+            cache: HashMap::new(),
+        };
+
+        // Save a scenario
+        let scenario = InstalledScenario::new(
+            "test-scenario".to_string(),
+            "1.0.0".to_string(),
+            temp_dir.path().join("test"),
+            "test://source".to_string(),
+            create_test_manifest(),
+        );
+
+        storage.save(scenario).await.unwrap();
+        assert!(storage.get("test-scenario", "1.0.0").is_some());
+
+        // Remove it
+        storage.remove("test-scenario", "1.0.0").await.unwrap();
+        assert!(storage.get("test-scenario", "1.0.0").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_storage_load() {
+        let temp_dir = TempDir::new().unwrap();
+        let scenarios_dir = temp_dir.path().join("scenarios");
+        let metadata_dir = temp_dir.path().join("metadata");
+
+        // Create and save with first storage instance
+        {
+            let mut storage = ScenarioStorage {
+                scenarios_dir: scenarios_dir.clone(),
+                metadata_dir: metadata_dir.clone(),
+                cache: HashMap::new(),
+            };
+
+            let scenario = InstalledScenario::new(
+                "test-scenario".to_string(),
+                "1.0.0".to_string(),
+                temp_dir.path().join("test"),
+                "test://source".to_string(),
+                create_test_manifest(),
+            );
+
+            storage.save(scenario).await.unwrap();
+        }
+
+        // Load with new storage instance
+        let mut storage2 = ScenarioStorage {
+            scenarios_dir,
+            metadata_dir,
+            cache: HashMap::new(),
+        };
+
+        storage2.load().await.unwrap();
+
+        // Should have loaded the scenario
+        assert_eq!(storage2.list().len(), 1);
+        assert!(storage2.get("test-scenario", "1.0.0").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_storage_load_ignores_non_json_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let scenarios_dir = temp_dir.path().join("scenarios");
+        let metadata_dir = temp_dir.path().join("metadata");
+
+        // Create directories
+        std::fs::create_dir_all(&metadata_dir).unwrap();
+
+        // Create a non-JSON file
+        std::fs::write(metadata_dir.join("readme.txt"), "This is not JSON").unwrap();
+
+        let mut storage = ScenarioStorage {
+            scenarios_dir,
+            metadata_dir,
+            cache: HashMap::new(),
+        };
+
+        // Load should succeed and ignore non-JSON files
+        storage.load().await.unwrap();
+        assert!(storage.list().is_empty());
     }
 }

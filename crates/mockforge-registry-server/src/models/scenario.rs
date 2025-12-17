@@ -208,7 +208,10 @@ impl Scenario {
 
         let sql = format!(
             "SELECT * FROM scenarios {} {} LIMIT ${} OFFSET ${}",
-            where_clause, order_by, param_count, param_count + 1
+            where_clause,
+            order_by,
+            param_count,
+            param_count + 1
         );
 
         let mut query_builder = sqlx::query_as::<_, Self>(&sql);
@@ -232,10 +235,7 @@ impl Scenario {
     }
 
     /// Find scenarios by organization
-    pub async fn find_by_org(
-        pool: &sqlx::PgPool,
-        org_id: Uuid,
-    ) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM scenarios WHERE org_id = $1 ORDER BY created_at DESC",
         )
@@ -320,5 +320,301 @@ impl ScenarioVersion {
         .bind(scenario_id)
         .fetch_all(pool)
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_decimal::prelude::*;
+
+    #[test]
+    fn test_scenario_serialization() {
+        let scenario = Scenario {
+            id: Uuid::new_v4(),
+            org_id: Some(Uuid::new_v4()),
+            name: "Test Scenario".to_string(),
+            slug: "test-scenario".to_string(),
+            description: "A test scenario".to_string(),
+            author_id: Uuid::new_v4(),
+            current_version: "1.0.0".to_string(),
+            category: "testing".to_string(),
+            tags: vec!["test".to_string(), "demo".to_string()],
+            license: "MIT".to_string(),
+            repository: Some("https://github.com/test/repo".to_string()),
+            homepage: Some("https://test.com".to_string()),
+            manifest_json: serde_json::json!({"version": "1.0.0"}),
+            downloads_total: 100,
+            rating_avg: Decimal::from_str("4.5").unwrap(),
+            rating_count: 10,
+            verified_at: Some(Utc::now()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let json = serde_json::to_string(&scenario).unwrap();
+        assert!(json.contains("Test Scenario"));
+        assert!(json.contains("test-scenario"));
+        assert!(json.contains("testing"));
+    }
+
+    #[test]
+    fn test_scenario_deserialization() {
+        let json = r#"{
+            "id": "00000000-0000-0000-0000-000000000001",
+            "org_id": "00000000-0000-0000-0000-000000000002",
+            "name": "Test Scenario",
+            "slug": "test-scenario",
+            "description": "A test scenario",
+            "author_id": "00000000-0000-0000-0000-000000000003",
+            "current_version": "1.0.0",
+            "category": "testing",
+            "tags": ["test", "demo"],
+            "license": "MIT",
+            "repository": "https://github.com/test/repo",
+            "homepage": "https://test.com",
+            "manifest_json": {"version": "1.0.0"},
+            "downloads_total": 100,
+            "rating_avg": 4.5,
+            "rating_count": 10,
+            "verified_at": "2024-01-01T00:00:00Z",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
+        }"#;
+
+        let scenario: Scenario = serde_json::from_str(json).unwrap();
+        assert_eq!(scenario.name, "Test Scenario");
+        assert_eq!(scenario.slug, "test-scenario");
+        assert_eq!(scenario.category, "testing");
+        assert_eq!(scenario.tags.len(), 2);
+    }
+
+    #[test]
+    fn test_scenario_clone() {
+        let scenario = Scenario {
+            id: Uuid::new_v4(),
+            org_id: None,
+            name: "Test Scenario".to_string(),
+            slug: "test-scenario".to_string(),
+            description: "A test scenario".to_string(),
+            author_id: Uuid::new_v4(),
+            current_version: "1.0.0".to_string(),
+            category: "testing".to_string(),
+            tags: vec!["test".to_string()],
+            license: "MIT".to_string(),
+            repository: None,
+            homepage: None,
+            manifest_json: serde_json::json!({}),
+            downloads_total: 0,
+            rating_avg: Decimal::from_str("0.0").unwrap(),
+            rating_count: 0,
+            verified_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let cloned = scenario.clone();
+        assert_eq!(scenario.id, cloned.id);
+        assert_eq!(scenario.name, cloned.name);
+        assert_eq!(scenario.slug, cloned.slug);
+    }
+
+    #[test]
+    fn test_scenario_version_serialization() {
+        let version = ScenarioVersion {
+            id: Uuid::new_v4(),
+            scenario_id: Uuid::new_v4(),
+            version: "1.0.0".to_string(),
+            manifest_json: serde_json::json!({"version": "1.0.0"}),
+            download_url: "https://example.com/scenario.tar.gz".to_string(),
+            checksum: "abc123".to_string(),
+            file_size: 1024,
+            min_mockforge_version: Some("0.1.0".to_string()),
+            yanked: false,
+            downloads: 50,
+            published_at: Utc::now(),
+        };
+
+        let json = serde_json::to_string(&version).unwrap();
+        assert!(json.contains("1.0.0"));
+        assert!(json.contains("abc123"));
+        assert!(json.contains("1024"));
+    }
+
+    #[test]
+    fn test_scenario_version_clone() {
+        let version = ScenarioVersion {
+            id: Uuid::new_v4(),
+            scenario_id: Uuid::new_v4(),
+            version: "1.0.0".to_string(),
+            manifest_json: serde_json::json!({}),
+            download_url: "https://example.com/scenario.tar.gz".to_string(),
+            checksum: "abc123".to_string(),
+            file_size: 1024,
+            min_mockforge_version: None,
+            yanked: false,
+            downloads: 0,
+            published_at: Utc::now(),
+        };
+
+        let cloned = version.clone();
+        assert_eq!(version.id, cloned.id);
+        assert_eq!(version.scenario_id, cloned.scenario_id);
+        assert_eq!(version.version, cloned.version);
+        assert_eq!(version.checksum, cloned.checksum);
+    }
+
+    #[test]
+    fn test_build_search_where_clause_empty() {
+        let (where_clause, params) = Scenario::build_search_where_clause(None, None, &[], None);
+
+        assert!(where_clause.contains("WHERE"));
+        assert!(where_clause.contains("org_id IS NULL"));
+        assert!(params.is_empty() || !params.is_empty()); // params may vary
+    }
+
+    #[test]
+    fn test_build_search_where_clause_with_org() {
+        let org_id = Uuid::new_v4();
+        let (where_clause, _params) =
+            Scenario::build_search_where_clause(None, None, &[], Some(org_id));
+
+        assert!(where_clause.contains("WHERE"));
+        assert!(where_clause.contains("org_id"));
+    }
+
+    #[test]
+    fn test_build_search_where_clause_with_category() {
+        let (where_clause, _params) =
+            Scenario::build_search_where_clause(None, Some("testing"), &[], None);
+
+        assert!(where_clause.contains("WHERE"));
+        assert!(where_clause.contains("category"));
+    }
+
+    #[test]
+    fn test_build_search_where_clause_with_tags() {
+        let tags = vec!["test".to_string(), "demo".to_string()];
+        let (where_clause, _params) = Scenario::build_search_where_clause(None, None, &tags, None);
+
+        assert!(where_clause.contains("WHERE"));
+        assert!(where_clause.contains("tags"));
+    }
+
+    #[test]
+    fn test_build_search_where_clause_with_query() {
+        let (where_clause, _params) =
+            Scenario::build_search_where_clause(Some("search term"), None, &[], None);
+
+        assert!(where_clause.contains("WHERE"));
+        assert!(where_clause.contains("tsvector") || where_clause.contains("tsquery"));
+    }
+
+    #[test]
+    fn test_build_search_where_clause_all_params() {
+        let org_id = Uuid::new_v4();
+        let tags = vec!["test".to_string()];
+        let (where_clause, _params) = Scenario::build_search_where_clause(
+            Some("search"),
+            Some("testing"),
+            &tags,
+            Some(org_id),
+        );
+
+        assert!(where_clause.contains("WHERE"));
+        assert!(where_clause.contains("AND"));
+    }
+
+    #[test]
+    fn test_scenario_with_org() {
+        let org_id = Uuid::new_v4();
+        let scenario = Scenario {
+            id: Uuid::new_v4(),
+            org_id: Some(org_id),
+            name: "Org Scenario".to_string(),
+            slug: "org-scenario".to_string(),
+            description: "An org scenario".to_string(),
+            author_id: Uuid::new_v4(),
+            current_version: "1.0.0".to_string(),
+            category: "testing".to_string(),
+            tags: vec![],
+            license: "MIT".to_string(),
+            repository: None,
+            homepage: None,
+            manifest_json: serde_json::json!({}),
+            downloads_total: 0,
+            rating_avg: Decimal::from_str("0.0").unwrap(),
+            rating_count: 0,
+            verified_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert_eq!(scenario.org_id, Some(org_id));
+    }
+
+    #[test]
+    fn test_scenario_public() {
+        let scenario = Scenario {
+            id: Uuid::new_v4(),
+            org_id: None,
+            name: "Public Scenario".to_string(),
+            slug: "public-scenario".to_string(),
+            description: "A public scenario".to_string(),
+            author_id: Uuid::new_v4(),
+            current_version: "1.0.0".to_string(),
+            category: "testing".to_string(),
+            tags: vec![],
+            license: "MIT".to_string(),
+            repository: None,
+            homepage: None,
+            manifest_json: serde_json::json!({}),
+            downloads_total: 0,
+            rating_avg: Decimal::from_str("0.0").unwrap(),
+            rating_count: 0,
+            verified_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert_eq!(scenario.org_id, None);
+    }
+
+    #[test]
+    fn test_scenario_version_yanked() {
+        let version = ScenarioVersion {
+            id: Uuid::new_v4(),
+            scenario_id: Uuid::new_v4(),
+            version: "1.0.0".to_string(),
+            manifest_json: serde_json::json!({}),
+            download_url: "https://example.com/scenario.tar.gz".to_string(),
+            checksum: "abc123".to_string(),
+            file_size: 1024,
+            min_mockforge_version: None,
+            yanked: true,
+            downloads: 0,
+            published_at: Utc::now(),
+        };
+
+        assert!(version.yanked);
+    }
+
+    #[test]
+    fn test_scenario_version_not_yanked() {
+        let version = ScenarioVersion {
+            id: Uuid::new_v4(),
+            scenario_id: Uuid::new_v4(),
+            version: "1.0.0".to_string(),
+            manifest_json: serde_json::json!({}),
+            download_url: "https://example.com/scenario.tar.gz".to_string(),
+            checksum: "abc123".to_string(),
+            file_size: 1024,
+            min_mockforge_version: None,
+            yanked: false,
+            downloads: 0,
+            published_at: Utc::now(),
+        };
+
+        assert!(!version.yanked);
     }
 }

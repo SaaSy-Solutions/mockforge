@@ -567,12 +567,8 @@ export default function() {{}}
 
         // Verify the script includes TLS skip option for requests with body
         assert!(
-            script.contains("tls: { skipTLSVerify: true }"),
-            "Script should include TLS skip option when skip_tls_verify is true"
-        );
-        assert!(
-            script.contains("skipTLSVerify: true"),
-            "Script should include skipTLSVerify option"
+            script.contains("insecureSkipTLSVerify: true"),
+            "Script should include insecureSkipTLSVerify option when skip_tls_verify is true"
         );
     }
 
@@ -615,8 +611,8 @@ export default function() {{}}
 
         // Verify the script includes TLS skip option for requests without body
         assert!(
-            script.contains("tls: { skipTLSVerify: true }"),
-            "Script should include TLS skip option when skip_tls_verify is true (no body)"
+            script.contains("insecureSkipTLSVerify: true"),
+            "Script should include insecureSkipTLSVerify option when skip_tls_verify is true (no body)"
         );
     }
 
@@ -659,12 +655,8 @@ export default function() {{}}
 
         // Verify the script does NOT include TLS skip option when skip_tls_verify is false
         assert!(
-            !script.contains("skipTLSVerify"),
-            "Script should NOT include TLS skip option when skip_tls_verify is false"
-        );
-        assert!(
-            !script.contains("tls: { skipTLSVerify: true }"),
-            "Script should NOT include TLS skip option when skip_tls_verify is false"
+            !script.contains("insecureSkipTLSVerify"),
+            "Script should NOT include insecureSkipTLSVerify option when skip_tls_verify is false"
         );
     }
 
@@ -722,10 +714,10 @@ export default function() {{}}
         let script = generator.generate().expect("Should generate script");
 
         // Verify the script includes TLS skip option for all operations
-        let skip_count = script.matches("skipTLSVerify").count();
+        let skip_count = script.matches("insecureSkipTLSVerify: true").count();
         assert_eq!(
             skip_count, 2,
-            "Script should include TLS skip option for all operations when skip_tls_verify is true"
+            "Script should include insecureSkipTLSVerify option for all operations when skip_tls_verify is true"
         );
     }
 }

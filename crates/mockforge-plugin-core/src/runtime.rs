@@ -1002,9 +1002,476 @@ pub enum ValueType {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    // ==================== RuntimeConfig Tests ====================
 
     #[test]
-    fn test_module_compiles() {
-        // Basic compilation test
+    fn test_runtime_config_default() {
+        let config = RuntimeConfig::default();
+
+        assert_eq!(config.max_memory_per_plugin, 10 * 1024 * 1024);
+        assert!((config.max_cpu_per_plugin - 0.5).abs() < f64::EPSILON);
+        assert_eq!(config.max_execution_time_ms, 5000);
+        assert!(!config.allow_network_access);
+        assert!(config.allowed_fs_paths.is_empty());
+        assert_eq!(config.max_concurrent_executions, 10);
+        assert!(config.cache_dir.is_none());
+        assert!(!config.debug_logging);
+    }
+
+    #[test]
+    fn test_runtime_config_custom() {
+        let config = RuntimeConfig {
+            max_memory_per_plugin: 20 * 1024 * 1024,
+            max_cpu_per_plugin: 0.8,
+            max_execution_time_ms: 10000,
+            allow_network_access: true,
+            allowed_fs_paths: vec!["/tmp".to_string(), "/home".to_string()],
+            max_concurrent_executions: 5,
+            cache_dir: Some("/cache".to_string()),
+            debug_logging: true,
+        };
+
+        assert_eq!(config.max_memory_per_plugin, 20 * 1024 * 1024);
+        assert!((config.max_cpu_per_plugin - 0.8).abs() < f64::EPSILON);
+        assert_eq!(config.max_execution_time_ms, 10000);
+        assert!(config.allow_network_access);
+        assert_eq!(config.allowed_fs_paths.len(), 2);
+        assert_eq!(config.max_concurrent_executions, 5);
+        assert_eq!(config.cache_dir.as_deref(), Some("/cache"));
+        assert!(config.debug_logging);
+    }
+
+    #[test]
+    fn test_runtime_config_clone() {
+        let config = RuntimeConfig {
+            max_memory_per_plugin: 15 * 1024 * 1024,
+            max_cpu_per_plugin: 0.6,
+            max_execution_time_ms: 7500,
+            allow_network_access: true,
+            allowed_fs_paths: vec!["/data".to_string()],
+            max_concurrent_executions: 8,
+            cache_dir: Some("/var/cache".to_string()),
+            debug_logging: false,
+        };
+
+        let cloned = config.clone();
+
+        assert_eq!(cloned.max_memory_per_plugin, config.max_memory_per_plugin);
+        assert!((cloned.max_cpu_per_plugin - config.max_cpu_per_plugin).abs() < f64::EPSILON);
+        assert_eq!(cloned.max_execution_time_ms, config.max_execution_time_ms);
+        assert_eq!(cloned.allow_network_access, config.allow_network_access);
+        assert_eq!(cloned.allowed_fs_paths, config.allowed_fs_paths);
+        assert_eq!(cloned.max_concurrent_executions, config.max_concurrent_executions);
+        assert_eq!(cloned.cache_dir, config.cache_dir);
+        assert_eq!(cloned.debug_logging, config.debug_logging);
+    }
+
+    #[test]
+    fn test_runtime_config_debug() {
+        let config = RuntimeConfig::default();
+        let debug = format!("{:?}", config);
+
+        assert!(debug.contains("RuntimeConfig"));
+        assert!(debug.contains("max_memory_per_plugin"));
+        assert!(debug.contains("max_cpu_per_plugin"));
+    }
+
+    // ==================== ExecutionLimits Tests ====================
+
+    #[test]
+    fn test_execution_limits_default() {
+        let limits = ExecutionLimits::default();
+
+        assert_eq!(limits.memory_limit, 10 * 1024 * 1024);
+        assert_eq!(limits.cpu_time_limit, 5_000_000_000);
+        assert_eq!(limits.wall_time_limit, 10_000_000_000);
+        assert_eq!(limits.fuel_limit, 1_000_000);
+    }
+
+    #[test]
+    fn test_execution_limits_custom() {
+        let limits = ExecutionLimits {
+            memory_limit: 50 * 1024 * 1024,
+            cpu_time_limit: 10_000_000_000,
+            wall_time_limit: 20_000_000_000,
+            fuel_limit: 5_000_000,
+        };
+
+        assert_eq!(limits.memory_limit, 50 * 1024 * 1024);
+        assert_eq!(limits.cpu_time_limit, 10_000_000_000);
+        assert_eq!(limits.wall_time_limit, 20_000_000_000);
+        assert_eq!(limits.fuel_limit, 5_000_000);
+    }
+
+    // ==================== SecurityContext Tests ====================
+
+    #[test]
+    fn test_security_context_default() {
+        let ctx = SecurityContext::default();
+
+        assert!(!ctx.allowed_syscalls.is_empty());
+        assert!(ctx.allowed_syscalls.contains(&"fd_write".to_string()));
+        assert!(ctx.allowed_syscalls.contains(&"fd_read".to_string()));
+        assert!(ctx.allowed_syscalls.contains(&"random_get".to_string()));
+        assert!(ctx.allowed_syscalls.contains(&"clock_time_get".to_string()));
+
+        assert!(!ctx.blocked_syscalls.is_empty());
+        assert!(ctx.blocked_syscalls.contains(&"path_open".to_string()));
+        assert!(ctx.blocked_syscalls.contains(&"sock_open".to_string()));
+        assert!(ctx.blocked_syscalls.contains(&"proc_exec".to_string()));
+    }
+
+    #[test]
+    fn test_security_context_custom() {
+        let ctx = SecurityContext {
+            allowed_syscalls: vec!["custom_syscall".to_string()],
+            blocked_syscalls: vec!["dangerous_syscall".to_string()],
+            network_policy: NetworkPolicy::AllowAll,
+            filesystem_policy: FilesystemPolicy::AllowAll,
+        };
+
+        assert_eq!(ctx.allowed_syscalls.len(), 1);
+        assert_eq!(ctx.blocked_syscalls.len(), 1);
+    }
+
+    // ==================== NetworkPolicy Tests ====================
+
+    #[test]
+    fn test_network_policy_deny_all() {
+        let policy = NetworkPolicy::DenyAll;
+        let debug = format!("{:?}", policy);
+        assert!(debug.contains("DenyAll"));
+    }
+
+    #[test]
+    fn test_network_policy_allow_all() {
+        let policy = NetworkPolicy::AllowAll;
+        let debug = format!("{:?}", policy);
+        assert!(debug.contains("AllowAll"));
+    }
+
+    #[test]
+    fn test_network_policy_allow_hosts() {
+        let policy = NetworkPolicy::AllowHosts(vec![
+            "example.com".to_string(),
+            "api.example.com".to_string(),
+        ]);
+        let debug = format!("{:?}", policy);
+        assert!(debug.contains("AllowHosts"));
+        assert!(debug.contains("example.com"));
+    }
+
+    #[test]
+    fn test_network_policy_clone() {
+        let policy = NetworkPolicy::AllowHosts(vec!["test.com".to_string()]);
+        let cloned = policy.clone();
+
+        if let NetworkPolicy::AllowHosts(hosts) = cloned {
+            assert_eq!(hosts.len(), 1);
+            assert_eq!(hosts[0], "test.com");
+        } else {
+            panic!("Expected AllowHosts variant");
+        }
+    }
+
+    // ==================== FilesystemPolicy Tests ====================
+
+    #[test]
+    fn test_filesystem_policy_deny_all() {
+        let policy = FilesystemPolicy::DenyAll;
+        let debug = format!("{:?}", policy);
+        assert!(debug.contains("DenyAll"));
+    }
+
+    #[test]
+    fn test_filesystem_policy_allow_all() {
+        let policy = FilesystemPolicy::AllowAll;
+        let debug = format!("{:?}", policy);
+        assert!(debug.contains("AllowAll"));
+    }
+
+    #[test]
+    fn test_filesystem_policy_allow_paths() {
+        let policy = FilesystemPolicy::AllowPaths(vec!["/tmp".to_string(), "/var".to_string()]);
+        let debug = format!("{:?}", policy);
+        assert!(debug.contains("AllowPaths"));
+        assert!(debug.contains("/tmp"));
+    }
+
+    #[test]
+    fn test_filesystem_policy_clone() {
+        let policy = FilesystemPolicy::AllowPaths(vec!["/home".to_string()]);
+        let cloned = policy.clone();
+
+        if let FilesystemPolicy::AllowPaths(paths) = cloned {
+            assert_eq!(paths.len(), 1);
+            assert_eq!(paths[0], "/home");
+        } else {
+            panic!("Expected AllowPaths variant");
+        }
+    }
+
+    // ==================== ValueType Tests ====================
+
+    #[test]
+    fn test_value_type_i32() {
+        let vt = ValueType::I32;
+        let debug = format!("{:?}", vt);
+        assert!(debug.contains("I32"));
+    }
+
+    #[test]
+    fn test_value_type_i64() {
+        let vt = ValueType::I64;
+        let debug = format!("{:?}", vt);
+        assert!(debug.contains("I64"));
+    }
+
+    #[test]
+    fn test_value_type_f32() {
+        let vt = ValueType::F32;
+        let debug = format!("{:?}", vt);
+        assert!(debug.contains("F32"));
+    }
+
+    #[test]
+    fn test_value_type_f64() {
+        let vt = ValueType::F64;
+        let debug = format!("{:?}", vt);
+        assert!(debug.contains("F64"));
+    }
+
+    #[test]
+    fn test_value_type_clone() {
+        let vt = ValueType::I32;
+        let cloned = vt.clone();
+
+        if let ValueType::I32 = cloned {
+            // Success
+        } else {
+            panic!("Expected I32 variant");
+        }
+    }
+
+    // ==================== FunctionSignature Tests ====================
+
+    #[test]
+    fn test_function_signature_empty() {
+        let sig = FunctionSignature {
+            parameters: vec![],
+            return_type: None,
+        };
+
+        assert!(sig.parameters.is_empty());
+        assert!(sig.return_type.is_none());
+    }
+
+    #[test]
+    fn test_function_signature_with_params() {
+        let sig = FunctionSignature {
+            parameters: vec![ValueType::I32, ValueType::I64],
+            return_type: Some(ValueType::F64),
+        };
+
+        assert_eq!(sig.parameters.len(), 2);
+        assert!(sig.return_type.is_some());
+    }
+
+    #[test]
+    fn test_function_signature_clone() {
+        let sig = FunctionSignature {
+            parameters: vec![ValueType::I32],
+            return_type: Some(ValueType::I32),
+        };
+
+        let cloned = sig.clone();
+        assert_eq!(cloned.parameters.len(), sig.parameters.len());
+    }
+
+    #[test]
+    fn test_function_signature_debug() {
+        let sig = FunctionSignature {
+            parameters: vec![ValueType::I32],
+            return_type: Some(ValueType::I64),
+        };
+
+        let debug = format!("{:?}", sig);
+        assert!(debug.contains("FunctionSignature"));
+        assert!(debug.contains("parameters"));
+    }
+
+    // ==================== PluginFunction Tests ====================
+
+    #[test]
+    fn test_plugin_function_creation() {
+        let func = PluginFunction {
+            name: "process_data".to_string(),
+            signature: FunctionSignature {
+                parameters: vec![ValueType::I32, ValueType::I32],
+                return_type: Some(ValueType::I32),
+            },
+            documentation: Some("Processes input data".to_string()),
+        };
+
+        assert_eq!(func.name, "process_data");
+        assert_eq!(func.signature.parameters.len(), 2);
+        assert!(func.documentation.is_some());
+    }
+
+    #[test]
+    fn test_plugin_function_without_docs() {
+        let func = PluginFunction {
+            name: "init".to_string(),
+            signature: FunctionSignature {
+                parameters: vec![],
+                return_type: None,
+            },
+            documentation: None,
+        };
+
+        assert_eq!(func.name, "init");
+        assert!(func.documentation.is_none());
+    }
+
+    #[test]
+    fn test_plugin_function_clone() {
+        let func = PluginFunction {
+            name: "test".to_string(),
+            signature: FunctionSignature {
+                parameters: vec![ValueType::I64],
+                return_type: Some(ValueType::F32),
+            },
+            documentation: Some("Test function".to_string()),
+        };
+
+        let cloned = func.clone();
+        assert_eq!(cloned.name, func.name);
+        assert_eq!(cloned.documentation, func.documentation);
+    }
+
+    #[test]
+    fn test_plugin_function_debug() {
+        let func = PluginFunction {
+            name: "debug_test".to_string(),
+            signature: FunctionSignature {
+                parameters: vec![],
+                return_type: None,
+            },
+            documentation: None,
+        };
+
+        let debug = format!("{:?}", func);
+        assert!(debug.contains("PluginFunction"));
+        assert!(debug.contains("debug_test"));
+    }
+
+    // ==================== PluginInterface Tests ====================
+
+    #[test]
+    fn test_plugin_interface_empty() {
+        let interface = PluginInterface { functions: vec![] };
+        assert!(interface.functions.is_empty());
+    }
+
+    #[test]
+    fn test_plugin_interface_with_functions() {
+        let interface = PluginInterface {
+            functions: vec![
+                PluginFunction {
+                    name: "init".to_string(),
+                    signature: FunctionSignature {
+                        parameters: vec![],
+                        return_type: None,
+                    },
+                    documentation: None,
+                },
+                PluginFunction {
+                    name: "process".to_string(),
+                    signature: FunctionSignature {
+                        parameters: vec![ValueType::I32, ValueType::I32],
+                        return_type: Some(ValueType::I32),
+                    },
+                    documentation: Some("Main processing function".to_string()),
+                },
+            ],
+        };
+
+        assert_eq!(interface.functions.len(), 2);
+        assert_eq!(interface.functions[0].name, "init");
+        assert_eq!(interface.functions[1].name, "process");
+    }
+
+    #[test]
+    fn test_plugin_interface_clone() {
+        let interface = PluginInterface {
+            functions: vec![PluginFunction {
+                name: "clone_test".to_string(),
+                signature: FunctionSignature {
+                    parameters: vec![],
+                    return_type: None,
+                },
+                documentation: None,
+            }],
+        };
+
+        let cloned = interface.clone();
+        assert_eq!(cloned.functions.len(), interface.functions.len());
+        assert_eq!(cloned.functions[0].name, interface.functions[0].name);
+    }
+
+    #[test]
+    fn test_plugin_interface_debug() {
+        let interface = PluginInterface { functions: vec![] };
+        let debug = format!("{:?}", interface);
+        assert!(debug.contains("PluginInterface"));
+    }
+
+    // ==================== PluginRuntime Tests ====================
+
+    #[test]
+    fn test_plugin_runtime_creation() {
+        let config = RuntimeConfig::default();
+        let runtime = PluginRuntime::new(config);
+
+        assert!(runtime.is_ok());
+    }
+
+    #[test]
+    fn test_plugin_runtime_with_custom_config() {
+        let config = RuntimeConfig {
+            max_memory_per_plugin: 50 * 1024 * 1024,
+            max_cpu_per_plugin: 0.9,
+            max_execution_time_ms: 30000,
+            allow_network_access: true,
+            allowed_fs_paths: vec!["/tmp".to_string()],
+            max_concurrent_executions: 20,
+            cache_dir: Some("/cache".to_string()),
+            debug_logging: true,
+        };
+
+        let runtime = PluginRuntime::new(config);
+        assert!(runtime.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_plugin_runtime_list_empty() {
+        let config = RuntimeConfig::default();
+        let runtime = PluginRuntime::new(config).unwrap();
+
+        let plugins = runtime.list_plugins().await;
+        assert!(plugins.is_empty());
+    }
+
+    // ==================== ModuleValidator Tests ====================
+
+    // Note: Full ModuleValidator tests require actual WASM modules
+    // These tests verify the validator methods are callable
+
+    #[test]
+    fn test_module_validator_exists() {
+        // Verify ModuleValidator type exists
+        let _ = std::any::TypeId::of::<ModuleValidator>();
     }
 }

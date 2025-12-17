@@ -68,7 +68,7 @@ pub struct CreatePromotionRequest {
 }
 
 /// Promotion response
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromotionResponse {
     /// Promotion ID
     pub promotion_id: String,
@@ -525,5 +525,313 @@ pub async fn get_entity_promotion_history(
             Ok(Json(ApiResponse::success(history_json)))
         }
         Err(e) => Ok(Json(ApiResponse::error(format!("Failed to get promotion history: {}", e)))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_promotion_request_deserialization() {
+        let json = r#"{
+            "entity_type": "scenario",
+            "entity_id": "test-scenario-123",
+            "entity_version": "v1.0",
+            "workspace_id": "workspace-1",
+            "from_environment": "dev",
+            "to_environment": "prod",
+            "requires_approval": true,
+            "comments": "Promoting to prod"
+        }"#;
+
+        let request: CreatePromotionRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.entity_type, "scenario");
+        assert_eq!(request.entity_id, "test-scenario-123");
+        assert_eq!(request.entity_version, Some("v1.0".to_string()));
+        assert_eq!(request.workspace_id, "workspace-1");
+        assert_eq!(request.from_environment, "dev");
+        assert_eq!(request.to_environment, "prod");
+        assert_eq!(request.requires_approval, Some(true));
+        assert_eq!(request.comments, Some("Promoting to prod".to_string()));
+    }
+
+    #[test]
+    fn test_create_promotion_request_with_tags() {
+        let json = r#"{
+            "entity_type": "scenario",
+            "entity_id": "test-123",
+            "workspace_id": "workspace-1",
+            "from_environment": "dev",
+            "to_environment": "staging",
+            "scenario_tags": ["critical", "payment"]
+        }"#;
+
+        let request: CreatePromotionRequest = serde_json::from_str(json).unwrap();
+        assert!(request.scenario_tags.is_some());
+        let tags = request.scenario_tags.unwrap();
+        assert_eq!(tags.len(), 2);
+        assert!(tags.contains(&"critical".to_string()));
+        assert!(tags.contains(&"payment".to_string()));
+    }
+
+    #[test]
+    fn test_create_promotion_request_without_optional_fields() {
+        let json = r#"{
+            "entity_type": "persona",
+            "entity_id": "persona-456",
+            "workspace_id": "workspace-2",
+            "from_environment": "staging",
+            "to_environment": "prod"
+        }"#;
+
+        let request: CreatePromotionRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.entity_version, None);
+        assert_eq!(request.requires_approval, None);
+        assert_eq!(request.scenario_tags, None);
+        assert_eq!(request.comments, None);
+        assert_eq!(request.metadata, None);
+    }
+
+    #[test]
+    fn test_create_promotion_request_with_metadata() {
+        let json = r#"{
+            "entity_type": "config",
+            "entity_id": "config-789",
+            "workspace_id": "workspace-3",
+            "from_environment": "dev",
+            "to_environment": "staging",
+            "metadata": {"key": "value", "number": 123}
+        }"#;
+
+        let request: CreatePromotionRequest = serde_json::from_str(json).unwrap();
+        assert!(request.metadata.is_some());
+        let metadata = request.metadata.unwrap();
+        assert_eq!(metadata.get("key").unwrap().as_str().unwrap(), "value");
+        assert_eq!(metadata.get("number").unwrap().as_i64().unwrap(), 123);
+    }
+
+    #[test]
+    fn test_promotion_response_serialization() {
+        let response = PromotionResponse {
+            promotion_id: "promo-123".to_string(),
+            entity_type: "scenario".to_string(),
+            entity_id: "scenario-456".to_string(),
+            entity_version: Some("v2.0".to_string()),
+            from_environment: "dev".to_string(),
+            to_environment: "prod".to_string(),
+            status: "pending".to_string(),
+            promoted_by: "user-789".to_string(),
+            approved_by: Some("admin-001".to_string()),
+            comments: Some("Test promotion".to_string()),
+            pr_url: Some("https://github.com/org/repo/pull/123".to_string()),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let serialized = serde_json::to_string(&response).unwrap();
+        assert!(serialized.contains("promo-123"));
+        assert!(serialized.contains("scenario"));
+        assert!(serialized.contains("pending"));
+        assert!(serialized.contains("admin-001"));
+    }
+
+    #[test]
+    fn test_promotion_response_without_optional_fields() {
+        let response = PromotionResponse {
+            promotion_id: "promo-999".to_string(),
+            entity_type: "persona".to_string(),
+            entity_id: "persona-111".to_string(),
+            entity_version: None,
+            from_environment: "staging".to_string(),
+            to_environment: "prod".to_string(),
+            status: "approved".to_string(),
+            promoted_by: "user-222".to_string(),
+            approved_by: None,
+            comments: None,
+            pr_url: None,
+            timestamp: "2024-01-02T00:00:00Z".to_string(),
+        };
+
+        let serialized = serde_json::to_string(&response).unwrap();
+        let deserialized: PromotionResponse = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.promotion_id, "promo-999");
+        assert_eq!(deserialized.entity_version, None);
+        assert_eq!(deserialized.approved_by, None);
+        assert_eq!(deserialized.comments, None);
+        assert_eq!(deserialized.pr_url, None);
+    }
+
+    #[test]
+    fn test_update_promotion_status_request_deserialization() {
+        let json = r#"{
+            "status": "approved",
+            "approved_by": "admin-123"
+        }"#;
+
+        let request: UpdatePromotionStatusRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.status, "approved");
+        assert_eq!(request.approved_by, Some("admin-123".to_string()));
+    }
+
+    #[test]
+    fn test_update_promotion_status_request_without_approver() {
+        let json = r#"{"status": "rejected"}"#;
+
+        let request: UpdatePromotionStatusRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.status, "rejected");
+        assert_eq!(request.approved_by, None);
+    }
+
+    #[test]
+    fn test_list_promotions_query_default() {
+        let json = "{}";
+        let query: ListPromotionsQuery = serde_json::from_str(json).unwrap();
+        assert_eq!(query.limit, 100); // default value
+        assert_eq!(query.status, None);
+        assert_eq!(query.entity_type, None);
+    }
+
+    #[test]
+    fn test_list_promotions_query_with_filters() {
+        let json = r#"{
+            "limit": 50,
+            "status": "pending",
+            "entity_type": "scenario"
+        }"#;
+
+        let query: ListPromotionsQuery = serde_json::from_str(json).unwrap();
+        assert_eq!(query.limit, 50);
+        assert_eq!(query.status, Some("pending".to_string()));
+        assert_eq!(query.entity_type, Some("scenario".to_string()));
+    }
+
+    #[test]
+    fn test_promotion_history_query_deserialization() {
+        let json = r#"{"workspace_id": "workspace-abc"}"#;
+
+        let query: PromotionHistoryQuery = serde_json::from_str(json).unwrap();
+        assert_eq!(query.workspace_id, "workspace-abc");
+    }
+
+    #[test]
+    fn test_default_limit_function() {
+        assert_eq!(default_limit(), 100);
+    }
+
+    #[test]
+    fn test_create_promotion_request_clone() {
+        let request = CreatePromotionRequest {
+            entity_type: "scenario".to_string(),
+            entity_id: "test-123".to_string(),
+            entity_version: Some("v1".to_string()),
+            workspace_id: "ws-1".to_string(),
+            from_environment: "dev".to_string(),
+            to_environment: "prod".to_string(),
+            requires_approval: Some(true),
+            scenario_tags: Some(vec!["tag1".to_string()]),
+            comments: Some("test".to_string()),
+            metadata: Some(serde_json::json!({"key": "value"})),
+        };
+
+        let cloned = request.clone();
+        assert_eq!(cloned.entity_type, request.entity_type);
+        assert_eq!(cloned.entity_id, request.entity_id);
+        assert_eq!(cloned.workspace_id, request.workspace_id);
+    }
+
+    #[test]
+    fn test_promotion_response_clone() {
+        let response = PromotionResponse {
+            promotion_id: "promo-1".to_string(),
+            entity_type: "scenario".to_string(),
+            entity_id: "scenario-1".to_string(),
+            entity_version: Some("v1".to_string()),
+            from_environment: "dev".to_string(),
+            to_environment: "prod".to_string(),
+            status: "pending".to_string(),
+            promoted_by: "user-1".to_string(),
+            approved_by: None,
+            comments: None,
+            pr_url: None,
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let cloned = response.clone();
+        assert_eq!(cloned.promotion_id, response.promotion_id);
+        assert_eq!(cloned.entity_type, response.entity_type);
+        assert_eq!(cloned.status, response.status);
+    }
+
+    #[test]
+    fn test_create_promotion_request_debug() {
+        let request = CreatePromotionRequest {
+            entity_type: "scenario".to_string(),
+            entity_id: "test-123".to_string(),
+            entity_version: None,
+            workspace_id: "ws-1".to_string(),
+            from_environment: "dev".to_string(),
+            to_environment: "prod".to_string(),
+            requires_approval: None,
+            scenario_tags: None,
+            comments: None,
+            metadata: None,
+        };
+
+        let debug_str = format!("{:?}", request);
+        assert!(debug_str.contains("test-123"));
+        assert!(debug_str.contains("ws-1"));
+    }
+
+    #[test]
+    fn test_promotion_response_debug() {
+        let response = PromotionResponse {
+            promotion_id: "promo-1".to_string(),
+            entity_type: "scenario".to_string(),
+            entity_id: "scenario-1".to_string(),
+            entity_version: None,
+            from_environment: "dev".to_string(),
+            to_environment: "prod".to_string(),
+            status: "pending".to_string(),
+            promoted_by: "user-1".to_string(),
+            approved_by: None,
+            comments: None,
+            pr_url: None,
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let debug_str = format!("{:?}", response);
+        assert!(debug_str.contains("promo-1"));
+        assert!(debug_str.contains("pending"));
+    }
+
+    #[test]
+    fn test_all_entity_types() {
+        let entity_types = vec!["scenario", "persona", "config"];
+        for entity_type in entity_types {
+            let json = format!(
+                r#"{{
+                "entity_type": "{}",
+                "entity_id": "test-id",
+                "workspace_id": "ws-1",
+                "from_environment": "dev",
+                "to_environment": "prod"
+            }}"#,
+                entity_type
+            );
+
+            let request: CreatePromotionRequest = serde_json::from_str(&json).unwrap();
+            assert_eq!(request.entity_type, entity_type);
+        }
+    }
+
+    #[test]
+    fn test_all_status_types() {
+        let statuses = vec!["pending", "approved", "rejected", "completed", "failed"];
+        for status in statuses {
+            let json = format!(r#"{{"status": "{}"}}"#, status);
+            let request: UpdatePromotionStatusRequest = serde_json::from_str(&json).unwrap();
+            assert_eq!(request.status, status);
+        }
     }
 }

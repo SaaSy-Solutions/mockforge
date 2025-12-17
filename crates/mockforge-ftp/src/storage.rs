@@ -230,3 +230,179 @@ impl Metadata for MockForgeMetadata {
         1000 // Default UID
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures::{
+        FileContentConfig, FileValidation, FtpFixture, UploadRule, UploadStorage, VirtualFileConfig,
+    };
+    use crate::vfs::{FileContent, FileMetadata};
+
+    #[test]
+    fn test_mockforge_storage_new() {
+        let vfs = Arc::new(VirtualFileSystem::new(std::path::PathBuf::from("/")));
+        let spec_registry = Arc::new(FtpSpecRegistry::new());
+        let storage = MockForgeStorage::new(vfs.clone(), spec_registry.clone());
+
+        let debug = format!("{:?}", storage);
+        assert!(debug.contains("MockForgeStorage"));
+    }
+
+    #[test]
+    fn test_mockforge_storage_clone() {
+        let vfs = Arc::new(VirtualFileSystem::new(std::path::PathBuf::from("/")));
+        let spec_registry = Arc::new(FtpSpecRegistry::new());
+        let storage = MockForgeStorage::new(vfs.clone(), spec_registry.clone());
+
+        let _cloned = storage.clone();
+        // Just verify it can be cloned
+    }
+
+    #[test]
+    fn test_mockforge_metadata_len_with_file() {
+        let file = VirtualFile::new(
+            std::path::PathBuf::from("/test.txt"),
+            FileContent::Static(b"test content".to_vec()),
+            FileMetadata {
+                size: 1024,
+                ..Default::default()
+            },
+        );
+
+        let metadata = MockForgeMetadata {
+            file: Some(file),
+            is_dir: false,
+        };
+
+        assert_eq!(metadata.len(), 1024);
+    }
+
+    #[test]
+    fn test_mockforge_metadata_len_without_file() {
+        let metadata = MockForgeMetadata {
+            file: None,
+            is_dir: true,
+        };
+
+        assert_eq!(metadata.len(), 0);
+    }
+
+    #[test]
+    fn test_mockforge_metadata_is_dir() {
+        let metadata = MockForgeMetadata {
+            file: None,
+            is_dir: true,
+        };
+
+        assert!(metadata.is_dir());
+        assert!(!metadata.is_file());
+    }
+
+    #[test]
+    fn test_mockforge_metadata_is_file() {
+        let file = VirtualFile::new(
+            std::path::PathBuf::from("/test.txt"),
+            FileContent::Static(vec![]),
+            FileMetadata::default(),
+        );
+
+        let metadata = MockForgeMetadata {
+            file: Some(file),
+            is_dir: false,
+        };
+
+        assert!(metadata.is_file());
+        assert!(!metadata.is_dir());
+    }
+
+    #[test]
+    fn test_mockforge_metadata_is_symlink() {
+        let metadata = MockForgeMetadata {
+            file: None,
+            is_dir: false,
+        };
+
+        assert!(!metadata.is_symlink());
+    }
+
+    #[test]
+    fn test_mockforge_metadata_modified() {
+        let file = VirtualFile::new(
+            std::path::PathBuf::from("/test.txt"),
+            FileContent::Static(vec![]),
+            FileMetadata::default(),
+        );
+
+        let metadata = MockForgeMetadata {
+            file: Some(file),
+            is_dir: false,
+        };
+
+        let modified = metadata.modified();
+        assert!(modified.is_ok());
+    }
+
+    #[test]
+    fn test_mockforge_metadata_modified_no_file() {
+        let metadata = MockForgeMetadata {
+            file: None,
+            is_dir: true,
+        };
+
+        let modified = metadata.modified();
+        assert!(modified.is_ok());
+    }
+
+    #[test]
+    fn test_mockforge_metadata_gid() {
+        let metadata = MockForgeMetadata {
+            file: None,
+            is_dir: false,
+        };
+
+        assert_eq!(metadata.gid(), 1000);
+    }
+
+    #[test]
+    fn test_mockforge_metadata_uid() {
+        let metadata = MockForgeMetadata {
+            file: None,
+            is_dir: false,
+        };
+
+        assert_eq!(metadata.uid(), 1000);
+    }
+
+    #[test]
+    fn test_mockforge_metadata_clone() {
+        let file = VirtualFile::new(
+            std::path::PathBuf::from("/test.txt"),
+            FileContent::Static(vec![]),
+            FileMetadata::default(),
+        );
+
+        let metadata = MockForgeMetadata {
+            file: Some(file),
+            is_dir: false,
+        };
+
+        let _cloned = metadata.clone();
+        // Just verify it can be cloned
+    }
+
+    #[test]
+    fn test_mockforge_metadata_debug() {
+        let metadata = MockForgeMetadata {
+            file: None,
+            is_dir: true,
+        };
+
+        let debug = format!("{:?}", metadata);
+        assert!(debug.contains("MockForgeMetadata"));
+    }
+
+    // Note: The async methods of StorageBackend trait are difficult to test without
+    // a full async runtime and mock user details. The tests above cover the synchronous
+    // parts and the metadata implementation which is testable without network I/O.
+}

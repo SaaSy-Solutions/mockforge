@@ -107,3 +107,161 @@ impl ApiGenerator {
         endpoints
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entities::Entity;
+    use crate::schema::VbrSchemaDefinition;
+    use mockforge_data::SchemaDefinition;
+
+    fn create_test_entity(name: &str) -> Entity {
+        let base_schema = SchemaDefinition::new(name.to_string());
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        Entity::new(name.to_string(), vbr_schema)
+    }
+
+    fn create_entity_with_foreign_key(name: &str) -> Entity {
+        let base_schema = SchemaDefinition::new(name.to_string());
+        let mut vbr_schema = VbrSchemaDefinition::new(base_schema);
+        vbr_schema.foreign_keys.push(crate::schema::ForeignKeyDefinition {
+            field: "user_id".to_string(),
+            target_entity: "User".to_string(),
+            target_field: "id".to_string(),
+            on_delete: crate::schema::CascadeAction::Cascade,
+            on_update: crate::schema::CascadeAction::NoAction,
+        });
+        Entity::new(name.to_string(), vbr_schema)
+    }
+
+    #[test]
+    fn test_api_generator_new() {
+        let generator = ApiGenerator::new("/api".to_string());
+        assert_eq!(generator.prefix, "/api");
+    }
+
+    #[test]
+    fn test_api_generator_custom_prefix() {
+        let generator = ApiGenerator::new("/v2/api".to_string());
+        assert_eq!(generator.prefix, "/v2/api");
+    }
+
+    #[test]
+    fn test_generate_endpoints_count() {
+        let generator = ApiGenerator::new("/api".to_string());
+        let entity = create_test_entity("User");
+        let endpoints = generator.generate_endpoints(&entity);
+
+        // Should generate 6 basic CRUD endpoints
+        assert_eq!(endpoints.len(), 6);
+    }
+
+    #[test]
+    fn test_generate_endpoints_methods() {
+        let generator = ApiGenerator::new("/api".to_string());
+        let entity = create_test_entity("User");
+        let endpoints = generator.generate_endpoints(&entity);
+
+        let methods: Vec<&str> = endpoints.iter().map(|e| e.method.as_str()).collect();
+        assert!(methods.contains(&"GET"));
+        assert!(methods.contains(&"POST"));
+        assert!(methods.contains(&"PUT"));
+        assert!(methods.contains(&"PATCH"));
+        assert!(methods.contains(&"DELETE"));
+    }
+
+    #[test]
+    fn test_generate_endpoints_paths() {
+        let generator = ApiGenerator::new("/api".to_string());
+        let entity = create_test_entity("User");
+        let endpoints = generator.generate_endpoints(&entity);
+
+        let paths: Vec<&str> = endpoints.iter().map(|e| e.path.as_str()).collect();
+        assert!(paths.contains(&"/api/user"));
+        assert!(paths.contains(&"/api/user/{id}"));
+    }
+
+    #[test]
+    fn test_generate_endpoints_handler_names() {
+        let generator = ApiGenerator::new("/api".to_string());
+        let entity = create_test_entity("User");
+        let endpoints = generator.generate_endpoints(&entity);
+
+        let handlers: Vec<&str> = endpoints.iter().map(|e| e.handler_name.as_str()).collect();
+        assert!(handlers.contains(&"list_user"));
+        assert!(handlers.contains(&"get_user"));
+        assert!(handlers.contains(&"create_user"));
+        assert!(handlers.contains(&"update_user"));
+        assert!(handlers.contains(&"patch_user"));
+        assert!(handlers.contains(&"delete_user"));
+    }
+
+    #[test]
+    fn test_generate_endpoints_entity_name() {
+        let generator = ApiGenerator::new("/api".to_string());
+        let entity = create_test_entity("Product");
+        let endpoints = generator.generate_endpoints(&entity);
+
+        for endpoint in endpoints {
+            assert_eq!(endpoint.entity_name, "Product");
+        }
+    }
+
+    #[test]
+    fn test_generate_endpoints_with_foreign_key() {
+        let generator = ApiGenerator::new("/api".to_string());
+        let entity = create_entity_with_foreign_key("Order");
+        let endpoints = generator.generate_endpoints(&entity);
+
+        // Should have 6 basic + 1 relationship endpoint
+        assert_eq!(endpoints.len(), 7);
+
+        // Check for the relationship endpoint
+        let relationship_endpoint = endpoints.iter().find(|e| e.path.contains("/user"));
+        assert!(relationship_endpoint.is_some());
+        assert_eq!(relationship_endpoint.unwrap().method, "GET");
+    }
+
+    #[test]
+    fn test_api_endpoint_debug() {
+        let endpoint = ApiEndpoint {
+            method: "GET".to_string(),
+            path: "/api/test".to_string(),
+            handler_name: "test_handler".to_string(),
+            entity_name: "Test".to_string(),
+        };
+
+        let debug = format!("{:?}", endpoint);
+        assert!(debug.contains("ApiEndpoint"));
+        assert!(debug.contains("GET"));
+        assert!(debug.contains("/api/test"));
+    }
+
+    #[test]
+    fn test_api_endpoint_clone() {
+        let endpoint = ApiEndpoint {
+            method: "POST".to_string(),
+            path: "/api/test".to_string(),
+            handler_name: "create_test".to_string(),
+            entity_name: "Test".to_string(),
+        };
+
+        let cloned = endpoint.clone();
+        assert_eq!(endpoint.method, cloned.method);
+        assert_eq!(endpoint.path, cloned.path);
+        assert_eq!(endpoint.handler_name, cloned.handler_name);
+        assert_eq!(endpoint.entity_name, cloned.entity_name);
+    }
+
+    #[test]
+    fn test_lowercase_entity_in_path() {
+        let generator = ApiGenerator::new("/api".to_string());
+        let entity = create_test_entity("UserProfile");
+        let endpoints = generator.generate_endpoints(&entity);
+
+        // Path should use lowercase entity name
+        let list_endpoint = endpoints.iter().find(|e| e.handler_name == "list_userprofile");
+        assert!(list_endpoint.is_some());
+        assert_eq!(list_endpoint.unwrap().path, "/api/userprofile");
+    }
+}

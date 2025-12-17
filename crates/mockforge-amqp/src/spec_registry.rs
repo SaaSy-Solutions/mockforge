@@ -195,3 +195,402 @@ impl SpecRegistry for AmqpSpecRegistry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockforge_core::config::AmqpConfig;
+    use mockforge_core::protocol_abstraction::{MessagePattern, SpecRegistry};
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    fn create_test_config() -> AmqpConfig {
+        AmqpConfig {
+            enabled: true,
+            host: "127.0.0.1".to_string(),
+            port: 5672,
+            max_connections: 100,
+            max_channels_per_connection: 100,
+            frame_max: 131072,
+            heartbeat_interval: 60,
+            fixtures_dir: None,
+            virtual_hosts: vec!["/".to_string()],
+        }
+    }
+
+    fn create_protocol_request(
+        operation: &str,
+        path: &str,
+        routing_key: Option<String>,
+        metadata: HashMap<String, String>,
+    ) -> ProtocolRequest {
+        ProtocolRequest {
+            protocol: Protocol::Amqp,
+            pattern: MessagePattern::PubSub,
+            operation: operation.to_string(),
+            path: path.to_string(),
+            topic: None,
+            routing_key,
+            partition: None,
+            qos: None,
+            metadata,
+            body: None,
+            client_ip: None,
+        }
+    }
+
+    fn create_test_config_with_fixtures() -> (AmqpConfig, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let fixture_path = temp_dir.path().join("test-fixture.yaml");
+
+        let yaml_content = r#"
+identifier: test-fixture
+name: Test Fixture
+exchanges:
+  - name: test-exchange
+    type: direct
+    durable: true
+queues:
+  - name: test-queue
+    durable: true
+    message_template:
+      message: "Hello {{name}}"
+      timestamp: "{{timestamp}}"
+bindings:
+  - exchange: test-exchange
+    queue: test-queue
+    routing_key: test.key
+"#;
+
+        let mut file = std::fs::File::create(&fixture_path).unwrap();
+        file.write_all(yaml_content.as_bytes()).unwrap();
+
+        let config = AmqpConfig {
+            enabled: true,
+            host: "127.0.0.1".to_string(),
+            port: 5672,
+            max_connections: 100,
+            max_channels_per_connection: 100,
+            frame_max: 131072,
+            heartbeat_interval: 60,
+            fixtures_dir: Some(temp_dir.path().to_path_buf()),
+            virtual_hosts: vec!["/".to_string()],
+        };
+
+        (config, temp_dir)
+    }
+
+    #[tokio::test]
+    async fn test_amqp_spec_registry_new() {
+        let config = create_test_config();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+        assert_eq!(registry.fixtures.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_amqp_spec_registry_with_fixtures() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+        assert_eq!(registry.fixtures.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_protocol() {
+        let config = create_test_config();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+        assert_eq!(registry.protocol(), Protocol::Amqp);
+    }
+
+    #[tokio::test]
+    async fn test_operations_empty() {
+        let config = create_test_config();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+        let operations = registry.operations();
+        assert!(operations.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_operations_with_fixture() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+        let operations = registry.operations();
+
+        // Each fixture generates two operations: PUBLISH and CONSUME
+        assert_eq!(operations.len(), 2);
+        assert!(operations.iter().any(|op| op.operation_type == "PUBLISH"));
+        assert!(operations.iter().any(|op| op.operation_type == "CONSUME"));
+    }
+
+    #[tokio::test]
+    async fn test_find_operation_publish() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let operation = registry.find_operation("PUBLISH", "test-fixture");
+        assert!(operation.is_some());
+
+        let op = operation.unwrap();
+        assert_eq!(op.operation_type, "PUBLISH");
+        assert_eq!(op.name, "test-fixture-publish");
+        assert_eq!(op.input_schema, Some("AmqpMessage".to_string()));
+        assert_eq!(op.output_schema, Some("PublishResponse".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_find_operation_consume() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let operation = registry.find_operation("CONSUME", "test-fixture");
+        assert!(operation.is_some());
+
+        let op = operation.unwrap();
+        assert_eq!(op.operation_type, "CONSUME");
+        assert_eq!(op.name, "test-fixture-consume");
+        assert_eq!(op.input_schema, Some("ConsumeRequest".to_string()));
+        assert_eq!(op.output_schema, Some("AmqpMessage".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_find_operation_invalid() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let operation = registry.find_operation("INVALID", "test-fixture");
+        assert!(operation.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_find_operation_nonexistent_fixture() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let operation = registry.find_operation("PUBLISH", "nonexistent");
+        assert!(operation.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_find_fixture_for_queue() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let fixture = registry.find_fixture_for_queue("test-queue");
+        assert!(fixture.is_some());
+        assert_eq!(fixture.unwrap().identifier, "test-fixture");
+    }
+
+    #[tokio::test]
+    async fn test_find_fixture_for_queue_nonexistent() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let fixture = registry.find_fixture_for_queue("nonexistent-queue");
+        assert!(fixture.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_validate_request_publish_valid() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request(
+            "PUBLISH",
+            "test-fixture",
+            Some("test.key".to_string()),
+            HashMap::from([("exchange".to_string(), "test-exchange".to_string())]),
+        );
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(result.valid);
+        assert!(result.errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_validate_request_publish_invalid_exchange() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request(
+            "PUBLISH",
+            "test-fixture",
+            Some("test.key".to_string()),
+            HashMap::from([("exchange".to_string(), "nonexistent-exchange".to_string())]),
+        );
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].code, Some("INVALID_OPERATION".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_validate_request_publish_missing_exchange() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request(
+            "PUBLISH",
+            "test-fixture",
+            Some("test.key".to_string()),
+            HashMap::new(),
+        );
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_validate_request_consume_valid() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request("CONSUME", "test-queue", None, HashMap::new());
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(result.valid);
+        assert!(result.errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_validate_request_consume_invalid_queue() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request("CONSUME", "nonexistent-queue", None, HashMap::new());
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_validate_request_invalid_operation() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request("INVALID", "test-queue", None, HashMap::new());
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_generate_mock_response_publish() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request(
+            "PUBLISH",
+            "test-fixture",
+            Some("test.key".to_string()),
+            HashMap::from([("exchange".to_string(), "test-exchange".to_string())]),
+        );
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        match response.status {
+            ResponseStatus::AmqpStatus(code) => assert_eq!(code, 200),
+            _ => panic!("Expected AmqpStatus"),
+        }
+        assert_eq!(response.metadata.get("exchange"), Some(&"test-exchange".to_string()));
+        assert_eq!(response.metadata.get("routing_key"), Some(&"test.key".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_generate_mock_response_publish_missing_exchange() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request(
+            "PUBLISH",
+            "test-fixture",
+            Some("test.key".to_string()),
+            HashMap::new(),
+        );
+
+        let result = registry.generate_mock_response(&request);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_generate_mock_response_publish_missing_routing_key() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request(
+            "PUBLISH",
+            "test-fixture",
+            None,
+            HashMap::from([("exchange".to_string(), "test-exchange".to_string())]),
+        );
+
+        let result = registry.generate_mock_response(&request);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_generate_mock_response_consume() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request("CONSUME", "test-queue", None, HashMap::new());
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        match response.status {
+            ResponseStatus::AmqpStatus(code) => assert_eq!(code, 200),
+            _ => panic!("Expected AmqpStatus"),
+        }
+        assert_eq!(response.metadata.get("queue"), Some(&"test-queue".to_string()));
+        assert_eq!(response.content_type, "application/json");
+    }
+
+    #[tokio::test]
+    async fn test_generate_mock_response_consume_with_template() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request(
+            "CONSUME",
+            "test-queue",
+            None,
+            HashMap::from([("name".to_string(), "World".to_string())]),
+        );
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert!(!response.body.is_empty());
+        let body_str = String::from_utf8(response.body).unwrap();
+        assert!(body_str.contains("Hello") || body_str.contains("message"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_mock_response_consume_nonexistent_queue() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request("CONSUME", "nonexistent-queue", None, HashMap::new());
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        // Should return empty body for nonexistent queue
+        assert!(response.body.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_generate_mock_response_unsupported_operation() {
+        let (config, _temp_dir) = create_test_config_with_fixtures();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+
+        let request = create_protocol_request("UNSUPPORTED", "test-queue", None, HashMap::new());
+
+        let result = registry.generate_mock_response(&request);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_spec_registry_debug() {
+        let config = create_test_config();
+        let registry = AmqpSpecRegistry::new(config).await.unwrap();
+        let debug = format!("{:?}", registry);
+        assert!(debug.contains("AmqpSpecRegistry"));
+    }
+}

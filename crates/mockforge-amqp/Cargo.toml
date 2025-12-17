@@ -29,6 +29,7 @@ futures.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 criterion.workspace = true
+tempfile = "3"
 
 [[bench]]
 name = "amqp_benchmarks"

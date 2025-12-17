@@ -572,3 +572,485 @@ impl LifecycleScenarios {
         PersonaLifecycle::with_rules(persona_id, LifecycleState::NewSignup, rules)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // LifecycleState tests
+    // =========================================================================
+
+    #[test]
+    fn test_lifecycle_state_name() {
+        assert_eq!(LifecycleState::NewSignup.name(), "New Signup");
+        assert_eq!(LifecycleState::Active.name(), "Active");
+        assert_eq!(LifecycleState::PowerUser.name(), "Power User");
+        assert_eq!(LifecycleState::ChurnRisk.name(), "Churn Risk");
+        assert_eq!(LifecycleState::Churned.name(), "Churned");
+        assert_eq!(LifecycleState::UpgradePending.name(), "Upgrade Pending");
+        assert_eq!(LifecycleState::PaymentFailed.name(), "Payment Failed");
+    }
+
+    #[test]
+    fn test_lifecycle_state_is_terminal() {
+        assert!(LifecycleState::Churned.is_terminal());
+        assert!(!LifecycleState::Active.is_terminal());
+        assert!(!LifecycleState::NewSignup.is_terminal());
+    }
+
+    #[test]
+    fn test_lifecycle_state_eq() {
+        assert_eq!(LifecycleState::Active, LifecycleState::Active);
+        assert_ne!(LifecycleState::Active, LifecycleState::Churned);
+    }
+
+    #[test]
+    fn test_lifecycle_state_clone() {
+        let state = LifecycleState::PowerUser;
+        let cloned = state;
+        assert_eq!(cloned, LifecycleState::PowerUser);
+    }
+
+    #[test]
+    fn test_lifecycle_state_serialize() {
+        let state = LifecycleState::NewSignup;
+        let json = serde_json::to_string(&state).unwrap();
+        assert_eq!(json, "\"new_signup\"");
+    }
+
+    #[test]
+    fn test_lifecycle_state_deserialize() {
+        let json = "\"active\"";
+        let state: LifecycleState = serde_json::from_str(json).unwrap();
+        assert_eq!(state, LifecycleState::Active);
+    }
+
+    #[test]
+    fn test_lifecycle_state_debug() {
+        let debug_str = format!("{:?}", LifecycleState::ChurnRisk);
+        assert!(debug_str.contains("ChurnRisk"));
+    }
+
+    // =========================================================================
+    // TransitionRule tests
+    // =========================================================================
+
+    #[test]
+    fn test_transition_rule_creation() {
+        let rule = TransitionRule {
+            to: LifecycleState::Active,
+            after_days: Some(7),
+            condition: Some("order_count > 5".to_string()),
+            on_transition: None,
+        };
+        assert_eq!(rule.to, LifecycleState::Active);
+        assert_eq!(rule.after_days, Some(7));
+    }
+
+    #[test]
+    fn test_transition_rule_clone() {
+        let rule = TransitionRule {
+            to: LifecycleState::Churned,
+            after_days: Some(30),
+            condition: None,
+            on_transition: None,
+        };
+        let cloned = rule.clone();
+        assert_eq!(cloned.to, LifecycleState::Churned);
+    }
+
+    #[test]
+    fn test_transition_rule_serialize() {
+        let rule = TransitionRule {
+            to: LifecycleState::Active,
+            after_days: Some(14),
+            condition: None,
+            on_transition: None,
+        };
+        let json = serde_json::to_string(&rule).unwrap();
+        assert!(json.contains("active"));
+        assert!(json.contains("14"));
+    }
+
+    // =========================================================================
+    // PersonaLifecycle tests
+    // =========================================================================
+
+    #[test]
+    fn test_persona_lifecycle_new() {
+        let lifecycle = PersonaLifecycle::new("user-123".to_string(), LifecycleState::NewSignup);
+        assert_eq!(lifecycle.persona_id, "user-123");
+        assert_eq!(lifecycle.current_state, LifecycleState::NewSignup);
+        assert_eq!(lifecycle.state_history.len(), 1);
+    }
+
+    #[test]
+    fn test_persona_lifecycle_with_rules() {
+        let rules = vec![TransitionRule {
+            to: LifecycleState::Active,
+            after_days: Some(7),
+            condition: None,
+            on_transition: None,
+        }];
+        let lifecycle =
+            PersonaLifecycle::with_rules("user-123".to_string(), LifecycleState::NewSignup, rules);
+        assert_eq!(lifecycle.transition_rules.len(), 1);
+    }
+
+    #[test]
+    fn test_persona_lifecycle_transition_to() {
+        let mut lifecycle =
+            PersonaLifecycle::new("user-123".to_string(), LifecycleState::NewSignup);
+        let now = Utc::now();
+        lifecycle.transition_to(LifecycleState::Active, now);
+
+        assert_eq!(lifecycle.current_state, LifecycleState::Active);
+        assert_eq!(lifecycle.state_history.len(), 2);
+    }
+
+    #[test]
+    fn test_persona_lifecycle_transition_to_same_state() {
+        let mut lifecycle =
+            PersonaLifecycle::new("user-123".to_string(), LifecycleState::NewSignup);
+        let now = Utc::now();
+        lifecycle.transition_to(LifecycleState::NewSignup, now);
+
+        // Should not add duplicate history entry
+        assert_eq!(lifecycle.state_history.len(), 1);
+    }
+
+    #[test]
+    fn test_persona_lifecycle_transition_if_elapsed() {
+        let rules = vec![TransitionRule {
+            to: LifecycleState::Active,
+            after_days: Some(7),
+            condition: None,
+            on_transition: None,
+        }];
+        let lifecycle =
+            PersonaLifecycle::with_rules("user-123".to_string(), LifecycleState::NewSignup, rules);
+
+        // Before 7 days - no transition
+        let future_time_5days = lifecycle.state_entered_at + Duration::days(5);
+        assert!(lifecycle.transition_if_elapsed(future_time_5days).is_none());
+
+        // After 7 days - should transition
+        let future_time_8days = lifecycle.state_entered_at + Duration::days(8);
+        let result = lifecycle.transition_if_elapsed(future_time_8days);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().0, LifecycleState::Active);
+    }
+
+    #[test]
+    fn test_persona_lifecycle_transition_if_elapsed_with_condition() {
+        let rules = vec![TransitionRule {
+            to: LifecycleState::Churned,
+            after_days: Some(30),
+            condition: Some("payment_failed_count > 2".to_string()),
+            on_transition: None,
+        }];
+        let mut lifecycle =
+            PersonaLifecycle::with_rules("user-123".to_string(), LifecycleState::ChurnRisk, rules);
+
+        let future_time = lifecycle.state_entered_at + Duration::days(35);
+
+        // Without metadata - condition not met
+        assert!(lifecycle.transition_if_elapsed(future_time).is_none());
+
+        // With metadata - condition met
+        lifecycle.set_metadata("payment_failed_count".to_string(), serde_json::json!(3));
+        let result = lifecycle.transition_if_elapsed(future_time);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_persona_lifecycle_apply_lifecycle_effects() {
+        let lifecycle = PersonaLifecycle::new("user-123".to_string(), LifecycleState::NewSignup);
+        let effects = lifecycle.apply_lifecycle_effects();
+
+        assert_eq!(effects.get("account_age"), Some(&"0".to_string()));
+        assert_eq!(effects.get("order_count"), Some(&"0".to_string()));
+        assert_eq!(effects.get("loyalty_level"), Some(&"bronze".to_string()));
+    }
+
+    #[test]
+    fn test_persona_lifecycle_apply_lifecycle_effects_power_user() {
+        let lifecycle = PersonaLifecycle::new("user-123".to_string(), LifecycleState::PowerUser);
+        let effects = lifecycle.apply_lifecycle_effects();
+
+        assert_eq!(effects.get("loyalty_level"), Some(&"gold".to_string()));
+        assert_eq!(effects.get("engagement_level"), Some(&"high".to_string()));
+    }
+
+    #[test]
+    fn test_persona_lifecycle_current_state_duration() {
+        let lifecycle = PersonaLifecycle::new("user-123".to_string(), LifecycleState::NewSignup);
+        let future_time = lifecycle.state_entered_at + Duration::days(10);
+        let duration = lifecycle.current_state_duration(future_time);
+
+        assert_eq!(duration.num_days(), 10);
+    }
+
+    #[test]
+    fn test_persona_lifecycle_metadata() {
+        let mut lifecycle =
+            PersonaLifecycle::new("user-123".to_string(), LifecycleState::NewSignup);
+
+        lifecycle.set_metadata("order_count".to_string(), serde_json::json!(5));
+
+        let value = lifecycle.get_metadata("order_count");
+        assert!(value.is_some());
+        assert_eq!(value.unwrap().as_u64(), Some(5));
+    }
+
+    #[test]
+    fn test_persona_lifecycle_metadata_not_found() {
+        let lifecycle = PersonaLifecycle::new("user-123".to_string(), LifecycleState::NewSignup);
+        assert!(lifecycle.get_metadata("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_persona_lifecycle_from_preset() {
+        let lifecycle =
+            PersonaLifecycle::from_preset(LifecyclePreset::Subscription, "user-123".to_string());
+        assert_eq!(lifecycle.persona_id, "user-123");
+        assert!(!lifecycle.transition_rules.is_empty());
+    }
+
+    #[test]
+    fn test_persona_lifecycle_serialize() {
+        let lifecycle = PersonaLifecycle::new("user-123".to_string(), LifecycleState::Active);
+        let json = serde_json::to_string(&lifecycle).unwrap();
+        assert!(json.contains("user-123"));
+        assert!(json.contains("active"));
+    }
+
+    // =========================================================================
+    // LifecyclePreset tests
+    // =========================================================================
+
+    #[test]
+    fn test_lifecycle_preset_all() {
+        let presets = LifecyclePreset::all();
+        assert_eq!(presets.len(), 4);
+    }
+
+    #[test]
+    fn test_lifecycle_preset_name() {
+        assert_eq!(LifecyclePreset::Subscription.name(), "Subscription");
+        assert_eq!(LifecyclePreset::Loan.name(), "Loan");
+        assert_eq!(LifecyclePreset::OrderFulfillment.name(), "Order Fulfillment");
+        assert_eq!(LifecyclePreset::UserEngagement.name(), "User Engagement");
+    }
+
+    #[test]
+    fn test_lifecycle_preset_description() {
+        let desc = LifecyclePreset::Subscription.description();
+        assert!(desc.contains("NEW"));
+        assert!(desc.contains("CANCELED"));
+    }
+
+    #[test]
+    fn test_lifecycle_preset_serialize() {
+        let preset = LifecyclePreset::Loan;
+        let json = serde_json::to_string(&preset).unwrap();
+        assert_eq!(json, "\"loan\"");
+    }
+
+    #[test]
+    fn test_lifecycle_preset_deserialize() {
+        let json = "\"order_fulfillment\"";
+        let preset: LifecyclePreset = serde_json::from_str(json).unwrap();
+        assert_eq!(preset, LifecyclePreset::OrderFulfillment);
+    }
+
+    // =========================================================================
+    // ExtendedLifecycleState tests
+    // =========================================================================
+
+    #[test]
+    fn test_extended_lifecycle_state_serialize() {
+        let state = ExtendedLifecycleState::SubscriptionActive;
+        let json = serde_json::to_string(&state).unwrap();
+        assert_eq!(json, "\"subscription_active\"");
+    }
+
+    #[test]
+    fn test_extended_lifecycle_state_deserialize() {
+        let json = "\"loan_defaulted\"";
+        let state: ExtendedLifecycleState = serde_json::from_str(json).unwrap();
+        assert_eq!(state, ExtendedLifecycleState::LoanDefaulted);
+    }
+
+    #[test]
+    fn test_extended_lifecycle_state_eq() {
+        assert_eq!(ExtendedLifecycleState::OrderPending, ExtendedLifecycleState::OrderPending);
+        assert_ne!(ExtendedLifecycleState::OrderPending, ExtendedLifecycleState::OrderShipped);
+    }
+
+    // =========================================================================
+    // LifecycleScenarios tests
+    // =========================================================================
+
+    #[test]
+    fn test_new_signup_scenario() {
+        let lifecycle = LifecycleScenarios::new_signup_scenario("user-1".to_string());
+        assert_eq!(lifecycle.current_state, LifecycleState::NewSignup);
+        assert_eq!(lifecycle.transition_rules.len(), 1);
+    }
+
+    #[test]
+    fn test_power_user_scenario() {
+        let lifecycle = LifecycleScenarios::power_user_scenario("user-2".to_string());
+        assert_eq!(lifecycle.current_state, LifecycleState::PowerUser);
+        assert_eq!(lifecycle.transition_rules.len(), 1);
+    }
+
+    #[test]
+    fn test_churn_risk_scenario() {
+        let lifecycle = LifecycleScenarios::churn_risk_scenario("user-3".to_string());
+        assert_eq!(lifecycle.current_state, LifecycleState::ChurnRisk);
+        assert_eq!(lifecycle.transition_rules.len(), 2);
+    }
+
+    #[test]
+    fn test_active_scenario() {
+        let lifecycle = LifecycleScenarios::active_scenario("user-4".to_string());
+        assert_eq!(lifecycle.current_state, LifecycleState::Active);
+        assert_eq!(lifecycle.transition_rules.len(), 2);
+    }
+
+    #[test]
+    fn test_subscription_preset() {
+        let lifecycle = LifecycleScenarios::subscription_preset("sub-1".to_string());
+        assert_eq!(lifecycle.persona_id, "sub-1");
+        assert!(!lifecycle.transition_rules.is_empty());
+    }
+
+    #[test]
+    fn test_loan_preset() {
+        let lifecycle = LifecycleScenarios::loan_preset("loan-1".to_string());
+        assert_eq!(lifecycle.persona_id, "loan-1");
+        assert!(!lifecycle.transition_rules.is_empty());
+    }
+
+    #[test]
+    fn test_order_fulfillment_preset() {
+        let lifecycle = LifecycleScenarios::order_fulfillment_preset("order-1".to_string());
+        assert_eq!(lifecycle.persona_id, "order-1");
+        assert!(!lifecycle.transition_rules.is_empty());
+    }
+
+    #[test]
+    fn test_user_engagement_preset() {
+        let lifecycle = LifecycleScenarios::user_engagement_preset("engage-1".to_string());
+        assert_eq!(lifecycle.persona_id, "engage-1");
+        assert!(!lifecycle.transition_rules.is_empty());
+    }
+
+    // =========================================================================
+    // Condition evaluation tests
+    // =========================================================================
+
+    #[test]
+    fn test_evaluate_condition_greater_than() {
+        let mut lifecycle =
+            PersonaLifecycle::new("user-123".to_string(), LifecycleState::NewSignup);
+        lifecycle.set_metadata("count".to_string(), serde_json::json!(10));
+
+        // Directly test the condition evaluation via the rules mechanism
+        let rules = vec![TransitionRule {
+            to: LifecycleState::Active,
+            after_days: Some(0),
+            condition: Some("count > 5".to_string()),
+            on_transition: None,
+        }];
+        let mut test_lifecycle =
+            PersonaLifecycle::with_rules("test".to_string(), LifecycleState::NewSignup, rules);
+        test_lifecycle.set_metadata("count".to_string(), serde_json::json!(10));
+
+        let result = test_lifecycle.transition_if_elapsed(Utc::now());
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_condition_less_than() {
+        let rules = vec![TransitionRule {
+            to: LifecycleState::ChurnRisk,
+            after_days: Some(0),
+            condition: Some("score < 50".to_string()),
+            on_transition: None,
+        }];
+        let mut lifecycle =
+            PersonaLifecycle::with_rules("test".to_string(), LifecycleState::Active, rules);
+        lifecycle.set_metadata("score".to_string(), serde_json::json!(30));
+
+        let result = lifecycle.transition_if_elapsed(Utc::now());
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_condition_equals() {
+        let rules = vec![TransitionRule {
+            to: LifecycleState::Active,
+            after_days: Some(0),
+            condition: Some("status == 1".to_string()),
+            on_transition: None,
+        }];
+        let mut lifecycle =
+            PersonaLifecycle::with_rules("test".to_string(), LifecycleState::NewSignup, rules);
+        lifecycle.set_metadata("status".to_string(), serde_json::json!(1));
+
+        let result = lifecycle.transition_if_elapsed(Utc::now());
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_condition_not_equals() {
+        let rules = vec![TransitionRule {
+            to: LifecycleState::Active,
+            after_days: Some(0),
+            condition: Some("level != 0".to_string()),
+            on_transition: None,
+        }];
+        let mut lifecycle =
+            PersonaLifecycle::with_rules("test".to_string(), LifecycleState::NewSignup, rules);
+        lifecycle.set_metadata("level".to_string(), serde_json::json!(5));
+
+        let result = lifecycle.transition_if_elapsed(Utc::now());
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_evaluate_condition_missing_metadata() {
+        let rules = vec![TransitionRule {
+            to: LifecycleState::Active,
+            after_days: Some(0),
+            condition: Some("missing > 0".to_string()),
+            on_transition: None,
+        }];
+        let lifecycle =
+            PersonaLifecycle::with_rules("test".to_string(), LifecycleState::NewSignup, rules);
+
+        // Should not transition - condition evaluates to false when metadata is missing
+        let result = lifecycle.transition_if_elapsed(Utc::now());
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_evaluate_condition_invalid_format() {
+        let rules = vec![TransitionRule {
+            to: LifecycleState::Active,
+            after_days: Some(0),
+            condition: Some("invalid_format".to_string()),
+            on_transition: None,
+        }];
+        let lifecycle =
+            PersonaLifecycle::with_rules("test".to_string(), LifecycleState::NewSignup, rules);
+
+        // Should not transition - invalid condition format
+        let result = lifecycle.transition_if_elapsed(Utc::now());
+        assert!(result.is_none());
+    }
+}

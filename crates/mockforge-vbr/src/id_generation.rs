@@ -180,6 +180,7 @@ pub async fn get_and_increment_counter(
 mod tests {
     use super::*;
 
+    // generate_pattern_id tests
     #[test]
     fn test_generate_pattern_id() {
         let pattern = "USR-{increment:06}";
@@ -197,12 +198,100 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_pattern_id_increment_no_padding() {
+        let pattern = "ID-{increment}";
+        let result = generate_pattern_id(pattern, "Test", "id", Some(42)).unwrap();
+        assert_eq!(result, "ID-42");
+    }
+
+    #[test]
+    fn test_generate_pattern_id_increment_with_padding() {
+        let pattern = "NUM-{increment:08}";
+        let result = generate_pattern_id(pattern, "Test", "id", Some(123)).unwrap();
+        assert_eq!(result, "NUM-00000123");
+    }
+
+    #[test]
+    fn test_generate_pattern_id_increment_default_counter() {
+        let pattern = "SEQ-{increment:04}";
+        // When counter is None, defaults to 1
+        let result = generate_pattern_id(pattern, "Test", "id", None).unwrap();
+        assert_eq!(result, "SEQ-0001");
+    }
+
+    #[test]
+    fn test_generate_pattern_id_uuid() {
+        let pattern = "ITEM-{uuid}";
+        let result = generate_pattern_id(pattern, "Test", "id", None).unwrap();
+        assert!(result.starts_with("ITEM-"));
+        // UUID is 36 chars (including hyphens)
+        assert_eq!(result.len(), 41); // "ITEM-" (5) + UUID (36)
+    }
+
+    #[test]
+    fn test_generate_pattern_id_random_default_length() {
+        let pattern = "RND-{random}";
+        let result = generate_pattern_id(pattern, "Test", "id", None).unwrap();
+        assert!(result.starts_with("RND-"));
+        // Default random length is 8
+        assert_eq!(result.len(), 12); // "RND-" (4) + 8 random
+    }
+
+    #[test]
+    fn test_generate_pattern_id_random_custom_length() {
+        let pattern = "KEY-{random:20}";
+        let result = generate_pattern_id(pattern, "Test", "id", None).unwrap();
+        assert!(result.starts_with("KEY-"));
+        assert_eq!(result.len(), 24); // "KEY-" (4) + 20 random
+    }
+
+    #[test]
+    fn test_generate_pattern_id_multiple_placeholders() {
+        let pattern = "{increment:03}-{random:4}";
+        let result = generate_pattern_id(pattern, "Test", "id", Some(5)).unwrap();
+        // Should be "005-" followed by 4 random chars
+        assert!(result.starts_with("005-"));
+        assert_eq!(result.len(), 8); // "005-" (4) + 4 random
+    }
+
+    #[test]
+    fn test_generate_pattern_id_plain_text() {
+        let pattern = "STATIC-ID";
+        let result = generate_pattern_id(pattern, "Test", "id", None).unwrap();
+        assert_eq!(result, "STATIC-ID");
+    }
+
+    // generate_realistic_id tests
+    #[test]
     fn test_generate_realistic_id() {
         let result = generate_realistic_id("cus", 14).unwrap();
         assert!(result.starts_with("cus_"));
         assert_eq!(result.len(), 18); // "cus_" (4) + 14 random chars
     }
 
+    #[test]
+    fn test_generate_realistic_id_different_prefix() {
+        let result = generate_realistic_id("ord", 10).unwrap();
+        assert!(result.starts_with("ord_"));
+        assert_eq!(result.len(), 14); // "ord_" (4) + 10 random
+    }
+
+    #[test]
+    fn test_generate_realistic_id_long_prefix() {
+        let result = generate_realistic_id("subscription", 8).unwrap();
+        assert!(result.starts_with("subscription_"));
+        assert_eq!(result.len(), 21); // "subscription_" (13) + 8 random
+    }
+
+    #[test]
+    fn test_generate_realistic_id_uniqueness() {
+        let id1 = generate_realistic_id("test", 12).unwrap();
+        let id2 = generate_realistic_id("test", 12).unwrap();
+        // Should generate different IDs
+        assert_ne!(id1, id2);
+    }
+
+    // generate_random_string tests
     #[test]
     fn test_generate_random_string() {
         let s1 = generate_random_string(8);
@@ -211,5 +300,87 @@ mod tests {
         assert_eq!(s2.len(), 8);
         // Should be different (very unlikely to be the same)
         assert_ne!(s1, s2);
+    }
+
+    #[test]
+    fn test_generate_random_string_various_lengths() {
+        assert_eq!(generate_random_string(1).len(), 1);
+        assert_eq!(generate_random_string(5).len(), 5);
+        assert_eq!(generate_random_string(16).len(), 16);
+        assert_eq!(generate_random_string(32).len(), 32);
+    }
+
+    #[test]
+    fn test_generate_random_string_valid_chars() {
+        let s = generate_random_string(100);
+        // All characters should be alphanumeric lowercase or digits
+        for c in s.chars() {
+            assert!(c.is_ascii_lowercase() || c.is_ascii_digit());
+        }
+    }
+
+    #[test]
+    fn test_generate_random_string_empty() {
+        let s = generate_random_string(0);
+        assert!(s.is_empty());
+    }
+
+    // generate_id tests
+    #[test]
+    fn test_generate_id_uuid() {
+        let rule = AutoGenerationRule::Uuid;
+        let result = generate_id(&rule, "Entity", "id", None).unwrap();
+        // UUID format validation
+        assert_eq!(result.len(), 36);
+        assert!(result.contains('-'));
+    }
+
+    #[test]
+    fn test_generate_id_timestamp() {
+        let rule = AutoGenerationRule::Timestamp;
+        let result = generate_id(&rule, "Entity", "created_at", None).unwrap();
+        // Should be a valid timestamp (numeric string)
+        let _timestamp: i64 = result.parse().expect("Should be a valid timestamp");
+    }
+
+    #[test]
+    fn test_generate_id_date() {
+        let rule = AutoGenerationRule::Date;
+        let result = generate_id(&rule, "Entity", "date", None).unwrap();
+        // Should be in YYYY-MM-DD format
+        assert_eq!(result.len(), 10);
+        assert!(result.contains('-'));
+    }
+
+    #[test]
+    fn test_generate_id_pattern() {
+        let rule = AutoGenerationRule::Pattern("PREFIX-{increment:04}".to_string());
+        let result = generate_id(&rule, "Entity", "id", Some(7)).unwrap();
+        assert_eq!(result, "PREFIX-0007");
+    }
+
+    #[test]
+    fn test_generate_id_realistic() {
+        let rule = AutoGenerationRule::Realistic {
+            prefix: "inv".to_string(),
+            length: 10,
+        };
+        let result = generate_id(&rule, "Invoice", "id", None).unwrap();
+        assert!(result.starts_with("inv_"));
+        assert_eq!(result.len(), 14);
+    }
+
+    #[test]
+    fn test_generate_id_auto_increment_error() {
+        let rule = AutoGenerationRule::AutoIncrement;
+        let result = generate_id(&rule, "Entity", "id", None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_id_custom_error() {
+        let rule = AutoGenerationRule::Custom("NOW()".to_string());
+        let result = generate_id(&rule, "Entity", "id", None);
+        assert!(result.is_err());
     }
 }

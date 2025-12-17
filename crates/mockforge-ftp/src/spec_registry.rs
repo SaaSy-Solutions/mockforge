@@ -345,3 +345,578 @@ impl SpecRegistry for FtpSpecRegistry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures::{
+        FileContentConfig, FileValidation, FtpFixture, UploadRule, UploadStorage, VirtualFileConfig,
+    };
+    use crate::vfs::{FileContent, FileMetadata, VirtualFile};
+
+    #[test]
+    fn test_upload_record_debug() {
+        let record = UploadRecord {
+            id: "test-id".to_string(),
+            path: std::path::PathBuf::from("/test.txt"),
+            size: 1024,
+            uploaded_at: chrono::Utc::now(),
+            rule_name: Some("test-rule".to_string()),
+        };
+        let debug = format!("{:?}", record);
+        assert!(debug.contains("test-id"));
+    }
+
+    #[test]
+    fn test_upload_record_clone() {
+        let record = UploadRecord {
+            id: "test-id".to_string(),
+            path: std::path::PathBuf::from("/test.txt"),
+            size: 1024,
+            uploaded_at: chrono::Utc::now(),
+            rule_name: None,
+        };
+        let cloned = record.clone();
+        assert_eq!(record.id, cloned.id);
+        assert_eq!(record.size, cloned.size);
+    }
+
+    #[test]
+    fn test_ftp_spec_registry_new() {
+        let registry = FtpSpecRegistry::new();
+        assert!(registry.fixtures.is_empty());
+        assert_eq!(registry.get_uploads().len(), 0);
+    }
+
+    #[test]
+    fn test_ftp_spec_registry_default() {
+        let registry = FtpSpecRegistry::default();
+        assert!(registry.fixtures.is_empty());
+    }
+
+    #[test]
+    fn test_ftp_spec_registry_protocol() {
+        let registry = FtpSpecRegistry::new();
+        assert_eq!(registry.protocol(), Protocol::Ftp);
+    }
+
+    #[test]
+    fn test_ftp_spec_registry_with_fixtures() {
+        let fixture = FtpFixture {
+            identifier: "test-fixture".to_string(),
+            name: "Test Fixture".to_string(),
+            description: Some("A test fixture".to_string()),
+            virtual_files: vec![VirtualFileConfig {
+                path: std::path::PathBuf::from("/test.txt"),
+                content: FileContentConfig::Static {
+                    content: "Hello World".to_string(),
+                },
+                permissions: "644".to_string(),
+                owner: "user".to_string(),
+                group: "group".to_string(),
+            }],
+            upload_rules: vec![],
+        };
+
+        let registry = FtpSpecRegistry::new().with_fixtures(vec![fixture]).unwrap();
+
+        assert_eq!(registry.fixtures.len(), 1);
+        assert!(registry.vfs.get_file(&std::path::PathBuf::from("/test.txt")).is_some());
+    }
+
+    #[test]
+    fn test_ftp_spec_registry_with_vfs() {
+        let vfs = Arc::new(VirtualFileSystem::new(std::path::PathBuf::from("/")));
+        let registry = FtpSpecRegistry::new().with_vfs(vfs.clone());
+
+        assert!(Arc::ptr_eq(&registry.vfs, &vfs));
+    }
+
+    #[test]
+    fn test_find_upload_rule_match() {
+        let rule = UploadRule {
+            path_pattern: r"^/uploads/.*\.txt$".to_string(),
+            auto_accept: true,
+            validation: None,
+            storage: UploadStorage::Memory,
+        };
+
+        let fixture = FtpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            virtual_files: vec![],
+            upload_rules: vec![rule],
+        };
+
+        let registry = FtpSpecRegistry::new().with_fixtures(vec![fixture]).unwrap();
+
+        assert!(registry.find_upload_rule("/uploads/test.txt").is_some());
+        assert!(registry.find_upload_rule("/uploads/test.pdf").is_none());
+    }
+
+    #[test]
+    fn test_record_upload() {
+        let registry = FtpSpecRegistry::new();
+        let path = std::path::PathBuf::from("/upload.txt");
+
+        let id = registry
+            .record_upload(path.clone(), 1024, Some("test-rule".to_string()))
+            .unwrap();
+
+        assert!(!id.is_empty());
+        let uploads = registry.get_uploads();
+        assert_eq!(uploads.len(), 1);
+        assert_eq!(uploads[0].path, path);
+        assert_eq!(uploads[0].size, 1024);
+    }
+
+    #[test]
+    fn test_get_upload() {
+        let registry = FtpSpecRegistry::new();
+        let id = registry
+            .record_upload(std::path::PathBuf::from("/test.txt"), 512, None)
+            .unwrap();
+
+        let upload = registry.get_upload(&id);
+        assert!(upload.is_some());
+        assert_eq!(upload.unwrap().size, 512);
+    }
+
+    #[test]
+    fn test_get_upload_not_found() {
+        let registry = FtpSpecRegistry::new();
+        let upload = registry.get_upload("non-existent-id");
+        assert!(upload.is_none());
+    }
+
+    #[test]
+    fn test_operations() {
+        let fixture = FtpFixture {
+            identifier: "test".to_string(),
+            name: "Test Fixture".to_string(),
+            description: Some("Test description".to_string()),
+            virtual_files: vec![VirtualFileConfig {
+                path: std::path::PathBuf::from("/file1.txt"),
+                content: FileContentConfig::Static {
+                    content: "content".to_string(),
+                },
+                permissions: "644".to_string(),
+                owner: "user".to_string(),
+                group: "group".to_string(),
+            }],
+            upload_rules: vec![],
+        };
+
+        let registry = FtpSpecRegistry::new().with_fixtures(vec![fixture]).unwrap();
+
+        let ops = registry.operations();
+        assert_eq!(ops.len(), 1);
+        assert_eq!(ops[0].operation_type, "RETR");
+        assert!(ops[0].metadata.contains_key("description"));
+    }
+
+    #[test]
+    fn test_find_operation() {
+        let fixture = FtpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            virtual_files: vec![VirtualFileConfig {
+                path: std::path::PathBuf::from("/test.txt"),
+                content: FileContentConfig::Static {
+                    content: "test".to_string(),
+                },
+                permissions: "755".to_string(),
+                owner: "root".to_string(),
+                group: "admin".to_string(),
+            }],
+            upload_rules: vec![],
+        };
+
+        let registry = FtpSpecRegistry::new().with_fixtures(vec![fixture]).unwrap();
+
+        let op = registry.find_operation("RETR", "/test.txt");
+        assert!(op.is_some());
+        let op = op.unwrap();
+        assert_eq!(op.operation_type, "RETR");
+        assert_eq!(op.metadata.get("permissions").unwrap(), "755");
+    }
+
+    #[test]
+    fn test_find_operation_not_found() {
+        let registry = FtpSpecRegistry::new();
+        let op = registry.find_operation("RETR", "/nonexistent.txt");
+        assert!(op.is_none());
+    }
+
+    #[test]
+    fn test_validate_request_invalid_protocol() {
+        let registry = FtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Http,
+            operation: "RETR".to_string(),
+            path: "/test.txt".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(!result.valid);
+        assert_eq!(result.errors[0].code, Some("invalid_protocol".to_string()));
+    }
+
+    #[test]
+    fn test_validate_request_invalid_operation() {
+        let registry = FtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "INVALID".to_string(),
+            path: "/test.txt".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(!result.valid);
+        assert_eq!(result.errors[0].code, Some("unsupported_operation".to_string()));
+    }
+
+    #[test]
+    fn test_validate_request_valid() {
+        let registry = FtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "RETR".to_string(),
+            path: "/test.txt".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let result = registry.validate_request(&request).unwrap();
+        assert!(result.valid);
+    }
+
+    #[test]
+    fn test_generate_mock_response_retr_success() {
+        let registry = FtpSpecRegistry::new();
+        let file = VirtualFile::new(
+            std::path::PathBuf::from("/test.txt"),
+            FileContent::Static(b"test content".to_vec()),
+            FileMetadata {
+                size: 12,
+                ..Default::default()
+            },
+        );
+        registry.vfs.add_file(std::path::PathBuf::from("/test.txt"), file).unwrap();
+
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "RETR".to_string(),
+            path: "/test.txt".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(150));
+        assert_eq!(response.body, b"test content");
+    }
+
+    #[test]
+    fn test_generate_mock_response_retr_not_found() {
+        let registry = FtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "RETR".to_string(),
+            path: "/nonexistent.txt".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(550));
+    }
+
+    #[test]
+    fn test_generate_mock_response_stor_success() {
+        let rule = UploadRule {
+            path_pattern: r"^/uploads/.*".to_string(),
+            auto_accept: true,
+            validation: None,
+            storage: UploadStorage::Memory,
+        };
+
+        let fixture = FtpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            virtual_files: vec![],
+            upload_rules: vec![rule],
+        };
+
+        let registry = FtpSpecRegistry::new().with_fixtures(vec![fixture]).unwrap();
+
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "STOR".to_string(),
+            path: "/uploads/test.txt".to_string(),
+            body: Some(b"file content".to_vec()),
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(226));
+    }
+
+    #[test]
+    fn test_generate_mock_response_stor_rejected() {
+        let rule = UploadRule {
+            path_pattern: r"^/uploads/.*".to_string(),
+            auto_accept: false,
+            validation: None,
+            storage: UploadStorage::Memory,
+        };
+
+        let fixture = FtpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            virtual_files: vec![],
+            upload_rules: vec![rule],
+        };
+
+        let registry = FtpSpecRegistry::new().with_fixtures(vec![fixture]).unwrap();
+
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "STOR".to_string(),
+            path: "/uploads/test.txt".to_string(),
+            body: Some(b"file content".to_vec()),
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(550));
+        assert_eq!(response.body, b"Upload rejected by rule");
+    }
+
+    #[test]
+    fn test_generate_mock_response_stor_validation_failed() {
+        let rule = UploadRule {
+            path_pattern: r"^/uploads/.*".to_string(),
+            auto_accept: true,
+            validation: Some(FileValidation {
+                max_size_bytes: Some(10),
+                allowed_extensions: None,
+                mime_types: None,
+            }),
+            storage: UploadStorage::Memory,
+        };
+
+        let fixture = FtpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            virtual_files: vec![],
+            upload_rules: vec![rule],
+        };
+
+        let registry = FtpSpecRegistry::new().with_fixtures(vec![fixture]).unwrap();
+
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "STOR".to_string(),
+            path: "/uploads/test.txt".to_string(),
+            body: Some(b"very large file content".to_vec()),
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(550));
+    }
+
+    #[test]
+    fn test_generate_mock_response_stor_no_body() {
+        let rule = UploadRule {
+            path_pattern: r"^/uploads/.*".to_string(),
+            auto_accept: true,
+            validation: None,
+            storage: UploadStorage::Memory,
+        };
+
+        let fixture = FtpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            virtual_files: vec![],
+            upload_rules: vec![rule],
+        };
+
+        let registry = FtpSpecRegistry::new().with_fixtures(vec![fixture]).unwrap();
+
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "STOR".to_string(),
+            path: "/uploads/test.txt".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(550));
+        assert_eq!(response.body, b"No file data provided");
+    }
+
+    #[test]
+    fn test_generate_mock_response_stor_no_rule() {
+        let registry = FtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "STOR".to_string(),
+            path: "/uploads/test.txt".to_string(),
+            body: Some(b"content".to_vec()),
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(550));
+        assert_eq!(response.body, b"No upload rule matches this path");
+    }
+
+    #[test]
+    fn test_generate_mock_response_list() {
+        let registry = FtpSpecRegistry::new();
+        let file = VirtualFile::new(
+            std::path::PathBuf::from("/dir/file.txt"),
+            FileContent::Static(b"content".to_vec()),
+            FileMetadata {
+                size: 7,
+                ..Default::default()
+            },
+        );
+        registry.vfs.add_file(std::path::PathBuf::from("/dir/file.txt"), file).unwrap();
+
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "LIST".to_string(),
+            path: "/dir".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(226));
+        assert!(response.metadata.get("count").unwrap().parse::<usize>().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_generate_mock_response_dele_success() {
+        let registry = FtpSpecRegistry::new();
+        let file = VirtualFile::new(
+            std::path::PathBuf::from("/test.txt"),
+            FileContent::Static(vec![]),
+            FileMetadata::default(),
+        );
+        registry.vfs.add_file(std::path::PathBuf::from("/test.txt"), file).unwrap();
+
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "DELE".to_string(),
+            path: "/test.txt".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(250));
+    }
+
+    #[test]
+    fn test_generate_mock_response_dele_not_found() {
+        let registry = FtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "DELE".to_string(),
+            path: "/nonexistent.txt".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(550));
+    }
+
+    #[test]
+    fn test_generate_mock_response_pwd() {
+        let registry = FtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "PWD".to_string(),
+            path: "/home/user".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(257));
+        assert_eq!(response.body, b"\"/home/user\"");
+    }
+
+    #[test]
+    fn test_generate_mock_response_size_success() {
+        let registry = FtpSpecRegistry::new();
+        let file = VirtualFile::new(
+            std::path::PathBuf::from("/test.txt"),
+            FileContent::Static(b"test".to_vec()),
+            FileMetadata {
+                size: 1024,
+                ..Default::default()
+            },
+        );
+        registry.vfs.add_file(std::path::PathBuf::from("/test.txt"), file).unwrap();
+
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "SIZE".to_string(),
+            path: "/test.txt".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(213));
+        assert_eq!(response.body, b"1024");
+    }
+
+    #[test]
+    fn test_generate_mock_response_size_not_found() {
+        let registry = FtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "SIZE".to_string(),
+            path: "/nonexistent.txt".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(550));
+    }
+
+    #[test]
+    fn test_generate_mock_response_unsupported_command() {
+        let registry = FtpSpecRegistry::new();
+        let request = ProtocolRequest {
+            protocol: Protocol::Ftp,
+            operation: "MKD".to_string(),
+            path: "/newdir".to_string(),
+            body: None,
+            ..Default::default()
+        };
+
+        let response = registry.generate_mock_response(&request).unwrap();
+        assert_eq!(response.status, ResponseStatus::FtpStatus(502));
+        assert_eq!(response.body, b"Command not implemented");
+    }
+}

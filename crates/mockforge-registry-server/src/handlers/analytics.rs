@@ -2,7 +2,10 @@
 //!
 //! Provides comprehensive analytics for admin users
 
-use axum::{extract::{Query, State}, Json};
+use axum::{
+    extract::{Query, State},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -139,33 +142,32 @@ pub async fn get_analytics(
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-    let verified_users: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_verified = TRUE")
-        .fetch_one(pool)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let verified_users: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_verified = TRUE")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     let unverified_users = total_users.0 - verified_users.0;
 
     let auth_providers = sqlx::query_as::<_, (Option<String>, i64)>(
-        "SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider"
+        "SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider",
     )
     .fetch_all(pool)
     .await
     .map_err(|e| ApiError::Database(e))?;
 
-    let new_users_7d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days'"
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let new_users_7d: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days'")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
-    let new_users_30d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '30 days'"
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let new_users_30d: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '30 days'")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     // Subscription Analytics
     let total_orgs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM organizations")
@@ -174,34 +176,31 @@ pub async fn get_analytics(
         .map_err(|e| ApiError::Database(e))?;
 
     let plan_distribution = sqlx::query_as::<_, (String, i64)>(
-        "SELECT plan, COUNT(*) FROM organizations GROUP BY plan"
+        "SELECT plan, COUNT(*) FROM organizations GROUP BY plan",
     )
     .fetch_all(pool)
     .await
     .map_err(|e| ApiError::Database(e))?;
 
-    let active_subs: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM subscriptions WHERE status IN ('active', 'trialing')"
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let active_subs: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM subscriptions WHERE status IN ('active', 'trialing')")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     // Revenue estimate (Pro: $29, Team: $99)
     let revenue_estimate = plan_distribution
         .iter()
-        .map(|(plan, count)| {
-            match plan.as_str() {
-                "pro" => *count as f64 * 29.0,
-                "team" => *count as f64 * 99.0,
-                _ => 0.0,
-            }
+        .map(|(plan, count)| match plan.as_str() {
+            "pro" => *count as f64 * 29.0,
+            "team" => *count as f64 * 99.0,
+            _ => 0.0,
         })
         .sum::<f64>();
 
     // Usage Analytics
     let total_requests: (Option<i64>,) = sqlx::query_as(
-        "SELECT SUM(requests) FROM usage_counters WHERE period_start >= DATE_TRUNC('month', NOW())"
+        "SELECT SUM(requests) FROM usage_counters WHERE period_start >= DATE_TRUNC('month', NOW())",
     )
     .fetch_one(pool)
     .await
@@ -236,24 +235,24 @@ pub async fn get_analytics(
         GROUP BY o.id, o.name, o.plan
         ORDER BY requests DESC
         LIMIT 10
-        "#
+        "#,
     )
     .fetch_all(pool)
     .await
     .map_err(|e| ApiError::Database(e))?;
 
     // Feature Analytics
-    let hosted_mocks_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM hosted_mocks WHERE deleted_at IS NULL")
-        .fetch_one(pool)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let hosted_mocks_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM hosted_mocks WHERE deleted_at IS NULL")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
-    let hosted_mocks_orgs: (i64,) = sqlx::query_as(
-        "SELECT COUNT(DISTINCT org_id) FROM hosted_mocks WHERE deleted_at IS NULL"
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let hosted_mocks_orgs: (i64,) =
+        sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM hosted_mocks WHERE deleted_at IS NULL")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     let hosted_mocks_30d: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM hosted_mocks WHERE created_at > NOW() - INTERVAL '30 days' AND deleted_at IS NULL"
@@ -267,13 +266,14 @@ pub async fn get_analytics(
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-    let plugins_orgs: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM plugins WHERE org_id IS NOT NULL")
-        .fetch_one(pool)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let plugins_orgs: (i64,) =
+        sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM plugins WHERE org_id IS NOT NULL")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     let plugins_30d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM plugins WHERE created_at > NOW() - INTERVAL '30 days'"
+        "SELECT COUNT(*) FROM plugins WHERE created_at > NOW() - INTERVAL '30 days'",
     )
     .fetch_one(pool)
     .await
@@ -284,30 +284,32 @@ pub async fn get_analytics(
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-    let templates_orgs: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM templates WHERE org_id IS NOT NULL")
-        .fetch_one(pool)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let templates_orgs: (i64,) =
+        sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM templates WHERE org_id IS NOT NULL")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     let templates_30d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM templates WHERE created_at > NOW() - INTERVAL '30 days'"
+        "SELECT COUNT(*) FROM templates WHERE created_at > NOW() - INTERVAL '30 days'",
     )
     .fetch_one(pool)
     .await
-        .map_err(|e| ApiError::Database(e))?;
+    .map_err(|e| ApiError::Database(e))?;
 
     let scenarios_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scenarios")
         .fetch_one(pool)
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-    let scenarios_orgs: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM scenarios WHERE org_id IS NOT NULL")
-        .fetch_one(pool)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let scenarios_orgs: (i64,) =
+        sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM scenarios WHERE org_id IS NOT NULL")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     let scenarios_30d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM scenarios WHERE created_at > NOW() - INTERVAL '30 days'"
+        "SELECT COUNT(*) FROM scenarios WHERE created_at > NOW() - INTERVAL '30 days'",
     )
     .fetch_one(pool)
     .await
@@ -324,7 +326,7 @@ pub async fn get_analytics(
         .map_err(|e| ApiError::Database(e))?;
 
     let api_tokens_30d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM api_tokens WHERE created_at > NOW() - INTERVAL '30 days'"
+        "SELECT COUNT(*) FROM api_tokens WHERE created_at > NOW() - INTERVAL '30 days'",
     )
     .fetch_one(pool)
     .await
@@ -338,7 +340,7 @@ pub async fn get_analytics(
         WHERE created_at > NOW() - INTERVAL '30 days'
         GROUP BY DATE(created_at)
         ORDER BY date ASC
-        "#
+        "#,
     )
     .fetch_all(pool)
     .await
@@ -351,7 +353,7 @@ pub async fn get_analytics(
         WHERE created_at > NOW() - INTERVAL '30 days'
         GROUP BY DATE(created_at)
         ORDER BY date ASC
-        "#
+        "#,
     )
     .fetch_all(pool)
     .await
@@ -377,7 +379,7 @@ pub async fn get_analytics(
         r#"
         SELECT COALESCE(SUM(requests), 0) FROM usage_counters
         WHERE updated_at > NOW() - INTERVAL '24 hours'
-        "#
+        "#,
     )
     .fetch_one(pool)
     .await
@@ -387,7 +389,7 @@ pub async fn get_analytics(
         r#"
         SELECT COALESCE(SUM(requests), 0) FROM usage_counters
         WHERE updated_at > NOW() - INTERVAL '7 days'
-        "#
+        "#,
     )
     .fetch_one(pool)
     .await
@@ -506,7 +508,7 @@ pub struct FunnelStage {
     pub stage: String,
     pub count: i64,
     pub conversion_rate: f64, // Percentage of previous stage
-    pub drop_off: f64, // Percentage lost from previous stage
+    pub drop_off: f64,        // Percentage lost from previous stage
 }
 
 /// Get conversion funnel analysis (admin only)

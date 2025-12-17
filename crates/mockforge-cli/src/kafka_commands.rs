@@ -881,3 +881,65 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_kafka_commands_metrics_variant() {
+        let _cmd = KafkaCommands::Metrics {
+            format: "text".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_kafka_commands_serve_variant() {
+        let _cmd = KafkaCommands::Serve {
+            port: 9092,
+            host: "127.0.0.1".to_string(),
+            config: None,
+        };
+    }
+
+    #[test]
+    fn test_kafka_commands_produce_variant() {
+        let _cmd = KafkaCommands::Produce {
+            topic: "test-topic".to_string(),
+            key: Some("key1".to_string()),
+            value: "test message".to_string(),
+            partition: None,
+            header: vec![],
+        };
+    }
+
+    #[test]
+    fn test_kafka_commands_produce_with_partition() {
+        let _cmd = KafkaCommands::Produce {
+            topic: "test-topic".to_string(),
+            key: None,
+            value: "message".to_string(),
+            partition: Some(2),
+            header: vec!["header1:value1".to_string()],
+        };
+    }
+
+    #[test]
+    fn test_kafka_topic_create_variant() {
+        let _cmd = KafkaTopicCommands::Create {
+            name: "new-topic".to_string(),
+            partitions: 3,
+            replication_factor: 1,
+        };
+    }
+
+    #[test]
+    fn test_kafka_topic_list_variant() {
+        let _cmd = KafkaTopicCommands::List;
+    }
+
+    #[test]
+    fn test_kafka_groups_list_variant() {
+        let _cmd = KafkaGroupsCommands::List;
+    }
+}

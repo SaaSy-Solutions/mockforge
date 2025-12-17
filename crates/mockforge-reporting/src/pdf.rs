@@ -274,12 +274,8 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    #[test]
-    fn test_pdf_generation() {
-        let config = PdfConfig::default();
-        let generator = PdfReportGenerator::new(config);
-
-        let report = ExecutionReport {
+    fn create_test_report() -> ExecutionReport {
+        ExecutionReport {
             orchestration_name: "test-orch".to_string(),
             start_time: Utc::now(),
             end_time: Utc::now(),
@@ -299,7 +295,14 @@ mod tests {
             },
             failures: vec![],
             recommendations: vec!["Increase timeout thresholds".to_string()],
-        };
+        }
+    }
+
+    #[test]
+    fn test_pdf_generation() {
+        let config = PdfConfig::default();
+        let generator = PdfReportGenerator::new(config);
+        let report = create_test_report();
 
         let temp_dir = tempdir().unwrap();
         let output_path = temp_dir.path().join("report.pdf");
@@ -307,5 +310,238 @@ mod tests {
         let result = generator.generate(&report, output_path.to_str().unwrap());
         assert!(result.is_ok());
         assert!(output_path.exists());
+    }
+
+    #[test]
+    fn test_pdf_config_default() {
+        let config = PdfConfig::default();
+        assert_eq!(config.title, "Chaos Orchestration Report");
+        assert_eq!(config.author, "MockForge");
+        assert!(config.include_charts);
+        assert!(config.include_metrics);
+        assert!(config.include_recommendations);
+    }
+
+    #[test]
+    fn test_pdf_config_custom() {
+        let config = PdfConfig {
+            title: "Custom Report".to_string(),
+            author: "Test Author".to_string(),
+            include_charts: false,
+            include_metrics: true,
+            include_recommendations: false,
+        };
+
+        assert_eq!(config.title, "Custom Report");
+        assert_eq!(config.author, "Test Author");
+        assert!(!config.include_charts);
+        assert!(config.include_metrics);
+        assert!(!config.include_recommendations);
+    }
+
+    #[test]
+    fn test_pdf_config_clone() {
+        let config = PdfConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.title, cloned.title);
+        assert_eq!(config.author, cloned.author);
+    }
+
+    #[test]
+    fn test_pdf_config_serialize() {
+        let config = PdfConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("title"));
+        assert!(json.contains("author"));
+        assert!(json.contains("include_charts"));
+    }
+
+    #[test]
+    fn test_pdf_config_deserialize() {
+        let json = r#"{"title":"Test","author":"Author","include_charts":true,"include_metrics":false,"include_recommendations":true}"#;
+        let config: PdfConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.title, "Test");
+        assert_eq!(config.author, "Author");
+        assert!(config.include_charts);
+        assert!(!config.include_metrics);
+    }
+
+    #[test]
+    fn test_execution_report_clone() {
+        let report = create_test_report();
+        let cloned = report.clone();
+        assert_eq!(report.orchestration_name, cloned.orchestration_name);
+        assert_eq!(report.duration_seconds, cloned.duration_seconds);
+    }
+
+    #[test]
+    fn test_execution_report_serialize() {
+        let report = create_test_report();
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(json.contains("orchestration_name"));
+        assert!(json.contains("metrics"));
+        assert!(json.contains("status"));
+    }
+
+    #[test]
+    fn test_report_metrics_clone() {
+        let metrics = ReportMetrics {
+            total_requests: 1000,
+            successful_requests: 980,
+            failed_requests: 20,
+            avg_latency_ms: 100.0,
+            p95_latency_ms: 200.0,
+            p99_latency_ms: 300.0,
+            error_rate: 0.02,
+        };
+
+        let cloned = metrics.clone();
+        assert_eq!(metrics.total_requests, cloned.total_requests);
+        assert_eq!(metrics.error_rate, cloned.error_rate);
+    }
+
+    #[test]
+    fn test_report_metrics_serialize() {
+        let metrics = ReportMetrics {
+            total_requests: 1000,
+            successful_requests: 980,
+            failed_requests: 20,
+            avg_latency_ms: 100.0,
+            p95_latency_ms: 200.0,
+            p99_latency_ms: 300.0,
+            error_rate: 0.02,
+        };
+
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("total_requests"));
+        assert!(json.contains("error_rate"));
+    }
+
+    #[test]
+    fn test_failure_detail_clone() {
+        let failure = FailureDetail {
+            step_name: "auth-step".to_string(),
+            error_message: "Connection timeout".to_string(),
+            timestamp: Utc::now(),
+        };
+
+        let cloned = failure.clone();
+        assert_eq!(failure.step_name, cloned.step_name);
+        assert_eq!(failure.error_message, cloned.error_message);
+    }
+
+    #[test]
+    fn test_failure_detail_serialize() {
+        let failure = FailureDetail {
+            step_name: "auth-step".to_string(),
+            error_message: "Connection timeout".to_string(),
+            timestamp: Utc::now(),
+        };
+
+        let json = serde_json::to_string(&failure).unwrap();
+        assert!(json.contains("step_name"));
+        assert!(json.contains("error_message"));
+        assert!(json.contains("timestamp"));
+    }
+
+    #[test]
+    fn test_pdf_with_failures() {
+        let config = PdfConfig::default();
+        let generator = PdfReportGenerator::new(config);
+
+        let mut report = create_test_report();
+        report.failures = vec![
+            FailureDetail {
+                step_name: "auth-step".to_string(),
+                error_message: "Connection timeout".to_string(),
+                timestamp: Utc::now(),
+            },
+            FailureDetail {
+                step_name: "data-step".to_string(),
+                error_message: "Invalid response".to_string(),
+                timestamp: Utc::now(),
+            },
+        ];
+        report.failed_steps = 2;
+
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path().join("report_with_failures.pdf");
+
+        let result = generator.generate(&report, output_path.to_str().unwrap());
+        assert!(result.is_ok());
+        assert!(output_path.exists());
+    }
+
+    #[test]
+    fn test_pdf_without_metrics() {
+        let config = PdfConfig {
+            include_metrics: false,
+            ..PdfConfig::default()
+        };
+        let generator = PdfReportGenerator::new(config);
+        let report = create_test_report();
+
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path().join("report_no_metrics.pdf");
+
+        let result = generator.generate(&report, output_path.to_str().unwrap());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pdf_without_recommendations() {
+        let config = PdfConfig {
+            include_recommendations: false,
+            ..PdfConfig::default()
+        };
+        let generator = PdfReportGenerator::new(config);
+
+        let mut report = create_test_report();
+        report.recommendations = vec![];
+
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path().join("report_no_recs.pdf");
+
+        let result = generator.generate(&report, output_path.to_str().unwrap());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pdf_generator_invalid_path() {
+        let config = PdfConfig::default();
+        let generator = PdfReportGenerator::new(config);
+        let report = create_test_report();
+
+        let result = generator.generate(&report, "/nonexistent/path/report.pdf");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pdf_config_debug() {
+        let config = PdfConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("PdfConfig"));
+    }
+
+    #[test]
+    fn test_execution_report_debug() {
+        let report = create_test_report();
+        let debug = format!("{:?}", report);
+        assert!(debug.contains("ExecutionReport"));
+    }
+
+    #[test]
+    fn test_report_metrics_debug() {
+        let metrics = ReportMetrics {
+            total_requests: 1000,
+            successful_requests: 980,
+            failed_requests: 20,
+            avg_latency_ms: 100.0,
+            p95_latency_ms: 200.0,
+            p99_latency_ms: 300.0,
+            error_rate: 0.02,
+        };
+        let debug = format!("{:?}", metrics);
+        assert!(debug.contains("ReportMetrics"));
     }
 }

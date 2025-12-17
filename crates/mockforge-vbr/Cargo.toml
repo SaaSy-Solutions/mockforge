@@ -61,3 +61,4 @@ jwt = ["jsonwebtoken"]
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tempfile = "3"

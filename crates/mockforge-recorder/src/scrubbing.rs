@@ -669,6 +669,77 @@ impl CaptureFilter {
 mod tests {
     use super::*;
 
+    // ==================== ScrubConfig Tests ====================
+
+    #[test]
+    fn test_scrub_config_default() {
+        let config = ScrubConfig::default();
+        assert!(config.rules.is_empty());
+        assert!(!config.deterministic);
+        assert_eq!(config.counter_seed, 0);
+    }
+
+    #[test]
+    fn test_scrub_config_serialize() {
+        let config = ScrubConfig {
+            rules: vec![ScrubRule::Email {
+                replacement: "user@example.com".to_string(),
+            }],
+            deterministic: true,
+            counter_seed: 100,
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("email"));
+        assert!(json.contains("deterministic"));
+    }
+
+    // ==================== ScrubTarget Tests ====================
+
+    #[test]
+    fn test_scrub_target_equality() {
+        assert_eq!(ScrubTarget::All, ScrubTarget::All);
+        assert_ne!(ScrubTarget::Headers, ScrubTarget::Body);
+    }
+
+    #[test]
+    fn test_scrub_target_default() {
+        assert_eq!(default_target(), ScrubTarget::All);
+    }
+
+    // ==================== ScrubRule Tests ====================
+
+    #[test]
+    fn test_scrub_rule_regex_serialize() {
+        let rule = ScrubRule::Regex {
+            pattern: r"\d+".to_string(),
+            replacement: "XXX".to_string(),
+            target: ScrubTarget::Body,
+        };
+        let json = serde_json::to_string(&rule).unwrap();
+        assert!(json.contains("regex"));
+        assert!(json.contains("\\\\d+"));
+    }
+
+    #[test]
+    fn test_scrub_rule_header_serialize() {
+        let rule = ScrubRule::Header {
+            name: "Authorization".to_string(),
+            replacement: "Bearer ***".to_string(),
+        };
+        let json = serde_json::to_string(&rule).unwrap();
+        assert!(json.contains("header"));
+        assert!(json.contains("Authorization"));
+    }
+
+    // ==================== Scrubber Tests ====================
+
+    #[test]
+    fn test_scrubber_default() {
+        let scrubber = Scrubber::default();
+        assert!(scrubber.config.rules.is_empty());
+        assert!(scrubber.compiled_regexes.is_empty());
+    }
+
     #[test]
     fn test_scrub_email() {
         let config = ScrubConfig {
@@ -688,6 +759,23 @@ mod tests {
     }
 
     #[test]
+    fn test_scrub_multiple_emails() {
+        let config = ScrubConfig {
+            rules: vec![ScrubRule::Email {
+                replacement: "redacted@example.com".to_string(),
+            }],
+            deterministic: false,
+            counter_seed: 0,
+        };
+
+        let scrubber = Scrubber::new(config).unwrap();
+        let input = "Contact: john@test.com and jane@test.org";
+        let result = scrubber.scrub_string(input, ScrubTarget::All);
+
+        assert_eq!(result.matches("redacted@example.com").count(), 2);
+    }
+
+    #[test]
     fn test_scrub_uuid() {
         let config = ScrubConfig {
             rules: vec![ScrubRule::Uuid {
@@ -703,6 +791,63 @@ mod tests {
 
         assert!(result.contains("00000000-0000-0000-0000-000000000000"));
         assert!(!result.contains("123e4567-e89b-12d3-a456-426614174000"));
+    }
+
+    #[test]
+    fn test_scrub_uuid_counter_increments() {
+        let config = ScrubConfig {
+            rules: vec![ScrubRule::Uuid {
+                replacement: "00000000-0000-0000-0000-{{counter:012}}".to_string(),
+            }],
+            deterministic: false,
+            counter_seed: 0,
+        };
+
+        let scrubber = Scrubber::new(config).unwrap();
+        let input1 = "ID: 123e4567-e89b-12d3-a456-426614174000";
+        let input2 = "ID: abc12345-e89b-12d3-a456-426614174000";
+
+        let result1 = scrubber.scrub_string(input1, ScrubTarget::All);
+        let result2 = scrubber.scrub_string(input2, ScrubTarget::All);
+
+        assert!(result1.contains("000000000000"));
+        assert!(result2.contains("000000000001"));
+    }
+
+    #[test]
+    fn test_scrub_ip_address() {
+        let config = ScrubConfig {
+            rules: vec![ScrubRule::IpAddress {
+                replacement: "127.0.0.1".to_string(),
+            }],
+            deterministic: false,
+            counter_seed: 0,
+        };
+
+        let scrubber = Scrubber::new(config).unwrap();
+        let input = "Client IP: 192.168.1.100";
+        let result = scrubber.scrub_string(input, ScrubTarget::All);
+
+        assert!(result.contains("127.0.0.1"));
+        assert!(!result.contains("192.168.1.100"));
+    }
+
+    #[test]
+    fn test_scrub_credit_card() {
+        let config = ScrubConfig {
+            rules: vec![ScrubRule::CreditCard {
+                replacement: "XXXX-XXXX-XXXX-XXXX".to_string(),
+            }],
+            deterministic: false,
+            counter_seed: 0,
+        };
+
+        let scrubber = Scrubber::new(config).unwrap();
+        let input = "Card: 1234-5678-9012-3456";
+        let result = scrubber.scrub_string(input, ScrubTarget::All);
+
+        assert!(result.contains("XXXX-XXXX-XXXX-XXXX"));
+        assert!(!result.contains("1234-5678-9012-3456"));
     }
 
     #[test]
@@ -726,6 +871,126 @@ mod tests {
     }
 
     #[test]
+    fn test_scrub_json_field_top_level() {
+        let config = ScrubConfig {
+            rules: vec![ScrubRule::Field {
+                field: "email".to_string(),
+                replacement: "redacted".to_string(),
+                target: ScrubTarget::Body,
+            }],
+            deterministic: false,
+            counter_seed: 0,
+        };
+
+        let scrubber = Scrubber::new(config).unwrap();
+        let input = r#"{"email": "secret@test.com"}"#;
+        let result = scrubber.scrub_string(input, ScrubTarget::Body);
+
+        assert!(result.contains("redacted"));
+    }
+
+    #[test]
+    fn test_scrub_regex_pattern() {
+        let config = ScrubConfig {
+            rules: vec![ScrubRule::Regex {
+                pattern: r"secret-\w+".to_string(),
+                replacement: "secret-REDACTED".to_string(),
+                target: ScrubTarget::All,
+            }],
+            deterministic: false,
+            counter_seed: 0,
+        };
+
+        let scrubber = Scrubber::new(config).unwrap();
+        let input = "Token: secret-abc123";
+        let result = scrubber.scrub_string(input, ScrubTarget::All);
+
+        assert!(result.contains("secret-REDACTED"));
+        assert!(!result.contains("secret-abc123"));
+    }
+
+    #[test]
+    fn test_scrub_regex_invalid_pattern() {
+        let config = ScrubConfig {
+            rules: vec![ScrubRule::Regex {
+                pattern: r"[invalid".to_string(),
+                replacement: "x".to_string(),
+                target: ScrubTarget::All,
+            }],
+            deterministic: false,
+            counter_seed: 0,
+        };
+
+        let result = Scrubber::new(config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_scrub_target_body_only() {
+        let config = ScrubConfig {
+            rules: vec![ScrubRule::Regex {
+                pattern: r"test".to_string(),
+                replacement: "REDACTED".to_string(),
+                target: ScrubTarget::Body,
+            }],
+            deterministic: false,
+            counter_seed: 0,
+        };
+
+        let scrubber = Scrubber::new(config).unwrap();
+        let result_body = scrubber.scrub_string("test data", ScrubTarget::Body);
+        let result_headers = scrubber.scrub_string("test data", ScrubTarget::Headers);
+
+        assert_eq!(result_body, "REDACTED data");
+        assert_eq!(result_headers, "test data"); // Should not be scrubbed
+    }
+
+    #[test]
+    fn test_scrub_multiple_rules() {
+        let config = ScrubConfig {
+            rules: vec![
+                ScrubRule::Email {
+                    replacement: "user@example.com".to_string(),
+                },
+                ScrubRule::IpAddress {
+                    replacement: "0.0.0.0".to_string(),
+                },
+            ],
+            deterministic: false,
+            counter_seed: 0,
+        };
+
+        let scrubber = Scrubber::new(config).unwrap();
+        let input = "Email: john@test.com, IP: 192.168.1.1";
+        let result = scrubber.scrub_string(input, ScrubTarget::All);
+
+        assert!(result.contains("user@example.com"));
+        assert!(result.contains("0.0.0.0"));
+    }
+
+    // ==================== CaptureFilterConfig Tests ====================
+
+    #[test]
+    fn test_capture_filter_config_default() {
+        let config = CaptureFilterConfig::default();
+        assert!(config.status_codes.is_empty());
+        assert!(config.path_patterns.is_empty());
+        assert!(config.methods.is_empty());
+        assert!(config.exclude_paths.is_empty());
+        assert!(!config.errors_only);
+        assert_eq!(config.sample_rate, 1.0);
+    }
+
+    // ==================== CaptureFilter Tests ====================
+
+    #[test]
+    fn test_capture_filter_default() {
+        let filter = CaptureFilter::default();
+        // Default should capture everything
+        assert!(filter.should_capture("GET", "/api/test", Some(200)));
+    }
+
+    #[test]
     fn test_capture_filter_status_code() {
         let config = CaptureFilterConfig {
             status_codes: vec![500, 502, 503],
@@ -738,6 +1003,18 @@ mod tests {
         assert!(filter.should_capture("POST", "/api/test", Some(502)));
         assert!(!filter.should_capture("GET", "/api/test", Some(200)));
         assert!(!filter.should_capture("GET", "/api/test", Some(404)));
+    }
+
+    #[test]
+    fn test_capture_filter_status_code_without_status() {
+        let config = CaptureFilterConfig {
+            status_codes: vec![500],
+            ..Default::default()
+        };
+
+        let filter = CaptureFilter::new(config).unwrap();
+        // Should allow when no status provided (filter later)
+        assert!(filter.should_capture("GET", "/api/test", None));
     }
 
     #[test]
@@ -771,6 +1048,20 @@ mod tests {
     }
 
     #[test]
+    fn test_capture_filter_multiple_path_patterns() {
+        let config = CaptureFilterConfig {
+            path_patterns: vec![r"^/api/v1/.*".to_string(), r"^/internal/.*".to_string()],
+            ..Default::default()
+        };
+
+        let filter = CaptureFilter::new(config).unwrap();
+
+        assert!(filter.should_capture("GET", "/api/v1/users", None));
+        assert!(filter.should_capture("GET", "/internal/admin", None));
+        assert!(!filter.should_capture("GET", "/public/docs", None));
+    }
+
+    #[test]
     fn test_capture_filter_exclude() {
         let config = CaptureFilterConfig {
             exclude_paths: vec![r"/health".to_string(), r"/metrics".to_string()],
@@ -782,5 +1073,106 @@ mod tests {
         assert!(filter.should_capture("GET", "/api/users", None));
         assert!(!filter.should_capture("GET", "/health", None));
         assert!(!filter.should_capture("GET", "/metrics", None));
+    }
+
+    #[test]
+    fn test_capture_filter_methods() {
+        let config = CaptureFilterConfig {
+            methods: vec!["POST".to_string(), "PUT".to_string()],
+            ..Default::default()
+        };
+
+        let filter = CaptureFilter::new(config).unwrap();
+
+        assert!(filter.should_capture("POST", "/api/users", None));
+        assert!(filter.should_capture("PUT", "/api/users/1", None));
+        assert!(!filter.should_capture("GET", "/api/users", None));
+        assert!(!filter.should_capture("DELETE", "/api/users/1", None));
+    }
+
+    #[test]
+    fn test_capture_filter_methods_case_insensitive() {
+        let config = CaptureFilterConfig {
+            methods: vec!["POST".to_string()],
+            ..Default::default()
+        };
+
+        let filter = CaptureFilter::new(config).unwrap();
+
+        assert!(filter.should_capture("POST", "/api/users", None));
+        assert!(filter.should_capture("post", "/api/users", None));
+        assert!(filter.should_capture("Post", "/api/users", None));
+    }
+
+    #[test]
+    fn test_capture_filter_invalid_path_pattern() {
+        let config = CaptureFilterConfig {
+            path_patterns: vec![r"[invalid".to_string()],
+            ..Default::default()
+        };
+
+        let result = CaptureFilter::new(config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_capture_filter_invalid_exclude_pattern() {
+        let config = CaptureFilterConfig {
+            exclude_paths: vec![r"[invalid".to_string()],
+            ..Default::default()
+        };
+
+        let result = CaptureFilter::new(config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_capture_filter_combined_filters() {
+        let config = CaptureFilterConfig {
+            path_patterns: vec![r"^/api/.*".to_string()],
+            methods: vec!["POST".to_string()],
+            errors_only: true,
+            ..Default::default()
+        };
+
+        let filter = CaptureFilter::new(config).unwrap();
+
+        // Must match all conditions
+        assert!(filter.should_capture("POST", "/api/users", Some(500)));
+        assert!(!filter.should_capture("GET", "/api/users", Some(500))); // Wrong method
+        assert!(!filter.should_capture("POST", "/other/path", Some(500))); // Wrong path
+        assert!(!filter.should_capture("POST", "/api/users", Some(200))); // Not an error
+    }
+
+    // ==================== Default Value Function Tests ====================
+
+    #[test]
+    fn test_default_uuid_replacement() {
+        let replacement = default_uuid_replacement();
+        assert!(replacement.contains("{{counter:012}}"));
+    }
+
+    #[test]
+    fn test_default_email_replacement() {
+        let replacement = default_email_replacement();
+        assert_eq!(replacement, "user@example.com");
+    }
+
+    #[test]
+    fn test_default_ip_replacement() {
+        let replacement = default_ip_replacement();
+        assert_eq!(replacement, "127.0.0.1");
+    }
+
+    #[test]
+    fn test_default_creditcard_replacement() {
+        let replacement = default_creditcard_replacement();
+        assert_eq!(replacement, "XXXX-XXXX-XXXX-XXXX");
+    }
+
+    #[test]
+    fn test_default_sample_rate() {
+        let rate = default_sample_rate();
+        assert_eq!(rate, 1.0);
     }
 }

@@ -69,10 +69,11 @@ impl TemplateReview {
 
     /// Count reviews for a template
     pub async fn count_by_template(pool: &sqlx::PgPool, template_id: Uuid) -> sqlx::Result<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM template_reviews WHERE template_id = $1")
-            .bind(template_id)
-            .fetch_one(pool)
-            .await?;
+        let (count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM template_reviews WHERE template_id = $1")
+                .bind(template_id)
+                .fetch_one(pool)
+                .await?;
         Ok(count)
     }
 

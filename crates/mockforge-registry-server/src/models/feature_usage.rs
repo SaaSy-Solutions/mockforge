@@ -136,10 +136,7 @@ impl FeatureUsage {
     }
 
     /// Clean up old feature usage events (older than N days)
-    pub async fn cleanup_old(
-        pool: &sqlx::PgPool,
-        days: i64,
-    ) -> sqlx::Result<u64> {
+    pub async fn cleanup_old(pool: &sqlx::PgPool, days: i64) -> sqlx::Result<u64> {
         let cutoff = Utc::now() - chrono::Duration::days(days);
         let result = sqlx::query("DELETE FROM feature_usage WHERE created_at < $1")
             .bind(cutoff)

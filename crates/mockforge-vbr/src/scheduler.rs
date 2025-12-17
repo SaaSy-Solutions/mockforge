@@ -93,3 +93,46 @@ impl Scheduler {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scheduler_new() {
+        let scheduler = Scheduler::new(60);
+        assert_eq!(scheduler.cleanup_interval, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_scheduler_new_short_interval() {
+        let scheduler = Scheduler::new(1);
+        assert_eq!(scheduler.cleanup_interval, Duration::from_secs(1));
+    }
+
+    #[test]
+    fn test_scheduler_new_long_interval() {
+        let scheduler = Scheduler::new(3600);
+        assert_eq!(scheduler.cleanup_interval, Duration::from_secs(3600));
+    }
+
+    #[test]
+    fn test_scheduler_new_zero_interval() {
+        // Zero is valid, though not recommended
+        let scheduler = Scheduler::new(0);
+        assert_eq!(scheduler.cleanup_interval, Duration::from_secs(0));
+    }
+
+    #[test]
+    fn test_cleanup_interval_field() {
+        let scheduler = Scheduler::new(120);
+        // Check that the interval is correctly stored
+        assert_eq!(scheduler.cleanup_interval.as_secs(), 120);
+    }
+
+    #[test]
+    fn test_scheduler_interval_milliseconds() {
+        let scheduler = Scheduler::new(5);
+        assert_eq!(scheduler.cleanup_interval.as_millis(), 5000);
+    }
+}

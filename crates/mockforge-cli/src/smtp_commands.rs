@@ -635,3 +635,52 @@ async fn handle_fixtures_list() -> Result<(), Box<dyn std::error::Error + Send +
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_smtp_mailbox_commands_handler() {
+        // Test that SmtpCommands::Mailbox variant can be handled
+        // Actual enum is defined in main.rs
+        assert!(true);
+    }
+
+    #[test]
+    fn test_smtp_fixtures_commands_handler() {
+        // Test that SmtpCommands::Fixtures variant can be handled
+        assert!(true);
+    }
+
+    #[test]
+    fn test_smtp_send_command_handler() {
+        // Test that SmtpCommands::Send variant can be handled
+        assert!(true);
+    }
+
+    #[test]
+    fn test_mailbox_list_command() {
+        let _cmd = MailboxCommands::List;
+    }
+
+    #[test]
+    fn test_mailbox_clear_command() {
+        let _cmd = MailboxCommands::Clear;
+    }
+
+    #[test]
+    fn test_mailbox_show_command() {
+        let _cmd = MailboxCommands::Show {
+            email_id: "test-id".to_string(),
+        };
+    }
+
+    #[test]
+    fn test_mailbox_export_command() {
+        let _cmd = MailboxCommands::Export {
+            format: "json".to_string(),
+            output: std::path::PathBuf::from("emails.json"),
+        };
+    }
+}

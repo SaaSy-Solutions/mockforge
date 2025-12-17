@@ -36,8 +36,7 @@ impl MultitenantRouter {
         body: axum::body::Body,
     ) -> Result<Response, StatusCode> {
         // Parse org_id
-        let org_id = Uuid::parse_str(&org_id_str)
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        let org_id = Uuid::parse_str(&org_id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
 
         // Find deployment
         let deployment = HostedMock::find_by_slug(state.db.pool(), org_id, &slug)
@@ -51,15 +50,12 @@ impl MultitenantRouter {
         }
 
         // Get deployment URL
-        let base_url = deployment.deployment_url
-            .as_ref()
-            .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+        let base_url = deployment.deployment_url.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
         // Extract path from URI
         let path = uri.path();
-        let path_after_slug = path
-            .strip_prefix(&format!("/{}/{}", org_id_str, slug))
-            .unwrap_or("/");
+        let path_after_slug =
+            path.strip_prefix(&format!("/{}/{}", org_id_str, slug)).unwrap_or("/");
 
         // Build target URL
         let mut target_url = format!("{}{}", base_url, path_after_slug);
@@ -122,10 +118,7 @@ impl MultitenantRouter {
             }
         }
 
-        let response = request
-            .send()
-            .await
-            .map_err(|_| StatusCode::BAD_GATEWAY)?;
+        let response = request.send().await.map_err(|_| StatusCode::BAD_GATEWAY)?;
 
         // Convert response - save status and headers before consuming body
         let status = StatusCode::from_u16(response.status().as_u16())
@@ -134,17 +127,16 @@ impl MultitenantRouter {
         // Collect headers before consuming response
         let mut response_headers = Vec::new();
         for (key, value) in response.headers() {
-            if let (Ok(header_name), Ok(value_str)) = (key.as_str().parse::<axum::http::HeaderName>(), value.to_str()) {
+            if let (Ok(header_name), Ok(value_str)) =
+                (key.as_str().parse::<axum::http::HeaderName>(), value.to_str())
+            {
                 if let Ok(header_value) = axum::http::HeaderValue::from_str(value_str) {
                     response_headers.push((header_name, header_value));
                 }
             }
         }
 
-        let body_bytes = response
-            .bytes()
-            .await
-            .map_err(|_| StatusCode::BAD_GATEWAY)?;
+        let body_bytes = response.bytes().await.map_err(|_| StatusCode::BAD_GATEWAY)?;
 
         // Build response with headers
         let mut response_builder = Response::builder().status(status);

@@ -818,3 +818,600 @@ impl PromotionServiceTrait for PromotionService {
             .map_err(|e| mockforge_core::Error::generic(format!("Promotion failed: {e}")))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockforge_core::pr_generation::PRProvider;
+    use mockforge_core::workspace::mock_environment::MockEnvironmentName;
+    use mockforge_core::workspace::scenario_promotion::{
+        PromotionEntityType, PromotionRequest, PromotionStatus,
+    };
+    use sqlx::SqlitePool;
+
+    async fn setup_test_db() -> Pool<Sqlite> {
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
+
+        // Create tables
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS promotion_history (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                entity_version TEXT,
+                from_environment TEXT NOT NULL,
+                to_environment TEXT NOT NULL,
+                promoted_by TEXT NOT NULL,
+                approved_by TEXT,
+                status TEXT NOT NULL,
+                comments TEXT,
+                pr_url TEXT,
+                metadata TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        pool
+    }
+
+    #[test]
+    fn test_promotion_gitops_config_new() {
+        let config = PromotionGitOpsConfig::new(
+            true,
+            PRProvider::GitHub,
+            "owner".to_string(),
+            "repo".to_string(),
+            Some("token".to_string()),
+            "main".to_string(),
+            Some("config.yaml".to_string()),
+        );
+
+        assert!(config.enabled);
+        assert!(config.pr_generator.is_some());
+        assert_eq!(config.config_path, Some("config.yaml".to_string()));
+    }
+
+    #[test]
+    fn test_promotion_gitops_config_new_without_token() {
+        let config = PromotionGitOpsConfig::new(
+            true,
+            PRProvider::GitHub,
+            "owner".to_string(),
+            "repo".to_string(),
+            None,
+            "main".to_string(),
+            None,
+        );
+
+        assert!(config.enabled);
+        assert!(config.pr_generator.is_none());
+        assert_eq!(config.config_path, None);
+    }
+
+    #[test]
+    fn test_promotion_gitops_config_disabled() {
+        let config = PromotionGitOpsConfig::disabled();
+
+        assert!(!config.enabled);
+        assert!(config.pr_generator.is_none());
+        assert_eq!(config.config_path, None);
+    }
+
+    #[test]
+    fn test_promotion_gitops_config_gitlab() {
+        let config = PromotionGitOpsConfig::new(
+            true,
+            PRProvider::GitLab,
+            "owner".to_string(),
+            "repo".to_string(),
+            Some("token".to_string()),
+            "main".to_string(),
+            None,
+        );
+
+        assert!(config.enabled);
+        assert!(config.pr_generator.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_promotion_service_new() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        // Verify service is created with disabled gitops
+        assert!(!service.gitops.enabled);
+    }
+
+    #[tokio::test]
+    async fn test_promotion_service_with_gitops() {
+        let pool = setup_test_db().await;
+        let gitops = PromotionGitOpsConfig::disabled();
+        let service = PromotionService::with_gitops(pool, gitops);
+
+        assert!(!service.gitops.enabled);
+    }
+
+    #[tokio::test]
+    async fn test_run_migrations() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let result = service.run_migrations().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_record_promotion_success() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let request = PromotionRequest {
+            entity_type: PromotionEntityType::Scenario,
+            entity_id: "test-scenario".to_string(),
+            entity_version: Some("v1".to_string()),
+            workspace_id: Uuid::new_v4().to_string(),
+            from_environment: MockEnvironmentName::Dev,
+            to_environment: MockEnvironmentName::Test,
+            requires_approval: false,
+            approval_required_reason: None,
+            comments: Some("Test promotion".to_string()),
+            metadata: std::collections::HashMap::new(),
+        };
+
+        let user_id = Uuid::new_v4();
+        let result = service
+            .record_promotion(&request, user_id, PromotionStatus::Pending, None)
+            .await;
+
+        assert!(result.is_ok());
+        let promotion_id = result.unwrap();
+
+        // Verify the promotion was recorded
+        let promotion = service.get_promotion_by_id(promotion_id).await.unwrap();
+        assert!(promotion.is_some());
+        let promotion = promotion.unwrap();
+        assert_eq!(promotion.entity_id, "test-scenario");
+        assert_eq!(promotion.status, PromotionStatus::Pending);
+    }
+
+    #[tokio::test]
+    async fn test_record_promotion_with_metadata() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("key1".to_string(), serde_json::Value::String("value1".to_string()));
+        metadata.insert("key2".to_string(), serde_json::Value::String("value2".to_string()));
+
+        let request = PromotionRequest {
+            entity_type: PromotionEntityType::Persona,
+            entity_id: "test-persona".to_string(),
+            entity_version: None,
+            workspace_id: Uuid::new_v4().to_string(),
+            from_environment: MockEnvironmentName::Test,
+            to_environment: MockEnvironmentName::Prod,
+            requires_approval: true,
+            approval_required_reason: Some("Production deployment".to_string()),
+            comments: None,
+            metadata,
+        };
+
+        let user_id = Uuid::new_v4();
+        let result = service
+            .record_promotion(&request, user_id, PromotionStatus::Pending, None)
+            .await;
+
+        assert!(result.is_ok());
+        let promotion_id = result.unwrap();
+
+        // Verify metadata was stored
+        let promotion = service.get_promotion_by_id(promotion_id).await.unwrap();
+        assert!(promotion.is_some());
+        let promotion = promotion.unwrap();
+        assert_eq!(promotion.metadata.len(), 2);
+        assert_eq!(promotion.metadata.get("key1").unwrap(), "value1");
+    }
+
+    #[tokio::test]
+    async fn test_update_promotion_status() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let request = PromotionRequest {
+            entity_type: PromotionEntityType::Config,
+            entity_id: "test-config".to_string(),
+            entity_version: None,
+            workspace_id: Uuid::new_v4().to_string(),
+            from_environment: MockEnvironmentName::Dev,
+            to_environment: MockEnvironmentName::Test,
+            requires_approval: true,
+            approval_required_reason: None,
+            comments: None,
+            metadata: std::collections::HashMap::new(),
+        };
+
+        let user_id = Uuid::new_v4();
+        let promotion_id = service
+            .record_promotion(&request, user_id, PromotionStatus::Pending, None)
+            .await
+            .unwrap();
+
+        // Update status
+        let approver_id = Uuid::new_v4();
+        let result = service
+            .update_promotion_status(promotion_id, PromotionStatus::Approved, Some(approver_id))
+            .await;
+
+        assert!(result.is_ok());
+
+        // Verify update
+        let promotion = service.get_promotion_by_id(promotion_id).await.unwrap();
+        assert!(promotion.is_some());
+        let promotion = promotion.unwrap();
+        assert_eq!(promotion.status, PromotionStatus::Approved);
+        assert_eq!(promotion.approved_by, Some(approver_id.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_update_promotion_pr_url() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let request = PromotionRequest {
+            entity_type: PromotionEntityType::Scenario,
+            entity_id: "test-scenario".to_string(),
+            entity_version: None,
+            workspace_id: Uuid::new_v4().to_string(),
+            from_environment: MockEnvironmentName::Dev,
+            to_environment: MockEnvironmentName::Test,
+            requires_approval: false,
+            approval_required_reason: None,
+            comments: None,
+            metadata: std::collections::HashMap::new(),
+        };
+
+        let user_id = Uuid::new_v4();
+        let promotion_id = service
+            .record_promotion(&request, user_id, PromotionStatus::Pending, None)
+            .await
+            .unwrap();
+
+        // Update PR URL
+        let pr_url = "https://github.com/owner/repo/pull/123".to_string();
+        let result = service.update_promotion_pr_url(promotion_id, pr_url.clone()).await;
+
+        assert!(result.is_ok());
+
+        // Verify update
+        let promotion = service.get_promotion_by_id(promotion_id).await.unwrap();
+        assert!(promotion.is_some());
+        let promotion = promotion.unwrap();
+        assert_eq!(promotion.pr_url, Some(pr_url));
+    }
+
+    #[tokio::test]
+    async fn test_get_promotion_by_id_not_found() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let result = service.get_promotion_by_id(Uuid::new_v4()).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_promotion_history() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let workspace_id = Uuid::new_v4();
+        let entity_id = "test-scenario";
+
+        // Create multiple promotions for the same entity
+        for i in 0..3 {
+            let request = PromotionRequest {
+                entity_type: PromotionEntityType::Scenario,
+                entity_id: entity_id.to_string(),
+                entity_version: Some(format!("v{}", i)),
+                workspace_id: workspace_id.to_string(),
+                from_environment: MockEnvironmentName::Dev,
+                to_environment: MockEnvironmentName::Test,
+                requires_approval: false,
+                approval_required_reason: None,
+                comments: Some(format!("Promotion {}", i)),
+                metadata: std::collections::HashMap::new(),
+            };
+
+            let user_id = Uuid::new_v4();
+            service
+                .record_promotion(&request, user_id, PromotionStatus::Completed, None)
+                .await
+                .unwrap();
+        }
+
+        // Get history
+        let history = service
+            .get_promotion_history(
+                &workspace_id.to_string(),
+                PromotionEntityType::Scenario,
+                entity_id,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(history.promotions.len(), 3);
+        assert_eq!(history.entity_id, entity_id);
+        assert_eq!(history.workspace_id, workspace_id.to_string());
+    }
+
+    #[tokio::test]
+    async fn test_get_workspace_promotions() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let workspace_id = Uuid::new_v4();
+
+        // Create promotions for different entities
+        for entity_type in &[
+            PromotionEntityType::Scenario,
+            PromotionEntityType::Persona,
+            PromotionEntityType::Config,
+        ] {
+            let request = PromotionRequest {
+                entity_type: *entity_type,
+                entity_id: format!("test-{}", entity_type),
+                entity_version: None,
+                workspace_id: workspace_id.to_string(),
+                from_environment: MockEnvironmentName::Dev,
+                to_environment: MockEnvironmentName::Test,
+                requires_approval: false,
+                approval_required_reason: None,
+                comments: None,
+                metadata: std::collections::HashMap::new(),
+            };
+
+            let user_id = Uuid::new_v4();
+            service
+                .record_promotion(&request, user_id, PromotionStatus::Completed, None)
+                .await
+                .unwrap();
+        }
+
+        // Get all workspace promotions
+        let promotions =
+            service.get_workspace_promotions(&workspace_id.to_string(), None).await.unwrap();
+
+        assert_eq!(promotions.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_get_workspace_promotions_with_limit() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let workspace_id = Uuid::new_v4();
+
+        // Create 5 promotions
+        for i in 0..5 {
+            let request = PromotionRequest {
+                entity_type: PromotionEntityType::Scenario,
+                entity_id: format!("test-{}", i),
+                entity_version: None,
+                workspace_id: workspace_id.to_string(),
+                from_environment: MockEnvironmentName::Dev,
+                to_environment: MockEnvironmentName::Test,
+                requires_approval: false,
+                approval_required_reason: None,
+                comments: None,
+                metadata: std::collections::HashMap::new(),
+            };
+
+            let user_id = Uuid::new_v4();
+            service
+                .record_promotion(&request, user_id, PromotionStatus::Completed, None)
+                .await
+                .unwrap();
+        }
+
+        // Get with limit
+        let promotions = service
+            .get_workspace_promotions(&workspace_id.to_string(), Some(3))
+            .await
+            .unwrap();
+
+        assert_eq!(promotions.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_get_pending_promotions() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let workspace_id = Uuid::new_v4();
+
+        // Create promotions with different statuses
+        for (i, status) in [
+            PromotionStatus::Pending,
+            PromotionStatus::Approved,
+            PromotionStatus::Pending,
+            PromotionStatus::Completed,
+        ]
+        .iter()
+        .enumerate()
+        {
+            let request = PromotionRequest {
+                entity_type: PromotionEntityType::Scenario,
+                entity_id: format!("test-{}", i),
+                entity_version: None,
+                workspace_id: workspace_id.to_string(),
+                from_environment: MockEnvironmentName::Dev,
+                to_environment: MockEnvironmentName::Test,
+                requires_approval: true,
+                approval_required_reason: None,
+                comments: None,
+                metadata: std::collections::HashMap::new(),
+            };
+
+            let user_id = Uuid::new_v4();
+            service.record_promotion(&request, user_id, *status, None).await.unwrap();
+        }
+
+        // Get pending promotions
+        let pending =
+            service.get_pending_promotions(Some(&workspace_id.to_string())).await.unwrap();
+
+        assert_eq!(pending.len(), 2);
+        for promotion in &pending {
+            assert_eq!(promotion.status, PromotionStatus::Pending);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_pending_promotions_all_workspaces() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        // Create promotions in different workspaces
+        for _ in 0..3 {
+            let workspace_id = Uuid::new_v4();
+            let request = PromotionRequest {
+                entity_type: PromotionEntityType::Scenario,
+                entity_id: "test-scenario".to_string(),
+                entity_version: None,
+                workspace_id: workspace_id.to_string(),
+                from_environment: MockEnvironmentName::Dev,
+                to_environment: MockEnvironmentName::Test,
+                requires_approval: true,
+                approval_required_reason: None,
+                comments: None,
+                metadata: std::collections::HashMap::new(),
+            };
+
+            let user_id = Uuid::new_v4();
+            service
+                .record_promotion(&request, user_id, PromotionStatus::Pending, None)
+                .await
+                .unwrap();
+        }
+
+        // Get all pending promotions
+        let pending = service.get_pending_promotions(None).await.unwrap();
+
+        assert_eq!(pending.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_promotion_service_trait_promote_entity() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let workspace_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+
+        let result = service
+            .promote_entity(
+                workspace_id,
+                PromotionEntityType::Scenario,
+                "test-scenario".to_string(),
+                Some("v1".to_string()),
+                MockEnvironmentName::Dev,
+                MockEnvironmentName::Test,
+                user_id,
+                Some("Auto promotion".to_string()),
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let promotion_id = result.unwrap();
+
+        // Verify the promotion was created with Completed status
+        let promotion = service.get_promotion_by_id(promotion_id).await.unwrap();
+        assert!(promotion.is_some());
+        let promotion = promotion.unwrap();
+        assert_eq!(promotion.status, PromotionStatus::Completed);
+        assert_eq!(promotion.entity_id, "test-scenario");
+    }
+
+    #[tokio::test]
+    async fn test_all_promotion_statuses() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let statuses = vec![
+            PromotionStatus::Pending,
+            PromotionStatus::Approved,
+            PromotionStatus::Rejected,
+            PromotionStatus::Completed,
+            PromotionStatus::Failed,
+        ];
+
+        for status in statuses {
+            let request = PromotionRequest {
+                entity_type: PromotionEntityType::Scenario,
+                entity_id: format!("test-{}", status),
+                entity_version: None,
+                workspace_id: Uuid::new_v4().to_string(),
+                from_environment: MockEnvironmentName::Dev,
+                to_environment: MockEnvironmentName::Test,
+                requires_approval: false,
+                approval_required_reason: None,
+                comments: None,
+                metadata: std::collections::HashMap::new(),
+            };
+
+            let user_id = Uuid::new_v4();
+            let promotion_id =
+                service.record_promotion(&request, user_id, status, None).await.unwrap();
+
+            // Verify status was stored correctly
+            let promotion = service.get_promotion_by_id(promotion_id).await.unwrap();
+            assert!(promotion.is_some());
+            assert_eq!(promotion.unwrap().status, status);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_all_entity_types() {
+        let pool = setup_test_db().await;
+        let service = PromotionService::new(pool);
+
+        let entity_types = vec![
+            PromotionEntityType::Scenario,
+            PromotionEntityType::Persona,
+            PromotionEntityType::Config,
+        ];
+
+        for entity_type in entity_types {
+            let request = PromotionRequest {
+                entity_type,
+                entity_id: format!("test-{}", entity_type),
+                entity_version: None,
+                workspace_id: Uuid::new_v4().to_string(),
+                from_environment: MockEnvironmentName::Dev,
+                to_environment: MockEnvironmentName::Test,
+                requires_approval: false,
+                approval_required_reason: None,
+                comments: None,
+                metadata: std::collections::HashMap::new(),
+            };
+
+            let user_id = Uuid::new_v4();
+            let promotion_id = service
+                .record_promotion(&request, user_id, PromotionStatus::Completed, None)
+                .await
+                .unwrap();
+
+            // Verify entity type was stored correctly
+            let promotion = service.get_promotion_by_id(promotion_id).await.unwrap();
+            assert!(promotion.is_some());
+            assert_eq!(promotion.unwrap().entity_type, entity_type);
+        }
+    }
+}

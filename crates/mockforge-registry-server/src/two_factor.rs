@@ -4,7 +4,7 @@
 //! for two-factor authentication
 
 use anyhow::{anyhow, Result};
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use data_encoding::BASE32;
 use qrcode::QrCode;
 use sha1::Sha1;
@@ -29,7 +29,8 @@ pub fn generate_secret() -> String {
 /// # Returns
 /// 6-digit TOTP code as a string
 pub fn generate_totp_code(secret: &str, timestamp: Option<u64>) -> Result<String> {
-    let secret_bytes = BASE32.decode(secret.as_bytes())
+    let secret_bytes = BASE32
+        .decode(secret.as_bytes())
         .map_err(|e| anyhow!("Invalid base32 secret: {}", e))?;
 
     let time = timestamp.unwrap_or_else(|| {
@@ -93,31 +94,25 @@ pub fn verify_totp_code(secret: &str, code: &str, window: Option<u64>) -> Result
 ///
 /// # Returns
 /// Data URL for the QR code image (SVG format)
-pub fn generate_qr_code_data_url(
-    secret: &str,
-    account_name: &str,
-    issuer: &str,
-) -> Result<String> {
+pub fn generate_qr_code_data_url(secret: &str, account_name: &str, issuer: &str) -> Result<String> {
     // TOTP URI format: otpauth://totp/{issuer}:{account_name}?secret={secret}&issuer={issuer}
     let uri = format!(
         "otpauth://totp/{}:{}?secret={}&issuer={}&algorithm=SHA1&digits=6&period=30",
-        issuer,
-        account_name,
-        secret,
-        issuer
+        issuer, account_name, secret, issuer
     );
 
     // Generate QR code
-    let qr = QrCode::new(uri.as_bytes())
-        .map_err(|e| anyhow!("Failed to generate QR code: {}", e))?;
+    let qr =
+        QrCode::new(uri.as_bytes()).map_err(|e| anyhow!("Failed to generate QR code: {}", e))?;
 
     // Convert to SVG
-    let svg = qr.render::<qrcode::render::svg::Color>()
-        .max_dimensions(200, 200)
-        .build();
+    let svg = qr.render::<qrcode::render::svg::Color>().max_dimensions(200, 200).build();
 
     // Return as data URL
-    Ok(format!("data:image/svg+xml;base64,{}", general_purpose::STANDARD.encode(svg.as_bytes())))
+    Ok(format!(
+        "data:image/svg+xml;base64,{}",
+        general_purpose::STANDARD.encode(svg.as_bytes())
+    ))
 }
 
 /// Generate backup codes for account recovery

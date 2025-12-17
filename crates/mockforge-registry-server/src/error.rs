@@ -262,3 +262,227 @@ impl IntoResponse for ApiError {
 }
 
 pub type ApiResult<T> = Result<T, ApiError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse;
+
+    // ApiError variant tests
+    #[test]
+    fn test_api_error_plugin_not_found() {
+        let error = ApiError::PluginNotFound("test-plugin".to_string());
+        assert_eq!(error.to_string(), "Plugin not found: test-plugin");
+    }
+
+    #[test]
+    fn test_api_error_template_not_found() {
+        let error = ApiError::TemplateNotFound("test-template".to_string());
+        assert_eq!(error.to_string(), "Template not found: test-template");
+    }
+
+    #[test]
+    fn test_api_error_scenario_not_found() {
+        let error = ApiError::ScenarioNotFound("test-scenario".to_string());
+        assert_eq!(error.to_string(), "Scenario not found: test-scenario");
+    }
+
+    #[test]
+    fn test_api_error_invalid_version() {
+        let error = ApiError::InvalidVersion("1.0.0".to_string());
+        assert_eq!(error.to_string(), "Version not found: 1.0.0");
+    }
+
+    #[test]
+    fn test_api_error_plugin_exists() {
+        let error = ApiError::PluginExists("test-plugin".to_string());
+        assert_eq!(error.to_string(), "Plugin already exists: test-plugin");
+    }
+
+    #[test]
+    fn test_api_error_template_exists() {
+        let error = ApiError::TemplateExists("test-template".to_string());
+        assert_eq!(error.to_string(), "Template already exists: test-template");
+    }
+
+    #[test]
+    fn test_api_error_scenario_exists() {
+        let error = ApiError::ScenarioExists("test-scenario".to_string());
+        assert_eq!(error.to_string(), "Scenario already exists: test-scenario");
+    }
+
+    #[test]
+    fn test_api_error_auth_required() {
+        let error = ApiError::AuthRequired;
+        assert_eq!(error.to_string(), "Authentication required");
+    }
+
+    #[test]
+    fn test_api_error_permission_denied() {
+        let error = ApiError::PermissionDenied;
+        assert_eq!(error.to_string(), "Permission denied");
+    }
+
+    #[test]
+    fn test_api_error_organization_not_found() {
+        let error = ApiError::OrganizationNotFound;
+        assert_eq!(error.to_string(), "Organization not found or access denied");
+    }
+
+    #[test]
+    fn test_api_error_invalid_request() {
+        let error = ApiError::InvalidRequest("Bad input".to_string());
+        assert_eq!(error.to_string(), "Invalid request: Bad input");
+    }
+
+    #[test]
+    fn test_api_error_validation_failed() {
+        let error = ApiError::ValidationFailed("Name is required".to_string());
+        assert_eq!(error.to_string(), "Validation failed: Name is required");
+    }
+
+    #[test]
+    fn test_api_error_rate_limit_exceeded() {
+        let error = ApiError::RateLimitExceeded("100 requests/minute".to_string());
+        assert_eq!(error.to_string(), "Rate limit exceeded: 100 requests/minute");
+    }
+
+    #[test]
+    fn test_api_error_resource_limit_exceeded() {
+        let error = ApiError::ResourceLimitExceeded("10 plugins".to_string());
+        assert_eq!(error.to_string(), "Resource limit exceeded: 10 plugins");
+    }
+
+    #[test]
+    fn test_api_error_storage() {
+        let error = ApiError::Storage("S3 connection failed".to_string());
+        assert_eq!(error.to_string(), "Storage error: S3 connection failed");
+    }
+
+    #[test]
+    fn test_api_error_internal() {
+        let error = ApiError::Internal(anyhow::anyhow!("Unknown error"));
+        assert_eq!(error.to_string(), "Internal server error");
+    }
+
+    // IntoResponse tests - check status codes
+    #[tokio::test]
+    async fn test_into_response_plugin_not_found() {
+        let error = ApiError::PluginNotFound("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_template_not_found() {
+        let error = ApiError::TemplateNotFound("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_scenario_not_found() {
+        let error = ApiError::ScenarioNotFound("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_invalid_version() {
+        let error = ApiError::InvalidVersion("1.0.0".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_plugin_exists() {
+        let error = ApiError::PluginExists("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_template_exists() {
+        let error = ApiError::TemplateExists("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_scenario_exists() {
+        let error = ApiError::ScenarioExists("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_auth_required() {
+        let error = ApiError::AuthRequired;
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_permission_denied() {
+        let error = ApiError::PermissionDenied;
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_organization_not_found() {
+        let error = ApiError::OrganizationNotFound;
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_invalid_request() {
+        let error = ApiError::InvalidRequest("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_validation_failed() {
+        let error = ApiError::ValidationFailed("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_rate_limit_exceeded() {
+        let error = ApiError::RateLimitExceeded("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_resource_limit_exceeded() {
+        let error = ApiError::ResourceLimitExceeded("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_storage() {
+        let error = ApiError::Storage("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_internal() {
+        let error = ApiError::Internal(anyhow::anyhow!("test"));
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // Debug trait tests
+    #[test]
+    fn test_api_error_debug() {
+        let error = ApiError::AuthRequired;
+        let debug = format!("{:?}", error);
+        assert!(debug.contains("AuthRequired"));
+    }
+}

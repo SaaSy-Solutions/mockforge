@@ -41,9 +41,11 @@
 //! let db = AnalyticsDatabase::new(&config.database_path).await?;
 //! db.run_migrations().await?;
 //!
-//! // Query recent metrics
-//! let metrics = db.get_recent_metrics(3600).await?;
-//! println!("Total requests in last hour: {}", metrics.total_requests);
+//! // Query top endpoints
+//! let endpoints = db.get_top_endpoints(10, None).await?;
+//! for endpoint in &endpoints {
+//!     println!("Endpoint: {} - {} requests", endpoint.endpoint, endpoint.total_requests);
+//! }
 //! # Ok(())
 //! # }
 //! ```

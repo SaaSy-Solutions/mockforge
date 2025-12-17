@@ -767,13 +767,128 @@ impl PersonaBehaviorLearner {
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // LearningConfig tests
+    // =========================================================================
+
     #[test]
     fn test_learning_config_default() {
         let config = LearningConfig::default();
         assert!(!config.enabled); // Opt-in by default
         assert_eq!(config.sensitivity, 0.2);
         assert_eq!(config.min_samples, 10);
+        assert_eq!(config.decay, 0.05);
+        assert!(config.persona_adaptation);
+        assert!(config.traffic_mirroring);
     }
+
+    #[test]
+    fn test_learning_config_serialize() {
+        let config = LearningConfig {
+            enabled: true,
+            mode: LearningMode::Statistical,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("true"));
+        assert!(json.contains("statistical"));
+    }
+
+    #[test]
+    fn test_learning_config_deserialize() {
+        let json = r#"{"enabled": true, "mode": "hybrid", "sensitivity": 0.5}"#;
+        let config: LearningConfig = serde_json::from_str(json).unwrap();
+        assert!(config.enabled);
+        assert_eq!(config.mode, LearningMode::Hybrid);
+        assert!((config.sensitivity - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_learning_config_clone() {
+        let config = LearningConfig {
+            enabled: true,
+            sensitivity: 0.3,
+            ..Default::default()
+        };
+        let cloned = config.clone();
+        assert!(cloned.enabled);
+        assert!((cloned.sensitivity - 0.3).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_learning_config_debug() {
+        let config = LearningConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("sensitivity"));
+        assert!(debug_str.contains("enabled"));
+    }
+
+    #[test]
+    fn test_learning_config_endpoint_learning() {
+        let mut config = LearningConfig::default();
+        config.endpoint_learning.insert("/api/users".to_string(), true);
+        config.endpoint_learning.insert("/api/orders".to_string(), false);
+
+        assert_eq!(config.endpoint_learning.get("/api/users"), Some(&true));
+        assert_eq!(config.endpoint_learning.get("/api/orders"), Some(&false));
+    }
+
+    #[test]
+    fn test_learning_config_persona_learning() {
+        let mut config = LearningConfig::default();
+        config.persona_learning.insert("persona-1".to_string(), true);
+        config.persona_learning.insert("persona-2".to_string(), false);
+
+        assert_eq!(config.persona_learning.get("persona-1"), Some(&true));
+        assert_eq!(config.persona_learning.get("persona-2"), Some(&false));
+    }
+
+    // =========================================================================
+    // LearningMode tests
+    // =========================================================================
+
+    #[test]
+    fn test_learning_mode_default() {
+        let mode = LearningMode::default();
+        assert_eq!(mode, LearningMode::Behavioral);
+    }
+
+    #[test]
+    fn test_learning_mode_eq() {
+        assert_eq!(LearningMode::Statistical, LearningMode::Statistical);
+        assert_ne!(LearningMode::Behavioral, LearningMode::Hybrid);
+    }
+
+    #[test]
+    fn test_learning_mode_serialize() {
+        let mode = LearningMode::Hybrid;
+        let json = serde_json::to_string(&mode).unwrap();
+        assert_eq!(json, "\"hybrid\"");
+    }
+
+    #[test]
+    fn test_learning_mode_deserialize() {
+        let json = "\"statistical\"";
+        let mode: LearningMode = serde_json::from_str(json).unwrap();
+        assert_eq!(mode, LearningMode::Statistical);
+    }
+
+    #[test]
+    fn test_learning_mode_clone() {
+        let mode = LearningMode::Hybrid;
+        let cloned = mode.clone();
+        assert_eq!(cloned, LearningMode::Hybrid);
+    }
+
+    #[test]
+    fn test_learning_mode_debug() {
+        let debug_str = format!("{:?}", LearningMode::Behavioral);
+        assert!(debug_str.contains("Behavioral"));
+    }
+
+    // =========================================================================
+    // DriftLearningEngine tests
+    // =========================================================================
 
     #[test]
     fn test_drift_learning_engine_creation() {
@@ -781,6 +896,304 @@ mod tests {
         let learning_config = LearningConfig::default();
         let engine = DriftLearningEngine::new(drift_config, learning_config);
         assert!(engine.is_ok());
+    }
+
+    #[test]
+    fn test_drift_learning_engine_with_traffic_mirroring_disabled() {
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig {
+            traffic_mirroring: false,
+            ..Default::default()
+        };
+        let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+        assert!(engine.traffic_learner.is_none());
+    }
+
+    #[test]
+    fn test_drift_learning_engine_with_persona_adaptation_disabled() {
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig {
+            persona_adaptation: false,
+            ..Default::default()
+        };
+        let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+        assert!(engine.persona_learner.is_none());
+    }
+
+    #[test]
+    fn test_drift_learning_engine_get_drift_engine() {
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig::default();
+        let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+        let _ = engine.drift_engine();
+    }
+
+    #[test]
+    fn test_drift_learning_engine_get_learning_config() {
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig {
+            enabled: true,
+            sensitivity: 0.5,
+            ..Default::default()
+        };
+        let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+        assert!(engine.learning_config().enabled);
+        assert!((engine.learning_config().sensitivity - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_drift_learning_engine_update_learning_config() {
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig::default();
+        let mut engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+
+        let new_config = LearningConfig {
+            enabled: true,
+            sensitivity: 0.8,
+            ..Default::default()
+        };
+        engine.update_learning_config(new_config).unwrap();
+
+        assert!(engine.learning_config().enabled);
+        assert!((engine.learning_config().sensitivity - 0.8).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn test_drift_learning_engine_get_learned_patterns_empty() {
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig::default();
+        let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+
+        let patterns = engine.get_learned_patterns().await;
+        assert!(patterns.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_drift_learning_engine_apply_drift_with_learning_disabled() {
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+
+        let data = serde_json::json!({"value": 100});
+        let result = engine.apply_drift_with_learning(data.clone()).await.unwrap();
+        // Should return data without learning modifications
+        assert!(result.is_object());
+    }
+
+    #[tokio::test]
+    async fn test_drift_learning_engine_apply_drift_with_learning_enabled() {
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig {
+            enabled: true,
+            ..Default::default()
+        };
+        let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+
+        let data = serde_json::json!({"value": 100});
+        let result = engine.apply_drift_with_learning(data).await.unwrap();
+        assert!(result.is_object());
+    }
+
+    #[test]
+    fn test_drift_learning_engine_blend_values_numeric() {
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig {
+            sensitivity: 0.5,
+            ..Default::default()
+        };
+        let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+
+        let existing = serde_json::json!(100.0);
+        let learned = serde_json::json!(200.0);
+        let result = engine.blend_values(&existing, &learned, 0.5).unwrap();
+
+        // With sensitivity 0.5 and confidence 0.5, weight = 0.25
+        // blended = 100 * 0.75 + 200 * 0.25 = 75 + 50 = 125
+        if let Some(n) = result.as_f64() {
+            assert!((n - 125.0).abs() < 1.0);
+        }
+    }
+
+    #[test]
+    fn test_drift_learning_engine_blend_values_non_numeric() {
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig::default();
+        let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+
+        let existing = serde_json::json!("original");
+        let learned = serde_json::json!("learned");
+        let result = engine.blend_values(&existing, &learned, 0.5).unwrap();
+
+        // Non-numeric values keep existing
+        assert_eq!(result, serde_json::json!("original"));
+    }
+
+    // =========================================================================
+    // LearnedPattern tests
+    // =========================================================================
+
+    #[test]
+    fn test_learned_pattern_creation() {
+        let pattern = LearnedPattern {
+            pattern_id: "test-pattern".to_string(),
+            pattern_type: PatternType::Latency,
+            parameters: HashMap::new(),
+            confidence: 0.9,
+            sample_count: 100,
+            last_updated: chrono::Utc::now(),
+        };
+        assert_eq!(pattern.pattern_id, "test-pattern");
+        assert!((pattern.confidence - 0.9).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_learned_pattern_clone() {
+        let pattern = LearnedPattern {
+            pattern_id: "cloneable".to_string(),
+            pattern_type: PatternType::ErrorRate,
+            parameters: HashMap::new(),
+            confidence: 0.75,
+            sample_count: 50,
+            last_updated: chrono::Utc::now(),
+        };
+        let cloned = pattern.clone();
+        assert_eq!(cloned.pattern_id, "cloneable");
+    }
+
+    #[test]
+    fn test_learned_pattern_debug() {
+        let pattern = LearnedPattern {
+            pattern_id: "debug-pattern".to_string(),
+            pattern_type: PatternType::PersonaBehavior,
+            parameters: HashMap::new(),
+            confidence: 0.5,
+            sample_count: 25,
+            last_updated: chrono::Utc::now(),
+        };
+        let debug_str = format!("{:?}", pattern);
+        assert!(debug_str.contains("debug-pattern"));
+    }
+
+    // =========================================================================
+    // PatternType tests
+    // =========================================================================
+
+    #[test]
+    fn test_pattern_type_eq() {
+        assert_eq!(PatternType::Latency, PatternType::Latency);
+        assert_ne!(PatternType::Latency, PatternType::ErrorRate);
+    }
+
+    #[test]
+    fn test_pattern_type_clone() {
+        let pt = PatternType::RequestSequence;
+        let cloned = pt.clone();
+        assert_eq!(cloned, PatternType::RequestSequence);
+    }
+
+    #[test]
+    fn test_pattern_type_debug() {
+        let debug_str = format!("{:?}", PatternType::PersonaBehavior);
+        assert!(debug_str.contains("PersonaBehavior"));
+    }
+
+    // =========================================================================
+    // TrafficPatternLearner tests
+    // =========================================================================
+
+    #[test]
+    fn test_traffic_pattern_learner_new() {
+        let config = LearningConfig::default();
+        let learner = TrafficPatternLearner::new(config);
+        assert!(learner.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_traffic_pattern_learner_analyze_traffic_patterns() {
+        let config = LearningConfig::default();
+        let mut learner = TrafficPatternLearner::new(config).unwrap();
+        // Returns empty since database integration is disabled
+        let patterns = learner.analyze_traffic_patterns(&()).await.unwrap();
+        assert!(patterns.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_traffic_pattern_learner_detect_latency_patterns() {
+        let config = LearningConfig::default();
+        let mut learner = TrafficPatternLearner::new(config).unwrap();
+        let patterns = learner.detect_latency_patterns().await.unwrap();
+        assert!(patterns.is_empty()); // Returns empty since disabled
+    }
+
+    #[tokio::test]
+    async fn test_traffic_pattern_learner_detect_error_patterns() {
+        let config = LearningConfig::default();
+        let mut learner = TrafficPatternLearner::new(config).unwrap();
+        let patterns = learner.detect_error_patterns().await.unwrap();
+        assert!(patterns.is_empty()); // Returns empty since disabled
+    }
+
+    // =========================================================================
+    // PersonaBehaviorLearner tests
+    // =========================================================================
+
+    #[test]
+    fn test_persona_behavior_learner_new() {
+        let config = LearningConfig::default();
+        let learner = PersonaBehaviorLearner::new(config);
+        assert!(learner.is_ok());
+    }
+
+    #[test]
+    fn test_persona_behavior_learner_record_event_disabled() {
+        let config = LearningConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        let mut learner = PersonaBehaviorLearner::new(config).unwrap();
+
+        learner.record_event(
+            "persona-1".to_string(),
+            BehaviorEvent {
+                timestamp: chrono::Utc::now(),
+                event_type: BehaviorEventType::Request {
+                    endpoint: "/api/test".to_string(),
+                    method: "GET".to_string(),
+                },
+                data: HashMap::new(),
+            },
+        );
+
+        // Should not record when disabled
+        assert!(learner.get_behavior_history("persona-1").is_none());
+    }
+
+    #[test]
+    fn test_persona_behavior_learner_record_event_persona_disabled() {
+        let mut config = LearningConfig {
+            enabled: true,
+            ..Default::default()
+        };
+        config.persona_learning.insert("persona-1".to_string(), false);
+        let mut learner = PersonaBehaviorLearner::new(config).unwrap();
+
+        learner.record_event(
+            "persona-1".to_string(),
+            BehaviorEvent {
+                timestamp: chrono::Utc::now(),
+                event_type: BehaviorEventType::Request {
+                    endpoint: "/api/test".to_string(),
+                    method: "GET".to_string(),
+                },
+                data: HashMap::new(),
+            },
+        );
+
+        // Should not record when persona learning is disabled
+        assert!(learner.get_behavior_history("persona-1").is_none());
     }
 
     #[tokio::test]
@@ -821,5 +1234,260 @@ mod tests {
         // Analyze (won't find pattern with only 2 samples, need min_samples)
         let pattern = learner.analyze_persona_behavior("persona-1").await.unwrap();
         assert!(pattern.is_none()); // Not enough samples
+    }
+
+    #[tokio::test]
+    async fn test_persona_behavior_learner_get_behavior_history() {
+        let config = LearningConfig {
+            enabled: true,
+            ..Default::default()
+        };
+        let mut learner = PersonaBehaviorLearner::new(config).unwrap();
+
+        learner.record_event(
+            "persona-test".to_string(),
+            BehaviorEvent {
+                timestamp: chrono::Utc::now(),
+                event_type: BehaviorEventType::Request {
+                    endpoint: "/api/users".to_string(),
+                    method: "GET".to_string(),
+                },
+                data: HashMap::new(),
+            },
+        );
+
+        let history = learner.get_behavior_history("persona-test");
+        assert!(history.is_some());
+        assert_eq!(history.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_persona_behavior_learner_analyze_nonexistent_persona() {
+        let config = LearningConfig {
+            enabled: true,
+            ..Default::default()
+        };
+        let learner = PersonaBehaviorLearner::new(config).unwrap();
+
+        let pattern = learner.analyze_persona_behavior("nonexistent").await.unwrap();
+        assert!(pattern.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_persona_behavior_learner_analyze_disabled() {
+        let config = LearningConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        let learner = PersonaBehaviorLearner::new(config).unwrap();
+
+        let pattern = learner.analyze_persona_behavior("any").await.unwrap();
+        assert!(pattern.is_none());
+    }
+
+    #[test]
+    fn test_persona_behavior_learner_event_limit() {
+        let config = LearningConfig {
+            enabled: true,
+            ..Default::default()
+        };
+        let mut learner = PersonaBehaviorLearner::new(config).unwrap();
+
+        // Record more than 1000 events
+        for i in 0..1050 {
+            learner.record_event(
+                "persona-limit".to_string(),
+                BehaviorEvent {
+                    timestamp: chrono::Utc::now(),
+                    event_type: BehaviorEventType::Request {
+                        endpoint: format!("/api/test/{}", i),
+                        method: "GET".to_string(),
+                    },
+                    data: HashMap::new(),
+                },
+            );
+        }
+
+        let history = learner.get_behavior_history("persona-limit").unwrap();
+        assert_eq!(history.len(), 1000); // Should be capped at 1000
+    }
+
+    // =========================================================================
+    // BehaviorEvent tests
+    // =========================================================================
+
+    #[test]
+    fn test_behavior_event_creation() {
+        let event = BehaviorEvent {
+            timestamp: chrono::Utc::now(),
+            event_type: BehaviorEventType::Request {
+                endpoint: "/api/test".to_string(),
+                method: "POST".to_string(),
+            },
+            data: HashMap::new(),
+        };
+        assert!(event.data.is_empty());
+    }
+
+    #[test]
+    fn test_behavior_event_clone() {
+        let event = BehaviorEvent {
+            timestamp: chrono::Utc::now(),
+            event_type: BehaviorEventType::PatternDetected {
+                pattern: "test-pattern".to_string(),
+            },
+            data: HashMap::new(),
+        };
+        let cloned = event.clone();
+        if let BehaviorEventType::PatternDetected { pattern } = cloned.event_type {
+            assert_eq!(pattern, "test-pattern");
+        } else {
+            panic!("Wrong event type after clone");
+        }
+    }
+
+    #[test]
+    fn test_behavior_event_debug() {
+        let event = BehaviorEvent {
+            timestamp: chrono::Utc::now(),
+            event_type: BehaviorEventType::RequestSucceededAfterFailure {
+                endpoint: "/api/retry".to_string(),
+            },
+            data: HashMap::new(),
+        };
+        let debug_str = format!("{:?}", event);
+        assert!(debug_str.contains("RequestSucceededAfterFailure"));
+    }
+
+    // =========================================================================
+    // BehaviorEventType tests
+    // =========================================================================
+
+    #[test]
+    fn test_behavior_event_type_request() {
+        let event_type = BehaviorEventType::Request {
+            endpoint: "/api/users".to_string(),
+            method: "GET".to_string(),
+        };
+        if let BehaviorEventType::Request { endpoint, method } = event_type {
+            assert_eq!(endpoint, "/api/users");
+            assert_eq!(method, "GET");
+        }
+    }
+
+    #[test]
+    fn test_behavior_event_type_request_failed() {
+        let event_type = BehaviorEventType::RequestFailed {
+            endpoint: "/api/orders".to_string(),
+            status_code: 500,
+        };
+        if let BehaviorEventType::RequestFailed {
+            endpoint,
+            status_code,
+        } = event_type
+        {
+            assert_eq!(endpoint, "/api/orders");
+            assert_eq!(status_code, 500);
+        }
+    }
+
+    #[test]
+    fn test_behavior_event_type_eq() {
+        let a = BehaviorEventType::PatternDetected {
+            pattern: "a".to_string(),
+        };
+        let b = BehaviorEventType::PatternDetected {
+            pattern: "a".to_string(),
+        };
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_behavior_event_type_clone() {
+        let event_type = BehaviorEventType::RequestFailed {
+            endpoint: "/test".to_string(),
+            status_code: 404,
+        };
+        let cloned = event_type.clone();
+        assert_eq!(cloned, event_type);
+    }
+
+    #[test]
+    fn test_behavior_event_type_debug() {
+        let event_type = BehaviorEventType::Request {
+            endpoint: "/debug".to_string(),
+            method: "DELETE".to_string(),
+        };
+        let debug_str = format!("{:?}", event_type);
+        assert!(debug_str.contains("Request"));
+        assert!(debug_str.contains("/debug"));
+    }
+
+    // =========================================================================
+    // Integration tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_full_learning_workflow() {
+        // Create learning engine
+        let drift_config = DataDriftConfig::new();
+        let learning_config = LearningConfig {
+            enabled: true,
+            min_samples: 2, // Lower threshold for testing
+            ..Default::default()
+        };
+        let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
+
+        // Apply drift with learning
+        let data = serde_json::json!({
+            "user_id": "123",
+            "amount": 100.0,
+            "status": "pending"
+        });
+        let result = engine.apply_drift_with_learning(data).await.unwrap();
+        assert!(result.is_object());
+    }
+
+    #[tokio::test]
+    async fn test_persona_behavior_pattern_detection() {
+        let config = LearningConfig {
+            enabled: true,
+            min_samples: 5,
+            ..Default::default()
+        };
+        let mut learner = PersonaBehaviorLearner::new(config).unwrap();
+
+        // Simulate pattern: failure followed by checkout retry
+        for _ in 0..10 {
+            learner.record_event(
+                "retry-persona".to_string(),
+                BehaviorEvent {
+                    timestamp: chrono::Utc::now(),
+                    event_type: BehaviorEventType::RequestFailed {
+                        endpoint: "/api/payment".to_string(),
+                        status_code: 503,
+                    },
+                    data: HashMap::new(),
+                },
+            );
+            learner.record_event(
+                "retry-persona".to_string(),
+                BehaviorEvent {
+                    timestamp: chrono::Utc::now(),
+                    event_type: BehaviorEventType::Request {
+                        endpoint: "/api/checkout".to_string(),
+                        method: "POST".to_string(),
+                    },
+                    data: HashMap::new(),
+                },
+            );
+        }
+
+        // Now analyze - should detect pattern
+        let pattern = learner.analyze_persona_behavior("retry-persona").await.unwrap();
+        assert!(pattern.is_some());
+        let p = pattern.unwrap();
+        assert_eq!(p.pattern_type, PatternType::PersonaBehavior);
+        assert!(p.confidence > 0.0);
     }
 }

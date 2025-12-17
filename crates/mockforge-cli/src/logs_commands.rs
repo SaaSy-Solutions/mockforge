@@ -415,3 +415,343 @@ fn print_log_entry(log: &LogEntry) {
         timestamp, status_str, method_str, path, response_time, size
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_log_entry() -> LogEntry {
+        LogEntry {
+            timestamp: "2025-01-15T10:30:45.123Z".to_string(),
+            status: 200,
+            method: "GET".to_string(),
+            url: "/api/users".to_string(),
+            response_time: Some(42),
+            size: Some(1024),
+        }
+    }
+
+    #[test]
+    fn test_log_entry_serialization() {
+        let log = create_test_log_entry();
+        let json = serde_json::to_string(&log).unwrap();
+
+        assert!(json.contains("\"timestamp\":\"2025-01-15T10:30:45.123Z\""));
+        assert!(json.contains("\"status\":200"));
+        assert!(json.contains("\"method\":\"GET\""));
+        assert!(json.contains("\"url\":\"/api/users\""));
+        assert!(json.contains("\"response_time\":42"));
+        assert!(json.contains("\"size\":1024"));
+    }
+
+    #[test]
+    fn test_log_entry_deserialization() {
+        let json = r#"{
+            "timestamp": "2025-01-15T10:30:45.123Z",
+            "status": 201,
+            "method": "POST",
+            "url": "/api/items",
+            "response_time": 100,
+            "size": 2048
+        }"#;
+
+        let log: LogEntry = serde_json::from_str(json).unwrap();
+
+        assert_eq!(log.timestamp, "2025-01-15T10:30:45.123Z");
+        assert_eq!(log.status, 201);
+        assert_eq!(log.method, "POST");
+        assert_eq!(log.url, "/api/items");
+        assert_eq!(log.response_time, Some(100));
+        assert_eq!(log.size, Some(2048));
+    }
+
+    #[test]
+    fn test_log_entry_deserialization_without_optional_fields() {
+        let json = r#"{
+            "timestamp": "2025-01-15T10:30:45Z",
+            "status": 404,
+            "method": "DELETE",
+            "url": "/api/items/123",
+            "response_time": null,
+            "size": null
+        }"#;
+
+        let log: LogEntry = serde_json::from_str(json).unwrap();
+
+        assert_eq!(log.status, 404);
+        assert_eq!(log.method, "DELETE");
+        assert!(log.response_time.is_none());
+        assert!(log.size.is_none());
+    }
+
+    #[test]
+    fn test_log_entry_clone() {
+        let log = create_test_log_entry();
+        let cloned = log.clone();
+
+        assert_eq!(log.timestamp, cloned.timestamp);
+        assert_eq!(log.status, cloned.status);
+        assert_eq!(log.method, cloned.method);
+        assert_eq!(log.url, cloned.url);
+    }
+
+    #[test]
+    fn test_log_entry_debug() {
+        let log = create_test_log_entry();
+        let debug_str = format!("{:?}", log);
+
+        assert!(debug_str.contains("LogEntry"));
+        assert!(debug_str.contains("GET"));
+        assert!(debug_str.contains("200"));
+    }
+
+    #[test]
+    fn test_api_response_success() {
+        let json = r#"{
+            "success": true,
+            "data": [{"timestamp": "2025-01-15T10:30:45Z", "status": 200, "method": "GET", "url": "/api/test", "response_time": 50, "size": 100}],
+            "error": null
+        }"#;
+
+        let response: ApiResponse<Vec<LogEntry>> = serde_json::from_str(json).unwrap();
+
+        assert!(response.success);
+        assert!(response.data.is_some());
+        assert!(response.error.is_none());
+        assert_eq!(response.data.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_api_response_error() {
+        let json = r#"{
+            "success": false,
+            "data": null,
+            "error": "Server unavailable"
+        }"#;
+
+        let response: ApiResponse<Vec<LogEntry>> = serde_json::from_str(json).unwrap();
+
+        assert!(!response.success);
+        assert!(response.data.is_none());
+        assert_eq!(response.error, Some("Server unavailable".to_string()));
+    }
+
+    #[test]
+    fn test_log_entry_all_http_methods() {
+        let methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"];
+
+        for method in methods {
+            let log = LogEntry {
+                timestamp: "2025-01-15T10:30:45Z".to_string(),
+                status: 200,
+                method: method.to_string(),
+                url: "/api/test".to_string(),
+                response_time: None,
+                size: None,
+            };
+
+            // Just verify it can be created and serialized
+            let json = serde_json::to_string(&log).unwrap();
+            assert!(json.contains(method));
+        }
+    }
+
+    #[test]
+    fn test_log_entry_various_status_codes() {
+        let status_codes = [200, 201, 204, 301, 302, 400, 401, 403, 404, 500, 502, 503];
+
+        for status in status_codes {
+            let log = LogEntry {
+                timestamp: "2025-01-15T10:30:45Z".to_string(),
+                status,
+                method: "GET".to_string(),
+                url: "/api/test".to_string(),
+                response_time: None,
+                size: None,
+            };
+
+            let json = serde_json::to_string(&log).unwrap();
+            assert!(json.contains(&format!("\"status\":{}", status)));
+        }
+    }
+
+    #[test]
+    fn test_log_entry_long_url_serialization() {
+        let long_url =
+            "/api/v1/organizations/12345/projects/67890/resources/abcdef/items/ghijkl/details"
+                .to_string();
+        let log = LogEntry {
+            timestamp: "2025-01-15T10:30:45Z".to_string(),
+            status: 200,
+            method: "GET".to_string(),
+            url: long_url.clone(),
+            response_time: Some(150),
+            size: Some(5000),
+        };
+
+        let json = serde_json::to_string(&log).unwrap();
+        let parsed: LogEntry = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.url, long_url);
+    }
+
+    #[test]
+    fn test_log_entry_special_characters_in_url() {
+        let url = "/api/search?q=hello%20world&page=1".to_string();
+        let log = LogEntry {
+            timestamp: "2025-01-15T10:30:45Z".to_string(),
+            status: 200,
+            method: "GET".to_string(),
+            url: url.clone(),
+            response_time: None,
+            size: None,
+        };
+
+        let json = serde_json::to_string(&log).unwrap();
+        let parsed: LogEntry = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.url, url);
+    }
+
+    #[test]
+    fn test_log_entry_zero_values() {
+        let log = LogEntry {
+            timestamp: "2025-01-15T10:30:45Z".to_string(),
+            status: 200,
+            method: "GET".to_string(),
+            url: "/".to_string(),
+            response_time: Some(0),
+            size: Some(0),
+        };
+
+        assert_eq!(log.response_time, Some(0));
+        assert_eq!(log.size, Some(0));
+
+        let json = serde_json::to_string(&log).unwrap();
+        assert!(json.contains("\"response_time\":0"));
+        assert!(json.contains("\"size\":0"));
+    }
+
+    #[test]
+    fn test_log_entry_large_values() {
+        let log = LogEntry {
+            timestamp: "2025-01-15T10:30:45Z".to_string(),
+            status: 200,
+            method: "GET".to_string(),
+            url: "/api/large".to_string(),
+            response_time: Some(u64::MAX),
+            size: Some(u64::MAX),
+        };
+
+        let json = serde_json::to_string(&log).unwrap();
+        let parsed: LogEntry = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.response_time, Some(u64::MAX));
+        assert_eq!(parsed.size, Some(u64::MAX));
+    }
+
+    #[test]
+    fn test_print_logs_table_empty() {
+        // Test that empty logs don't cause panic
+        let logs: Vec<LogEntry> = vec![];
+        print_logs_table(&logs);
+    }
+
+    #[test]
+    fn test_print_log_entry_does_not_panic() {
+        // Test various edge cases for print_log_entry
+        let test_cases = vec![
+            // Short timestamp
+            LogEntry {
+                timestamp: "2025-01-15".to_string(),
+                status: 200,
+                method: "GET".to_string(),
+                url: "/short".to_string(),
+                response_time: None,
+                size: None,
+            },
+            // Long timestamp
+            LogEntry {
+                timestamp: "2025-01-15T10:30:45.123456789Z".to_string(),
+                status: 500,
+                method: "POST".to_string(),
+                url: "/error".to_string(),
+                response_time: Some(1000),
+                size: Some(100),
+            },
+            // Long URL that gets truncated
+            LogEntry {
+                timestamp: "2025-01-15T10:30:45Z".to_string(),
+                status: 404,
+                method: "DELETE".to_string(),
+                url: "/api/v1/very/long/path/that/should/be/truncated/by/the/print/function"
+                    .to_string(),
+                response_time: None,
+                size: None,
+            },
+            // 4xx status
+            LogEntry {
+                timestamp: "2025-01-15T10:30:45Z".to_string(),
+                status: 403,
+                method: "PUT".to_string(),
+                url: "/forbidden".to_string(),
+                response_time: Some(5),
+                size: Some(0),
+            },
+            // PATCH method
+            LogEntry {
+                timestamp: "2025-01-15T10:30:45Z".to_string(),
+                status: 200,
+                method: "PATCH".to_string(),
+                url: "/update".to_string(),
+                response_time: Some(25),
+                size: Some(512),
+            },
+            // Unknown method
+            LogEntry {
+                timestamp: "2025-01-15T10:30:45Z".to_string(),
+                status: 200,
+                method: "CUSTOM".to_string(),
+                url: "/custom".to_string(),
+                response_time: None,
+                size: None,
+            },
+        ];
+
+        for log in &test_cases {
+            print_log_entry(log);
+        }
+    }
+
+    #[test]
+    fn test_print_logs_table_with_entries() {
+        let logs = vec![
+            create_test_log_entry(),
+            LogEntry {
+                timestamp: "2025-01-15T10:31:00Z".to_string(),
+                status: 201,
+                method: "POST".to_string(),
+                url: "/api/items".to_string(),
+                response_time: Some(100),
+                size: Some(2048),
+            },
+        ];
+
+        // Should not panic
+        print_logs_table(&logs);
+    }
+
+    #[test]
+    fn test_log_entry_round_trip() {
+        let original = create_test_log_entry();
+        let json = serde_json::to_string(&original).unwrap();
+        let parsed: LogEntry = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(original.timestamp, parsed.timestamp);
+        assert_eq!(original.status, parsed.status);
+        assert_eq!(original.method, parsed.method);
+        assert_eq!(original.url, parsed.url);
+        assert_eq!(original.response_time, parsed.response_time);
+        assert_eq!(original.size, parsed.size);
+    }
+}

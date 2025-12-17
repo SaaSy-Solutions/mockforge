@@ -70,8 +70,8 @@ impl ApiToken {
         expires_at: Option<DateTime<Utc>>,
     ) -> sqlx::Result<(String, Self)> {
         // Generate token: mfx_<random_base64>
+        use base64::{engine::general_purpose, Engine as _};
         use rand::Rng;
-        use base64::{Engine as _, engine::general_purpose};
         let mut rng = rand::thread_rng();
         let random_bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
         // Use base64 crate version 0.21 API
@@ -140,10 +140,7 @@ impl ApiToken {
     }
 
     /// Verify token and return the token record if valid
-    pub async fn verify_token(
-        pool: &sqlx::PgPool,
-        token: &str,
-    ) -> sqlx::Result<Option<Self>> {
+    pub async fn verify_token(pool: &sqlx::PgPool, token: &str) -> sqlx::Result<Option<Self>> {
         // Token format: mfx_<base64>
         if !token.starts_with("mfx_") {
             return Ok(None);
@@ -163,9 +160,7 @@ impl ApiToken {
 
         // Check each candidate
         for candidate in candidates {
-            if bcrypt::verify(token, &candidate.hashed_token)
-                .unwrap_or(false)
-            {
+            if bcrypt::verify(token, &candidate.hashed_token).unwrap_or(false) {
                 // Update last_used_at
                 sqlx::query("UPDATE api_tokens SET last_used_at = NOW() WHERE id = $1")
                     .bind(candidate.id)
@@ -209,10 +204,8 @@ impl ApiToken {
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
         // Create new token with same scopes
-        let scopes: Vec<TokenScope> = old_token.scopes
-            .iter()
-            .filter_map(|s| TokenScope::from_string(s))
-            .collect();
+        let scopes: Vec<TokenScope> =
+            old_token.scopes.iter().filter_map(|s| TokenScope::from_string(s)).collect();
 
         let new_name = new_name.unwrap_or(&old_token.name);
         let (new_full_token, new_token) = Self::create(
@@ -253,7 +246,7 @@ impl ApiToken {
                   AND created_at < $2
                   AND (expires_at IS NULL OR expires_at > NOW())
                 ORDER BY created_at ASC
-                "#
+                "#,
             )
             .bind(org_id)
             .bind(cutoff)
@@ -264,7 +257,7 @@ impl ApiToken {
                 WHERE created_at < $1
                   AND (expires_at IS NULL OR expires_at > NOW())
                 ORDER BY created_at ASC
-                "#
+                "#,
             )
             .bind(cutoff)
         };
@@ -275,12 +268,307 @@ impl ApiToken {
     /// Check if token needs rotation (older than N days)
     pub fn needs_rotation(&self, days_old: i64) -> bool {
         let cutoff = Utc::now() - chrono::Duration::days(days_old);
-        self.created_at < cutoff && (self.expires_at.is_none() || self.expires_at.unwrap() > Utc::now())
+        self.created_at < cutoff
+            && (self.expires_at.is_none() || self.expires_at.unwrap() > Utc::now())
     }
 
     /// Get age of token in days
     pub fn age_days(&self) -> i64 {
         let duration = Utc::now() - self.created_at;
         duration.num_days()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_token_scope_to_string() {
+        assert_eq!(TokenScope::ReadPackages.to_string(), "read:packages");
+        assert_eq!(TokenScope::PublishPackages.to_string(), "publish:packages");
+        assert_eq!(TokenScope::DeployMocks.to_string(), "deploy:mocks");
+        assert_eq!(TokenScope::AdminOrg.to_string(), "admin:org");
+        assert_eq!(TokenScope::ReadUsage.to_string(), "read:usage");
+        assert_eq!(TokenScope::ManageBilling.to_string(), "manage:billing");
+    }
+
+    #[test]
+    fn test_token_scope_from_string() {
+        assert_eq!(TokenScope::from_string("read:packages"), Some(TokenScope::ReadPackages));
+        assert_eq!(TokenScope::from_string("publish:packages"), Some(TokenScope::PublishPackages));
+        assert_eq!(TokenScope::from_string("deploy:mocks"), Some(TokenScope::DeployMocks));
+        assert_eq!(TokenScope::from_string("admin:org"), Some(TokenScope::AdminOrg));
+        assert_eq!(TokenScope::from_string("read:usage"), Some(TokenScope::ReadUsage));
+        assert_eq!(TokenScope::from_string("manage:billing"), Some(TokenScope::ManageBilling));
+
+        // Invalid scope
+        assert_eq!(TokenScope::from_string("invalid"), None);
+        assert_eq!(TokenScope::from_string(""), None);
+    }
+
+    #[test]
+    fn test_token_scope_round_trip() {
+        let scopes = vec![
+            TokenScope::ReadPackages,
+            TokenScope::PublishPackages,
+            TokenScope::DeployMocks,
+            TokenScope::AdminOrg,
+            TokenScope::ReadUsage,
+            TokenScope::ManageBilling,
+        ];
+
+        for scope in scopes {
+            let string = scope.to_string();
+            let parsed = TokenScope::from_string(&string);
+            assert_eq!(Some(scope), parsed);
+        }
+    }
+
+    #[test]
+    fn test_token_scope_serialization() {
+        let scope = TokenScope::ReadPackages;
+        let json = serde_json::to_string(&scope).unwrap();
+        assert_eq!(json, "\"readpackages\"");
+
+        let scope = TokenScope::PublishPackages;
+        let json = serde_json::to_string(&scope).unwrap();
+        assert_eq!(json, "\"publishpackages\"");
+    }
+
+    #[test]
+    fn test_token_scope_deserialization() {
+        let scope: TokenScope = serde_json::from_str("\"readpackages\"").unwrap();
+        assert_eq!(scope, TokenScope::ReadPackages);
+
+        let scope: TokenScope = serde_json::from_str("\"publishpackages\"").unwrap();
+        assert_eq!(scope, TokenScope::PublishPackages);
+    }
+
+    #[test]
+    fn test_token_scope_equality() {
+        assert_eq!(TokenScope::ReadPackages, TokenScope::ReadPackages);
+        assert_ne!(TokenScope::ReadPackages, TokenScope::PublishPackages);
+    }
+
+    #[test]
+    fn test_token_scope_clone() {
+        let scope = TokenScope::AdminOrg;
+        let cloned = scope.clone();
+        assert_eq!(scope, cloned);
+    }
+
+    #[test]
+    fn test_api_token_has_scope() {
+        let token = ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: None,
+            name: "Test Token".to_string(),
+            token_prefix: "mfx_12345678".to_string(),
+            hashed_token: "hash".to_string(),
+            scopes: vec!["read:packages".to_string(), "publish:packages".to_string()],
+            last_used_at: None,
+            expires_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert!(token.has_scope(&TokenScope::ReadPackages));
+        assert!(token.has_scope(&TokenScope::PublishPackages));
+        assert!(!token.has_scope(&TokenScope::DeployMocks));
+        assert!(!token.has_scope(&TokenScope::AdminOrg));
+    }
+
+    #[test]
+    fn test_api_token_needs_rotation() {
+        let old_token = ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: None,
+            name: "Old Token".to_string(),
+            token_prefix: "mfx_old12345".to_string(),
+            hashed_token: "hash".to_string(),
+            scopes: vec!["read:packages".to_string()],
+            last_used_at: None,
+            expires_at: None,
+            created_at: Utc::now() - chrono::Duration::days(100),
+            updated_at: Utc::now(),
+        };
+
+        assert!(old_token.needs_rotation(90));
+        assert!(old_token.needs_rotation(50));
+        assert!(!old_token.needs_rotation(200));
+    }
+
+    #[test]
+    fn test_api_token_needs_rotation_expired() {
+        let expired_token = ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: None,
+            name: "Expired Token".to_string(),
+            token_prefix: "mfx_exp12345".to_string(),
+            hashed_token: "hash".to_string(),
+            scopes: vec!["read:packages".to_string()],
+            last_used_at: None,
+            expires_at: Some(Utc::now() - chrono::Duration::days(10)),
+            created_at: Utc::now() - chrono::Duration::days(100),
+            updated_at: Utc::now(),
+        };
+
+        // Expired tokens should not need rotation (they're already invalid)
+        assert!(!expired_token.needs_rotation(90));
+    }
+
+    #[test]
+    fn test_api_token_age_days() {
+        let token = ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: None,
+            name: "Test Token".to_string(),
+            token_prefix: "mfx_12345678".to_string(),
+            hashed_token: "hash".to_string(),
+            scopes: vec!["read:packages".to_string()],
+            last_used_at: None,
+            expires_at: None,
+            created_at: Utc::now() - chrono::Duration::days(42),
+            updated_at: Utc::now(),
+        };
+
+        let age = token.age_days();
+        assert!(age >= 41 && age <= 43); // Allow some tolerance
+    }
+
+    #[test]
+    fn test_api_token_age_days_new() {
+        let token = ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: None,
+            name: "New Token".to_string(),
+            token_prefix: "mfx_new12345".to_string(),
+            hashed_token: "hash".to_string(),
+            scopes: vec!["read:packages".to_string()],
+            last_used_at: None,
+            expires_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let age = token.age_days();
+        assert_eq!(age, 0);
+    }
+
+    #[test]
+    fn test_api_token_serialization() {
+        let token = ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: Some(Uuid::new_v4()),
+            name: "Test Token".to_string(),
+            token_prefix: "mfx_12345678".to_string(),
+            hashed_token: "hash".to_string(),
+            scopes: vec!["read:packages".to_string()],
+            last_used_at: Some(Utc::now()),
+            expires_at: Some(Utc::now()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let json = serde_json::to_string(&token).unwrap();
+        assert!(json.contains("Test Token"));
+        assert!(json.contains("mfx_12345678"));
+        assert!(json.contains("read:packages"));
+    }
+
+    #[test]
+    fn test_api_token_clone() {
+        let token = ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: None,
+            name: "Test Token".to_string(),
+            token_prefix: "mfx_12345678".to_string(),
+            hashed_token: "hash".to_string(),
+            scopes: vec!["read:packages".to_string()],
+            last_used_at: None,
+            expires_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let cloned = token.clone();
+        assert_eq!(token.id, cloned.id);
+        assert_eq!(token.name, cloned.name);
+        assert_eq!(token.token_prefix, cloned.token_prefix);
+        assert_eq!(token.scopes, cloned.scopes);
+    }
+
+    #[test]
+    fn test_api_token_has_scope_empty() {
+        let token = ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: None,
+            name: "No Scopes Token".to_string(),
+            token_prefix: "mfx_noscopes".to_string(),
+            hashed_token: "hash".to_string(),
+            scopes: vec![],
+            last_used_at: None,
+            expires_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert!(!token.has_scope(&TokenScope::ReadPackages));
+        assert!(!token.has_scope(&TokenScope::AdminOrg));
+    }
+
+    #[test]
+    fn test_api_token_token_prefix_format() {
+        let prefix = "mfx_12345678";
+        assert!(prefix.starts_with("mfx_"));
+        assert_eq!(prefix.len(), 12);
+    }
+
+    #[test]
+    fn test_api_token_with_user() {
+        let user_id = Uuid::new_v4();
+        let token = ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: Some(user_id),
+            name: "User Token".to_string(),
+            token_prefix: "mfx_user1234".to_string(),
+            hashed_token: "hash".to_string(),
+            scopes: vec!["read:packages".to_string()],
+            last_used_at: None,
+            expires_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert_eq!(token.user_id, Some(user_id));
+    }
+
+    #[test]
+    fn test_api_token_without_user() {
+        let token = ApiToken {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            user_id: None,
+            name: "Org Token".to_string(),
+            token_prefix: "mfx_org12345".to_string(),
+            hashed_token: "hash".to_string(),
+            scopes: vec!["read:packages".to_string()],
+            last_used_at: None,
+            expires_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        assert_eq!(token.user_id, None);
     }
 }

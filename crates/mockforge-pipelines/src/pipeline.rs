@@ -525,4 +525,417 @@ mod tests {
 
         assert!(pipeline.matches_event(&event));
     }
+
+    #[test]
+    fn test_pipeline_new() {
+        let workspace_id = Uuid::new_v4();
+        let org_id = Uuid::new_v4();
+
+        let definition = PipelineDefinition {
+            name: "my-pipeline".to_string(),
+            description: "A test pipeline".to_string(),
+            triggers: vec![],
+            steps: vec![],
+            enabled: true,
+            step_defaults: HashMap::new(),
+        };
+
+        let pipeline =
+            Pipeline::new("my-pipeline".to_string(), definition, Some(workspace_id), Some(org_id));
+
+        assert_eq!(pipeline.name, "my-pipeline");
+        assert_eq!(pipeline.workspace_id, Some(workspace_id));
+        assert_eq!(pipeline.org_id, Some(org_id));
+        assert!(pipeline.id != Uuid::nil());
+    }
+
+    #[test]
+    fn test_pipeline_disabled_does_not_match() {
+        let definition = PipelineDefinition {
+            name: "disabled-pipeline".to_string(),
+            description: String::new(),
+            triggers: vec![PipelineTrigger {
+                event: "schema.changed".to_string(),
+                filters: HashMap::new(),
+            }],
+            steps: vec![],
+            enabled: false,
+            step_defaults: HashMap::new(),
+        };
+
+        let workspace_id = Uuid::new_v4();
+        let pipeline = Pipeline::new("test".to_string(), definition, Some(workspace_id), None);
+
+        let event =
+            PipelineEvent::schema_changed(workspace_id, "openapi".to_string(), HashMap::new());
+
+        assert!(!pipeline.matches_event(&event));
+    }
+
+    #[test]
+    fn test_pipeline_workspace_mismatch() {
+        let definition = PipelineDefinition {
+            name: "test-pipeline".to_string(),
+            description: String::new(),
+            triggers: vec![PipelineTrigger {
+                event: "schema.changed".to_string(),
+                filters: HashMap::new(),
+            }],
+            steps: vec![],
+            enabled: true,
+            step_defaults: HashMap::new(),
+        };
+
+        let workspace_id = Uuid::new_v4();
+        let other_workspace_id = Uuid::new_v4();
+
+        let pipeline = Pipeline::new("test".to_string(), definition, Some(workspace_id), None);
+
+        // Event from different workspace should not match
+        let event = PipelineEvent::schema_changed(
+            other_workspace_id,
+            "openapi".to_string(),
+            HashMap::new(),
+        );
+
+        assert!(!pipeline.matches_event(&event));
+    }
+
+    #[test]
+    fn test_pipeline_trigger_serialize_deserialize() {
+        let trigger = PipelineTrigger {
+            event: "schema.changed".to_string(),
+            filters: {
+                let mut f = HashMap::new();
+                f.insert(
+                    "schema_type".to_string(),
+                    serde_json::Value::String("openapi".to_string()),
+                );
+                f
+            },
+        };
+
+        let json = serde_json::to_string(&trigger).unwrap();
+        let deserialized: PipelineTrigger = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.event, trigger.event);
+        assert_eq!(deserialized.filters.len(), 1);
+    }
+
+    #[test]
+    fn test_pipeline_step_serialize_deserialize() {
+        let step = PipelineStep {
+            name: "test-step".to_string(),
+            step_type: "notify".to_string(),
+            config: {
+                let mut c = HashMap::new();
+                c.insert("channels".to_string(), serde_json::json!(["#team-channel"]));
+                c
+            },
+            continue_on_error: true,
+            timeout: Some(60),
+        };
+
+        let json = serde_json::to_string(&step).unwrap();
+        let deserialized: PipelineStep = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.name, step.name);
+        assert_eq!(deserialized.step_type, step.step_type);
+        assert!(deserialized.continue_on_error);
+        assert_eq!(deserialized.timeout, Some(60));
+    }
+
+    #[test]
+    fn test_pipeline_step_default_continue_on_error() {
+        let json = r#"{
+            "name": "test-step",
+            "step_type": "notify",
+            "config": {}
+        }"#;
+
+        let step: PipelineStep = serde_json::from_str(json).unwrap();
+        assert!(!step.continue_on_error);
+        assert_eq!(step.timeout, None);
+    }
+
+    #[test]
+    fn test_pipeline_definition_serialize_deserialize() {
+        let definition = PipelineDefinition {
+            name: "full-pipeline".to_string(),
+            description: "A complete pipeline".to_string(),
+            triggers: vec![
+                PipelineTrigger {
+                    event: "schema.changed".to_string(),
+                    filters: HashMap::new(),
+                },
+                PipelineTrigger {
+                    event: "scenario.published".to_string(),
+                    filters: HashMap::new(),
+                },
+            ],
+            steps: vec![
+                PipelineStep {
+                    name: "step1".to_string(),
+                    step_type: "notify".to_string(),
+                    config: HashMap::new(),
+                    continue_on_error: false,
+                    timeout: None,
+                },
+                PipelineStep {
+                    name: "step2".to_string(),
+                    step_type: "regenerate_sdk".to_string(),
+                    config: HashMap::new(),
+                    continue_on_error: true,
+                    timeout: Some(300),
+                },
+            ],
+            enabled: true,
+            step_defaults: HashMap::new(),
+        };
+
+        let json = serde_json::to_string(&definition).unwrap();
+        let deserialized: PipelineDefinition = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.name, definition.name);
+        assert_eq!(deserialized.triggers.len(), 2);
+        assert_eq!(deserialized.steps.len(), 2);
+    }
+
+    #[test]
+    fn test_pipeline_definition_defaults() {
+        let json = r#"{
+            "name": "minimal-pipeline",
+            "triggers": [],
+            "steps": []
+        }"#;
+
+        let definition: PipelineDefinition = serde_json::from_str(json).unwrap();
+        assert!(definition.enabled);
+        assert!(definition.description.is_empty());
+        assert!(definition.step_defaults.is_empty());
+    }
+
+    #[test]
+    fn test_pipeline_execution_status_serialize() {
+        let status = PipelineExecutionStatus::Running;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, "\"running\"");
+
+        let status = PipelineExecutionStatus::Completed;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, "\"completed\"");
+
+        let status = PipelineExecutionStatus::Failed;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, "\"failed\"");
+    }
+
+    #[test]
+    fn test_pipeline_execution_status_eq() {
+        assert_eq!(PipelineExecutionStatus::Started, PipelineExecutionStatus::Started);
+        assert_ne!(PipelineExecutionStatus::Started, PipelineExecutionStatus::Running);
+    }
+
+    #[test]
+    fn test_step_execution_result_serialize() {
+        let result = StepExecutionResult {
+            step_name: "test-step".to_string(),
+            step_type: "notify".to_string(),
+            status: "completed".to_string(),
+            started_at: Utc::now(),
+            completed_at: Some(Utc::now()),
+            output: Some({
+                let mut m = HashMap::new();
+                m.insert("key".to_string(), serde_json::json!("value"));
+                m
+            }),
+            error_message: None,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("test-step"));
+        assert!(json.contains("completed"));
+    }
+
+    #[test]
+    fn test_pipeline_executor_new() {
+        let executor = PipelineExecutor::new();
+        assert!(executor.step_executors.is_empty());
+    }
+
+    #[test]
+    fn test_pipeline_executor_default() {
+        let executor = PipelineExecutor::default();
+        assert!(executor.step_executors.is_empty());
+    }
+
+    #[test]
+    fn test_pipeline_matches_no_filters() {
+        let definition = PipelineDefinition {
+            name: "test-pipeline".to_string(),
+            description: String::new(),
+            triggers: vec![PipelineTrigger {
+                event: "schema.changed".to_string(),
+                filters: HashMap::new(), // No filters
+            }],
+            steps: vec![],
+            enabled: true,
+            step_defaults: HashMap::new(),
+        };
+
+        let workspace_id = Uuid::new_v4();
+        let pipeline = Pipeline::new("test".to_string(), definition, Some(workspace_id), None);
+
+        let event =
+            PipelineEvent::schema_changed(workspace_id, "openapi".to_string(), HashMap::new());
+
+        assert!(pipeline.matches_event(&event));
+    }
+
+    #[test]
+    fn test_pipeline_matches_wrong_event_type() {
+        let definition = PipelineDefinition {
+            name: "test-pipeline".to_string(),
+            description: String::new(),
+            triggers: vec![PipelineTrigger {
+                event: "schema.changed".to_string(),
+                filters: HashMap::new(),
+            }],
+            steps: vec![],
+            enabled: true,
+            step_defaults: HashMap::new(),
+        };
+
+        let workspace_id = Uuid::new_v4();
+        let pipeline = Pipeline::new("test".to_string(), definition, Some(workspace_id), None);
+
+        // Different event type
+        let event = PipelineEvent::scenario_published(
+            workspace_id,
+            Uuid::new_v4(),
+            "scenario".to_string(),
+            None,
+        );
+
+        assert!(!pipeline.matches_event(&event));
+    }
+
+    #[test]
+    fn test_pipeline_matches_filter_mismatch() {
+        let definition = PipelineDefinition {
+            name: "test-pipeline".to_string(),
+            description: String::new(),
+            triggers: vec![PipelineTrigger {
+                event: "schema.changed".to_string(),
+                filters: {
+                    let mut f = HashMap::new();
+                    f.insert(
+                        "schema_type".to_string(),
+                        serde_json::Value::String("protobuf".to_string()),
+                    );
+                    f
+                },
+            }],
+            steps: vec![],
+            enabled: true,
+            step_defaults: HashMap::new(),
+        };
+
+        let workspace_id = Uuid::new_v4();
+        let pipeline = Pipeline::new("test".to_string(), definition, Some(workspace_id), None);
+
+        // Event with different schema_type
+        let event =
+            PipelineEvent::schema_changed(workspace_id, "openapi".to_string(), HashMap::new());
+
+        assert!(!pipeline.matches_event(&event));
+    }
+
+    #[test]
+    fn test_pipeline_global_scope() {
+        // Pipeline without workspace_id should match any workspace
+        let definition = PipelineDefinition {
+            name: "global-pipeline".to_string(),
+            description: String::new(),
+            triggers: vec![PipelineTrigger {
+                event: "schema.changed".to_string(),
+                filters: HashMap::new(),
+            }],
+            steps: vec![],
+            enabled: true,
+            step_defaults: HashMap::new(),
+        };
+
+        let pipeline = Pipeline::new("test".to_string(), definition, None, None);
+
+        let workspace_id = Uuid::new_v4();
+        let event =
+            PipelineEvent::schema_changed(workspace_id, "openapi".to_string(), HashMap::new());
+
+        assert!(pipeline.matches_event(&event));
+    }
+
+    #[test]
+    fn test_pipeline_with_step_defaults() {
+        let mut step_defaults = HashMap::new();
+        let mut notify_defaults = HashMap::new();
+        notify_defaults
+            .insert("webhook_url".to_string(), serde_json::json!("https://default.webhook"));
+        step_defaults.insert("notify".to_string(), notify_defaults);
+
+        let definition = PipelineDefinition {
+            name: "pipeline-with-defaults".to_string(),
+            description: String::new(),
+            triggers: vec![],
+            steps: vec![],
+            enabled: true,
+            step_defaults,
+        };
+
+        let json = serde_json::to_string(&definition).unwrap();
+        let deserialized: PipelineDefinition = serde_json::from_str(&json).unwrap();
+
+        assert!(deserialized.step_defaults.contains_key("notify"));
+    }
+
+    #[test]
+    fn test_pipeline_clone() {
+        let definition = PipelineDefinition {
+            name: "test".to_string(),
+            description: "desc".to_string(),
+            triggers: vec![],
+            steps: vec![],
+            enabled: true,
+            step_defaults: HashMap::new(),
+        };
+
+        let pipeline = Pipeline::new("test".to_string(), definition, None, None);
+        let cloned = pipeline.clone();
+
+        assert_eq!(pipeline.id, cloned.id);
+        assert_eq!(pipeline.name, cloned.name);
+    }
+
+    #[test]
+    fn test_pipeline_execution_clone() {
+        let workspace_id = Uuid::new_v4();
+        let execution = PipelineExecution {
+            id: Uuid::new_v4(),
+            pipeline_id: Uuid::new_v4(),
+            trigger_event: PipelineEvent::schema_changed(
+                workspace_id,
+                "openapi".to_string(),
+                HashMap::new(),
+            ),
+            status: PipelineExecutionStatus::Completed,
+            started_at: Utc::now(),
+            completed_at: Some(Utc::now()),
+            error_message: None,
+            execution_log: vec![],
+        };
+
+        let cloned = execution.clone();
+        assert_eq!(execution.id, cloned.id);
+        assert_eq!(execution.status, cloned.status);
+    }
 }

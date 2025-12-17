@@ -79,3 +79,142 @@ impl From<anyhow::Error> for ScenarioError {
         ScenarioError::Generic(err.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_not_found_error() {
+        let err = ScenarioError::NotFound("test-scenario".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Scenario not found"));
+        assert!(msg.contains("test-scenario"));
+    }
+
+    #[test]
+    fn test_invalid_manifest_error() {
+        let err = ScenarioError::InvalidManifest("missing required field".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Invalid scenario manifest"));
+        assert!(msg.contains("missing required field"));
+    }
+
+    #[test]
+    fn test_invalid_version_error() {
+        let err = ScenarioError::InvalidVersion("1.2".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Invalid version"));
+        assert!(msg.contains("1.2"));
+    }
+
+    #[test]
+    fn test_already_exists_error() {
+        let err = ScenarioError::AlreadyExists("existing-scenario".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("already exists"));
+        assert!(msg.contains("existing-scenario"));
+    }
+
+    #[test]
+    fn test_auth_required_error() {
+        let err = ScenarioError::AuthRequired;
+        assert!(err.to_string().contains("Authentication required"));
+    }
+
+    #[test]
+    fn test_permission_denied_error() {
+        let err = ScenarioError::PermissionDenied;
+        assert!(err.to_string().contains("Permission denied"));
+    }
+
+    #[test]
+    fn test_storage_error() {
+        let err = ScenarioError::Storage("disk full".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Storage error"));
+        assert!(msg.contains("disk full"));
+    }
+
+    #[test]
+    fn test_network_error() {
+        let err = ScenarioError::Network("connection refused".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Network error"));
+        assert!(msg.contains("connection refused"));
+    }
+
+    #[test]
+    fn test_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let err: ScenarioError = io_err.into();
+        assert!(matches!(err, ScenarioError::Io(_)));
+        assert!(err.to_string().contains("File system error"));
+    }
+
+    #[test]
+    fn test_serde_error() {
+        let json_err: serde_json::Error = serde_json::from_str::<String>("invalid").unwrap_err();
+        let err: ScenarioError = json_err.into();
+        assert!(matches!(err, ScenarioError::Serde(_)));
+        assert!(err.to_string().contains("Serialization error"));
+    }
+
+    #[test]
+    fn test_yaml_error() {
+        let yaml_content = "invalid: yaml: content:";
+        let yaml_err: serde_yaml::Error = serde_yaml::from_str::<String>(yaml_content).unwrap_err();
+        let err: ScenarioError = yaml_err.into();
+        assert!(matches!(err, ScenarioError::Yaml(_)));
+        assert!(err.to_string().contains("YAML parsing error"));
+    }
+
+    #[test]
+    fn test_invalid_source_error() {
+        let err = ScenarioError::InvalidSource("unknown://source".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Invalid source"));
+        assert!(msg.contains("unknown://source"));
+    }
+
+    #[test]
+    fn test_checksum_mismatch_error() {
+        let err = ScenarioError::ChecksumMismatch {
+            expected: "abc123".to_string(),
+            actual: "def456".to_string(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("Checksum verification failed"));
+        assert!(msg.contains("abc123"));
+        assert!(msg.contains("def456"));
+    }
+
+    #[test]
+    fn test_dependency_resolution_error() {
+        let err = ScenarioError::DependencyResolution("circular dependency".to_string());
+        let msg = err.to_string();
+        assert!(msg.contains("Dependency resolution failed"));
+        assert!(msg.contains("circular dependency"));
+    }
+
+    #[test]
+    fn test_generic_error() {
+        let err = ScenarioError::Generic("custom error message".to_string());
+        assert_eq!(err.to_string(), "custom error message");
+    }
+
+    #[test]
+    fn test_from_anyhow_error() {
+        let anyhow_err = anyhow::anyhow!("something went wrong");
+        let err: ScenarioError = anyhow_err.into();
+        assert!(matches!(err, ScenarioError::Generic(_)));
+        assert!(err.to_string().contains("something went wrong"));
+    }
+
+    #[test]
+    fn test_error_debug() {
+        let err = ScenarioError::NotFound("test".to_string());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("NotFound"));
+    }
+}

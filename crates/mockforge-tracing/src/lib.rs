@@ -88,4 +88,141 @@ mod tests {
         assert_eq!(Protocol::WebSocket.as_str(), "websocket");
         assert_eq!(Protocol::GraphQL.as_str(), "graphql");
     }
+
+    #[test]
+    fn test_protocol_debug() {
+        assert_eq!(format!("{:?}", Protocol::Http), "Http");
+        assert_eq!(format!("{:?}", Protocol::Grpc), "Grpc");
+        assert_eq!(format!("{:?}", Protocol::WebSocket), "WebSocket");
+        assert_eq!(format!("{:?}", Protocol::GraphQL), "GraphQL");
+    }
+
+    #[test]
+    fn test_protocol_clone() {
+        let proto = Protocol::Http;
+        let cloned = proto.clone();
+        assert_eq!(proto, cloned);
+    }
+
+    #[test]
+    fn test_protocol_copy() {
+        let proto = Protocol::Grpc;
+        let copied = proto; // Copy, not move
+        assert_eq!(proto, copied);
+        assert_eq!(Protocol::Grpc, copied); // proto still accessible
+    }
+
+    #[test]
+    fn test_protocol_eq() {
+        assert_eq!(Protocol::Http, Protocol::Http);
+        assert_ne!(Protocol::Http, Protocol::Grpc);
+        assert_ne!(Protocol::WebSocket, Protocol::GraphQL);
+    }
+
+    #[test]
+    fn test_create_request_span() {
+        // Initialize a no-op tracer for testing
+        use opentelemetry_sdk::trace::TracerProvider as SdkTracerProvider;
+
+        let provider = SdkTracerProvider::builder().build();
+        global::set_tracer_provider(provider);
+
+        let attributes = vec![
+            KeyValue::new("http.method", "GET"),
+            KeyValue::new("http.url", "/api/users"),
+        ];
+
+        let span = create_request_span(Protocol::Http, "test-operation", attributes);
+
+        // Verify span was created (it's a BoxedSpan)
+        assert!(!span.span_context().trace_id().to_string().is_empty());
+    }
+
+    #[test]
+    fn test_create_request_span_all_protocols() {
+        use opentelemetry_sdk::trace::TracerProvider as SdkTracerProvider;
+
+        let provider = SdkTracerProvider::builder().build();
+        global::set_tracer_provider(provider);
+
+        let protocols = [
+            Protocol::Http,
+            Protocol::Grpc,
+            Protocol::WebSocket,
+            Protocol::GraphQL,
+        ];
+
+        for protocol in protocols {
+            let span = create_request_span(protocol, "test-op", vec![]);
+            assert!(!span.span_context().trace_id().to_string().is_empty());
+        }
+    }
+
+    #[test]
+    fn test_record_success() {
+        use opentelemetry_sdk::trace::TracerProvider as SdkTracerProvider;
+
+        let provider = SdkTracerProvider::builder().build();
+        global::set_tracer_provider(provider);
+
+        let mut span = create_request_span(Protocol::Http, "success-test", vec![]);
+
+        let attributes = vec![
+            KeyValue::new("http.status_code", 200),
+            KeyValue::new("response.size", 1024),
+        ];
+
+        record_success(&mut span, attributes);
+        // If we get here without panic, the function worked
+    }
+
+    #[test]
+    fn test_record_success_empty_attributes() {
+        use opentelemetry_sdk::trace::TracerProvider as SdkTracerProvider;
+
+        let provider = SdkTracerProvider::builder().build();
+        global::set_tracer_provider(provider);
+
+        let mut span = create_request_span(Protocol::Grpc, "success-empty", vec![]);
+        record_success(&mut span, vec![]);
+        // Should complete without error
+    }
+
+    #[test]
+    fn test_record_error() {
+        use opentelemetry_sdk::trace::TracerProvider as SdkTracerProvider;
+
+        let provider = SdkTracerProvider::builder().build();
+        global::set_tracer_provider(provider);
+
+        let mut span = create_request_span(Protocol::Http, "error-test", vec![]);
+
+        record_error(&mut span, "Connection refused");
+        // If we get here without panic, the function worked
+    }
+
+    #[test]
+    fn test_record_error_with_details() {
+        use opentelemetry_sdk::trace::TracerProvider as SdkTracerProvider;
+
+        let provider = SdkTracerProvider::builder().build();
+        global::set_tracer_provider(provider);
+
+        let mut span = create_request_span(Protocol::WebSocket, "error-details", vec![]);
+
+        record_error(&mut span, "WebSocket handshake failed: 401 Unauthorized");
+        // Should complete without error
+    }
+
+    #[test]
+    fn test_record_error_empty_message() {
+        use opentelemetry_sdk::trace::TracerProvider as SdkTracerProvider;
+
+        let provider = SdkTracerProvider::builder().build();
+        global::set_tracer_provider(provider);
+
+        let mut span = create_request_span(Protocol::GraphQL, "error-empty", vec![]);
+        record_error(&mut span, "");
+        // Should handle empty error messages gracefully
+    }
 }

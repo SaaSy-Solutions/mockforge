@@ -623,6 +623,331 @@ mod tests {
         WorkspaceState::new(Arc::new(tokio::sync::RwLock::new(registry)))
     }
 
+    // ==================== WorkspaceState Tests ====================
+
+    #[test]
+    fn test_workspace_state_creation() {
+        let state = create_test_state();
+        // State is created - this verifies the type is correct
+        let _ = state;
+    }
+
+    #[test]
+    fn test_workspace_state_clone() {
+        let state = create_test_state();
+        let cloned = state.clone();
+        // Both states reference the same registry
+        let _ = cloned;
+    }
+
+    #[test]
+    fn test_workspace_state_debug() {
+        let state = create_test_state();
+        let debug = format!("{:?}", state);
+        assert!(debug.contains("WorkspaceState"));
+    }
+
+    // ==================== ApiResponse Tests ====================
+
+    #[test]
+    fn test_api_response_success() {
+        let response: ApiResponse<String> = ApiResponse::success("test data".to_string());
+        assert!(response.success);
+        assert!(response.data.is_some());
+        assert!(response.error.is_none());
+    }
+
+    #[test]
+    fn test_api_response_error() {
+        let response: ApiResponse<String> = ApiResponse::error("test error".to_string());
+        assert!(!response.success);
+        assert!(response.data.is_none());
+        assert!(response.error.is_some());
+    }
+
+    #[test]
+    fn test_api_response_serialization() {
+        let response = ApiResponse::success("data".to_string());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("success"));
+        assert!(json.contains("data"));
+    }
+
+    #[test]
+    fn test_api_response_error_serialization() {
+        let response: ApiResponse<()> = ApiResponse::error("something went wrong".to_string());
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("error"));
+        assert!(json.contains("something went wrong"));
+    }
+
+    // ==================== CreateWorkspaceRequest Tests ====================
+
+    #[test]
+    fn test_create_workspace_request_minimal() {
+        let request = CreateWorkspaceRequest {
+            id: "ws-123".to_string(),
+            name: "My Workspace".to_string(),
+            description: None,
+        };
+
+        assert_eq!(request.id, "ws-123");
+        assert_eq!(request.name, "My Workspace");
+        assert!(request.description.is_none());
+    }
+
+    #[test]
+    fn test_create_workspace_request_full() {
+        let request = CreateWorkspaceRequest {
+            id: "ws-456".to_string(),
+            name: "Full Workspace".to_string(),
+            description: Some("A complete workspace".to_string()),
+        };
+
+        assert!(request.description.is_some());
+    }
+
+    #[test]
+    fn test_create_workspace_request_deserialization() {
+        let json = r#"{
+            "id": "test-ws",
+            "name": "Test",
+            "description": "Test workspace"
+        }"#;
+
+        let request: CreateWorkspaceRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.id, "test-ws");
+        assert_eq!(request.name, "Test");
+    }
+
+    // ==================== UpdateWorkspaceRequest Tests ====================
+
+    #[test]
+    fn test_update_workspace_request_empty() {
+        let request = UpdateWorkspaceRequest {
+            name: None,
+            description: None,
+            enabled: None,
+        };
+
+        assert!(request.name.is_none());
+        assert!(request.description.is_none());
+        assert!(request.enabled.is_none());
+    }
+
+    #[test]
+    fn test_update_workspace_request_partial() {
+        let request = UpdateWorkspaceRequest {
+            name: Some("New Name".to_string()),
+            description: None,
+            enabled: Some(false),
+        };
+
+        assert!(request.name.is_some());
+        assert!(request.enabled.is_some());
+    }
+
+    #[test]
+    fn test_update_workspace_request_deserialization() {
+        let json = r#"{
+            "name": "Updated",
+            "enabled": true
+        }"#;
+
+        let request: UpdateWorkspaceRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.name, Some("Updated".to_string()));
+        assert_eq!(request.enabled, Some(true));
+    }
+
+    // ==================== WorkspaceListItem Tests ====================
+
+    #[test]
+    fn test_workspace_list_item_creation() {
+        let item = WorkspaceListItem {
+            id: "item-1".to_string(),
+            name: "Test Item".to_string(),
+            description: Some("Description".to_string()),
+            enabled: true,
+            stats: WorkspaceStats::default(),
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-02T00:00:00Z".to_string(),
+        };
+
+        assert_eq!(item.id, "item-1");
+        assert!(item.enabled);
+    }
+
+    #[test]
+    fn test_workspace_list_item_serialization() {
+        let item = WorkspaceListItem {
+            id: "ser-test".to_string(),
+            name: "Serialize Test".to_string(),
+            description: None,
+            enabled: false,
+            stats: WorkspaceStats::default(),
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let json = serde_json::to_string(&item).unwrap();
+        assert!(json.contains("ser-test"));
+        assert!(json.contains("Serialize Test"));
+    }
+
+    #[test]
+    fn test_workspace_list_item_clone() {
+        let item = WorkspaceListItem {
+            id: "clone-test".to_string(),
+            name: "Clone Test".to_string(),
+            description: None,
+            enabled: true,
+            stats: WorkspaceStats::default(),
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let cloned = item.clone();
+        assert_eq!(cloned.id, item.id);
+        assert_eq!(cloned.enabled, item.enabled);
+    }
+
+    // ==================== MockEnvironmentResponse Tests ====================
+
+    #[test]
+    fn test_mock_environment_response_creation() {
+        let response = MockEnvironmentResponse {
+            name: "dev".to_string(),
+            id: "env-123".to_string(),
+            workspace_id: "ws-456".to_string(),
+            reality_config: None,
+            chaos_config: None,
+            drift_budget_config: None,
+        };
+
+        assert_eq!(response.name, "dev");
+        assert_eq!(response.id, "env-123");
+    }
+
+    #[test]
+    fn test_mock_environment_response_with_configs() {
+        let response = MockEnvironmentResponse {
+            name: "test".to_string(),
+            id: "env-test".to_string(),
+            workspace_id: "ws-test".to_string(),
+            reality_config: Some(serde_json::json!({"level": "high"})),
+            chaos_config: Some(serde_json::json!({"enabled": true})),
+            drift_budget_config: Some(serde_json::json!({"max_drift": 0.1})),
+        };
+
+        assert!(response.reality_config.is_some());
+        assert!(response.chaos_config.is_some());
+        assert!(response.drift_budget_config.is_some());
+    }
+
+    #[test]
+    fn test_mock_environment_response_serialization() {
+        let response = MockEnvironmentResponse {
+            name: "prod".to_string(),
+            id: "env-prod".to_string(),
+            workspace_id: "ws-prod".to_string(),
+            reality_config: None,
+            chaos_config: None,
+            drift_budget_config: None,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("prod"));
+        assert!(json.contains("env-prod"));
+    }
+
+    // ==================== MockEnvironmentManagerResponse Tests ====================
+
+    #[test]
+    fn test_mock_environment_manager_response_empty() {
+        let response = MockEnvironmentManagerResponse {
+            workspace_id: "ws-empty".to_string(),
+            active_environment: None,
+            environments: vec![],
+        };
+
+        assert!(response.active_environment.is_none());
+        assert!(response.environments.is_empty());
+    }
+
+    #[test]
+    fn test_mock_environment_manager_response_with_environments() {
+        let response = MockEnvironmentManagerResponse {
+            workspace_id: "ws-full".to_string(),
+            active_environment: Some("dev".to_string()),
+            environments: vec![
+                MockEnvironmentResponse {
+                    name: "dev".to_string(),
+                    id: "env-dev".to_string(),
+                    workspace_id: "ws-full".to_string(),
+                    reality_config: None,
+                    chaos_config: None,
+                    drift_budget_config: None,
+                },
+                MockEnvironmentResponse {
+                    name: "test".to_string(),
+                    id: "env-test".to_string(),
+                    workspace_id: "ws-full".to_string(),
+                    reality_config: None,
+                    chaos_config: None,
+                    drift_budget_config: None,
+                },
+            ],
+        };
+
+        assert_eq!(response.active_environment, Some("dev".to_string()));
+        assert_eq!(response.environments.len(), 2);
+    }
+
+    // ==================== SetActiveEnvironmentRequest Tests ====================
+
+    #[test]
+    fn test_set_active_environment_request_creation() {
+        let request = SetActiveEnvironmentRequest {
+            environment: "prod".to_string(),
+        };
+
+        assert_eq!(request.environment, "prod");
+    }
+
+    #[test]
+    fn test_set_active_environment_request_deserialization() {
+        let json = r#"{"environment": "test"}"#;
+        let request: SetActiveEnvironmentRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.environment, "test");
+    }
+
+    // ==================== UpdateMockEnvironmentRequest Tests ====================
+
+    #[test]
+    fn test_update_mock_environment_request_empty() {
+        let request = UpdateMockEnvironmentRequest {
+            reality_config: None,
+            chaos_config: None,
+            drift_budget_config: None,
+        };
+
+        assert!(request.reality_config.is_none());
+    }
+
+    #[test]
+    fn test_update_mock_environment_request_with_configs() {
+        let request = UpdateMockEnvironmentRequest {
+            reality_config: Some(serde_json::json!({"level": "medium"})),
+            chaos_config: Some(serde_json::json!({"rate": 0.5})),
+            drift_budget_config: None,
+        };
+
+        assert!(request.reality_config.is_some());
+        assert!(request.chaos_config.is_some());
+    }
+
+    // ==================== Handler Tests ====================
+
     #[tokio::test]
     async fn test_create_workspace() {
         let state = create_test_state();
@@ -656,5 +981,130 @@ mod tests {
 
         assert!(result.0.success);
         assert!(!result.0.data.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_workspace() {
+        let state = create_test_state();
+
+        // Create a workspace first
+        let request = CreateWorkspaceRequest {
+            id: "get-test".to_string(),
+            name: "Get Test Workspace".to_string(),
+            description: None,
+        };
+
+        let _ = create_workspace(State(state.clone()), Json(request)).await;
+
+        let result = get_workspace(State(state), Path("get-test".to_string())).await.unwrap();
+
+        assert!(result.0.success);
+        assert_eq!(result.0.data.as_ref().unwrap().id, "get-test");
+    }
+
+    #[tokio::test]
+    async fn test_get_workspace_not_found() {
+        let state = create_test_state();
+
+        let result = get_workspace(State(state), Path("nonexistent".to_string())).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_duplicate_workspace() {
+        let state = create_test_state();
+
+        let request = CreateWorkspaceRequest {
+            id: "duplicate".to_string(),
+            name: "First".to_string(),
+            description: None,
+        };
+
+        let _ = create_workspace(State(state.clone()), Json(request)).await;
+
+        let request2 = CreateWorkspaceRequest {
+            id: "duplicate".to_string(),
+            name: "Second".to_string(),
+            description: None,
+        };
+
+        let result = create_workspace(State(state), Json(request2)).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_workspace() {
+        let state = create_test_state();
+
+        // Create a workspace first
+        let request = CreateWorkspaceRequest {
+            id: "delete-test".to_string(),
+            name: "Delete Test".to_string(),
+            description: None,
+        };
+
+        let _ = create_workspace(State(state.clone()), Json(request)).await;
+
+        let result = delete_workspace(State(state.clone()), Path("delete-test".to_string())).await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().0.success);
+
+        // Verify workspace is gone
+        let get_result = get_workspace(State(state), Path("delete-test".to_string())).await;
+        assert!(get_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_workspace() {
+        let state = create_test_state();
+
+        // Create a workspace first
+        let create_request = CreateWorkspaceRequest {
+            id: "update-test".to_string(),
+            name: "Original Name".to_string(),
+            description: None,
+        };
+
+        let _ = create_workspace(State(state.clone()), Json(create_request)).await;
+
+        // Update the workspace
+        let update_request = UpdateWorkspaceRequest {
+            name: Some("Updated Name".to_string()),
+            description: Some("New description".to_string()),
+            enabled: Some(false),
+        };
+
+        let result = update_workspace(
+            State(state.clone()),
+            Path("update-test".to_string()),
+            Json(update_request),
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.0.success);
+        assert_eq!(response.0.data.as_ref().unwrap().name, "Updated Name");
+    }
+
+    #[tokio::test]
+    async fn test_get_workspace_stats() {
+        let state = create_test_state();
+
+        // Create a workspace first
+        let request = CreateWorkspaceRequest {
+            id: "stats-test".to_string(),
+            name: "Stats Test".to_string(),
+            description: None,
+        };
+
+        let _ = create_workspace(State(state.clone()), Json(request)).await;
+
+        let result = get_workspace_stats(State(state), Path("stats-test".to_string())).await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().0.success);
     }
 }

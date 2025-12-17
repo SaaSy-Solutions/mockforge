@@ -8,16 +8,16 @@ use axum::{
     http::HeaderMap,
     Json,
 };
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::Utc;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
+    middleware::{resolve_org_context, AuthUser},
     AppState,
 };
-use mockforge_analytics::{PillarUsageMetrics, PillarUsageEvent, Pillar};
+use mockforge_analytics::{Pillar, PillarUsageEvent, PillarUsageMetrics};
 
 /// Get pillar usage metrics for a workspace
 ///
@@ -36,15 +36,23 @@ pub async fn get_workspace_pillar_metrics(
 
     // Parse duration (default to 7 days)
     let time_range_str = params.time_range.unwrap_or_else(|| "7d".to_string());
-    let duration_seconds = parse_duration(&time_range_str)
-        .ok_or_else(|| ApiError::InvalidRequest("Invalid time_range format. Use '1d', '7d', '30d', '90d', or 'all'".to_string()))?;
+    let duration_seconds = parse_duration(&time_range_str).ok_or_else(|| {
+        ApiError::InvalidRequest(
+            "Invalid time_range format. Use '1d', '7d', '30d', '90d', or 'all'".to_string(),
+        )
+    })?;
 
     // Get analytics database and query metrics
     let metrics = if let Some(analytics_db) = &state.analytics_db {
         analytics_db
             .get_workspace_pillar_metrics(&workspace_id.to_string(), duration_seconds)
             .await
-            .map_err(|e| ApiError::Internal(anyhow::Error::msg(format!("Failed to query pillar metrics: {}", e))))?
+            .map_err(|e| {
+                ApiError::Internal(anyhow::Error::msg(format!(
+                    "Failed to query pillar metrics: {}",
+                    e
+                )))
+            })?
     } else {
         // Return empty metrics if analytics database is not available
         PillarUsageMetrics {
@@ -106,15 +114,23 @@ pub async fn get_org_pillar_metrics(
 
     // Parse duration (default to 30 days)
     let time_range_str = params.time_range.unwrap_or_else(|| "30d".to_string());
-    let duration_seconds = parse_duration(&time_range_str)
-        .ok_or_else(|| ApiError::InvalidRequest("Invalid time_range format. Use '1d', '7d', '30d', '90d', or 'all'".to_string()))?;
+    let duration_seconds = parse_duration(&time_range_str).ok_or_else(|| {
+        ApiError::InvalidRequest(
+            "Invalid time_range format. Use '1d', '7d', '30d', '90d', or 'all'".to_string(),
+        )
+    })?;
 
     // Get analytics database and query metrics
     let metrics = if let Some(analytics_db) = &state.analytics_db {
         analytics_db
             .get_org_pillar_metrics(&org_id.to_string(), duration_seconds)
             .await
-            .map_err(|e| ApiError::Internal(anyhow::Error::msg(format!("Failed to query pillar metrics: {}", e))))?
+            .map_err(|e| {
+                ApiError::Internal(anyhow::Error::msg(format!(
+                    "Failed to query pillar metrics: {}",
+                    e
+                )))
+            })?
     } else {
         // Return empty metrics if analytics database is not available
         PillarUsageMetrics {
@@ -162,10 +178,9 @@ pub async fn record_pillar_event(
             timestamp: Utc::now(),
         };
 
-        analytics_db
-            .record_pillar_usage(&event)
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::Error::msg(format!("Failed to record pillar event: {}", e))))?;
+        analytics_db.record_pillar_usage(&event).await.map_err(|e| {
+            ApiError::Internal(anyhow::Error::msg(format!("Failed to record pillar event: {}", e)))
+        })?;
     }
 
     Ok(Json(RecordPillarEventResponse {
@@ -210,11 +225,11 @@ pub struct RecordPillarEventResponse {
 /// Supports: "1d", "7d", "30d", "90d", "all" (returns max i64 for "all")
 fn parse_duration(s: &str) -> Option<i64> {
     match s.to_lowercase().as_str() {
-        "1d" => Some(86400),      // 1 day
-        "7d" => Some(604800),     // 7 days
-        "30d" => Some(2592000),   // 30 days
-        "90d" => Some(7776000),   // 90 days
-        "all" => Some(i64::MAX),  // All time
+        "1d" => Some(86400),     // 1 day
+        "7d" => Some(604800),    // 7 days
+        "30d" => Some(2592000),  // 30 days
+        "90d" => Some(7776000),  // 90 days
+        "all" => Some(i64::MAX), // All time
         _ => None,
     }
 }

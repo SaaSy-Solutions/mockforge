@@ -113,4 +113,155 @@ mod tests {
         let _router = prometheus_router(registry);
         // Router should be created successfully
     }
+
+    #[test]
+    fn test_metrics_error_display() {
+        let error = MetricsError::EncodingError("test error message".to_string());
+        let display = format!("{}", error);
+        assert!(display.contains("Encoding error"));
+        assert!(display.contains("test error message"));
+    }
+
+    #[test]
+    fn test_metrics_error_debug() {
+        let error = MetricsError::EncodingError("test".to_string());
+        let debug = format!("{:?}", error);
+        assert!(debug.contains("EncodingError"));
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn test_metrics_error_is_error_trait() {
+        let error = MetricsError::EncodingError("test".to_string());
+        // Verify it implements std::error::Error
+        let _: &dyn std::error::Error = &error;
+    }
+
+    #[tokio::test]
+    async fn test_metrics_error_into_response() {
+        let error = MetricsError::EncodingError("encoding failed".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler_with_various_metrics() {
+        let registry = Arc::new(MetricsRegistry::new());
+
+        // Record various types of metrics
+        registry.record_http_request("GET", 200, 0.045);
+        registry.record_http_request("POST", 201, 0.123);
+        registry.record_http_request("DELETE", 204, 0.015);
+        registry.record_http_request("PUT", 500, 0.500);
+        registry.record_grpc_request("ListUsers", "OK", 0.025);
+        registry.record_ws_message_sent();
+        registry.record_ws_message_received();
+        registry.record_plugin_execution("test-plugin", true, 0.010);
+        registry.record_error("http", "timeout");
+        registry.update_memory_usage(1024.0 * 1024.0 * 50.0);
+        registry.update_cpu_usage(25.5);
+
+        // Call the handler
+        let result = metrics_handler(State(registry)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler_empty_registry() {
+        let registry = Arc::new(MetricsRegistry::new());
+        // No metrics recorded
+        let result = metrics_handler(State(registry)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler_with_grpc_metrics() {
+        let registry = Arc::new(MetricsRegistry::new());
+        registry.record_grpc_request("GetUser", "OK", 0.025);
+        registry.record_grpc_request("CreateUser", "INTERNAL", 0.150);
+        registry.record_grpc_request_with_pillar("ListUsers", "OK", 0.050, "reality");
+
+        let result = metrics_handler(State(registry)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler_with_websocket_metrics() {
+        let registry = Arc::new(MetricsRegistry::new());
+        registry.record_ws_connection_established();
+        registry.record_ws_message_sent();
+        registry.record_ws_message_received();
+        registry.record_ws_error();
+        registry.record_ws_connection_closed(60.0, "normal");
+
+        let result = metrics_handler(State(registry)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler_with_smtp_metrics() {
+        let registry = Arc::new(MetricsRegistry::new());
+        registry.record_smtp_connection_established();
+        registry.record_smtp_message_received();
+        registry.record_smtp_message_stored();
+        registry.record_smtp_error("auth_failed");
+        registry.record_smtp_connection_closed();
+
+        let result = metrics_handler(State(registry)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler_with_marketplace_metrics() {
+        let registry = Arc::new(MetricsRegistry::new());
+        registry.record_marketplace_publish("plugin", true, 2.5);
+        registry.record_marketplace_download("template", true, 0.5);
+        registry.record_marketplace_search("scenario", true, 0.1);
+        registry.record_marketplace_error("plugin", "validation_failed");
+        registry.update_marketplace_items_total("plugin", 150);
+
+        let result = metrics_handler(State(registry)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler_with_workspace_metrics() {
+        let registry = Arc::new(MetricsRegistry::new());
+        registry.record_workspace_request("workspace-1", "GET", 200, 0.05);
+        registry.update_workspace_active_routes("workspace-1", 10);
+        registry.record_workspace_error("workspace-1", "timeout");
+        registry.increment_workspace_routes("workspace-1");
+        registry.decrement_workspace_routes("workspace-1");
+
+        let result = metrics_handler(State(registry)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler_with_scenario_metrics() {
+        let registry = Arc::new(MetricsRegistry::new());
+        registry.set_scenario_mode(0); // healthy
+        registry.record_chaos_trigger();
+        registry.set_scenario_mode(3); // chaos
+
+        let result = metrics_handler(State(registry)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler_with_path_metrics() {
+        let registry = Arc::new(MetricsRegistry::new());
+        registry.record_http_request_with_path("/api/users/123", "GET", 200, 0.05);
+        registry.record_http_request_with_path("/api/users/456", "GET", 200, 0.06);
+        registry.record_http_request_with_path_and_pillar(
+            "/api/items",
+            "POST",
+            201,
+            0.1,
+            "reality",
+        );
+
+        let result = metrics_handler(State(registry)).await;
+        assert!(result.is_ok());
+    }
 }

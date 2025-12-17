@@ -247,6 +247,60 @@ mod tests {
         super::AdminState::new(None, None, None, None, false, 8080, None, None, None, None, None)
     }
 
+    // ==================== RequestMetrics Tests ====================
+
+    #[test]
+    fn test_request_metrics_default() {
+        let metrics = RequestMetrics::default();
+        assert_eq!(metrics.total_requests, 0);
+        assert_eq!(metrics.active_requests, 0);
+        assert_eq!(metrics.average_response_time, 0.0);
+        assert_eq!(metrics.requests_per_second, 0.0);
+        assert_eq!(metrics.total_errors, 0);
+    }
+
+    #[test]
+    fn test_request_metrics_creation() {
+        let metrics = RequestMetrics {
+            total_requests: 1000,
+            active_requests: 10,
+            average_response_time: 45.5,
+            requests_per_second: 25.0,
+            total_errors: 5,
+        };
+
+        assert_eq!(metrics.total_requests, 1000);
+        assert_eq!(metrics.active_requests, 10);
+        assert!((metrics.average_response_time - 45.5).abs() < 0.001);
+        assert!((metrics.requests_per_second - 25.0).abs() < 0.001);
+        assert_eq!(metrics.total_errors, 5);
+    }
+
+    #[test]
+    fn test_request_metrics_clone() {
+        let metrics = RequestMetrics {
+            total_requests: 500,
+            active_requests: 5,
+            average_response_time: 30.0,
+            requests_per_second: 10.0,
+            total_errors: 2,
+        };
+
+        let cloned = metrics.clone();
+        assert_eq!(cloned.total_requests, 500);
+        assert_eq!(cloned.active_requests, 5);
+    }
+
+    #[test]
+    fn test_request_metrics_debug() {
+        let metrics = RequestMetrics::default();
+        let debug_str = format!("{:?}", metrics);
+        assert!(debug_str.contains("RequestMetrics"));
+        assert!(debug_str.contains("total_requests"));
+    }
+
+    // ==================== Handler Tests ====================
+
     #[tokio::test]
     async fn test_get_restart_status() {
         let state = create_test_state();
@@ -261,5 +315,203 @@ mod tests {
         let response = get_config(axum::extract::State(state)).await;
 
         assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_get_health() {
+        let response = get_health().await;
+
+        assert_eq!(response.0.status, "healthy");
+        assert!(response.0.issues.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_server_info() {
+        let state = create_test_state();
+        let response = get_server_info(axum::extract::State(state)).await;
+
+        assert!(response.0.is_object());
+        let obj = response.0.as_object().unwrap();
+        assert!(obj.contains_key("http_server"));
+        assert!(obj.contains_key("ws_server"));
+        assert!(obj.contains_key("grpc_server"));
+        assert!(obj.contains_key("graphql_server"));
+        assert!(obj.contains_key("api_enabled"));
+    }
+
+    #[tokio::test]
+    async fn test_get_server_info_disabled() {
+        let state = create_test_state();
+        let response = get_server_info(axum::extract::State(state)).await;
+
+        // With None addresses, should return "disabled"
+        let obj = response.0.as_object().unwrap();
+        assert_eq!(obj.get("http_server").and_then(|v| v.as_str()), Some("disabled"));
+        assert_eq!(obj.get("ws_server").and_then(|v| v.as_str()), Some("disabled"));
+    }
+
+    #[tokio::test]
+    async fn test_get_metrics() {
+        let state = create_test_state();
+        let response = get_metrics(axum::extract::State(state)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_empty() {
+        let state = create_test_state();
+        let params = HashMap::new();
+        let response = get_logs(axum::extract::State(state), axum::extract::Query(params)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_with_limit() {
+        let state = create_test_state();
+        let mut params = HashMap::new();
+        params.insert("limit".to_string(), "10".to_string());
+
+        let response = get_logs(axum::extract::State(state), axum::extract::Query(params)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_with_method_filter() {
+        let state = create_test_state();
+        let mut params = HashMap::new();
+        params.insert("method".to_string(), "GET".to_string());
+
+        let response = get_logs(axum::extract::State(state), axum::extract::Query(params)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_with_path_filter() {
+        let state = create_test_state();
+        let mut params = HashMap::new();
+        params.insert("path".to_string(), "/api".to_string());
+
+        let response = get_logs(axum::extract::State(state), axum::extract::Query(params)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_with_status_filter() {
+        let state = create_test_state();
+        let mut params = HashMap::new();
+        params.insert("status".to_string(), "200".to_string());
+
+        let response = get_logs(axum::extract::State(state), axum::extract::Query(params)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_clear_logs() {
+        let state = create_test_state();
+        let response = clear_logs(axum::extract::State(state)).await;
+
+        assert!(response.0.success);
+        assert!(response.0.data.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_update_latency() {
+        let state = create_test_state();
+        let config = json!({
+            "base_ms": 100,
+            "jitter_ms": 20
+        });
+
+        let response =
+            update_latency(axum::extract::State(state), axum::extract::Json(config)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_update_latency_with_overrides() {
+        let state = create_test_state();
+        let config = json!({
+            "base_ms": 50,
+            "jitter_ms": 10,
+            "tag_overrides": {
+                "slow": 500,
+                "fast": 10
+            }
+        });
+
+        let response =
+            update_latency(axum::extract::State(state), axum::extract::Json(config)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_update_faults() {
+        let state = create_test_state();
+        let config = json!({
+            "enabled": true,
+            "failure_rate": 0.1,
+            "status_codes": [500, 503]
+        });
+
+        let response =
+            update_faults(axum::extract::State(state), axum::extract::Json(config)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_update_faults_disabled() {
+        let state = create_test_state();
+        let config = json!({
+            "enabled": false
+        });
+
+        let response =
+            update_faults(axum::extract::State(state), axum::extract::Json(config)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_update_proxy() {
+        let state = create_test_state();
+        let config = json!({
+            "enabled": true,
+            "upstream_url": "http://localhost:8000",
+            "timeout_seconds": 60
+        });
+
+        let response = update_proxy(axum::extract::State(state), axum::extract::Json(config)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_update_proxy_disabled() {
+        let state = create_test_state();
+        let config = json!({
+            "enabled": false
+        });
+
+        let response = update_proxy(axum::extract::State(state), axum::extract::Json(config)).await;
+
+        assert!(response.0.success);
+    }
+
+    #[tokio::test]
+    async fn test_restart_servers() {
+        let state = create_test_state();
+        let response = restart_servers(axum::extract::State(state)).await;
+
+        // Should succeed to initiate (even if restart won't actually work without real servers)
+        assert!(response.0.success || response.0.error.is_some());
     }
 }

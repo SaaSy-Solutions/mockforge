@@ -32,7 +32,11 @@ impl MarketplaceTestHelper {
     }
 
     /// Register a new test user
-    async fn register_user(&mut self, username: &str, email: &str) -> Result<(), Box<dyn std::error::Error>> {
+    async fn register_user(
+        &mut self,
+        username: &str,
+        email: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let response = self
             .client
             .post(&format!("{}/api/v1/auth/register", self.base_url))
@@ -52,7 +56,11 @@ impl MarketplaceTestHelper {
     }
 
     /// Login with existing user
-    async fn login(&mut self, email: &str, password: &str) -> Result<(), Box<dyn std::error::Error>> {
+    async fn login(
+        &mut self,
+        email: &str,
+        password: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let response = self
             .client
             .post(&format!("{}/api/v1/auth/login", self.base_url))
@@ -105,7 +113,8 @@ impl MarketplaceTestHelper {
     fn create_test_package() -> Vec<u8> {
         // Minimal valid gzip file (magic bytes + minimal header)
         vec![
-            0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x03, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ]
     }
 
@@ -122,7 +131,8 @@ impl MarketplaceTestHelper {
 #[tokio::test]
 #[ignore] // Requires running registry server
 async fn test_plugin_marketplace_workflow() {
-    let base_url = std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let base_url =
+        std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
     let mut helper = MarketplaceTestHelper::new(base_url);
 
     // Step 1: Register and authenticate
@@ -172,7 +182,8 @@ async fn test_plugin_marketplace_workflow() {
         publish_response.text().await
     );
 
-    let publish_body: serde_json::Value = publish_response.json().await.expect("Failed to parse response");
+    let publish_body: serde_json::Value =
+        publish_response.json().await.expect("Failed to parse response");
     assert_eq!(publish_body["success"], true);
     let plugin_name = format!("test-plugin-{}", timestamp);
 
@@ -190,7 +201,8 @@ async fn test_plugin_marketplace_workflow() {
         .expect("Failed to search plugins");
 
     assert!(search_response.status().is_success());
-    let search_body: serde_json::Value = search_response.json().await.expect("Failed to parse response");
+    let search_body: serde_json::Value =
+        search_response.json().await.expect("Failed to parse response");
     assert!(search_body["plugins"].as_array().unwrap().len() > 0);
 
     // Step 5: Get plugin details
@@ -202,7 +214,8 @@ async fn test_plugin_marketplace_workflow() {
         .expect("Failed to get plugin");
 
     assert!(get_response.status().is_success());
-    let plugin_body: serde_json::Value = get_response.json().await.expect("Failed to parse response");
+    let plugin_body: serde_json::Value =
+        get_response.json().await.expect("Failed to parse response");
     assert_eq!(plugin_body["name"], plugin_name);
 
     // Step 6: Submit a review
@@ -230,7 +243,8 @@ async fn test_plugin_marketplace_workflow() {
         .expect("Failed to get reviews");
 
     assert!(reviews_response.status().is_success());
-    let reviews_body: serde_json::Value = reviews_response.json().await.expect("Failed to parse response");
+    let reviews_body: serde_json::Value =
+        reviews_response.json().await.expect("Failed to parse response");
     assert!(reviews_body["reviews"].as_array().unwrap().len() > 0);
 }
 
@@ -238,7 +252,8 @@ async fn test_plugin_marketplace_workflow() {
 #[tokio::test]
 #[ignore] // Requires running registry server
 async fn test_template_marketplace_workflow() {
-    let base_url = std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let base_url =
+        std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
     let mut helper = MarketplaceTestHelper::new(base_url);
 
     // Step 1: Register and authenticate
@@ -308,7 +323,8 @@ async fn test_template_marketplace_workflow() {
         .expect("Failed to search templates");
 
     assert!(search_response.status().is_success());
-    let search_body: serde_json::Value = search_response.json().await.expect("Failed to parse response");
+    let search_body: serde_json::Value =
+        search_response.json().await.expect("Failed to parse response");
     assert!(search_body["templates"].as_array().unwrap().len() > 0);
 
     // Step 5: Get template details
@@ -326,7 +342,8 @@ async fn test_template_marketplace_workflow() {
 #[tokio::test]
 #[ignore] // Requires running registry server
 async fn test_scenario_marketplace_workflow() {
-    let base_url = std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let base_url =
+        std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
     let mut helper = MarketplaceTestHelper::new(base_url);
 
     // Step 1: Register and authenticate
@@ -392,7 +409,8 @@ async fn test_scenario_marketplace_workflow() {
         .expect("Failed to search scenarios");
 
     assert!(search_response.status().is_success());
-    let search_body: serde_json::Value = search_response.json().await.expect("Failed to parse response");
+    let search_body: serde_json::Value =
+        search_response.json().await.expect("Failed to parse response");
     assert!(search_body["scenarios"].as_array().unwrap().len() > 0);
 
     // Step 5: Get scenario details
@@ -426,7 +444,8 @@ async fn test_scenario_marketplace_workflow() {
 #[tokio::test]
 #[ignore] // Requires running registry server
 async fn test_upload_validation_errors() {
-    let base_url = std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let base_url =
+        std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
     let mut helper = MarketplaceTestHelper::new(base_url);
 
     // Register and authenticate
@@ -454,7 +473,7 @@ async fn test_upload_validation_errors() {
             "description": "Test plugin",
             "category": "testing",
             "license": "MIT",
-            "tags": vec![],
+            "tags": Vec::<String>::new(),
             "checksum": checksum,
             "file_size": invalid_wasm.len() as i64,
             "wasm_data": wasm_base64,
@@ -482,7 +501,7 @@ async fn test_upload_validation_errors() {
             "description": "Test plugin",
             "category": "testing",
             "license": "MIT",
-            "tags": vec![],
+            "tags": Vec::<String>::new(),
             "checksum": checksum,
             "file_size": wasm_data.len() as i64,
             "wasm_data": wasm_base64,
@@ -495,8 +514,9 @@ async fn test_upload_validation_errors() {
     // Should fail validation
     assert!(!response.status().is_success(), "Should reject path traversal in name");
 
-    // Test 3: File too large
-    let large_wasm = vec![0x00, 0x61, 0x73, 0x6D; 11 * 1024 * 1024]; // 11 MB
+    // Test 3: File too large - create an 11 MB buffer with WASM magic bytes
+    let mut large_wasm = vec![0u8; 11 * 1024 * 1024]; // 11 MB
+    large_wasm[..4].copy_from_slice(&[0x00, 0x61, 0x73, 0x6D]);
     let checksum = MarketplaceTestHelper::calculate_checksum(&large_wasm);
     let wasm_base64 = base64::encode(&large_wasm);
 
@@ -510,7 +530,7 @@ async fn test_upload_validation_errors() {
             "description": "Test plugin",
             "category": "testing",
             "license": "MIT",
-            "tags": vec![],
+            "tags": Vec::<String>::new(),
             "checksum": checksum,
             "file_size": large_wasm.len() as i64,
             "wasm_data": wasm_base64,

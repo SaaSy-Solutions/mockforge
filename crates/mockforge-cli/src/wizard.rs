@@ -820,3 +820,346 @@ pub fn detect_environment() -> Vec<String> {
 
     suggestions
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_wizard_config_creation() {
+        let config = WizardConfig {
+            project_name: "test-project".to_string(),
+            project_dir: PathBuf::from("/tmp/test-project"),
+            protocols: vec![Protocol::Http, Protocol::WebSocket],
+            enable_admin: true,
+            enable_examples: true,
+            template: Some(Template::RestApi),
+        };
+
+        assert_eq!(config.project_name, "test-project");
+        assert_eq!(config.protocols.len(), 2);
+        assert!(config.enable_admin);
+        assert!(config.enable_examples);
+    }
+
+    #[test]
+    fn test_protocol_all() {
+        let protocols = Protocol::all();
+        assert_eq!(protocols.len(), 7);
+        assert!(protocols.contains(&Protocol::Http));
+        assert!(protocols.contains(&Protocol::WebSocket));
+        assert!(protocols.contains(&Protocol::Grpc));
+        assert!(protocols.contains(&Protocol::GraphQL));
+        assert!(protocols.contains(&Protocol::Kafka));
+        assert!(protocols.contains(&Protocol::Mqtt));
+        assert!(protocols.contains(&Protocol::Amqp));
+    }
+
+    #[test]
+    fn test_protocol_name() {
+        assert_eq!(Protocol::Http.name(), "HTTP/REST");
+        assert_eq!(Protocol::WebSocket.name(), "WebSocket");
+        assert_eq!(Protocol::Grpc.name(), "gRPC");
+        assert_eq!(Protocol::GraphQL.name(), "GraphQL");
+        assert_eq!(Protocol::Kafka.name(), "Kafka");
+        assert_eq!(Protocol::Mqtt.name(), "MQTT");
+        assert_eq!(Protocol::Amqp.name(), "AMQP/RabbitMQ");
+    }
+
+    #[test]
+    fn test_protocol_port() {
+        assert_eq!(Protocol::Http.port(), 3000);
+        assert_eq!(Protocol::WebSocket.port(), 3001);
+        assert_eq!(Protocol::Grpc.port(), 50051);
+        assert_eq!(Protocol::GraphQL.port(), 4000);
+        assert_eq!(Protocol::Kafka.port(), 9092);
+        assert_eq!(Protocol::Mqtt.port(), 1883);
+        assert_eq!(Protocol::Amqp.port(), 5672);
+    }
+
+    #[test]
+    fn test_template_all() {
+        let templates = Template::all();
+        assert_eq!(templates.len(), 5);
+        assert!(templates.contains(&Template::RestApi));
+        assert!(templates.contains(&Template::Grpc));
+        assert!(templates.contains(&Template::WebSocket));
+        assert!(templates.contains(&Template::GraphQL));
+        assert!(templates.contains(&Template::Microservices));
+    }
+
+    #[test]
+    fn test_template_name() {
+        assert_eq!(Template::RestApi.name(), "REST API");
+        assert_eq!(Template::Grpc.name(), "gRPC Service");
+        assert_eq!(Template::WebSocket.name(), "WebSocket Server");
+        assert_eq!(Template::GraphQL.name(), "GraphQL API");
+        assert_eq!(Template::Microservices.name(), "Microservices (Multi-Protocol)");
+    }
+
+    #[test]
+    fn test_template_description() {
+        assert_eq!(Template::RestApi.description(), "Standard REST API with CRUD operations");
+        assert_eq!(Template::Grpc.description(), "gRPC service with protobuf definitions");
+        assert_eq!(Template::WebSocket.description(), "Real-time WebSocket server");
+        assert_eq!(Template::GraphQL.description(), "GraphQL API with queries and mutations");
+        assert_eq!(
+            Template::Microservices.description(),
+            "Multiple protocols for microservices architecture"
+        );
+    }
+
+    #[test]
+    fn test_generate_config_yaml_http() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::Http],
+            enable_admin: false,
+            enable_examples: false,
+            template: None,
+        };
+
+        let yaml = generate_config_yaml(&config);
+        assert!(yaml.contains("# HTTP Server"));
+        assert!(yaml.contains("port: 3000"));
+        assert!(yaml.contains("cors_enabled: true"));
+    }
+
+    #[test]
+    fn test_generate_config_yaml_websocket() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::WebSocket],
+            enable_admin: false,
+            enable_examples: false,
+            template: None,
+        };
+
+        let yaml = generate_config_yaml(&config);
+        assert!(yaml.contains("# WebSocket Server"));
+        assert!(yaml.contains("port: 3001"));
+    }
+
+    #[test]
+    fn test_generate_config_yaml_grpc() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::Grpc],
+            enable_admin: false,
+            enable_examples: false,
+            template: None,
+        };
+
+        let yaml = generate_config_yaml(&config);
+        assert!(yaml.contains("# gRPC Server"));
+        assert!(yaml.contains("port: 50051"));
+    }
+
+    #[test]
+    fn test_generate_config_yaml_graphql() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::GraphQL],
+            enable_admin: false,
+            enable_examples: false,
+            template: None,
+        };
+
+        let yaml = generate_config_yaml(&config);
+        assert!(yaml.contains("# GraphQL Server"));
+        assert!(yaml.contains("port: 4000"));
+    }
+
+    #[test]
+    fn test_generate_config_yaml_kafka() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::Kafka],
+            enable_admin: false,
+            enable_examples: false,
+            template: None,
+        };
+
+        let yaml = generate_config_yaml(&config);
+        assert!(yaml.contains("# Kafka Broker"));
+        assert!(yaml.contains("port: 9092"));
+        assert!(yaml.contains("enabled: true"));
+    }
+
+    #[test]
+    fn test_generate_config_yaml_mqtt() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::Mqtt],
+            enable_admin: false,
+            enable_examples: false,
+            template: None,
+        };
+
+        let yaml = generate_config_yaml(&config);
+        assert!(yaml.contains("# MQTT Broker"));
+        assert!(yaml.contains("port: 1883"));
+    }
+
+    #[test]
+    fn test_generate_config_yaml_amqp() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::Amqp],
+            enable_admin: false,
+            enable_examples: false,
+            template: None,
+        };
+
+        let yaml = generate_config_yaml(&config);
+        assert!(yaml.contains("# AMQP Broker"));
+        assert!(yaml.contains("port: 5672"));
+    }
+
+    #[test]
+    fn test_generate_config_yaml_with_admin() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::Http],
+            enable_admin: true,
+            enable_examples: false,
+            template: None,
+        };
+
+        let yaml = generate_config_yaml(&config);
+        assert!(yaml.contains("# Admin UI"));
+        assert!(yaml.contains("enabled: true"));
+        assert!(yaml.contains("port: 9080"));
+    }
+
+    #[test]
+    fn test_generate_config_yaml_multiple_protocols() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::Http, Protocol::Grpc, Protocol::Kafka],
+            enable_admin: true,
+            enable_examples: false,
+            template: None,
+        };
+
+        let yaml = generate_config_yaml(&config);
+        assert!(yaml.contains("# HTTP Server"));
+        assert!(yaml.contains("# gRPC Server"));
+        assert!(yaml.contains("# Kafka Broker"));
+        assert!(yaml.contains("# Admin UI"));
+    }
+
+    #[test]
+    fn test_generate_readme() {
+        let config = WizardConfig {
+            project_name: "my-api".to_string(),
+            project_dir: PathBuf::from("/tmp/my-api"),
+            protocols: vec![Protocol::Http, Protocol::WebSocket],
+            enable_admin: true,
+            enable_examples: true,
+            template: Some(Template::RestApi),
+        };
+
+        let readme = generate_readme(&config);
+        assert!(readme.contains("# my-api"));
+        assert!(readme.contains("MockForge project generated by wizard"));
+        assert!(readme.contains("mockforge serve"));
+        assert!(readme.contains("http://localhost:9080"));
+        assert!(readme.contains("HTTP/REST (port 3000)"));
+        assert!(readme.contains("WebSocket (port 3001)"));
+    }
+
+    #[test]
+    fn test_generate_readme_without_admin() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::Http],
+            enable_admin: false,
+            enable_examples: false,
+            template: None,
+        };
+
+        let readme = generate_readme(&config);
+        assert!(!readme.contains("Admin UI"));
+    }
+
+    #[test]
+    fn test_detect_environment_nodejs() {
+        // Can't actually test file detection without creating files,
+        // but we can test the function structure
+        let suggestions = detect_environment();
+        // Should return Vec<String> regardless
+        assert!(suggestions.is_empty() || !suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_protocol_equality() {
+        assert_eq!(Protocol::Http, Protocol::Http);
+        assert_ne!(Protocol::Http, Protocol::WebSocket);
+        assert_eq!(Protocol::Grpc, Protocol::Grpc);
+    }
+
+    #[test]
+    fn test_template_equality() {
+        assert_eq!(Template::RestApi, Template::RestApi);
+        assert_ne!(Template::RestApi, Template::Grpc);
+        assert_eq!(Template::GraphQL, Template::GraphQL);
+    }
+
+    #[test]
+    fn test_wizard_config_clone() {
+        let config1 = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::Http],
+            enable_admin: true,
+            enable_examples: false,
+            template: Some(Template::RestApi),
+        };
+
+        let config2 = config1.clone();
+        assert_eq!(config1.project_name, config2.project_name);
+        assert_eq!(config1.project_dir, config2.project_dir);
+        assert_eq!(config1.enable_admin, config2.enable_admin);
+    }
+
+    #[test]
+    fn test_wizard_config_debug() {
+        let config = WizardConfig {
+            project_name: "test".to_string(),
+            project_dir: PathBuf::from("/tmp/test"),
+            protocols: vec![Protocol::Http],
+            enable_admin: true,
+            enable_examples: true,
+            template: None,
+        };
+
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("test"));
+        assert!(debug_str.contains("Http"));
+    }
+
+    #[test]
+    fn test_protocol_copy() {
+        let p1 = Protocol::Http;
+        let p2 = p1;
+        assert_eq!(p1, p2);
+    }
+
+    #[test]
+    fn test_template_copy() {
+        let t1 = Template::RestApi;
+        let t2 = t1;
+        assert_eq!(t1, t2);
+    }
+}

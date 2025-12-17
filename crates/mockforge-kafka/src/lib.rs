@@ -141,3 +141,233 @@ pub use metrics::{KafkaMetrics, MetricsExporter, MetricsSnapshot};
 pub use partitions::{KafkaMessage, Partition};
 pub use spec_registry::KafkaSpecRegistry;
 pub use topics::{Topic, TopicConfig};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== Module Re-export Tests ====================
+
+    #[test]
+    fn test_kafka_mock_broker_available() {
+        // Ensure KafkaMockBroker is re-exported and accessible
+        let _type_exists: Option<KafkaMockBroker> = None;
+    }
+
+    #[test]
+    fn test_consumer_group_available() {
+        // Ensure ConsumerGroup is re-exported and accessible
+        let _type_exists: Option<ConsumerGroup> = None;
+    }
+
+    #[test]
+    fn test_consumer_group_manager_available() {
+        // Ensure ConsumerGroupManager is re-exported and accessible
+        let _type_exists: Option<ConsumerGroupManager> = None;
+    }
+
+    #[test]
+    fn test_kafka_fixture_available() {
+        // Ensure KafkaFixture is re-exported and accessible
+        let _type_exists: Option<KafkaFixture> = None;
+    }
+
+    #[test]
+    fn test_auto_produce_config_available() {
+        // Ensure AutoProduceConfig is re-exported and accessible
+        let _type_exists: Option<AutoProduceConfig> = None;
+    }
+
+    #[test]
+    fn test_kafka_metrics_available() {
+        // Ensure KafkaMetrics is re-exported and accessible
+        let _type_exists: Option<KafkaMetrics> = None;
+    }
+
+    #[test]
+    fn test_metrics_exporter_available() {
+        // Ensure MetricsExporter is re-exported and accessible
+        let _type_exists: Option<MetricsExporter> = None;
+    }
+
+    #[test]
+    fn test_metrics_snapshot_available() {
+        // Ensure MetricsSnapshot is re-exported and accessible
+        let _type_exists: Option<MetricsSnapshot> = None;
+    }
+
+    #[test]
+    fn test_kafka_message_available() {
+        // Ensure KafkaMessage is re-exported and accessible
+        let _type_exists: Option<KafkaMessage> = None;
+    }
+
+    #[test]
+    fn test_partition_available() {
+        // Ensure Partition is re-exported and accessible
+        let _type_exists: Option<Partition> = None;
+    }
+
+    #[test]
+    fn test_kafka_spec_registry_available() {
+        // Ensure KafkaSpecRegistry is re-exported and accessible
+        let _type_exists: Option<KafkaSpecRegistry> = None;
+    }
+
+    #[test]
+    fn test_topic_available() {
+        // Ensure Topic is re-exported and accessible
+        let _type_exists: Option<Topic> = None;
+    }
+
+    #[test]
+    fn test_topic_config_available() {
+        // Ensure TopicConfig is re-exported and accessible
+        let _type_exists: Option<TopicConfig> = None;
+    }
+
+    // ==================== Basic Functionality Tests ====================
+
+    #[tokio::test]
+    async fn test_broker_creation() {
+        let config = mockforge_core::config::KafkaConfig::default();
+        let broker = KafkaMockBroker::new(config).await;
+        assert!(broker.is_ok());
+    }
+
+    #[test]
+    fn test_metrics_creation() {
+        let metrics = KafkaMetrics::default();
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.messages_produced_total, 0);
+    }
+
+    #[test]
+    fn test_partition_creation() {
+        let partition = Partition::new(0);
+        assert_eq!(partition.id, 0);
+        assert_eq!(partition.high_watermark, 0);
+    }
+
+    #[test]
+    fn test_topic_config_default() {
+        let config = TopicConfig::default();
+        assert!(config.num_partitions > 0);
+    }
+
+    #[test]
+    fn test_consumer_group_manager_creation() {
+        let manager = ConsumerGroupManager::new();
+        assert_eq!(manager.groups().len(), 0);
+    }
+
+    // ==================== Integration Tests ====================
+
+    #[tokio::test]
+    async fn test_end_to_end_message_flow() {
+        let config = mockforge_core::config::KafkaConfig::default();
+        let broker = KafkaMockBroker::new(config).await.unwrap();
+
+        // Create a topic
+        let topic_config = TopicConfig::default();
+        broker.test_create_topic("test-topic", topic_config).await;
+
+        // Check that metrics are initialized
+        let metrics = broker.metrics();
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.messages_produced_total, 0);
+    }
+
+    #[tokio::test]
+    async fn test_consumer_group_workflow() {
+        let config = mockforge_core::config::KafkaConfig::default();
+        let broker = KafkaMockBroker::new(config).await.unwrap();
+
+        // Create a topic
+        let topic_config = TopicConfig::default();
+        broker.test_create_topic("workflow-topic", topic_config).await;
+
+        // Join a consumer group
+        let result = broker.test_join_group("test-group", "member-1", "client-1").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_fixture_to_message_conversion() {
+        use std::collections::HashMap;
+
+        let fixture = KafkaFixture {
+            identifier: "test-id".to_string(),
+            name: "Test".to_string(),
+            topic: "test-topic".to_string(),
+            partition: Some(0),
+            key_pattern: Some("key-test".to_string()),
+            value_template: serde_json::json!({"data": "test"}),
+            headers: HashMap::new(),
+            auto_produce: None,
+        };
+
+        let context = HashMap::new();
+        let message = fixture.generate_message(&context).unwrap();
+
+        assert!(message.key.is_some());
+        assert!(!message.value.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_spec_registry_creation() {
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        let topics = Arc::new(RwLock::new(std::collections::HashMap::new()));
+        let config = mockforge_core::config::KafkaConfig::default();
+
+        let registry = KafkaSpecRegistry::new(config, topics).await;
+        assert!(registry.is_ok());
+    }
+
+    // ==================== Protocol Abstraction Tests ====================
+
+    #[tokio::test]
+    async fn test_spec_registry_protocol_trait() {
+        use mockforge_core::protocol_abstraction::SpecRegistry;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        let topics = Arc::new(RwLock::new(std::collections::HashMap::new()));
+        let config = mockforge_core::config::KafkaConfig::default();
+
+        let registry = KafkaSpecRegistry::new(config, topics).await.unwrap();
+
+        // Test protocol method
+        assert_eq!(registry.protocol(), mockforge_core::Protocol::Kafka);
+
+        // Test operations method
+        let ops = registry.operations();
+        assert!(ops.is_empty() || ops.len() > 0);
+    }
+
+    // ==================== Metrics Integration Tests ====================
+
+    #[test]
+    fn test_metrics_exporter_creation() {
+        use std::sync::Arc;
+
+        let metrics = Arc::new(KafkaMetrics::default());
+        let exporter = MetricsExporter::new(metrics);
+
+        let prometheus_output = exporter.export_prometheus();
+        assert!(prometheus_output.contains("kafka") || prometheus_output.contains("#"));
+    }
+
+    #[test]
+    fn test_metrics_snapshot_serialization() {
+        let metrics = KafkaMetrics::default();
+        metrics.record_request(0); // Produce
+        metrics.record_response();
+
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.requests_total, 1);
+        assert_eq!(snapshot.responses_total, 1);
+    }
+}

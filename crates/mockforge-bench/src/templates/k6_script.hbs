@@ -40,12 +40,12 @@ export default function () {
     const payload = {{{this.body}}};
     const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, JSON.stringify(payload), {
       headers{{#if ../skip_tls_verify}},
-      tls: { skipTLSVerify: true }{{/if}}
+      insecureSkipTLSVerify: true{{/if}}
     });
     {{else}}
     const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, {
       headers{{#if ../skip_tls_verify}},
-      tls: { skipTLSVerify: true }{{/if}}
+      insecureSkipTLSVerify: true{{/if}}
     });
     {{/if}}
 

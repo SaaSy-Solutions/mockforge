@@ -199,11 +199,7 @@ impl OrgSetting {
     }
 
     /// Delete an organization setting
-    pub async fn delete(
-        pool: &sqlx::PgPool,
-        org_id: Uuid,
-        setting_key: &str,
-    ) -> sqlx::Result<()> {
+    pub async fn delete(pool: &sqlx::PgPool, org_id: Uuid, setting_key: &str) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM org_settings WHERE org_id = $1 AND setting_key = $2")
             .bind(org_id)
             .bind(setting_key)

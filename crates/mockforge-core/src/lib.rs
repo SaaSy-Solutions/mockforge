@@ -217,6 +217,8 @@ pub mod codegen;
 pub mod collection_export;
 pub mod conditions;
 pub mod config;
+/// Connection pooling for HTTP clients with health checks and idle management
+pub mod connection_pool;
 /// Cross-protocol consistency engine for unified state across all protocols
 pub mod consistency;
 /// Consumer-driven contracts for tracking usage and detecting consumer-specific breaking changes

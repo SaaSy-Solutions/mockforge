@@ -128,13 +128,11 @@ impl Template {
         name: &str,
         version: &str,
     ) -> sqlx::Result<Option<Self>> {
-        sqlx::query_as::<_, Self>(
-            "SELECT * FROM templates WHERE name = $1 AND version = $2",
-        )
-        .bind(name)
-        .bind(version)
-        .fetch_optional(pool)
-        .await
+        sqlx::query_as::<_, Self>("SELECT * FROM templates WHERE name = $1 AND version = $2")
+            .bind(name)
+            .bind(version)
+            .fetch_optional(pool)
+            .await
     }
 
     /// Build WHERE clause for search queries (using parameterized queries for security)
@@ -249,7 +247,9 @@ impl Template {
 
         let sql = format!(
             "SELECT * FROM templates {} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
-            where_clause, param_count, param_count + 1
+            where_clause,
+            param_count,
+            param_count + 1
         );
 
         let mut query_builder = sqlx::query_as::<_, Self>(&sql);
@@ -273,10 +273,7 @@ impl Template {
     }
 
     /// Find templates by organization
-    pub async fn find_by_org(
-        pool: &sqlx::PgPool,
-        org_id: Uuid,
-    ) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM templates WHERE org_id = $1 ORDER BY created_at DESC",
         )

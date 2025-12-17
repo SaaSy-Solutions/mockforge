@@ -8,18 +8,18 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{AuditEventType, User, record_audit_event},
+    models::{record_audit_event, AuditEventType, User},
     two_factor::{
-        generate_backup_codes, generate_qr_code_data_url, generate_secret,
-        hash_backup_code, verify_totp_code,
+        generate_backup_codes, generate_qr_code_data_url, generate_secret, hash_backup_code,
+        verify_totp_code,
     },
     AppState,
 };
 
 #[derive(Debug, Serialize)]
 pub struct Setup2FAResponse {
-    pub secret: String, // Base32-encoded secret (for manual entry)
-    pub qr_code_url: String, // Data URL for QR code
+    pub secret: String,            // Base32-encoded secret (for manual entry)
+    pub qr_code_url: String,       // Data URL for QR code
     pub backup_codes: Vec<String>, // Plain text backup codes (shown once)
 }
 
@@ -106,9 +106,7 @@ pub async fn verify_2fa_setup(
 
     // Check if 2FA is already enabled
     if user.two_factor_enabled {
-        return Err(ApiError::InvalidRequest(
-            "2FA is already enabled".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("2FA is already enabled".to_string()));
     }
 
     // This is a simplified flow - in production, you'd retrieve the secret
@@ -149,9 +147,7 @@ pub async fn verify_2fa_setup_with_secret(
 
     // Check if 2FA is already enabled
     if user.two_factor_enabled {
-        return Err(ApiError::InvalidRequest(
-            "2FA is already enabled".to_string(),
-        ));
+        return Err(ApiError::InvalidRequest("2FA is already enabled".to_string()));
     }
 
     // Verify TOTP code
@@ -194,7 +190,9 @@ pub async fn verify_2fa_setup_with_secret(
 
     Ok(Json(Verify2FASetupResponse {
         success: true,
-        message: "2FA has been enabled successfully. Please save your backup codes in a safe place.".to_string(),
+        message:
+            "2FA has been enabled successfully. Please save your backup codes in a safe place."
+                .to_string(),
     }))
 }
 
@@ -235,9 +233,7 @@ pub async fn disable_2fa(
     }
 
     // Disable 2FA
-    User::disable_2fa(pool, user_id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    User::disable_2fa(pool, user_id).await.map_err(|e| ApiError::Database(e))?;
 
     // Record audit log
     // Use a sentinel UUID for user-level actions (no org)

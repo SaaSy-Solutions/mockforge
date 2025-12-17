@@ -26,7 +26,7 @@ impl SAMLAssertionId {
         org_id: Uuid,
     ) -> sqlx::Result<bool> {
         let count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM saml_assertion_ids WHERE assertion_id = $1 AND org_id = $2"
+            "SELECT COUNT(*) FROM saml_assertion_ids WHERE assertion_id = $1 AND org_id = $2",
         )
         .bind(assertion_id)
         .bind(org_id)
@@ -43,7 +43,7 @@ impl SAMLAssertionId {
         org_id: Uuid,
     ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
-            "SELECT * FROM saml_assertion_ids WHERE assertion_id = $1 AND org_id = $2"
+            "SELECT * FROM saml_assertion_ids WHERE assertion_id = $1 AND org_id = $2",
         )
         .bind(assertion_id)
         .bind(org_id)
@@ -82,7 +82,7 @@ impl SAMLAssertionId {
     /// Should be called periodically via a scheduled task
     pub async fn cleanup_expired(pool: &sqlx::PgPool) -> sqlx::Result<u64> {
         let result = sqlx::query(
-            "DELETE FROM saml_assertion_ids WHERE expires_at < NOW() - INTERVAL '24 hours'"
+            "DELETE FROM saml_assertion_ids WHERE expires_at < NOW() - INTERVAL '24 hours'",
         )
         .execute(pool)
         .await?;

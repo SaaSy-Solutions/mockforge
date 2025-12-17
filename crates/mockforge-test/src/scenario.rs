@@ -219,6 +219,7 @@ impl ScenarioBuilder {
 mod tests {
     use super::*;
 
+    // ScenarioBuilder tests
     #[test]
     fn test_scenario_builder() {
         let scenario = ScenarioBuilder::new("test-scenario")
@@ -244,8 +245,119 @@ mod tests {
     }
 
     #[test]
+    fn test_scenario_builder_new() {
+        let builder = ScenarioBuilder::new("my-scenario");
+        let scenario = builder.build();
+        assert_eq!(scenario["name"], "my-scenario");
+        assert!(scenario["mocks"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_scenario_builder_with_string_name() {
+        let name = String::from("string-scenario");
+        let scenario = ScenarioBuilder::new(name).build();
+        assert_eq!(scenario["name"], "string-scenario");
+    }
+
+    #[test]
+    fn test_scenario_builder_single_mock() {
+        let scenario = ScenarioBuilder::new("single-mock")
+            .mock("/api/health", serde_json::json!({"status": "ok"}))
+            .build();
+
+        let mocks = scenario["mocks"].as_array().unwrap();
+        assert_eq!(mocks.len(), 1);
+        assert_eq!(mocks[0]["endpoint"], "/api/health");
+    }
+
+    #[test]
+    fn test_scenario_builder_multiple_mocks() {
+        let scenario = ScenarioBuilder::new("multi-mock")
+            .mock("/api/v1/users", serde_json::json!([]))
+            .mock("/api/v1/posts", serde_json::json!([]))
+            .mock("/api/v1/comments", serde_json::json!([]))
+            .build();
+
+        let mocks = scenario["mocks"].as_array().unwrap();
+        assert_eq!(mocks.len(), 3);
+    }
+
+    #[test]
+    fn test_scenario_builder_complex_response() {
+        let response = serde_json::json!({
+            "data": {
+                "user": {
+                    "id": 123,
+                    "name": "John Doe",
+                    "roles": ["admin", "user"],
+                    "metadata": {
+                        "created_at": "2025-01-01T00:00:00Z"
+                    }
+                }
+            },
+            "pagination": {
+                "total": 100,
+                "page": 1,
+                "per_page": 10
+            }
+        });
+
+        let scenario =
+            ScenarioBuilder::new("complex").mock("/api/profile", response.clone()).build();
+
+        let mocks = scenario["mocks"].as_array().unwrap();
+        assert_eq!(mocks[0]["response"]["data"]["user"]["id"], 123);
+    }
+
+    #[test]
+    fn test_scenario_builder_null_response() {
+        let scenario = ScenarioBuilder::new("null-response")
+            .mock("/api/empty", serde_json::json!(null))
+            .build();
+
+        let mocks = scenario["mocks"].as_array().unwrap();
+        assert!(mocks[0]["response"].is_null());
+    }
+
+    #[test]
+    fn test_scenario_builder_array_response() {
+        let scenario = ScenarioBuilder::new("array-response")
+            .mock("/api/items", serde_json::json!([1, 2, 3, 4, 5]))
+            .build();
+
+        let mocks = scenario["mocks"].as_array().unwrap();
+        let response = mocks[0]["response"].as_array().unwrap();
+        assert_eq!(response.len(), 5);
+    }
+
+    // ScenarioManager tests
+    #[test]
     fn test_scenario_manager_creation() {
         let manager = ScenarioManager::new("localhost", 3000);
         assert_eq!(manager.base_url, "http://localhost:3000");
+    }
+
+    #[test]
+    fn test_scenario_manager_different_host() {
+        let manager = ScenarioManager::new("192.168.1.100", 8080);
+        assert_eq!(manager.base_url, "http://192.168.1.100:8080");
+    }
+
+    #[test]
+    fn test_scenario_manager_hostname() {
+        let manager = ScenarioManager::new("api.example.com", 443);
+        assert_eq!(manager.base_url, "http://api.example.com:443");
+    }
+
+    #[test]
+    fn test_scenario_manager_port_zero() {
+        let manager = ScenarioManager::new("localhost", 0);
+        assert_eq!(manager.base_url, "http://localhost:0");
+    }
+
+    #[test]
+    fn test_scenario_manager_high_port() {
+        let manager = ScenarioManager::new("localhost", 65535);
+        assert_eq!(manager.base_url, "http://localhost:65535");
     }
 }

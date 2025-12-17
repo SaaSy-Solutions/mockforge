@@ -8,6 +8,8 @@ members = [
     "crates/mockforge-plugin-core",
     "crates/mockforge-plugin-cli",
     "crates/mockforge-plugin-registry",
+    "crates/mockforge-plugin-sdk",
+    "crates/mockforge-reporting",
 
     # Observability & tracing
     "crates/mockforge-tracing",
@@ -30,9 +32,8 @@ members = [
     "test_openapi_demo",
     "desktop-app",
     "tests",
-]
-exclude = [
-    # These are server applications, not library crates
+
+    # Server applications (included for testing)
     "crates/mockforge-registry-server",
     "crates/mockforge-k8s-operator",
     "crates/mockforge-federation",

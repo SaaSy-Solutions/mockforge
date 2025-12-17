@@ -147,3 +147,136 @@ const fn default_snapshot_retention() -> u32 {
 const fn default_cleanup_interval() -> u32 {
     24 // Daily
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_analytics_config_default() {
+        let config = AnalyticsConfig::default();
+        assert!(config.enabled);
+        assert_eq!(config.database_path, PathBuf::from("mockforge-analytics.db"));
+        assert_eq!(config.aggregation_interval_seconds, 60);
+        assert_eq!(config.rollup_interval_hours, 1);
+        assert_eq!(config.batch_size, 1000);
+        assert_eq!(config.max_query_results, 10000);
+    }
+
+    #[test]
+    fn test_retention_config_default() {
+        let config = RetentionConfig::default();
+        assert_eq!(config.minute_aggregates_days, 7);
+        assert_eq!(config.hour_aggregates_days, 30);
+        assert_eq!(config.day_aggregates_days, 365);
+        assert_eq!(config.error_events_days, 7);
+        assert_eq!(config.client_analytics_days, 30);
+        assert_eq!(config.traffic_patterns_days, 90);
+        assert_eq!(config.snapshots_days, 90);
+        assert_eq!(config.cleanup_interval_hours, 24);
+    }
+
+    #[test]
+    fn test_analytics_config_serialize() {
+        let config = AnalyticsConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("\"enabled\":true"));
+        assert!(json.contains("\"aggregation_interval_seconds\":60"));
+    }
+
+    #[test]
+    fn test_analytics_config_deserialize() {
+        let json = r#"{
+            "enabled": false,
+            "database_path": "/tmp/test.db",
+            "aggregation_interval_seconds": 120,
+            "rollup_interval_hours": 2,
+            "batch_size": 500,
+            "max_query_results": 5000
+        }"#;
+        let config: AnalyticsConfig = serde_json::from_str(json).unwrap();
+        assert!(!config.enabled);
+        assert_eq!(config.database_path, PathBuf::from("/tmp/test.db"));
+        assert_eq!(config.aggregation_interval_seconds, 120);
+        assert_eq!(config.rollup_interval_hours, 2);
+        assert_eq!(config.batch_size, 500);
+        assert_eq!(config.max_query_results, 5000);
+    }
+
+    #[test]
+    fn test_retention_config_serialize() {
+        let config = RetentionConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("\"minute_aggregates_days\":7"));
+        assert!(json.contains("\"hour_aggregates_days\":30"));
+    }
+
+    #[test]
+    fn test_retention_config_deserialize() {
+        let json = r#"{
+            "minute_aggregates_days": 14,
+            "hour_aggregates_days": 60,
+            "day_aggregates_days": 180,
+            "error_events_days": 30,
+            "client_analytics_days": 60,
+            "traffic_patterns_days": 45,
+            "snapshots_days": 120,
+            "cleanup_interval_hours": 12
+        }"#;
+        let config: RetentionConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.minute_aggregates_days, 14);
+        assert_eq!(config.hour_aggregates_days, 60);
+        assert_eq!(config.day_aggregates_days, 180);
+        assert_eq!(config.error_events_days, 30);
+        assert_eq!(config.client_analytics_days, 60);
+        assert_eq!(config.traffic_patterns_days, 45);
+        assert_eq!(config.snapshots_days, 120);
+        assert_eq!(config.cleanup_interval_hours, 12);
+    }
+
+    #[test]
+    fn test_analytics_config_clone() {
+        let config = AnalyticsConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.enabled, cloned.enabled);
+        assert_eq!(config.database_path, cloned.database_path);
+    }
+
+    #[test]
+    fn test_retention_config_clone() {
+        let config = RetentionConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.minute_aggregates_days, cloned.minute_aggregates_days);
+        assert_eq!(config.hour_aggregates_days, cloned.hour_aggregates_days);
+    }
+
+    #[test]
+    fn test_analytics_config_with_defaults_in_partial_json() {
+        let json = r#"{
+            "enabled": true,
+            "database_path": "/data/analytics.db"
+        }"#;
+        let config: AnalyticsConfig = serde_json::from_str(json).unwrap();
+        // Defaults should be applied for missing fields
+        assert_eq!(config.aggregation_interval_seconds, 60);
+        assert_eq!(config.rollup_interval_hours, 1);
+        assert_eq!(config.batch_size, 1000);
+    }
+
+    #[test]
+    fn test_retention_config_debug() {
+        let config = RetentionConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("RetentionConfig"));
+        assert!(debug.contains("minute_aggregates_days"));
+    }
+
+    #[test]
+    fn test_analytics_config_debug() {
+        let config = AnalyticsConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("AnalyticsConfig"));
+        assert!(debug.contains("enabled"));
+        assert!(debug.contains("database_path"));
+    }
+}

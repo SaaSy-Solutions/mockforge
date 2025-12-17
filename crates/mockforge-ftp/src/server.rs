@@ -68,7 +68,7 @@ impl FtpServer {
                                 ..Default::default()
                             },
                         );
-                        self.vfs.add_file(path.to_path_buf(), file)?;
+                        self.vfs.add_file_async(path.to_path_buf(), file).await?;
                     }
                     crate::fixtures::UploadStorage::File { path: storage_path } => {
                         // Write to file system
@@ -90,5 +90,233 @@ impl FtpServer {
 
     pub fn vfs(&self) -> Arc<VirtualFileSystem> {
         self.vfs.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures::{FileValidation, UploadRule, UploadStorage};
+
+    #[test]
+    fn test_ftp_server_new() {
+        let config = FtpConfig {
+            host: "127.0.0.1".to_string(),
+            port: 2121,
+            virtual_root: std::path::PathBuf::from("/"),
+            ..Default::default()
+        };
+
+        let server = FtpServer::new(config.clone());
+        assert_eq!(server.config.host, "127.0.0.1");
+        assert_eq!(server.config.port, 2121);
+    }
+
+    #[test]
+    fn test_ftp_server_debug() {
+        let config = FtpConfig {
+            host: "localhost".to_string(),
+            port: 21,
+            virtual_root: std::path::PathBuf::from("/tmp"),
+            ..Default::default()
+        };
+
+        let server = FtpServer::new(config);
+        let debug = format!("{:?}", server);
+        assert!(debug.contains("FtpServer"));
+    }
+
+    #[test]
+    fn test_ftp_server_spec_registry() {
+        let config = FtpConfig {
+            host: "127.0.0.1".to_string(),
+            port: 2121,
+            virtual_root: std::path::PathBuf::from("/"),
+            ..Default::default()
+        };
+
+        let server = FtpServer::new(config);
+        let registry = server.spec_registry();
+        assert!(registry.fixtures.is_empty());
+    }
+
+    #[test]
+    fn test_ftp_server_vfs() {
+        let config = FtpConfig {
+            host: "127.0.0.1".to_string(),
+            port: 2121,
+            virtual_root: std::path::PathBuf::from("/test"),
+            ..Default::default()
+        };
+
+        let server = FtpServer::new(config);
+        let vfs = server.vfs();
+        let files = vfs.list_files(&std::path::PathBuf::from("/"));
+        assert!(files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_handle_upload_memory_storage() {
+        let config = FtpConfig {
+            host: "127.0.0.1".to_string(),
+            port: 2121,
+            virtual_root: std::path::PathBuf::from("/"),
+            ..Default::default()
+        };
+
+        let server = FtpServer::new(config);
+
+        // Create a fixture with an upload rule
+        let rule = UploadRule {
+            path_pattern: r"^/uploads/.*".to_string(),
+            auto_accept: true,
+            validation: None,
+            storage: UploadStorage::Memory,
+        };
+
+        let fixture = crate::fixtures::FtpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            virtual_files: vec![],
+            upload_rules: vec![rule],
+        };
+
+        // Update the spec registry
+        let new_registry = FtpSpecRegistry::new()
+            .with_vfs(server.vfs.clone())
+            .with_fixtures(vec![fixture])
+            .unwrap();
+
+        let server = FtpServer {
+            config: server.config,
+            vfs: server.vfs.clone(),
+            spec_registry: Arc::new(new_registry),
+        };
+
+        let path = std::path::Path::new("/uploads/test.txt");
+        let data = b"test file content".to_vec();
+
+        let result = server.handle_upload(path, data.clone()).await;
+        assert!(result.is_ok());
+
+        // Verify file was stored in VFS
+        let file = server.vfs.get_file_async(path).await;
+        assert!(file.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_handle_upload_discard_storage() {
+        let config = FtpConfig {
+            host: "127.0.0.1".to_string(),
+            port: 2121,
+            virtual_root: std::path::PathBuf::from("/"),
+            ..Default::default()
+        };
+
+        let server = FtpServer::new(config);
+
+        let rule = UploadRule {
+            path_pattern: r"^/uploads/.*".to_string(),
+            auto_accept: true,
+            validation: None,
+            storage: UploadStorage::Discard,
+        };
+
+        let fixture = crate::fixtures::FtpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            virtual_files: vec![],
+            upload_rules: vec![rule],
+        };
+
+        let new_registry = FtpSpecRegistry::new()
+            .with_vfs(server.vfs.clone())
+            .with_fixtures(vec![fixture])
+            .unwrap();
+
+        let server = FtpServer {
+            config: server.config,
+            vfs: server.vfs.clone(),
+            spec_registry: Arc::new(new_registry),
+        };
+
+        let path = std::path::Path::new("/uploads/test.txt");
+        let data = b"test file content".to_vec();
+
+        let result = server.handle_upload(path, data).await;
+        assert!(result.is_ok());
+
+        // With discard storage, file should not be in VFS
+        let file = server.vfs.get_file_async(path).await;
+        assert!(file.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handle_upload_validation_failure() {
+        let config = FtpConfig {
+            host: "127.0.0.1".to_string(),
+            port: 2121,
+            virtual_root: std::path::PathBuf::from("/"),
+            ..Default::default()
+        };
+
+        let server = FtpServer::new(config);
+
+        let rule = UploadRule {
+            path_pattern: r"^/uploads/.*".to_string(),
+            auto_accept: true,
+            validation: Some(FileValidation {
+                max_size_bytes: Some(10),
+                allowed_extensions: None,
+                mime_types: None,
+            }),
+            storage: UploadStorage::Memory,
+        };
+
+        let fixture = crate::fixtures::FtpFixture {
+            identifier: "test".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            virtual_files: vec![],
+            upload_rules: vec![rule],
+        };
+
+        let new_registry = FtpSpecRegistry::new()
+            .with_vfs(server.vfs.clone())
+            .with_fixtures(vec![fixture])
+            .unwrap();
+
+        let server = FtpServer {
+            config: server.config,
+            vfs: server.vfs.clone(),
+            spec_registry: Arc::new(new_registry),
+        };
+
+        let path = std::path::Path::new("/uploads/test.txt");
+        let data = b"this is a very large file that exceeds the limit".to_vec();
+
+        let result = server.handle_upload(path, data).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_handle_upload_no_matching_rule() {
+        let config = FtpConfig {
+            host: "127.0.0.1".to_string(),
+            port: 2121,
+            virtual_root: std::path::PathBuf::from("/"),
+            ..Default::default()
+        };
+
+        let server = FtpServer::new(config);
+
+        let path = std::path::Path::new("/no-rule/test.txt");
+        let data = b"test content".to_vec();
+
+        let result = server.handle_upload(path, data).await;
+        // Should succeed but do nothing since no rule matches
+        assert!(result.is_ok());
     }
 }

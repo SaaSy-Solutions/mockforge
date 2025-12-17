@@ -200,4 +200,193 @@ mod tests {
         assert_eq!(username, "user");
         assert_eq!(password, "pass");
     }
+
+    #[test]
+    fn test_harness_default() {
+        let harness = TestHarness::default();
+        assert_eq!(harness.contexts.len(), 0);
+    }
+
+    #[test]
+    fn test_harness_multiple_contexts() {
+        let mut harness = TestHarness::new();
+        harness.create_context("plugin-1", "req-1");
+        harness.create_context("plugin-2", "req-2");
+        harness.create_context("plugin-3", "req-3");
+        assert_eq!(harness.contexts.len(), 3);
+    }
+
+    #[test]
+    fn test_harness_get_context() {
+        let mut harness = TestHarness::new();
+        harness.create_context("my-plugin", "req-123");
+
+        let retrieved = harness.get_context("my-plugin");
+        assert!(retrieved.is_some());
+        let ctx = retrieved.unwrap();
+        assert_eq!(ctx.plugin_id.as_str(), "my-plugin");
+        assert_eq!(ctx.request_id, "req-123");
+    }
+
+    #[test]
+    fn test_harness_get_context_not_found() {
+        let harness = TestHarness::new();
+        assert!(harness.get_context("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_harness_context_overwrite() {
+        let mut harness = TestHarness::new();
+        harness.create_context("plugin", "req-1");
+        harness.create_context("plugin", "req-2");
+
+        // Should have only 1 context (overwritten)
+        assert_eq!(harness.contexts.len(), 1);
+        let ctx = harness.get_context("plugin").unwrap();
+        assert_eq!(ctx.request_id, "req-2");
+    }
+
+    #[test]
+    fn test_harness_create_context_with_custom() {
+        let mut harness = TestHarness::new();
+        let mut custom_data = HashMap::new();
+        custom_data.insert("key1".to_string(), serde_json::json!("value1"));
+        custom_data.insert("key2".to_string(), serde_json::json!(42));
+
+        let context = harness.create_context_with_custom("plugin", "req-1", custom_data);
+        assert_eq!(context.plugin_id.as_str(), "plugin");
+        assert_eq!(context.request_id, "req-1");
+    }
+
+    #[test]
+    fn test_harness_create_context_with_empty_custom() {
+        let mut harness = TestHarness::new();
+        let context = harness.create_context_with_custom("plugin", "req-1", HashMap::new());
+        assert_eq!(context.plugin_id.as_str(), "plugin");
+    }
+
+    #[test]
+    fn test_mock_auth_request_bearer_token() {
+        let request = MockAuthRequest::with_bearer_token("my-secret-token");
+        let auth_header = request.authorization_header();
+        assert!(auth_header.is_some());
+        let header = auth_header.unwrap();
+        assert!(header.starts_with("Bearer "));
+        assert!(header.contains("my-secret-token"));
+    }
+
+    #[test]
+    fn test_mock_auth_request_with_headers() {
+        let mut headers = HashMap::new();
+        headers.insert("x-custom-header".to_string(), "custom-value".to_string());
+        headers.insert("content-type".to_string(), "application/json".to_string());
+
+        let request = MockAuthRequest::with_headers(headers);
+        // The request should be created successfully
+        assert_eq!(request.method, "GET");
+    }
+
+    #[test]
+    fn test_mock_auth_request_with_empty_headers() {
+        let request = MockAuthRequest::with_headers(HashMap::new());
+        assert_eq!(request.method, "GET");
+        assert!(request.authorization_header().is_none());
+    }
+
+    #[test]
+    fn test_mock_auth_request_basic_auth_empty_credentials() {
+        let request = MockAuthRequest::with_basic_auth("", "");
+        let (username, password) = request.basic_credentials().unwrap();
+        assert_eq!(username, "");
+        assert_eq!(password, "");
+    }
+
+    #[test]
+    fn test_mock_auth_request_bearer_empty_token() {
+        let request = MockAuthRequest::with_bearer_token("");
+        let auth_header = request.authorization_header();
+        assert!(auth_header.is_some());
+        assert_eq!(auth_header.unwrap(), "Bearer ");
+    }
+
+    #[test]
+    fn test_test_context_function() {
+        let context = test_context();
+        assert_eq!(context.plugin_id.as_str(), "test-plugin");
+        assert_eq!(context.request_id, "test-request");
+        assert_eq!(context.version.major, 0);
+        assert_eq!(context.version.minor, 1);
+        assert_eq!(context.version.patch, 0);
+    }
+
+    #[test]
+    fn test_test_context_with_id_function() {
+        let context = test_context_with_id("custom-plugin");
+        assert_eq!(context.plugin_id.as_str(), "custom-plugin");
+        assert_eq!(context.request_id, "test-request");
+    }
+
+    #[test]
+    fn test_test_context_with_empty_id() {
+        let context = test_context_with_id("");
+        assert_eq!(context.plugin_id.as_str(), "");
+        assert_eq!(context.request_id, "test-request");
+    }
+
+    #[test]
+    fn test_assert_plugin_ok_macro() {
+        let result: std::result::Result<i32, &str> = Ok(42);
+        assert_plugin_ok!(result);
+    }
+
+    #[test]
+    #[should_panic(expected = "Plugin returned error")]
+    fn test_assert_plugin_ok_macro_fails_on_err() {
+        let result: std::result::Result<i32, &str> = Err("error");
+        assert_plugin_ok!(result);
+    }
+
+    #[test]
+    #[should_panic(expected = "Custom message")]
+    fn test_assert_plugin_ok_macro_with_message() {
+        let result: std::result::Result<i32, &str> = Err("error");
+        assert_plugin_ok!(result, "Custom message");
+    }
+
+    #[test]
+    fn test_assert_plugin_err_macro() {
+        let result: std::result::Result<i32, &str> = Err("error");
+        assert_plugin_err!(result);
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected plugin error, got success")]
+    fn test_assert_plugin_err_macro_fails_on_ok() {
+        let result: std::result::Result<i32, &str> = Ok(42);
+        assert_plugin_err!(result);
+    }
+
+    #[test]
+    #[should_panic(expected = "Custom message")]
+    fn test_assert_plugin_err_macro_with_message() {
+        let result: std::result::Result<i32, &str> = Ok(42);
+        assert_plugin_err!(result, "Custom message");
+    }
+
+    #[test]
+    fn test_mock_auth_request_basic_auth_special_chars() {
+        let request = MockAuthRequest::with_basic_auth("user@domain.com", "p@ss:w0rd!");
+        let (username, password) = request.basic_credentials().unwrap();
+        assert_eq!(username, "user@domain.com");
+        assert_eq!(password, "p@ss:w0rd!");
+    }
+
+    #[test]
+    fn test_context_version_is_0_1_0() {
+        let mut harness = TestHarness::new();
+        let context = harness.create_context("plugin", "req");
+        assert_eq!(context.version.major, 0);
+        assert_eq!(context.version.minor, 1);
+        assert_eq!(context.version.patch, 0);
+    }
 }
