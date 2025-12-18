@@ -215,8 +215,9 @@ impl OpenApiRoute {
 
     /// Convert OpenAPI path to Axum-compatible path format
     pub fn axum_path(&self) -> String {
+        // Strip query string if present (some non-standard OpenAPI specs embed query params in path)
         // Axum v0.7+ uses {param} format, same as OpenAPI
-        self.path.clone()
+        self.path.split('?').next().unwrap_or(&self.path).to_string()
     }
 
     /// Add metadata to the route

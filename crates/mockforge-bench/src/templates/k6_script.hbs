@@ -42,7 +42,14 @@ export default function () {
       headers{{#if ../skip_tls_verify}},
       insecureSkipTLSVerify: true{{/if}}
     });
+    {{else if this.is_get_or_head}}
+    // GET and HEAD only take 2 args: http.get(url, params)
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, {
+      headers{{#if ../skip_tls_verify}},
+      insecureSkipTLSVerify: true{{/if}}
+    });
     {{else}}
+    // POST, PUT, PATCH, DELETE take 3 args: http.post(url, body, params)
     const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, {
       headers{{#if ../skip_tls_verify}},
       insecureSkipTLSVerify: true{{/if}}
@@ -80,27 +87,38 @@ function textSummary(data, options) {
   output += indent + '='.repeat(60) + '\n\n';
 
   // Request metrics
-  if (metrics.http_reqs) {
-    output += indent + `Total Requests: ${metrics.http_reqs.values.count}\n`;
-    output += indent + `Request Rate: ${metrics.http_reqs.values.rate.toFixed(2)} req/s\n\n`;
+  if (metrics.http_reqs && metrics.http_reqs.values) {
+    const count = metrics.http_reqs.values.count || 0;
+    const rate = metrics.http_reqs.values.rate;
+    output += indent + `Total Requests: ${count}\n`;
+    output += indent + `Request Rate: ${rate != null ? rate.toFixed(2) : '0.00'} req/s\n\n`;
+  } else {
+    output += indent + 'Total Requests: 0\n';
+    output += indent + 'Request Rate: 0.00 req/s\n\n';
   }
 
   // Duration metrics
-  if (metrics.http_req_duration) {
+  if (metrics.http_req_duration && metrics.http_req_duration.values) {
+    const v = metrics.http_req_duration.values;
     output += indent + 'Response Times:\n';
-    output += indent + `  Min: ${metrics.http_req_duration.values.min.toFixed(2)}ms\n`;
-    output += indent + `  Avg: ${metrics.http_req_duration.values.avg.toFixed(2)}ms\n`;
-    output += indent + `  Med: ${metrics.http_req_duration.values.med.toFixed(2)}ms\n`;
-    output += indent + `  p90: ${metrics.http_req_duration.values['p(90)'].toFixed(2)}ms\n`;
-    output += indent + `  p95: ${metrics.http_req_duration.values['p(95)'].toFixed(2)}ms\n`;
-    output += indent + `  p99: ${metrics.http_req_duration.values['p(99)'].toFixed(2)}ms\n`;
-    output += indent + `  Max: ${metrics.http_req_duration.values.max.toFixed(2)}ms\n\n`;
+    output += indent + `  Min: ${v.min != null ? v.min.toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  Avg: ${v.avg != null ? v.avg.toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  Med: ${v.med != null ? v.med.toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  p90: ${v['p(90)'] != null ? v['p(90)'].toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  p95: ${v['p(95)'] != null ? v['p(95)'].toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  p99: ${v['p(99)'] != null ? v['p(99)'].toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  Max: ${v.max != null ? v.max.toFixed(2) : 'N/A'}ms\n\n`;
+  } else {
+    output += indent + 'Response Times: No successful requests\n\n';
   }
 
   // Error rate
-  if (metrics.http_req_failed) {
-    const errorRate = (metrics.http_req_failed.values.rate * 100).toFixed(2);
+  if (metrics.http_req_failed && metrics.http_req_failed.values) {
+    const rate = metrics.http_req_failed.values.rate;
+    const errorRate = rate != null ? (rate * 100).toFixed(2) : '100.00';
     output += indent + `Error Rate: ${errorRate}%\n\n`;
+  } else {
+    output += indent + 'Error Rate: N/A\n\n';
   }
 
   output += indent + '='.repeat(60) + '\n';

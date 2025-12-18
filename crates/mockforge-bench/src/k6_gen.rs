@@ -111,6 +111,9 @@ impl K6ScriptGenerator {
                     "delete" => "del".to_string(),
                     m => m.to_string(),
                 };
+                // GET and HEAD methods only take 2 arguments in k6: http.get(url, params)
+                // Other methods take 3 arguments: http.post(url, body, params)
+                let is_get_or_head = matches!(k6_method.as_str(), "get" | "head");
                 json!({
                     "index": idx,
                     "name": sanitized_name,  // Use sanitized name for variable names
@@ -121,6 +124,7 @@ impl K6ScriptGenerator {
                     "headers": self.build_headers_json(template),  // Returns JSON string for template
                     "body": template.body.as_ref().map(|b| b.to_string()),
                     "has_body": template.body.is_some(),
+                    "is_get_or_head": is_get_or_head,  // For correct k6 function signature
                 })
             })
             .collect::<Vec<_>>();
