@@ -717,11 +717,21 @@ export default function() {{}}
         let generator = K6ScriptGenerator::new(config, vec![template1, template2]);
         let script = generator.generate().expect("Should generate script");
 
-        // Verify the script includes TLS skip option for all operations
+        // Verify the script includes TLS skip option ONCE in global options
+        // (k6 only supports insecureSkipTLSVerify as a global option, not per-request)
         let skip_count = script.matches("insecureSkipTLSVerify: true").count();
         assert_eq!(
-            skip_count, 2,
-            "Script should include insecureSkipTLSVerify option for all operations when skip_tls_verify is true"
+            skip_count, 1,
+            "Script should include insecureSkipTLSVerify exactly once in global options (not per-request)"
+        );
+
+        // Verify it appears in the options block, before scenarios
+        let options_start = script.find("export const options = {").expect("Should have options");
+        let scenarios_start = script.find("scenarios:").expect("Should have scenarios");
+        let options_prefix = &script[options_start..scenarios_start];
+        assert!(
+            options_prefix.contains("insecureSkipTLSVerify: true"),
+            "insecureSkipTLSVerify should be in global options block"
         );
     }
 }

@@ -10,6 +10,9 @@ const {{this.name}}_errors = new Rate('{{this.metric_name}}_errors');
 
 // Test configuration
 export const options = {
+  {{#if skip_tls_verify}}
+  insecureSkipTLSVerify: true,
+  {{/if}}
   scenarios: {
     {{scenario_name}}: {
       executor: 'ramping-vus',
@@ -38,22 +41,13 @@ export default function () {
 
     {{#if this.has_body}}
     const payload = {{{this.body}}};
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, JSON.stringify(payload), {
-      headers{{#if ../skip_tls_verify}},
-      insecureSkipTLSVerify: true{{/if}}
-    });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, JSON.stringify(payload), { headers });
     {{else if this.is_get_or_head}}
     // GET and HEAD only take 2 args: http.get(url, params)
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, {
-      headers{{#if ../skip_tls_verify}},
-      insecureSkipTLSVerify: true{{/if}}
-    });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, { headers });
     {{else}}
     // POST, PUT, PATCH, DELETE take 3 args: http.post(url, body, params)
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, {
-      headers{{#if ../skip_tls_verify}},
-      insecureSkipTLSVerify: true{{/if}}
-    });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, { headers });
     {{/if}}
 
     const success = check(res, {

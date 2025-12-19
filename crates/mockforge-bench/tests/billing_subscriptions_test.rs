@@ -240,3 +240,81 @@ async fn test_billing_subscriptions_spec_generation() {
     println!("  - Script length: {} characters", script.len());
     println!("  - All variable names are properly sanitized (no dots in identifiers)");
 }
+
+/// Test that verifies insecureSkipTLSVerify is placed in global options, not per-request
+/// This is critical because k6 only supports this as a global option.
+/// See: https://grafana.com/docs/k6/latest/using-k6/k6-options/reference/#insecure-skip-tls-verify
+#[tokio::test]
+async fn test_insecure_skip_tls_verify_in_global_options() {
+    let spec_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("billing_subscriptions_v1.json");
+
+    let parser = SpecParser::from_file(&spec_path).await.expect("Should parse the spec");
+
+    let operations = parser.get_operations();
+    let templates: Vec<_> = operations
+        .iter()
+        .map(RequestGenerator::generate_template)
+        .collect::<Result<Vec<_>>>()
+        .expect("Should generate request templates");
+
+    // Test with skip_tls_verify = true
+    let config = K6Config {
+        target_url: "https://192.168.1.100".to_string(),
+        scenario: LoadScenario::Constant,
+        duration_secs: 30,
+        max_vus: 5,
+        threshold_percentile: "p(95)".to_string(),
+        threshold_ms: 500,
+        max_error_rate: 0.05,
+        auth_header: None,
+        custom_headers: HashMap::new(),
+        skip_tls_verify: true, // Enable insecure mode
+    };
+
+    let generator = K6ScriptGenerator::new(config, templates);
+    let script = generator.generate().expect("Should generate k6 script");
+
+    // Verify insecureSkipTLSVerify is in the global options block
+    // It should appear BEFORE "scenarios:" in the options object
+    let options_start = script
+        .find("export const options = {")
+        .expect("Script should have options export");
+    let scenarios_start = script.find("scenarios:").expect("Script should have scenarios");
+
+    let options_prefix = &script[options_start..scenarios_start];
+    assert!(
+        options_prefix.contains("insecureSkipTLSVerify: true"),
+        "insecureSkipTLSVerify should be in global options block BEFORE scenarios.\n\
+         Options prefix:\n{}\n\nFull options block should look like:\n\
+         export const options = {{\n  insecureSkipTLSVerify: true,\n  scenarios: ...",
+        options_prefix
+    );
+
+    // Verify insecureSkipTLSVerify is NOT in individual request params
+    // (It won't work there - k6 only supports it globally)
+    let request_sections: Vec<&str> = script
+        .split("const res = http.")
+        .skip(1) // Skip first split (before first request)
+        .collect();
+
+    for (i, section) in request_sections.iter().enumerate() {
+        // Get just the request line (up to the semicolon)
+        if let Some(end) = section.find(';') {
+            let request_line = &section[..end];
+            assert!(
+                !request_line.contains("insecureSkipTLSVerify"),
+                "Request {} should NOT have insecureSkipTLSVerify in params (it's ignored there).\n\
+                 Request: {}",
+                i + 1,
+                request_line
+            );
+        }
+    }
+
+    println!("\n✓ insecureSkipTLSVerify correctly placed in global options");
+    println!("  - Verified it appears before 'scenarios:' in options block");
+    println!("  - Verified it does NOT appear in individual request params");
+}
