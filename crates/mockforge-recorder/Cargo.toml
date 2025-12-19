@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-recorder"
-version = "0.3.9"
+version = "0.3.10"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -52,7 +52,7 @@ serde_path_to_error = "0.1"
 reqwest = { workspace = true }
 
 # Core types for OpenAPI generation
-mockforge-core = { version = "0.3.9", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.10", path = "../mockforge-core" }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }

@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-smtp"
-version = "0.3.9"
+version = "0.3.10"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -14,7 +14,7 @@ categories = ["development-tools", "email"]
 
 [dependencies]
 # MockForge core
-mockforge-core = { version = "0.3.9", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.10", path = "../mockforge-core" }
 
 # Standard workspace dependencies
 tokio = { workspace = true, features = ["net", "io-util"] }

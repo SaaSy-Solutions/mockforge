@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-runtime-daemon"
-version = "0.3.9"
+version = "0.3.10"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -30,8 +30,8 @@ axum = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4"] }
 chrono = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
-mockforge-core = { version = "0.3.9", path = "../mockforge-core" }
-mockforge-data = { version = "0.3.9", path = "../mockforge-data", optional = true }
+mockforge-core = { version = "0.3.10", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.10", path = "../mockforge-data", optional = true }
 
 [features]
 default = []

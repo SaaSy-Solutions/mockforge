@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-ws"
-version = "0.3.9"
+version = "0.3.10"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -28,10 +28,10 @@ chrono = { workspace = true }
 fastrand = "2.0"
 async-trait = { workspace = true }
 thiserror = "2.0"
-mockforge-core = { version = "0.3.9", path = "../mockforge-core" }
-mockforge-data = { version = "0.3.9", path = "../mockforge-data" }
-mockforge-observability = { version = "0.3.9", path = "../mockforge-observability" }
-mockforge-tracing = { version = "0.3.9", path = "../mockforge-tracing" }
+mockforge-core = { version = "0.3.10", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.10", path = "../mockforge-data" }
+mockforge-observability = { version = "0.3.10", path = "../mockforge-observability" }
+mockforge-tracing = { version = "0.3.10", path = "../mockforge-tracing" }
 opentelemetry = { version = "0.22", features = ["trace"] }
 
 [dev-dependencies]
