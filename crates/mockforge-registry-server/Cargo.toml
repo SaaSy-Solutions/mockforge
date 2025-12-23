@@ -31,7 +31,7 @@ rand = "0.8" # Random number generation for tokens
 
 # Storage
 aws-sdk-s3 = "1.10"
-aws-config = "1.1"
+aws-config = "1.8"
 
 # Utilities
 anyhow = "1.0"
