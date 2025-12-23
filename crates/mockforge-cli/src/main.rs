@@ -1479,6 +1479,7 @@ enum Commands {
     ///   mockforge bench --spec api.yaml --target https://api.com --scenario spike --output results/
     ///   mockforge bench --spec api.yaml --target https://api.com --operations "GET /users,POST /users"
     ///   mockforge bench --spec api.yaml --targets-file /path/to/targets.txt --max-concurrency 20
+    ///   mockforge bench --spec api.yaml --target https://api.com --params-file params.json
     #[command(verbatim_doc_comment)]
     Bench {
         /// API specification file (OpenAPI/Swagger)
@@ -1559,6 +1560,19 @@ enum Commands {
         /// Only used when --targets-file is specified
         #[arg(long, default_value = "both")]
         results_format: String,
+
+        /// Parameter values override file (JSON or YAML)
+        ///
+        /// Allows providing custom values for path parameters, query parameters,
+        /// headers, and request bodies instead of auto-generated placeholder values.
+        ///
+        /// Example file format:
+        /// {
+        ///   "defaults": { "path_params": { "id": "123" } },
+        ///   "operations": { "createUser": { "body": { "name": "Test" } } }
+        /// }
+        #[arg(long, value_name = "FILE")]
+        params_file: Option<PathBuf>,
     },
 }
 
@@ -2875,6 +2889,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             insecure,
             max_concurrency,
             results_format,
+            params_file,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -2918,6 +2933,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 targets_file,
                 max_concurrency: Some(max_concurrency),
                 results_format,
+                params_file,
             };
 
             if let Err(e) = bench_cmd.execute().await {

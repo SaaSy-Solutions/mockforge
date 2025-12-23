@@ -1,0 +1,54 @@
+{
+  "defaults": {
+    "path_params": {
+      "uuid": "virtualservice-12345-abcde",
+      "id": "vs-001"
+    },
+    "query_params": {
+      "page": "1",
+      "page_size": "20",
+      "include_name": "true"
+    }
+  },
+  "operations": {
+    "POST /virtualservice": {
+      "body": {
+        "name": "test-virtual-service",
+        "enabled": true,
+        "vip": [
+          {
+            "ip_address": {
+              "addr": "10.0.0.100",
+              "type": "V4"
+            }
+          }
+        ],
+        "services": [
+          {
+            "port": 80,
+            "enable_ssl": false
+          }
+        ]
+      }
+    },
+    "PUT /virtualservice/{uuid}": {
+      "path_params": {
+        "uuid": "virtualservice-12345-abcde"
+      },
+      "body": {
+        "name": "updated-virtual-service",
+        "enabled": true
+      }
+    },
+    "GET /virtualservice/{uuid}": {
+      "path_params": {
+        "uuid": "virtualservice-12345-abcde"
+      }
+    },
+    "DELETE /virtualservice/{uuid}": {
+      "path_params": {
+        "uuid": "virtualservice-12345-abcde"
+      }
+    }
+  }
+}

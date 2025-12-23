@@ -141,6 +141,7 @@ async fn test_bench_command_parse_headers() {
         targets_file: None,
         max_concurrency: None,
         results_format: "both".to_string(),
+        params_file: None,
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -172,6 +173,7 @@ async fn test_bench_command_parse_headers_invalid_format() {
         targets_file: None,
         max_concurrency: None,
         results_format: "both".to_string(),
+        params_file: None,
     };
 
     let result = cmd.parse_headers();

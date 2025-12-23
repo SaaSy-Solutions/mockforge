@@ -1,6 +1,7 @@
 //! Request template generation from OpenAPI operations
 
 use crate::error::Result;
+use crate::param_overrides::OperationOverrides;
 use crate::spec_parser::ApiOperation;
 use openapiv3::{
     MediaType, Parameter, ParameterData, ParameterSchemaOrContent, ReferenceOr, RequestBody,
@@ -57,6 +58,17 @@ pub struct RequestGenerator;
 impl RequestGenerator {
     /// Generate a request template from an API operation
     pub fn generate_template(operation: &ApiOperation) -> Result<RequestTemplate> {
+        Self::generate_template_with_overrides(operation, None)
+    }
+
+    /// Generate a request template with optional parameter overrides
+    ///
+    /// When overrides are provided, they take precedence over auto-generated values.
+    /// This allows users to provide realistic test data instead of placeholder values.
+    pub fn generate_template_with_overrides(
+        operation: &ApiOperation,
+        overrides: Option<&OperationOverrides>,
+    ) -> Result<RequestTemplate> {
         let mut template = RequestTemplate {
             operation: operation.clone(),
             path_params: HashMap::new(),
@@ -65,15 +77,38 @@ impl RequestGenerator {
             body: None,
         };
 
-        // Extract parameters
+        // Extract parameters from OpenAPI spec
         for param_ref in &operation.operation.parameters {
             if let ReferenceOr::Item(param) = param_ref {
-                Self::process_parameter(param, &mut template)?;
+                Self::process_parameter_with_overrides(param, &mut template, overrides)?;
             }
         }
 
-        // Extract request body
-        if let Some(ReferenceOr::Item(request_body)) = &operation.operation.request_body {
+        // Apply any additional overridden parameters not in the spec
+        if let Some(ovr) = overrides {
+            // Add overridden path params that weren't in the spec
+            for (name, value) in &ovr.path_params {
+                template.path_params.entry(name.clone()).or_insert_with(|| value.clone());
+            }
+            // Add overridden query params that weren't in the spec
+            for (name, value) in &ovr.query_params {
+                template.query_params.entry(name.clone()).or_insert_with(|| value.clone());
+            }
+            // Add overridden headers that weren't in the spec
+            for (name, value) in &ovr.headers {
+                template.headers.entry(name.clone()).or_insert_with(|| value.clone());
+            }
+        }
+
+        // Extract request body (override takes precedence)
+        if let Some(ovr) = overrides {
+            if let Some(body) = ovr.get_body() {
+                template.body = Some(body.clone());
+            } else if let Some(ReferenceOr::Item(request_body)) = &operation.operation.request_body
+            {
+                template.body = Self::generate_body(request_body)?;
+            }
+        } else if let Some(ReferenceOr::Item(request_body)) = &operation.operation.request_body {
             template.body = Self::generate_body(request_body)?;
         }
 
@@ -82,16 +117,36 @@ impl RequestGenerator {
 
     /// Process a parameter and add it to the template
     fn process_parameter(param: &Parameter, template: &mut RequestTemplate) -> Result<()> {
-        let (name, param_data) = match param {
+        Self::process_parameter_with_overrides(param, template, None)
+    }
+
+    /// Process a parameter with optional overrides
+    fn process_parameter_with_overrides(
+        param: &Parameter,
+        template: &mut RequestTemplate,
+        overrides: Option<&OperationOverrides>,
+    ) -> Result<()> {
+        let (param_type, param_data) = match param {
             Parameter::Query { parameter_data, .. } => ("query", parameter_data),
             Parameter::Path { parameter_data, .. } => ("path", parameter_data),
             Parameter::Header { parameter_data, .. } => ("header", parameter_data),
             Parameter::Cookie { .. } => return Ok(()), // Skip cookies for now
         };
 
-        let value = Self::generate_param_value(param_data)?;
+        // Check for override first, then fall back to generated value
+        let value = if let Some(ovr) = overrides {
+            match param_type {
+                "path" => ovr.get_path_param(&param_data.name).cloned(),
+                "query" => ovr.get_query_param(&param_data.name).cloned(),
+                "header" => ovr.get_header(&param_data.name).cloned(),
+                _ => None,
+            }
+        } else {
+            None
+        }
+        .unwrap_or_else(|| Self::generate_param_value(param_data).unwrap_or_default());
 
-        match name {
+        match param_type {
             "query" => {
                 template.query_params.insert(param_data.name.clone(), value);
             }

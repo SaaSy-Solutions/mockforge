@@ -4,6 +4,7 @@ use crate::error::{BenchError, Result};
 use crate::executor::K6Executor;
 use crate::k6_gen::{K6Config, K6ScriptGenerator};
 use crate::parallel_executor::{AggregatedResults, ParallelExecutor};
+use crate::param_overrides::ParameterOverrides;
 use crate::reporter::TerminalReporter;
 use crate::request_gen::RequestGenerator;
 use crate::scenarios::LoadScenario;
@@ -37,6 +38,11 @@ pub struct BenchCommand {
     pub max_concurrency: Option<u32>,
     /// Results format: "per-target", "aggregated", or "both"
     pub results_format: String,
+    /// Optional file containing parameter value overrides (JSON or YAML)
+    ///
+    /// Allows users to provide custom values for path parameters, query parameters,
+    /// headers, and request bodies instead of auto-generated placeholder values.
+    pub params_file: Option<PathBuf>,
 }
 
 impl BenchCommand {
@@ -85,11 +91,30 @@ impl BenchCommand {
 
         TerminalReporter::print_success(&format!("Found {} operations", operations.len()));
 
+        // Load parameter overrides if provided
+        let param_overrides = if let Some(params_file) = &self.params_file {
+            TerminalReporter::print_progress("Loading parameter overrides...");
+            let overrides = ParameterOverrides::from_file(params_file)?;
+            TerminalReporter::print_success(&format!(
+                "Loaded parameter overrides ({} operation-specific, {} defaults)",
+                overrides.operations.len(),
+                if overrides.defaults.is_empty() { 0 } else { 1 }
+            ));
+            Some(overrides)
+        } else {
+            None
+        };
+
         // Generate request templates
         TerminalReporter::print_progress("Generating request templates...");
         let templates: Vec<_> = operations
             .iter()
-            .map(RequestGenerator::generate_template)
+            .map(|op| {
+                let op_overrides = param_overrides.as_ref().map(|po| {
+                    po.get_for_operation(op.operation_id.as_deref(), &op.method, &op.path)
+                });
+                RequestGenerator::generate_template_with_overrides(op, op_overrides.as_ref())
+            })
             .collect::<Result<Vec<_>>>()?;
         TerminalReporter::print_success("Request templates generated");
 
@@ -215,6 +240,7 @@ impl BenchCommand {
                 targets_file: None,
                 max_concurrency: None,
                 results_format: self.results_format.clone(),
+                params_file: self.params_file.clone(),
             },
             targets,
             max_concurrency,
@@ -369,6 +395,7 @@ mod tests {
             targets_file: None,
             max_concurrency: None,
             results_format: "both".to_string(),
+            params_file: None,
         };
 
         let headers = cmd.parse_headers().unwrap();
