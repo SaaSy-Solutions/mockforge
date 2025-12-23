@@ -22,6 +22,10 @@ pub struct BenchCommand {
     pub vus: u32,
     pub scenario: String,
     pub operations: Option<String>,
+    /// Exclude operations from testing (comma-separated)
+    ///
+    /// Supports "METHOD /path" or just "METHOD" to exclude all operations of that type.
+    pub exclude_operations: Option<String>,
     pub auth: Option<String>,
     pub headers: Option<String>,
     pub output: PathBuf,
@@ -79,11 +83,24 @@ impl BenchCommand {
 
         // Get operations
         TerminalReporter::print_progress("Extracting API operations...");
-        let operations = if let Some(filter) = &self.operations {
+        let mut operations = if let Some(filter) = &self.operations {
             parser.filter_operations(filter)?
         } else {
             parser.get_operations()
         };
+
+        // Apply exclusions if provided
+        if let Some(exclude) = &self.exclude_operations {
+            let before_count = operations.len();
+            operations = parser.exclude_operations(operations, exclude)?;
+            let excluded_count = before_count - operations.len();
+            if excluded_count > 0 {
+                TerminalReporter::print_progress(&format!(
+                    "Excluded {} operations matching '{}'",
+                    excluded_count, exclude
+                ));
+            }
+        }
 
         if operations.is_empty() {
             return Err(BenchError::Other("No operations found in spec".to_string()));
@@ -227,6 +244,7 @@ impl BenchCommand {
                 vus: self.vus,
                 scenario: self.scenario.clone(),
                 operations: self.operations.clone(),
+                exclude_operations: self.exclude_operations.clone(),
                 auth: self.auth.clone(),
                 headers: self.headers.clone(),
                 output: self.output.clone(),
@@ -382,6 +400,7 @@ mod tests {
             vus: 10,
             scenario: "ramp-up".to_string(),
             operations: None,
+            exclude_operations: None,
             auth: None,
             headers: Some("X-API-Key:test123,X-Client-ID:client456".to_string()),
             output: PathBuf::from("output"),

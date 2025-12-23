@@ -1511,6 +1511,16 @@ enum Commands {
         #[arg(long)]
         operations: Option<String>,
 
+        /// Exclude operations from testing (comma-separated)
+        ///
+        /// Supports "METHOD /path" or just "METHOD" to exclude all operations of that type.
+        /// Examples:
+        ///   --exclude-operations "DELETE"              (exclude all DELETE operations)
+        ///   --exclude-operations "DELETE,POST"         (exclude all DELETE and POST)
+        ///   --exclude-operations "DELETE /users/{id}"  (exclude specific operation)
+        #[arg(long)]
+        exclude_operations: Option<String>,
+
         /// Authentication header value (e.g., "Bearer token123")
         #[arg(long)]
         auth: Option<String>,
@@ -2877,6 +2887,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             vus,
             scenario,
             operations,
+            exclude_operations,
             auth,
             headers,
             output,
@@ -2920,6 +2931,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 vus,
                 scenario,
                 operations,
+                exclude_operations,
                 auth,
                 headers,
                 output,
