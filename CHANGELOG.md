@@ -8,63 +8,32 @@
 
 - Nothing yet.
 
-### Deprecated
-
-- Nothing yet.
-
-### Removed
-
-- Nothing yet.
-
 ### Fixed
-
-- Nothing yet.
-
-### Security
 
 - Nothing yet.
 
 ## [0.3.12] - 2025-12-23
 
-### Added
-
-- Version bump to 0.3.12
-
 ### Changed
 
-- Nothing yet.
-
-### Fixed
-
-- Nothing yet.
+- **[DevX] Dependency updates**: Version alignment and dependency updates across all workspace crates
 
 ## [0.3.11] - 2025-12-19
 
 ### Added
 
-- Version bump to 0.3.11
+- **[DevX] Custom benchmark parameters**: Added `--params-file` option to `mockforge bench` command for loading custom parameter values from a file
 
-### Changed
-
-- Nothing yet.
-
-### Fixed
-
-- Nothing yet.
+  **Why it matters**: Allows users to define reusable parameter configurations for benchmark runs, making it easier to test different scenarios without modifying command-line arguments each time.
 
 ## [0.3.10] - 2025-12-18
 
-### Added
-
-- Version bump to 0.3.10
-
-### Changed
-
-- Nothing yet.
-
 ### Fixed
 
-- Nothing yet.
+- **[DevX] k6 benchmark script generation fixes**: Resolved multiple issues with generated k6 scripts
+  - Fixed `--insecure` flag handling by moving `insecureSkipTLSVerify` to global k6 options
+  - Fixed `textSummary` import and usage in generated scripts
+  - Fixed query parameter encoding in benchmark requests
 
 ## [0.3.9] - 2025-12-17
 
