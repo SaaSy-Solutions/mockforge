@@ -1,0 +1,235 @@
+import http from 'k6/http';
+import { check, sleep, group } from 'k6';
+import { Rate, Trend, Counter } from 'k6/metrics';
+{{#each dynamic_imports}}
+{{{this}}}
+{{/each}}
+
+{{#each dynamic_globals}}
+{{{this}}}
+{{/each}}
+
+// Flow-level metrics
+const flowSuccessRate = new Rate('flow_success_rate');
+const flowDuration = new Trend('flow_duration');
+const flowErrors = new Counter('flow_errors');
+
+// Step-level metrics
+{{#each flows}}
+{{#each this.steps}}
+const {{../name}}_step{{@index}}_latency = new Trend('{{../name}}_step{{@index}}_latency');
+const {{../name}}_step{{@index}}_errors = new Rate('{{../name}}_step{{@index}}_errors');
+{{/each}}
+{{/each}}
+
+// Test configuration
+export const options = {
+  {{#if skip_tls_verify}}
+  insecureSkipTLSVerify: true,
+  {{/if}}
+  scenarios: {
+    crud_flow: {
+      executor: 'ramping-vus',
+      startVUs: 0,
+      stages: [
+        {{#each stages}}
+        { duration: '{{this.duration}}', target: {{this.target}} },
+        {{/each}}
+      ],
+      gracefulRampDown: '10s',
+    },
+  },
+  thresholds: {
+    'http_req_duration': ['{{threshold_percentile}}<{{threshold_ms}}'],
+    'http_req_failed': ['rate<{{max_error_rate}}'],
+    'flow_success_rate': ['rate>0.95'],
+  },
+};
+
+const BASE_URL = '{{base_url}}';
+
+// Common headers
+const headers = {{{headers}}};
+
+// Helper function to extract value from JSON response
+function extractValue(response, fieldPath) {
+  try {
+    const json = response.json();
+    const parts = fieldPath.split('.');
+    let value = json;
+    for (const part of parts) {
+      if (value && typeof value === 'object') {
+        value = value[part];
+      } else {
+        return null;
+      }
+    }
+    return value;
+  } catch (e) {
+    console.error(`Failed to extract ${fieldPath}: ${e.message}`);
+    return null;
+  }
+}
+
+// Helper function to replace path parameters
+function replacePath(pathTemplate, values) {
+  let path = pathTemplate;
+  for (const [key, value] of Object.entries(values)) {
+    path = path.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+  }
+  return path;
+}
+
+export default function () {
+  {{#each flows}}
+  // Flow: {{this.name}}
+  group('{{this.name}}', function() {
+    const flowStart = Date.now();
+    let flowSuccess = true;
+    const extractedValues = {};
+
+    {{#each this.steps}}
+    // Step {{@index}}: {{this.description}}
+    {
+      {{#if this.use_values}}
+      // Apply extracted values to path
+      const pathValues = {};
+      {{#each this.use_values}}
+      if (extractedValues['{{this}}']) {
+        pathValues['{{@key}}'] = extractedValues['{{this}}'];
+      }
+      {{/each}}
+      const path = replacePath('{{{this.path}}}', pathValues);
+      {{else}}
+      const path = '{{{this.path}}}';
+      {{/if}}
+
+      {{#if this.has_body}}
+      {{#if this.body_is_dynamic}}
+      // Dynamic body with runtime placeholders and extracted values
+      let payload = {{{this.body}}};
+      {{#each this.use_values}}
+      // Replace {{@key}} with extracted value if present
+      if (extractedValues['{{this}}']) {
+        payload = JSON.parse(JSON.stringify(payload).replace(/\$\{extracted\.{{this}}\}/g, extractedValues['{{this}}']));
+      }
+      {{/each}}
+      {{else}}
+      const payload = {{{this.body}}};
+      {{/if}}
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers });
+      {{else if this.is_get_or_head}}
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers });
+      {{else}}
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers });
+      {{/if}}
+
+      const success = check(res, {
+        '{{this.display_name}}: status is OK': (r) => r.status >= 200 && r.status < 300,
+      });
+
+      {{../name}}_step{{@index}}_latency.add(res.timings.duration);
+      {{../name}}_step{{@index}}_errors.add(!success);
+
+      if (!success) {
+        flowSuccess = false;
+        console.error(`Step {{@index}} ({{this.display_name}}) failed: ${res.status} - ${res.body}`);
+      }
+
+      {{#if this.extract}}
+      // Extract values for subsequent steps
+      if (success) {
+        {{#each this.extract}}
+        const extracted_{{this}} = extractValue(res, '{{this}}');
+        if (extracted_{{this}}) {
+          extractedValues['{{this}}'] = extracted_{{this}};
+        }
+        {{/each}}
+      }
+      {{/if}}
+
+      sleep(0.5); // Brief pause between steps
+    }
+    {{/each}}
+
+    const flowEnd = Date.now();
+    flowDuration.add(flowEnd - flowStart);
+    flowSuccessRate.add(flowSuccess);
+    if (!flowSuccess) {
+      flowErrors.add(1);
+    }
+  });
+  {{/each}}
+
+  sleep(1); // Pause between flow iterations
+}
+
+export function handleSummary(data) {
+  return {
+    'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+  };
+}
+
+function textSummary(data, options) {
+  const indent = options.indent || '';
+  const enableColors = options.enableColors || false;
+
+  const metrics = data.metrics;
+  let output = '\n';
+
+  output += indent + '='.repeat(60) + '\n';
+  output += indent + 'CRUD Flow Test Summary\n';
+  output += indent + '='.repeat(60) + '\n\n';
+
+  // Flow metrics
+  if (metrics.flow_success_rate && metrics.flow_success_rate.values) {
+    const rate = metrics.flow_success_rate.values.rate;
+    const successRate = rate != null ? (rate * 100).toFixed(2) : 'N/A';
+    output += indent + `Flow Success Rate: ${successRate}%\n`;
+  }
+
+  if (metrics.flow_duration && metrics.flow_duration.values) {
+    const v = metrics.flow_duration.values;
+    output += indent + `Flow Duration (avg): ${v.avg != null ? v.avg.toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `Flow Duration (p95): ${v['p(95)'] != null ? v['p(95)'].toFixed(2) : 'N/A'}ms\n`;
+  }
+
+  if (metrics.flow_errors && metrics.flow_errors.values) {
+    const count = metrics.flow_errors.values.count || 0;
+    output += indent + `Flow Errors: ${count}\n`;
+  }
+
+  output += '\n';
+
+  // Request metrics
+  if (metrics.http_reqs && metrics.http_reqs.values) {
+    const count = metrics.http_reqs.values.count || 0;
+    const rate = metrics.http_reqs.values.rate;
+    output += indent + `Total Requests: ${count}\n`;
+    output += indent + `Request Rate: ${rate != null ? rate.toFixed(2) : '0.00'} req/s\n\n`;
+  }
+
+  // Duration metrics
+  if (metrics.http_req_duration && metrics.http_req_duration.values) {
+    const v = metrics.http_req_duration.values;
+    output += indent + 'Response Times:\n';
+    output += indent + `  Min: ${v.min != null ? v.min.toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  Avg: ${v.avg != null ? v.avg.toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  Med: ${v.med != null ? v.med.toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  p90: ${v['p(90)'] != null ? v['p(90)'].toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  p95: ${v['p(95)'] != null ? v['p(95)'].toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  p99: ${v['p(99)'] != null ? v['p(99)'].toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  Max: ${v.max != null ? v.max.toFixed(2) : 'N/A'}ms\n\n`;
+  }
+
+  // Error rate
+  if (metrics.http_req_failed && metrics.http_req_failed.values) {
+    const rate = metrics.http_req_failed.values.rate;
+    const errorRate = rate != null ? (rate * 100).toFixed(2) : '100.00';
+    output += indent + `Error Rate: ${errorRate}%\n\n`;
+  }
+
+  output += indent + '='.repeat(60) + '\n';
+
+  return output;
+}

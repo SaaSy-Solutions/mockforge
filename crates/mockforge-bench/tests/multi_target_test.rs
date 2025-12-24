@@ -143,6 +143,19 @@ async fn test_bench_command_parse_headers() {
         max_concurrency: None,
         results_format: "both".to_string(),
         params_file: None,
+        crud_flow: false,
+        flow_config: None,
+        extract_fields: None,
+        parallel_create: None,
+        data_file: None,
+        data_distribution: "unique-per-vu".to_string(),
+        data_mappings: None,
+        error_rate: None,
+        error_types: None,
+        security_test: false,
+        security_payloads: None,
+        security_categories: None,
+        security_target_fields: None,
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -176,6 +189,19 @@ async fn test_bench_command_parse_headers_invalid_format() {
         max_concurrency: None,
         results_format: "both".to_string(),
         params_file: None,
+        crud_flow: false,
+        flow_config: None,
+        extract_fields: None,
+        parallel_create: None,
+        data_file: None,
+        data_distribution: "unique-per-vu".to_string(),
+        data_mappings: None,
+        error_rate: None,
+        error_types: None,
+        security_test: false,
+        security_payloads: None,
+        security_categories: None,
+        security_target_fields: None,
     };
 
     let result = cmd.parse_headers();

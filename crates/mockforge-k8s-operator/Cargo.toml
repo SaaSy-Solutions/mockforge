@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-k8s-operator"
-version = "0.3.11"
+version = "0.3.12"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -36,7 +36,7 @@ anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 
 # MockForge dependencies
-mockforge-chaos = { version = "0.3.11", path = "../mockforge-chaos" }
+mockforge-chaos = { version = "0.3.12", path = "../mockforge-chaos" }
 
 # Metrics
 prometheus = { version = "0.14", features = ["process"] }

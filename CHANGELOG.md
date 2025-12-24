@@ -24,6 +24,20 @@
 
 - Nothing yet.
 
+## [0.3.12] - 2025-12-23
+
+### Added
+
+- Version bump to 0.3.12
+
+### Changed
+
+- Nothing yet.
+
+### Fixed
+
+- Nothing yet.
+
 ## [0.3.11] - 2025-12-19
 
 ### Added

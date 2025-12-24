@@ -1,6 +1,13 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate, Trend, Counter } from 'k6/metrics';
+{{#each dynamic_imports}}
+{{{this}}}
+{{/each}}
+
+{{#each dynamic_globals}}
+{{{this}}}
+{{/each}}
 
 // Custom metrics per operation
 {{#each operations}}
@@ -40,14 +47,34 @@ export default function () {
     const headers = {{{this.headers}}};
 
     {{#if this.has_body}}
+    {{#if this.body_is_dynamic}}
+    // Dynamic body with runtime placeholders
     const payload = {{{this.body}}};
+    {{else}}
+    const payload = {{{this.body}}};
+    {{/if}}
+    {{#if this.path_is_dynamic}}
+    const url = {{{this.path}}};
+    const res = http.{{this.method}}(`${BASE_URL}${url}`, JSON.stringify(payload), { headers });
+    {{else}}
     const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, JSON.stringify(payload), { headers });
+    {{/if}}
     {{else if this.is_get_or_head}}
     // GET and HEAD only take 2 args: http.get(url, params)
+    {{#if this.path_is_dynamic}}
+    const url = {{{this.path}}};
+    const res = http.{{this.method}}(`${BASE_URL}${url}`, { headers });
+    {{else}}
     const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, { headers });
+    {{/if}}
     {{else}}
     // POST, PUT, PATCH, DELETE take 3 args: http.post(url, body, params)
+    {{#if this.path_is_dynamic}}
+    const url = {{{this.path}}};
+    const res = http.{{this.method}}(`${BASE_URL}${url}`, null, { headers });
+    {{else}}
     const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, { headers });
+    {{/if}}
     {{/if}}
 
     const success = check(res, {

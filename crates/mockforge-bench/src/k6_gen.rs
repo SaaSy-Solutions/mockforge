@@ -1,11 +1,12 @@
 //! k6 script generation for load testing real endpoints
 
+use crate::dynamic_params::{DynamicParamProcessor, DynamicPlaceholder};
 use crate::error::{BenchError, Result};
 use crate::request_gen::RequestTemplate;
 use crate::scenarios::LoadScenario;
 use handlebars::Handlebars;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Configuration for k6 script generation
 pub struct K6Config {
@@ -96,6 +97,9 @@ impl K6ScriptGenerator {
             .scenario
             .generate_stages(self.config.duration_secs, self.config.max_vus);
 
+        // Track all placeholders used across all operations
+        let mut all_placeholders: HashSet<DynamicPlaceholder> = HashSet::new();
+
         let operations = self
             .templates
             .iter()
@@ -114,20 +118,42 @@ impl K6ScriptGenerator {
                 // GET and HEAD methods only take 2 arguments in k6: http.get(url, params)
                 // Other methods take 3 arguments: http.post(url, body, params)
                 let is_get_or_head = matches!(k6_method.as_str(), "get" | "head");
+
+                // Process path for dynamic placeholders
+                let path = template.generate_path();
+                let processed_path = DynamicParamProcessor::process_path(&path);
+                all_placeholders.extend(processed_path.placeholders.clone());
+
+                // Process body for dynamic placeholders
+                let (body_value, body_is_dynamic) = if let Some(body) = &template.body {
+                    let processed_body = DynamicParamProcessor::process_json_body(body);
+                    all_placeholders.extend(processed_body.placeholders.clone());
+                    (Some(processed_body.value), processed_body.is_dynamic)
+                } else {
+                    (None, false)
+                };
+
                 json!({
                     "index": idx,
                     "name": sanitized_name,  // Use sanitized name for variable names
                     "metric_name": metric_name,  // Use sanitized name for metric name strings (k6 validation)
                     "display_name": display_name,  // Keep original for comments/display
                     "method": k6_method,  // k6 uses lowercase methods (http.get, http.post, http.del)
-                    "path": template.generate_path(),
+                    "path": if processed_path.is_dynamic { processed_path.value } else { path },
+                    "path_is_dynamic": processed_path.is_dynamic,
                     "headers": self.build_headers_json(template),  // Returns JSON string for template
-                    "body": template.body.as_ref().map(|b| b.to_string()),
+                    "body": body_value,
+                    "body_is_dynamic": body_is_dynamic,
                     "has_body": template.body.is_some(),
                     "is_get_or_head": is_get_or_head,  // For correct k6 function signature
                 })
             })
             .collect::<Vec<_>>();
+
+        // Get required imports and global initializations based on placeholders used
+        let required_imports = DynamicParamProcessor::get_required_imports(&all_placeholders);
+        let required_globals = DynamicParamProcessor::get_required_globals(&all_placeholders);
+        let has_dynamic_values = !all_placeholders.is_empty();
 
         Ok(json!({
             "base_url": self.config.target_url,
@@ -141,6 +167,9 @@ impl K6ScriptGenerator {
             "max_error_rate": self.config.max_error_rate,
             "scenario_name": format!("{:?}", self.config.scenario).to_lowercase(),
             "skip_tls_verify": self.config.skip_tls_verify,
+            "has_dynamic_values": has_dynamic_values,
+            "dynamic_imports": required_imports,
+            "dynamic_globals": required_globals,
         }))
     }
 
@@ -732,6 +761,232 @@ export default function() {{}}
         assert!(
             options_prefix.contains("insecureSkipTLSVerify: true"),
             "insecureSkipTLSVerify should be in global options block"
+        );
+    }
+
+    #[test]
+    fn test_dynamic_params_in_body() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+        use serde_json::json;
+
+        // Create an operation with dynamic placeholders in the body
+        let operation = ApiOperation {
+            method: "post".to_string(),
+            path: "/api/resources".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("createResource".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: Some(json!({
+                "name": "load-test-${__VU}",
+                "iteration": "${__ITER}"
+            })),
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify the script contains dynamic body indication
+        assert!(
+            script.contains("Dynamic body with runtime placeholders"),
+            "Script should contain comment about dynamic body"
+        );
+
+        // Verify the script contains the __VU variable reference
+        assert!(
+            script.contains("__VU"),
+            "Script should contain __VU reference for dynamic VU-based values"
+        );
+
+        // Verify the script contains the __ITER variable reference
+        assert!(
+            script.contains("__ITER"),
+            "Script should contain __ITER reference for dynamic iteration values"
+        );
+    }
+
+    #[test]
+    fn test_dynamic_params_with_uuid() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+        use serde_json::json;
+
+        // Create an operation with UUID placeholder
+        let operation = ApiOperation {
+            method: "post".to_string(),
+            path: "/api/resources".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("createResource".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: Some(json!({
+                "id": "${__UUID}"
+            })),
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify the script includes the crypto import for UUID
+        assert!(
+            script.contains("import { crypto }") || script.contains("webcrypto"),
+            "Script should include crypto import when UUID placeholder is used"
+        );
+
+        // Verify crypto.randomUUID() is in the generated code
+        assert!(
+            script.contains("crypto.randomUUID()"),
+            "Script should contain crypto.randomUUID() for UUID placeholder"
+        );
+    }
+
+    #[test]
+    fn test_dynamic_params_with_counter() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+        use serde_json::json;
+
+        // Create an operation with COUNTER placeholder
+        let operation = ApiOperation {
+            method: "post".to_string(),
+            path: "/api/resources".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("createResource".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: Some(json!({
+                "sequence": "${__COUNTER}"
+            })),
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify the script includes the global counter initialization
+        assert!(
+            script.contains("let globalCounter = 0"),
+            "Script should include globalCounter initialization when COUNTER placeholder is used"
+        );
+
+        // Verify globalCounter++ is in the generated code
+        assert!(
+            script.contains("globalCounter++"),
+            "Script should contain globalCounter++ for COUNTER placeholder"
+        );
+    }
+
+    #[test]
+    fn test_static_body_no_dynamic_marker() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+        use serde_json::json;
+
+        // Create an operation with static body (no placeholders)
+        let operation = ApiOperation {
+            method: "post".to_string(),
+            path: "/api/resources".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("createResource".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: Some(json!({
+                "name": "static-value",
+                "count": 42
+            })),
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify the script does NOT contain dynamic body marker
+        assert!(
+            !script.contains("Dynamic body with runtime placeholders"),
+            "Script should NOT contain dynamic body comment for static body"
+        );
+
+        // Verify it does NOT include unnecessary crypto imports
+        assert!(
+            !script.contains("webcrypto"),
+            "Script should NOT include webcrypto import for static body"
+        );
+
+        // Verify it does NOT include global counter
+        assert!(
+            !script.contains("let globalCounter"),
+            "Script should NOT include globalCounter for static body"
         );
     }
 }

@@ -1583,6 +1583,106 @@ enum Commands {
         /// }
         #[arg(long, value_name = "FILE")]
         params_file: Option<PathBuf>,
+
+        // === CRUD Flow Options ===
+        /// Enable CRUD flow mode (auto-detect from spec or use --flow-config)
+        ///
+        /// Automatically detects Create/Read/Update/Delete patterns from the OpenAPI spec
+        /// and executes them as a sequential flow with response chaining.
+        #[arg(long)]
+        crud_flow: bool,
+
+        /// Custom CRUD flow configuration file (YAML)
+        ///
+        /// Overrides auto-detection with explicit flow definition.
+        /// See documentation for flow config format.
+        #[arg(long, value_name = "FILE")]
+        flow_config: Option<PathBuf>,
+
+        /// Fields to extract from responses (comma-separated)
+        ///
+        /// Used in CRUD flow mode to chain values between requests.
+        /// Example: --extract-fields "id,uuid,name"
+        #[arg(long)]
+        extract_fields: Option<String>,
+
+        // === Parallel Execution Options ===
+        /// Create N resources in parallel using http.batch()
+        ///
+        /// Executes POST requests in parallel batches for high-throughput testing.
+        /// Example: --parallel-create 300
+        #[arg(long, value_name = "N")]
+        parallel_create: Option<u32>,
+
+        // === Data-Driven Testing Options ===
+        /// Test data file (CSV or JSON)
+        ///
+        /// Loads test data for data-driven testing using k6 SharedArray.
+        /// CSV files should have headers matching field names.
+        #[arg(long, value_name = "FILE")]
+        data_file: Option<PathBuf>,
+
+        /// Data distribution strategy
+        ///
+        /// How to distribute data across VUs and iterations:
+        /// - unique-per-vu: Each VU gets unique row (default)
+        /// - unique-per-iteration: Each iteration gets unique row
+        /// - random: Random row selection
+        /// - sequential: Sequential iteration through all rows
+        #[arg(long, default_value = "unique-per-vu")]
+        data_distribution: String,
+
+        /// Data column to request field mappings
+        ///
+        /// Format: "column:target,column2:target2"
+        /// Targets: body.field, path.param, query.param, header.name
+        /// Example: --data-mappings "email:body.email,userId:path.id"
+        #[arg(long)]
+        data_mappings: Option<String>,
+
+        // === Invalid Data Testing Options ===
+        /// Percentage of requests to send with invalid data (0.0-1.0)
+        ///
+        /// Enables error testing by mixing valid and invalid requests.
+        /// Example: --error-rate 0.2 for 20% invalid requests
+        #[arg(long)]
+        error_rate: Option<f64>,
+
+        /// Types of invalid data to generate (comma-separated)
+        ///
+        /// Options: missing-field, wrong-type, empty, null, out-of-range, malformed
+        /// Example: --error-types "missing-field,wrong-type,null"
+        #[arg(long)]
+        error_types: Option<String>,
+
+        // === Security Testing Options ===
+        /// Enable security payload injection testing
+        ///
+        /// Injects common attack payloads (SQLi, XSS, etc.) to test error handling.
+        /// ONLY use against test/staging environments!
+        #[arg(long)]
+        security_test: bool,
+
+        /// Custom security payloads file (JSON)
+        ///
+        /// Extends built-in payloads with custom attack patterns.
+        /// See documentation for payload file format.
+        #[arg(long, value_name = "FILE")]
+        security_payloads: Option<PathBuf>,
+
+        /// Security test categories (comma-separated)
+        ///
+        /// Options: sqli, xss, command-injection, path-traversal, ssti, ldap
+        /// Example: --security-categories "sqli,xss"
+        #[arg(long)]
+        security_categories: Option<String>,
+
+        /// Fields to target for security payload injection
+        ///
+        /// If not specified, injects into first string field.
+        /// Example: --security-target-fields "name,email,query"
+        #[arg(long)]
+        security_target_fields: Option<String>,
     },
 }
 
@@ -2901,6 +3001,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             max_concurrency,
             results_format,
             params_file,
+            crud_flow,
+            flow_config,
+            extract_fields,
+            parallel_create,
+            data_file,
+            data_distribution,
+            data_mappings,
+            error_rate,
+            error_types,
+            security_test,
+            security_payloads,
+            security_categories,
+            security_target_fields,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -2946,6 +3059,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 max_concurrency: Some(max_concurrency),
                 results_format,
                 params_file,
+                crud_flow,
+                flow_config,
+                extract_fields,
+                parallel_create,
+                data_file,
+                data_distribution,
+                data_mappings,
+                error_rate,
+                error_types,
+                security_test,
+                security_payloads,
+                security_categories,
+                security_target_fields,
             };
 
             if let Err(e) = bench_cmd.execute().await {
