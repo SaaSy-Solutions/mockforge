@@ -939,6 +939,20 @@ impl BenchCommand {
         let custom_headers = self.parse_headers()?;
         let config = self.build_crud_flow_config().unwrap_or_default();
 
+        // Generate stages from scenario
+        let duration_secs = Self::parse_duration(&self.duration)?;
+        let scenario =
+            LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
+        let stages = scenario.generate_stages(duration_secs, self.vus);
+
+        // Build headers JSON string for the template
+        let mut all_headers = custom_headers.clone();
+        if let Some(auth) = &self.auth {
+            all_headers.insert("Authorization".to_string(), auth.clone());
+        }
+        let headers_json =
+            serde_json::to_string(&all_headers).unwrap_or_else(|_| "{}".to_string());
+
         let data = serde_json::json!({
             "base_url": self.target,
             "flows": flows.iter().map(|f| {
@@ -947,22 +961,54 @@ impl BenchCommand {
                     "name": sanitized_name.clone(),
                     "display_name": f.name,
                     "base_path": f.base_path,
-                    "steps": f.steps.iter().map(|s| {
+                    "steps": f.steps.iter().enumerate().map(|(idx, s)| {
+                        // Parse operation to get method and path
+                        let parts: Vec<&str> = s.operation.splitn(2, ' ').collect();
+                        let method = if parts.len() >= 1 {
+                            let m = parts[0].to_lowercase();
+                            // k6 uses 'del' for DELETE
+                            if m == "delete" { "del".to_string() } else { m }
+                        } else {
+                            "get".to_string()
+                        };
+                        let path = if parts.len() >= 2 { parts[1] } else { "/" };
+                        let is_get_or_head = method == "get" || method == "head";
+                        // POST, PUT, PATCH typically have bodies
+                        let has_body = matches!(method.as_str(), "post" | "put" | "patch");
+
                         serde_json::json!({
                             "operation": s.operation,
+                            "method": method,
+                            "path": path,
                             "extract": s.extract,
                             "use_values": s.use_values,
                             "description": s.description,
+                            "display_name": s.description.clone().unwrap_or_else(|| format!("Step {}", idx)),
+                            "is_get_or_head": is_get_or_head,
+                            "has_body": has_body,
+                            "body": serde_json::json!({}),  // Default empty body for CRUD operations
+                            "body_is_dynamic": false,
                         })
                     }).collect::<Vec<_>>(),
                 })
             }).collect::<Vec<_>>(),
             "extract_fields": config.default_extract_fields,
-            "duration_secs": Self::parse_duration(&self.duration)?,
+            "duration_secs": duration_secs,
             "max_vus": self.vus,
             "auth_header": self.auth,
             "custom_headers": custom_headers,
             "skip_tls_verify": self.skip_tls_verify,
+            // Add missing template fields
+            "stages": stages.iter().map(|s| serde_json::json!({
+                "duration": s.duration,
+                "target": s.target,
+            })).collect::<Vec<_>>(),
+            "threshold_percentile": self.threshold_percentile,
+            "threshold_ms": self.threshold_ms,
+            "max_error_rate": self.max_error_rate,
+            "headers": headers_json,
+            "dynamic_imports": Vec::<String>::new(),
+            "dynamic_globals": Vec::<String>::new(),
         });
 
         let script = handlebars
@@ -1088,6 +1134,20 @@ impl BenchCommand {
         let custom_headers = self.parse_headers()?;
         let config = self.build_crud_flow_config().unwrap_or_default();
 
+        // Generate stages from scenario
+        let duration_secs = Self::parse_duration(&self.duration)?;
+        let scenario =
+            LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
+        let stages = scenario.generate_stages(duration_secs, self.vus);
+
+        // Build headers JSON string for the template
+        let mut all_headers = custom_headers.clone();
+        if let Some(auth) = &self.auth {
+            all_headers.insert("Authorization".to_string(), auth.clone());
+        }
+        let headers_json =
+            serde_json::to_string(&all_headers).unwrap_or_else(|_| "{}".to_string());
+
         let data = serde_json::json!({
             "base_url": self.target,
             "flows": flows.iter().map(|f| {
@@ -1097,22 +1157,54 @@ impl BenchCommand {
                     "name": sanitized_name.clone(),  // Use sanitized name for variable names
                     "display_name": f.name,          // Keep original for comments/display
                     "base_path": f.base_path,
-                    "steps": f.steps.iter().map(|s| {
+                    "steps": f.steps.iter().enumerate().map(|(idx, s)| {
+                        // Parse operation to get method and path
+                        let parts: Vec<&str> = s.operation.splitn(2, ' ').collect();
+                        let method = if parts.len() >= 1 {
+                            let m = parts[0].to_lowercase();
+                            // k6 uses 'del' for DELETE
+                            if m == "delete" { "del".to_string() } else { m }
+                        } else {
+                            "get".to_string()
+                        };
+                        let path = if parts.len() >= 2 { parts[1] } else { "/" };
+                        let is_get_or_head = method == "get" || method == "head";
+                        // POST, PUT, PATCH typically have bodies
+                        let has_body = matches!(method.as_str(), "post" | "put" | "patch");
+
                         serde_json::json!({
                             "operation": s.operation,
+                            "method": method,
+                            "path": path,
                             "extract": s.extract,
                             "use_values": s.use_values,
                             "description": s.description,
+                            "display_name": s.description.clone().unwrap_or_else(|| format!("Step {}", idx)),
+                            "is_get_or_head": is_get_or_head,
+                            "has_body": has_body,
+                            "body": serde_json::json!({}),  // Default empty body for CRUD operations
+                            "body_is_dynamic": false,
                         })
                     }).collect::<Vec<_>>(),
                 })
             }).collect::<Vec<_>>(),
             "extract_fields": config.default_extract_fields,
-            "duration_secs": Self::parse_duration(&self.duration)?,
+            "duration_secs": duration_secs,
             "max_vus": self.vus,
             "auth_header": self.auth,
             "custom_headers": custom_headers,
             "skip_tls_verify": self.skip_tls_verify,
+            // Add missing template fields
+            "stages": stages.iter().map(|s| serde_json::json!({
+                "duration": s.duration,
+                "target": s.target,
+            })).collect::<Vec<_>>(),
+            "threshold_percentile": self.threshold_percentile,
+            "threshold_ms": self.threshold_ms,
+            "max_error_rate": self.max_error_rate,
+            "headers": headers_json,
+            "dynamic_imports": Vec::<String>::new(),
+            "dynamic_globals": Vec::<String>::new(),
         });
 
         let script = handlebars

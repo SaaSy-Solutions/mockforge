@@ -32,7 +32,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-mockforge-smtp = { version = "0.3.13", path = "../mockforge-smtp", optional = true }
+mockforge-smtp = { version = "0.3.14", path = "../mockforge-smtp", optional = true }
 async-trait = { workspace = true }
 glob = { workspace = true }
 globwalk = { workspace = true }
@@ -52,19 +52,19 @@ jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
-mockforge-core = { version = "0.3.13", path = "../mockforge-core" }
-mockforge-data = { version = "0.3.13", path = "../mockforge-data" }
-mockforge-observability = { version = "0.3.13", path = "../mockforge-observability" }
-mockforge-recorder = { version = "0.3.13", path = "../mockforge-recorder" }
-mockforge-scenarios = { version = "0.3.13", path = "../mockforge-scenarios" }
-mockforge-tracing = { version = "0.3.13", path = "../mockforge-tracing" }
+mockforge-core = { version = "0.3.14", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.14", path = "../mockforge-data" }
+mockforge-observability = { version = "0.3.14", path = "../mockforge-observability" }
+mockforge-recorder = { version = "0.3.14", path = "../mockforge-recorder" }
+mockforge-scenarios = { version = "0.3.14", path = "../mockforge-scenarios" }
+mockforge-tracing = { version = "0.3.14", path = "../mockforge-tracing" }
 opentelemetry = { version = "0.22", features = ["trace"] }
-mockforge-mqtt = { version = "0.3.13", path = "../mockforge-mqtt", optional = true }
-mockforge-chaos = { version = "0.3.13", path = "../mockforge-chaos" }
-mockforge-performance = { version = "0.3.13", path = "../mockforge-performance" }
-mockforge-world-state = { version = "0.3.13", path = "../mockforge-world-state" }
-mockforge-template-expansion = { version = "0.3.13", path = "../mockforge-template-expansion" }
-mockforge-route-chaos = { version = "0.3.13", path = "../mockforge-route-chaos" }
+mockforge-mqtt = { version = "0.3.14", path = "../mockforge-mqtt", optional = true }
+mockforge-chaos = { version = "0.3.14", path = "../mockforge-chaos" }
+mockforge-performance = { version = "0.3.14", path = "../mockforge-performance" }
+mockforge-world-state = { version = "0.3.14", path = "../mockforge-world-state" }
+mockforge-template-expansion = { version = "0.3.14", path = "../mockforge-template-expansion" }
+mockforge-route-chaos = { version = "0.3.14", path = "../mockforge-route-chaos" }
 futures-util = "0.3"
 rustls = "0.23"
 rustls-pemfile = "2.0"
@@ -86,8 +86,8 @@ reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
-mockforge-ws = { version = "0.3.13", path = "../mockforge-ws" }
-mockforge-plugin-core = { version = "0.3.13", path = "../mockforge-plugin-core" }
+mockforge-ws = { version = "0.3.14", path = "../mockforge-ws" }
+mockforge-plugin-core = { version = "0.3.14", path = "../mockforge-plugin-core" }
 opentelemetry_sdk = "0.22"
 uuid = { version = "1.0", features = ["v4"] }
 once_cell = { workspace = true }

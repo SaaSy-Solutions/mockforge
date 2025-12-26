@@ -64,11 +64,13 @@ impl DynamicPlaceholder {
     }
 
     /// Check if this placeholder requires additional k6 imports
+    ///
+    /// Note: As of k6 v1.0.0+, webcrypto is globally available and no longer
+    /// requires importing from 'k6/experimental/webcrypto'. The crypto object
+    /// (including crypto.randomUUID()) is available globally.
     pub fn requires_import(&self) -> Option<&'static str> {
-        match self {
-            Self::UUID => Some("import { crypto } from 'k6/experimental/webcrypto';"),
-            _ => None,
-        }
+        // No imports required - crypto is globally available in k6 v1.0.0+
+        None
     }
 
     /// Check if this placeholder requires global state initialization
@@ -349,7 +351,9 @@ mod tests {
 
     #[test]
     fn test_placeholder_requires_import() {
-        assert!(DynamicPlaceholder::UUID.requires_import().is_some());
+        // As of k6 v1.0.0+, webcrypto is globally available
+        // No imports are required for any placeholder
+        assert!(DynamicPlaceholder::UUID.requires_import().is_none());
         assert!(DynamicPlaceholder::VU.requires_import().is_none());
         assert!(DynamicPlaceholder::Iteration.requires_import().is_none());
     }
@@ -389,8 +393,9 @@ mod tests {
         placeholders.insert(DynamicPlaceholder::UUID);
         placeholders.insert(DynamicPlaceholder::VU);
 
+        // As of k6 v1.0.0+, webcrypto is globally available
+        // No imports are required for any placeholder
         let imports = DynamicParamProcessor::get_required_imports(&placeholders);
-        assert_eq!(imports.len(), 1);
-        assert!(imports[0].contains("webcrypto"));
+        assert_eq!(imports.len(), 0);
     }
 }

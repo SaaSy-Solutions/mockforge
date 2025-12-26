@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-tcp"
-version = "0.3.13"
+version = "0.3.14"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -13,7 +13,7 @@ categories = ["development-tools", "network-programming"]
 
 [dependencies]
 # MockForge core
-mockforge-core = { version = "0.3.13", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.14", path = "../mockforge-core" }
 
 # Standard workspace dependencies
 tokio = { workspace = true, features = ["net", "io-util", "time", "sync"] }

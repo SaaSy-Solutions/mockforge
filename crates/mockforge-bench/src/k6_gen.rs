@@ -873,10 +873,11 @@ export default function() {{}}
         let generator = K6ScriptGenerator::new(config, vec![template]);
         let script = generator.generate().expect("Should generate script");
 
-        // Verify the script includes the crypto import for UUID
+        // As of k6 v1.0.0+, webcrypto is globally available - no import needed
+        // Verify the script does NOT include the old experimental webcrypto import
         assert!(
-            script.contains("import { crypto }") || script.contains("webcrypto"),
-            "Script should include crypto import when UUID placeholder is used"
+            !script.contains("k6/experimental/webcrypto"),
+            "Script should NOT include deprecated k6/experimental/webcrypto import"
         );
 
         // Verify crypto.randomUUID() is in the generated code

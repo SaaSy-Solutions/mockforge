@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-registry-server"
-version = "0.3.13"
+version = "0.3.14"
 edition = "2021"
 resolver = "2"
 authors = ["MockForge Contributors"]
@@ -71,11 +71,11 @@ x509-parser = "0.17"
 rustls-pemfile = "2.0"
 
 # Internal dependencies
-mockforge-analytics = { version = "0.3.13", path = "../mockforge-analytics" }
-mockforge-collab = { version = "0.3.13", path = "../mockforge-collab" }
-mockforge-core = { version = "0.3.13", path = "../mockforge-core" }
-mockforge-plugin-registry = { version = "0.3.13", path = "../mockforge-plugin-registry" }
-mockforge-observability = { version = "0.3.13", path = "../mockforge-observability" }
+mockforge-analytics = { version = "0.3.14", path = "../mockforge-analytics" }
+mockforge-collab = { version = "0.3.14", path = "../mockforge-collab" }
+mockforge-core = { version = "0.3.14", path = "../mockforge-core" }
+mockforge-plugin-registry = { version = "0.3.14", path = "../mockforge-plugin-registry" }
+mockforge-observability = { version = "0.3.14", path = "../mockforge-observability" }
 
 # Metrics
 prometheus = { version = "0.14", features = ["process"] }
