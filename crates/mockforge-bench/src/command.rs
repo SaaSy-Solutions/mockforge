@@ -18,15 +18,31 @@ use crate::scenarios::LoadScenario;
 use crate::security_payloads::{
     SecurityCategory, SecurityPayloads, SecurityTestConfig, SecurityTestGenerator,
 };
+use crate::spec_dependencies::{
+    topological_sort, DependencyDetector, ExtractedValues, SpecDependencyConfig,
+};
 use crate::spec_parser::SpecParser;
 use crate::target_parser::parse_targets_file;
+use mockforge_core::openapi::multi_spec::{
+    load_specs_from_directory, load_specs_from_files, merge_specs, ConflictStrategy,
+};
+use mockforge_core::openapi::spec::OpenApiSpec;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 /// Bench command configuration
 pub struct BenchCommand {
-    pub spec: PathBuf,
+    /// OpenAPI spec file(s) - can specify multiple
+    pub spec: Vec<PathBuf>,
+    /// Directory containing OpenAPI spec files (discovers .json, .yaml, .yml files)
+    pub spec_dir: Option<PathBuf>,
+    /// Conflict resolution strategy when merging multiple specs: "error" (default), "first", "last"
+    pub merge_conflicts: String,
+    /// Spec mode: "merge" (default) combines all specs, "sequential" runs them in order
+    pub spec_mode: String,
+    /// Dependency configuration file for cross-spec value passing (used with sequential mode)
+    pub dependency_config: Option<PathBuf>,
     pub target: String,
     pub duration: String,
     pub vus: u32,
@@ -96,6 +112,61 @@ pub struct BenchCommand {
 }
 
 impl BenchCommand {
+    /// Load and merge specs from --spec files and --spec-dir
+    pub async fn load_and_merge_specs(&self) -> Result<OpenApiSpec> {
+        let mut all_specs: Vec<(PathBuf, OpenApiSpec)> = Vec::new();
+
+        // Load specs from --spec flags
+        if !self.spec.is_empty() {
+            let specs = load_specs_from_files(self.spec.clone())
+                .await
+                .map_err(|e| BenchError::Other(format!("Failed to load spec files: {}", e)))?;
+            all_specs.extend(specs);
+        }
+
+        // Load specs from --spec-dir if provided
+        if let Some(spec_dir) = &self.spec_dir {
+            let dir_specs = load_specs_from_directory(spec_dir).await.map_err(|e| {
+                BenchError::Other(format!("Failed to load specs from directory: {}", e))
+            })?;
+            all_specs.extend(dir_specs);
+        }
+
+        if all_specs.is_empty() {
+            return Err(BenchError::Other(
+                "No spec files provided. Use --spec or --spec-dir.".to_string(),
+            ));
+        }
+
+        // If only one spec, return it directly (extract just the OpenApiSpec)
+        if all_specs.len() == 1 {
+            return Ok(all_specs.into_iter().next().unwrap().1);
+        }
+
+        // Merge multiple specs
+        let conflict_strategy = match self.merge_conflicts.as_str() {
+            "first" => ConflictStrategy::First,
+            "last" => ConflictStrategy::Last,
+            _ => ConflictStrategy::Error,
+        };
+
+        merge_specs(all_specs, conflict_strategy)
+            .map_err(|e| BenchError::Other(format!("Failed to merge specs: {}", e)))
+    }
+
+    /// Get a display name for the spec(s)
+    fn get_spec_display_name(&self) -> String {
+        if self.spec.len() == 1 {
+            self.spec[0].to_string_lossy().to_string()
+        } else if !self.spec.is_empty() {
+            format!("{} spec files", self.spec.len())
+        } else if let Some(dir) = &self.spec_dir {
+            format!("specs from {}", dir.display())
+        } else {
+            "no specs".to_string()
+        }
+    }
+
     /// Execute the bench command
     pub async fn execute(&self) -> Result<()> {
         // Check if we're in multi-target mode
@@ -103,10 +174,15 @@ impl BenchCommand {
             return self.execute_multi_target(targets_file).await;
         }
 
+        // Check if we're in sequential spec mode (for dependency handling)
+        if self.spec_mode == "sequential" && (self.spec.len() > 1 || self.spec_dir.is_some()) {
+            return self.execute_sequential_specs().await;
+        }
+
         // Single target mode (existing behavior)
         // Print header
         TerminalReporter::print_header(
-            self.spec.to_str().unwrap(),
+            &self.get_spec_display_name(),
             &self.target,
             0, // Will be updated later
             &self.scenario,
@@ -122,10 +198,18 @@ impl BenchCommand {
             return Err(BenchError::K6NotFound);
         }
 
-        // Load and parse spec
-        TerminalReporter::print_progress("Loading OpenAPI specification...");
-        let parser = SpecParser::from_file(&self.spec).await?;
-        TerminalReporter::print_success("Specification loaded");
+        // Load and parse spec(s)
+        TerminalReporter::print_progress("Loading OpenAPI specification(s)...");
+        let merged_spec = self.load_and_merge_specs().await?;
+        let parser = SpecParser::from_spec(merged_spec);
+        if self.spec.len() > 1 || self.spec_dir.is_some() {
+            TerminalReporter::print_success(&format!(
+                "Loaded and merged {} specification(s)",
+                self.spec.len() + self.spec_dir.as_ref().map(|_| 1).unwrap_or(0)
+            ));
+        } else {
+            TerminalReporter::print_success("Specification loaded");
+        }
 
         // Check for mock server integration
         let mock_config = self.build_mock_config().await;
@@ -313,7 +397,7 @@ impl BenchCommand {
 
         // Print header for multi-target mode
         TerminalReporter::print_header(
-            self.spec.to_str().unwrap(),
+            &self.get_spec_display_name(),
             &format!("{} targets", num_targets),
             0,
             &self.scenario,
@@ -325,6 +409,10 @@ impl BenchCommand {
             BenchCommand {
                 // Clone all fields except targets_file (we don't need it in the executor)
                 spec: self.spec.clone(),
+                spec_dir: self.spec_dir.clone(),
+                merge_conflicts: self.merge_conflicts.clone(),
+                spec_mode: self.spec_mode.clone(),
+                dependency_config: self.dependency_config.clone(),
                 target: self.target.clone(), // Not used in multi-target mode, but kept for compatibility
                 duration: self.duration.clone(),
                 vus: self.vus,
@@ -674,6 +762,302 @@ impl BenchCommand {
         Ok(enhanced_script)
     }
 
+    /// Execute specs sequentially with dependency ordering and value passing
+    async fn execute_sequential_specs(&self) -> Result<()> {
+        TerminalReporter::print_progress("Sequential spec mode: Loading specs individually...");
+
+        // Load all specs (without merging)
+        let mut all_specs: Vec<(PathBuf, OpenApiSpec)> = Vec::new();
+
+        if !self.spec.is_empty() {
+            let specs = load_specs_from_files(self.spec.clone())
+                .await
+                .map_err(|e| BenchError::Other(format!("Failed to load spec files: {}", e)))?;
+            all_specs.extend(specs);
+        }
+
+        if let Some(spec_dir) = &self.spec_dir {
+            let dir_specs = load_specs_from_directory(spec_dir).await.map_err(|e| {
+                BenchError::Other(format!("Failed to load specs from directory: {}", e))
+            })?;
+            all_specs.extend(dir_specs);
+        }
+
+        if all_specs.is_empty() {
+            return Err(BenchError::Other(
+                "No spec files found for sequential execution".to_string(),
+            ));
+        }
+
+        TerminalReporter::print_success(&format!("Loaded {} spec(s)", all_specs.len()));
+
+        // Load dependency config or auto-detect
+        let execution_order = if let Some(config_path) = &self.dependency_config {
+            TerminalReporter::print_progress("Loading dependency configuration...");
+            let config = SpecDependencyConfig::from_file(config_path)?;
+
+            if !config.disable_auto_detect && config.execution_order.is_empty() {
+                // Auto-detect if config doesn't specify order
+                self.detect_and_sort_specs(&all_specs)?
+            } else {
+                // Use configured order
+                config.execution_order.iter().flat_map(|g| g.specs.clone()).collect()
+            }
+        } else {
+            // Auto-detect dependencies
+            self.detect_and_sort_specs(&all_specs)?
+        };
+
+        TerminalReporter::print_success(&format!(
+            "Execution order: {}",
+            execution_order
+                .iter()
+                .map(|p| p.file_name().unwrap_or_default().to_string_lossy().to_string())
+                .collect::<Vec<_>>()
+                .join(" → ")
+        ));
+
+        // Execute each spec in order
+        let mut extracted_values = ExtractedValues::new();
+        let total_specs = execution_order.len();
+
+        for (index, spec_path) in execution_order.iter().enumerate() {
+            let spec_name = spec_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+
+            TerminalReporter::print_progress(&format!(
+                "[{}/{}] Executing spec: {}",
+                index + 1,
+                total_specs,
+                spec_name
+            ));
+
+            // Find the spec in our loaded specs
+            let spec = all_specs
+                .iter()
+                .find(|(p, _)| p == spec_path)
+                .map(|(_, s)| s.clone())
+                .ok_or_else(|| {
+                    BenchError::Other(format!("Spec not found: {}", spec_path.display()))
+                })?;
+
+            // Execute this spec with any extracted values from previous specs
+            let new_values = self.execute_single_spec(&spec, &spec_name, &extracted_values).await?;
+
+            // Merge extracted values for the next spec
+            extracted_values.merge(&new_values);
+
+            TerminalReporter::print_success(&format!(
+                "[{}/{}] Completed: {} (extracted {} values)",
+                index + 1,
+                total_specs,
+                spec_name,
+                new_values.values.len()
+            ));
+        }
+
+        TerminalReporter::print_success(&format!(
+            "Sequential execution complete: {} specs executed",
+            total_specs
+        ));
+
+        Ok(())
+    }
+
+    /// Detect dependencies and return topologically sorted spec paths
+    fn detect_and_sort_specs(&self, specs: &[(PathBuf, OpenApiSpec)]) -> Result<Vec<PathBuf>> {
+        TerminalReporter::print_progress("Auto-detecting spec dependencies...");
+
+        let mut detector = DependencyDetector::new();
+        let dependencies = detector.detect_dependencies(specs);
+
+        if dependencies.is_empty() {
+            TerminalReporter::print_progress("No dependencies detected, using file order");
+            return Ok(specs.iter().map(|(p, _)| p.clone()).collect());
+        }
+
+        TerminalReporter::print_progress(&format!(
+            "Detected {} cross-spec dependencies",
+            dependencies.len()
+        ));
+
+        for dep in &dependencies {
+            TerminalReporter::print_progress(&format!(
+                "  {} → {} (via field '{}')",
+                dep.dependency_spec.file_name().unwrap_or_default().to_string_lossy(),
+                dep.dependent_spec.file_name().unwrap_or_default().to_string_lossy(),
+                dep.field_name
+            ));
+        }
+
+        topological_sort(specs, &dependencies)
+    }
+
+    /// Execute a single spec and extract values for dependent specs
+    async fn execute_single_spec(
+        &self,
+        spec: &OpenApiSpec,
+        spec_name: &str,
+        _external_values: &ExtractedValues,
+    ) -> Result<ExtractedValues> {
+        let parser = SpecParser::from_spec(spec.clone());
+
+        // For now, we execute in CRUD flow mode if enabled, otherwise standard mode
+        if self.crud_flow {
+            // Execute CRUD flow and extract values
+            self.execute_crud_flow_with_extraction(&parser, spec_name).await
+        } else {
+            // Execute standard benchmark (no value extraction in non-CRUD mode)
+            self.execute_standard_spec(&parser, spec_name).await?;
+            Ok(ExtractedValues::new())
+        }
+    }
+
+    /// Execute CRUD flow with value extraction for sequential mode
+    async fn execute_crud_flow_with_extraction(
+        &self,
+        parser: &SpecParser,
+        spec_name: &str,
+    ) -> Result<ExtractedValues> {
+        let operations = parser.get_operations();
+        let flows = CrudFlowDetector::detect_flows(&operations);
+
+        if flows.is_empty() {
+            TerminalReporter::print_warning(&format!("No CRUD flows detected in {}", spec_name));
+            return Ok(ExtractedValues::new());
+        }
+
+        TerminalReporter::print_progress(&format!(
+            "  {} CRUD flow(s) in {}",
+            flows.len(),
+            spec_name
+        ));
+
+        // Generate and execute the CRUD flow script
+        let handlebars = handlebars::Handlebars::new();
+        let template = include_str!("templates/k6_crud_flow.hbs");
+
+        let custom_headers = self.parse_headers()?;
+        let config = self.build_crud_flow_config().unwrap_or_default();
+
+        let data = serde_json::json!({
+            "base_url": self.target,
+            "flows": flows.iter().map(|f| {
+                let sanitized_name = K6ScriptGenerator::sanitize_js_identifier(&f.name);
+                serde_json::json!({
+                    "name": sanitized_name.clone(),
+                    "display_name": f.name,
+                    "base_path": f.base_path,
+                    "steps": f.steps.iter().map(|s| {
+                        serde_json::json!({
+                            "operation": s.operation,
+                            "extract": s.extract,
+                            "use_values": s.use_values,
+                            "description": s.description,
+                        })
+                    }).collect::<Vec<_>>(),
+                })
+            }).collect::<Vec<_>>(),
+            "extract_fields": config.default_extract_fields,
+            "duration_secs": Self::parse_duration(&self.duration)?,
+            "max_vus": self.vus,
+            "auth_header": self.auth,
+            "custom_headers": custom_headers,
+            "skip_tls_verify": self.skip_tls_verify,
+        });
+
+        let script = handlebars
+            .render_template(template, &data)
+            .map_err(|e| BenchError::ScriptGenerationFailed(e.to_string()))?;
+
+        // Write and execute script
+        let script_path =
+            self.output.join(format!("k6-{}-crud-flow.js", spec_name.replace('.', "_")));
+
+        std::fs::create_dir_all(self.output.clone())?;
+        std::fs::write(&script_path, &script)?;
+
+        if !self.generate_only {
+            let executor = K6Executor::new()?;
+            let output_dir = self.output.join(format!("{}_results", spec_name.replace('.', "_")));
+            std::fs::create_dir_all(&output_dir)?;
+
+            executor.execute(&script_path, Some(&output_dir), self.verbose).await?;
+        }
+
+        // For now, return empty extracted values
+        // TODO: Parse k6 output to extract actual values
+        Ok(ExtractedValues::new())
+    }
+
+    /// Execute standard (non-CRUD) spec benchmark
+    async fn execute_standard_spec(&self, parser: &SpecParser, spec_name: &str) -> Result<()> {
+        let mut operations = if let Some(filter) = &self.operations {
+            parser.filter_operations(filter)?
+        } else {
+            parser.get_operations()
+        };
+
+        if let Some(exclude) = &self.exclude_operations {
+            operations = parser.exclude_operations(operations, exclude)?;
+        }
+
+        if operations.is_empty() {
+            TerminalReporter::print_warning(&format!("No operations found in {}", spec_name));
+            return Ok(());
+        }
+
+        TerminalReporter::print_progress(&format!(
+            "  {} operations in {}",
+            operations.len(),
+            spec_name
+        ));
+
+        // Generate request templates
+        let templates: Vec<_> = operations
+            .iter()
+            .map(RequestGenerator::generate_template)
+            .collect::<Result<Vec<_>>>()?;
+
+        // Parse headers
+        let custom_headers = self.parse_headers()?;
+
+        // Generate k6 script
+        let scenario =
+            LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
+
+        let k6_config = K6Config {
+            target_url: self.target.clone(),
+            scenario,
+            duration_secs: Self::parse_duration(&self.duration)?,
+            max_vus: self.vus,
+            threshold_percentile: self.threshold_percentile.clone(),
+            threshold_ms: self.threshold_ms,
+            max_error_rate: self.max_error_rate,
+            auth_header: self.auth.clone(),
+            custom_headers,
+            skip_tls_verify: self.skip_tls_verify,
+        };
+
+        let generator = K6ScriptGenerator::new(k6_config, templates);
+        let script = generator.generate()?;
+
+        // Write and execute script
+        let script_path = self.output.join(format!("k6-{}.js", spec_name.replace('.', "_")));
+
+        std::fs::create_dir_all(self.output.clone())?;
+        std::fs::write(&script_path, &script)?;
+
+        if !self.generate_only {
+            let executor = K6Executor::new()?;
+            let output_dir = self.output.join(format!("{}_results", spec_name.replace('.', "_")));
+            std::fs::create_dir_all(&output_dir)?;
+
+            executor.execute(&script_path, Some(&output_dir), self.verbose).await?;
+        }
+
+        Ok(())
+    }
+
     /// Execute CRUD flow testing mode
     async fn execute_crud_flow(&self, parser: &SpecParser) -> Result<()> {
         TerminalReporter::print_progress("Detecting CRUD operations...");
@@ -803,7 +1187,11 @@ mod tests {
     #[test]
     fn test_parse_headers() {
         let cmd = BenchCommand {
-            spec: PathBuf::from("test.yaml"),
+            spec: vec![PathBuf::from("test.yaml")],
+            spec_dir: None,
+            merge_conflicts: "error".to_string(),
+            spec_mode: "merge".to_string(),
+            dependency_config: None,
             target: "http://localhost".to_string(),
             duration: "1m".to_string(),
             vus: 10,
@@ -842,5 +1230,95 @@ mod tests {
         let headers = cmd.parse_headers().unwrap();
         assert_eq!(headers.get("X-API-Key"), Some(&"test123".to_string()));
         assert_eq!(headers.get("X-Client-ID"), Some(&"client456".to_string()));
+    }
+
+    #[test]
+    fn test_get_spec_display_name() {
+        let cmd = BenchCommand {
+            spec: vec![PathBuf::from("test.yaml")],
+            spec_dir: None,
+            merge_conflicts: "error".to_string(),
+            spec_mode: "merge".to_string(),
+            dependency_config: None,
+            target: "http://localhost".to_string(),
+            duration: "1m".to_string(),
+            vus: 10,
+            scenario: "ramp-up".to_string(),
+            operations: None,
+            exclude_operations: None,
+            auth: None,
+            headers: None,
+            output: PathBuf::from("output"),
+            generate_only: false,
+            script_output: None,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            verbose: false,
+            skip_tls_verify: false,
+            targets_file: None,
+            max_concurrency: None,
+            results_format: "both".to_string(),
+            params_file: None,
+            crud_flow: false,
+            flow_config: None,
+            extract_fields: None,
+            parallel_create: None,
+            data_file: None,
+            data_distribution: "unique-per-vu".to_string(),
+            data_mappings: None,
+            error_rate: None,
+            error_types: None,
+            security_test: false,
+            security_payloads: None,
+            security_categories: None,
+            security_target_fields: None,
+        };
+
+        assert_eq!(cmd.get_spec_display_name(), "test.yaml");
+
+        // Test multiple specs
+        let cmd_multi = BenchCommand {
+            spec: vec![PathBuf::from("a.yaml"), PathBuf::from("b.yaml")],
+            spec_dir: None,
+            merge_conflicts: "error".to_string(),
+            spec_mode: "merge".to_string(),
+            dependency_config: None,
+            target: "http://localhost".to_string(),
+            duration: "1m".to_string(),
+            vus: 10,
+            scenario: "ramp-up".to_string(),
+            operations: None,
+            exclude_operations: None,
+            auth: None,
+            headers: None,
+            output: PathBuf::from("output"),
+            generate_only: false,
+            script_output: None,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            verbose: false,
+            skip_tls_verify: false,
+            targets_file: None,
+            max_concurrency: None,
+            results_format: "both".to_string(),
+            params_file: None,
+            crud_flow: false,
+            flow_config: None,
+            extract_fields: None,
+            parallel_create: None,
+            data_file: None,
+            data_distribution: "unique-per-vu".to_string(),
+            data_mappings: None,
+            error_rate: None,
+            error_types: None,
+            security_test: false,
+            security_payloads: None,
+            security_categories: None,
+            security_target_fields: None,
+        };
+
+        assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");
     }
 }

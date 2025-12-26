@@ -2,11 +2,45 @@
 
 ### Added
 
+- **[DevX] Multi-spec support for bench command**: The `mockforge bench` command now supports loading and merging multiple OpenAPI specifications
+  - Multiple `--spec` flags: `mockforge bench --spec pools.yaml --spec vs.yaml --target https://api.com`
+  - Directory discovery with `--spec-dir`: `mockforge bench --spec-dir ./specs/ --target https://api.com`
+  - Conflict resolution strategies with `--merge-conflicts`: `error` (default), `first`, `last`
+  - Spec mode selection with `--spec-mode`: `merge` (default) combines all specs, `sequential` runs specs in dependency order
+  - Sequential execution mode with per-spec output directories and results
+  - Leverages existing multi-spec infrastructure from mockforge-core
+- **[DevX] Cross-spec dependency detection**: New `spec_dependencies` module for handling dependencies between specs
+  - Automatic detection of dependencies from field naming patterns (`pool_ref`, `pool_id`, `poolId`, etc.)
+  - Schema registry for cross-referencing schemas across multiple specs
+  - Topological sorting for correct execution order
+  - Manual dependency configuration via `--dependency-config` (YAML/JSON)
+  - Support for value extraction and injection between spec groups
+
+### Changed
+
+- `BenchCommand.spec` field changed from `PathBuf` to `Vec<PathBuf>` to support multiple specs
+- `SpecParser` now includes `from_spec()` method for pre-loaded OpenAPI specs
+- Added `dependency_config` field to `BenchCommand` for cross-spec value passing configuration
+
+### Fixed
+
 - Nothing yet.
+
+## [0.3.14] - 2025-12-26
+
+### Added
+
+- Version bump to 0.3.14
 
 ### Changed
 
 - Nothing yet.
+
+### Fixed
+
+- Nothing yet.
+
+## [0.3.13] - 2025-12-24
 
 ### Fixed
 

@@ -171,10 +171,11 @@ impl ParallelExecutor {
             return Err(BenchError::K6NotFound);
         }
 
-        // Load and parse spec (shared across all targets)
-        TerminalReporter::print_progress("Loading OpenAPI specification...");
-        let parser = SpecParser::from_file(&self.base_command.spec).await?;
-        TerminalReporter::print_success("Specification loaded");
+        // Load and parse spec(s) (shared across all targets)
+        TerminalReporter::print_progress("Loading OpenAPI specification(s)...");
+        let merged_spec = self.base_command.load_and_merge_specs().await?;
+        let parser = SpecParser::from_spec(merged_spec);
+        TerminalReporter::print_success("Specification(s) loaded");
 
         // Get operations
         let operations = if let Some(filter) = &self.base_command.operations {
@@ -230,7 +231,6 @@ impl ParallelExecutor {
         for (index, target) in self.targets.iter().enumerate() {
             let target = target.clone();
             // Clone necessary fields from base_command instead of passing reference
-            let spec = self.base_command.spec.clone();
             let duration = self.base_command.duration.clone();
             let vus = self.base_command.vus;
             let scenario_str = self.base_command.scenario.clone();
@@ -264,7 +264,6 @@ impl ParallelExecutor {
                 // We only need it to call execute_single_target, so we'll pass individual fields
                 // Execute test for this target
                 let result = Self::execute_single_target_internal(
-                    &spec,
                     &duration,
                     vus,
                     &scenario_str,
@@ -348,8 +347,8 @@ impl ParallelExecutor {
     }
 
     /// Execute a single target test (internal method that doesn't require BenchCommand)
+    #[allow(clippy::too_many_arguments)]
     async fn execute_single_target_internal(
-        spec: &PathBuf,
         duration: &str,
         vus: u32,
         scenario_str: &str,

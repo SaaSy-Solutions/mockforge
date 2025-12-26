@@ -122,7 +122,11 @@ async fn test_bench_command_parse_headers() {
     let (_temp_dir, spec_path) = create_minimal_spec_file();
 
     let cmd = BenchCommand {
-        spec: spec_path,
+        spec: vec![spec_path],
+        spec_dir: None,
+        merge_conflicts: "error".to_string(),
+        spec_mode: "merge".to_string(),
+        dependency_config: None,
         target: "http://localhost".to_string(),
         duration: "1m".to_string(),
         vus: 10,
@@ -168,7 +172,11 @@ async fn test_bench_command_parse_headers_invalid_format() {
     let (_temp_dir, spec_path) = create_minimal_spec_file();
 
     let cmd = BenchCommand {
-        spec: spec_path,
+        spec: vec![spec_path],
+        spec_dir: None,
+        merge_conflicts: "error".to_string(),
+        spec_mode: "merge".to_string(),
+        dependency_config: None,
         target: "http://localhost".to_string(),
         duration: "1m".to_string(),
         vus: 10,

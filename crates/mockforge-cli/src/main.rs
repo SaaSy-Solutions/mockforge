@@ -1480,11 +1480,33 @@ enum Commands {
     ///   mockforge bench --spec api.yaml --target https://api.com --operations "GET /users,POST /users"
     ///   mockforge bench --spec api.yaml --targets-file /path/to/targets.txt --max-concurrency 20
     ///   mockforge bench --spec api.yaml --target https://api.com --params-file params.json
+    ///
+    /// Multi-spec mode:
+    ///   mockforge bench --spec pools.yaml --spec vs.yaml --target https://api.com
+    ///   mockforge bench --spec-dir ./specs/ --target https://api.com
+    ///   mockforge bench --spec a.yaml --spec b.yaml --merge-conflicts first --target https://api.com
     #[command(verbatim_doc_comment)]
     Bench {
-        /// API specification file (OpenAPI/Swagger)
-        #[arg(short, long)]
-        spec: PathBuf,
+        /// API specification file(s) (OpenAPI/Swagger). Can specify multiple.
+        #[arg(short, long, action = clap::ArgAction::Append)]
+        spec: Vec<PathBuf>,
+
+        /// Directory containing OpenAPI spec files (discovers .json, .yaml, .yml files)
+        #[arg(long)]
+        spec_dir: Option<PathBuf>,
+
+        /// Conflict resolution strategy when merging multiple specs: "error" (default), "first", "last"
+        #[arg(long, default_value = "error")]
+        merge_conflicts: String,
+
+        /// Spec mode: "merge" (default) combines all specs, "sequential" runs them in order
+        #[arg(long, default_value = "merge")]
+        spec_mode: String,
+
+        /// Dependency configuration file (YAML/JSON) for cross-spec value passing
+        /// Only used when --spec-mode is "sequential"
+        #[arg(long)]
+        dependency_config: Option<PathBuf>,
 
         /// Target service URL (mutually exclusive with --targets-file)
         #[arg(short, long)]
@@ -2981,6 +3003,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
         Commands::Bench {
             spec,
+            spec_dir,
+            merge_conflicts,
+            spec_mode,
+            dependency_config,
             target,
             targets_file,
             duration,
@@ -3039,6 +3065,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
             let bench_cmd = mockforge_bench::BenchCommand {
                 spec,
+                spec_dir,
+                merge_conflicts,
+                spec_mode,
+                dependency_config,
                 target: target_str,
                 duration,
                 vus,

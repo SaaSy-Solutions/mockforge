@@ -19,6 +19,7 @@ pub mod reporter;
 pub mod request_gen;
 pub mod scenarios;
 pub mod security_payloads;
+pub mod spec_dependencies;
 pub mod spec_parser;
 pub mod target_parser;
 
@@ -33,4 +34,7 @@ pub use parallel_requests::{ParallelConfig, ParallelRequestGenerator};
 pub use param_overrides::{OperationOverrides, ParameterOverrides};
 pub use scenarios::LoadScenario;
 pub use security_payloads::{SecurityCategory, SecurityPayloads, SecurityTestConfig};
+pub use spec_dependencies::{
+    DependencyDetector, ExtractedValues, SpecDependency, SpecDependencyConfig, SpecGroup,
+};
 pub use target_parser::{parse_targets_file, TargetConfig};
