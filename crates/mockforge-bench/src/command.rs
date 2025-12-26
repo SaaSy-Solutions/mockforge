@@ -735,6 +735,20 @@ impl BenchCommand {
             .render_template(template, &data)
             .map_err(|e| BenchError::ScriptGenerationFailed(e.to_string()))?;
 
+        // Validate the generated CRUD flow script
+        TerminalReporter::print_progress("Validating CRUD flow script...");
+        let validation_errors = K6ScriptGenerator::validate_script(&script);
+        if !validation_errors.is_empty() {
+            TerminalReporter::print_error("CRUD flow script validation failed");
+            for error in &validation_errors {
+                eprintln!("  {}", error);
+            }
+            return Err(BenchError::Other(format!(
+                "CRUD flow script validation failed with {} error(s)",
+                validation_errors.len()
+            )));
+        }
+
         TerminalReporter::print_success("CRUD flow script generated");
 
         // Write and execute script

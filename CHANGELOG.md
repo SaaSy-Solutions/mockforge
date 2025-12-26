@@ -14,6 +14,7 @@
   - CRUD flow names are now sanitized for use as k6 metric names (e.g., `plans.list` → `plans_list`)
   - Original flow names preserved in comments and group names for readability
   - Made `sanitize_js_identifier` function public for reuse across k6 generators
+  - Added script validation to CRUD flow generation for defense in depth
 
 ## [0.3.12] - 2025-12-23
 
