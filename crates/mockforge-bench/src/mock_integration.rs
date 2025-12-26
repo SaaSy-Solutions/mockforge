@@ -103,10 +103,8 @@ impl MockServerDetector {
 
         match client.get(&info_url).send().await {
             Ok(response) if response.status().is_success() => {
-                let body: serde_json::Value = response
-                    .json()
-                    .await
-                    .unwrap_or_else(|_| serde_json::json!({}));
+                let body: serde_json::Value =
+                    response.json().await.unwrap_or_else(|_| serde_json::json!({}));
 
                 Ok(MockServerInfo {
                     is_mockforge: true,
@@ -164,12 +162,16 @@ impl MockIntegrationGenerator {
             }
             code.push_str("  };\n");
             code.push_str("  \n");
-            code.push_str("  const configRes = http.post(configUrl, JSON.stringify(statefulConfig), {\n");
+            code.push_str(
+                "  const configRes = http.post(configUrl, JSON.stringify(statefulConfig), {\n",
+            );
             code.push_str("    headers: { 'Content-Type': 'application/json' }\n");
             code.push_str("  });\n");
             code.push_str("  \n");
             code.push_str("  if (configRes.status !== 200) {\n");
-            code.push_str("    console.warn('Failed to configure mock server:', configRes.status);\n");
+            code.push_str(
+                "    console.warn('Failed to configure mock server:', configRes.status);\n",
+            );
             code.push_str("  }\n");
         }
 
@@ -204,7 +206,9 @@ impl MockIntegrationGenerator {
         code.push_str("      console.log(`Unmatched Routes: ${metrics.unmatchedRoutes || 0}`);\n");
         code.push_str("      if (metrics.statefulOperations) {\n");
         code.push_str("        console.log(`Stateful Creates: ${metrics.statefulOperations.creates || 0}`);\n");
-        code.push_str("        console.log(`Stateful Reads: ${metrics.statefulOperations.reads || 0}`);\n");
+        code.push_str(
+            "        console.log(`Stateful Reads: ${metrics.statefulOperations.reads || 0}`);\n",
+        );
         code.push_str("        console.log(`Stateful Updates: ${metrics.statefulOperations.updates || 0}`);\n");
         code.push_str("        console.log(`Stateful Deletes: ${metrics.statefulOperations.deletes || 0}`);\n");
         code.push_str("      }\n");

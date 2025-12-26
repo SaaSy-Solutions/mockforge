@@ -76,10 +76,7 @@ impl DataMapping {
                         pair
                     )));
                 }
-                Ok(DataMapping::new(
-                    parts[0].trim().to_string(),
-                    parts[1].trim().to_string(),
-                ))
+                Ok(DataMapping::new(parts[0].trim().to_string(), parts[1].trim().to_string()))
             })
             .collect()
     }
@@ -159,7 +156,9 @@ impl DataDrivenGenerator {
         imports.push_str("import { SharedArray } from 'k6/data';\n");
 
         if file_type == DataFileType::Csv {
-            imports.push_str("import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';\n");
+            imports.push_str(
+                "import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';\n",
+            );
         }
 
         imports
@@ -174,10 +173,7 @@ impl DataDrivenGenerator {
 
         match config.file_type() {
             DataFileType::Csv => {
-                code.push_str(&format!(
-                    "  const csvData = open('{}');\n",
-                    config.file_path
-                ));
+                code.push_str(&format!("  const csvData = open('{}');\n", config.file_path));
                 if config.csv_has_header {
                     code.push_str("  return papaparse.parse(csvData, { header: true }).data;\n");
                 } else {
@@ -185,10 +181,7 @@ impl DataDrivenGenerator {
                 }
             }
             DataFileType::Json => {
-                code.push_str(&format!(
-                    "  return JSON.parse(open('{}'));\n",
-                    config.file_path
-                ));
+                code.push_str(&format!("  return JSON.parse(open('{}'));\n", config.file_path));
             }
         }
 
@@ -203,22 +196,24 @@ impl DataDrivenGenerator {
             DataDistribution::UniquePerVu => {
                 "// Unique row per VU (wraps if more VUs than data rows)\n\
                  const rowIndex = (__VU - 1) % testData.length;\n\
-                 const row = testData[rowIndex];\n".to_string()
+                 const row = testData[rowIndex];\n"
+                    .to_string()
             }
             DataDistribution::UniquePerIteration => {
                 "// Unique row per iteration (cycles through data)\n\
                  const rowIndex = __ITER % testData.length;\n\
-                 const row = testData[rowIndex];\n".to_string()
+                 const row = testData[rowIndex];\n"
+                    .to_string()
             }
-            DataDistribution::Random => {
-                "// Random row selection\n\
+            DataDistribution::Random => "// Random row selection\n\
                  const rowIndex = Math.floor(Math.random() * testData.length);\n\
-                 const row = testData[rowIndex];\n".to_string()
-            }
+                 const row = testData[rowIndex];\n"
+                .to_string(),
             DataDistribution::Sequential => {
                 "// Sequential iteration (same for all VUs, based on iteration)\n\
                  const rowIndex = __ITER % testData.length;\n\
-                 const row = testData[rowIndex];\n".to_string()
+                 const row = testData[rowIndex];\n"
+                    .to_string()
             }
         }
     }
@@ -308,10 +303,7 @@ impl DataDrivenGenerator {
 /// Validate a data file exists and has the expected format
 pub fn validate_data_file(path: &Path) -> Result<DataFileInfo> {
     if !path.exists() {
-        return Err(BenchError::Other(format!(
-            "Data file not found: {}",
-            path.display()
-        )));
+        return Err(BenchError::Other(format!("Data file not found: {}", path.display())));
     }
 
     let content = std::fs::read_to_string(path)
@@ -381,9 +373,7 @@ fn validate_json(content: &str) -> Result<DataFileInfo> {
                 file_type: DataFileType::Json,
             })
         }
-        _ => Err(BenchError::Other(
-            "JSON data must be an array of objects".to_string(),
-        )),
+        _ => Err(BenchError::Other("JSON data must be an array of objects".to_string())),
     }
 }
 
@@ -407,14 +397,8 @@ mod tests {
             DataDistribution::from_str("unique-per-iteration").unwrap(),
             DataDistribution::UniquePerIteration
         );
-        assert_eq!(
-            DataDistribution::from_str("random").unwrap(),
-            DataDistribution::Random
-        );
-        assert_eq!(
-            DataDistribution::from_str("sequential").unwrap(),
-            DataDistribution::Sequential
-        );
+        assert_eq!(DataDistribution::from_str("random").unwrap(), DataDistribution::Random);
+        assert_eq!(DataDistribution::from_str("sequential").unwrap(), DataDistribution::Sequential);
     }
 
     #[test]
@@ -514,7 +498,8 @@ mod tests {
 
     #[test]
     fn test_generate_row_selection_unique_per_iteration() {
-        let code = DataDrivenGenerator::generate_row_selection(DataDistribution::UniquePerIteration);
+        let code =
+            DataDrivenGenerator::generate_row_selection(DataDistribution::UniquePerIteration);
         assert!(code.contains("__ITER"));
         assert!(code.contains("testData.length"));
     }

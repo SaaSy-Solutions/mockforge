@@ -56,7 +56,7 @@ impl K6ScriptGenerator {
     /// - "billing.subscriptions.v1" -> "billing_subscriptions_v1"
     /// - "get user" -> "get_user"
     /// - "123invalid" -> "_123invalid"
-    fn sanitize_js_identifier(name: &str) -> String {
+    pub fn sanitize_js_identifier(name: &str) -> String {
         let mut result = String::new();
         let mut chars = name.chars().peekable();
 
@@ -373,6 +373,15 @@ mod tests {
 
         // Test with special characters
         assert_eq!(K6ScriptGenerator::sanitize_js_identifier("test@name#value"), "test_name_value");
+
+        // Test CRUD flow names with dots (issue #79 follow-up)
+        assert_eq!(K6ScriptGenerator::sanitize_js_identifier("plans.list"), "plans_list");
+        assert_eq!(K6ScriptGenerator::sanitize_js_identifier("plans.create"), "plans_create");
+        assert_eq!(
+            K6ScriptGenerator::sanitize_js_identifier("plans.update-pricing-schemes"),
+            "plans_update_pricing_schemes"
+        );
+        assert_eq!(K6ScriptGenerator::sanitize_js_identifier("users CRUD"), "users_CRUD");
     }
 
     #[test]

@@ -107,9 +107,7 @@ impl InvalidDataConfig {
             return Ok(HashSet::new());
         }
 
-        s.split(',')
-            .map(|t| t.trim().parse::<InvalidDataType>())
-            .collect()
+        s.split(',').map(|t| t.trim().parse::<InvalidDataType>()).collect()
     }
 }
 
@@ -206,17 +204,17 @@ function invalidatePayload(payload, targetFields, invalidType) {
     }
 
     /// Generate k6 code for a complete invalid data test scenario
-    pub fn generate_complete_invalidation(config: &InvalidDataConfig, target_fields_js: &str) -> String {
+    pub fn generate_complete_invalidation(
+        config: &InvalidDataConfig,
+        target_fields_js: &str,
+    ) -> String {
         let mut code = String::new();
 
         code.push_str(&Self::generate_should_invalidate(config.error_rate));
         code.push('\n');
         code.push_str(&Self::generate_type_selection(&config.error_types));
         code.push('\n');
-        code.push_str(&format!(
-            "const targetFields = {};\n\n",
-            target_fields_js
-        ));
+        code.push_str(&format!("const targetFields = {};\n\n", target_fields_js));
         code.push_str("// Apply invalidation if needed\n");
         code.push_str("const finalPayload = shouldInvalidate\n");
         code.push_str("  ? invalidatePayload(payload, targetFields, invalidType)\n");
@@ -276,22 +274,10 @@ mod tests {
             InvalidDataType::from_str("missing-field").unwrap(),
             InvalidDataType::MissingField
         );
-        assert_eq!(
-            InvalidDataType::from_str("wrong-type").unwrap(),
-            InvalidDataType::WrongType
-        );
-        assert_eq!(
-            InvalidDataType::from_str("empty").unwrap(),
-            InvalidDataType::Empty
-        );
-        assert_eq!(
-            InvalidDataType::from_str("null").unwrap(),
-            InvalidDataType::Null
-        );
-        assert_eq!(
-            InvalidDataType::from_str("out-of-range").unwrap(),
-            InvalidDataType::OutOfRange
-        );
+        assert_eq!(InvalidDataType::from_str("wrong-type").unwrap(), InvalidDataType::WrongType);
+        assert_eq!(InvalidDataType::from_str("empty").unwrap(), InvalidDataType::Empty);
+        assert_eq!(InvalidDataType::from_str("null").unwrap(), InvalidDataType::Null);
+        assert_eq!(InvalidDataType::from_str("out-of-range").unwrap(), InvalidDataType::OutOfRange);
     }
 
     #[test]
@@ -303,10 +289,7 @@ mod tests {
         );
 
         // Without separator
-        assert_eq!(
-            InvalidDataType::from_str("wrongtype").unwrap(),
-            InvalidDataType::WrongType
-        );
+        assert_eq!(InvalidDataType::from_str("wrongtype").unwrap(), InvalidDataType::WrongType);
     }
 
     #[test]

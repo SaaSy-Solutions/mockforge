@@ -122,9 +122,8 @@ impl SpecParser {
                 };
 
                 let method_matches = op.method.to_uppercase() == method;
-                let path_matches = path_pattern
-                    .map(|p| Self::matches_path(&op.path, p))
-                    .unwrap_or(true); // If no path specified, match all paths for this method
+                let path_matches =
+                    path_pattern.map(|p| Self::matches_path(&op.path, p)).unwrap_or(true); // If no path specified, match all paths for this method
 
                 if method_matches && path_matches {
                     should_exclude = true;

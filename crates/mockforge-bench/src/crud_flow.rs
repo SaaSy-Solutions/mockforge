@@ -92,10 +92,7 @@ impl CrudFlow {
 
     /// Get all fields that need to be extracted across all steps
     pub fn get_all_extract_fields(&self) -> HashSet<String> {
-        self.steps
-            .iter()
-            .flat_map(|step| step.extract.iter().cloned())
-            .collect()
+        self.steps.iter().flat_map(|step| step.extract.iter().cloned()).collect()
     }
 }
 
@@ -174,13 +171,16 @@ impl ResourceOperations {
 
     /// Check if this resource has CRUD operations
     pub fn has_crud_operations(&self) -> bool {
-        self.create.is_some() && (self.read.is_some() || self.update.is_some() || self.delete.is_some())
+        self.create.is_some()
+            && (self.read.is_some() || self.update.is_some() || self.delete.is_some())
     }
 
     /// Get the ID parameter name from the path (e.g., "{id}", "{userId}")
     pub fn get_id_param_name(&self) -> Option<String> {
         // Look at read, update, or delete operations to find the ID parameter
-        let path = self.read.as_ref()
+        let path = self
+            .read
+            .as_ref()
             .or(self.update.as_ref())
             .or(self.delete.as_ref())
             .map(|op| &op.path)?;
@@ -195,7 +195,7 @@ fn extract_id_param_from_path(path: &str) -> Option<String> {
     // Find the last path segment that looks like {paramName}
     for segment in path.split('/').rev() {
         if segment.starts_with('{') && segment.ends_with('}') {
-            return Some(segment[1..segment.len()-1].to_string());
+            return Some(segment[1..segment.len() - 1].to_string());
         }
     }
     None
@@ -268,21 +268,19 @@ impl CrudFlowDetector {
 
     /// Build a CRUD flow from a resource's operations
     fn build_flow_from_resource(resource: &ResourceOperations) -> CrudFlow {
-        let name = resource
-            .base_path
-            .trim_start_matches('/')
-            .replace('/', "_")
-            .to_string();
+        let name = resource.base_path.trim_start_matches('/').replace('/', "_").to_string();
 
-        let mut flow = CrudFlow::new(format!("{} CRUD", name)).with_base_path(resource.base_path.clone());
+        let mut flow =
+            CrudFlow::new(format!("{} CRUD", name)).with_base_path(resource.base_path.clone());
 
         let id_param = resource.get_id_param_name().unwrap_or_else(|| "id".to_string());
 
         // Step 1: CREATE (POST) - extract ID
         if let Some(create_op) = &resource.create {
-            let step = FlowStep::new(format!("{} {}", create_op.method.to_uppercase(), create_op.path))
-                .with_extract(vec!["id".to_string(), "uuid".to_string()])
-                .with_description("Create resource".to_string());
+            let step =
+                FlowStep::new(format!("{} {}", create_op.method.to_uppercase(), create_op.path))
+                    .with_extract(vec!["id".to_string(), "uuid".to_string()])
+                    .with_description("Create resource".to_string());
             flow.add_step(step);
         }
 
@@ -302,9 +300,10 @@ impl CrudFlowDetector {
             let mut values = HashMap::new();
             values.insert(id_param.clone(), "id".to_string());
 
-            let step = FlowStep::new(format!("{} {}", update_op.method.to_uppercase(), update_op.path))
-                .with_values(values)
-                .with_description("Update resource".to_string());
+            let step =
+                FlowStep::new(format!("{} {}", update_op.method.to_uppercase(), update_op.path))
+                    .with_values(values)
+                    .with_description("Update resource".to_string());
             flow.add_step(step);
         }
 
@@ -324,9 +323,10 @@ impl CrudFlowDetector {
             let mut values = HashMap::new();
             values.insert(id_param.clone(), "id".to_string());
 
-            let step = FlowStep::new(format!("{} {}", delete_op.method.to_uppercase(), delete_op.path))
-                .with_values(values)
-                .with_description("Delete resource".to_string());
+            let step =
+                FlowStep::new(format!("{} {}", delete_op.method.to_uppercase(), delete_op.path))
+                    .with_values(values)
+                    .with_description("Delete resource".to_string());
             flow.add_step(step);
         }
 
@@ -498,8 +498,7 @@ mod tests {
         let mut values = HashMap::new();
         values.insert("id".to_string(), "user_id".to_string());
 
-        let step = FlowStep::new("GET /users/{id}".to_string())
-            .with_values(values);
+        let step = FlowStep::new("GET /users/{id}".to_string()).with_values(values);
 
         assert_eq!(step.use_values.get("id"), Some(&"user_id".to_string()));
     }
@@ -566,9 +565,7 @@ default_extract_fields:
 
     #[test]
     fn test_merge_with_config_user_provided() {
-        let detected = vec![
-            CrudFlow::new("detected_flow".to_string()),
-        ];
+        let detected = vec![CrudFlow::new("detected_flow".to_string())];
 
         let mut config = CrudFlowConfig::default();
         config.flows.push(CrudFlow::new("user_flow".to_string()));
@@ -580,9 +577,7 @@ default_extract_fields:
 
     #[test]
     fn test_merge_with_config_auto_detected() {
-        let detected = vec![
-            CrudFlow::new("detected_flow".to_string()),
-        ];
+        let detected = vec![CrudFlow::new("detected_flow".to_string())];
 
         let config = CrudFlowConfig::default();
 
@@ -595,7 +590,9 @@ default_extract_fields:
     fn test_crud_flow_get_all_extract_fields() {
         let mut flow = CrudFlow::new("test".to_string());
         flow.add_step(FlowStep::new("POST /test".to_string()).with_extract(vec!["id".to_string()]));
-        flow.add_step(FlowStep::new("GET /test/{id}".to_string()).with_extract(vec!["uuid".to_string()]));
+        flow.add_step(
+            FlowStep::new("GET /test/{id}".to_string()).with_extract(vec!["uuid".to_string()]),
+        );
 
         let fields = flow.get_all_extract_fields();
         assert!(fields.contains(&"id".to_string()));

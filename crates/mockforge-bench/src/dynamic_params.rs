@@ -9,9 +9,8 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 
 /// Regex pattern for dynamic placeholders: ${__VU}, ${__ITER}, ${__TIMESTAMP}, ${__UUID}, ${__RANDOM}, ${__COUNTER}
-static PLACEHOLDER_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\$\{__([A-Z_]+)\}").expect("Invalid placeholder regex")
-});
+static PLACEHOLDER_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\$\{__([A-Z_]+)\}").expect("Invalid placeholder regex"));
 
 /// Supported dynamic parameter placeholders
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -265,8 +264,7 @@ impl DynamicParamProcessor {
                 format!("{{\n  {}\n}}", pairs.join(",\n  "))
             }
             Value::Array(arr) => {
-                let items: Vec<String> =
-                    arr.iter().map(Self::generate_dynamic_body_js).collect();
+                let items: Vec<String> = arr.iter().map(Self::generate_dynamic_body_js).collect();
                 format!("[{}]", items.join(", "))
             }
             Value::Number(n) => n.to_string(),
@@ -282,18 +280,12 @@ impl DynamicParamProcessor {
 
     /// Get all required imports based on placeholders used
     pub fn get_required_imports(placeholders: &HashSet<DynamicPlaceholder>) -> Vec<&'static str> {
-        placeholders
-            .iter()
-            .filter_map(|p| p.requires_import())
-            .collect()
+        placeholders.iter().filter_map(|p| p.requires_import()).collect()
     }
 
     /// Get all required global initializations based on placeholders used
     pub fn get_required_globals(placeholders: &HashSet<DynamicPlaceholder>) -> Vec<&'static str> {
-        placeholders
-            .iter()
-            .filter_map(|p| p.requires_global_init())
-            .collect()
+        placeholders.iter().filter_map(|p| p.requires_global_init()).collect()
     }
 }
 
@@ -303,24 +295,15 @@ mod tests {
 
     #[test]
     fn test_has_dynamic_placeholders() {
-        assert!(DynamicParamProcessor::has_dynamic_placeholders(
-            "test-${__VU}"
-        ));
-        assert!(DynamicParamProcessor::has_dynamic_placeholders(
-            "${__ITER}-${__VU}"
-        ));
-        assert!(!DynamicParamProcessor::has_dynamic_placeholders(
-            "static-value"
-        ));
-        assert!(!DynamicParamProcessor::has_dynamic_placeholders(
-            "${normal_var}"
-        ));
+        assert!(DynamicParamProcessor::has_dynamic_placeholders("test-${__VU}"));
+        assert!(DynamicParamProcessor::has_dynamic_placeholders("${__ITER}-${__VU}"));
+        assert!(!DynamicParamProcessor::has_dynamic_placeholders("static-value"));
+        assert!(!DynamicParamProcessor::has_dynamic_placeholders("${normal_var}"));
     }
 
     #[test]
     fn test_extract_placeholders() {
-        let placeholders =
-            DynamicParamProcessor::extract_placeholders("vu-${__VU}-iter-${__ITER}");
+        let placeholders = DynamicParamProcessor::extract_placeholders("vu-${__VU}-iter-${__ITER}");
         assert!(placeholders.contains(&DynamicPlaceholder::VU));
         assert!(placeholders.contains(&DynamicPlaceholder::Iteration));
         assert_eq!(placeholders.len(), 2);

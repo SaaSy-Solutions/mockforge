@@ -6,14 +6,18 @@ use crate::error::{BenchError, Result};
 use crate::executor::K6Executor;
 use crate::invalid_data::{InvalidDataConfig, InvalidDataGenerator, InvalidDataType};
 use crate::k6_gen::{K6Config, K6ScriptGenerator};
-use crate::mock_integration::{MockIntegrationConfig, MockIntegrationGenerator, MockServerDetector};
+use crate::mock_integration::{
+    MockIntegrationConfig, MockIntegrationGenerator, MockServerDetector,
+};
 use crate::parallel_executor::{AggregatedResults, ParallelExecutor};
 use crate::parallel_requests::{ParallelConfig, ParallelRequestGenerator};
 use crate::param_overrides::ParameterOverrides;
 use crate::reporter::TerminalReporter;
 use crate::request_gen::RequestGenerator;
 use crate::scenarios::LoadScenario;
-use crate::security_payloads::{SecurityCategory, SecurityPayloads, SecurityTestConfig, SecurityTestGenerator};
+use crate::security_payloads::{
+    SecurityCategory, SecurityPayloads, SecurityTestConfig, SecurityTestGenerator,
+};
 use crate::spec_parser::SpecParser;
 use crate::target_parser::parse_targets_file;
 use std::collections::HashMap;
@@ -234,8 +238,10 @@ impl BenchCommand {
             if let Some(import_end) = script.find("export const options") {
                 script.insert_str(
                     import_end,
-                    &format!("\n// === Mock Server Integration ===\n{}\n{}\n{}\n",
-                        helper_code, setup_code, teardown_code),
+                    &format!(
+                        "\n// === Mock Server Integration ===\n{}\n{}\n{}\n",
+                        helper_code, setup_code, teardown_code
+                    ),
                 );
             }
         }
@@ -522,9 +528,11 @@ impl BenchCommand {
         let distribution = DataDistribution::from_str(&self.data_distribution)
             .unwrap_or(DataDistribution::UniquePerVu);
 
-        let mappings = self.data_mappings.as_ref().map(|m| {
-            DataMapping::parse_mappings(m).unwrap_or_default()
-        }).unwrap_or_default();
+        let mappings = self
+            .data_mappings
+            .as_ref()
+            .map(|m| DataMapping::parse_mappings(m).unwrap_or_default())
+            .unwrap_or_default();
 
         Some(DataDrivenConfig {
             file_path: data_file.to_string_lossy().to_string(),
@@ -538,7 +546,9 @@ impl BenchCommand {
     fn build_invalid_data_config(&self) -> Option<InvalidDataConfig> {
         let error_rate = self.error_rate?;
 
-        let error_types = self.error_types.as_ref()
+        let error_types = self
+            .error_types
+            .as_ref()
             .map(|types| InvalidDataConfig::parse_error_types(types).unwrap_or_default())
             .unwrap_or_default();
 
@@ -555,7 +565,9 @@ impl BenchCommand {
             return None;
         }
 
-        let categories = self.security_categories.as_ref()
+        let categories = self
+            .security_categories
+            .as_ref()
             .map(|cats| SecurityTestConfig::parse_categories(cats).unwrap_or_default())
             .unwrap_or_else(|| {
                 let mut default = std::collections::HashSet::new();
@@ -564,12 +576,14 @@ impl BenchCommand {
                 default
             });
 
-        let target_fields = self.security_target_fields.as_ref()
+        let target_fields = self
+            .security_target_fields
+            .as_ref()
             .map(|fields| fields.split(',').map(|f| f.trim().to_string()).collect())
             .unwrap_or_default();
 
-        let custom_payloads_file = self.security_payloads.as_ref()
-            .map(|p| p.to_string_lossy().to_string());
+        let custom_payloads_file =
+            self.security_payloads.as_ref().map(|p| p.to_string_lossy().to_string());
 
         Some(SecurityTestConfig {
             enabled: true,
@@ -605,9 +619,11 @@ impl BenchCommand {
             TerminalReporter::print_progress("Adding invalid data testing support...");
             additional_code.push_str(&InvalidDataGenerator::generate_invalidation_logic());
             additional_code.push('\n');
-            additional_code.push_str(&InvalidDataGenerator::generate_should_invalidate(config.error_rate));
+            additional_code
+                .push_str(&InvalidDataGenerator::generate_should_invalidate(config.error_rate));
             additional_code.push('\n');
-            additional_code.push_str(&InvalidDataGenerator::generate_type_selection(&config.error_types));
+            additional_code
+                .push_str(&InvalidDataGenerator::generate_type_selection(&config.error_types));
             additional_code.push('\n');
             TerminalReporter::print_success(&format!(
                 "Invalid data testing enabled ({}% error rate)",
@@ -619,9 +635,11 @@ impl BenchCommand {
         if let Some(config) = self.build_security_config() {
             TerminalReporter::print_progress("Adding security testing support...");
             let payload_list = SecurityPayloads::get_payloads(&config);
-            additional_code.push_str(&SecurityTestGenerator::generate_payload_selection(&payload_list));
+            additional_code
+                .push_str(&SecurityTestGenerator::generate_payload_selection(&payload_list));
             additional_code.push('\n');
-            additional_code.push_str(&SecurityTestGenerator::generate_apply_payload(&config.target_fields));
+            additional_code
+                .push_str(&SecurityTestGenerator::generate_apply_payload(&config.target_fields));
             additional_code.push('\n');
             additional_code.push_str(&SecurityTestGenerator::generate_security_checks());
             additional_code.push('\n');
@@ -689,8 +707,11 @@ impl BenchCommand {
         let data = serde_json::json!({
             "base_url": self.target,
             "flows": flows.iter().map(|f| {
+                // Sanitize flow name for use as JavaScript variable and k6 metric names
+                let sanitized_name = K6ScriptGenerator::sanitize_js_identifier(&f.name);
                 serde_json::json!({
-                    "name": f.name,
+                    "name": sanitized_name.clone(),  // Use sanitized name for variable names
+                    "display_name": f.name,          // Keep original for comments/display
                     "base_path": f.base_path,
                     "steps": f.steps.iter().map(|s| {
                         serde_json::json!({
@@ -738,9 +759,7 @@ impl BenchCommand {
         let executor = K6Executor::new()?;
         std::fs::create_dir_all(&self.output)?;
 
-        let results = executor
-            .execute(&script_path, Some(&self.output), self.verbose)
-            .await?;
+        let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
 
         let duration_secs = Self::parse_duration(&self.duration)?;
         TerminalReporter::print_summary(&results, duration_secs);

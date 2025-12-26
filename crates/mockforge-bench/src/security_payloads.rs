@@ -159,9 +159,7 @@ impl SecurityTestConfig {
             return Ok(HashSet::new());
         }
 
-        s.split(',')
-            .map(|c| c.trim().parse::<SecurityCategory>())
-            .collect()
+        s.split(',').map(|c| c.trim().parse::<SecurityCategory>()).collect()
     }
 }
 
@@ -186,7 +184,8 @@ impl SecurityPayloads {
                 "'; DROP TABLE users; --".to_string(),
                 SecurityCategory::SqlInjection,
                 "SQL injection table drop attempt".to_string(),
-            ).high_risk(),
+            )
+            .high_risk(),
             SecurityPayload::new(
                 "' UNION SELECT * FROM users --".to_string(),
                 SecurityCategory::SqlInjection,
@@ -263,17 +262,20 @@ impl SecurityPayloads {
                 "| cat /etc/passwd".to_string(),
                 SecurityCategory::CommandInjection,
                 "Unix command injection with pipe".to_string(),
-            ).high_risk(),
+            )
+            .high_risk(),
             SecurityPayload::new(
                 "$(cat /etc/passwd)".to_string(),
                 SecurityCategory::CommandInjection,
                 "Unix command substitution".to_string(),
-            ).high_risk(),
+            )
+            .high_risk(),
             SecurityPayload::new(
                 "`cat /etc/passwd`".to_string(),
                 SecurityCategory::CommandInjection,
                 "Unix backtick command execution".to_string(),
-            ).high_risk(),
+            )
+            .high_risk(),
             SecurityPayload::new(
                 "& dir".to_string(),
                 SecurityCategory::CommandInjection,
@@ -369,11 +371,8 @@ impl SecurityPayloads {
 
     /// Get all payloads for configured categories
     pub fn get_payloads(config: &SecurityTestConfig) -> Vec<SecurityPayload> {
-        let mut payloads: Vec<SecurityPayload> = config
-            .categories
-            .iter()
-            .flat_map(|c| Self::get_by_category(*c))
-            .collect();
+        let mut payloads: Vec<SecurityPayload> =
+            config.categories.iter().flat_map(|c| Self::get_by_category(*c)).collect();
 
         // Filter out high-risk if not included
         if !config.include_high_risk {
@@ -527,18 +526,12 @@ mod tests {
 
     #[test]
     fn test_security_category_from_str() {
-        assert_eq!(
-            SecurityCategory::from_str("sqli").unwrap(),
-            SecurityCategory::SqlInjection
-        );
+        assert_eq!(SecurityCategory::from_str("sqli").unwrap(), SecurityCategory::SqlInjection);
         assert_eq!(
             SecurityCategory::from_str("sql-injection").unwrap(),
             SecurityCategory::SqlInjection
         );
-        assert_eq!(
-            SecurityCategory::from_str("xss").unwrap(),
-            SecurityCategory::Xss
-        );
+        assert_eq!(SecurityCategory::from_str("xss").unwrap(), SecurityCategory::Xss);
         assert_eq!(
             SecurityCategory::from_str("command-injection").unwrap(),
             SecurityCategory::CommandInjection
@@ -637,13 +630,11 @@ mod tests {
 
     #[test]
     fn test_generate_payload_selection() {
-        let payloads = vec![
-            SecurityPayload::new(
-                "' OR '1'='1".to_string(),
-                SecurityCategory::SqlInjection,
-                "Basic SQLi".to_string(),
-            ),
-        ];
+        let payloads = vec![SecurityPayload::new(
+            "' OR '1'='1".to_string(),
+            SecurityCategory::SqlInjection,
+            "Basic SQLi".to_string(),
+        )];
 
         let code = SecurityTestGenerator::generate_payload_selection(&payloads);
         assert!(code.contains("securityPayloads"));
@@ -675,13 +666,11 @@ mod tests {
 
     #[test]
     fn test_payload_escaping() {
-        let payloads = vec![
-            SecurityPayload::new(
-                "'; DROP TABLE users; --".to_string(),
-                SecurityCategory::SqlInjection,
-                "Drop table".to_string(),
-            ),
-        ];
+        let payloads = vec![SecurityPayload::new(
+            "'; DROP TABLE users; --".to_string(),
+            SecurityCategory::SqlInjection,
+            "Drop table".to_string(),
+        )];
 
         let code = SecurityTestGenerator::generate_payload_selection(&payloads);
         // Single quotes should be escaped

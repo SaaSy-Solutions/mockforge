@@ -10,7 +10,10 @@
 
 ### Fixed
 
-- Nothing yet.
+- **[DevX] k6 CRUD flow metric name sanitization** (#79 follow-up): Fixed invalid k6 metric names in CRUD flow scripts when flow names contain dots or special characters
+  - CRUD flow names are now sanitized for use as k6 metric names (e.g., `plans.list` → `plans_list`)
+  - Original flow names preserved in comments and group names for readability
+  - Made `sanitize_js_identifier` function public for reuse across k6 generators
 
 ## [0.3.12] - 2025-12-23
 

@@ -82,8 +82,8 @@ function replacePath(pathTemplate, values) {
 
 export default function () {
   {{#each flows}}
-  // Flow: {{this.name}}
-  group('{{this.name}}', function() {
+  // Flow: {{this.display_name}}
+  group('{{this.display_name}}', function() {
     const flowStart = Date.now();
     let flowSuccess = true;
     const extractedValues = {};

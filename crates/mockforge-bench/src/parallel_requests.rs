@@ -85,10 +85,7 @@ impl ParallelRequestGenerator {
         // Generate batch creation loop
         code.push_str("// Parallel resource creation\n");
         code.push_str("const batchRequests = [];\n");
-        code.push_str(&format!(
-            "for (let i = 0; i < {}; i++) {{\n",
-            config.count
-        ));
+        code.push_str(&format!("for (let i = 0; i < {}; i++) {{\n", config.count));
         code.push_str("  batchRequests.push({\n");
         code.push_str("    method: 'POST',\n");
         code.push_str(&format!("    url: `${{BASE_URL}}{}`", path));
@@ -102,12 +99,11 @@ impl ParallelRequestGenerator {
         if config.count > config.max_batch_size {
             code.push_str("// Execute in batches to avoid overwhelming the server\n");
             code.push_str("const createdIds = [];\n");
-            code.push_str(&format!(
-                "const batchSize = {};\n",
-                config.max_batch_size
-            ));
+            code.push_str(&format!("const batchSize = {};\n", config.max_batch_size));
             code.push_str("for (let batchStart = 0; batchStart < batchRequests.length; batchStart += batchSize) {\n");
-            code.push_str("  const batchEnd = Math.min(batchStart + batchSize, batchRequests.length);\n");
+            code.push_str(
+                "  const batchEnd = Math.min(batchStart + batchSize, batchRequests.length);\n",
+            );
             code.push_str("  const batch = batchRequests.slice(batchStart, batchEnd);\n");
             code.push_str("  const responses = http.batch(batch);\n\n");
 
@@ -116,10 +112,7 @@ impl ParallelRequestGenerator {
                 code.push_str("  for (const res of responses) {\n");
                 code.push_str("    if (res.status >= 200 && res.status < 300) {\n");
                 code.push_str("      try {\n");
-                code.push_str(&format!(
-                    "        const id = res.json('{}');\n",
-                    id_field
-                ));
+                code.push_str(&format!("        const id = res.json('{}');\n", id_field));
                 code.push_str("        if (id) createdIds.push(id);\n");
                 code.push_str("      } catch (e) {\n");
                 code.push_str("        console.error('Failed to extract ID:', e);\n");
@@ -129,16 +122,15 @@ impl ParallelRequestGenerator {
             }
 
             code.push_str("  // Check batch results\n");
-            code.push_str("  const batchSuccess = responses.every(r => r.status >= 200 && r.status < 300);\n");
+            code.push_str(
+                "  const batchSuccess = responses.every(r => r.status >= 200 && r.status < 300);\n",
+            );
             code.push_str("  check(responses, {\n");
             code.push_str("    'batch creation successful': () => batchSuccess\n");
             code.push_str("  });\n\n");
 
             if config.batch_delay_ms > 0 {
-                code.push_str(&format!(
-                    "  sleep({});\n",
-                    config.batch_delay_ms as f64 / 1000.0
-                ));
+                code.push_str(&format!("  sleep({});\n", config.batch_delay_ms as f64 / 1000.0));
             }
             code.push_str("}\n");
         } else {
@@ -151,10 +143,7 @@ impl ParallelRequestGenerator {
                 code.push_str("for (const res of responses) {\n");
                 code.push_str("  if (res.status >= 200 && res.status < 300) {\n");
                 code.push_str("    try {\n");
-                code.push_str(&format!(
-                    "      const id = res.json('{}');\n",
-                    id_field
-                ));
+                code.push_str(&format!("      const id = res.json('{}');\n", id_field));
                 code.push_str("      if (id) createdIds.push(id);\n");
                 code.push_str("    } catch (e) {\n");
                 code.push_str("      console.error('Failed to extract ID:', e);\n");
@@ -164,7 +153,9 @@ impl ParallelRequestGenerator {
             }
 
             code.push_str("// Check all responses\n");
-            code.push_str("const allSuccess = responses.every(r => r.status >= 200 && r.status < 300);\n");
+            code.push_str(
+                "const allSuccess = responses.every(r => r.status >= 200 && r.status < 300);\n",
+            );
             code.push_str("check(responses, {\n");
             code.push_str("  'parallel creation successful': () => allSuccess\n");
             code.push_str("});\n");
@@ -188,7 +179,9 @@ impl ParallelRequestGenerator {
         code.push_str("    params: { headers }\n");
         code.push_str("  }));\n\n");
         code.push_str("  const getResponses = http.batch(getRequests);\n");
-        code.push_str("  const getSuccess = getResponses.every(r => r.status >= 200 && r.status < 300);\n");
+        code.push_str(
+            "  const getSuccess = getResponses.every(r => r.status >= 200 && r.status < 300);\n",
+        );
         code.push_str("  check(getResponses, {\n");
         code.push_str("    'parallel retrieval successful': () => getSuccess\n");
         code.push_str("  });\n");
@@ -226,16 +219,11 @@ impl ParallelRequestGenerator {
         let mut code = String::new();
 
         code.push_str("// Parallel batch execution helpers\n");
-        code.push_str(&format!(
-            "const PARALLEL_BATCH_SIZE = {};\n",
-            config.max_batch_size
-        ));
-        code.push_str(&format!(
-            "const PARALLEL_COUNT = {};\n\n",
-            config.count
-        ));
+        code.push_str(&format!("const PARALLEL_BATCH_SIZE = {};\n", config.max_batch_size));
+        code.push_str(&format!("const PARALLEL_COUNT = {};\n\n", config.count));
 
-        code.push_str(r#"function executeBatch(requests) {
+        code.push_str(
+            r#"function executeBatch(requests) {
   const results = [];
   const batchSize = PARALLEL_BATCH_SIZE;
 
@@ -262,7 +250,8 @@ function collectIds(responses, idField = 'id') {
   }
   return ids;
 }
-"#);
+"#,
+        );
 
         code
     }
@@ -317,9 +306,7 @@ mod tests {
 
     #[test]
     fn test_parallel_config_builders() {
-        let config = ParallelConfig::new(100)
-            .with_collect_ids(false)
-            .with_max_batch_size(25);
+        let config = ParallelConfig::new(100).with_collect_ids(false).with_max_batch_size(25);
 
         assert_eq!(config.count, 100);
         assert!(!config.collect_ids);
@@ -407,7 +394,10 @@ mod tests {
 
     #[test]
     fn test_generate_parallel_delete() {
-        let code = ParallelRequestGenerator::generate_parallel_delete("/resources/{resourceId}", "resourceId");
+        let code = ParallelRequestGenerator::generate_parallel_delete(
+            "/resources/{resourceId}",
+            "resourceId",
+        );
 
         assert!(code.contains("Parallel resource cleanup"));
         assert!(code.contains("method: 'DELETE'"));
