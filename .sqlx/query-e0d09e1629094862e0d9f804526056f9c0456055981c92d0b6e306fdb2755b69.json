@@ -1,15 +1,15 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT\n                id,\n                workspace_id,\n                backup_url,\n                storage_backend,\n                storage_config,\n                size_bytes,\n                backup_format,\n                encrypted,\n                commit_id,\n                created_at,\n                created_by,\n                expires_at\n            FROM workspace_backups\n            WHERE id = ?\n            ",
+  "query": "\n            SELECT\n                id as \"id: Uuid\",\n                workspace_id as \"workspace_id: Uuid\",\n                backup_url,\n                storage_backend,\n                storage_config,\n                size_bytes,\n                backup_format,\n                encrypted,\n                commit_id as \"commit_id: Uuid\",\n                created_at,\n                created_by as \"created_by: Uuid\",\n                expires_at\n            FROM workspace_backups\n            WHERE id = ?\n            ",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id: Uuid",
         "ordinal": 0,
         "type_info": "Text"
       },
       {
-        "name": "workspace_id",
+        "name": "workspace_id: Uuid",
         "ordinal": 1,
         "type_info": "Text"
       },
@@ -44,7 +44,7 @@
         "type_info": "Integer"
       },
       {
-        "name": "commit_id",
+        "name": "commit_id: Uuid",
         "ordinal": 8,
         "type_info": "Text"
       },
@@ -54,7 +54,7 @@
         "type_info": "Text"
       },
       {
-        "name": "created_by",
+        "name": "created_by: Uuid",
         "ordinal": 10,
         "type_info": "Text"
       },
@@ -82,5 +82,5 @@
       true
     ]
   },
-  "hash": "a5fb77c0d98d2748cebdbc9c15571a9c5e1c38e516e7e335d26e44b824ec0e8e"
+  "hash": "e0d09e1629094862e0d9f804526056f9c0456055981c92d0b6e306fdb2755b69"
 }

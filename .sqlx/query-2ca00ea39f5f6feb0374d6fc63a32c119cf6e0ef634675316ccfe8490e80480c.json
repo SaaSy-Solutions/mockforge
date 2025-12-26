@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT\n                id as \"id: Uuid\",\n                workspace_id as \"workspace_id: Uuid\",\n                author_id as \"author_id: Uuid\",\n                message,\n                parent_id as \"parent_id: Uuid\",\n                version,\n                snapshot,\n                changes,\n                created_at as \"created_at: chrono::DateTime<chrono::Utc>\"\n            FROM commits\n            WHERE workspace_id = ?\n            ORDER BY created_at DESC\n            LIMIT 1\n            ",
+  "query": "\n            SELECT\n                id as \"id: Uuid\",\n                workspace_id as \"workspace_id: Uuid\",\n                author_id as \"author_id: Uuid\",\n                message,\n                parent_id as \"parent_id: Uuid\",\n                version,\n                snapshot as \"snapshot: serde_json::Value\",\n                changes as \"changes: serde_json::Value\",\n                created_at as \"created_at: chrono::DateTime<chrono::Utc>\"\n            FROM commits\n            WHERE id = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -34,12 +34,12 @@
         "type_info": "Integer"
       },
       {
-        "name": "snapshot",
+        "name": "snapshot: serde_json::Value",
         "ordinal": 6,
         "type_info": "Text"
       },
       {
-        "name": "changes",
+        "name": "changes: serde_json::Value",
         "ordinal": 7,
         "type_info": "Text"
       },
@@ -64,5 +64,5 @@
       false
     ]
   },
-  "hash": "18b956bb30565f8e7d86ec161dd69396b08efd3417b561bb8f4bc3f988db468f"
+  "hash": "2ca00ea39f5f6feb0374d6fc63a32c119cf6e0ef634675316ccfe8490e80480c"
 }

@@ -385,23 +385,20 @@ impl SyncEngine {
         })?;
 
         let change_id = Uuid::new_v4();
-        let change_id_str = change_id.to_string();
         let change_data_str = serde_json::to_string(&change_data)?;
-        let workspace_id_str = workspace_id.to_string();
-        let user_id_str = user_id.to_string();
         let now = Utc::now().to_rfc3339();
         sqlx::query!(
             r#"
             INSERT INTO workspace_state_changes (id, workspace_id, change_type, change_data, version, created_at, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
-            change_id_str,
-            workspace_id_str,
+            change_id,
+            workspace_id,
             change_type,
             change_data_str,
             version,
             now,
-            user_id_str
+            user_id
         )
         .execute(db)
         .await?;
@@ -419,7 +416,6 @@ impl SyncEngine {
             CollabError::Internal("Database not available for state changes".to_string())
         })?;
 
-        let workspace_id_str = workspace_id.to_string();
         let changes = sqlx::query!(
             r#"
             SELECT change_data
@@ -427,7 +423,7 @@ impl SyncEngine {
             WHERE workspace_id = ? AND version > ?
             ORDER BY version ASC
             "#,
-            workspace_id_str,
+            workspace_id,
             since_version
         )
         .fetch_all(db)

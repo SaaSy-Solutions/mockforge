@@ -194,14 +194,15 @@ async fn test_merge_workspaces_success() {
     let (owner, owner_token) = ctx.create_test_user("owner", "owner@example.com").await;
     let (forker, forker_token) = ctx.create_test_user("forker", "forker@example.com").await;
 
-    // Create source workspace
+    // Create source workspace with initial commit (required for merge)
     let source_workspace_id = ctx.create_test_workspace(owner.id, "Source Workspace").await;
+    let source_commit_id = ctx.create_initial_commit(source_workspace_id, owner.id).await;
 
     // Add forker as member
     ctx.add_workspace_member(source_workspace_id, owner.id, forker.id, UserRole::Editor)
         .await;
 
-    // Fork the workspace
+    // Fork the workspace with fork point commit
     let fork_response = ctx
         .router
         .clone()
@@ -213,7 +214,8 @@ async fn test_merge_workspaces_success() {
                 .header(auth_header(&forker_token).0, auth_header(&forker_token).1)
                 .body(Body::from(
                     json!({
-                        "new_name": "Forked Workspace"
+                        "new_name": "Forked Workspace",
+                        "fork_point_commit_id": source_commit_id.to_string()
                     })
                     .to_string(),
                 ))
@@ -226,6 +228,10 @@ async fn test_merge_workspaces_success() {
     let fork_body = axum::body::to_bytes(fork_response.into_body(), usize::MAX).await.unwrap();
     let fork_json: serde_json::Value = serde_json::from_slice(&fork_body).unwrap();
     let forked_workspace_id = fork_json["id"].as_str().unwrap();
+    let forked_workspace_uuid = Uuid::parse_str(forked_workspace_id).unwrap();
+
+    // Create a commit for the forked workspace (required for merge)
+    ctx.create_initial_commit(forked_workspace_uuid, forker.id).await;
 
     // Merge forked workspace back into source
     let response = ctx
@@ -248,13 +254,13 @@ async fn test_merge_workspaces_success() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
-
+    let status = response.status();
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status, StatusCode::OK, "Merge error: {:?}", json);
 
-    assert!(json["workspace"].is_object());
-    assert!(json["conflicts"].is_array());
+    assert!(json["workspace"].is_object(), "Expected workspace in response: {:?}", json);
+    assert!(json["conflicts"].is_array(), "Expected conflicts in response: {:?}", json);
 }
 
 #[tokio::test]
@@ -263,11 +269,14 @@ async fn test_merge_workspaces_with_conflicts() {
     let (owner, owner_token) = ctx.create_test_user("owner", "owner@example.com").await;
     let (forker, forker_token) = ctx.create_test_user("forker", "forker@example.com").await;
 
+    // Create source workspace with initial commit
     let source_workspace_id = ctx.create_test_workspace(owner.id, "Source Workspace").await;
+    let source_commit_id = ctx.create_initial_commit(source_workspace_id, owner.id).await;
+
     ctx.add_workspace_member(source_workspace_id, owner.id, forker.id, UserRole::Editor)
         .await;
 
-    // Fork and make changes that will conflict
+    // Fork with fork point commit and make changes that will conflict
     let fork_response = ctx
         .router
         .clone()
@@ -279,7 +288,8 @@ async fn test_merge_workspaces_with_conflicts() {
                 .header(auth_header(&forker_token).0, auth_header(&forker_token).1)
                 .body(Body::from(
                     json!({
-                        "new_name": "Forked Workspace"
+                        "new_name": "Forked Workspace",
+                        "fork_point_commit_id": source_commit_id.to_string()
                     })
                     .to_string(),
                 ))
@@ -292,6 +302,10 @@ async fn test_merge_workspaces_with_conflicts() {
     let fork_body = axum::body::to_bytes(fork_response.into_body(), usize::MAX).await.unwrap();
     let fork_json: serde_json::Value = serde_json::from_slice(&fork_body).unwrap();
     let forked_workspace_id = fork_json["id"].as_str().unwrap();
+    let forked_workspace_uuid = Uuid::parse_str(forked_workspace_id).unwrap();
+
+    // Create a commit for the forked workspace (required for merge)
+    ctx.create_initial_commit(forked_workspace_uuid, forker.id).await;
 
     // Try to merge - may have conflicts depending on state
     let response = ctx
@@ -328,11 +342,14 @@ async fn test_list_merges() {
     let (owner, owner_token) = ctx.create_test_user("owner", "owner@example.com").await;
     let (forker, forker_token) = ctx.create_test_user("forker", "forker@example.com").await;
 
+    // Create source workspace with initial commit
     let source_workspace_id = ctx.create_test_workspace(owner.id, "Source Workspace").await;
+    let source_commit_id = ctx.create_initial_commit(source_workspace_id, owner.id).await;
+
     ctx.add_workspace_member(source_workspace_id, owner.id, forker.id, UserRole::Editor)
         .await;
 
-    // Fork and merge
+    // Fork with fork point commit and merge
     let fork_response = ctx
         .router
         .clone()
@@ -344,7 +361,8 @@ async fn test_list_merges() {
                 .header(auth_header(&forker_token).0, auth_header(&forker_token).1)
                 .body(Body::from(
                     json!({
-                        "new_name": "Forked Workspace"
+                        "new_name": "Forked Workspace",
+                        "fork_point_commit_id": source_commit_id.to_string()
                     })
                     .to_string(),
                 ))
@@ -356,6 +374,10 @@ async fn test_list_merges() {
     let fork_body = axum::body::to_bytes(fork_response.into_body(), usize::MAX).await.unwrap();
     let fork_json: serde_json::Value = serde_json::from_slice(&fork_body).unwrap();
     let forked_workspace_id = fork_json["id"].as_str().unwrap();
+    let forked_workspace_uuid = Uuid::parse_str(forked_workspace_id).unwrap();
+
+    // Create a commit for the forked workspace (required for merge)
+    ctx.create_initial_commit(forked_workspace_uuid, forker.id).await;
 
     // Perform merge
     let _merge_response = ctx
@@ -428,10 +450,11 @@ async fn test_create_backup() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
-
+    let status = response.status();
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(status, StatusCode::OK, "Backup error response: {:?}", json);
 
     assert!(json["id"].is_string());
     assert_eq!(json["workspace_id"], workspace_id.to_string());
@@ -486,8 +509,14 @@ async fn test_list_backups() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let status = response.status();
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "List backups error: {:?}",
+        String::from_utf8_lossy(&body)
+    );
     let backups: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
     assert_eq!(backups.len(), 3);
 }
@@ -540,7 +569,15 @@ async fn test_delete_backup() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    // DELETE returns 204 No Content on success
+    assert!(
+        status == StatusCode::OK || status == StatusCode::NO_CONTENT,
+        "Delete backup error: {:?}, status: {:?}",
+        String::from_utf8_lossy(&body),
+        status
+    );
 }
 
 #[tokio::test]
@@ -668,10 +705,10 @@ async fn test_update_workspace_state() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
-
+    let status = response.status();
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status, StatusCode::OK, "Update state error: {:?}", json);
     assert_eq!(json["workspace_id"], workspace_id.to_string());
 }
 
@@ -727,6 +764,8 @@ async fn test_get_state_history() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let history: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
-    assert!(!history.is_empty());
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["workspace_id"], workspace_id.to_string());
+    let changes = json["changes"].as_array().expect("Expected changes to be an array");
+    assert!(!changes.is_empty());
 }

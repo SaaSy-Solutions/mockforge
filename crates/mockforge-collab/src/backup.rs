@@ -183,7 +183,19 @@ impl BackupService {
         backup.backup_format = backup_format;
         backup.commit_id = commit_id;
 
-        // Save to database
+        // Use lowercase enum name for storage_backend to match CHECK constraint
+        let storage_backend_str = match backup.storage_backend {
+            StorageBackend::Local => "local",
+            StorageBackend::S3 => "s3",
+            StorageBackend::Azure => "azure",
+            StorageBackend::Gcs => "gcs",
+            StorageBackend::Custom => "custom",
+        };
+        let storage_config_str = backup.storage_config.as_ref().map(|v| v.to_string());
+        let created_at_str = backup.created_at.to_rfc3339();
+        let expires_at_str = backup.expires_at.map(|dt| dt.to_rfc3339());
+
+        // Save to database - use Uuid directly to match how users/workspaces are stored
         sqlx::query!(
             r#"
             INSERT INTO workspace_backups (
@@ -195,15 +207,15 @@ impl BackupService {
             backup.id,
             backup.workspace_id,
             backup.backup_url,
-            backup.storage_backend,
-            backup.storage_config,
+            storage_backend_str,
+            storage_config_str,
             backup.size_bytes,
             backup.backup_format,
             backup.encrypted,
             backup.commit_id,
-            backup.created_at,
+            created_at_str,
             backup.created_by,
-            backup.expires_at
+            expires_at_str
         )
         .execute(&self.db)
         .await?;
@@ -292,29 +304,28 @@ impl BackupService {
         limit: Option<i32>,
     ) -> Result<Vec<WorkspaceBackup>> {
         let limit = limit.unwrap_or(100);
-        let workspace_id_str = workspace_id.to_string();
 
         let rows = sqlx::query!(
             r#"
             SELECT
-                id,
-                workspace_id,
+                id as "id: Uuid",
+                workspace_id as "workspace_id: Uuid",
                 backup_url,
                 storage_backend,
                 storage_config,
                 size_bytes,
                 backup_format,
                 encrypted,
-                commit_id,
+                commit_id as "commit_id: Uuid",
                 created_at,
-                created_by,
+                created_by as "created_by: Uuid",
                 expires_at
             FROM workspace_backups
             WHERE workspace_id = ?
             ORDER BY created_at DESC
             LIMIT ?
             "#,
-            workspace_id_str,
+            workspace_id,
             limit
         )
         .fetch_all(&self.db)
@@ -323,15 +334,23 @@ impl BackupService {
         let backups: Result<Vec<WorkspaceBackup>> = rows
             .into_iter()
             .map(|row| {
+                let storage_backend = match row.storage_backend.as_str() {
+                    "local" => StorageBackend::Local,
+                    "s3" => StorageBackend::S3,
+                    "azure" => StorageBackend::Azure,
+                    "gcs" => StorageBackend::Gcs,
+                    "custom" => StorageBackend::Custom,
+                    other => {
+                        return Err(CollabError::Internal(format!(
+                            "Invalid storage_backend: {other}"
+                        )))
+                    }
+                };
                 Ok(WorkspaceBackup {
-                    id: Uuid::parse_str(&row.id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
-                    workspace_id: Uuid::parse_str(&row.workspace_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
+                    id: row.id,
+                    workspace_id: row.workspace_id,
                     backup_url: row.backup_url,
-                    storage_backend: serde_json::from_str(&row.storage_backend).map_err(|e| {
-                        CollabError::Internal(format!("Invalid storage_backend: {e}"))
-                    })?,
+                    storage_backend,
                     storage_config: row
                         .storage_config
                         .as_ref()
@@ -339,12 +358,11 @@ impl BackupService {
                     size_bytes: row.size_bytes,
                     backup_format: row.backup_format,
                     encrypted: row.encrypted != 0,
-                    commit_id: row.commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
+                    commit_id: row.commit_id,
                     created_at: DateTime::parse_from_rfc3339(&row.created_at)
                         .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
                         .with_timezone(&Utc),
-                    created_by: Uuid::parse_str(&row.created_by)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
+                    created_by: row.created_by,
                     expires_at: row
                         .expires_at
                         .as_ref()
@@ -366,49 +384,55 @@ impl BackupService {
 
     /// Get a backup by ID
     pub async fn get_backup(&self, backup_id: Uuid) -> Result<WorkspaceBackup> {
-        let backup_id_str = backup_id.to_string();
         let row = sqlx::query!(
             r#"
             SELECT
-                id,
-                workspace_id,
+                id as "id: Uuid",
+                workspace_id as "workspace_id: Uuid",
                 backup_url,
                 storage_backend,
                 storage_config,
                 size_bytes,
                 backup_format,
                 encrypted,
-                commit_id,
+                commit_id as "commit_id: Uuid",
                 created_at,
-                created_by,
+                created_by as "created_by: Uuid",
                 expires_at
             FROM workspace_backups
             WHERE id = ?
             "#,
-            backup_id_str
+            backup_id
         )
         .fetch_optional(&self.db)
         .await?
         .ok_or_else(|| CollabError::Internal(format!("Backup not found: {backup_id}")))?;
 
+        let storage_backend = match row.storage_backend.as_str() {
+            "local" => StorageBackend::Local,
+            "s3" => StorageBackend::S3,
+            "azure" => StorageBackend::Azure,
+            "gcs" => StorageBackend::Gcs,
+            "custom" => StorageBackend::Custom,
+            other => {
+                return Err(CollabError::Internal(format!("Invalid storage_backend: {other}")))
+            }
+        };
+
         Ok(WorkspaceBackup {
-            id: Uuid::parse_str(&row.id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
-            workspace_id: Uuid::parse_str(&row.workspace_id)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
+            id: row.id,
+            workspace_id: row.workspace_id,
             backup_url: row.backup_url,
-            storage_backend: serde_json::from_str(&row.storage_backend)
-                .map_err(|e| CollabError::Internal(format!("Invalid storage_backend: {e}")))?,
+            storage_backend,
             storage_config: row.storage_config.as_ref().and_then(|s| serde_json::from_str(s).ok()),
             size_bytes: row.size_bytes,
             backup_format: row.backup_format,
             encrypted: row.encrypted != 0,
-            commit_id: row.commit_id.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
+            commit_id: row.commit_id,
             created_at: DateTime::parse_from_rfc3339(&row.created_at)
                 .map_err(|e| CollabError::Internal(format!("Invalid timestamp: {e}")))?
                 .with_timezone(&Utc),
-            created_by: Uuid::parse_str(&row.created_by)
-                .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
+            created_by: row.created_by,
             expires_at: row
                 .expires_at
                 .as_ref()
@@ -453,13 +477,12 @@ impl BackupService {
         }
 
         // Delete from database
-        let backup_id_str = backup_id.to_string();
         sqlx::query!(
             r#"
             DELETE FROM workspace_backups
             WHERE id = ?
             "#,
-            backup_id_str
+            backup_id
         )
         .execute(&self.db)
         .await?;
@@ -518,8 +541,13 @@ impl BackupService {
                 )));
             }
 
-            let url_parts: Vec<&str> =
-                backup_url.strip_prefix("s3://").unwrap().splitn(2, '/').collect();
+            let url_parts: Vec<&str> = backup_url
+                .strip_prefix("s3://")
+                .ok_or_else(|| {
+                    CollabError::Internal(format!("Invalid S3 URL format: {}", backup_url))
+                })?
+                .splitn(2, '/')
+                .collect();
             if url_parts.len() != 2 {
                 return Err(CollabError::Internal(format!(
                     "Invalid S3 URL format: {}",
@@ -694,8 +722,13 @@ impl BackupService {
                 )));
             }
 
-            let url_parts: Vec<&str> =
-                backup_url.strip_prefix("gs://").unwrap().splitn(2, '/').collect();
+            let url_parts: Vec<&str> = backup_url
+                .strip_prefix("gs://")
+                .ok_or_else(|| {
+                    CollabError::Internal(format!("Invalid GCS URL format: {}", backup_url))
+                })?
+                .splitn(2, '/')
+                .collect();
             if url_parts.len() != 2 {
                 return Err(CollabError::Internal(format!(
                     "Invalid GCS URL format: {}",

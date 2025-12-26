@@ -37,7 +37,7 @@ impl TestContext {
         // Create temporary directory for test database
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
         let db_path = temp_dir.path().join("test.db");
-        let database_url = format!("sqlite:{}", db_path.display());
+        let database_url = format!("sqlite:{}?mode=rwc", db_path.display());
 
         // Create database pool
         let db = SqlitePool::connect(&database_url)
@@ -142,6 +142,42 @@ impl TestContext {
             .add_member(workspace_id, owner_id, member_id, role)
             .await
             .expect("Failed to add member");
+    }
+
+    /// Create an initial commit for a workspace (required for merge operations)
+    pub async fn create_initial_commit(&self, workspace_id: Uuid, user_id: Uuid) -> Uuid {
+        let workspace = self
+            .workspace
+            .get_workspace(workspace_id)
+            .await
+            .expect("Failed to get workspace");
+
+        let commit = self
+            .history
+            .create_commit(
+                workspace_id,
+                user_id,
+                "Initial commit".to_string(),
+                None, // No parent
+                1,
+                workspace.config.clone(),
+                serde_json::json!([]),
+            )
+            .await
+            .expect("Failed to create initial commit");
+
+        commit.id
+    }
+
+    /// Create a test workspace with an initial commit
+    pub async fn create_test_workspace_with_commit(
+        &self,
+        owner_id: Uuid,
+        name: &str,
+    ) -> (Uuid, Uuid) {
+        let workspace_id = self.create_test_workspace(owner_id, name).await;
+        let commit_id = self.create_initial_commit(workspace_id, owner_id).await;
+        (workspace_id, commit_id)
     }
 }
 

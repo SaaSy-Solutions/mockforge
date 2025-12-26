@@ -155,8 +155,8 @@ impl VersionControl {
                 message,
                 parent_id as "parent_id: Uuid",
                 version,
-                snapshot,
-                changes,
+                snapshot as "snapshot: serde_json::Value",
+                changes as "changes: serde_json::Value",
                 created_at as "created_at: chrono::DateTime<chrono::Utc>"
             FROM commits
             WHERE id = ?
@@ -182,8 +182,8 @@ impl VersionControl {
                 message,
                 parent_id as "parent_id: Uuid",
                 version,
-                snapshot,
-                changes,
+                snapshot as "snapshot: serde_json::Value",
+                changes as "changes: serde_json::Value",
                 created_at as "created_at: chrono::DateTime<chrono::Utc>"
             FROM commits
             WHERE workspace_id = ?
@@ -211,8 +211,8 @@ impl VersionControl {
                 message,
                 parent_id as "parent_id: Uuid",
                 version,
-                snapshot,
-                changes,
+                snapshot as "snapshot: serde_json::Value",
+                changes as "changes: serde_json::Value",
                 created_at as "created_at: chrono::DateTime<chrono::Utc>"
             FROM commits
             WHERE workspace_id = ?

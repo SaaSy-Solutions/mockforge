@@ -34,48 +34,40 @@ impl MergeService {
         target_workspace_id: Uuid,
     ) -> Result<Option<Uuid>> {
         // First, check if target is a fork of source
-        let source_ws_id_str = source_workspace_id.to_string();
-        let target_ws_id_str = target_workspace_id.to_string();
         let fork = sqlx::query!(
             r#"
-            SELECT fork_point_commit_id
+            SELECT fork_point_commit_id as "fork_point_commit_id: Uuid"
             FROM workspace_forks
             WHERE source_workspace_id = ? AND forked_workspace_id = ?
             "#,
-            source_ws_id_str,
-            target_ws_id_str
+            source_workspace_id,
+            target_workspace_id
         )
         .fetch_optional(&self.db)
         .await?;
 
         if let Some(fork) = fork {
-            if let Some(commit_id_str) = fork.fork_point_commit_id.as_ref() {
-                if let Ok(commit_id) = Uuid::parse_str(commit_id_str) {
-                    return Ok(Some(commit_id));
-                }
+            if let Some(commit_id) = fork.fork_point_commit_id {
+                return Ok(Some(commit_id));
             }
         }
 
         // Check if source is a fork of target
-        let target_ws_id_str2 = target_workspace_id.to_string();
-        let source_ws_id_str2 = source_workspace_id.to_string();
         let fork = sqlx::query!(
             r#"
-            SELECT fork_point_commit_id
+            SELECT fork_point_commit_id as "fork_point_commit_id: Uuid"
             FROM workspace_forks
             WHERE source_workspace_id = ? AND forked_workspace_id = ?
             "#,
-            target_ws_id_str2,
-            source_ws_id_str2
+            target_workspace_id,
+            source_workspace_id
         )
         .fetch_optional(&self.db)
         .await?;
 
         if let Some(fork) = fork {
-            if let Some(commit_id_str) = fork.fork_point_commit_id.as_ref() {
-                if let Ok(commit_id) = Uuid::parse_str(commit_id_str) {
-                    return Ok(Some(commit_id));
-                }
+            if let Some(commit_id) = fork.fork_point_commit_id {
+                return Ok(Some(commit_id));
             }
         }
 
@@ -178,17 +170,15 @@ impl MergeService {
         }
 
         // Save merge record
-        let merge_id_str = merge.id.to_string();
-        let source_ws_id_str = merge.source_workspace_id.to_string();
-        let target_ws_id_str = merge.target_workspace_id.to_string();
-        let base_commit_id_str = merge.base_commit_id.to_string();
-        let source_commit_id_str = merge.source_commit_id.to_string();
-        let target_commit_id_str = merge.target_commit_id.to_string();
-        let merge_commit_id_str = merge.merge_commit_id.map(|id| id.to_string());
-        let status_str = serde_json::to_string(&merge.status)?;
+        let status_str = match merge.status {
+            MergeStatus::Pending => "pending",
+            MergeStatus::InProgress => "in_progress",
+            MergeStatus::Completed => "completed",
+            MergeStatus::Conflict => "conflict",
+            MergeStatus::Cancelled => "cancelled",
+        };
         let conflict_data_str =
             merge.conflict_data.as_ref().map(serde_json::to_string).transpose()?;
-        let merged_by_str = merge.merged_by.map(|id| id.to_string());
         let merged_at_str = merge.merged_at.map(|dt| dt.to_rfc3339());
         let created_at_str = merge.created_at.to_rfc3339();
 
@@ -201,16 +191,16 @@ impl MergeService {
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
-            merge_id_str,
-            source_ws_id_str,
-            target_ws_id_str,
-            base_commit_id_str,
-            source_commit_id_str,
-            target_commit_id_str,
-            merge_commit_id_str,
+            merge.id,
+            merge.source_workspace_id,
+            merge.target_workspace_id,
+            merge.base_commit_id,
+            merge.source_commit_id,
+            merge.target_commit_id,
+            merge.merge_commit_id,
             status_str,
             conflict_data_str,
-            merged_by_str,
+            merge.merged_by,
             merged_at_str,
             created_at_str
         )
@@ -505,28 +495,27 @@ impl MergeService {
 
     /// List merges for a workspace
     pub async fn list_merges(&self, workspace_id: Uuid) -> Result<Vec<WorkspaceMerge>> {
-        let workspace_id_str = workspace_id.to_string();
         let rows = sqlx::query!(
             r#"
             SELECT
-                id,
-                source_workspace_id,
-                target_workspace_id,
-                base_commit_id,
-                source_commit_id,
-                target_commit_id,
-                merge_commit_id,
+                id as "id: Uuid",
+                source_workspace_id as "source_workspace_id: Uuid",
+                target_workspace_id as "target_workspace_id: Uuid",
+                base_commit_id as "base_commit_id: Uuid",
+                source_commit_id as "source_commit_id: Uuid",
+                target_commit_id as "target_commit_id: Uuid",
+                merge_commit_id as "merge_commit_id: Uuid",
                 status,
                 conflict_data,
-                merged_by,
+                merged_by as "merged_by: Uuid",
                 merged_at,
                 created_at
             FROM workspace_merges
             WHERE source_workspace_id = ? OR target_workspace_id = ?
             ORDER BY created_at DESC
             "#,
-            workspace_id_str,
-            workspace_id_str
+            workspace_id,
+            workspace_id
         )
         .fetch_all(&self.db)
         .await?;
@@ -534,30 +523,28 @@ impl MergeService {
         let merges: Result<Vec<WorkspaceMerge>> = rows
             .into_iter()
             .map(|row| {
+                let status = match row.status.as_str() {
+                    "pending" => MergeStatus::Pending,
+                    "in_progress" => MergeStatus::InProgress,
+                    "completed" => MergeStatus::Completed,
+                    "conflict" => MergeStatus::Conflict,
+                    "cancelled" => MergeStatus::Cancelled,
+                    other => return Err(CollabError::Internal(format!("Invalid status: {other}"))),
+                };
                 Ok(WorkspaceMerge {
-                    id: Uuid::parse_str(&row.id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
-                    source_workspace_id: Uuid::parse_str(&row.source_workspace_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
-                    target_workspace_id: Uuid::parse_str(&row.target_workspace_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
-                    base_commit_id: Uuid::parse_str(&row.base_commit_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
-                    source_commit_id: Uuid::parse_str(&row.source_commit_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
-                    target_commit_id: Uuid::parse_str(&row.target_commit_id)
-                        .map_err(|e| CollabError::Internal(format!("Invalid UUID: {e}")))?,
-                    merge_commit_id: row
-                        .merge_commit_id
-                        .as_ref()
-                        .and_then(|s| Uuid::parse_str(s).ok()),
-                    status: serde_json::from_str(&row.status)
-                        .map_err(|e| CollabError::Internal(format!("Invalid status: {e}")))?,
+                    id: row.id,
+                    source_workspace_id: row.source_workspace_id,
+                    target_workspace_id: row.target_workspace_id,
+                    base_commit_id: row.base_commit_id,
+                    source_commit_id: row.source_commit_id,
+                    target_commit_id: row.target_commit_id,
+                    merge_commit_id: row.merge_commit_id,
+                    status,
                     conflict_data: row
                         .conflict_data
                         .as_ref()
                         .and_then(|s| serde_json::from_str(s).ok()),
-                    merged_by: row.merged_by.as_ref().and_then(|s| Uuid::parse_str(s).ok()),
+                    merged_by: row.merged_by,
                     merged_at: row
                         .merged_at
                         .as_ref()

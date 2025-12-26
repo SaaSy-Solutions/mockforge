@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT fork_point_commit_id as \"fork_point_commit_id: Uuid\"\n            FROM workspace_forks\n            WHERE source_workspace_id = ? AND forked_workspace_id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "fork_point_commit_id: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "d911f28fc420ef55ac9db1055e869d370db2c7db640b78ea3d1a249f051f7a41"
+}
