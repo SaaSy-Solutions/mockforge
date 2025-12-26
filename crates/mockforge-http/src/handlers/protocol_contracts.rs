@@ -329,7 +329,15 @@ pub async fn create_grpc_contract(
     let mut registry = state.registry.write().await;
     registry.register(Box::new(contract));
 
-    let contract = registry.get(&request.contract_id).unwrap();
+    let contract = registry.get(&request.contract_id).ok_or_else(|| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "Failed to retrieve registered contract",
+                "contract_id": request.contract_id
+            })),
+        )
+    })?;
     let contract_json = contract.to_json().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -396,7 +404,15 @@ pub async fn create_websocket_contract(
     let mut registry = state.registry.write().await;
     registry.register(Box::new(contract));
 
-    let contract = registry.get(&request.contract_id).unwrap();
+    let contract = registry.get(&request.contract_id).ok_or_else(|| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "Failed to retrieve registered contract",
+                "contract_id": request.contract_id
+            })),
+        )
+    })?;
     let contract_json = contract.to_json().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -448,7 +464,15 @@ pub async fn create_mqtt_contract(
     let mut registry = state.registry.write().await;
     registry.register(Box::new(contract));
 
-    let contract = registry.get(&request.contract_id).unwrap();
+    let contract = registry.get(&request.contract_id).ok_or_else(|| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "Failed to retrieve registered contract",
+                "contract_id": request.contract_id
+            })),
+        )
+    })?;
     let contract_json = contract.to_json().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -547,7 +571,15 @@ pub async fn create_kafka_contract(
     let mut registry = state.registry.write().await;
     registry.register(Box::new(contract));
 
-    let contract = registry.get(&request.contract_id).unwrap();
+    let contract = registry.get(&request.contract_id).ok_or_else(|| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "Failed to retrieve registered contract",
+                "contract_id": request.contract_id
+            })),
+        )
+    })?;
     let contract_json = contract.to_json().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,

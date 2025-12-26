@@ -7,10 +7,15 @@ use crate::scenario_studio::types::{
     ConditionOperator, FlowCondition, FlowDefinition, FlowStep, StepType,
 };
 use chrono::Utc;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
+
+/// Regex for variable substitution (e.g., "{{variable_name}}")
+static VARIABLE_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\{\{([^}]+)\}\}").expect("Invalid regex pattern"));
 
 /// Result of executing a flow step
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -346,22 +351,22 @@ impl FlowExecutor {
 
     /// Substitute variables in a string (e.g., "{{variable_name}}")
     fn substitute_variables(&self, text: &str) -> String {
-        let re = Regex::new(r"\{\{([^}]+)\}\}").unwrap();
-        re.replace_all(text, |caps: &regex::Captures| {
-            let var_name = caps.get(1).unwrap().as_str().trim();
-            self.variables
-                .get(var_name)
-                .map(|v| {
-                    // Convert value to string
-                    if let Some(s) = v.as_str() {
-                        s.to_string()
-                    } else {
-                        v.to_string()
-                    }
-                })
-                .unwrap_or_else(|| format!("{{{{{}}}}}", var_name)) // Keep original if not found
-        })
-        .to_string()
+        VARIABLE_REGEX
+            .replace_all(text, |caps: &regex::Captures| {
+                let var_name = caps.get(1).unwrap().as_str().trim();
+                self.variables
+                    .get(var_name)
+                    .map(|v| {
+                        // Convert value to string
+                        if let Some(s) = v.as_str() {
+                            s.to_string()
+                        } else {
+                            v.to_string()
+                        }
+                    })
+                    .unwrap_or_else(|| format!("{{{{{}}}}}", var_name)) // Keep original if not found
+            })
+            .to_string()
     }
 
     /// Substitute variables in a JSON value

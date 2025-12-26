@@ -1,5 +1,5 @@
 use axum::serve;
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use mockforge_chaos::api::create_chaos_api_router;
 use mockforge_chaos::config::ChaosConfig;
@@ -73,6 +73,407 @@ struct Cli {
     command: Commands,
 }
 
+/// CLI arguments for the serve command (extracted to reduce enum size and prevent stack overflow)
+#[derive(Args)]
+struct ServeCliArgs {
+    /// Configuration file path
+    #[arg(short, long)]
+    pub config: Option<PathBuf>,
+
+    /// Configuration profile to use (dev, ci, demo, etc.)
+    #[arg(short, long)]
+    pub profile: Option<String>,
+
+    /// HTTP server port (defaults to config or 3000)
+    #[arg(long, help_heading = "Server Ports")]
+    pub http_port: Option<u16>,
+
+    /// WebSocket server port (defaults to config or 3001)
+    #[arg(long, help_heading = "Server Ports")]
+    pub ws_port: Option<u16>,
+
+    /// gRPC server port (defaults to config or 50051)
+    #[arg(long, help_heading = "Server Ports")]
+    pub grpc_port: Option<u16>,
+
+    /// SMTP server port (defaults to config or 1025)
+    #[arg(long, help_heading = "Server Ports")]
+    pub smtp_port: Option<u16>,
+
+    /// MQTT server port (defaults to config or 1883)
+    #[arg(long, help_heading = "Server Ports")]
+    pub mqtt_port: Option<u16>,
+
+    /// Kafka broker port (defaults to config or 9092)
+    #[arg(long, help_heading = "Server Ports")]
+    pub kafka_port: Option<u16>,
+
+    /// AMQP broker port (defaults to config or 5672)
+    #[arg(long, help_heading = "Server Ports")]
+    pub amqp_port: Option<u16>,
+
+    /// TCP server port (defaults to config or 9999)
+    #[arg(long, help_heading = "Server Ports")]
+    pub tcp_port: Option<u16>,
+
+    /// Enable TLS/HTTPS
+    #[arg(long, help_heading = "TLS/HTTPS")]
+    pub tls_enabled: bool,
+
+    /// Path to TLS certificate file (PEM format)
+    #[arg(long, help_heading = "TLS/HTTPS")]
+    pub tls_cert: Option<PathBuf>,
+
+    /// Path to TLS private key file (PEM format)
+    #[arg(long, help_heading = "TLS/HTTPS")]
+    pub tls_key: Option<PathBuf>,
+
+    /// Path to CA certificate file for mTLS (optional)
+    #[arg(long, help_heading = "TLS/HTTPS")]
+    pub tls_ca: Option<PathBuf>,
+
+    /// Minimum TLS version (1.2 or 1.3, default: 1.2)
+    #[arg(long, default_value = "1.2", help_heading = "TLS/HTTPS")]
+    pub tls_min_version: String,
+
+    /// Mutual TLS mode: off (default), optional, required
+    #[arg(long, default_value = "off", help_heading = "TLS/HTTPS")]
+    pub mtls: String,
+
+    /// Enable admin UI
+    #[arg(long, help_heading = "Admin & UI")]
+    pub admin: bool,
+
+    /// Admin UI port (defaults to config or 9080)
+    #[arg(long, help_heading = "Admin & UI")]
+    pub admin_port: Option<u16>,
+
+    /// Enable Prometheus metrics endpoint
+    #[arg(long, help_heading = "Observability & Metrics")]
+    pub metrics: bool,
+
+    /// Metrics server port (defaults to config or 9090)
+    #[arg(long, help_heading = "Observability & Metrics")]
+    pub metrics_port: Option<u16>,
+
+    /// Enable OpenTelemetry distributed tracing
+    #[arg(long, help_heading = "Tracing")]
+    pub tracing: bool,
+
+    /// Service name for traces
+    #[arg(long, default_value = "mockforge", help_heading = "Tracing")]
+    pub tracing_service_name: String,
+
+    /// Tracing environment (development, staging, production)
+    #[arg(long, default_value = "development", help_heading = "Tracing")]
+    pub tracing_environment: String,
+
+    /// Jaeger endpoint for trace export
+    #[arg(
+        long,
+        default_value = "http://localhost:14268/api/traces",
+        help_heading = "Tracing"
+    )]
+    pub jaeger_endpoint: String,
+
+    /// Tracing sampling rate (0.0 to 1.0)
+    #[arg(long, default_value = "1.0", help_heading = "Tracing")]
+    pub tracing_sampling_rate: f64,
+
+    /// Enable API Flight Recorder
+    #[arg(long, help_heading = "API Flight Recorder")]
+    pub recorder: bool,
+
+    /// Recorder database file path
+    #[arg(
+        long,
+        default_value = "./mockforge-recordings.db",
+        help_heading = "API Flight Recorder"
+    )]
+    pub recorder_db: String,
+
+    /// Disable recorder management API
+    #[arg(long, help_heading = "API Flight Recorder")]
+    pub recorder_no_api: bool,
+
+    /// Recorder management API port (defaults to main port)
+    #[arg(long, help_heading = "API Flight Recorder")]
+    pub recorder_api_port: Option<u16>,
+
+    /// Maximum number of recorded requests (0 for unlimited)
+    #[arg(long, default_value = "10000", help_heading = "API Flight Recorder")]
+    pub recorder_max_requests: i64,
+
+    /// Auto-delete recordings older than N days (0 to disable)
+    #[arg(long, default_value = "7", help_heading = "API Flight Recorder")]
+    pub recorder_retention_days: i64,
+
+    /// Enable chaos engineering (fault injection and reliability testing)
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos: bool,
+
+    /// Predefined chaos scenario: network_degradation, service_instability, cascading_failure, peak_traffic, slow_backend
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_scenario: Option<String>,
+
+    /// Chaos latency: fixed delay in milliseconds
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_latency_ms: Option<u64>,
+
+    /// Chaos latency: random delay range (min-max) in milliseconds
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_latency_range: Option<String>,
+
+    /// Chaos latency probability (0.0-1.0)
+    #[arg(long, default_value = "1.0", help_heading = "Chaos Engineering")]
+    pub chaos_latency_probability: f64,
+
+    /// Chaos fault injection: HTTP error codes (comma-separated)
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_http_errors: Option<String>,
+
+    /// Chaos fault injection: HTTP error probability (0.0-1.0)
+    #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering")]
+    pub chaos_http_error_probability: f64,
+
+    /// Chaos rate limit: requests per second
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_rate_limit: Option<u32>,
+
+    /// Chaos: bandwidth limit in bytes/sec (e.g., 10000 = 10KB/s for slow network simulation)
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_bandwidth_limit: Option<u64>,
+
+    /// Chaos: packet loss percentage 0-100 (e.g., 5.0 = 5% packet loss)
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_packet_loss: Option<f64>,
+
+    /// Enable gRPC-specific chaos engineering
+    #[arg(long, help_heading = "Chaos Engineering - gRPC")]
+    pub chaos_grpc: bool,
+
+    /// gRPC chaos: status codes to inject (comma-separated)
+    #[arg(long, help_heading = "Chaos Engineering - gRPC")]
+    pub chaos_grpc_status_codes: Option<String>,
+
+    /// gRPC chaos: stream interruption probability (0.0-1.0)
+    #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - gRPC")]
+    pub chaos_grpc_stream_interruption_probability: f64,
+
+    /// Enable WebSocket-specific chaos engineering
+    #[arg(long, help_heading = "Chaos Engineering - WebSocket")]
+    pub chaos_websocket: bool,
+
+    /// WebSocket chaos: close codes to inject (comma-separated)
+    #[arg(long, help_heading = "Chaos Engineering - WebSocket")]
+    pub chaos_websocket_close_codes: Option<String>,
+
+    /// WebSocket chaos: message drop probability (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.05",
+        help_heading = "Chaos Engineering - WebSocket"
+    )]
+    pub chaos_websocket_message_drop_probability: f64,
+
+    /// WebSocket chaos: message corruption probability (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.05",
+        help_heading = "Chaos Engineering - WebSocket"
+    )]
+    pub chaos_websocket_message_corruption_probability: f64,
+
+    /// Enable GraphQL-specific chaos engineering
+    #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
+    pub chaos_graphql: bool,
+
+    /// GraphQL chaos: error codes to inject (comma-separated)
+    #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
+    pub chaos_graphql_error_codes: Option<String>,
+
+    /// GraphQL chaos: partial data probability (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.1",
+        help_heading = "Chaos Engineering - GraphQL"
+    )]
+    pub chaos_graphql_partial_data_probability: f64,
+
+    /// GraphQL chaos: enable resolver-level latency injection
+    #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
+    pub chaos_graphql_resolver_latency: bool,
+
+    /// Enable circuit breaker pattern
+    #[arg(long, help_heading = "Resilience Patterns")]
+    pub circuit_breaker: bool,
+
+    /// Circuit breaker: failure threshold
+    #[arg(long, default_value = "5", help_heading = "Resilience Patterns")]
+    pub circuit_breaker_failure_threshold: u64,
+
+    /// Circuit breaker: success threshold
+    #[arg(long, default_value = "2", help_heading = "Resilience Patterns")]
+    pub circuit_breaker_success_threshold: u64,
+
+    /// Circuit breaker: timeout in milliseconds
+    #[arg(long, default_value = "60000", help_heading = "Resilience Patterns")]
+    pub circuit_breaker_timeout_ms: u64,
+
+    /// Circuit breaker: failure rate threshold percentage (0-100)
+    #[arg(long, default_value = "50.0", help_heading = "Resilience Patterns")]
+    pub circuit_breaker_failure_rate: f64,
+
+    /// Enable bulkhead pattern
+    #[arg(long, help_heading = "Resilience Patterns")]
+    pub bulkhead: bool,
+
+    /// Bulkhead: maximum concurrent requests
+    #[arg(long, default_value = "100", help_heading = "Resilience Patterns")]
+    pub bulkhead_max_concurrent: u32,
+
+    /// Bulkhead: maximum queue size
+    #[arg(long, default_value = "10", help_heading = "Resilience Patterns")]
+    pub bulkhead_max_queue: u32,
+
+    /// Bulkhead: queue timeout in milliseconds
+    #[arg(long, default_value = "5000", help_heading = "Resilience Patterns")]
+    pub bulkhead_queue_timeout_ms: u64,
+
+    /// OpenAPI spec file(s) for HTTP server (can be repeated multiple times)
+    #[arg(short, long, help_heading = "Server Configuration", action = clap::ArgAction::Append)]
+    pub spec: Vec<PathBuf>,
+
+    /// Directory containing OpenAPI spec files (discovers .json, .yaml, .yml files)
+    #[arg(long, help_heading = "Server Configuration")]
+    pub spec_dir: Option<PathBuf>,
+
+    /// Conflict resolution strategy when merging multiple specs: error (default), first, last
+    #[arg(long, default_value = "error", help_heading = "Server Configuration")]
+    pub merge_conflicts: String,
+
+    /// API versioning mode: none (default), info, path-prefix
+    #[arg(long, default_value = "none", help_heading = "Server Configuration")]
+    pub api_versioning: String,
+
+    /// WebSocket replay file
+    #[arg(long, help_heading = "Server Configuration")]
+    pub ws_replay_file: Option<PathBuf>,
+
+    /// GraphQL schema file (.graphql or .gql)
+    #[arg(long, help_heading = "Server Configuration")]
+    pub graphql: Option<PathBuf>,
+
+    /// GraphQL server port (defaults to config or 4000)
+    #[arg(long, help_heading = "Server Ports")]
+    pub graphql_port: Option<u16>,
+
+    /// GraphQL upstream server URL for passthrough
+    #[arg(long, help_heading = "Server Configuration")]
+    pub graphql_upstream: Option<String>,
+
+    /// Enable traffic shaping (bandwidth throttling and packet loss simulation)
+    #[arg(long, help_heading = "Traffic Shaping")]
+    pub traffic_shaping: bool,
+
+    /// Maximum bandwidth in bytes per second (e.g., 1000000 = 1MB/s)
+    #[arg(long, default_value = "1000000", help_heading = "Traffic Shaping")]
+    pub bandwidth_limit: u64,
+
+    /// Maximum burst size in bytes (allows temporary bursts above bandwidth limit)
+    #[arg(long, default_value = "10000", help_heading = "Traffic Shaping")]
+    pub burst_size: u64,
+
+    /// Network condition profile (3g, 4g, 5g, satellite_leo, satellite_geo, congested, lossy, high_latency, intermittent, extremely_poor, perfect)
+    #[arg(long, help_heading = "Network Profiles")]
+    pub network_profile: Option<String>,
+
+    /// List all available network profiles with descriptions
+    #[arg(long, help_heading = "Network Profiles")]
+    pub list_network_profiles: bool,
+
+    /// Enable random chaos mode (randomly injects errors and delays)
+    #[arg(long, help_heading = "Chaos Engineering - Random")]
+    pub chaos_random: bool,
+
+    /// Random chaos: error injection rate (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.1",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_error_rate: f64,
+
+    /// Random chaos: delay injection rate (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.3",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_delay_rate: f64,
+
+    /// Random chaos: minimum delay in milliseconds
+    #[arg(
+        long,
+        default_value = "100",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_min_delay: u64,
+
+    /// Random chaos: maximum delay in milliseconds
+    #[arg(
+        long,
+        default_value = "2000",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_max_delay: u64,
+
+    /// Apply a chaos network profile by name (e.g., slow_3g, flaky_wifi)
+    #[arg(long, help_heading = "Chaos Engineering - Profiles")]
+    pub chaos_profile: Option<String>,
+
+    /// Enable AI-powered features
+    #[arg(long, help_heading = "AI Features")]
+    pub ai_enabled: bool,
+
+    /// Reality level (1-5) for unified realism control
+    ///
+    /// Controls chaos, latency, and MockAI behavior:
+    ///   1 = Static Stubs (no chaos, instant, no AI)
+    ///   2 = Light Simulation (minimal latency, basic AI)
+    ///   3 = Moderate Realism (some chaos, moderate latency, full AI)
+    ///   4 = High Realism (increased chaos, realistic latency, session state)
+    ///   5 = Production Chaos (maximum chaos, production-like latency, full features)
+    ///
+    /// Can also be set via MOCKFORGE_REALITY_LEVEL environment variable.
+    #[arg(long, help_heading = "Reality Slider")]
+    pub reality_level: Option<u8>,
+
+    /// AI/RAG provider (openai, anthropic, ollama, openai_compatible)
+    #[arg(long, help_heading = "AI Features")]
+    pub rag_provider: Option<String>,
+
+    /// AI/RAG model name
+    #[arg(long, help_heading = "AI Features")]
+    pub rag_model: Option<String>,
+
+    /// AI/RAG API key (or set MOCKFORGE_RAG_API_KEY)
+    #[arg(long, help_heading = "AI Features")]
+    pub rag_api_key: Option<String>,
+
+    /// Validate configuration and check port availability without starting servers
+    #[arg(long, help_heading = "Validation")]
+    pub dry_run: bool,
+
+    /// Show progress indicators during server startup
+    #[arg(long, help_heading = "Validation")]
+    pub progress: bool,
+
+    /// Enable verbose logging output
+    #[arg(long, help_heading = "Validation")]
+    pub verbose: bool,
+}
+
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 enum Commands {
@@ -84,404 +485,7 @@ enum Commands {
     ///   mockforge serve --chaos --chaos-scenario network_degradation --chaos-latency-ms 200
     ///   mockforge serve --traffic-shaping --bandwidth-limit 500000 --burst-size 50000
     #[command(verbatim_doc_comment)]
-    Serve {
-        /// Configuration file path
-        #[arg(short, long)]
-        config: Option<PathBuf>,
-
-        /// Configuration profile to use (dev, ci, demo, etc.)
-        #[arg(short, long)]
-        profile: Option<String>,
-
-        /// HTTP server port (defaults to config or 3000)
-        #[arg(long, help_heading = "Server Ports")]
-        http_port: Option<u16>,
-
-        /// WebSocket server port (defaults to config or 3001)
-        #[arg(long, help_heading = "Server Ports")]
-        ws_port: Option<u16>,
-
-        /// gRPC server port (defaults to config or 50051)
-        #[arg(long, help_heading = "Server Ports")]
-        grpc_port: Option<u16>,
-
-        /// SMTP server port (defaults to config or 1025)
-        #[arg(long, help_heading = "Server Ports")]
-        smtp_port: Option<u16>,
-
-        /// MQTT server port (defaults to config or 1883)
-        #[arg(long, help_heading = "Server Ports")]
-        mqtt_port: Option<u16>,
-
-        /// Kafka broker port (defaults to config or 9092)
-        #[arg(long, help_heading = "Server Ports")]
-        kafka_port: Option<u16>,
-
-        /// AMQP broker port (defaults to config or 5672)
-        #[arg(long, help_heading = "Server Ports")]
-        amqp_port: Option<u16>,
-
-        /// TCP server port (defaults to config or 9999)
-        #[arg(long, help_heading = "Server Ports")]
-        tcp_port: Option<u16>,
-
-        /// Enable TLS/HTTPS
-        #[arg(long, help_heading = "TLS/HTTPS")]
-        tls_enabled: bool,
-
-        /// Path to TLS certificate file (PEM format)
-        #[arg(long, help_heading = "TLS/HTTPS")]
-        tls_cert: Option<PathBuf>,
-
-        /// Path to TLS private key file (PEM format)
-        #[arg(long, help_heading = "TLS/HTTPS")]
-        tls_key: Option<PathBuf>,
-
-        /// Path to CA certificate file for mTLS (optional)
-        #[arg(long, help_heading = "TLS/HTTPS")]
-        tls_ca: Option<PathBuf>,
-
-        /// Minimum TLS version (1.2 or 1.3, default: 1.2)
-        #[arg(long, default_value = "1.2", help_heading = "TLS/HTTPS")]
-        tls_min_version: String,
-
-        /// Mutual TLS mode: off (default), optional, required
-        #[arg(long, default_value = "off", help_heading = "TLS/HTTPS")]
-        mtls: String,
-
-        /// Enable admin UI
-        #[arg(long, help_heading = "Admin & UI")]
-        admin: bool,
-
-        /// Admin UI port (defaults to config or 9080)
-        #[arg(long, help_heading = "Admin & UI")]
-        admin_port: Option<u16>,
-
-        /// Enable Prometheus metrics endpoint
-        #[arg(long, help_heading = "Observability & Metrics")]
-        metrics: bool,
-
-        /// Metrics server port (defaults to config or 9090)
-        #[arg(long, help_heading = "Observability & Metrics")]
-        metrics_port: Option<u16>,
-
-        /// Enable OpenTelemetry distributed tracing
-        #[arg(long, help_heading = "Tracing")]
-        tracing: bool,
-
-        /// Service name for traces
-        #[arg(long, default_value = "mockforge", help_heading = "Tracing")]
-        tracing_service_name: String,
-
-        /// Tracing environment (development, staging, production)
-        #[arg(long, default_value = "development", help_heading = "Tracing")]
-        tracing_environment: String,
-
-        /// Jaeger endpoint for trace export
-        #[arg(
-            long,
-            default_value = "http://localhost:14268/api/traces",
-            help_heading = "Tracing"
-        )]
-        jaeger_endpoint: String,
-
-        /// Tracing sampling rate (0.0 to 1.0)
-        #[arg(long, default_value = "1.0", help_heading = "Tracing")]
-        tracing_sampling_rate: f64,
-
-        /// Enable API Flight Recorder
-        #[arg(long, help_heading = "API Flight Recorder")]
-        recorder: bool,
-
-        /// Recorder database file path
-        #[arg(
-            long,
-            default_value = "./mockforge-recordings.db",
-            help_heading = "API Flight Recorder"
-        )]
-        recorder_db: String,
-
-        /// Disable recorder management API
-        #[arg(long, help_heading = "API Flight Recorder")]
-        recorder_no_api: bool,
-
-        /// Recorder management API port (defaults to main port)
-        #[arg(long, help_heading = "API Flight Recorder")]
-        recorder_api_port: Option<u16>,
-
-        /// Maximum number of recorded requests (0 for unlimited)
-        #[arg(long, default_value = "10000", help_heading = "API Flight Recorder")]
-        recorder_max_requests: i64,
-
-        /// Auto-delete recordings older than N days (0 to disable)
-        #[arg(long, default_value = "7", help_heading = "API Flight Recorder")]
-        recorder_retention_days: i64,
-
-        /// Enable chaos engineering (fault injection and reliability testing)
-        #[arg(long, help_heading = "Chaos Engineering")]
-        chaos: bool,
-
-        /// Predefined chaos scenario: network_degradation, service_instability, cascading_failure, peak_traffic, slow_backend
-        #[arg(long, help_heading = "Chaos Engineering")]
-        chaos_scenario: Option<String>,
-
-        /// Chaos latency: fixed delay in milliseconds
-        #[arg(long, help_heading = "Chaos Engineering")]
-        chaos_latency_ms: Option<u64>,
-
-        /// Chaos latency: random delay range (min-max) in milliseconds
-        #[arg(long, help_heading = "Chaos Engineering")]
-        chaos_latency_range: Option<String>,
-
-        /// Chaos latency probability (0.0-1.0)
-        #[arg(long, default_value = "1.0", help_heading = "Chaos Engineering")]
-        chaos_latency_probability: f64,
-
-        /// Chaos fault injection: HTTP error codes (comma-separated)
-        #[arg(long, help_heading = "Chaos Engineering")]
-        chaos_http_errors: Option<String>,
-
-        /// Chaos fault injection: HTTP error probability (0.0-1.0)
-        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering")]
-        chaos_http_error_probability: f64,
-
-        /// Chaos rate limit: requests per second
-        #[arg(long, help_heading = "Chaos Engineering")]
-        chaos_rate_limit: Option<u32>,
-
-        /// Chaos: bandwidth limit in bytes/sec (e.g., 10000 = 10KB/s for slow network simulation)
-        #[arg(long, help_heading = "Chaos Engineering")]
-        chaos_bandwidth_limit: Option<u64>,
-
-        /// Chaos: packet loss percentage 0-100 (e.g., 5.0 = 5% packet loss)
-        #[arg(long, help_heading = "Chaos Engineering")]
-        chaos_packet_loss: Option<f64>,
-
-        /// Enable gRPC-specific chaos engineering
-        #[arg(long, help_heading = "Chaos Engineering - gRPC")]
-        chaos_grpc: bool,
-
-        /// gRPC chaos: status codes to inject (comma-separated)
-        #[arg(long, help_heading = "Chaos Engineering - gRPC")]
-        chaos_grpc_status_codes: Option<String>,
-
-        /// gRPC chaos: stream interruption probability (0.0-1.0)
-        #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - gRPC")]
-        chaos_grpc_stream_interruption_probability: f64,
-
-        /// Enable WebSocket-specific chaos engineering
-        #[arg(long, help_heading = "Chaos Engineering - WebSocket")]
-        chaos_websocket: bool,
-
-        /// WebSocket chaos: close codes to inject (comma-separated)
-        #[arg(long, help_heading = "Chaos Engineering - WebSocket")]
-        chaos_websocket_close_codes: Option<String>,
-
-        /// WebSocket chaos: message drop probability (0.0-1.0)
-        #[arg(
-            long,
-            default_value = "0.05",
-            help_heading = "Chaos Engineering - WebSocket"
-        )]
-        chaos_websocket_message_drop_probability: f64,
-
-        /// WebSocket chaos: message corruption probability (0.0-1.0)
-        #[arg(
-            long,
-            default_value = "0.05",
-            help_heading = "Chaos Engineering - WebSocket"
-        )]
-        chaos_websocket_message_corruption_probability: f64,
-
-        /// Enable GraphQL-specific chaos engineering
-        #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
-        chaos_graphql: bool,
-
-        /// GraphQL chaos: error codes to inject (comma-separated)
-        #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
-        chaos_graphql_error_codes: Option<String>,
-
-        /// GraphQL chaos: partial data probability (0.0-1.0)
-        #[arg(
-            long,
-            default_value = "0.1",
-            help_heading = "Chaos Engineering - GraphQL"
-        )]
-        chaos_graphql_partial_data_probability: f64,
-
-        /// GraphQL chaos: enable resolver-level latency injection
-        #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
-        chaos_graphql_resolver_latency: bool,
-
-        /// Enable circuit breaker pattern
-        #[arg(long, help_heading = "Resilience Patterns")]
-        circuit_breaker: bool,
-
-        /// Circuit breaker: failure threshold
-        #[arg(long, default_value = "5", help_heading = "Resilience Patterns")]
-        circuit_breaker_failure_threshold: u64,
-
-        /// Circuit breaker: success threshold
-        #[arg(long, default_value = "2", help_heading = "Resilience Patterns")]
-        circuit_breaker_success_threshold: u64,
-
-        /// Circuit breaker: timeout in milliseconds
-        #[arg(long, default_value = "60000", help_heading = "Resilience Patterns")]
-        circuit_breaker_timeout_ms: u64,
-
-        /// Circuit breaker: failure rate threshold percentage (0-100)
-        #[arg(long, default_value = "50.0", help_heading = "Resilience Patterns")]
-        circuit_breaker_failure_rate: f64,
-
-        /// Enable bulkhead pattern
-        #[arg(long, help_heading = "Resilience Patterns")]
-        bulkhead: bool,
-
-        /// Bulkhead: maximum concurrent requests
-        #[arg(long, default_value = "100", help_heading = "Resilience Patterns")]
-        bulkhead_max_concurrent: u32,
-
-        /// Bulkhead: maximum queue size
-        #[arg(long, default_value = "10", help_heading = "Resilience Patterns")]
-        bulkhead_max_queue: u32,
-
-        /// Bulkhead: queue timeout in milliseconds
-        #[arg(long, default_value = "5000", help_heading = "Resilience Patterns")]
-        bulkhead_queue_timeout_ms: u64,
-
-        /// OpenAPI spec file(s) for HTTP server (can be repeated multiple times)
-        #[arg(short, long, help_heading = "Server Configuration", action = clap::ArgAction::Append)]
-        spec: Vec<PathBuf>,
-
-        /// Directory containing OpenAPI spec files (discovers .json, .yaml, .yml files)
-        #[arg(long, help_heading = "Server Configuration")]
-        spec_dir: Option<PathBuf>,
-
-        /// Conflict resolution strategy when merging multiple specs: error (default), first, last
-        #[arg(long, default_value = "error", help_heading = "Server Configuration")]
-        merge_conflicts: String,
-
-        /// API versioning mode: none (default), info, path-prefix
-        #[arg(long, default_value = "none", help_heading = "Server Configuration")]
-        api_versioning: String,
-
-        /// WebSocket replay file
-        #[arg(long, help_heading = "Server Configuration")]
-        ws_replay_file: Option<PathBuf>,
-
-        /// GraphQL schema file (.graphql or .gql)
-        #[arg(long, help_heading = "Server Configuration")]
-        graphql: Option<PathBuf>,
-
-        /// GraphQL server port (defaults to config or 4000)
-        #[arg(long, help_heading = "Server Ports")]
-        graphql_port: Option<u16>,
-
-        /// GraphQL upstream server URL for passthrough
-        #[arg(long, help_heading = "Server Configuration")]
-        graphql_upstream: Option<String>,
-
-        /// Enable traffic shaping (bandwidth throttling and packet loss simulation)
-        #[arg(long, help_heading = "Traffic Shaping")]
-        traffic_shaping: bool,
-
-        /// Maximum bandwidth in bytes per second (e.g., 1000000 = 1MB/s)
-        #[arg(long, default_value = "1000000", help_heading = "Traffic Shaping")]
-        bandwidth_limit: u64,
-
-        /// Maximum burst size in bytes (allows temporary bursts above bandwidth limit)
-        #[arg(long, default_value = "10000", help_heading = "Traffic Shaping")]
-        burst_size: u64,
-
-        /// Network condition profile (3g, 4g, 5g, satellite_leo, satellite_geo, congested, lossy, high_latency, intermittent, extremely_poor, perfect)
-        #[arg(long, help_heading = "Network Profiles")]
-        network_profile: Option<String>,
-
-        /// List all available network profiles with descriptions
-        #[arg(long, help_heading = "Network Profiles")]
-        list_network_profiles: bool,
-
-        /// Enable random chaos mode (randomly injects errors and delays)
-        #[arg(long, help_heading = "Chaos Engineering - Random")]
-        chaos_random: bool,
-
-        /// Random chaos: error injection rate (0.0-1.0)
-        #[arg(
-            long,
-            default_value = "0.1",
-            help_heading = "Chaos Engineering - Random"
-        )]
-        chaos_random_error_rate: f64,
-
-        /// Random chaos: delay injection rate (0.0-1.0)
-        #[arg(
-            long,
-            default_value = "0.3",
-            help_heading = "Chaos Engineering - Random"
-        )]
-        chaos_random_delay_rate: f64,
-
-        /// Random chaos: minimum delay in milliseconds
-        #[arg(
-            long,
-            default_value = "100",
-            help_heading = "Chaos Engineering - Random"
-        )]
-        chaos_random_min_delay: u64,
-
-        /// Random chaos: maximum delay in milliseconds
-        #[arg(
-            long,
-            default_value = "2000",
-            help_heading = "Chaos Engineering - Random"
-        )]
-        chaos_random_max_delay: u64,
-
-        /// Apply a chaos network profile by name (e.g., slow_3g, flaky_wifi)
-        #[arg(long, help_heading = "Chaos Engineering - Profiles")]
-        chaos_profile: Option<String>,
-
-        /// Enable AI-powered features
-        #[arg(long, help_heading = "AI Features")]
-        ai_enabled: bool,
-
-        /// Reality level (1-5) for unified realism control
-        ///
-        /// Controls chaos, latency, and MockAI behavior:
-        ///   1 = Static Stubs (no chaos, instant, no AI)
-        ///   2 = Light Simulation (minimal latency, basic AI)
-        ///   3 = Moderate Realism (some chaos, moderate latency, full AI)
-        ///   4 = High Realism (increased chaos, realistic latency, session state)
-        ///   5 = Production Chaos (maximum chaos, production-like latency, full features)
-        ///
-        /// Can also be set via MOCKFORGE_REALITY_LEVEL environment variable.
-        #[arg(long, help_heading = "Reality Slider")]
-        reality_level: Option<u8>,
-
-        /// AI/RAG provider (openai, anthropic, ollama, openai_compatible)
-        #[arg(long, help_heading = "AI Features")]
-        rag_provider: Option<String>,
-
-        /// AI/RAG model name
-        #[arg(long, help_heading = "AI Features")]
-        rag_model: Option<String>,
-
-        /// AI/RAG API key (or set MOCKFORGE_RAG_API_KEY)
-        #[arg(long, help_heading = "AI Features")]
-        rag_api_key: Option<String>,
-
-        /// Validate configuration and check port availability without starting servers
-        #[arg(long, help_heading = "Validation")]
-        dry_run: bool,
-
-        /// Show progress indicators during server startup
-        #[arg(long, help_heading = "Validation")]
-        progress: bool,
-
-        /// Enable verbose logging output
-        #[arg(long, help_heading = "Validation")]
-        verbose: bool,
-    },
+    Serve(Box<ServeCliArgs>),
 
     /// SMTP server management and mailbox operations
     ///
@@ -2412,98 +2416,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     match cli.command {
-        Commands::Serve {
-            config,
-            profile,
-            http_port,
-            ws_port,
-            grpc_port,
-            smtp_port: _smtp_port,
-            mqtt_port: _mqtt_port,
-            kafka_port: _kafka_port,
-            amqp_port: _amqp_port,
-            tcp_port,
-            admin,
-            admin_port,
-            metrics,
-            metrics_port,
-            tracing,
-            tracing_service_name,
-            tracing_environment,
-            jaeger_endpoint,
-            tracing_sampling_rate,
-            recorder,
-            recorder_db,
-            recorder_no_api,
-            recorder_api_port,
-            recorder_max_requests,
-            recorder_retention_days,
-            chaos,
-            chaos_scenario,
-            chaos_latency_ms,
-            chaos_latency_range,
-            chaos_latency_probability,
-            chaos_http_errors,
-            chaos_http_error_probability,
-            chaos_rate_limit,
-            chaos_bandwidth_limit,
-            chaos_packet_loss,
-            chaos_grpc: _,
-            chaos_grpc_status_codes: _,
-            chaos_grpc_stream_interruption_probability: _,
-            chaos_websocket: _,
-            chaos_websocket_close_codes: _,
-            chaos_websocket_message_drop_probability: _,
-            chaos_websocket_message_corruption_probability: _,
-            chaos_graphql: _,
-            chaos_graphql_error_codes: _,
-            chaos_graphql_partial_data_probability: _,
-            chaos_graphql_resolver_latency: _,
-            circuit_breaker: _,
-            circuit_breaker_failure_threshold: _,
-            circuit_breaker_success_threshold: _,
-            circuit_breaker_timeout_ms: _,
-            circuit_breaker_failure_rate: _,
-            bulkhead: _,
-            bulkhead_max_concurrent: _,
-            bulkhead_max_queue: _,
-            bulkhead_queue_timeout_ms: _,
-            spec,
-            spec_dir,
-            merge_conflicts,
-            api_versioning,
-            tls_enabled,
-            tls_cert,
-            tls_key,
-            tls_ca,
-            tls_min_version,
-            mtls,
-            ws_replay_file,
-            graphql,
-            graphql_port,
-            graphql_upstream,
-            traffic_shaping,
-            bandwidth_limit,
-            burst_size,
-            network_profile,
-            list_network_profiles,
-            chaos_random,
-            chaos_random_error_rate,
-            chaos_random_delay_rate,
-            chaos_random_min_delay,
-            chaos_random_max_delay,
-            chaos_profile,
-            ai_enabled,
-            reality_level,
-            rag_provider,
-            rag_model,
-            rag_api_key,
-            dry_run,
-            progress,
-            verbose,
-        } => {
+        Commands::Serve(args) => {
             // Handle --list-network-profiles flag
-            if list_network_profiles {
+            if args.list_network_profiles {
                 let catalog = mockforge_core::NetworkProfileCatalog::new();
                 println!("\n📡 Available Network Profiles:\n");
                 for (name, description) in catalog.list_profiles_with_description() {
@@ -2514,102 +2429,102 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
 
             // Validate TLS flags
-            if tls_enabled {
-                if tls_cert.is_none() || tls_key.is_none() {
+            if args.tls_enabled {
+                if args.tls_cert.is_none() || args.tls_key.is_none() {
                     eprintln!("Error: --tls-enabled requires --tls-cert and --tls-key");
                     std::process::exit(1);
                 }
-                if (mtls == "optional" || mtls == "required") && tls_ca.is_none() {
-                    eprintln!("Error: --mtls {} requires --tls-ca", mtls);
+                if (args.mtls == "optional" || args.mtls == "required") && args.tls_ca.is_none() {
+                    eprintln!("Error: --mtls {} requires --tls-ca", args.mtls);
                     std::process::exit(1);
                 }
             }
-            if (mtls == "optional" || mtls == "required") && !tls_enabled {
-                eprintln!("Error: --mtls {} requires --tls-enabled", mtls);
+            if (args.mtls == "optional" || args.mtls == "required") && !args.tls_enabled {
+                eprintln!("Error: --mtls {} requires --tls-enabled", args.mtls);
                 std::process::exit(1);
             }
 
             // Validate spec flags (mutually exclusive)
-            if !spec.is_empty() && spec_dir.is_some() {
+            if !args.spec.is_empty() && args.spec_dir.is_some() {
                 eprintln!("Error: --spec and --spec-dir cannot be used together");
                 std::process::exit(1);
             }
 
             // Validate merge_conflicts and api_versioning values
-            if !matches!(merge_conflicts.as_str(), "error" | "first" | "last") {
+            if !matches!(args.merge_conflicts.as_str(), "error" | "first" | "last") {
                 eprintln!("Error: --merge-conflicts must be one of: error, first, last");
                 std::process::exit(1);
             }
-            if !matches!(api_versioning.as_str(), "none" | "info" | "path-prefix") {
+            if !matches!(args.api_versioning.as_str(), "none" | "info" | "path-prefix") {
                 eprintln!("Error: --api-versioning must be one of: none, info, path-prefix");
                 std::process::exit(1);
             }
 
             handle_serve(
-                config,
-                profile,
-                http_port,
-                ws_port,
-                grpc_port,
-                _smtp_port,
-                tcp_port,
-                admin,
-                admin_port,
-                metrics,
-                metrics_port,
-                tracing,
-                tracing_service_name,
-                tracing_environment,
-                jaeger_endpoint,
-                tracing_sampling_rate,
-                recorder,
-                recorder_db,
-                recorder_no_api,
-                recorder_api_port,
-                recorder_max_requests,
-                recorder_retention_days,
-                chaos,
-                chaos_scenario,
-                chaos_latency_ms,
-                chaos_latency_range,
-                chaos_latency_probability,
-                chaos_http_errors,
-                chaos_http_error_probability,
-                chaos_rate_limit,
-                chaos_bandwidth_limit,
-                chaos_packet_loss,
-                spec,
-                spec_dir,
-                merge_conflicts,
-                api_versioning,
-                tls_enabled,
-                tls_cert,
-                tls_key,
-                tls_ca,
-                tls_min_version,
-                mtls,
-                ws_replay_file,
-                graphql,
-                graphql_port,
-                graphql_upstream,
-                traffic_shaping,
-                bandwidth_limit,
-                burst_size,
-                network_profile,
-                chaos_random,
-                chaos_random_error_rate,
-                chaos_random_delay_rate,
-                chaos_random_min_delay,
-                chaos_random_max_delay,
-                chaos_profile,
-                ai_enabled,
-                reality_level,
-                rag_provider,
-                rag_model,
-                rag_api_key,
-                dry_run,
-                progress,
-                verbose,
+                args.config,
+                args.profile,
+                args.http_port,
+                args.ws_port,
+                args.grpc_port,
+                args.smtp_port,
+                args.tcp_port,
+                args.admin,
+                args.admin_port,
+                args.metrics,
+                args.metrics_port,
+                args.tracing,
+                args.tracing_service_name,
+                args.tracing_environment,
+                args.jaeger_endpoint,
+                args.tracing_sampling_rate,
+                args.recorder,
+                args.recorder_db,
+                args.recorder_no_api,
+                args.recorder_api_port,
+                args.recorder_max_requests,
+                args.recorder_retention_days,
+                args.chaos,
+                args.chaos_scenario,
+                args.chaos_latency_ms,
+                args.chaos_latency_range,
+                args.chaos_latency_probability,
+                args.chaos_http_errors,
+                args.chaos_http_error_probability,
+                args.chaos_rate_limit,
+                args.chaos_bandwidth_limit,
+                args.chaos_packet_loss,
+                args.spec,
+                args.spec_dir,
+                args.merge_conflicts,
+                args.api_versioning,
+                args.tls_enabled,
+                args.tls_cert,
+                args.tls_key,
+                args.tls_ca,
+                args.tls_min_version,
+                args.mtls,
+                args.ws_replay_file,
+                args.graphql,
+                args.graphql_port,
+                args.graphql_upstream,
+                args.traffic_shaping,
+                args.bandwidth_limit,
+                args.burst_size,
+                args.network_profile,
+                args.chaos_random,
+                args.chaos_random_error_rate,
+                args.chaos_random_delay_rate,
+                args.chaos_random_min_delay,
+                args.chaos_random_max_delay,
+                args.chaos_profile,
+                args.ai_enabled,
+                args.reality_level,
+                args.rag_provider,
+                args.rag_model,
+                args.rag_api_key,
+                args.dry_run,
+                args.progress,
+                args.verbose,
             )
             .await?;
         }
@@ -3206,7 +3121,7 @@ mod cli_tests {
         ]);
 
         match cli.command {
-            Commands::Serve { admin_port, .. } => assert_eq!(admin_port, Some(3100)),
+            Commands::Serve(args) => assert_eq!(args.admin_port, Some(3100)),
             _ => panic!("expected serve command"),
         }
     }
@@ -3848,13 +3763,15 @@ pub async fn handle_serve(
         final_ports.push((config.observability.prometheus.port, "Metrics"));
     }
 
-    if let Err(port_error) = ensure_ports_available(&final_ports) {
-        return Err(port_error.into());
+    // Skip port check for dry-run mode since we're not actually binding
+    if !serve_args.dry_run {
+        if let Err(port_error) = ensure_ports_available(&final_ports) {
+            return Err(port_error.into());
+        }
     }
 
     if serve_args.dry_run {
         println!("✅ Configuration validation passed!");
-        println!("✅ All required ports are available");
         if serve_args.config_path.is_some() {
             println!("✅ Configuration file is valid");
         }

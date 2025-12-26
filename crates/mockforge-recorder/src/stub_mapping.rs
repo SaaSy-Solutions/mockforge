@@ -3,10 +3,27 @@
 //! Converts recorded API interactions into MockForge fixture format for replay.
 
 use crate::{models::RecordedExchange, Result};
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+
+/// UUID v4 pattern for detection
+static UUID_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+        .expect("UUID regex pattern should be valid")
+});
+
+/// RFC3339 timestamp pattern for detection
+static TIMESTAMP_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})")
+        .expect("Timestamp regex pattern should be valid")
+});
+
+/// Numeric ID pattern for path segment detection
+static NUMERIC_ID_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"/\d+").expect("Numeric ID regex pattern should be valid"));
 
 /// Output format for stub mappings
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,10 +91,6 @@ pub struct ResponseTemplate {
 pub struct StubMappingConverter {
     /// Whether to detect and replace dynamic values with templates
     detect_dynamic_values: bool,
-    /// UUID pattern for detection
-    uuid_pattern: Regex,
-    /// Timestamp pattern for detection
-    timestamp_pattern: Regex,
 }
 
 impl StubMappingConverter {
@@ -85,16 +98,6 @@ impl StubMappingConverter {
     pub fn new(detect_dynamic_values: bool) -> Self {
         Self {
             detect_dynamic_values,
-            // UUID v4 pattern
-            uuid_pattern: Regex::new(
-                r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
-            )
-            .unwrap(),
-            // RFC3339 timestamp pattern
-            timestamp_pattern: Regex::new(
-                r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})",
-            )
-            .unwrap(),
         }
     }
 
@@ -249,10 +252,9 @@ impl StubMappingConverter {
     fn process_path(&self, path: &str) -> String {
         if self.detect_dynamic_values {
             // Replace UUIDs in path with template variable
-            let path = self.uuid_pattern.replace_all(path, "{{uuid}}");
+            let path = UUID_PATTERN.replace_all(path, "{{uuid}}");
             // Replace numeric IDs with template variable (common pattern)
-            let numeric_id_pattern = Regex::new(r"/\d+").unwrap();
-            let path = numeric_id_pattern.replace_all(&path, "/{{id}}");
+            let path = NUMERIC_ID_PATTERN.replace_all(&path, "/{{id}}");
             path.to_string()
         } else {
             path.to_string()
@@ -264,10 +266,10 @@ impl StubMappingConverter {
         let mut result = text.to_string();
 
         // Replace UUIDs
-        result = self.uuid_pattern.replace_all(&result, "{{uuid}}").to_string();
+        result = UUID_PATTERN.replace_all(&result, "{{uuid}}").to_string();
 
         // Replace timestamps
-        result = self.timestamp_pattern.replace_all(&result, "{{now}}").to_string();
+        result = TIMESTAMP_PATTERN.replace_all(&result, "{{now}}").to_string();
 
         // Try to parse as JSON and replace common dynamic fields
         if let Ok(json_value) = serde_json::from_str::<Value>(&result) {
@@ -299,11 +301,11 @@ impl StubMappingConverter {
             }
             Value::String(s) => {
                 // Check if it's a UUID
-                if self.uuid_pattern.is_match(s) {
+                if UUID_PATTERN.is_match(s) {
                     Some(Value::String("{{uuid}}".to_string()))
                 }
                 // Check if it's a timestamp
-                else if self.timestamp_pattern.is_match(s) {
+                else if TIMESTAMP_PATTERN.is_match(s) {
                     Some(Value::String("{{now}}".to_string()))
                 }
                 // Check if it looks like an ID (numeric string)

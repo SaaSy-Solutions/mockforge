@@ -263,9 +263,10 @@ pub fn apply_variant_to_response(
 
     response_builder.body(body).unwrap_or_else(|_| {
         // Fallback response if building fails
+        // This expect is safe because we're using known valid constants
         Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(Body::from("{}"))
-            .unwrap()
+            .expect("fallback response with valid status and body should never fail")
     })
 }

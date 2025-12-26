@@ -30,6 +30,9 @@ pub enum BenchError {
     #[error("Invalid scenario: {0}")]
     InvalidScenario(String),
 
+    #[error("Invalid path: {0}")]
+    InvalidPath(String),
+
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 

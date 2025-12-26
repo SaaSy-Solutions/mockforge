@@ -108,7 +108,8 @@ pub async fn get_plugin_badges(
     let mut badges = Vec::new();
 
     // Check for "Official" badge (created by admin user)
-    let admin_id = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+    let admin_id =
+        Uuid::parse_str("00000000-0000-0000-0000-000000000001").expect("hardcoded UUID is valid");
     if plugin.author_id == admin_id {
         badges.push("official".to_string());
     }

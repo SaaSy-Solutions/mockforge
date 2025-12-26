@@ -140,7 +140,8 @@ impl BenchCommand {
 
         // If only one spec, return it directly (extract just the OpenApiSpec)
         if all_specs.len() == 1 {
-            return Ok(all_specs.into_iter().next().unwrap().1);
+            // Safe to unwrap because we just checked len() == 1
+            return Ok(all_specs.into_iter().next().expect("checked len() == 1 above").1);
         }
 
         // Merge multiple specs
@@ -352,7 +353,9 @@ impl BenchCommand {
             self.output.join("k6-script.js")
         };
 
-        std::fs::create_dir_all(script_path.parent().unwrap())?;
+        if let Some(parent) = script_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::write(&script_path, &script)?;
         TerminalReporter::print_success(&format!("Script written to: {}", script_path.display()));
 
@@ -950,8 +953,7 @@ impl BenchCommand {
         if let Some(auth) = &self.auth {
             all_headers.insert("Authorization".to_string(), auth.clone());
         }
-        let headers_json =
-            serde_json::to_string(&all_headers).unwrap_or_else(|_| "{}".to_string());
+        let headers_json = serde_json::to_string(&all_headers).unwrap_or_else(|_| "{}".to_string());
 
         let data = serde_json::json!({
             "base_url": self.target,
@@ -1145,8 +1147,7 @@ impl BenchCommand {
         if let Some(auth) = &self.auth {
             all_headers.insert("Authorization".to_string(), auth.clone());
         }
-        let headers_json =
-            serde_json::to_string(&all_headers).unwrap_or_else(|_| "{}".to_string());
+        let headers_json = serde_json::to_string(&all_headers).unwrap_or_else(|_| "{}".to_string());
 
         let data = serde_json::json!({
             "base_url": self.target,
@@ -1234,7 +1235,9 @@ impl BenchCommand {
             self.output.join("k6-crud-flow-script.js")
         };
 
-        std::fs::create_dir_all(script_path.parent().unwrap())?;
+        if let Some(parent) = script_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         std::fs::write(&script_path, &script)?;
         TerminalReporter::print_success(&format!("Script written to: {}", script_path.display()));
 

@@ -156,15 +156,25 @@ const fn default_limit() -> i32 {
 
 impl IntoResponse for CollabError {
     fn into_response(self) -> Response {
-        let (status, message) = match self {
-            Self::AuthenticationFailed(msg) => (StatusCode::UNAUTHORIZED, msg),
-            Self::AuthorizationFailed(msg) => (StatusCode::FORBIDDEN, msg),
-            Self::WorkspaceNotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            Self::UserNotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            Self::InvalidInput(msg) => (StatusCode::BAD_REQUEST, msg),
-            Self::AlreadyExists(msg) => (StatusCode::CONFLICT, msg),
-            Self::Timeout(msg) => (StatusCode::REQUEST_TIMEOUT, msg),
-            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
+        let (status, message) = match &self {
+            Self::AuthenticationFailed(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
+            Self::AuthorizationFailed(msg) => (StatusCode::FORBIDDEN, msg.clone()),
+            Self::WorkspaceNotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            Self::UserNotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            Self::InvalidInput(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            Self::AlreadyExists(msg) => (StatusCode::CONFLICT, msg.clone()),
+            Self::Timeout(msg) => (StatusCode::REQUEST_TIMEOUT, msg.clone()),
+            Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            Self::DatabaseError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            Self::SerializationError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            Self::SyncError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            Self::WebSocketError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            Self::ConnectionError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            Self::ConflictDetected(msg) => (StatusCode::CONFLICT, msg.clone()),
+            Self::VersionMismatch { expected, actual } => (
+                StatusCode::CONFLICT,
+                format!("Version mismatch: expected {expected}, got {actual}"),
+            ),
         };
 
         (status, Json(serde_json::json!({ "error": message }))).into_response()
@@ -719,6 +729,7 @@ async fn get_snapshot(
 
 #[derive(Debug, Deserialize)]
 pub struct ForkWorkspaceRequest {
+    #[serde(alias = "new_name")]
     pub name: Option<String>,
     pub fork_point_commit_id: Option<Uuid>,
 }
@@ -784,7 +795,7 @@ async fn merge_workspaces(
         .await?;
 
     Ok(Json(serde_json::json!({
-        "merged_state": merged_state,
+        "workspace": merged_state,
         "conflicts": conflicts,
         "has_conflicts": !conflicts.is_empty()
     })))

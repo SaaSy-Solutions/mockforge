@@ -833,9 +833,10 @@ impl ResponseGenerator {
                 Value::String("example string".to_string())
             }
             openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => Value::Number(42.into()),
-            openapiv3::SchemaKind::Type(openapiv3::Type::Number(_)) => {
-                Value::Number(serde_json::Number::from_f64(std::f64::consts::PI).unwrap())
-            }
+            openapiv3::SchemaKind::Type(openapiv3::Type::Number(_)) => Value::Number(
+                serde_json::Number::from_f64(std::f64::consts::PI)
+                    .expect("PI is a valid f64 value"),
+            ),
             openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => Value::Bool(true),
             openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj)) => {
                 // First pass: Scan for pagination metadata (total, page, limit)
@@ -1310,7 +1311,7 @@ impl ResponseGenerator {
                         if let Some(lat) = lat_val.as_f64() {
                             *lat_val = Value::Number(
                                 serde_json::Number::from_f64(lat + (item_index as f64 * 0.01))
-                                    .unwrap(),
+                                    .expect("latitude arithmetic produces valid f64"),
                             );
                         }
                     }
@@ -1318,7 +1319,7 @@ impl ResponseGenerator {
                         if let Some(lng) = lng_val.as_f64() {
                             *lng_val = Value::Number(
                                 serde_json::Number::from_f64(lng + (item_index as f64 * 0.01))
-                                    .unwrap(),
+                                    .expect("longitude arithmetic produces valid f64"),
                             );
                         }
                     }
@@ -1625,7 +1626,7 @@ impl ResponseGenerator {
                 serde_json::Number::from_f64(
                     (thread_rng().random::<f64>() * 1000.0 * 100.0).round() / 100.0,
                 )
-                .unwrap(),
+                .expect("rounded price calculation produces valid f64"),
             )
         } else if prop_lower.contains("active")
             || prop_lower.contains("enabled")

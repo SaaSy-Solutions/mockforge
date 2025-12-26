@@ -418,8 +418,8 @@ Please provide a comprehensive analysis covering all requested areas. Be specifi
     /// Parse LLM response into ApiCritique struct
     fn parse_critique_response(&self, response: Value) -> Result<ApiCritique> {
         // Try to extract the critique from the response
-        let critique_json = if response.is_object() && response.get("critique").is_some() {
-            response.get("critique").unwrap().clone()
+        let critique_json = if let Some(critique) = response.get("critique") {
+            critique.clone()
         } else if response.is_object() {
             response
         } else {

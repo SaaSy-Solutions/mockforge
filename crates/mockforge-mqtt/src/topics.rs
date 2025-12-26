@@ -100,7 +100,7 @@ impl TopicTree {
                 qos,
                 timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("system time before UNIX epoch")
                     .as_secs(),
             };
             self.retained.insert(topic.to_string(), message);
@@ -125,7 +125,7 @@ impl TopicTree {
     pub fn cleanup_expired_retained(&mut self, max_age_secs: u64) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system time before UNIX epoch")
             .as_secs();
 
         self.retained

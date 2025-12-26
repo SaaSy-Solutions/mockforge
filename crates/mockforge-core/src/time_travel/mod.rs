@@ -36,11 +36,30 @@ pub struct VirtualClock {
 impl std::fmt::Debug for VirtualClock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("VirtualClock")
-            .field("current_time", &self.current_time.read().unwrap())
-            .field("enabled", &self.enabled.read().unwrap())
-            .field("scale_factor", &self.scale_factor.read().unwrap())
-            .field("baseline_real_time", &self.baseline_real_time.read().unwrap())
-            .field("callback_count", &self.time_change_callbacks.read().unwrap().len())
+            .field(
+                "current_time",
+                &*self.current_time.read().unwrap_or_else(|poisoned| poisoned.into_inner()),
+            )
+            .field(
+                "enabled",
+                &*self.enabled.read().unwrap_or_else(|poisoned| poisoned.into_inner()),
+            )
+            .field(
+                "scale_factor",
+                &*self.scale_factor.read().unwrap_or_else(|poisoned| poisoned.into_inner()),
+            )
+            .field(
+                "baseline_real_time",
+                &*self.baseline_real_time.read().unwrap_or_else(|poisoned| poisoned.into_inner()),
+            )
+            .field(
+                "callback_count",
+                &self
+                    .time_change_callbacks
+                    .read()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .len(),
+            )
             .finish()
     }
 }
@@ -70,13 +89,19 @@ impl VirtualClock {
     where
         F: Fn(DateTime<Utc>, DateTime<Utc>) + Send + Sync + 'static,
     {
-        let mut callbacks = self.time_change_callbacks.write().unwrap();
+        let mut callbacks = self
+            .time_change_callbacks
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         callbacks.push(Arc::new(callback));
     }
 
     /// Invoke all registered time change callbacks
     fn invoke_time_change_callbacks(&self, old_time: DateTime<Utc>, new_time: DateTime<Utc>) {
-        let callbacks = self.time_change_callbacks.read().unwrap();
+        let callbacks = self
+            .time_change_callbacks
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         for callback in callbacks.iter() {
             callback(old_time, new_time);
         }
@@ -91,13 +116,15 @@ impl VirtualClock {
 
     /// Enable time travel and set the current virtual time
     pub fn enable_and_set(&self, time: DateTime<Utc>) {
-        let mut current = self.current_time.write().unwrap();
+        let mut current =
+            self.current_time.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         *current = Some(time);
 
-        let mut enabled = self.enabled.write().unwrap();
+        let mut enabled = self.enabled.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         *enabled = true;
 
-        let mut baseline = self.baseline_real_time.write().unwrap();
+        let mut baseline =
+            self.baseline_real_time.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         *baseline = Some(Utc::now());
 
         info!("Time travel enabled at {}", time);
@@ -105,13 +132,15 @@ impl VirtualClock {
 
     /// Disable time travel and return to using real time
     pub fn disable(&self) {
-        let mut enabled = self.enabled.write().unwrap();
+        let mut enabled = self.enabled.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         *enabled = false;
 
-        let mut current = self.current_time.write().unwrap();
+        let mut current =
+            self.current_time.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         *current = None;
 
-        let mut baseline = self.baseline_real_time.write().unwrap();
+        let mut baseline =
+            self.baseline_real_time.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         *baseline = None;
 
         info!("Time travel disabled, using real time");
@@ -119,19 +148,19 @@ impl VirtualClock {
 
     /// Check if time travel is enabled
     pub fn is_enabled(&self) -> bool {
-        *self.enabled.read().unwrap()
+        *self.enabled.read().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Get the current time (virtual or real)
     pub fn now(&self) -> DateTime<Utc> {
-        let enabled = *self.enabled.read().unwrap();
+        let enabled = *self.enabled.read().unwrap_or_else(|poisoned| poisoned.into_inner());
 
         if !enabled {
             return Utc::now();
         }
 
-        let current = self.current_time.read().unwrap();
-        let scale = *self.scale_factor.read().unwrap();
+        let current = self.current_time.read().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let scale = *self.scale_factor.read().unwrap_or_else(|poisoned| poisoned.into_inner());
 
         if let Some(virtual_time) = *current {
             // If scale factor is 1.0, just return the virtual time
@@ -140,7 +169,8 @@ impl VirtualClock {
             }
 
             // If scale factor is different, calculate scaled time
-            let baseline = self.baseline_real_time.read().unwrap();
+            let baseline =
+                self.baseline_real_time.read().unwrap_or_else(|poisoned| poisoned.into_inner());
             if let Some(baseline_real) = *baseline {
                 let elapsed_real = Utc::now() - baseline_real;
                 let elapsed_scaled =
@@ -156,20 +186,22 @@ impl VirtualClock {
 
     /// Advance time by a duration
     pub fn advance(&self, duration: Duration) {
-        let enabled = *self.enabled.read().unwrap();
+        let enabled = *self.enabled.read().unwrap_or_else(|poisoned| poisoned.into_inner());
         if !enabled {
             warn!("Cannot advance time: time travel is not enabled");
             return;
         }
 
-        let mut current = self.current_time.write().unwrap();
+        let mut current =
+            self.current_time.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(time) = *current {
             let old_time = time;
             let new_time = time + duration;
             *current = Some(new_time);
 
             // Update baseline to current real time
-            let mut baseline = self.baseline_real_time.write().unwrap();
+            let mut baseline =
+                self.baseline_real_time.write().unwrap_or_else(|poisoned| poisoned.into_inner());
             *baseline = Some(Utc::now());
 
             // Invoke callbacks
@@ -188,11 +220,12 @@ impl VirtualClock {
             return;
         }
 
-        let mut scale = self.scale_factor.write().unwrap();
+        let mut scale = self.scale_factor.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         *scale = factor;
 
         // Update baseline to current real time
-        let mut baseline = self.baseline_real_time.write().unwrap();
+        let mut baseline =
+            self.baseline_real_time.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         *baseline = Some(Utc::now());
 
         info!("Time scale set to {}x", factor);
@@ -200,7 +233,7 @@ impl VirtualClock {
 
     /// Get the current time scale factor
     pub fn get_scale(&self) -> f64 {
-        *self.scale_factor.read().unwrap()
+        *self.scale_factor.read().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Reset time travel to real time
@@ -211,18 +244,20 @@ impl VirtualClock {
 
     /// Set the virtual time to a specific point
     pub fn set_time(&self, time: DateTime<Utc>) {
-        let enabled = *self.enabled.read().unwrap();
+        let enabled = *self.enabled.read().unwrap_or_else(|poisoned| poisoned.into_inner());
         if !enabled {
             self.enable_and_set(time);
             return;
         }
 
-        let mut current = self.current_time.write().unwrap();
+        let mut current =
+            self.current_time.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         let old_time = *current;
         *current = Some(time);
 
         // Update baseline to current real time
-        let mut baseline = self.baseline_real_time.write().unwrap();
+        let mut baseline =
+            self.baseline_real_time.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         *baseline = Some(Utc::now());
 
         // Invoke callbacks if time actually changed
@@ -364,11 +399,12 @@ impl ResponseScheduler {
             response.id.clone()
         };
 
-        let mut scheduled = self.scheduled.write().unwrap();
+        let mut scheduled = self.scheduled.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         scheduled.entry(response.trigger_time).or_default().push(response.clone());
 
         if let Some(name) = &response.name {
-            let mut named = self.named_schedules.write().unwrap();
+            let mut named =
+                self.named_schedules.write().unwrap_or_else(|poisoned| poisoned.into_inner());
             named.insert(name.clone(), id.clone());
         }
 
@@ -379,7 +415,7 @@ impl ResponseScheduler {
     /// Get responses that should be triggered at the current time
     pub fn get_due_responses(&self) -> Vec<ScheduledResponse> {
         let now = self.clock.now();
-        let mut scheduled = self.scheduled.write().unwrap();
+        let mut scheduled = self.scheduled.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut due = Vec::new();
 
         // Get all times up to now
@@ -425,7 +461,7 @@ impl ResponseScheduler {
 
     /// Remove a scheduled response by ID
     pub fn cancel(&self, id: &str) -> bool {
-        let mut scheduled = self.scheduled.write().unwrap();
+        let mut scheduled = self.scheduled.write().unwrap_or_else(|poisoned| poisoned.into_inner());
 
         for responses in scheduled.values_mut() {
             if let Some(pos) = responses.iter().position(|r| r.id == id) {
@@ -440,10 +476,11 @@ impl ResponseScheduler {
 
     /// Clear all scheduled responses
     pub fn clear_all(&self) {
-        let mut scheduled = self.scheduled.write().unwrap();
+        let mut scheduled = self.scheduled.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         scheduled.clear();
 
-        let mut named = self.named_schedules.write().unwrap();
+        let mut named =
+            self.named_schedules.write().unwrap_or_else(|poisoned| poisoned.into_inner());
         named.clear();
 
         info!("Cleared all scheduled responses");
@@ -451,13 +488,13 @@ impl ResponseScheduler {
 
     /// Get all scheduled responses
     pub fn list_scheduled(&self) -> Vec<ScheduledResponse> {
-        let scheduled = self.scheduled.read().unwrap();
+        let scheduled = self.scheduled.read().unwrap_or_else(|poisoned| poisoned.into_inner());
         scheduled.values().flat_map(|v| v.iter().cloned()).collect()
     }
 
     /// Get count of scheduled responses
     pub fn count(&self) -> usize {
-        let scheduled = self.scheduled.read().unwrap();
+        let scheduled = self.scheduled.read().unwrap_or_else(|poisoned| poisoned.into_inner());
         scheduled.values().map(|v| v.len()).sum()
     }
 }
@@ -535,7 +572,8 @@ static GLOBAL_CLOCK_REGISTRY: Lazy<Arc<RwLock<Option<Arc<VirtualClock>>>>> =
 /// This should be called when a `TimeTravelManager` is created to make
 /// the virtual clock available throughout the application.
 pub fn register_global_clock(clock: Arc<VirtualClock>) {
-    let mut registry = GLOBAL_CLOCK_REGISTRY.write().unwrap();
+    let mut registry =
+        GLOBAL_CLOCK_REGISTRY.write().unwrap_or_else(|poisoned| poisoned.into_inner());
     *registry = Some(clock);
     info!("Virtual clock registered globally");
 }
@@ -544,7 +582,8 @@ pub fn register_global_clock(clock: Arc<VirtualClock>) {
 ///
 /// This should be called when time travel is disabled or the manager is dropped.
 pub fn unregister_global_clock() {
-    let mut registry = GLOBAL_CLOCK_REGISTRY.write().unwrap();
+    let mut registry =
+        GLOBAL_CLOCK_REGISTRY.write().unwrap_or_else(|poisoned| poisoned.into_inner());
     *registry = None;
     info!("Virtual clock unregistered globally");
 }
@@ -553,7 +592,7 @@ pub fn unregister_global_clock() {
 ///
 /// Returns `None` if time travel is not enabled or no clock is registered.
 pub fn get_global_clock() -> Option<Arc<VirtualClock>> {
-    let registry = GLOBAL_CLOCK_REGISTRY.read().unwrap();
+    let registry = GLOBAL_CLOCK_REGISTRY.read().unwrap_or_else(|poisoned| poisoned.into_inner());
     registry.clone()
 }
 

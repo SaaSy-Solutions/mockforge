@@ -33,7 +33,7 @@ pub fn extract_user_id_with_fallback(claims: &OptionalAuthClaims) -> Uuid {
     extract_user_id_from_claims(claims).unwrap_or_else(|| {
         // For mock server, use a deterministic default user ID
         // In production, this should return an error if authentication is required
-        Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()
+        Uuid::parse_str("00000000-0000-0000-0000-000000000001").expect("hardcoded UUID is valid")
     })
 }
 

@@ -2,6 +2,20 @@
 
 ### Added
 
+- Nothing yet.
+
+### Changed
+
+- Nothing yet.
+
+### Fixed
+
+- Nothing yet.
+
+## [0.3.15] - 2025-12-26
+
+### Added
+
 - **[DevX] Multi-spec support for bench command**: The `mockforge bench` command now supports loading and merging multiple OpenAPI specifications
   - Multiple `--spec` flags: `mockforge bench --spec pools.yaml --spec vs.yaml --target https://api.com`
   - Directory discovery with `--spec-dir`: `mockforge bench --spec-dir ./specs/ --target https://api.com`

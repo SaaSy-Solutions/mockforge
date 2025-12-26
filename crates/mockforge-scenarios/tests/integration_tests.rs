@@ -103,7 +103,8 @@ async fn test_scenario_source_parsing() {
 
 #[tokio::test]
 async fn test_scenario_storage() {
-    let storage = ScenarioStorage::new().unwrap();
+    let temp_dir = TempDir::new().unwrap();
+    let storage = ScenarioStorage::with_dir(temp_dir.path()).unwrap();
     storage.init().await.unwrap();
 
     assert!(storage.list().is_empty());
@@ -111,13 +112,15 @@ async fn test_scenario_storage() {
 
 #[tokio::test]
 async fn test_scenario_installer_creation() {
-    let installer = ScenarioInstaller::new().unwrap();
+    let temp_dir = TempDir::new().unwrap();
+    let installer = ScenarioInstaller::with_dir(temp_dir.path()).unwrap();
     assert!(installer.list_installed().is_empty());
 }
 
 #[tokio::test]
 async fn test_scenario_installer_init() {
-    let mut installer = ScenarioInstaller::new().unwrap();
+    let temp_dir = TempDir::new().unwrap();
+    let mut installer = ScenarioInstaller::with_dir(temp_dir.path()).unwrap();
     installer.init().await.unwrap();
     assert!(installer.list_installed().is_empty());
 }

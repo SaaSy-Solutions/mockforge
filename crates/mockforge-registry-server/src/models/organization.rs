@@ -96,7 +96,7 @@ impl Organization {
         .bind(slug)
         .bind(owner_id)
         .bind(plan.to_string())
-        .bind(serde_json::to_value(limits).unwrap())
+        .bind(serde_json::to_value(&limits).map_err(|e| sqlx::Error::Protocol(e.to_string()))?)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -210,7 +210,7 @@ impl Organization {
             "#,
         )
         .bind(plan.to_string())
-        .bind(serde_json::to_value(limits).unwrap())
+        .bind(serde_json::to_value(&limits).map_err(|e| sqlx::Error::Protocol(e.to_string()))?)
         .bind(org_id)
         .execute(pool)
         .await?;

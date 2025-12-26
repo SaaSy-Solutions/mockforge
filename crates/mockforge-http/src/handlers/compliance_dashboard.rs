@@ -73,7 +73,10 @@ pub async fn get_dashboard(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(serde_json::to_value(&dashboard).unwrap()))
+    serde_json::to_value(&dashboard).map(Json).map_err(|e| {
+        error!("Failed to serialize dashboard: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
 }
 
 /// Get all compliance gaps
@@ -104,7 +107,10 @@ pub async fn get_gaps(
         })?
     };
 
-    Ok(Json(serde_json::to_value(&gaps).unwrap()))
+    serde_json::to_value(&gaps).map(Json).map_err(|e| {
+        error!("Failed to serialize gaps: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
 }
 
 /// Add a compliance gap
@@ -114,7 +120,10 @@ pub async fn add_gap(
     State(state): State<ComplianceDashboardState>,
     Json(request): Json<AddGapRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let gap_id = format!("GAP-{}", uuid::Uuid::new_v4().to_string().split('-').next().unwrap());
+    let gap_id = format!(
+        "GAP-{}",
+        uuid::Uuid::new_v4().simple().to_string().get(..8).unwrap_or("00000000")
+    );
 
     let engine = state.engine.write().await;
     engine
@@ -190,7 +199,10 @@ pub async fn get_alerts(
         })?
     };
 
-    Ok(Json(serde_json::to_value(&alerts).unwrap()))
+    serde_json::to_value(&alerts).map(Json).map_err(|e| {
+        error!("Failed to serialize alerts: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
 }
 
 /// Add a compliance alert
@@ -200,7 +212,10 @@ pub async fn add_alert(
     State(state): State<ComplianceDashboardState>,
     Json(request): Json<AddAlertRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let alert_id = format!("ALERT-{}", uuid::Uuid::new_v4().to_string().split('-').next().unwrap());
+    let alert_id = format!(
+        "ALERT-{}",
+        uuid::Uuid::new_v4().simple().to_string().get(..8).unwrap_or("00000000")
+    );
 
     let engine = state.engine.write().await;
     engine

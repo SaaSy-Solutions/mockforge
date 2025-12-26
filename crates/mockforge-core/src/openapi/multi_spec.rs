@@ -509,7 +509,7 @@ pub fn merge_specs(
             if base_doc.get("paths").is_none() {
                 base_doc["paths"] = serde_json::json!({});
             }
-            let base_paths = base_doc["paths"].as_object_mut().unwrap();
+            let base_paths = base_doc["paths"].as_object_mut().expect("paths must be an object");
             for (path, path_item) in paths {
                 if base_paths.contains_key(path) {
                     // Conflict - handle based on strategy
@@ -528,19 +528,22 @@ pub fn merge_specs(
             if base_doc.get("components").is_none() {
                 base_doc["components"] = serde_json::json!({});
             }
-            let base_components = base_doc["components"].as_object_mut().unwrap();
+            let base_components =
+                base_doc["components"].as_object_mut().expect("components must be an object");
             for (component_type, component_obj) in components {
                 if let Some(component_map) = component_obj.as_object() {
                     let base_component_map = base_components
                         .entry(component_type.clone())
                         .or_insert_with(|| serde_json::json!({}))
                         .as_object_mut()
-                        .unwrap();
+                        .expect("component type must be an object");
 
                     for (key, value) in component_map {
                         if base_component_map.contains_key(key) {
                             // Check if identical
-                            let existing = base_component_map.get(key).unwrap();
+                            let existing = base_component_map
+                                .get(key)
+                                .expect("key must exist after contains_key check");
                             if serde_json::to_string(existing).ok()
                                 != serde_json::to_string(value).ok()
                             {

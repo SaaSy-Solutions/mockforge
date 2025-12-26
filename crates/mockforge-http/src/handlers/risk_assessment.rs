@@ -167,7 +167,10 @@ pub async fn create_risk(
         });
     emit_security_event(event).await;
 
-    Ok(Json(serde_json::to_value(&risk).unwrap()))
+    Ok(Json(serde_json::to_value(&risk).map_err(|e| {
+        error!("Failed to serialize risk: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?))
 }
 
 /// Get a risk by ID
@@ -190,7 +193,10 @@ pub async fn get_risk(
             StatusCode::NOT_FOUND
         })?;
 
-    Ok(Json(serde_json::to_value(&risk).unwrap()))
+    Ok(Json(serde_json::to_value(&risk).map_err(|e| {
+        error!("Failed to serialize risk: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?))
 }
 
 /// List all risks
@@ -458,7 +464,10 @@ pub async fn get_risks_due_for_review(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(serde_json::to_value(&risks).unwrap()))
+    Ok(Json(serde_json::to_value(&risks).map_err(|e| {
+        error!("Failed to serialize risks: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?))
 }
 
 /// Get risk summary
@@ -473,7 +482,10 @@ pub async fn get_risk_summary(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(serde_json::to_value(&summary).unwrap()))
+    Ok(Json(serde_json::to_value(&summary).map_err(|e| {
+        error!("Failed to serialize summary: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?))
 }
 
 /// Create risk assessment router

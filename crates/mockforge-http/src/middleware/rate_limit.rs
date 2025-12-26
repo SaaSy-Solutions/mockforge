@@ -70,9 +70,13 @@ impl GlobalRateLimiter {
     /// Create a new global rate limiter
     pub fn new(config: RateLimitConfig) -> Self {
         let quota = Quota::per_minute(
-            NonZeroU32::new(config.requests_per_minute).unwrap_or(NonZeroU32::new(100).unwrap()),
+            NonZeroU32::new(config.requests_per_minute)
+                .unwrap_or(NonZeroU32::new(100).expect("constant 100 is non-zero")),
         )
-        .allow_burst(NonZeroU32::new(config.burst).unwrap_or(NonZeroU32::new(200).unwrap()));
+        .allow_burst(
+            NonZeroU32::new(config.burst)
+                .unwrap_or(NonZeroU32::new(200).expect("constant 200 is non-zero")),
+        );
 
         let limiter = Arc::new(RateLimiter::direct(quota));
         let window_start = Arc::new(Mutex::new(SystemTime::now()));
@@ -97,8 +101,10 @@ impl GlobalRateLimiter {
     /// limit, remaining requests, and reset timestamp.
     pub fn get_quota_info(&self) -> RateLimitQuota {
         let now = SystemTime::now();
-        let mut window_start = self.window_start.lock().unwrap();
-        let mut remaining = self.remaining_counter.lock().unwrap();
+        let mut window_start =
+            self.window_start.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut remaining =
+            self.remaining_counter.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 
         // Check if we need to reset the window (every minute)
         let window_duration = Duration::from_secs(60);

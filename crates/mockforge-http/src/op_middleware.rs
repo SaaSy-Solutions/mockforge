@@ -49,7 +49,16 @@ pub async fn add_shared_extension(
 
 /// Middleware to apply fault injection before processing request
 pub async fn fault_then_next(req: Request<Body>, next: Next) -> Response {
-    let shared = req.extensions().get::<Shared>().unwrap().clone();
+    let shared = match req.extensions().get::<Shared>() {
+        Some(s) => s.clone(),
+        None => {
+            tracing::error!("Shared extension not found in request - ensure add_shared_extension middleware is configured");
+            let mut res =
+                Response::new(Body::from("Internal server error: middleware misconfiguration"));
+            *res.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+            return res;
+        }
+    };
     let op = req.extensions().get::<OperationMeta>().cloned();
 
     // First, check the new enhanced failure injection system

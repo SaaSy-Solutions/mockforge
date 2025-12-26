@@ -126,16 +126,16 @@ pub async fn org_rate_limit_middleware(
 
     // If no user_id, this might be a public endpoint - skip org rate limiting
     // (but still apply global rate limiting if configured)
-    if user_id_str.is_none() {
-        return Ok(next.run(request).await);
-    }
-
-    let user_id = match Uuid::parse_str(&user_id_str.unwrap()) {
-        Ok(id) => id,
-        Err(_) => {
-            // Invalid user_id, skip org rate limiting
-            return Ok(next.run(request).await);
+    let user_id = if let Some(id_str) = user_id_str {
+        match Uuid::parse_str(&id_str) {
+            Ok(id) => id,
+            Err(_) => {
+                // Invalid user_id, skip org rate limiting
+                return Ok(next.run(request).await);
+            }
         }
+    } else {
+        return Ok(next.run(request).await);
     };
 
     // Resolve org context (pass request extensions for API token org_id lookup)

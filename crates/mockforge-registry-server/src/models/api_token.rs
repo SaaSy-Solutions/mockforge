@@ -268,8 +268,7 @@ impl ApiToken {
     /// Check if token needs rotation (older than N days)
     pub fn needs_rotation(&self, days_old: i64) -> bool {
         let cutoff = Utc::now() - chrono::Duration::days(days_old);
-        self.created_at < cutoff
-            && (self.expires_at.is_none() || self.expires_at.unwrap() > Utc::now())
+        self.created_at < cutoff && self.expires_at.map_or(true, |t| t > Utc::now())
     }
 
     /// Get age of token in days

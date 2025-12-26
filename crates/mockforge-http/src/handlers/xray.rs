@@ -97,7 +97,9 @@ pub async fn get_state(
         StatusCode::NOT_FOUND
     })?;
 
-    Ok(Json(serde_json::to_value(&unified_state).unwrap()))
+    Ok(Json(
+        serde_json::to_value(&unified_state).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
 }
 
 /// Get request context for a specific request ID
@@ -140,7 +142,7 @@ pub async fn get_request_context(
     Ok(Json(serde_json::json!({
         "request_id": request_id,
         "workspace": params.workspace,
-        "state_snapshot": serde_json::to_value(&unified_state).unwrap(),
+        "state_snapshot": serde_json::to_value(&unified_state).unwrap_or_default(),
         "timestamp": unified_state.last_updated,
         "cached": false,
         "note": "Snapshot not found, returning current state",
@@ -259,7 +261,9 @@ pub async fn get_entity(
             StatusCode::NOT_FOUND
         })?;
 
-    Ok(Json(serde_json::to_value(&entity).unwrap()))
+    Ok(Json(
+        serde_json::to_value(&entity).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
 }
 
 /// Create X-Ray router

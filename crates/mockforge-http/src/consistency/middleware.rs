@@ -134,32 +134,33 @@ pub async fn consistency_middleware(req: Request, next: Next) -> Response<Body> 
             let mut response = next.run(req).await;
 
             // Add X-Ray headers to response for browser extension
-            response
-                .headers_mut()
-                .insert("X-MockForge-Workspace", workspace_id.parse().unwrap());
-            response
-                .headers_mut()
-                .insert("X-MockForge-Request-ID", request_id.parse().unwrap());
+            // Use .parse().ok() to safely handle dynamic values that may contain invalid header characters
+            if let Ok(value) = workspace_id.parse() {
+                response.headers_mut().insert("X-MockForge-Workspace", value);
+            }
+            if let Ok(value) = request_id.parse() {
+                response.headers_mut().insert("X-MockForge-Request-ID", value);
+            }
             if let Some(ref persona_id) = persona_id {
-                response
-                    .headers_mut()
-                    .insert("X-MockForge-Persona", persona_id.parse().unwrap());
+                if let Ok(value) = persona_id.parse() {
+                    response.headers_mut().insert("X-MockForge-Persona", value);
+                }
             }
             if let Some(ref scenario_id) = scenario_id {
-                response
-                    .headers_mut()
-                    .insert("X-MockForge-Scenario", scenario_id.parse().unwrap());
+                if let Ok(value) = scenario_id.parse() {
+                    response.headers_mut().insert("X-MockForge-Scenario", value);
+                }
             }
-            response
-                .headers_mut()
-                .insert("X-MockForge-Reality-Level", reality_level.to_string().parse().unwrap());
-            response
-                .headers_mut()
-                .insert("X-MockForge-Reality-Ratio", reality_ratio.to_string().parse().unwrap());
+            if let Ok(value) = reality_level.to_string().parse() {
+                response.headers_mut().insert("X-MockForge-Reality-Level", value);
+            }
+            if let Ok(value) = reality_ratio.to_string().parse() {
+                response.headers_mut().insert("X-MockForge-Reality-Ratio", value);
+            }
             if !chaos_rules.is_empty() {
-                response
-                    .headers_mut()
-                    .insert("X-MockForge-Chaos-Rules", chaos_rules.join(",").parse().unwrap());
+                if let Ok(value) = chaos_rules.join(",").parse() {
+                    response.headers_mut().insert("X-MockForge-Chaos-Rules", value);
+                }
             }
 
             return response;

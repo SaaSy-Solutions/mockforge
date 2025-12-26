@@ -45,7 +45,7 @@ impl InstalledScenario {
     ) -> Self {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system time before UNIX epoch")
             .as_secs();
 
         Self {
@@ -63,7 +63,7 @@ impl InstalledScenario {
     pub fn mark_updated(&mut self, new_version: String) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system time before UNIX epoch")
             .as_secs();
 
         self.updated_at = Some(now);
@@ -94,6 +94,21 @@ impl ScenarioStorage {
         let base_dir = shellexpand::tilde("~/.mockforge");
         let base_path = PathBuf::from(base_dir.as_ref());
 
+        let scenarios_dir = base_path.join("scenarios");
+        let metadata_dir = base_path.join("scenario-metadata");
+
+        Ok(Self {
+            scenarios_dir,
+            metadata_dir,
+            cache: HashMap::new(),
+        })
+    }
+
+    /// Create a new scenario storage with a custom base directory
+    ///
+    /// This is useful for testing or when you want to isolate storage from the default location.
+    pub fn with_dir<P: AsRef<Path>>(base_path: P) -> Result<Self> {
+        let base_path = base_path.as_ref();
         let scenarios_dir = base_path.join("scenarios");
         let metadata_dir = base_path.join("scenario-metadata");
 

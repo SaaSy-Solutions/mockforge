@@ -664,8 +664,8 @@ What should the user do next?"#,
     /// Parse LLM response into NextAction
     fn parse_action_response(&self, response: Value) -> Result<NextAction> {
         // Try to extract action from response
-        let action_json = if response.is_object() && response.get("action").is_some() {
-            response.get("action").unwrap().clone()
+        let action_json = if let Some(action) = response.get("action") {
+            action.clone()
         } else if response.is_object() {
             response
         } else {

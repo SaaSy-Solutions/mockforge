@@ -53,6 +53,23 @@ static GLOBAL_FILTER: Lazy<Arc<CaptureFilter>> = Lazy::new(|| {
     }))
 });
 
+/// Regex pattern for matching UUIDs
+static UUID_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").unwrap()
+});
+
+/// Regex pattern for matching email addresses
+static EMAIL_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap());
+
+/// Regex pattern for matching IPv4 addresses
+static IPV4_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b").unwrap());
+
+/// Regex pattern for matching credit card numbers
+static CREDIT_CARD_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\b(?:\d{4}[-\s]?){3}\d{4}\b").unwrap());
+
 /// Configuration for scrubbing sensitive data
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ScrubConfig {
@@ -431,11 +448,7 @@ impl Scrubber {
 
     /// Scrub UUIDs with deterministic counter
     fn scrub_uuids(&self, input: &str, replacement: &str) -> String {
-        let uuid_pattern =
-            Regex::new(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-                .unwrap();
-
-        uuid_pattern
+        UUID_REGEX
             .replace_all(input, |_: &regex::Captures| {
                 let counter =
                     self.deterministic_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -448,21 +461,17 @@ impl Scrubber {
 
     /// Scrub email addresses
     fn scrub_emails(&self, input: &str, replacement: &str) -> String {
-        let email_pattern =
-            Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap();
-        email_pattern.replace_all(input, replacement).to_string()
+        EMAIL_REGEX.replace_all(input, replacement).to_string()
     }
 
     /// Scrub IP addresses
     fn scrub_ips(&self, input: &str, replacement: &str) -> String {
-        let ipv4_pattern = Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b").unwrap();
-        ipv4_pattern.replace_all(input, replacement).to_string()
+        IPV4_REGEX.replace_all(input, replacement).to_string()
     }
 
     /// Scrub credit card numbers
     fn scrub_credit_cards(&self, input: &str, replacement: &str) -> String {
-        let cc_pattern = Regex::new(r"\b(?:\d{4}[-\s]?){3}\d{4}\b").unwrap();
-        cc_pattern.replace_all(input, replacement).to_string()
+        CREDIT_CARD_REGEX.replace_all(input, replacement).to_string()
     }
 
     /// Scrub specific JSON field
@@ -517,7 +526,11 @@ impl Scrubber {
     /// Normalize timestamp to a deterministic value
     fn normalize_timestamp(timestamp: DateTime<Utc>) -> DateTime<Utc> {
         // Normalize to start of day
-        timestamp.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc()
+        timestamp
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .expect("0 is valid for hours/minutes/seconds")
+            .and_utc()
     }
 }
 

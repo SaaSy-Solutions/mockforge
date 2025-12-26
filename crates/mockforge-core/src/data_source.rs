@@ -441,8 +441,10 @@ impl DataSource for HttpDataSource {
     async fn load(&self) -> Result<DataSourceContent> {
         // Check if we should use cached content
         {
-            let cached_guard = self.cached_content.lock().unwrap();
-            let last_fetch_guard = self.last_fetch.lock().unwrap();
+            let cached_guard =
+                self.cached_content.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let last_fetch_guard =
+                self.last_fetch.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 
             if let (Some(cached), Some(last_fetch), Some(refresh_interval)) =
                 (cached_guard.as_ref(), last_fetch_guard.as_ref(), self.refresh_interval)
@@ -457,8 +459,10 @@ impl DataSource for HttpDataSource {
         // Fetch fresh data
         let content = self.fetch().await?;
         {
-            let mut last_fetch = self.last_fetch.lock().unwrap();
-            let mut cached = self.cached_content.lock().unwrap();
+            let mut last_fetch =
+                self.last_fetch.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut cached =
+                self.cached_content.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             *last_fetch = Some(std::time::Instant::now());
             *cached = Some(content.clone());
         }
@@ -468,7 +472,7 @@ impl DataSource for HttpDataSource {
 
     async fn check_updated(&self) -> Result<bool> {
         // For HTTP sources, we check if cache is expired
-        let last_fetch = self.last_fetch.lock().unwrap();
+        let last_fetch = self.last_fetch.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         if let (Some(last_fetch), Some(refresh_interval)) =
             (last_fetch.as_ref(), self.refresh_interval)
         {

@@ -41,14 +41,10 @@ impl PromotionGitOpsConfig {
         base_branch: String,
         config_path: Option<String>,
     ) -> Self {
-        let pr_generator = if enabled && token.is_some() {
+        let pr_generator = if let (true, Some(token)) = (enabled, token) {
             Some(match provider {
-                PRProvider::GitHub => {
-                    PRGenerator::new_github(owner, repo, token.unwrap(), base_branch)
-                }
-                PRProvider::GitLab => {
-                    PRGenerator::new_gitlab(owner, repo, token.unwrap(), base_branch)
-                }
+                PRProvider::GitHub => PRGenerator::new_github(owner, repo, token, base_branch),
+                PRProvider::GitLab => PRGenerator::new_gitlab(owner, repo, token, base_branch),
             })
         } else {
             None

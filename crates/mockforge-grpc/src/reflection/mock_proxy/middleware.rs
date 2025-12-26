@@ -130,9 +130,26 @@ impl MockReflectionProxy {
         if self.config.response_transform.enabled {
             // Add custom headers from configuration
             for (key, value) in &self.config.response_transform.custom_headers {
-                let key: MetadataKey<Ascii> = key.parse().unwrap();
-                let value: MetadataValue<Ascii> = value.parse().unwrap();
-                response.metadata_mut().insert(key, value);
+                let parsed_key: Option<MetadataKey<Ascii>> = key.parse().ok();
+                let parsed_value: Option<MetadataValue<Ascii>> = value.parse().ok();
+
+                match (parsed_key, parsed_value) {
+                    (Some(k), Some(v)) => {
+                        response.metadata_mut().insert(k, v);
+                    }
+                    (None, _) => {
+                        tracing::warn!(
+                            "Skipping invalid custom header key '{}' in response transform config",
+                            key
+                        );
+                    }
+                    (_, None) => {
+                        tracing::warn!(
+                            "Skipping invalid custom header value for key '{}' in response transform config",
+                            key
+                        );
+                    }
+                }
             }
         }
 

@@ -31,10 +31,8 @@ impl ABTestReport {
     ) -> Self {
         let total_requests: u64 = variant_analytics.values().map(|a| a.request_count).sum();
         let is_active = test_config.enabled
-            && (test_config.start_time.is_none()
-                || test_config.start_time.unwrap() <= chrono::Utc::now())
-            && (test_config.end_time.is_none()
-                || test_config.end_time.unwrap() >= chrono::Utc::now());
+            && test_config.start_time.map_or(true, |t| t <= chrono::Utc::now())
+            && test_config.end_time.map_or(true, |t| t >= chrono::Utc::now());
 
         Self {
             test_config,

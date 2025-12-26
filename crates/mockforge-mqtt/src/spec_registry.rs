@@ -129,15 +129,15 @@ impl SpecRegistry for MqttSpecRegistry {
     fn validate_request(&self, request: &ProtocolRequest) -> Result<ValidationResult> {
         let topic = request.topic.as_ref();
 
-        if topic.is_none() {
+        let topic = if let Some(t) = topic {
+            t
+        } else {
             return Ok(ValidationResult::failure(vec![ValidationError {
                 message: "Missing topic in MQTT request".to_string(),
                 path: Some("topic".to_string()),
                 code: Some("MISSING_TOPIC".to_string()),
             }]));
-        }
-
-        let topic = topic.unwrap();
+        };
         let valid = self.find_fixture_by_topic(topic).is_some();
 
         if valid {

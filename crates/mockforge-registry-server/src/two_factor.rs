@@ -36,7 +36,7 @@ pub fn generate_totp_code(secret: &str, timestamp: Option<u64>) -> Result<String
     let time = timestamp.unwrap_or_else(|| {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system time before UNIX epoch")
             .as_secs()
     });
 
@@ -65,7 +65,7 @@ pub fn verify_totp_code(secret: &str, code: &str, window: Option<u64>) -> Result
     let window = window.unwrap_or(1);
     let current_time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .expect("system time before UNIX epoch")
         .as_secs();
 
     // Check current time window and adjacent windows (for clock skew tolerance)

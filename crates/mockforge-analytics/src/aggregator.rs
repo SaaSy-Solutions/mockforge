@@ -158,8 +158,12 @@ impl MetricsAggregator {
     /// Aggregate metrics for the last minute
     async fn aggregate_minute_metrics(&self) -> Result<()> {
         let now = Utc::now();
-        let minute_start =
-            now.with_second(0).unwrap().with_nanosecond(0).unwrap() - chrono::Duration::minutes(1);
+        let minute_start = now
+            .with_second(0)
+            .expect("0 is valid for seconds")
+            .with_nanosecond(0)
+            .expect("0 is valid for nanoseconds")
+            - chrono::Duration::minutes(1);
         let timestamp = minute_start.timestamp();
 
         debug!("Aggregating metrics for minute: {}", minute_start);
@@ -298,9 +302,14 @@ impl MetricsAggregator {
     /// Roll up minute data to hour-level aggregates
     async fn rollup_to_hour(&self) -> Result<()> {
         let now = Utc::now();
-        let hour_start =
-            now.with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap()
-                - chrono::Duration::hours(1);
+        let hour_start = now
+            .with_minute(0)
+            .expect("0 is valid for minutes")
+            .with_second(0)
+            .expect("0 is valid for seconds")
+            .with_nanosecond(0)
+            .expect("0 is valid for nanoseconds")
+            - chrono::Duration::hours(1);
         let hour_end = hour_start + chrono::Duration::hours(1);
 
         info!("Rolling up metrics to hour: {}", hour_start);
@@ -396,13 +405,13 @@ impl MetricsAggregator {
         let now = Utc::now();
         let day_start = now
             .with_hour(0)
-            .unwrap()
+            .expect("0 is valid for hours")
             .with_minute(0)
-            .unwrap()
+            .expect("0 is valid for minutes")
             .with_second(0)
-            .unwrap()
+            .expect("0 is valid for seconds")
             .with_nanosecond(0)
-            .unwrap()
+            .expect("0 is valid for nanoseconds")
             - chrono::Duration::days(1);
         let day_end = day_start + chrono::Duration::days(1);
 

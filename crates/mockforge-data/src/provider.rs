@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_uuid() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let uuid = faker.uuid();
 
         assert_eq!(uuid.len(), 36);
@@ -87,7 +87,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_email() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let email = faker.email();
 
         assert!(!email.is_empty());
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_name() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let name = faker.name();
 
         assert!(!name.is_empty());
@@ -106,7 +106,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_address() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let address = faker.address();
 
         assert!(!address.is_empty());
@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_phone() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let phone = faker.phone();
 
         assert!(!phone.is_empty());
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_company() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let company = faker.company();
 
         assert!(!company.is_empty());
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_url() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let url = faker.url();
 
         assert!(url.starts_with("https://"));
@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_ip() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let ip = faker.ip_address();
 
         assert!(!ip.is_empty());
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_color() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let color = faker.color();
 
         let valid_colors = [
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_word() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let word = faker.word();
 
         assert!(!word.is_empty());
@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_sentence() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let sentence = faker.sentence();
 
         assert!(!sentence.is_empty());
@@ -182,7 +182,7 @@ mod tests {
     #[test]
     fn test_data_faker_provider_paragraph() {
         let provider = DataFakerProvider::new();
-        let mut faker = provider.0.lock().unwrap();
+        let mut faker = provider.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let paragraph = faker.paragraph();
 
         assert!(!paragraph.is_empty());

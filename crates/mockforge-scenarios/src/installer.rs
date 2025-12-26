@@ -67,6 +67,33 @@ impl ScenarioInstaller {
         })
     }
 
+    /// Create a new scenario installer with a custom base directory
+    ///
+    /// This is useful for testing or when you want to isolate the installer from the default location.
+    pub fn with_dir(base_path: impl AsRef<std::path::Path>) -> Result<Self> {
+        let base_path = base_path.as_ref();
+        let storage = ScenarioStorage::with_dir(base_path)?;
+
+        // Create cache directory within the custom base path
+        let cache_dir = base_path.join("cache");
+        std::fs::create_dir_all(&cache_dir).map_err(|e| {
+            ScenarioError::Storage(format!("Failed to create cache directory: {}", e))
+        })?;
+
+        // Create HTTP client
+        let client = Client::builder()
+            .timeout(Duration::from_secs(300)) // 5 minutes
+            .user_agent(format!("MockForge/{}", env!("CARGO_PKG_VERSION")))
+            .build()
+            .map_err(|e| ScenarioError::Network(format!("Failed to create HTTP client: {}", e)))?;
+
+        Ok(Self {
+            storage,
+            client,
+            cache_dir,
+        })
+    }
+
     /// Initialize the installer (loads storage)
     pub async fn init(&mut self) -> Result<()> {
         self.storage.init().await?;

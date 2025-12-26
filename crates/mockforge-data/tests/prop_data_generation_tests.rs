@@ -331,7 +331,7 @@ mod consistency_tests {
         #[test]
         fn generate_boolean_respects_probability(
             probability in 0.0f64..1.0,
-            iterations in 10usize..100
+            iterations in 100usize..500
         ) {
             let mut faker = EnhancedFaker::new();
             let mut true_count = 0;
@@ -343,15 +343,21 @@ mod consistency_tests {
             }
 
             // With enough iterations, should approximate the probability
-            // Allow some variance (within 30% of expected)
-            let expected_true = (iterations as f64 * probability) as usize;
-            let variance = (iterations as f64 * 0.3) as usize;
-            let lower_bound = expected_true.saturating_sub(variance);
-            let upper_bound = expected_true + variance;
+            // Use proper statistical bounds based on binomial distribution
+            // Standard deviation for binomial: sqrt(n * p * (1-p))
+            // We allow 4 standard deviations for very high confidence (99.99%)
+            let expected_true = iterations as f64 * probability;
+            let std_dev = (iterations as f64 * probability * (1.0 - probability)).sqrt();
+            let margin = (4.0 * std_dev).max(5.0); // At least 5 to handle edge cases
 
-            // Allow some flexibility for randomness
-            assert!(true_count >= lower_bound.saturating_sub(iterations / 10));
-            assert!(true_count <= upper_bound + iterations / 10);
+            let lower_bound = (expected_true - margin).max(0.0) as usize;
+            let upper_bound = (expected_true + margin).min(iterations as f64) as usize;
+
+            assert!(
+                true_count >= lower_bound && true_count <= upper_bound,
+                "true_count {} outside bounds [{}, {}] for probability {} with {} iterations",
+                true_count, lower_bound, upper_bound, probability, iterations
+            );
         }
     }
 }

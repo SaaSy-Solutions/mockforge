@@ -1103,11 +1103,16 @@ impl TestGenerator {
         code.push_str("            using var client = new HttpClient();\n");
 
         // Create request message
+        // Format method name for C# HttpMethod (e.g., "GET" -> "Get", "POST" -> "Post")
+        let method_name = if request.method.is_empty() {
+            "Get".to_string()
+        } else {
+            request.method.chars().next().unwrap_or('G').to_uppercase().collect::<String>()
+                + &request.method.get(1..).unwrap_or("et").to_lowercase()
+        };
         code.push_str(&format!(
             "            var request = new HttpRequestMessage(HttpMethod.{}, \"{}\");\n",
-            request.method.chars().next().unwrap().to_uppercase().collect::<String>()
-                + &request.method[1..].to_lowercase(),
-            url
+            method_name, url
         ));
 
         // Add headers
@@ -1350,11 +1355,11 @@ impl TestGenerator {
         &self,
         exchanges: &[crate::models::RecordedExchange],
     ) -> Result<Vec<TestFixture>> {
-        if self.config.llm_config.is_none() {
+        let llm_config = if let Some(config) = self.config.llm_config.as_ref() {
+            config
+        } else {
             return Ok(Vec::new());
-        }
-
-        let llm_config = self.config.llm_config.as_ref().unwrap();
+        };
         let mut fixtures = Vec::new();
 
         // Group exchanges by endpoint
@@ -1410,11 +1415,11 @@ impl TestGenerator {
         &self,
         exchanges: &[crate::models::RecordedExchange],
     ) -> Result<Vec<EdgeCaseSuggestion>> {
-        if self.config.llm_config.is_none() {
+        let llm_config = if let Some(config) = self.config.llm_config.as_ref() {
+            config
+        } else {
             return Ok(Vec::new());
-        }
-
-        let llm_config = self.config.llm_config.as_ref().unwrap();
+        };
         let mut edge_cases = Vec::new();
 
         // Group by endpoint

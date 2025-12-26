@@ -222,7 +222,8 @@ impl RustAdapter {
         function_name: &str,
         input_data: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
-        let mut runtime_guard = self.runtime.lock().unwrap();
+        let mut runtime_guard =
+            self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let runtime = runtime_guard.as_mut().ok_or_else(|| {
             PluginError::execution("Runtime not initialized. Call initialize() first.".to_string())
         })?;
@@ -320,7 +321,8 @@ impl RuntimeAdapter for RustAdapter {
             .map_err(|e| PluginError::execution(format!("Failed to instantiate module: {}", e)))?;
 
         // Store the runtime
-        let mut runtime_guard = self.runtime.lock().unwrap();
+        let mut runtime_guard =
+            self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         *runtime_guard = Some(WasmRuntime { store, instance });
 
         tracing::info!("Successfully initialized Rust plugin: {}", self.plugin_id);
@@ -457,7 +459,8 @@ impl TinyGoAdapter {
         function_name: &str,
         input_data: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
-        let mut runtime_guard = self.runtime.lock().unwrap();
+        let mut runtime_guard =
+            self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let runtime = runtime_guard.as_mut().ok_or_else(|| {
             PluginError::execution("Runtime not initialized. Call initialize() first.".to_string())
         })?;
@@ -563,7 +566,8 @@ impl RuntimeAdapter for TinyGoAdapter {
         })?;
 
         // Store the runtime
-        let mut runtime_guard = self.runtime.lock().unwrap();
+        let mut runtime_guard =
+            self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         *runtime_guard = Some(WasmRuntime { store, instance });
 
         tracing::info!("Successfully initialized TinyGo plugin: {}", self.plugin_id);
@@ -698,7 +702,8 @@ impl AssemblyScriptAdapter {
         function_name: &str,
         input_data: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
-        let mut runtime_guard = self.runtime.lock().unwrap();
+        let mut runtime_guard =
+            self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let runtime = runtime_guard.as_mut().ok_or_else(|| {
             PluginError::execution("Runtime not initialized. Call initialize() first.".to_string())
         })?;
@@ -813,7 +818,8 @@ impl RuntimeAdapter for AssemblyScriptAdapter {
         })?;
 
         // Store the runtime
-        let mut runtime_guard = self.runtime.lock().unwrap();
+        let mut runtime_guard =
+            self.runtime.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         *runtime_guard = Some(WasmRuntime { store, instance });
 
         tracing::info!("Successfully initialized AssemblyScript plugin: {}", self.plugin_id);

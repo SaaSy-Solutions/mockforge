@@ -50,7 +50,7 @@ pub async fn buffer_response_middleware(req: Request, next: Next) -> Response<Bo
             return Response::builder()
                 .status(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
                 .body(Body::from("Failed to buffer response"))
-                .unwrap();
+                .expect("static response body should never fail to build");
         }
     };
 
@@ -75,7 +75,16 @@ pub async fn buffer_response_middleware(req: Request, next: Next) -> Response<Bo
     }
 
     // Add buffered response to response extensions
-    let mut response = response_builder.body(Body::from(body_bytes)).unwrap();
+    let mut response = match response_builder.body(Body::from(body_bytes)) {
+        Ok(resp) => resp,
+        Err(e) => {
+            tracing::error!("Failed to build response: {}", e);
+            return Response::builder()
+                .status(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from("Failed to build response"))
+                .expect("static response body should never fail to build");
+        }
+    };
 
     // Store buffered response in response extensions
     response.extensions_mut().insert(buffered);

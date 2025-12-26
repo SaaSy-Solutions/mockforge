@@ -6,9 +6,15 @@
 use crate::config::Config;
 use async_trait::async_trait;
 use mockforge_plugin_core::*;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
+
+/// Regex for extracting tokens from templates (e.g., "{{token}}")
+static TOKEN_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\{\{([^}]+)\}\}").expect("Invalid token regex pattern"));
 
 /// Plugin-based token resolver that integrates with the template engine
 #[derive(Debug)]
@@ -210,9 +216,7 @@ impl TemplatePluginIntegration {
     pub async fn extract_tokens(&self, template: &str) -> Vec<String> {
         let mut tokens = Vec::new();
 
-        let token_pattern = regex::Regex::new(r"\{\{([^}]+)\}\}").unwrap_or_else(|_| regex::Regex::new(r"\{\{([^}]+)\}\}").unwrap());
-
-        for capture in token_pattern.captures_iter(template) {
+        for capture in TOKEN_PATTERN.captures_iter(template) {
             let token = capture.get(1).unwrap().as_str().to_string();
             if self.resolver.can_resolve_token(&token).await {
                 tokens.push(token);
