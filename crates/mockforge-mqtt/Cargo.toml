@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-mqtt"
-version = "0.3.15"
+version = "0.3.16"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ keywords = ["mqtt", "iot", "pubsub", "mock", "testing"]
 categories = ["development-tools::testing", "network-programming"]
 
 [dependencies]
-mockforge-core = { version = "0.3.15", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.16", path = "../mockforge-core" }
 tokio = { workspace = true, features = ["net", "io-util"] }
 rumqttc = "0.25"
 serde = { workspace = true }

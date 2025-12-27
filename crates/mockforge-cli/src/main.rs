@@ -3011,6 +3011,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 data_file,
                 data_distribution,
                 data_mappings,
+                per_uri_control: false,
                 error_rate,
                 error_types,
                 security_test,

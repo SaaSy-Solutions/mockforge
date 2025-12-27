@@ -2,7 +2,16 @@
 
 ### Added
 
-- Nothing yet.
+- **[DevX] Per-URI control mode for data-driven testing** (#79): New `--per-uri-control` flag for CSV/JSON data files that allows each row to specify HTTP method, URI, body, query params, headers, attack type, and expected status code
+  - Enables fine-grained control over test requests directly from data files
+  - Supports security testing per-URI with `attack_type` column
+  - Automatic status validation with `expected_status` column
+  - Example CSV format:
+    ```csv
+    method,uri,body,query_params,headers,attack_type,expected_status
+    GET,/virtualservice,,include_name=true,,,200
+    POST,/virtualservice,"{""name"":""test""}",,,sqli,201
+    ```
 
 ### Changed
 
@@ -10,7 +19,10 @@
 
 ### Fixed
 
-- Nothing yet.
+- **[DevX] CRUD flow params file integration** (#79): Fixed `--params-file` not being applied in CRUD flow mode
+  - Body configurations from params file are now correctly applied to POST/PUT/PATCH operations in `--crud-flow` mode
+  - Fixed body serialization issue that caused "ReferenceError: object is not defined" error in generated k6 scripts
+  - Body is now properly serialized as a JSON string for the Handlebars template
 
 ## [0.3.15] - 2025-12-26
 

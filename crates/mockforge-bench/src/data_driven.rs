@@ -96,6 +96,80 @@ pub struct DataDrivenConfig {
     /// Whether the CSV has a header row
     #[serde(default = "default_true")]
     pub csv_has_header: bool,
+    /// Enable per-URI control mode (each row specifies method, uri, body, etc.)
+    #[serde(default)]
+    pub per_uri_control: bool,
+    /// Per-URI control column configuration
+    #[serde(default)]
+    pub per_uri_columns: PerUriColumns,
+}
+
+/// Column names for per-URI control mode
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerUriColumns {
+    /// Column name for HTTP method (default: "method")
+    #[serde(default = "default_method_column")]
+    pub method: String,
+    /// Column name for URI/path (default: "uri")
+    #[serde(default = "default_uri_column")]
+    pub uri: String,
+    /// Column name for request body (default: "body")
+    #[serde(default = "default_body_column")]
+    pub body: String,
+    /// Column name for query parameters (default: "query_params")
+    #[serde(default = "default_query_params_column")]
+    pub query_params: String,
+    /// Column name for headers (default: "headers")
+    #[serde(default = "default_headers_column")]
+    pub headers: String,
+    /// Column name for attack/security type (default: "attack_type")
+    #[serde(default = "default_attack_type_column")]
+    pub attack_type: String,
+    /// Column name for expected status code (default: "expected_status")
+    #[serde(default = "default_expected_status_column")]
+    pub expected_status: String,
+}
+
+fn default_method_column() -> String {
+    "method".to_string()
+}
+
+fn default_uri_column() -> String {
+    "uri".to_string()
+}
+
+fn default_body_column() -> String {
+    "body".to_string()
+}
+
+fn default_query_params_column() -> String {
+    "query_params".to_string()
+}
+
+fn default_headers_column() -> String {
+    "headers".to_string()
+}
+
+fn default_attack_type_column() -> String {
+    "attack_type".to_string()
+}
+
+fn default_expected_status_column() -> String {
+    "expected_status".to_string()
+}
+
+impl Default for PerUriColumns {
+    fn default() -> Self {
+        Self {
+            method: default_method_column(),
+            uri: default_uri_column(),
+            body: default_body_column(),
+            query_params: default_query_params_column(),
+            headers: default_headers_column(),
+            attack_type: default_attack_type_column(),
+            expected_status: default_expected_status_column(),
+        }
+    }
 }
 
 fn default_true() -> bool {
@@ -110,6 +184,8 @@ impl DataDrivenConfig {
             distribution: DataDistribution::default(),
             mappings: Vec::new(),
             csv_has_header: true,
+            per_uri_control: false,
+            per_uri_columns: PerUriColumns::default(),
         }
     }
 
@@ -122,6 +198,18 @@ impl DataDrivenConfig {
     /// Add mappings
     pub fn with_mappings(mut self, mappings: Vec<DataMapping>) -> Self {
         self.mappings = mappings;
+        self
+    }
+
+    /// Enable per-URI control mode
+    pub fn with_per_uri_control(mut self, enabled: bool) -> Self {
+        self.per_uri_control = enabled;
+        self
+    }
+
+    /// Set custom per-URI column names
+    pub fn with_per_uri_columns(mut self, columns: PerUriColumns) -> Self {
+        self.per_uri_columns = columns;
         self
     }
 
@@ -294,9 +382,233 @@ impl DataDrivenGenerator {
 
         code.push_str(&Self::generate_row_selection(config.distribution));
         code.push('\n');
-        code.push_str(&Self::generate_apply_mappings(&config.mappings));
+
+        if config.per_uri_control {
+            code.push_str(&Self::generate_per_uri_control_code(config));
+        } else {
+            code.push_str(&Self::generate_apply_mappings(&config.mappings));
+        }
 
         code
+    }
+
+    /// Generate k6 code for per-URI control mode
+    ///
+    /// This mode allows each row in the CSV/JSON to specify:
+    /// - HTTP method (GET, POST, PUT, PATCH, DELETE)
+    /// - URI/path to call
+    /// - Request body (JSON string)
+    /// - Query parameters (JSON string or key=value&key=value format)
+    /// - Additional headers (JSON string)
+    /// - Attack type for security testing
+    /// - Expected status code for validation
+    ///
+    /// Example CSV:
+    /// ```csv
+    /// method,uri,body,query_params,headers,attack_type,expected_status
+    /// GET,/virtualservice,,include_name=true,,sqli,200
+    /// POST,/virtualservice,"{\"name\":\"test-vs\",\"port\":80}",,,,201
+    /// PUT,/virtualservice/{uuid},"{\"name\":\"updated-vs\"}",,,,200
+    /// DELETE,/virtualservice/{uuid},,,,xss,204
+    /// ```
+    pub fn generate_per_uri_control_code(config: &DataDrivenConfig) -> String {
+        let cols = &config.per_uri_columns;
+        let mut code = String::new();
+
+        code.push_str("// Per-URI control mode: each row specifies method, URI, body, etc.\n");
+        code.push_str(&format!(
+            "const method = (row['{}'] || 'GET').toUpperCase();\n",
+            cols.method
+        ));
+        code.push_str(&format!("const uri = row['{}'] || '/';\n", cols.uri));
+        code.push_str(&format!("const bodyStr = row['{}'] || '';\n", cols.body));
+        code.push_str(&format!("const queryParamsStr = row['{}'] || '';\n", cols.query_params));
+        code.push_str(&format!("const extraHeadersStr = row['{}'] || '';\n", cols.headers));
+        code.push_str(&format!("const attackType = row['{}'] || '';\n", cols.attack_type));
+        code.push_str(&format!(
+            "const expectedStatus = row['{}'] ? parseInt(row['{}']) : null;\n",
+            cols.expected_status, cols.expected_status
+        ));
+
+        code.push_str("\n// Parse body if present\n");
+        code.push_str("let requestBody = null;\n");
+        code.push_str("if (bodyStr && bodyStr.trim()) {\n");
+        code.push_str("  try {\n");
+        code.push_str("    requestBody = JSON.parse(bodyStr);\n");
+        code.push_str("  } catch (e) {\n");
+        code.push_str("    // If not valid JSON, use as string (for form data or plain text)\n");
+        code.push_str("    requestBody = bodyStr;\n");
+        code.push_str("  }\n");
+        code.push_str("}\n\n");
+
+        code.push_str("// Parse query parameters if present\n");
+        code.push_str("let queryString = '';\n");
+        code.push_str("if (queryParamsStr && queryParamsStr.trim()) {\n");
+        code.push_str("  try {\n");
+        code.push_str("    // Try parsing as JSON first\n");
+        code.push_str("    const qp = JSON.parse(queryParamsStr);\n");
+        code.push_str("    queryString = '?' + Object.entries(qp).map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');\n");
+        code.push_str("  } catch (e) {\n");
+        code.push_str("    // Assume it's already in key=value&key=value format\n");
+        code.push_str("    queryString = queryParamsStr.startsWith('?') ? queryParamsStr : '?' + queryParamsStr;\n");
+        code.push_str("  }\n");
+        code.push_str("}\n\n");
+
+        code.push_str("// Parse extra headers if present\n");
+        code.push_str("let extraHeaders = {};\n");
+        code.push_str("if (extraHeadersStr && extraHeadersStr.trim()) {\n");
+        code.push_str("  try {\n");
+        code.push_str("    extraHeaders = JSON.parse(extraHeadersStr);\n");
+        code.push_str("  } catch (e) {\n");
+        code.push_str("    console.warn('Failed to parse extra headers:', e.message);\n");
+        code.push_str("  }\n");
+        code.push_str("}\n\n");
+
+        code.push_str("// Merge headers\n");
+        code.push_str("const mergedHeaders = Object.assign({}, headers, extraHeaders);\n\n");
+
+        code.push_str("// Build full URL with query string\n");
+        code.push_str("const fullUrl = `${BASE_URL}${uri}${queryString}`;\n\n");
+
+        code.push_str("// Make the request based on method\n");
+        code.push_str("let res;\n");
+        code.push_str("switch (method) {\n");
+        code.push_str("  case 'GET':\n");
+        code.push_str("    res = http.get(fullUrl, { headers: mergedHeaders });\n");
+        code.push_str("    break;\n");
+        code.push_str("  case 'POST':\n");
+        code.push_str("    res = http.post(fullUrl, requestBody ? JSON.stringify(requestBody) : null, { headers: mergedHeaders });\n");
+        code.push_str("    break;\n");
+        code.push_str("  case 'PUT':\n");
+        code.push_str("    res = http.put(fullUrl, requestBody ? JSON.stringify(requestBody) : null, { headers: mergedHeaders });\n");
+        code.push_str("    break;\n");
+        code.push_str("  case 'PATCH':\n");
+        code.push_str("    res = http.patch(fullUrl, requestBody ? JSON.stringify(requestBody) : null, { headers: mergedHeaders });\n");
+        code.push_str("    break;\n");
+        code.push_str("  case 'DELETE':\n");
+        code.push_str("    res = http.del(fullUrl, requestBody ? JSON.stringify(requestBody) : null, { headers: mergedHeaders });\n");
+        code.push_str("    break;\n");
+        code.push_str("  default:\n");
+        code.push_str("    console.error(`Unsupported HTTP method: ${method}`);\n");
+        code.push_str("    return;\n");
+        code.push_str("}\n\n");
+
+        code.push_str("// Validate response status if expected status is specified\n");
+        code.push_str("if (expectedStatus !== null) {\n");
+        code.push_str("  check(res, {\n");
+        code.push_str("    [`${method} ${uri}: status is ${expectedStatus}`]: (r) => r.status === expectedStatus,\n");
+        code.push_str("  });\n");
+        code.push_str("} else {\n");
+        code.push_str("  check(res, {\n");
+        code.push_str(
+            "    [`${method} ${uri}: status is 2xx`]: (r) => r.status >= 200 && r.status < 300,\n",
+        );
+        code.push_str("  });\n");
+        code.push_str("}\n\n");
+
+        code.push_str("// Record metrics with operation name\n");
+        code.push_str(
+            "const opName = `${method.toLowerCase()}_${uri.replace(/[^a-zA-Z0-9]/g, '_')}`;\n",
+        );
+        code.push_str("if (typeof perUriLatency !== 'undefined' && perUriLatency[opName]) {\n");
+        code.push_str("  perUriLatency[opName].add(res.timings.duration);\n");
+        code.push_str("}\n\n");
+
+        code.push_str("// Log attack type if security testing\n");
+        code.push_str("if (attackType) {\n");
+        code.push_str(
+            "  console.log(`[Security Test] ${attackType}: ${method} ${uri} => ${res.status}`);\n",
+        );
+        code.push_str("}\n");
+
+        code
+    }
+
+    /// Generate metrics declarations for per-URI control mode
+    pub fn generate_per_uri_metrics(operations: &[(String, String)]) -> String {
+        let mut code = String::new();
+
+        code.push_str("// Per-URI latency metrics\n");
+        code.push_str("const perUriLatency = {\n");
+
+        for (method, uri) in operations {
+            let op_name = format!(
+                "{}_{}",
+                method.to_lowercase(),
+                uri.replace(|c: char| !c.is_alphanumeric(), "_")
+            );
+            code.push_str(&format!("  '{}': new Trend('{}_latency'),\n", op_name, op_name));
+        }
+
+        code.push_str("};\n\n");
+
+        code
+    }
+
+    /// Generate a complete per-URI control mode script
+    pub fn generate_per_uri_control_script(
+        config: &DataDrivenConfig,
+        target_url: &str,
+        custom_headers: &std::collections::HashMap<String, String>,
+        skip_tls_verify: bool,
+    ) -> String {
+        let mut script = String::new();
+
+        // Imports
+        script.push_str("import http from 'k6/http';\n");
+        script.push_str("import { check, sleep } from 'k6';\n");
+        script.push_str("import { Trend, Rate } from 'k6/metrics';\n");
+        script.push_str(&Self::generate_imports(config.file_type()));
+        script.push('\n');
+
+        // Data loading
+        script.push_str(&Self::generate_data_loading(config));
+
+        // Custom metrics
+        script.push_str("// Custom metrics\n");
+        script.push_str("const requestLatency = new Trend('request_latency');\n");
+        script.push_str("const requestErrors = new Rate('request_errors');\n\n");
+
+        // Options
+        script.push_str("export const options = {\n");
+        if skip_tls_verify {
+            script.push_str("  insecureSkipTLSVerify: true,\n");
+        }
+        script.push_str("  scenarios: {\n");
+        script.push_str("    per_uri_control: {\n");
+        script.push_str("      executor: 'shared-iterations',\n");
+        script.push_str("      vus: 10,\n");
+        script.push_str("      iterations: testData.length,\n");
+        script.push_str("      maxDuration: '5m',\n");
+        script.push_str("    },\n");
+        script.push_str("  },\n");
+        script.push_str("  thresholds: {\n");
+        script.push_str("    'http_req_duration': ['p(95)<500'],\n");
+        script.push_str("    'http_req_failed': ['rate<0.1'],\n");
+        script.push_str("  },\n");
+        script.push_str("};\n\n");
+
+        // Base URL and headers
+        script.push_str(&format!("const BASE_URL = '{}';\n\n", target_url));
+        let headers_json =
+            serde_json::to_string(custom_headers).unwrap_or_else(|_| "{}".to_string());
+        script.push_str(&format!("const headers = {};\n\n", headers_json));
+
+        // Default function
+        script.push_str("export default function () {\n");
+        script.push_str("  ");
+        script.push_str(
+            &Self::generate_iteration_code(config).lines().collect::<Vec<_>>().join("\n  "),
+        );
+        script.push_str("\n\n  // Record overall latency\n");
+        script.push_str("  if (res) {\n");
+        script.push_str("    requestLatency.add(res.timings.duration);\n");
+        script.push_str("    requestErrors.add(res.status >= 400);\n");
+        script.push_str("  }\n\n");
+        script.push_str("  sleep(0.1);\n");
+        script.push_str("}\n");
+
+        script
     }
 }
 
@@ -596,5 +908,122 @@ mod tests {
 
         assert!(code.contains("__VU - 1"));
         assert!(code.contains("requestBody['email'] = row['email']"));
+    }
+
+    #[test]
+    fn test_per_uri_columns_default() {
+        let cols = PerUriColumns::default();
+        assert_eq!(cols.method, "method");
+        assert_eq!(cols.uri, "uri");
+        assert_eq!(cols.body, "body");
+        assert_eq!(cols.query_params, "query_params");
+        assert_eq!(cols.headers, "headers");
+        assert_eq!(cols.attack_type, "attack_type");
+        assert_eq!(cols.expected_status, "expected_status");
+    }
+
+    #[test]
+    fn test_data_driven_config_per_uri_control() {
+        let config = DataDrivenConfig::new("test.csv".to_string()).with_per_uri_control(true);
+
+        assert!(config.per_uri_control);
+    }
+
+    #[test]
+    fn test_generate_per_uri_control_code() {
+        let config = DataDrivenConfig::new("test.csv".to_string()).with_per_uri_control(true);
+
+        let code = DataDrivenGenerator::generate_per_uri_control_code(&config);
+
+        // Check for key elements of per-URI control code
+        assert!(code.contains("const method = (row['method']"));
+        assert!(code.contains("const uri = row['uri']"));
+        assert!(code.contains("const bodyStr = row['body']"));
+        assert!(code.contains("const queryParamsStr = row['query_params']"));
+        assert!(code.contains("const attackType = row['attack_type']"));
+        assert!(code.contains("const expectedStatus = row['expected_status']"));
+
+        // Check for HTTP method switch
+        assert!(code.contains("switch (method)"));
+        assert!(code.contains("case 'GET':"));
+        assert!(code.contains("case 'POST':"));
+        assert!(code.contains("case 'PUT':"));
+        assert!(code.contains("case 'PATCH':"));
+        assert!(code.contains("case 'DELETE':"));
+
+        // Check for validation
+        assert!(code.contains("if (expectedStatus !== null)"));
+        assert!(code.contains("check(res"));
+    }
+
+    #[test]
+    fn test_generate_iteration_code_with_per_uri_control() {
+        let config = DataDrivenConfig::new("test.csv".to_string())
+            .with_distribution(DataDistribution::UniquePerIteration)
+            .with_per_uri_control(true);
+
+        let code = DataDrivenGenerator::generate_iteration_code(&config);
+
+        // Should use per-URI control code, not mappings
+        assert!(code.contains("Per-URI control mode"));
+        assert!(code.contains("switch (method)"));
+        assert!(!code.contains("requestBody['"));
+    }
+
+    #[test]
+    fn test_generate_per_uri_metrics() {
+        let operations = vec![
+            ("GET".to_string(), "/users".to_string()),
+            ("POST".to_string(), "/users".to_string()),
+            ("GET".to_string(), "/users/{id}".to_string()),
+        ];
+
+        let code = DataDrivenGenerator::generate_per_uri_metrics(&operations);
+
+        assert!(code.contains("get__users"));
+        assert!(code.contains("post__users"));
+        assert!(code.contains("get__users__id_"));
+        assert!(code.contains("new Trend"));
+    }
+
+    #[test]
+    fn test_generate_per_uri_control_script() {
+        let config = DataDrivenConfig::new("requests.csv".to_string())
+            .with_per_uri_control(true)
+            .with_distribution(DataDistribution::Sequential);
+
+        let headers = std::collections::HashMap::from([(
+            "Content-Type".to_string(),
+            "application/json".to_string(),
+        )]);
+
+        let script = DataDrivenGenerator::generate_per_uri_control_script(
+            &config,
+            "https://api.example.com",
+            &headers,
+            true,
+        );
+
+        // Check imports
+        assert!(script.contains("import http from 'k6/http'"));
+        assert!(script.contains("import { check, sleep }"));
+        assert!(script.contains("SharedArray"));
+
+        // Check data loading
+        assert!(script.contains("requests.csv"));
+
+        // Check options
+        assert!(script.contains("insecureSkipTLSVerify: true"));
+        assert!(script.contains("per_uri_control:"));
+
+        // Check base URL
+        assert!(script.contains("const BASE_URL = 'https://api.example.com'"));
+
+        // Check headers
+        assert!(script.contains("Content-Type"));
+
+        // Check default function
+        assert!(script.contains("export default function"));
+        assert!(script.contains("switch (method)"));
     }
 }

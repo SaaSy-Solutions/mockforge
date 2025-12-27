@@ -25,7 +25,9 @@ pub mod target_parser;
 
 pub use command::BenchCommand;
 pub use crud_flow::{CrudFlow, CrudFlowConfig, CrudFlowDetector, FlowStep};
-pub use data_driven::{DataDistribution, DataDrivenConfig, DataDrivenGenerator, DataMapping};
+pub use data_driven::{
+    DataDistribution, DataDrivenConfig, DataDrivenGenerator, DataMapping, PerUriColumns,
+};
 pub use error::{BenchError, Result};
 pub use invalid_data::{InvalidDataConfig, InvalidDataGenerator, InvalidDataType};
 pub use mock_integration::{MockIntegrationConfig, MockIntegrationGenerator, MockServerDetector};

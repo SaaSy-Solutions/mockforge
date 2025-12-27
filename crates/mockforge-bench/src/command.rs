@@ -93,6 +93,8 @@ pub struct BenchCommand {
     pub data_distribution: String,
     /// Data column to field mappings
     pub data_mappings: Option<String>,
+    /// Enable per-URI control mode (each row specifies method, uri, body, etc.)
+    pub per_uri_control: bool,
 
     // === Invalid Data Testing Options ===
     /// Percentage of requests with invalid data
@@ -443,6 +445,7 @@ impl BenchCommand {
                 data_file: self.data_file.clone(),
                 data_distribution: self.data_distribution.clone(),
                 data_mappings: self.data_mappings.clone(),
+                per_uri_control: self.per_uri_control,
                 error_rate: self.error_rate,
                 error_types: self.error_types.clone(),
                 security_test: self.security_test,
@@ -630,6 +633,8 @@ impl BenchCommand {
             distribution,
             mappings,
             csv_has_header: true,
+            per_uri_control: self.per_uri_control,
+            per_uri_columns: crate::data_driven::PerUriColumns::default(),
         })
     }
 
@@ -942,6 +947,14 @@ impl BenchCommand {
         let custom_headers = self.parse_headers()?;
         let config = self.build_crud_flow_config().unwrap_or_default();
 
+        // Load parameter overrides if provided (for body configurations)
+        let param_overrides = if let Some(params_file) = &self.params_file {
+            let overrides = ParameterOverrides::from_file(params_file)?;
+            Some(overrides)
+        } else {
+            None
+        };
+
         // Generate stages from scenario
         let duration_secs = Self::parse_duration(&self.duration)?;
         let scenario =
@@ -966,7 +979,12 @@ impl BenchCommand {
                     "steps": f.steps.iter().enumerate().map(|(idx, s)| {
                         // Parse operation to get method and path
                         let parts: Vec<&str> = s.operation.splitn(2, ' ').collect();
-                        let method = if parts.len() >= 1 {
+                        let method_raw = if !parts.is_empty() {
+                            parts[0].to_uppercase()
+                        } else {
+                            "GET".to_string()
+                        };
+                        let method = if !parts.is_empty() {
                             let m = parts[0].to_lowercase();
                             // k6 uses 'del' for DELETE
                             if m == "delete" { "del".to_string() } else { m }
@@ -978,6 +996,20 @@ impl BenchCommand {
                         // POST, PUT, PATCH typically have bodies
                         let has_body = matches!(method.as_str(), "post" | "put" | "patch");
 
+                        // Look up body from params file if available
+                        let body_value = if has_body {
+                            param_overrides.as_ref()
+                                .map(|po| po.get_for_operation(None, &method_raw, path))
+                                .and_then(|oo| oo.body)
+                                .unwrap_or_else(|| serde_json::json!({}))
+                        } else {
+                            serde_json::json!({})
+                        };
+
+                        // Serialize body as JSON string for the template
+                        let body_json_str = serde_json::to_string(&body_value)
+                            .unwrap_or_else(|_| "{}".to_string());
+
                         serde_json::json!({
                             "operation": s.operation,
                             "method": method,
@@ -988,7 +1020,7 @@ impl BenchCommand {
                             "display_name": s.description.clone().unwrap_or_else(|| format!("Step {}", idx)),
                             "is_get_or_head": is_get_or_head,
                             "has_body": has_body,
-                            "body": serde_json::json!({}),  // Default empty body for CRUD operations
+                            "body": body_json_str,  // Body as JSON string for JS literal
                             "body_is_dynamic": false,
                         })
                     }).collect::<Vec<_>>(),
@@ -1136,6 +1168,20 @@ impl BenchCommand {
         let custom_headers = self.parse_headers()?;
         let config = self.build_crud_flow_config().unwrap_or_default();
 
+        // Load parameter overrides if provided (for body configurations)
+        let param_overrides = if let Some(params_file) = &self.params_file {
+            TerminalReporter::print_progress("Loading parameter overrides...");
+            let overrides = ParameterOverrides::from_file(params_file)?;
+            TerminalReporter::print_success(&format!(
+                "Loaded parameter overrides ({} operation-specific, {} defaults)",
+                overrides.operations.len(),
+                if overrides.defaults.is_empty() { 0 } else { 1 }
+            ));
+            Some(overrides)
+        } else {
+            None
+        };
+
         // Generate stages from scenario
         let duration_secs = Self::parse_duration(&self.duration)?;
         let scenario =
@@ -1161,7 +1207,12 @@ impl BenchCommand {
                     "steps": f.steps.iter().enumerate().map(|(idx, s)| {
                         // Parse operation to get method and path
                         let parts: Vec<&str> = s.operation.splitn(2, ' ').collect();
-                        let method = if parts.len() >= 1 {
+                        let method_raw = if !parts.is_empty() {
+                            parts[0].to_uppercase()
+                        } else {
+                            "GET".to_string()
+                        };
+                        let method = if !parts.is_empty() {
                             let m = parts[0].to_lowercase();
                             // k6 uses 'del' for DELETE
                             if m == "delete" { "del".to_string() } else { m }
@@ -1173,6 +1224,20 @@ impl BenchCommand {
                         // POST, PUT, PATCH typically have bodies
                         let has_body = matches!(method.as_str(), "post" | "put" | "patch");
 
+                        // Look up body from params file if available
+                        let body_value = if has_body {
+                            param_overrides.as_ref()
+                                .map(|po| po.get_for_operation(None, &method_raw, path))
+                                .and_then(|oo| oo.body)
+                                .unwrap_or_else(|| serde_json::json!({}))
+                        } else {
+                            serde_json::json!({})
+                        };
+
+                        // Serialize body as JSON string for the template
+                        let body_json_str = serde_json::to_string(&body_value)
+                            .unwrap_or_else(|_| "{}".to_string());
+
                         serde_json::json!({
                             "operation": s.operation,
                             "method": method,
@@ -1183,7 +1248,7 @@ impl BenchCommand {
                             "display_name": s.description.clone().unwrap_or_else(|| format!("Step {}", idx)),
                             "is_get_or_head": is_get_or_head,
                             "has_body": has_body,
-                            "body": serde_json::json!({}),  // Default empty body for CRUD operations
+                            "body": body_json_str,  // Body as JSON string for JS literal
                             "body_is_dynamic": false,
                         })
                     }).collect::<Vec<_>>(),
@@ -1314,6 +1379,7 @@ mod tests {
             data_file: None,
             data_distribution: "unique-per-vu".to_string(),
             data_mappings: None,
+            per_uri_control: false,
             error_rate: None,
             error_types: None,
             security_test: false,
@@ -1362,6 +1428,7 @@ mod tests {
             data_file: None,
             data_distribution: "unique-per-vu".to_string(),
             data_mappings: None,
+            per_uri_control: false,
             error_rate: None,
             error_types: None,
             security_test: false,
@@ -1406,6 +1473,7 @@ mod tests {
             data_file: None,
             data_distribution: "unique-per-vu".to_string(),
             data_mappings: None,
+            per_uri_control: false,
             error_rate: None,
             error_types: None,
             security_test: false,
