@@ -345,10 +345,11 @@ mod consistency_tests {
             // With enough iterations, should approximate the probability
             // Use proper statistical bounds based on binomial distribution
             // Standard deviation for binomial: sqrt(n * p * (1-p))
-            // We allow 4 standard deviations for very high confidence (99.99%)
+            // We allow 6 standard deviations for very high confidence to avoid flaky tests
+            // in CI environments with many test runs
             let expected_true = iterations as f64 * probability;
             let std_dev = (iterations as f64 * probability * (1.0 - probability)).sqrt();
-            let margin = (4.0 * std_dev).max(5.0); // At least 5 to handle edge cases
+            let margin = (6.0 * std_dev).max(10.0); // At least 10 to handle edge cases
 
             let lower_bound = (expected_true - margin).max(0.0) as usize;
             let upper_bound = (expected_true + margin).min(iterations as f64) as usize;

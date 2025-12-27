@@ -784,11 +784,12 @@ impl MetricsRegistry {
     /// Record a GraphQL request
     pub fn record_graphql_request(&self, operation: &str, status: u16, duration_seconds: f64) {
         let status_str = status.to_string();
+        // GraphQL requests are categorized under the "contracts" pillar
         self.requests_total
-            .with_label_values(&["graphql", operation, &status_str])
+            .with_label_values(&["graphql", operation, &status_str, "contracts"])
             .inc();
         self.requests_duration_seconds
-            .with_label_values(&["graphql", operation])
+            .with_label_values(&["graphql", operation, "contracts"])
             .observe(duration_seconds);
     }
 

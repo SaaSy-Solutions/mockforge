@@ -122,7 +122,7 @@ async fn test_vbr_entity_retrieval() {
     // Install the scenario
     let source = scenario_dir.to_string_lossy().to_string();
     let options = InstallOptions {
-        force: false,
+        force: true, // Use force to allow re-running tests without manual cleanup
         skip_validation: false,
         expected_checksum: None,
     };
@@ -173,7 +173,7 @@ async fn test_mockai_config_retrieval() {
     // Install the scenario
     let source = scenario_dir.to_string_lossy().to_string();
     let options = InstallOptions {
-        force: false,
+        force: true, // Use force to allow re-running tests without manual cleanup
         skip_validation: false,
         expected_checksum: None,
     };
@@ -394,7 +394,7 @@ async fn test_apply_to_workspace_with_alignment() {
 
     let source = scenario_dir.to_string_lossy().to_string();
     let options = InstallOptions {
-        force: false,
+        force: true, // Use force to allow re-running tests without manual cleanup
         skip_validation: false,
         expected_checksum: None,
     };

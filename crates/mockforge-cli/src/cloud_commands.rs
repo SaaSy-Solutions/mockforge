@@ -1246,7 +1246,11 @@ fn get_api_key() -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use tempfile::TempDir;
+
+    // Mutex to serialize tests that modify environment variables
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     // CloudCommands enum tests
     #[test]
@@ -1416,6 +1420,9 @@ mod tests {
     // get_api_key tests with environment variable
     #[test]
     fn test_get_api_key_from_env() {
+        // Lock mutex to prevent parallel test interference
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
         // Set environment variable
         std::env::set_var("MOCKFORGE_API_KEY", "test-api-key");
 
@@ -1430,6 +1437,9 @@ mod tests {
 
     #[test]
     fn test_get_api_key_not_found() {
+        // Lock mutex to prevent parallel test interference
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
         // Make sure env var is not set
         std::env::remove_var("MOCKFORGE_API_KEY");
 

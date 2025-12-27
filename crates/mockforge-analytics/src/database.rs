@@ -74,6 +74,16 @@ impl AnalyticsDatabase {
             AnalyticsError::Migration(format!("Failed to execute coverage metrics migration: {e}"))
         })? {}
 
+        // Run pillar usage migration
+        let pillar_usage_migration_sql = include_str!("../migrations/002_pillar_usage.sql");
+        let mut conn = self.pool.acquire().await?;
+        let mut stream = conn.execute_many(pillar_usage_migration_sql);
+
+        while let Some(_) = stream.try_next().await.map_err(|e| {
+            error!("Pillar usage migration error: {}", e);
+            AnalyticsError::Migration(format!("Failed to execute pillar usage migration: {e}"))
+        })? {}
+
         info!("Analytics database migrations completed successfully");
         Ok(())
     }

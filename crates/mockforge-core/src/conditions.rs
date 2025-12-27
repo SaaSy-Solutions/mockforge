@@ -228,12 +228,27 @@ fn evaluate_not_condition(
 
 /// Evaluate JSONPath query
 fn evaluate_jsonpath(query: &str, context: &ConditionContext) -> Result<bool, ConditionError> {
+    // Check if this is a comparison expression (e.g., $.user.role == 'admin')
+    // Supported operators: ==, !=
+    let (jsonpath_expr, comparison_op, expected_value) =
+        if let Some((path, value)) = query.split_once("==") {
+            let path = path.trim();
+            let value = value.trim().trim_matches('\'').trim_matches('"');
+            (path, Some("=="), Some(value))
+        } else if let Some((path, value)) = query.split_once("!=") {
+            let path = path.trim();
+            let value = value.trim().trim_matches('\'').trim_matches('"');
+            (path, Some("!="), Some(value))
+        } else {
+            (query, None, None)
+        };
+
     // Determine if this is a request or response query
-    let (_is_request, json_value) = if query.starts_with("$.request.") {
-        let _query = query.replace("$.request.", "$.");
+    let (_is_request, json_value) = if jsonpath_expr.starts_with("$.request.") {
+        let _query = jsonpath_expr.replace("$.request.", "$.");
         (true, &context.request_body)
-    } else if query.starts_with("$.response.") {
-        let _query = query.replace("$.response.", "$.");
+    } else if jsonpath_expr.starts_with("$.response.") {
+        let _query = jsonpath_expr.replace("$.response.", "$.");
         (false, &context.response_body)
     } else {
         // Default to response body if available, otherwise request body
@@ -248,12 +263,54 @@ fn evaluate_jsonpath(query: &str, context: &ConditionContext) -> Result<bool, Co
         return Ok(false); // No body to query
     };
 
-    match Selector::new(query) {
+    match Selector::new(jsonpath_expr) {
         Ok(selector) => {
             let results: Vec<_> = selector.find(json_value).collect();
+
+            // If there's a comparison, check the value
+            if let (Some(op), Some(expected)) = (comparison_op, expected_value) {
+                if results.is_empty() {
+                    return Ok(false);
+                }
+
+                // Compare the first result with the expected value
+                let actual_value = match &results[0] {
+                    Value::String(s) => s.as_str(),
+                    Value::Number(n) => {
+                        return Ok(match op {
+                            "==" => n.to_string() == expected,
+                            "!=" => n.to_string() != expected,
+                            _ => false,
+                        })
+                    }
+                    Value::Bool(b) => {
+                        return Ok(match op {
+                            "==" => b.to_string() == expected,
+                            "!=" => b.to_string() != expected,
+                            _ => false,
+                        })
+                    }
+                    Value::Null => {
+                        return Ok(match op {
+                            "==" => expected == "null",
+                            "!=" => expected != "null",
+                            _ => false,
+                        })
+                    }
+                    _ => return Ok(false),
+                };
+
+                return Ok(match op {
+                    "==" => actual_value == expected,
+                    "!=" => actual_value != expected,
+                    _ => false,
+                });
+            }
+
+            // No comparison, just check if results exist
             Ok(!results.is_empty())
         }
-        Err(_) => Err(ConditionError::InvalidJsonPath(query.to_string())),
+        Err(_) => Err(ConditionError::InvalidJsonPath(jsonpath_expr.to_string())),
     }
 }
 
@@ -391,9 +448,9 @@ fn evaluate_simple_condition(
                     // Header exists: return true if actual value != expected value
                     return Ok(actual_value != expected_value);
                 }
-                // Header doesn't exist: return true if checking != '' (empty string)
-                // because non-existent header is not equal to empty string
-                return Ok(expected_value.is_empty());
+                // Header doesn't exist: treat as empty string for comparison
+                // For != '' check, return false because missing header is treated as empty
+                return Ok(!expected_value.is_empty());
             }
             // Check for = operator (with optional whitespace)
             if let Some(expected_value) = rest_trimmed.strip_prefix("=") {

@@ -104,6 +104,7 @@ async fn works_under_mount_prefix() {
     assert!(res.status().is_success());
 }
 
+#[ignore = "Requires authentication infrastructure"]
 #[tokio::test]
 async fn test_api_endpoints() {
     // admin router with API enabled

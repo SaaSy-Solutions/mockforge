@@ -67,19 +67,14 @@ pub async fn init_pillar_tracking(analytics_db: Option<Arc<AnalyticsDatabase>>) 
 mod tests {
     use super::*;
     use mockforge_core::pillars::Pillar as CorePillar;
+    use std::path::Path;
 
     #[test]
     fn test_analytics_pillar_recorder_new() {
-        // Create a temporary database for testing
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_pillar_tracking.db");
-
-        // Clean up any existing test database
-        let _ = std::fs::remove_file(&db_path);
-
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
-            let db = AnalyticsDatabase::new(&db_path).await.unwrap();
+            // Use in-memory database for testing
+            let db = AnalyticsDatabase::new(Path::new(":memory:")).await.unwrap();
             let _ = db.run_migrations().await;
 
             let db_arc = Arc::new(db);
@@ -88,9 +83,6 @@ mod tests {
             // Verify recorder was created
             assert!(Arc::ptr_eq(&recorder.db, &db_arc));
         });
-
-        // Clean up
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[test]
@@ -147,14 +139,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_init_pillar_tracking_with_database() {
-        // Create a temporary database for testing
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_init_pillar_tracking.db");
-
-        // Clean up any existing test database
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = AnalyticsDatabase::new(&db_path).await.unwrap();
+        // Use in-memory database for testing
+        let db = AnalyticsDatabase::new(Path::new(":memory:")).await.unwrap();
         let _ = db.run_migrations().await;
 
         let db_arc = Arc::new(db);
@@ -164,9 +150,6 @@ mod tests {
 
         // If we get here without panicking, initialization succeeded
         assert!(true);
-
-        // Clean up
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[tokio::test]
@@ -180,14 +163,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_record_pillar_event() {
-        // Create a temporary database for testing
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_record_event.db");
-
-        // Clean up any existing test database
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = AnalyticsDatabase::new(&db_path).await.unwrap();
+        // Use in-memory database for testing
+        let db = AnalyticsDatabase::new(Path::new(":memory:")).await.unwrap();
         let _ = db.run_migrations().await;
 
         let db_arc = Arc::new(db);
@@ -208,21 +185,12 @@ mod tests {
 
         // Should succeed
         assert!(result.is_ok());
-
-        // Clean up
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[tokio::test]
     async fn test_record_pillar_event_all_pillars() {
-        // Create a temporary database for testing
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_all_pillars.db");
-
-        // Clean up any existing test database
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = AnalyticsDatabase::new(&db_path).await.unwrap();
+        // Use in-memory database for testing
+        let db = AnalyticsDatabase::new(Path::new(":memory:")).await.unwrap();
         let _ = db.run_migrations().await;
 
         let db_arc = Arc::new(db);
@@ -253,21 +221,12 @@ mod tests {
             let result = recorder.record(event).await;
             assert!(result.is_ok(), "Failed to record {:?} pillar", pillar);
         }
-
-        // Clean up
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[tokio::test]
     async fn test_record_multiple_events_same_workspace() {
-        // Create a temporary database for testing
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_multiple_events.db");
-
-        // Clean up any existing test database
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = AnalyticsDatabase::new(&db_path).await.unwrap();
+        // Use in-memory database for testing
+        let db = AnalyticsDatabase::new(Path::new(":memory:")).await.unwrap();
         let _ = db.run_migrations().await;
 
         let db_arc = Arc::new(db);
@@ -290,9 +249,6 @@ mod tests {
             let result = recorder.record(event).await;
             assert!(result.is_ok(), "Failed to record event {}", i);
         }
-
-        // Clean up
-        let _ = std::fs::remove_file(&db_path);
     }
 
     #[test]

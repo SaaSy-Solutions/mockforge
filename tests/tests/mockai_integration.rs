@@ -8,7 +8,9 @@ use mockforge_core::openapi::OpenApiSpec;
 use serde_json::json;
 
 /// Test MockAI with a simple OpenAPI spec
+/// Requires OPENAI_API_KEY environment variable to be set
 #[tokio::test]
+#[ignore = "requires OPENAI_API_KEY environment variable"]
 async fn test_mockai_basic_request() {
     // Create a minimal OpenAPI spec
     let spec_json = json!({
@@ -121,7 +123,9 @@ async fn test_mockai_basic_request() {
 }
 
 /// Test MockAI session persistence
+/// Requires OPENAI_API_KEY environment variable to be set
 #[tokio::test]
+#[ignore = "requires OPENAI_API_KEY environment variable"]
 async fn test_mockai_session_persistence() {
     // Create a minimal OpenAPI spec
     let spec_json = json!({

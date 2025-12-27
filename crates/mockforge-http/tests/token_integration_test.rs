@@ -358,8 +358,8 @@ async fn test_performance_large_object() {
     let resolved = resolve_response_tokens(body).await.unwrap();
     let duration = start.elapsed();
 
-    // Should complete in under 1ms (way under 200ms requirement)
-    assert!(duration.as_millis() < 1);
+    // Should complete in under 100ms (reasonable margin for CI environments)
+    assert!(duration.as_millis() < 100, "Token resolution took too long: {:?}", duration);
 
     // Verify all fields were resolved
     assert!(resolved["field1"].is_string());

@@ -54,7 +54,7 @@ impl PluginStorage {
     fn sanitize_key_component(component: &str) -> String {
         component
             .chars()
-            .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || *c == '.')
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_' || *c == '.')
             .take(100) // Limit length
             .collect::<String>()
             .trim_matches('.')
@@ -276,15 +276,16 @@ mod tests {
         assert_eq!(PluginStorage::sanitize_key_component("2.3.4-alpha"), "2.3.4-alpha");
         assert_eq!(PluginStorage::sanitize_key_component("1.0.0-beta.1"), "1.0.0-beta.1");
 
-        // Version with invalid characters
-        assert_eq!(PluginStorage::sanitize_key_component("1.0.0/../../etc"), "1.0.0etc");
+        // Version with invalid characters (slashes removed, dots preserved)
+        assert_eq!(PluginStorage::sanitize_key_component("1.0.0/../../etc"), "1.0.0....etc");
     }
 
     #[test]
     fn test_sanitize_key_component_unicode() {
         // Unicode should be removed (only ASCII alphanumeric allowed)
-        assert_eq!(PluginStorage::sanitize_key_component("plugin-中文"), "plugin-");
-        assert_eq!(PluginStorage::sanitize_key_component("émoji-😀"), "moji-");
+        // Trailing hyphen is also trimmed
+        assert_eq!(PluginStorage::sanitize_key_component("plugin-中文"), "plugin");
+        assert_eq!(PluginStorage::sanitize_key_component("émoji-😀"), "moji");
     }
 
     #[test]

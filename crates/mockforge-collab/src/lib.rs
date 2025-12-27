@@ -46,6 +46,7 @@
 //!     let config = ClientConfig {
 //!         server_url: "ws://localhost:8080".to_string(),
 //!         auth_token: "your-token".to_string(),
+//!         ..Default::default()
 //!     };
 //!
 //!     let client = CollabClient::connect(config).await?;

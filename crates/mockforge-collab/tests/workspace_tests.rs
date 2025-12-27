@@ -209,7 +209,7 @@ async fn test_add_member_to_workspace() {
                 .body(Body::from(
                     json!({
                         "user_id": member.id.to_string(),
-                        "role": "Editor"
+                        "role": "editor"
                     })
                     .to_string(),
                 ))

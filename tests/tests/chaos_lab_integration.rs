@@ -236,19 +236,19 @@ async fn test_latency_metrics_sample_limit() {
 
     let tracker = LatencyMetricsTracker::new();
 
-    // Record more than MAX_SAMPLES (100) samples
-    for i in 0..150 {
+    // Record more than MAX_SAMPLES (1000) samples
+    for i in 0..1200 {
         tracker.record_latency(i as u64);
     }
 
-    // Should only keep the last 100 samples
+    // Should only keep the last 1000 samples
     let samples = tracker.get_samples();
-    assert!(samples.len() <= 100, "Should not exceed MAX_SAMPLES limit");
-    assert_eq!(samples.len(), 100, "Should have exactly 100 samples");
+    assert!(samples.len() <= 1000, "Should not exceed MAX_SAMPLES limit");
+    assert_eq!(samples.len(), 1000, "Should have exactly 1000 samples");
 
     // Verify oldest samples were removed
     let first_sample = samples.first().unwrap();
-    assert!(first_sample.latency_ms >= 50, "First sample should be from later recordings");
+    assert!(first_sample.latency_ms >= 200, "First sample should be from later recordings");
 }
 
 /// Test error pattern state management

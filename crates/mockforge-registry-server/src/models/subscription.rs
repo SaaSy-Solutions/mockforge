@@ -9,7 +9,7 @@ use crate::models::Plan;
 
 /// Subscription status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum SubscriptionStatus {
     Active,
     Trialing,

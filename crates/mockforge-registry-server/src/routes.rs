@@ -15,10 +15,10 @@ pub fn create_router() -> Router<AppState> {
     let public_routes = Router::new()
         .route("/health", get(handlers::health::health_check))
         .route("/api/v1/plugins/search", post(handlers::plugins::search_plugins))
-        .route("/api/v1/plugins/:name", get(handlers::plugins::get_plugin))
-        .route("/api/v1/plugins/:name/versions/:version", get(handlers::plugins::get_version))
-        .route("/api/v1/plugins/:name/reviews", get(handlers::reviews::get_reviews))
-        .route("/api/v1/plugins/:name/badges", get(handlers::admin::get_plugin_badges))
+        .route("/api/v1/plugins/{name}", get(handlers::plugins::get_plugin))
+        .route("/api/v1/plugins/{name}/versions/{version}", get(handlers::plugins::get_version))
+        .route("/api/v1/plugins/{name}/reviews", get(handlers::reviews::get_reviews))
+        .route("/api/v1/plugins/{name}/badges", get(handlers::admin::get_plugin_badges))
         .route("/api/v1/stats", get(handlers::stats::get_stats))
         .route("/api/v1/auth/register", post(handlers::auth::register))
         .route("/api/v1/auth/login", post(handlers::auth::login))
@@ -34,12 +34,12 @@ pub fn create_router() -> Router<AppState> {
     let auth_routes = Router::new()
         .route("/api/v1/plugins/publish", post(handlers::plugins::publish_plugin))
         .route(
-            "/api/v1/plugins/:name/versions/:version/yank",
+            "/api/v1/plugins/{name}/versions/{version}/yank",
             delete(handlers::plugins::yank_version),
         )
-        .route("/api/v1/plugins/:name/reviews", post(handlers::reviews::submit_review))
+        .route("/api/v1/plugins/{name}/reviews", post(handlers::reviews::submit_review))
         .route(
-            "/api/v1/plugins/:name/reviews/:review_id/vote",
+            "/api/v1/plugins/{name}/reviews/{review_id}/vote",
             post(handlers::reviews::vote_review),
         )
         // 2FA routes
@@ -50,23 +50,23 @@ pub fn create_router() -> Router<AppState> {
         // Organization routes
         .route("/api/v1/organizations", get(handlers::organizations::list_organizations))
         .route("/api/v1/organizations", post(handlers::organizations::create_organization))
-        .route("/api/v1/organizations/:org_id", get(handlers::organizations::get_organization))
-        .route("/api/v1/organizations/:org_id", patch(handlers::organizations::update_organization))
-        .route("/api/v1/organizations/:org_id", delete(handlers::organizations::delete_organization))
-        .route("/api/v1/organizations/:org_id/members", get(handlers::organizations::get_organization_members))
-        .route("/api/v1/organizations/:org_id/members", post(handlers::organizations::add_organization_member))
-        .route("/api/v1/organizations/:org_id/members/:user_id", patch(handlers::organizations::update_organization_member_role))
-        .route("/api/v1/organizations/:org_id/members/:user_id", delete(handlers::organizations::remove_organization_member))
+        .route("/api/v1/organizations/{org_id}", get(handlers::organizations::get_organization))
+        .route("/api/v1/organizations/{org_id}", patch(handlers::organizations::update_organization))
+        .route("/api/v1/organizations/{org_id}", delete(handlers::organizations::delete_organization))
+        .route("/api/v1/organizations/{org_id}/members", get(handlers::organizations::get_organization_members))
+        .route("/api/v1/organizations/{org_id}/members", post(handlers::organizations::add_organization_member))
+        .route("/api/v1/organizations/{org_id}/members/{user_id}", patch(handlers::organizations::update_organization_member_role))
+        .route("/api/v1/organizations/{org_id}/members/{user_id}", delete(handlers::organizations::remove_organization_member))
         // Organization settings routes
-        .route("/api/v1/organizations/:org_id/settings", get(handlers::organization_settings::get_organization_settings))
-        .route("/api/v1/organizations/:org_id/settings", patch(handlers::organization_settings::update_organization_settings))
-        .route("/api/v1/organizations/:org_id/settings/ai", get(handlers::organization_settings::get_organization_ai_settings))
-        .route("/api/v1/organizations/:org_id/settings/ai", patch(handlers::organization_settings::update_organization_ai_settings))
-        .route("/api/v1/organizations/:org_id/usage", get(handlers::organization_settings::get_organization_usage))
-        .route("/api/v1/organizations/:org_id/billing", get(handlers::organization_settings::get_organization_billing))
+        .route("/api/v1/organizations/{org_id}/settings", get(handlers::organization_settings::get_organization_settings))
+        .route("/api/v1/organizations/{org_id}/settings", patch(handlers::organization_settings::update_organization_settings))
+        .route("/api/v1/organizations/{org_id}/settings/ai", get(handlers::organization_settings::get_organization_ai_settings))
+        .route("/api/v1/organizations/{org_id}/settings/ai", patch(handlers::organization_settings::update_organization_ai_settings))
+        .route("/api/v1/organizations/{org_id}/usage", get(handlers::organization_settings::get_organization_usage))
+        .route("/api/v1/organizations/{org_id}/billing", get(handlers::organization_settings::get_organization_billing))
         // Pillar analytics routes
-        .route("/api/v1/organizations/:org_id/analytics/pillars", get(handlers::pillar_analytics::get_org_pillar_metrics))
-        .route("/api/v1/workspaces/:workspace_id/analytics/pillars", get(handlers::pillar_analytics::get_workspace_pillar_metrics))
+        .route("/api/v1/organizations/{org_id}/analytics/pillars", get(handlers::pillar_analytics::get_org_pillar_metrics))
+        .route("/api/v1/workspaces/{workspace_id}/analytics/pillars", get(handlers::pillar_analytics::get_workspace_pillar_metrics))
         .route("/api/v1/analytics/pillars/events", post(handlers::pillar_analytics::record_pillar_event))
         // SSO routes (Team plan only)
         .route("/api/v1/sso/config", get(handlers::sso::get_sso_config))
@@ -74,20 +74,20 @@ pub fn create_router() -> Router<AppState> {
         .route("/api/v1/sso/config", delete(handlers::sso::delete_sso_config))
         .route("/api/v1/sso/enable", post(handlers::sso::enable_sso))
         .route("/api/v1/sso/disable", post(handlers::sso::disable_sso))
-        .route("/api/v1/sso/saml/metadata/:org_slug", get(handlers::sso::get_saml_metadata))
+        .route("/api/v1/sso/saml/metadata/{org_slug}", get(handlers::sso::get_saml_metadata))
         .layer(middleware::from_fn(auth_middleware))
         .layer(middleware::from_fn(rate_limit_middleware));
 
     // Public SSO routes (no auth required - these handle SAML redirects)
     let sso_public_routes = Router::new()
-        .route("/api/v1/sso/saml/login/:org_slug", get(handlers::sso::initiate_saml_login))
-        .route("/api/v1/sso/saml/acs/:org_slug", post(handlers::sso::saml_acs))
-        .route("/api/v1/sso/saml/slo/:org_slug", post(handlers::sso::saml_slo))
+        .route("/api/v1/sso/saml/login/{org_slug}", get(handlers::sso::initiate_saml_login))
+        .route("/api/v1/sso/saml/acs/{org_slug}", post(handlers::sso::saml_acs))
+        .route("/api/v1/sso/saml/slo/{org_slug}", post(handlers::sso::saml_slo))
         .layer(middleware::from_fn(rate_limit_middleware));
 
     // Admin routes (require admin JWT + rate limiting)
     let admin_routes = Router::new()
-        .route("/api/v1/admin/plugins/:name/verify", post(handlers::admin::verify_plugin))
+        .route("/api/v1/admin/plugins/{name}/verify", post(handlers::admin::verify_plugin))
         .route("/api/v1/admin/stats", get(handlers::admin::get_admin_stats))
         .route("/api/v1/admin/analytics", get(handlers::analytics::get_analytics))
         .route(
@@ -168,8 +168,8 @@ mod tests {
         let routes = vec![
             "/health",
             "/api/v1/plugins/search",
-            "/api/v1/plugins/:name",
-            "/api/v1/plugins/:name/versions/:version",
+            "/api/v1/plugins/{name}",
+            "/api/v1/plugins/{name}/versions/{version}",
             "/api/v1/stats",
             "/api/v1/auth/register",
             "/api/v1/auth/login",
@@ -190,14 +190,14 @@ mod tests {
         // Verify authenticated route paths are correctly defined
         let routes = vec![
             "/api/v1/plugins/publish",
-            "/api/v1/plugins/:name/versions/:version/yank",
+            "/api/v1/plugins/{name}/versions/{version}/yank",
             "/api/v1/auth/2fa/setup",
             "/api/v1/auth/2fa/verify-setup",
             "/api/v1/auth/2fa/disable",
             "/api/v1/auth/2fa/status",
             "/api/v1/organizations",
-            "/api/v1/organizations/:org_id",
-            "/api/v1/organizations/:org_id/members",
+            "/api/v1/organizations/{org_id}",
+            "/api/v1/organizations/{org_id}/members",
         ];
 
         for route in routes {
@@ -213,10 +213,10 @@ mod tests {
             "/api/v1/sso/config",
             "/api/v1/sso/enable",
             "/api/v1/sso/disable",
-            "/api/v1/sso/saml/metadata/:org_slug",
-            "/api/v1/sso/saml/login/:org_slug",
-            "/api/v1/sso/saml/acs/:org_slug",
-            "/api/v1/sso/saml/slo/:org_slug",
+            "/api/v1/sso/saml/metadata/{org_slug}",
+            "/api/v1/sso/saml/login/{org_slug}",
+            "/api/v1/sso/saml/acs/{org_slug}",
+            "/api/v1/sso/saml/slo/{org_slug}",
         ];
 
         for route in routes {
@@ -229,7 +229,7 @@ mod tests {
     fn test_admin_route_paths() {
         // Verify admin route paths are correctly defined
         let routes = vec![
-            "/api/v1/admin/plugins/:name/verify",
+            "/api/v1/admin/plugins/{name}/verify",
             "/api/v1/admin/stats",
             "/api/v1/admin/analytics",
             "/api/v1/admin/analytics/funnel",
@@ -245,14 +245,14 @@ mod tests {
     fn test_organization_settings_routes() {
         // Verify organization settings routes are correctly defined
         let routes = vec![
-            "/api/v1/organizations/:org_id/settings",
-            "/api/v1/organizations/:org_id/settings/ai",
-            "/api/v1/organizations/:org_id/usage",
-            "/api/v1/organizations/:org_id/billing",
+            "/api/v1/organizations/{org_id}/settings",
+            "/api/v1/organizations/{org_id}/settings/ai",
+            "/api/v1/organizations/{org_id}/usage",
+            "/api/v1/organizations/{org_id}/billing",
         ];
 
         for route in routes {
-            assert!(route.contains(":org_id"));
+            assert!(route.contains("{org_id}"));
             assert!(route.starts_with("/api/v1/organizations"));
         }
     }
@@ -261,8 +261,8 @@ mod tests {
     fn test_pillar_analytics_routes() {
         // Verify pillar analytics routes are correctly defined
         let routes = vec![
-            "/api/v1/organizations/:org_id/analytics/pillars",
-            "/api/v1/workspaces/:workspace_id/analytics/pillars",
+            "/api/v1/organizations/{org_id}/analytics/pillars",
+            "/api/v1/workspaces/{workspace_id}/analytics/pillars",
             "/api/v1/analytics/pillars/events",
         ];
 
@@ -276,23 +276,23 @@ mod tests {
     fn test_route_parameter_consistency() {
         // Verify that route parameters use consistent naming
         let org_routes = vec![
-            "/api/v1/organizations/:org_id",
-            "/api/v1/organizations/:org_id/members",
-            "/api/v1/organizations/:org_id/settings",
+            "/api/v1/organizations/{org_id}",
+            "/api/v1/organizations/{org_id}/members",
+            "/api/v1/organizations/{org_id}/settings",
         ];
 
         for route in org_routes {
-            assert!(route.contains(":org_id"));
+            assert!(route.contains("{org_id}"));
         }
 
         let plugin_routes = vec![
-            "/api/v1/plugins/:name",
-            "/api/v1/plugins/:name/versions/:version",
-            "/api/v1/plugins/:name/reviews",
+            "/api/v1/plugins/{name}",
+            "/api/v1/plugins/{name}/versions/{version}",
+            "/api/v1/plugins/{name}/reviews",
         ];
 
         for route in plugin_routes {
-            assert!(route.contains(":name"));
+            assert!(route.contains("{name}"));
         }
     }
 
@@ -300,13 +300,13 @@ mod tests {
     fn test_review_routes() {
         // Verify review routes are correctly defined
         let routes = vec![
-            "/api/v1/plugins/:name/reviews",
-            "/api/v1/plugins/:name/reviews/:review_id/vote",
+            "/api/v1/plugins/{name}/reviews",
+            "/api/v1/plugins/{name}/reviews/{review_id}/vote",
         ];
 
         for route in routes {
             assert!(route.contains("reviews"));
-            assert!(route.contains(":name"));
+            assert!(route.contains("{name}"));
         }
     }
 
@@ -330,10 +330,10 @@ mod tests {
     fn test_no_duplicate_route_patterns() {
         // Ensure no obvious duplicate routes
         let all_routes = vec![
-            "/api/v1/plugins/:name",
+            "/api/v1/plugins/{name}",
             "/api/v1/plugins/search",
-            "/api/v1/organizations/:org_id",
-            "/api/v1/organizations/:org_id/members",
+            "/api/v1/organizations/{org_id}",
+            "/api/v1/organizations/{org_id}/members",
         ];
 
         // Check that each route is unique
@@ -405,13 +405,13 @@ mod tests {
     fn test_organization_member_routes() {
         // Verify organization member management routes
         let routes = vec![
-            "/api/v1/organizations/:org_id/members",
-            "/api/v1/organizations/:org_id/members/:user_id",
+            "/api/v1/organizations/{org_id}/members",
+            "/api/v1/organizations/{org_id}/members/{user_id}",
         ];
 
         for route in routes {
             assert!(route.contains("members"));
-            assert!(route.contains(":org_id"));
+            assert!(route.contains("{org_id}"));
         }
     }
 
@@ -433,22 +433,22 @@ mod tests {
     fn test_saml_routes_org_slug_parameter() {
         // Verify SAML routes use org_slug parameter
         let routes = vec![
-            "/api/v1/sso/saml/metadata/:org_slug",
-            "/api/v1/sso/saml/login/:org_slug",
-            "/api/v1/sso/saml/acs/:org_slug",
-            "/api/v1/sso/saml/slo/:org_slug",
+            "/api/v1/sso/saml/metadata/{org_slug}",
+            "/api/v1/sso/saml/login/{org_slug}",
+            "/api/v1/sso/saml/acs/{org_slug}",
+            "/api/v1/sso/saml/slo/{org_slug}",
         ];
 
         for route in routes {
-            assert!(route.contains(":org_slug"));
+            assert!(route.contains("{org_slug}"));
             assert!(route.contains("/saml/"));
         }
     }
 
     #[test]
     fn test_plugin_badges_route() {
-        let route = "/api/v1/plugins/:name/badges";
-        assert!(route.contains(":name"));
+        let route = "/api/v1/plugins/{name}/badges";
+        assert!(route.contains("{name}"));
         assert!(route.contains("badges"));
     }
 }

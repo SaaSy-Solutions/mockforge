@@ -70,8 +70,8 @@ async fn test_stub_mapping_conversion() {
         response: Some(recorded_response),
     };
 
-    // Convert to stub mapping
-    let converter = StubMappingConverter::new(false);
+    // Convert to stub mapping with dynamic value detection enabled
+    let converter = StubMappingConverter::new(true);
     let stub_mapping = converter.convert(&exchange).expect("Should convert to stub");
     let stub = converter
         .to_string(&stub_mapping, StubFormat::Yaml)
@@ -84,7 +84,8 @@ async fn test_stub_mapping_conversion() {
     assert!(stub.contains("/api/users"));
 
     // Check that dynamic values are templated
-    assert!(stub.contains("{{uuid}}") || stub.contains("{{timestamp}}"));
+    // The converter replaces UUIDs with {{uuid}} and timestamps with {{now}}
+    assert!(stub.contains("{{uuid}}") || stub.contains("{{now}}"));
 }
 
 #[tokio::test]

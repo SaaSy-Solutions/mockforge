@@ -248,8 +248,8 @@ mod tests {
         let user_id = "user-123";
         let token1 = create_token(user_id, TEST_SECRET).unwrap();
 
-        // Wait a tiny bit to ensure different iat
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        // Wait at least 1 second to ensure different iat (JWT timestamps have second resolution)
+        std::thread::sleep(std::time::Duration::from_millis(1100));
 
         let token2 = create_token(user_id, TEST_SECRET).unwrap();
 

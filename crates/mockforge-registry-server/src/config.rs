@@ -57,9 +57,14 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Mutex to serialize tests that modify environment variables
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_config_defaults() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Set required env vars
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::set_var("JWT_SECRET", "test-secret");
@@ -81,6 +86,7 @@ mod tests {
 
     #[test]
     fn test_config_custom_values() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Set all env vars
         std::env::set_var("PORT", "9090");
         std::env::set_var("DATABASE_URL", "postgres://custom/db");
@@ -118,6 +124,7 @@ mod tests {
 
     #[test]
     fn test_config_missing_required_database_url() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::remove_var("DATABASE_URL");
         std::env::set_var("JWT_SECRET", "test-secret");
 
@@ -131,6 +138,7 @@ mod tests {
 
     #[test]
     fn test_config_missing_required_jwt_secret() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::remove_var("JWT_SECRET");
 
@@ -144,6 +152,7 @@ mod tests {
 
     #[test]
     fn test_config_invalid_port() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("PORT", "invalid");
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::set_var("JWT_SECRET", "test-secret");
@@ -159,6 +168,7 @@ mod tests {
 
     #[test]
     fn test_config_invalid_max_plugin_size() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::set_var("JWT_SECRET", "test-secret");
         std::env::set_var("MAX_PLUGIN_SIZE", "not-a-number");
@@ -174,6 +184,7 @@ mod tests {
 
     #[test]
     fn test_config_invalid_rate_limit() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::set_var("JWT_SECRET", "test-secret");
         std::env::set_var("RATE_LIMIT_PER_MINUTE", "not-a-number");
@@ -189,6 +200,7 @@ mod tests {
 
     #[test]
     fn test_config_port_boundary_values() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::set_var("JWT_SECRET", "test-secret");
 
@@ -210,6 +222,7 @@ mod tests {
 
     #[test]
     fn test_config_clone() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::set_var("JWT_SECRET", "test-secret");
 
@@ -227,6 +240,7 @@ mod tests {
 
     #[test]
     fn test_config_debug() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::set_var("JWT_SECRET", "test-secret");
 

@@ -550,7 +550,7 @@ mod tests {
     fn test_merge_status_serialization() {
         let status = MergeStatus::InProgress;
         let json = serde_json::to_string(&status).unwrap();
-        assert_eq!(json, r#""inprogress""#);
+        assert_eq!(json, r#""in_progress""#);
     }
 
     #[test]

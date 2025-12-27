@@ -67,6 +67,10 @@ impl CollabConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Mutex to serialize tests that modify environment variables
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_default_config() {
@@ -87,6 +91,9 @@ mod tests {
 
     #[test]
     fn test_from_env_defaults() {
+        // Lock mutex to prevent parallel test interference
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
         // Clear environment variables
         std::env::remove_var("MOCKFORGE_JWT_SECRET");
         std::env::remove_var("MOCKFORGE_DATABASE_URL");
@@ -101,6 +108,9 @@ mod tests {
 
     #[test]
     fn test_from_env_with_values() {
+        // Lock mutex to prevent parallel test interference
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
         // Set environment variables
         std::env::set_var("MOCKFORGE_JWT_SECRET", "test-secret");
         std::env::set_var("MOCKFORGE_DATABASE_URL", "postgres://localhost/test");

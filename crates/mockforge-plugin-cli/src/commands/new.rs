@@ -111,7 +111,11 @@ fn init_git_repo(dir: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::Mutex;
     use tempfile::TempDir;
+
+    // Mutex to serialize tests that modify the current working directory
+    static CWD_MUTEX: Mutex<()> = Mutex::new(());
 
     #[tokio::test]
     async fn test_create_plugin_project_basic() {
@@ -257,6 +261,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_plugin_project_default_output() {
+        // Lock mutex to prevent concurrent tests from changing current directory
+        let _guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
         let temp_dir = TempDir::new().unwrap();
         let original_dir = std::env::current_dir().unwrap();
 
@@ -264,12 +271,13 @@ mod tests {
 
         let result = create_plugin_project("default-out", "auth", None, None, None, false).await;
 
+        // Always restore directory, even if test fails
+        std::env::set_current_dir(&original_dir).unwrap();
+
         assert!(result.is_ok());
 
         let plugin_dir = temp_dir.path().join("default-out");
         assert!(plugin_dir.exists());
-
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[tokio::test]

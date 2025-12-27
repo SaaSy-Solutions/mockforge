@@ -121,15 +121,14 @@ impl PromotionService {
         };
 
         // Record promotion in database
-        // Store string conversions to avoid temporary value issues
+        // Note: promotion_history table uses TEXT columns, so convert UUIDs to strings
         let promotion_id_str = promotion_id.to_string();
+        let promoted_by_str = promoted_by.to_string();
         let entity_type_str = request.entity_type.to_string();
         let from_env_str = request.from_environment.as_str().to_string();
         let to_env_str = request.to_environment.as_str().to_string();
-        let promoted_by_str = promoted_by.to_string();
         let status_str = status.to_string();
-        let created_at_str = now.to_rfc3339();
-        let updated_at_str = now.to_rfc3339();
+        let now_str = now.to_rfc3339();
 
         sqlx::query!(
             r#"
@@ -151,8 +150,8 @@ impl PromotionService {
             status_str,
             request.comments,
             metadata_json,
-            created_at_str,
-            updated_at_str,
+            now_str,
+            now_str,
         )
         .execute(&self.db)
         .await
@@ -279,7 +278,7 @@ impl PromotionService {
         let now = Utc::now();
         let status_str = status.to_string();
         let approved_by_str = approved_by.map(|u| u.to_string());
-        let updated_at_str = now.to_rfc3339();
+        let now_str = now.to_rfc3339();
         let promotion_id_str = promotion_id.to_string();
 
         sqlx::query!(
@@ -290,7 +289,7 @@ impl PromotionService {
             "#,
             status_str,
             approved_by_str,
-            updated_at_str,
+            now_str,
             promotion_id_str,
         )
         .execute(&self.db)
@@ -306,7 +305,7 @@ impl PromotionService {
                 use mockforge_pipelines::events::{publish_event, PipelineEvent};
                 use sqlx::Row;
 
-                // Get workspace_id from database
+                // Get workspace_id from database (stored as TEXT)
                 let workspace_id_row =
                     sqlx::query("SELECT workspace_id FROM promotion_history WHERE id = ?")
                         .bind(&promotion_id_str)
@@ -347,7 +346,7 @@ impl PromotionService {
     /// Update promotion with `GitOps` PR URL
     pub async fn update_promotion_pr_url(&self, promotion_id: Uuid, pr_url: String) -> Result<()> {
         let now = Utc::now();
-        let updated_at_str = now.to_rfc3339();
+        let now_str = now.to_rfc3339();
         let promotion_id_str = promotion_id.to_string();
 
         sqlx::query!(
@@ -357,7 +356,7 @@ impl PromotionService {
             WHERE id = ?
             "#,
             pr_url,
-            updated_at_str,
+            now_str,
             promotion_id_str,
         )
         .execute(&self.db)
@@ -397,7 +396,7 @@ impl PromotionService {
             let entity_type_str: String = row.get("entity_type");
             let entity_id: String = row.get("entity_id");
             let entity_version: Option<String> = row.get("entity_version");
-            let workspace_id: String = row.get("workspace_id");
+            let _workspace_id: String = row.get("workspace_id");
             let from_environment: String = row.get("from_environment");
             let to_environment: String = row.get("to_environment");
             let promoted_by: String = row.get("promoted_by");

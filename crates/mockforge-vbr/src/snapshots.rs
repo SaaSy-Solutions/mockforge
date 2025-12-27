@@ -174,7 +174,7 @@ impl SnapshotManager {
         registry: &EntityRegistry,
     ) -> Result<Option<u64>> {
         let snapshot_dir = self.snapshot_path(name);
-        let storage_backend = database.connection_info();
+        let storage_backend = database.connection_info().to_lowercase();
 
         if storage_backend.contains("sqlite") {
             // For SQLite, we'll export all data to JSON
@@ -282,11 +282,10 @@ impl SnapshotManager {
 
         // Restore data based on storage backend
         let snapshot_dir = self.snapshot_path(name);
-        if metadata.storage_backend.contains("sqlite")
-            || metadata.storage_backend.contains("memory")
-        {
+        let storage_backend_lower = metadata.storage_backend.to_lowercase();
+        if storage_backend_lower.contains("sqlite") || storage_backend_lower.contains("memory") {
             self.import_json_to_database(&snapshot_dir, database, registry).await?;
-        } else if metadata.storage_backend.contains("json") {
+        } else if storage_backend_lower.contains("json") {
             // For JSON backend, would need to copy the JSON file
             // This requires access to the JSON database implementation
             return Err(Error::generic(

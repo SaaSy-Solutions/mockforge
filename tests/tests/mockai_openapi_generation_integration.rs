@@ -23,11 +23,11 @@ fn create_test_exchange(
         query_params: None,
         headers: "{}".to_string(),
         body: None,
-        body_encoding: "application/json".to_string(),
+        body_encoding: "utf8".to_string(),
         status_code: Some(status_code),
         response_headers: Some("{}".to_string()),
         response_body: response_body.map(|s| s.to_string()),
-        response_body_encoding: Some("application/json".to_string()),
+        response_body_encoding: Some("utf8".to_string()),
         timestamp: Utc::now(),
     }
 }

@@ -35,19 +35,65 @@ async fn setup_test_db() -> Pool<Sqlite> {
     pool
 }
 
+/// Create a test user in the database
+async fn create_test_user(pool: &Pool<Sqlite>) -> Uuid {
+    let user_id = Uuid::new_v4();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    sqlx::query(
+        r#"INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(user_id.to_string())
+    .bind("testuser")
+    .bind("test@example.com")
+    .bind("hash")
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .expect("Failed to create test user");
+
+    user_id
+}
+
+/// Create a test workspace in the database
+async fn create_test_workspace(pool: &Pool<Sqlite>, owner_id: Uuid) -> Uuid {
+    let workspace_id = Uuid::new_v4();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    sqlx::query(
+        r#"INSERT INTO workspaces (id, name, owner_id, config, version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(workspace_id.to_string())
+    .bind("Test Workspace")
+    .bind(owner_id.to_string())
+    .bind("{}")
+    .bind(1)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .expect("Failed to create test workspace");
+
+    workspace_id
+}
+
 #[tokio::test]
 async fn test_create_promotion() {
     let db = setup_test_db().await;
+    let user_id = create_test_user(&db).await;
+    let workspace_id = create_test_workspace(&db, user_id).await;
     let service = PromotionService::new(db);
 
-    let workspace_id = "test-workspace-123";
-    let user_id = Uuid::new_v4();
+    let workspace_id_str = workspace_id.to_string();
 
     let request = PromotionRequest {
         entity_type: PromotionEntityType::Scenario,
         entity_id: "scenario-456".to_string(),
         entity_version: Some("v1.0.0".to_string()),
-        workspace_id: workspace_id.to_string(),
+        workspace_id: workspace_id_str.clone(),
         from_environment: MockEnvironmentName::Dev,
         to_environment: MockEnvironmentName::Test,
         requires_approval: true,
@@ -63,7 +109,7 @@ async fn test_create_promotion() {
 
     // Verify promotion was created
     let history = service
-        .get_promotion_history(workspace_id, PromotionEntityType::Scenario, "scenario-456")
+        .get_promotion_history(&workspace_id_str, PromotionEntityType::Scenario, "scenario-456")
         .await
         .expect("Failed to get promotion history");
 
@@ -77,18 +123,18 @@ async fn test_create_promotion() {
 #[tokio::test]
 async fn test_approve_promotion() {
     let db = setup_test_db().await;
+    let user_id = create_test_user(&db).await;
+    let workspace_id = create_test_workspace(&db, user_id).await;
     let service = PromotionService::new(db);
 
-    let workspace_id = "test-workspace-123";
-    let user_id = Uuid::new_v4();
-    let approver_id = Uuid::new_v4();
+    let workspace_id_str = workspace_id.to_string();
 
     // Create promotion
     let request = PromotionRequest {
         entity_type: PromotionEntityType::Scenario,
         entity_id: "scenario-789".to_string(),
         entity_version: None,
-        workspace_id: workspace_id.to_string(),
+        workspace_id: workspace_id_str.clone(),
         from_environment: MockEnvironmentName::Test,
         to_environment: MockEnvironmentName::Prod,
         requires_approval: true,
@@ -102,30 +148,31 @@ async fn test_approve_promotion() {
         .await
         .expect("Failed to create promotion");
 
-    // Approve promotion
+    // Approve promotion (use same user as approver for simplicity)
     service
-        .update_promotion_status(promotion_id, PromotionStatus::Approved, Some(approver_id))
+        .update_promotion_status(promotion_id, PromotionStatus::Approved, Some(user_id))
         .await
         .expect("Failed to approve promotion");
 
     // Verify status was updated
     let history = service
-        .get_promotion_history(workspace_id, PromotionEntityType::Scenario, "scenario-789")
+        .get_promotion_history(&workspace_id_str, PromotionEntityType::Scenario, "scenario-789")
         .await
         .expect("Failed to get promotion history");
 
     assert_eq!(history.promotions.len(), 1);
     assert_eq!(history.promotions[0].status, PromotionStatus::Approved);
-    assert_eq!(history.promotions[0].approved_by, Some(approver_id.to_string()));
+    assert_eq!(history.promotions[0].approved_by, Some(user_id.to_string()));
 }
 
 #[tokio::test]
 async fn test_list_workspace_promotions() {
     let db = setup_test_db().await;
+    let user_id = create_test_user(&db).await;
+    let workspace_id = create_test_workspace(&db, user_id).await;
     let service = PromotionService::new(db);
 
-    let workspace_id = "test-workspace-456";
-    let user_id = Uuid::new_v4();
+    let workspace_id_str = workspace_id.to_string();
 
     // Create multiple promotions
     for i in 0..5 {
@@ -133,7 +180,7 @@ async fn test_list_workspace_promotions() {
             entity_type: PromotionEntityType::Scenario,
             entity_id: format!("scenario-{}", i),
             entity_version: None,
-            workspace_id: workspace_id.to_string(),
+            workspace_id: workspace_id_str.clone(),
             from_environment: MockEnvironmentName::Dev,
             to_environment: MockEnvironmentName::Test,
             requires_approval: true,
@@ -150,7 +197,7 @@ async fn test_list_workspace_promotions() {
 
     // List promotions
     let promotions = service
-        .get_workspace_promotions(workspace_id, Some(10))
+        .get_workspace_promotions(&workspace_id_str, Some(10))
         .await
         .expect("Failed to list promotions");
 
@@ -160,11 +207,11 @@ async fn test_list_workspace_promotions() {
 #[tokio::test]
 async fn test_list_pending_promotions() {
     let db = setup_test_db().await;
+    let user_id = create_test_user(&db).await;
+    let workspace_id = create_test_workspace(&db, user_id).await;
     let service = PromotionService::new(db);
 
-    let workspace_id = "test-workspace-789";
-    let user_id = Uuid::new_v4();
-    let approver_id = Uuid::new_v4();
+    let workspace_id_str = workspace_id.to_string();
 
     // Create pending promotions
     for i in 0..3 {
@@ -172,7 +219,7 @@ async fn test_list_pending_promotions() {
             entity_type: PromotionEntityType::Scenario,
             entity_id: format!("scenario-pending-{}", i),
             entity_version: None,
-            workspace_id: workspace_id.to_string(),
+            workspace_id: workspace_id_str.clone(),
             from_environment: MockEnvironmentName::Dev,
             to_environment: MockEnvironmentName::Test,
             requires_approval: true,
@@ -192,7 +239,7 @@ async fn test_list_pending_promotions() {
         entity_type: PromotionEntityType::Scenario,
         entity_id: "scenario-approved".to_string(),
         entity_version: None,
-        workspace_id: workspace_id.to_string(),
+        workspace_id: workspace_id_str.clone(),
         from_environment: MockEnvironmentName::Dev,
         to_environment: MockEnvironmentName::Test,
         requires_approval: true,
@@ -207,13 +254,13 @@ async fn test_list_pending_promotions() {
         .expect("Failed to create promotion");
 
     service
-        .update_promotion_status(promotion_id, PromotionStatus::Approved, Some(approver_id))
+        .update_promotion_status(promotion_id, PromotionStatus::Approved, Some(user_id))
         .await
         .expect("Failed to approve promotion");
 
     // List pending promotions
     let pending = service
-        .get_pending_promotions(Some(workspace_id))
+        .get_pending_promotions(Some(&workspace_id_str))
         .await
         .expect("Failed to list pending promotions");
 
@@ -224,11 +271,11 @@ async fn test_list_pending_promotions() {
 #[tokio::test]
 async fn test_promotion_history_for_entity() {
     let db = setup_test_db().await;
+    let user_id = create_test_user(&db).await;
+    let workspace_id = create_test_workspace(&db, user_id).await;
     let service = PromotionService::new(db);
 
-    let workspace_id = "test-workspace-history";
-    let user_id = Uuid::new_v4();
-
+    let workspace_id_str = workspace_id.to_string();
     let entity_id = "scenario-history-test";
 
     // Create multiple promotions for the same entity
@@ -242,7 +289,7 @@ async fn test_promotion_history_for_entity() {
             entity_type: PromotionEntityType::Scenario,
             entity_id: entity_id.to_string(),
             entity_version: None,
-            workspace_id: workspace_id.to_string(),
+            workspace_id: workspace_id_str.clone(),
             from_environment: from,
             to_environment: to,
             requires_approval: true,
@@ -259,7 +306,7 @@ async fn test_promotion_history_for_entity() {
 
     // Get promotion history
     let history = service
-        .get_promotion_history(workspace_id, PromotionEntityType::Scenario, entity_id)
+        .get_promotion_history(&workspace_id_str, PromotionEntityType::Scenario, entity_id)
         .await
         .expect("Failed to get promotion history");
 
@@ -271,10 +318,11 @@ async fn test_promotion_history_for_entity() {
 #[tokio::test]
 async fn test_promotion_with_metadata() {
     let db = setup_test_db().await;
+    let user_id = create_test_user(&db).await;
+    let workspace_id = create_test_workspace(&db, user_id).await;
     let service = PromotionService::new(db);
 
-    let workspace_id = "test-workspace-metadata";
-    let user_id = Uuid::new_v4();
+    let workspace_id_str = workspace_id.to_string();
 
     let mut metadata = HashMap::new();
     metadata.insert("test_key".to_string(), serde_json::json!("test_value"));
@@ -284,7 +332,7 @@ async fn test_promotion_with_metadata() {
         entity_type: PromotionEntityType::Config,
         entity_id: "config-123".to_string(),
         entity_version: None,
-        workspace_id: workspace_id.to_string(),
+        workspace_id: workspace_id_str.clone(),
         from_environment: MockEnvironmentName::Dev,
         to_environment: MockEnvironmentName::Test,
         requires_approval: false,
@@ -293,14 +341,14 @@ async fn test_promotion_with_metadata() {
         metadata: metadata.clone(),
     };
 
-    let promotion_id = service
+    let _promotion_id = service
         .record_promotion(&request, user_id, PromotionStatus::Pending, None)
         .await
         .expect("Failed to create promotion");
 
     // Verify metadata was stored
     let history = service
-        .get_promotion_history(workspace_id, PromotionEntityType::Config, "config-123")
+        .get_promotion_history(&workspace_id_str, PromotionEntityType::Config, "config-123")
         .await
         .expect("Failed to get promotion history");
 
@@ -342,10 +390,11 @@ async fn test_pillar_tag_approval_detection() {
 #[tokio::test]
 async fn test_pillar_tags_preserved_in_promotion() {
     let db = setup_test_db().await;
+    let user_id = create_test_user(&db).await;
+    let workspace_id = create_test_workspace(&db, user_id).await;
     let service = PromotionService::new(db);
 
-    let workspace_id = "test-workspace-pillar-tags";
-    let user_id = Uuid::new_v4();
+    let workspace_id_str = workspace_id.to_string();
 
     let mut metadata = HashMap::new();
     metadata.insert(
@@ -357,7 +406,7 @@ async fn test_pillar_tags_preserved_in_promotion() {
         entity_type: PromotionEntityType::Scenario,
         entity_id: "scenario-pillar-tags".to_string(),
         entity_version: None,
-        workspace_id: workspace_id.to_string(),
+        workspace_id: workspace_id_str.clone(),
         from_environment: MockEnvironmentName::Dev,
         to_environment: MockEnvironmentName::Test,
         requires_approval: true,
@@ -369,14 +418,18 @@ async fn test_pillar_tags_preserved_in_promotion() {
         metadata: metadata.clone(),
     };
 
-    let promotion_id = service
+    let _promotion_id = service
         .record_promotion(&request, user_id, PromotionStatus::Pending, None)
         .await
         .expect("Failed to create promotion");
 
     // Verify tags were preserved in promotion history
     let history = service
-        .get_promotion_history(workspace_id, PromotionEntityType::Scenario, "scenario-pillar-tags")
+        .get_promotion_history(
+            &workspace_id_str,
+            PromotionEntityType::Scenario,
+            "scenario-pillar-tags",
+        )
         .await
         .expect("Failed to get promotion history");
 

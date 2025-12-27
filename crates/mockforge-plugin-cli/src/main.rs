@@ -222,7 +222,7 @@ mod tests {
     // Commands::New tests
     #[test]
     fn test_new_command_required_args() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "new", "my-plugin", "-t", "auth"]);
+        let result = Cli::try_parse_from(&["mockforge-plugin", "new", "my-plugin", "-p", "auth"]);
         assert!(result.is_ok());
 
         if let Commands::New {
@@ -495,7 +495,7 @@ mod tests {
         let result = Cli::try_parse_from(&[
             "mockforge-plugin",
             "init",
-            "-t",
+            "-p",
             "datasource",
             "-o",
             "custom.yaml",

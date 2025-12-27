@@ -50,6 +50,10 @@ async fn main() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Mutex to serialize tests that modify environment variables
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_default_tracing_filter() {
@@ -72,6 +76,7 @@ mod tests {
 
     #[test]
     fn test_get_watch_namespace_not_set() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // When WATCH_NAMESPACE is not set, should return None
         std::env::remove_var("WATCH_NAMESPACE");
         let namespace = get_watch_namespace();
@@ -80,6 +85,7 @@ mod tests {
 
     #[test]
     fn test_get_watch_namespace_set() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // When WATCH_NAMESPACE is set, should return the value
         let test_namespace = "test-namespace";
         std::env::set_var("WATCH_NAMESPACE", test_namespace);
@@ -90,6 +96,7 @@ mod tests {
 
     #[test]
     fn test_get_watch_namespace_empty_string() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // When WATCH_NAMESPACE is empty string, should return Some("")
         std::env::set_var("WATCH_NAMESPACE", "");
         let namespace = get_watch_namespace();
@@ -99,6 +106,7 @@ mod tests {
 
     #[test]
     fn test_get_watch_namespace_with_special_chars() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Test namespace with hyphens and underscores
         let test_namespace = "my-test_namespace-123";
         std::env::set_var("WATCH_NAMESPACE", test_namespace);
@@ -109,6 +117,7 @@ mod tests {
 
     #[test]
     fn test_get_watch_namespace_default_namespace() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Test with "default" namespace
         std::env::set_var("WATCH_NAMESPACE", "default");
         let namespace = get_watch_namespace();
@@ -118,6 +127,7 @@ mod tests {
 
     #[test]
     fn test_get_watch_namespace_kube_system() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Test with "kube-system" namespace
         std::env::set_var("WATCH_NAMESPACE", "kube-system");
         let namespace = get_watch_namespace();
@@ -127,6 +137,7 @@ mod tests {
 
     #[test]
     fn test_environment_variable_isolation() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Ensure tests don't interfere with each other
         std::env::remove_var("WATCH_NAMESPACE");
         assert!(get_watch_namespace().is_none());
@@ -159,6 +170,7 @@ mod tests {
     // Integration-style tests (these would need a K8s cluster in real scenarios)
     #[test]
     fn test_namespace_scenarios() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Test various namespace scenarios
         let scenarios = vec![
             ("default", Some("default".to_string())),
@@ -191,6 +203,7 @@ mod tests {
 
     #[test]
     fn test_namespace_validation_characters() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Test various valid Kubernetes namespace characters
         let valid_namespaces = vec![
             "abc",
@@ -211,6 +224,7 @@ mod tests {
 
     #[test]
     fn test_multiple_namespace_switches() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Test switching between namespaces
         std::env::set_var("WATCH_NAMESPACE", "ns1");
         assert_eq!(get_watch_namespace(), Some("ns1".to_string()));
@@ -226,6 +240,7 @@ mod tests {
 
     #[test]
     fn test_watch_all_namespaces() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // When no namespace is set, operator should watch all namespaces
         std::env::remove_var("WATCH_NAMESPACE");
         let namespace = get_watch_namespace();
@@ -244,6 +259,7 @@ mod tests {
 
     #[test]
     fn test_namespace_length() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Test with various length namespaces
         let short_ns = "a";
         std::env::set_var("WATCH_NAMESPACE", short_ns);
@@ -258,6 +274,7 @@ mod tests {
 
     #[test]
     fn test_env_var_case_sensitivity() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         // Environment variable names are case-sensitive
         std::env::set_var("WATCH_NAMESPACE", "test");
         assert_eq!(get_watch_namespace(), Some("test".to_string()));

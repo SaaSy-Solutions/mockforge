@@ -517,7 +517,7 @@ async fn create_commit(
 /// - `pagination`: Object with `limit` and `offset` values
 ///
 /// # Example
-/// ```
+/// ```text
 /// GET /workspaces/{id}/commits?limit=20&offset=0
 /// ```
 ///
