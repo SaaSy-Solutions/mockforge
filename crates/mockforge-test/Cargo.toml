@@ -10,7 +10,7 @@ documentation.workspace = true
 description = "Test utilities for MockForge - easy integration with Playwright and Vitest"
 keywords = ["mock", "testing", "playwright", "vitest", "test-utilities"]
 categories = ["development-tools", "development-tools::testing"]
-publish = true
+publish = false
 
 [dependencies]
 # Core MockForge dependencies

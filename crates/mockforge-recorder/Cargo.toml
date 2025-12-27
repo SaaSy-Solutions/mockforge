@@ -8,7 +8,7 @@ description = "Recording and replay functionality for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = true  # Internal component, integrated into CLI
+publish = false  # Internal component, integrated into CLI
 
 [dependencies]
 # Database

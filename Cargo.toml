@@ -8,8 +8,6 @@ members = [
     "crates/mockforge-plugin-core",
     "crates/mockforge-plugin-cli",
     "crates/mockforge-plugin-registry",
-    "crates/mockforge-plugin-sdk",
-    "crates/mockforge-reporting",
 
     # Observability & tracing
     "crates/mockforge-tracing",
@@ -23,8 +21,6 @@ members = [
     "crates/mockforge-tunnel",
 
     # Main user-facing crates
-    "crates/mockforge-bench",
-    "crates/mockforge-cli",
 
     # Examples and tests
     "examples/plugins/response-graphql",
@@ -34,10 +30,6 @@ members = [
     "tests",
 
     # Server applications (included for testing)
-    "crates/mockforge-registry-server",
-    "crates/mockforge-k8s-operator",
-    "crates/mockforge-federation",
-    "crates/mockforge-runtime-daemon",
 ]
 resolver = "2"
 

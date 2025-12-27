@@ -8,7 +8,7 @@ description = "Virtual Backend Reality engine - stateful mock servers with persi
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = true
+publish = false
 
 [dependencies]
 # Core dependencies
