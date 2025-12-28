@@ -1710,6 +1710,21 @@ enum Commands {
         /// Example: --security-target-fields "name,email,query"
         #[arg(long)]
         security_target_fields: Option<String>,
+
+        // === WAFBench Integration ===
+        /// WAFBench test directory or glob pattern
+        ///
+        /// Load attack patterns from WAFBench YAML files (CRS rule sets).
+        /// Supports glob patterns for selecting specific rule categories.
+        ///
+        /// Examples:
+        ///   --wafbench-dir ./wafbench/REQUEST-941-*        (all XSS rules)
+        ///   --wafbench-dir ./wafbench/REQUEST-942-*        (all SQLi rules)
+        ///   --wafbench-dir ./wafbench/**/*.yaml            (all rules)
+        ///
+        /// See: https://github.com/microsoft/WAFBench
+        #[arg(long, value_name = "PATH")]
+        wafbench_dir: Option<String>,
     },
 }
 
@@ -3024,6 +3039,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             security_payloads,
             security_categories,
             security_target_fields,
+            wafbench_dir,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3087,6 +3103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 security_payloads,
                 security_categories,
                 security_target_fields,
+                wafbench_dir,
             };
 
             if let Err(e) = bench_cmd.execute().await {

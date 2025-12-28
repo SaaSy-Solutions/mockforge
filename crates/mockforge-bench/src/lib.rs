@@ -22,6 +22,7 @@ pub mod security_payloads;
 pub mod spec_dependencies;
 pub mod spec_parser;
 pub mod target_parser;
+pub mod wafbench;
 
 pub use command::BenchCommand;
 pub use crud_flow::{CrudFlow, CrudFlowConfig, CrudFlowDetector, FlowStep};
@@ -40,3 +41,4 @@ pub use spec_dependencies::{
     DependencyDetector, ExtractedValues, SpecDependency, SpecDependencyConfig, SpecGroup,
 };
 pub use target_parser::{parse_targets_file, TargetConfig};
+pub use wafbench::{WafBenchLoader, WafBenchStats, WafBenchTestCase};

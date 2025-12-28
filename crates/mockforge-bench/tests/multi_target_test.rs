@@ -161,6 +161,7 @@ async fn test_bench_command_parse_headers() {
         security_payloads: None,
         security_categories: None,
         security_target_fields: None,
+        wafbench_dir: None,
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -212,6 +213,7 @@ async fn test_bench_command_parse_headers_invalid_format() {
         security_payloads: None,
         security_categories: None,
         security_target_fields: None,
+        wafbench_dir: None,
     };
 
     let result = cmd.parse_headers();

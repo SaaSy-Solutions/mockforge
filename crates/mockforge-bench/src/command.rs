@@ -16,13 +16,14 @@ use crate::reporter::TerminalReporter;
 use crate::request_gen::RequestGenerator;
 use crate::scenarios::LoadScenario;
 use crate::security_payloads::{
-    SecurityCategory, SecurityPayloads, SecurityTestConfig, SecurityTestGenerator,
+    SecurityCategory, SecurityPayload, SecurityPayloads, SecurityTestConfig, SecurityTestGenerator,
 };
 use crate::spec_dependencies::{
     topological_sort, DependencyDetector, ExtractedValues, SpecDependencyConfig,
 };
 use crate::spec_parser::SpecParser;
 use crate::target_parser::parse_targets_file;
+use crate::wafbench::WafBenchLoader;
 use mockforge_core::openapi::multi_spec::{
     load_specs_from_directory, load_specs_from_files, merge_specs, ConflictStrategy,
 };
@@ -111,6 +112,10 @@ pub struct BenchCommand {
     pub security_categories: Option<String>,
     /// Fields to target for security injection
     pub security_target_fields: Option<String>,
+
+    // === WAFBench Integration ===
+    /// WAFBench test directory or glob pattern for loading CRS attack patterns
+    pub wafbench_dir: Option<String>,
 }
 
 impl BenchCommand {
@@ -452,6 +457,7 @@ impl BenchCommand {
                 security_payloads: self.security_payloads.clone(),
                 security_categories: self.security_categories.clone(),
                 security_target_fields: self.security_target_fields.clone(),
+                wafbench_dir: self.wafbench_dir.clone(),
             },
             targets,
             max_concurrency,
@@ -697,6 +703,47 @@ impl BenchCommand {
         Some(ParallelConfig::new(count))
     }
 
+    /// Load WAFBench payloads from the specified directory or pattern
+    fn load_wafbench_payloads(&self) -> Vec<SecurityPayload> {
+        let Some(ref wafbench_dir) = self.wafbench_dir else {
+            return Vec::new();
+        };
+
+        let mut loader = WafBenchLoader::new();
+
+        if let Err(e) = loader.load_from_pattern(wafbench_dir) {
+            TerminalReporter::print_warning(&format!("Failed to load WAFBench tests: {}", e));
+            return Vec::new();
+        }
+
+        let stats = loader.stats();
+
+        if stats.files_processed == 0 {
+            TerminalReporter::print_warning(&format!(
+                "No WAFBench YAML files found matching '{}'",
+                wafbench_dir
+            ));
+            return Vec::new();
+        }
+
+        TerminalReporter::print_progress(&format!(
+            "Loaded {} WAFBench files, {} test cases, {} payloads",
+            stats.files_processed, stats.test_cases_loaded, stats.payloads_extracted
+        ));
+
+        // Print category breakdown
+        for (category, count) in &stats.by_category {
+            TerminalReporter::print_progress(&format!("  - {}: {} tests", category, count));
+        }
+
+        // Report any parse errors
+        for error in &stats.parse_errors {
+            TerminalReporter::print_warning(&format!("  Parse error: {}", error));
+        }
+
+        loader.to_security_payloads()
+    }
+
     /// Generate enhanced k6 script with advanced features
     fn generate_enhanced_script(&self, base_script: &str) -> Result<String> {
         let mut enhanced_script = base_script.to_string();
@@ -728,14 +775,36 @@ impl BenchCommand {
         }
 
         // Add security testing code
-        if let Some(config) = self.build_security_config() {
+        let security_config = self.build_security_config();
+        let wafbench_payloads = self.load_wafbench_payloads();
+
+        if security_config.is_some() || !wafbench_payloads.is_empty() {
             TerminalReporter::print_progress("Adding security testing support...");
-            let payload_list = SecurityPayloads::get_payloads(&config);
+
+            // Combine built-in payloads with WAFBench payloads
+            let mut payload_list: Vec<SecurityPayload> = Vec::new();
+
+            if let Some(ref config) = security_config {
+                payload_list.extend(SecurityPayloads::get_payloads(config));
+            }
+
+            // Add WAFBench payloads
+            if !wafbench_payloads.is_empty() {
+                TerminalReporter::print_progress(&format!(
+                    "Loading {} WAFBench attack patterns...",
+                    wafbench_payloads.len()
+                ));
+                payload_list.extend(wafbench_payloads);
+            }
+
+            let target_fields =
+                security_config.as_ref().map(|c| c.target_fields.clone()).unwrap_or_default();
+
             additional_code
                 .push_str(&SecurityTestGenerator::generate_payload_selection(&payload_list));
             additional_code.push('\n');
             additional_code
-                .push_str(&SecurityTestGenerator::generate_apply_payload(&config.target_fields));
+                .push_str(&SecurityTestGenerator::generate_apply_payload(&target_fields));
             additional_code.push('\n');
             additional_code.push_str(&SecurityTestGenerator::generate_security_checks());
             additional_code.push('\n');
@@ -1386,6 +1455,7 @@ mod tests {
             security_payloads: None,
             security_categories: None,
             security_target_fields: None,
+            wafbench_dir: None,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -1435,6 +1505,7 @@ mod tests {
             security_payloads: None,
             security_categories: None,
             security_target_fields: None,
+            wafbench_dir: None,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -1480,6 +1551,7 @@ mod tests {
             security_payloads: None,
             security_categories: None,
             security_target_fields: None,
+            wafbench_dir: None,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

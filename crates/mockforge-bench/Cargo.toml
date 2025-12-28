@@ -49,6 +49,12 @@ regex = "1.11"
 # Process execution
 which = "7.0"
 
+# File globbing for WAFBench directory patterns
+glob = "0.3"
+
+# URL encoding/decoding for WAFBench payload extraction
+urlencoding = "2.1"
+
 [dev-dependencies]
 mockito = "1.5"
 tempfile = "3.14"
