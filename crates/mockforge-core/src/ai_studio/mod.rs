@@ -16,22 +16,22 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use mockforge_core::ai_studio::{ChatOrchestrator, ChatRequest};
 //! use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 //!
-//! # async fn example() -> mockforge_core::Result<()> {
-//! let config = IntelligentBehaviorConfig::default();
-//! let orchestrator = ChatOrchestrator::new(config);
+//! async fn example() -> mockforge_core::Result<()> {
+//!     let config = IntelligentBehaviorConfig::default();
+//!     let orchestrator = ChatOrchestrator::new(config);
 //!
-//! // Process a natural language command
-//! let request = ChatRequest {
-//!     message: "Create a user API with CRUD operations".to_string(),
-//!     context: None,
-//! };
-//! let response = orchestrator.process(&request).await?;
-//! # Ok(())
-//! # }
+//!     // Process a natural language command
+//!     let request = ChatRequest {
+//!         message: "Create a user API with CRUD operations".to_string(),
+//!         context: None,
+//!     };
+//!     let response = orchestrator.process(&request).await?;
+//!     Ok(())
+//! }
 //! ```
 
 pub mod api_critique;

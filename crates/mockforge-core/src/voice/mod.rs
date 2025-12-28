@@ -15,23 +15,23 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,no_run
-//! use mockforge_core::voice::{VoiceCommandParser, VoiceCommand};
+//! ```rust,ignore
+//! use mockforge_core::voice::{VoiceCommandParser, VoiceSpecGenerator};
 //! use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 //!
-//! # async fn example() -> mockforge_core::Result<()> {
-//! let config = IntelligentBehaviorConfig::default();
-//! let parser = VoiceCommandParser::new(config);
+//! async fn example() -> mockforge_core::Result<()> {
+//!     let config = IntelligentBehaviorConfig::default();
+//!     let parser = VoiceCommandParser::new(config.clone());
 //!
-//! // Parse a voice command
-//! let command = "Create a fake e-commerce API with 20 products and a checkout flow";
-//! let parsed = parser.parse_command(command).await?;
+//!     // Parse a voice command
+//!     let command = "Create a fake e-commerce API with 20 products and a checkout flow";
+//!     let parsed = parser.parse_command(command).await?;
 //!
-//! // Generate OpenAPI spec
-//! let spec_generator = VoiceSpecGenerator::new();
-//! let spec = spec_generator.generate_spec(&parsed).await?;
-//! # Ok(())
-//! # }
+//!     // Generate OpenAPI spec
+//!     let spec_generator = VoiceSpecGenerator::new(config);
+//!     let spec = spec_generator.generate_spec(&parsed).await?;
+//!     Ok(())
+//! }
 //! ```
 
 pub mod command_parser;

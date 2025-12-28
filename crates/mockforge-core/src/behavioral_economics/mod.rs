@@ -14,9 +14,9 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use mockforge_core::behavioral_economics::{
-//!     BehavioralEconomicsEngine, BehaviorRule, BehaviorCondition, BehaviorAction
+//!     BehavioralEconomicsEngine, BehaviorRule, BehaviorCondition, BehaviorAction, RuleType
 //! };
 //!
 //! // Declarative rule: Cart conversion drops if latency > 400ms

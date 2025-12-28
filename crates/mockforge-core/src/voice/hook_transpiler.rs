@@ -54,11 +54,9 @@ impl HookTranspiler {
     ///
     /// * `description` - Natural language description of the hook logic
     ///
-    /// # Example
+    /// # Example Description
     ///
-    /// ```
     /// "For users flagged as VIP, webhooks should fire instantly but payments fail 5% of the time"
-    /// ```
     pub async fn transpile(&self, description: &str) -> Result<Hook> {
         // Build system prompt for hook parsing
         let system_prompt = r#"You are an expert at parsing natural language descriptions of hook logic

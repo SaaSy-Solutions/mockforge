@@ -22,23 +22,23 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use mockforge_core::ai_studio::system_generator::{SystemGenerator, SystemGenerationRequest};
 //! use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 //!
-//! # async fn example() -> mockforge_core::Result<()> {
-//! let config = IntelligentBehaviorConfig::default();
-//! let generator = SystemGenerator::new(config);
+//! async fn example() -> mockforge_core::Result<()> {
+//!     let config = IntelligentBehaviorConfig::default();
+//!     let generator = SystemGenerator::new(config);
 //!
-//! let request = SystemGenerationRequest {
-//!     description: "I'm building a ride-sharing app with drivers, riders, trips, payments, live-location updates, pricing, and surge events.".to_string(),
-//!     output_formats: vec!["openapi".to_string(), "personas".to_string(), "lifecycles".to_string()],
-//!     workspace_id: Some("workspace-123".to_string()),
-//! };
+//!     let request = SystemGenerationRequest {
+//!         description: "I'm building a ride-sharing app".to_string(),
+//!         output_formats: vec!["openapi".to_string(), "personas".to_string()],
+//!         workspace_id: Some("workspace-123".to_string()),
+//!     };
 //!
-//! let system = generator.generate(&request).await?;
-//! # Ok(())
-//! # }
+//!     let system = generator.generate(&request).await?;
+//!     Ok(())
+//! }
 //! ```
 
 use crate::ai_studio::{

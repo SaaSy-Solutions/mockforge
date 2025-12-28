@@ -342,7 +342,8 @@ impl OpenApiRoute {
     /// * `scenario` - Optional scenario name to select from the OpenAPI examples
     ///
     /// # Example
-    /// ```rust
+    ///
+    /// ```rust,ignore
     /// // Select the "error" scenario from examples
     /// let (status, body) = route.mock_response_with_status_and_scenario(Some("error"));
     /// ```

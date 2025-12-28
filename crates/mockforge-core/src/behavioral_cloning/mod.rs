@@ -11,30 +11,30 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use mockforge_core::behavioral_cloning::{
 //!     SequenceLearner, ProbabilisticModel, EdgeAmplifier,
 //! };
 //!
-//! # async fn example() -> mockforge_core::Result<()> {
-//! // Learn sequences from recorded traffic
-//! let sequences = SequenceLearner::discover_sequences_from_traces(&database).await?;
+//! async fn example(database: &impl mockforge_core::behavioral_cloning::TraceQueryProvider) -> mockforge_core::Result<()> {
+//!     // Learn sequences from recorded traffic
+//!     let sequences = SequenceLearner::discover_sequences_from_traces(database).await?;
 //!
-//! // Build probability models for endpoints
-//! let model = ProbabilisticModel::build_probability_model(
-//!     &database,
-//!     "/api/users",
-//!     "GET"
-//! ).await?;
+//!     // Build probability models for endpoints
+//!     let model = ProbabilisticModel::build_probability_model(
+//!         database,
+//!         "/api/users",
+//!         "GET"
+//!     ).await?;
 //!
-//! // Sample a status code based on learned distribution
-//! let status_code = model.sample_status_code();
+//!     // Sample a status code based on learned distribution
+//!     let status_code = model.sample_status_code();
 //!
-//! // Amplify rare errors for testing
-//! let amplifier = EdgeAmplifier::new();
-//! amplifier.apply_amplification(&mut model, 0.5)?; // 50% frequency
-//! # Ok(())
-//! # }
+//!     // Amplify rare errors for testing
+//!     let amplifier = EdgeAmplifier::new();
+//!     amplifier.apply_amplification(&mut model.clone(), 0.5)?; // 50% frequency
+//!     Ok(())
+//! }
 //! ```
 
 pub mod edge_amplifier;

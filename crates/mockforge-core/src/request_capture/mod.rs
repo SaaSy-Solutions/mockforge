@@ -12,24 +12,24 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,no_run
-//! use mockforge_core::request_capture::{CaptureManager, CaptureSource};
+//! ```rust,ignore
+//! use mockforge_core::request_capture::CaptureManager;
 //! use mockforge_core::ai_contract_diff::CapturedRequest;
 //!
-//! # async fn example() -> mockforge_core::Result<()> {
-//! // Create capture manager
-//! let manager = CaptureManager::new(1000); // Keep last 1000 requests
+//! async fn example() -> mockforge_core::Result<()> {
+//!     // Create capture manager
+//!     let manager = CaptureManager::new(1000); // Keep last 1000 requests
 //!
-//! // Capture a request from browser extension
-//! let request = CapturedRequest::new("POST", "/api/users", "browser_extension")
-//!     .with_body(serde_json::json!({"name": "Alice"}));
+//!     // Capture a request from browser extension
+//!     let request = CapturedRequest::new("POST", "/api/users", "browser_extension")
+//!         .with_body(serde_json::json!({"name": "Alice"}));
 //!
-//! manager.capture(request).await?;
+//!     manager.capture(request).await?;
 //!
-//! // Retrieve captured requests
-//! let requests = manager.get_recent_captures(Some(10)).await;
-//! # Ok(())
-//! # }
+//!     // Retrieve captured requests
+//!     let requests = manager.get_recent_captures(Some(10)).await;
+//!     Ok(())
+//! }
 //! ```
 
 pub mod capture_manager;

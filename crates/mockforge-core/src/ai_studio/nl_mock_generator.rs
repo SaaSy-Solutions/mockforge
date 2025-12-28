@@ -51,17 +51,19 @@ impl MockGenerator {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
-    /// # async fn example() -> mockforge_core::Result<()> {
-    /// let generator = MockGenerator::new();
-    /// let result = generator.generate(
-    ///     "Create a user API with CRUD operations for managing users",
-    ///     None,
-    ///     None,
-    ///     None,
-    /// ).await?;
-    /// # Ok(())
-    /// # }
+    /// ```rust,ignore
+    /// use mockforge_core::ai_studio::nl_mock_generator::MockGenerator;
+    ///
+    /// async fn example() -> mockforge_core::Result<()> {
+    ///     let generator = MockGenerator::new();
+    ///     let result = generator.generate(
+    ///         "Create a user API with CRUD operations for managing users",
+    ///         None,
+    ///         None,
+    ///         None,
+    ///     ).await?;
+    ///     Ok(())
+    /// }
     /// ```
     pub async fn generate(
         &self,

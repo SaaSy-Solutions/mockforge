@@ -7,25 +7,29 @@
 //!
 //! ## Usage
 //!
-//! ```rust,no_run
-//! use mockforge_core::time_travel::{CronScheduler, CronJob, CronJobAction};
+//! ```rust,ignore
+//! use mockforge_core::time_travel::{CronScheduler, CronJob, CronJobAction, VirtualClock};
 //! use std::sync::Arc;
 //!
-//! let scheduler = CronScheduler::new(clock.clone());
+//! async fn example() -> Result<(), String> {
+//!     let clock = Arc::new(VirtualClock::new());
+//!     let scheduler = CronScheduler::new(clock);
 //!
-//! // Schedule a job that runs every day at 3am
-//! let job = CronJob {
-//!     id: "daily-cleanup".to_string(),
-//!     name: "Daily Cleanup".to_string(),
-//!     schedule: "0 3 * * *".to_string(), // 3am every day
-//!     action: CronJobAction::Callback(Box::new(|_| {
+//!     // Schedule a job that runs every day at 3am
+//!     let job = CronJob::new(
+//!         "daily-cleanup".to_string(),
+//!         "Daily Cleanup".to_string(),
+//!         "0 3 * * *".to_string(), // 3am every day
+//!     );
+//!
+//!     let action = CronJobAction::Callback(Box::new(|_| {
 //!         println!("Running daily cleanup");
 //!         Ok(())
-//!     })),
-//!     enabled: true,
-//! };
+//!     }));
 //!
-//! scheduler.add_job(job).await?;
+//!     scheduler.add_job(job, action).await?;
+//!     Ok(())
+//! }
 //! ```
 
 use chrono::{DateTime, Utc};

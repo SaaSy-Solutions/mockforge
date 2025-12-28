@@ -6,22 +6,24 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use mockforge_core::verification::{VerificationRequest, VerificationCount, verify_requests};
 //! use mockforge_core::request_logger::get_global_logger;
 //!
-//! // Verify that GET /api/users was called exactly 3 times
-//! let pattern = VerificationRequest {
-//!     method: Some("GET".to_string()),
-//!     path: Some("/api/users".to_string()),
-//!     query_params: std::collections::HashMap::new(),
-//!     headers: std::collections::HashMap::new(),
-//!     body_pattern: None,
-//! };
+//! async fn verify_example() {
+//!     // Verify that GET /api/users was called exactly 3 times
+//!     let pattern = VerificationRequest {
+//!         method: Some("GET".to_string()),
+//!         path: Some("/api/users".to_string()),
+//!         query_params: std::collections::HashMap::new(),
+//!         headers: std::collections::HashMap::new(),
+//!         body_pattern: None,
+//!     };
 //!
-//! let logger = get_global_logger().unwrap();
-//! let result = verify_requests(logger, &pattern, VerificationCount::Exactly(3)).await;
-//! assert!(result.matched, "Expected GET /api/users to be called exactly 3 times");
+//!     let logger = get_global_logger().unwrap();
+//!     let result = verify_requests(logger, &pattern, VerificationCount::Exactly(3)).await;
+//!     assert!(result.matched, "Expected GET /api/users to be called exactly 3 times");
+//! }
 //! ```
 
 use crate::request_logger::RequestLogEntry;

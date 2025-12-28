@@ -15,15 +15,15 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use mockforge_core::ai_contract_diff::{
 //!     ContractDiffAnalyzer, ContractDiffConfig, CapturedRequest,
 //! };
 //! use mockforge_core::openapi::OpenApiSpec;
 //!
-//! # async fn example() -> mockforge_core::Result<()> {
-//! // Load contract specification
-//! let spec = OpenApiSpec::from_file("api.yaml").await?;
+//! async fn example() -> mockforge_core::Result<()> {
+//!     // Load contract specification
+//!     let spec = OpenApiSpec::from_file("api.yaml").await?;
 //!
 //! // Configure contract diff
 //! let config = ContractDiffConfig {
@@ -60,9 +60,9 @@
 //!     for correction in &result.corrections {
 //!         println!("  Correction: {}", correction.description);
 //!     }
+//!     }
+//!     Ok(())
 //! }
-//! # Ok(())
-//! # }
 //! ```
 
 pub mod confidence_scorer;

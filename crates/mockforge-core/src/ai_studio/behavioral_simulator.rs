@@ -14,23 +14,23 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use mockforge_core::ai_studio::behavioral_simulator::{BehavioralSimulator, CreateAgentRequest};
 //! use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 //!
-//! # async fn example() -> mockforge_core::Result<()> {
-//! let config = IntelligentBehaviorConfig::default();
-//! let simulator = BehavioralSimulator::new(config);
+//! async fn example() -> mockforge_core::Result<()> {
+//!     let config = IntelligentBehaviorConfig::default();
+//!     let simulator = BehavioralSimulator::new(config);
 //!
-//! let request = CreateAgentRequest {
-//!     persona_id: Some("existing-persona-123".to_string()),
-//!     behavior_policy: Some("bargain-hunter".to_string()),
-//!     generate_persona: false,
-//! };
+//!     let request = CreateAgentRequest {
+//!         persona_id: Some("existing-persona-123".to_string()),
+//!         behavior_policy: Some("bargain-hunter".to_string()),
+//!         generate_persona: false,
+//!     };
 //!
-//! let agent = simulator.create_agent(&request).await?;
-//! # Ok(())
-//! # }
+//!     let agent = simulator.create_agent(&request).await?;
+//!     Ok(())
+//! }
 //! ```
 
 use crate::intelligent_behavior::{

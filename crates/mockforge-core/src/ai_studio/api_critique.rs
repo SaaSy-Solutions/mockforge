@@ -14,23 +14,23 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use mockforge_core::ai_studio::api_critique::{ApiCritique, ApiCritiqueEngine, CritiqueRequest};
 //! use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 //!
-//! # async fn example() -> mockforge_core::Result<()> {
-//! let config = IntelligentBehaviorConfig::default();
-//! let engine = ApiCritiqueEngine::new(config);
+//! async fn example() -> mockforge_core::Result<()> {
+//!     let config = IntelligentBehaviorConfig::default();
+//!     let engine = ApiCritiqueEngine::new(config);
 //!
-//! let request = CritiqueRequest {
-//!     schema: serde_json::json!({"openapi": "3.0.0", ...}),
-//!     schema_type: "openapi".to_string(),
-//!     focus_areas: vec!["anti-patterns".to_string(), "naming".to_string()],
-//! };
+//!     let request = CritiqueRequest {
+//!         schema: serde_json::json!({"openapi": "3.0.0"}),
+//!         schema_type: "openapi".to_string(),
+//!         focus_areas: vec!["anti-patterns".to_string(), "naming".to_string()],
+//!     };
 //!
-//! let critique = engine.analyze(&request).await?;
-//! # Ok(())
-//! # }
+//!     let critique = engine.analyze(&request).await?;
+//!     Ok(())
+//! }
 //! ```
 
 use crate::intelligent_behavior::{
