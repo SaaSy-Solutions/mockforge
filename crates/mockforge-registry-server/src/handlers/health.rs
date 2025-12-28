@@ -1,14 +1,16 @@
 //! Health check endpoints
 //!
-//! Provides three health check patterns:
+//! Provides health check patterns:
 //! - `/health` - Legacy endpoint, basic health check
 //! - `/health/live` - Liveness probe, confirms the service is running
 //! - `/health/ready` - Readiness probe, confirms all dependencies are healthy
+//! - `/health/circuits` - Circuit breaker status for external services
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::circuit_breaker::CircuitState;
 use crate::AppState;
 
 /// Component health status
@@ -63,9 +65,7 @@ pub async fn liveness_check() -> (StatusCode, Json<HealthResponse>) {
 /// Readiness probe - confirms the service is ready to accept traffic
 /// Checks all critical dependencies (database, Redis, S3, etc.)
 /// GET /health/ready
-pub async fn readiness_check(
-    State(state): State<AppState>,
-) -> (StatusCode, Json<HealthResponse>) {
+pub async fn readiness_check(State(state): State<AppState>) -> (StatusCode, Json<HealthResponse>) {
     let mut components = std::collections::HashMap::new();
     let mut overall_status = ComponentStatus::Healthy;
 
@@ -215,6 +215,53 @@ async fn check_storage(state: &AppState) -> ComponentHealth {
     }
 }
 
+/// Circuit breaker status for a single service
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CircuitBreakerStatus {
+    pub service: String,
+    pub state: String,
+    pub total_calls: u64,
+    pub total_failures: u64,
+    pub total_rejections: u64,
+}
+
+/// Circuit breaker status response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CircuitBreakersResponse {
+    pub circuits: Vec<CircuitBreakerStatus>,
+    pub all_closed: bool,
+}
+
+/// Circuit breaker status endpoint
+/// GET /health/circuits
+pub async fn circuit_breaker_status(
+    State(state): State<AppState>,
+) -> Json<CircuitBreakersResponse> {
+    let states = state.circuit_breakers.all_states().await;
+    let metrics = state.circuit_breakers.all_metrics().await;
+
+    let circuits: Vec<CircuitBreakerStatus> = states
+        .into_iter()
+        .map(|(name, circuit_state)| {
+            let metric = metrics.iter().find(|m| m.name == name);
+            CircuitBreakerStatus {
+                service: name,
+                state: circuit_state.to_string(),
+                total_calls: metric.map(|m| m.total_calls).unwrap_or(0),
+                total_failures: metric.map(|m| m.total_failures).unwrap_or(0),
+                total_rejections: metric.map(|m| m.total_rejections).unwrap_or(0),
+            }
+        })
+        .collect();
+
+    let all_closed = circuits.iter().all(|c| c.state == "CLOSED");
+
+    Json(CircuitBreakersResponse {
+        circuits,
+        all_closed,
+    })
+}
+
 /// Check email service configuration
 fn check_email_config() -> ComponentHealth {
     let provider = std::env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "disabled".to_string());
@@ -271,18 +318,9 @@ mod tests {
 
     #[test]
     fn test_component_status_serialization() {
-        assert_eq!(
-            serde_json::to_string(&ComponentStatus::Healthy).unwrap(),
-            "\"healthy\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ComponentStatus::Unhealthy).unwrap(),
-            "\"unhealthy\""
-        );
-        assert_eq!(
-            serde_json::to_string(&ComponentStatus::Degraded).unwrap(),
-            "\"degraded\""
-        );
+        assert_eq!(serde_json::to_string(&ComponentStatus::Healthy).unwrap(), "\"healthy\"");
+        assert_eq!(serde_json::to_string(&ComponentStatus::Unhealthy).unwrap(), "\"unhealthy\"");
+        assert_eq!(serde_json::to_string(&ComponentStatus::Degraded).unwrap(), "\"degraded\"");
     }
 
     #[test]

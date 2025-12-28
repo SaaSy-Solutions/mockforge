@@ -297,7 +297,10 @@ mod tests {
 
     #[test]
     fn test_http_error_conversion() {
-        let http_err = axum::http::Error::from(axum::http::status::InvalidStatusCode);
+        // Create an HTTP error using an invalid header value
+        use axum::http::header::InvalidHeaderValue;
+        let http_err: axum::http::Error =
+            axum::http::header::HeaderValue::from_bytes(&[0x80]).unwrap_err().into();
         let err = Error::from(http_err);
         let msg = format!("{err}");
         assert!(msg.contains("HTTP error"));

@@ -1,6 +1,17 @@
 use crate::messages::QueuedMessage;
 use std::collections::VecDeque;
 use std::time::Duration;
+use tokio::sync::broadcast;
+
+/// Notification sent when a message is enqueued
+#[derive(Debug, Clone)]
+pub struct QueueNotification {
+    pub queue_name: String,
+}
+
+/// Channel for queue notifications
+pub type QueueNotifySender = broadcast::Sender<QueueNotification>;
+pub type QueueNotifyReceiver = broadcast::Receiver<QueueNotification>;
 
 /// Queue properties for TTL, length limits, etc.
 #[derive(Debug, Clone)]
@@ -80,6 +91,7 @@ impl Queue {
 /// Manager for all queues
 pub struct QueueManager {
     queues: std::collections::HashMap<String, Queue>,
+    notify_tx: QueueNotifySender,
 }
 
 impl Default for QueueManager {
@@ -90,8 +102,33 @@ impl Default for QueueManager {
 
 impl QueueManager {
     pub fn new() -> Self {
+        let (notify_tx, _) = broadcast::channel(1024);
         Self {
             queues: std::collections::HashMap::new(),
+            notify_tx,
+        }
+    }
+
+    /// Subscribe to queue notifications
+    pub fn subscribe(&self) -> QueueNotifyReceiver {
+        self.notify_tx.subscribe()
+    }
+
+    /// Enqueue a message to a queue and notify subscribers
+    pub fn enqueue_and_notify(
+        &mut self,
+        queue_name: &str,
+        message: QueuedMessage,
+    ) -> Result<(), String> {
+        if let Some(queue) = self.queues.get_mut(queue_name) {
+            queue.enqueue(message)?;
+            // Notify subscribers (ignore errors if no subscribers)
+            let _ = self.notify_tx.send(QueueNotification {
+                queue_name: queue_name.to_string(),
+            });
+            Ok(())
+        } else {
+            Err(format!("Queue '{}' not found", queue_name))
         }
     }
 

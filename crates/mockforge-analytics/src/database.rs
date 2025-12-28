@@ -65,7 +65,7 @@ impl AnalyticsDatabase {
         })? {}
 
         // Run coverage metrics migration
-        let coverage_migration_sql = include_str!("../migrations/002_coverage_metrics.sql");
+        let coverage_migration_sql = include_str!("../migrations/003_coverage_metrics.sql");
         let mut conn = self.pool.acquire().await?;
         let mut stream = conn.execute_many(coverage_migration_sql);
 

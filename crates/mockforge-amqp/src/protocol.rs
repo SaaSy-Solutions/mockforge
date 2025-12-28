@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::io;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 /// AMQP frame types
@@ -129,7 +129,7 @@ pub struct Frame {
 
 impl Frame {
     /// Read a frame from the stream
-    pub async fn read_from_stream(stream: &mut TcpStream) -> io::Result<Self> {
+    pub async fn read_from_stream<S: AsyncRead + Unpin>(stream: &mut S) -> io::Result<Self> {
         // AMQP frame format: [frame-type (1 byte)] [channel (2 bytes)] [size (4 bytes)] [payload] [frame-end (1 byte)]
         let mut header = [0u8; 7];
         stream.read_exact(&mut header).await?;
@@ -163,7 +163,7 @@ impl Frame {
     }
 
     /// Write a frame to the stream
-    pub async fn write_to_stream(&self, stream: &mut TcpStream) -> io::Result<()> {
+    pub async fn write_to_stream<S: AsyncWrite + Unpin>(&self, stream: &mut S) -> io::Result<()> {
         let frame_type_byte = match self.frame_type {
             FrameType::Method => 1,
             FrameType::Header => 2,

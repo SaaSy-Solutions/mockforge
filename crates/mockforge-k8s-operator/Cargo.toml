@@ -35,6 +35,9 @@ anyhow = "1.0"
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
+# Cron expression parsing
+cron = "0.15"
+
 # MockForge dependencies
 mockforge-chaos = { version = "0.3.16", path = "../mockforge-chaos" }
 

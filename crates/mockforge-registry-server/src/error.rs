@@ -40,6 +40,12 @@ pub enum ApiError {
     #[error("Permission denied")]
     PermissionDenied,
 
+    #[error("Insufficient scope: required '{required}', token has [{scopes:?}]")]
+    InsufficientScope {
+        required: String,
+        scopes: Vec<String>,
+    },
+
     #[error("Organization not found or access denied")]
     OrganizationNotFound,
 
@@ -162,6 +168,20 @@ impl IntoResponse for ApiError {
                 "Organization not found or access denied".to_string(),
                 json!({
                     "hint": "Check that the organization exists and you have access to it"
+                }),
+            ),
+            ApiError::InsufficientScope { required, scopes } => (
+                StatusCode::FORBIDDEN,
+                "INSUFFICIENT_SCOPE",
+                format!(
+                    "Insufficient scope: required '{}', token has [{}]",
+                    required,
+                    scopes.join(", ")
+                ),
+                json!({
+                    "required_scope": required,
+                    "token_scopes": scopes,
+                    "hint": "Your API token does not have the required scope for this operation. Create a new token with the appropriate scope."
                 }),
             ),
 
@@ -484,5 +504,26 @@ mod tests {
         let error = ApiError::AuthRequired;
         let debug = format!("{:?}", error);
         assert!(debug.contains("AuthRequired"));
+    }
+
+    #[test]
+    fn test_api_error_insufficient_scope() {
+        let error = ApiError::InsufficientScope {
+            required: "publish:packages".to_string(),
+            scopes: vec!["read:packages".to_string()],
+        };
+        // Uses {:?} for scopes vector, so it includes quotes
+        assert!(error.to_string().contains("publish:packages"));
+        assert!(error.to_string().contains("read:packages"));
+    }
+
+    #[tokio::test]
+    async fn test_into_response_insufficient_scope() {
+        let error = ApiError::InsufficientScope {
+            required: "publish:packages".to_string(),
+            scopes: vec!["read:packages".to_string()],
+        };
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 }

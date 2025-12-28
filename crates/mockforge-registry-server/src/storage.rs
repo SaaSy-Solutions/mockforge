@@ -38,18 +38,10 @@ impl PluginStorage {
                 );
             }
 
-            tracing::info!(
-                "Using custom S3 endpoint: {} with explicit credentials",
-                endpoint
-            );
+            tracing::info!("Using custom S3 endpoint: {} with explicit credentials", endpoint);
 
-            let credentials = Credentials::new(
-                access_key_id,
-                secret_access_key,
-                None,
-                None,
-                "static",
-            );
+            let credentials =
+                Credentials::new(access_key_id, secret_access_key, None, None, "static");
 
             aws_config::defaults(BehaviorVersion::latest())
                 .region(Region::new(config.s3_region.clone()))

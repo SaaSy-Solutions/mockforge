@@ -139,6 +139,19 @@ pub enum RiskReviewFrequency {
     AdHoc,
 }
 
+/// Record of a risk review
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RiskReview {
+    /// When the review was performed
+    pub reviewed_at: DateTime<Utc>,
+    /// Who performed the review
+    pub reviewed_by: Uuid,
+    /// Notes from the review
+    pub notes: Option<String>,
+    /// Status after review
+    pub status: TreatmentStatus,
+}
+
 /// Risk entry in the risk register
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Risk {
@@ -188,6 +201,10 @@ pub struct Risk {
     pub residual_risk_level: Option<RiskLevel>,
     /// Last reviewed date
     pub last_reviewed: Option<DateTime<Utc>>,
+    /// Last reviewed by user ID
+    pub reviewed_by: Option<Uuid>,
+    /// Review history
+    pub review_history: Vec<RiskReview>,
     /// Next review date
     pub next_review: Option<DateTime<Utc>>,
     /// Review frequency
@@ -240,6 +257,8 @@ impl Risk {
             residual_risk_score: None,
             residual_risk_level: None,
             last_reviewed: None,
+            reviewed_by: None,
+            review_history: Vec::new(),
             next_review: None,
             review_frequency: RiskReviewFrequency::Quarterly,
             compliance_requirements: Vec::new(),
@@ -615,12 +634,35 @@ impl RiskAssessmentEngine {
 
     /// Review risk
     pub async fn review_risk(&self, risk_id: &str, reviewed_by: Uuid) -> Result<(), Error> {
+        self.review_risk_with_notes(risk_id, reviewed_by, None).await
+    }
+
+    /// Review risk with optional notes
+    pub async fn review_risk_with_notes(
+        &self,
+        risk_id: &str,
+        reviewed_by: Uuid,
+        notes: Option<String>,
+    ) -> Result<(), Error> {
         let mut risks = self.risks.write().await;
         if let Some(risk) = risks.get_mut(risk_id) {
-            risk.last_reviewed = Some(Utc::now());
+            let now = Utc::now();
+
+            // Create review record for audit trail
+            let review = RiskReview {
+                reviewed_at: now,
+                reviewed_by,
+                notes,
+                status: risk.treatment_status,
+            };
+
+            // Update risk with review information
+            risk.last_reviewed = Some(now);
+            risk.reviewed_by = Some(reviewed_by);
+            risk.review_history.push(review);
             risk.calculate_next_review();
-            risk.updated_at = Utc::now();
-            let _ = reviewed_by; // TODO: Store reviewer
+            risk.updated_at = now;
+
             drop(risks);
             // Persist to disk
             self.save_risks().await?;

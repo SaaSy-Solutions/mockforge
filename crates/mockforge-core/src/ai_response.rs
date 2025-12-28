@@ -174,17 +174,86 @@ impl RequestContext {
 
 /// Expand template variables in a prompt string using request context
 ///
-/// This function is re-exported from mockforge-template-expansion crate.
-/// Import it directly from that crate to avoid Send issues.
+/// **Note**: This function has been moved to `mockforge-template-expansion` crate.
+/// Use `mockforge_template_expansion::expand_prompt_template` for the full implementation.
 ///
-/// For backwards compatibility, you can also use:
+/// This backward-compatible version performs basic template expansion for common patterns.
+/// It handles `{{method}}`, `{{path}}`, `{{query.*}}`, `{{path.*}}`, `{{headers.*}}`, and `{{body.*}}`.
+///
+/// For new code, import directly from the template expansion crate:
 /// ```rust
 /// use mockforge_template_expansion::expand_prompt_template;
 /// ```
-pub fn expand_prompt_template(_template: &str, _context: &RequestContext) -> String {
-    // This is a placeholder - the actual implementation is in mockforge-template-expansion
-    // This function should not be called directly. Use mockforge_template_expansion::expand_prompt_template instead.
-    unimplemented!("expand_prompt_template has been moved to mockforge-template-expansion crate. Use mockforge_template_expansion::expand_prompt_template instead.")
+#[deprecated(note = "Use mockforge_template_expansion::expand_prompt_template instead")]
+pub fn expand_prompt_template(template: &str, context: &RequestContext) -> String {
+    let mut result = template.to_string();
+
+    // Normalize {{request.*}} prefix to standard format
+    result = result
+        .replace("{{request.query.", "{{query.")
+        .replace("{{request.path.", "{{path.")
+        .replace("{{request.headers.", "{{headers.")
+        .replace("{{request.body.", "{{body.")
+        .replace("{{request.method}}", "{{method}}")
+        .replace("{{request.path}}", "{{path}}");
+
+    // Replace {{method}}
+    result = result.replace("{{method}}", &context.method);
+
+    // Replace {{path}}
+    result = result.replace("{{path}}", &context.path);
+
+    // Replace {{path.*}} variables
+    for (key, val) in &context.path_params {
+        let placeholder = format!("{{{{path.{key}}}}}");
+        let replacement = value_to_string(val);
+        result = result.replace(&placeholder, &replacement);
+    }
+
+    // Replace {{query.*}} variables
+    for (key, val) in &context.query_params {
+        let placeholder = format!("{{{{query.{key}}}}}");
+        let replacement = value_to_string(val);
+        result = result.replace(&placeholder, &replacement);
+    }
+
+    // Replace {{headers.*}} variables
+    for (key, val) in &context.headers {
+        let placeholder = format!("{{{{headers.{key}}}}}");
+        let replacement = value_to_string(val);
+        result = result.replace(&placeholder, &replacement);
+    }
+
+    // Replace {{body.*}} variables
+    if let Some(body) = &context.body {
+        if let Some(obj) = body.as_object() {
+            for (key, val) in obj {
+                let placeholder = format!("{{{{body.{key}}}}}");
+                let replacement = value_to_string(val);
+                result = result.replace(&placeholder, &replacement);
+            }
+        }
+    }
+
+    // Replace {{multipart.*}} variables
+    for (key, val) in &context.multipart_fields {
+        let placeholder = format!("{{{{multipart.{key}}}}}");
+        let replacement = value_to_string(val);
+        result = result.replace(&placeholder, &replacement);
+    }
+
+    result
+}
+
+/// Helper to convert a JSON value to a string representation
+fn value_to_string(val: &serde_json::Value) -> String {
+    match val {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Null => "null".to_string(),
+        _ => serde_json::to_string(val).unwrap_or_default(),
+    }
 }
 
 #[cfg(test)]

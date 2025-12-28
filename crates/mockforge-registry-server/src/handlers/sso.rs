@@ -485,11 +485,11 @@ pub async fn get_saml_metadata(
         slo_url
     );
 
-    Ok(axum::response::Response::builder()
+    axum::response::Response::builder()
         .status(axum::http::StatusCode::OK)
         .header("Content-Type", "application/xml")
         .body(metadata.into())
-        .unwrap())
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to build response: {}", e)))
 }
 
 /// Initiate SAML SSO login
@@ -677,7 +677,10 @@ pub async fn saml_acs(
     .await
     .map_err(|e| ApiError::Database(e))?;
 
-    // Generate JWT token
+    // Generate short-lived access token (1 hour) for URL redirect
+    // Note: For SSO flows, we pass only an access token in the URL for security
+    // (refresh tokens should not be in URLs). The client should call /api/auth/refresh
+    // with this token to get a proper token pair for ongoing sessions.
     let token = crate::auth::create_token(&user.id.to_string(), &state.config.jwt_secret)
         .map_err(|e| ApiError::Internal(e))?;
 

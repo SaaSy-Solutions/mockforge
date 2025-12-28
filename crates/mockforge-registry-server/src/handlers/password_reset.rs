@@ -62,7 +62,18 @@ pub async fn request_password_reset(
     .map_err(|e| ApiError::Database(e))?;
 
     // Send password reset email (non-blocking)
-    let email_service = EmailService::from_env();
+    let email_service = match EmailService::from_env() {
+        Ok(service) => service,
+        Err(e) => {
+            tracing::warn!("Failed to create email service: {}", e);
+            // Still return success to avoid leaking information about email existence
+            return Ok(Json(PasswordResetRequestResponse {
+                success: true,
+                message: "If your email is registered, you'll receive a password reset link."
+                    .to_string(),
+            }));
+        }
+    };
     let reset_email = EmailService::generate_password_reset_email(
         &user.username,
         &user.email,

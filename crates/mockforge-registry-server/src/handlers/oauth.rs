@@ -4,25 +4,22 @@
 
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     response::{IntoResponse, Redirect, Response},
     Json,
 };
 use oauth2::{
-    basic::BasicClient,
-    reqwest::async_http_client,
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, RedirectUrl, Scope, TokenResponse, TokenUrl,
+    basic::BasicClient, reqwest::async_http_client, AuthUrl, AuthorizationCode, ClientId,
+    ClientSecret, RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
-use serde::{Deserialize, Serialize};
-use url::Url;
-use uuid::Uuid;
+use serde::Deserialize;
 
 use crate::{
-    auth::create_token,
-    error::{ApiError, ApiResult},
-    models::{Organization, Plan, User},
+    auth::{create_token_pair, REFRESH_TOKEN_EXPIRY_DAYS},
+    error::ApiError,
+    models::{Organization, User},
     AppState,
 };
+use chrono::{Duration, Utc};
 
 /// OAuth provider type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,8 +54,9 @@ pub async fn oauth_authorize(
         .ok_or_else(|| ApiError::InvalidRequest("Invalid OAuth provider".to_string()))?;
 
     // Get OAuth client for provider
-    let client = get_oauth_client(&state, provider)
-        .ok_or_else(|| ApiError::InvalidRequest("OAuth not configured for this provider".to_string()))?;
+    let client = get_oauth_client(&state, provider).ok_or_else(|| {
+        ApiError::InvalidRequest("OAuth not configured for this provider".to_string())
+    })?;
 
     // Build authorization URL with CSRF state
     let (auth_url, csrf_state) = client
@@ -79,13 +77,13 @@ pub async fn oauth_authorize(
         redis
             .set_with_expiry(&state_key, &state_value, 900) // 15 minutes expiration
             .await
-            .map_err(|e| ApiError::Internal(format!("Failed to store OAuth state: {}", e)))?;
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to store OAuth state: {}", e)))?;
     } else {
         // If Redis is not available, we can't securely store state
         // In production, Redis should be required for OAuth to prevent CSRF attacks
-        return Err(ApiError::Internal(
-            "OAuth requires Redis for CSRF protection. Please configure REDIS_URL.".to_string()
-        ));
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "OAuth requires Redis for CSRF protection. Please configure REDIS_URL."
+        )));
     }
 
     // Redirect to OAuth provider
@@ -110,10 +108,9 @@ pub async fn oauth_callback(
 
         if let Some(redis) = &state.redis {
             // Retrieve and verify state token from Redis
-            let stored_state = redis
-                .get(&state_key)
-                .await
-                .map_err(|e| ApiError::Internal(format!("Failed to verify OAuth state: {}", e)))?;
+            let stored_state = redis.get(&state_key).await.map_err(|e| {
+                ApiError::Internal(anyhow::anyhow!("Failed to verify OAuth state: {}", e))
+            })?;
 
             match stored_state {
                 Some(value) => {
@@ -122,7 +119,8 @@ pub async fn oauth_callback(
                     let expected_prefix = format!("{}:", provider.to_string());
                     if !value.starts_with(&expected_prefix) {
                         return Err(ApiError::InvalidRequest(
-                            "OAuth state token provider mismatch. Possible CSRF attack.".to_string()
+                            "OAuth state token provider mismatch. Possible CSRF attack."
+                                .to_string(),
                         ));
                     }
 
@@ -133,35 +131,35 @@ pub async fn oauth_callback(
                 None => {
                     // State token not found - either expired, already used, or invalid
                     return Err(ApiError::InvalidRequest(
-                        "Invalid or expired OAuth state token. Please try again.".to_string()
+                        "Invalid or expired OAuth state token. Please try again.".to_string(),
                     ));
                 }
             }
         } else {
             // Redis is required for OAuth state verification
             // Without Redis, we cannot securely verify the state token
-            return Err(ApiError::Internal(
-                "OAuth requires Redis for CSRF protection. Please configure REDIS_URL.".to_string()
-            ));
+            return Err(ApiError::Internal(anyhow::anyhow!(
+                "OAuth requires Redis for CSRF protection. Please configure REDIS_URL."
+            )));
         }
     } else {
         // State parameter is required for CSRF protection
         return Err(ApiError::InvalidRequest(
-            "Missing OAuth state parameter. This is required for security.".to_string()
+            "Missing OAuth state parameter. This is required for security.".to_string(),
         ));
     }
 
     // Get OAuth client
-    let client = get_oauth_client(&state, provider)
-        .ok_or_else(|| ApiError::InvalidRequest("OAuth not configured for this provider".to_string()))?;
+    let client = get_oauth_client(&state, provider).ok_or_else(|| {
+        ApiError::InvalidRequest("OAuth not configured for this provider".to_string())
+    })?;
 
     // Exchange authorization code for access token
     let code = AuthorizationCode::new(params.code.clone());
-    let token_result = client
-        .exchange_code(code)
-        .request_async(async_http_client)
-        .await
-        .map_err(|e| ApiError::Internal(format!("OAuth token exchange failed: {}", e)))?;
+    let token_result =
+        client.exchange_code(code).request_async(async_http_client).await.map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("OAuth token exchange failed: {}", e))
+        })?;
 
     let access_token = token_result.access_token().secret();
 
@@ -174,13 +172,11 @@ pub async fn oauth_callback(
     let user = match provider {
         OAuthProvider::GitHub => {
             // Check if user exists by GitHub ID
-            let existing = sqlx::query_as::<_, User>(
-                "SELECT * FROM users WHERE github_id = $1"
-            )
-            .bind(&user_info.provider_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+            let existing = sqlx::query_as::<_, User>("SELECT * FROM users WHERE github_id = $1")
+                .bind(&user_info.provider_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| ApiError::Database(e))?;
 
             if let Some(user) = existing {
                 user
@@ -208,13 +204,11 @@ pub async fn oauth_callback(
         }
         OAuthProvider::Google => {
             // Check if user exists by Google ID
-            let existing = sqlx::query_as::<_, User>(
-                "SELECT * FROM users WHERE google_id = $1"
-            )
-            .bind(&user_info.provider_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+            let existing = sqlx::query_as::<_, User>("SELECT * FROM users WHERE google_id = $1")
+                .bind(&user_info.provider_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| ApiError::Database(e))?;
 
             if let Some(user) = existing {
                 user
@@ -251,23 +245,38 @@ pub async fn oauth_callback(
     // Check if this is a new user by checking if they were just created
     let is_new_user = user.created_at > chrono::Utc::now() - chrono::Duration::minutes(1);
     if is_new_user {
-        let email_service = crate::email::EmailService::from_env();
-        let welcome_email = email_service.generate_welcome_email(&user.username, &user.email);
-        tokio::spawn(async move {
-            if let Err(e) = email_service.send(welcome_email).await {
-                tracing::warn!("Failed to send welcome email: {}", e);
-            }
-        });
+        if let Ok(email_service) = crate::email::EmailService::from_env() {
+            let welcome_email =
+                crate::email::EmailService::generate_welcome_email(&user.username, &user.email);
+            tokio::spawn(async move {
+                if let Err(e) = email_service.send(welcome_email).await {
+                    tracing::warn!("Failed to send welcome email: {}", e);
+                }
+            });
+        }
     }
 
-    // Generate JWT token
-    let token = create_token(&user.id.to_string(), &state.config.jwt_secret)
+    // Generate token pair (access + refresh)
+    let (token_pair, jti) = create_token_pair(&user.id.to_string(), &state.config.jwt_secret)
         .map_err(|e| ApiError::Internal(e))?;
 
-    // Redirect to frontend with token (or return JSON)
+    // Store refresh token JTI in database for revocation support
+    let expires_at = Utc::now()
+        .checked_add_signed(Duration::days(REFRESH_TOKEN_EXPIRY_DAYS))
+        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Failed to calculate token expiry")))?;
+
+    state.db.store_refresh_token_jti(&jti, user.id, expires_at).await.map_err(|e| {
+        tracing::warn!("Failed to store refresh token JTI: {}", e);
+        ApiError::Internal(e)
+    })?;
+
+    // Redirect to frontend with tokens (or return JSON)
     // For now, return JSON - frontend can handle redirect
     let response = serde_json::json!({
-        "token": token,
+        "access_token": token_pair.access_token,
+        "refresh_token": token_pair.refresh_token,
+        "access_token_expires_at": token_pair.access_token_expires_at,
+        "refresh_token_expires_at": token_pair.refresh_token_expires_at,
         "user_id": user.id.to_string(),
         "username": user.username,
         "email": user.email,
@@ -287,7 +296,10 @@ struct OAuthUserInfo {
 }
 
 /// Fetch user info from OAuth provider
-async fn fetch_user_info(provider: OAuthProvider, access_token: &str) -> Result<OAuthUserInfo, ApiError> {
+async fn fetch_user_info(
+    provider: OAuthProvider,
+    access_token: &str,
+) -> Result<OAuthUserInfo, ApiError> {
     match provider {
         OAuthProvider::GitHub => {
             let client = reqwest::Client::new();
@@ -297,26 +309,24 @@ async fn fetch_user_info(provider: OAuthProvider, access_token: &str) -> Result<
                 .header("User-Agent", "MockForge")
                 .send()
                 .await
-                .map_err(|e| ApiError::Internal(format!("Failed to fetch GitHub user: {}", e)))?;
+                .map_err(|e| {
+                    ApiError::Internal(anyhow::anyhow!("Failed to fetch GitHub user: {}", e))
+                })?;
 
-            let user: serde_json::Value = response
-                .json()
-                .await
-                .map_err(|e| ApiError::Internal(format!("Failed to parse GitHub response: {}", e)))?;
+            let user: serde_json::Value = response.json().await.map_err(|e| {
+                ApiError::Internal(anyhow::anyhow!("Failed to parse GitHub response: {}", e))
+            })?;
 
             Ok(OAuthUserInfo {
                 provider_id: user["id"]
                     .as_u64()
-                    .ok_or_else(|| ApiError::Internal("Invalid GitHub user ID".to_string()))?
+                    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid GitHub user ID")))?
                     .to_string(),
                 username: user["login"]
                     .as_str()
-                    .ok_or_else(|| ApiError::Internal("Invalid GitHub username".to_string()))?
+                    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid GitHub username")))?
                     .to_string(),
-                email: user["email"]
-                    .as_str()
-                    .unwrap_or("")
-                    .to_string(),
+                email: user["email"].as_str().unwrap_or("").to_string(),
                 avatar_url: user["avatar_url"].as_str().map(|s| s.to_string()),
             })
         }
@@ -327,28 +337,29 @@ async fn fetch_user_info(provider: OAuthProvider, access_token: &str) -> Result<
                 .header("Authorization", format!("Bearer {}", access_token))
                 .send()
                 .await
-                .map_err(|e| ApiError::Internal(format!("Failed to fetch Google user: {}", e)))?;
+                .map_err(|e| {
+                    ApiError::Internal(anyhow::anyhow!("Failed to fetch Google user: {}", e))
+                })?;
 
-            let user: serde_json::Value = response
-                .json()
-                .await
-                .map_err(|e| ApiError::Internal(format!("Failed to parse Google response: {}", e)))?;
+            let user: serde_json::Value = response.json().await.map_err(|e| {
+                ApiError::Internal(anyhow::anyhow!("Failed to parse Google response: {}", e))
+            })?;
 
             Ok(OAuthUserInfo {
                 provider_id: user["id"]
                     .as_str()
-                    .ok_or_else(|| ApiError::Internal("Invalid Google user ID".to_string()))?
+                    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid Google user ID")))?
                     .to_string(),
                 username: user["email"]
                     .as_str()
-                    .ok_or_else(|| ApiError::Internal("Invalid Google email".to_string()))?
+                    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid Google email")))?
                     .split('@')
                     .next()
                     .unwrap_or("user")
                     .to_string(),
                 email: user["email"]
                     .as_str()
-                    .ok_or_else(|| ApiError::Internal("Invalid Google email".to_string()))?
+                    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid Google email")))?
                     .to_string(),
                 avatar_url: user["picture"].as_str().map(|s| s.to_string()),
             })
@@ -364,7 +375,7 @@ async fn create_oauth_user(
 ) -> Result<User, ApiError> {
     // Generate a placeholder password hash (OAuth users don't need passwords)
     let password_hash = bcrypt::hash("oauth_user_no_password", bcrypt::DEFAULT_COST)
-        .map_err(|e| ApiError::Internal(format!("Failed to hash password: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to hash password: {}", e)))?;
 
     // Ensure username is unique
     let mut username = user_info.username.clone();
@@ -420,11 +431,17 @@ fn get_oauth_client(state: &AppState, provider: OAuthProvider) -> Option<BasicCl
                     ClientId::new(client_id.clone()),
                     Some(ClientSecret::new(client_secret.clone())),
                     AuthUrl::new("https://github.com/login/oauth/authorize".to_string()).ok()?,
-                    Some(TokenUrl::new("https://github.com/login/oauth/access_token".to_string()).ok()?),
+                    Some(
+                        TokenUrl::new("https://github.com/login/oauth/access_token".to_string())
+                            .ok()?,
+                    ),
                 )
                 .set_redirect_uri(
-                    RedirectUrl::new(format!("{}/api/v1/auth/oauth/github/callback", state.config.app_base_url))
-                        .ok()?,
+                    RedirectUrl::new(format!(
+                        "{}/api/v1/auth/oauth/github/callback",
+                        state.config.app_base_url
+                    ))
+                    .ok()?,
                 ),
             )
         }
@@ -436,12 +453,16 @@ fn get_oauth_client(state: &AppState, provider: OAuthProvider) -> Option<BasicCl
                 BasicClient::new(
                     ClientId::new(client_id.clone()),
                     Some(ClientSecret::new(client_secret.clone())),
-                    AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string()).ok()?,
+                    AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())
+                        .ok()?,
                     Some(TokenUrl::new("https://oauth2.googleapis.com/token".to_string()).ok()?),
                 )
                 .set_redirect_uri(
-                    RedirectUrl::new(format!("{}/api/v1/auth/oauth/google/callback", state.config.app_base_url))
-                        .ok()?,
+                    RedirectUrl::new(format!(
+                        "{}/api/v1/auth/oauth/google/callback",
+                        state.config.app_base_url
+                    ))
+                    .ok()?,
                 ),
             )
         }

@@ -4,11 +4,14 @@
 //! to disk and restore them later, enabling time travel capabilities.
 
 use crate::consistency::ConsistencyEngine;
+use crate::snapshots::state_exporter::ProtocolStateExporter;
 use crate::snapshots::types::{SnapshotComponents, SnapshotManifest, SnapshotMetadata};
 use crate::workspace_persistence::WorkspacePersistence;
 use crate::Result;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::fs;
 use tracing::{debug, info, warn};
 
@@ -49,6 +52,16 @@ impl SnapshotManager {
     /// Save a snapshot of the current system state
     ///
     /// This creates a snapshot directory and saves all specified components.
+    ///
+    /// # Arguments
+    /// * `name` - Name for the snapshot
+    /// * `description` - Optional description
+    /// * `workspace_id` - Workspace identifier
+    /// * `components` - Which components to include
+    /// * `consistency_engine` - Optional consistency engine for unified state
+    /// * `workspace_persistence` - Optional workspace persistence for config
+    /// * `vbr_state` - Optional VBR state (pre-extracted JSON)
+    /// * `recorder_state` - Optional Recorder state (pre-extracted JSON)
     pub async fn save_snapshot(
         &self,
         name: String,
@@ -59,6 +72,36 @@ impl SnapshotManager {
         workspace_persistence: Option<&WorkspacePersistence>,
         vbr_state: Option<serde_json::Value>,
         recorder_state: Option<serde_json::Value>,
+    ) -> Result<SnapshotManifest> {
+        self.save_snapshot_with_exporters(
+            name,
+            description,
+            workspace_id,
+            components,
+            consistency_engine,
+            workspace_persistence,
+            vbr_state,
+            recorder_state,
+            HashMap::new(),
+        )
+        .await
+    }
+
+    /// Save a snapshot with protocol state exporters
+    ///
+    /// Extended version that accepts a map of protocol state exporters
+    /// for capturing state from multiple protocols.
+    pub async fn save_snapshot_with_exporters(
+        &self,
+        name: String,
+        description: Option<String>,
+        workspace_id: String,
+        components: SnapshotComponents,
+        consistency_engine: Option<&ConsistencyEngine>,
+        workspace_persistence: Option<&WorkspacePersistence>,
+        vbr_state: Option<serde_json::Value>,
+        recorder_state: Option<serde_json::Value>,
+        protocol_exporters: HashMap<String, Arc<dyn ProtocolStateExporter>>,
     ) -> Result<SnapshotManifest> {
         info!("Saving snapshot '{}' for workspace '{}'", name, workspace_id);
 
@@ -142,29 +185,60 @@ impl SnapshotManager {
         }
 
         // Save protocol states if requested
-        if !components.protocols.is_empty() || components.protocols.is_empty() {
+        if !components.protocols.is_empty() || !protocol_exporters.is_empty() {
             let protocols_dir = temp_dir.join("protocols");
             fs::create_dir_all(&protocols_dir).await?;
 
-            if let Some(_engine) = consistency_engine {
-                // Save all protocol states
-                let protocols: Vec<String> = if components.protocols.is_empty() {
-                    vec![
-                        "http".to_string(),
-                        "graphql".to_string(),
-                        "grpc".to_string(),
-                        "websocket".to_string(),
-                        "tcp".to_string(),
-                    ]
-                } else {
-                    components.protocols.clone()
-                };
+            // Determine which protocols to save
+            let protocols_to_save: Vec<String> = if components.protocols.is_empty() {
+                // If no specific protocols requested, save all available exporters
+                protocol_exporters.keys().cloned().collect()
+            } else {
+                components.protocols.clone()
+            };
 
-                for protocol_name in protocols {
-                    // TODO: Get protocol state from engine when protocol adapters are integrated
-                    let protocol_path = protocols_dir.join(format!("{}.json", protocol_name));
-                    let empty_state = serde_json::json!({});
-                    fs::write(&protocol_path, serde_json::to_string_pretty(&empty_state)?).await?;
+            for protocol_name in protocols_to_save {
+                let protocol_path = protocols_dir.join(format!("{}.json", protocol_name));
+
+                // Try to get state from exporter if available
+                if let Some(exporter) = protocol_exporters.get(&protocol_name) {
+                    match exporter.export_state().await {
+                        Ok(state) => {
+                            let summary = exporter.state_summary().await;
+                            fs::write(&protocol_path, serde_json::to_string_pretty(&state)?)
+                                .await?;
+                            debug!(
+                                "Saved {} protocol state to {}: {}",
+                                protocol_name,
+                                protocol_path.display(),
+                                summary
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to export {} protocol state: {}. Saving empty state.",
+                                protocol_name, e
+                            );
+                            let empty_state = serde_json::json!({
+                                "error": format!("Failed to export state: {}", e),
+                                "protocol": protocol_name
+                            });
+                            fs::write(&protocol_path, serde_json::to_string_pretty(&empty_state)?)
+                                .await?;
+                        }
+                    }
+                } else {
+                    // No exporter available, save placeholder
+                    debug!(
+                        "No exporter available for protocol {}, saving placeholder",
+                        protocol_name
+                    );
+                    let placeholder_state = serde_json::json!({
+                        "protocol": protocol_name,
+                        "state": "no_exporter_available"
+                    });
+                    fs::write(&protocol_path, serde_json::to_string_pretty(&placeholder_state)?)
+                        .await?;
                 }
             }
         }

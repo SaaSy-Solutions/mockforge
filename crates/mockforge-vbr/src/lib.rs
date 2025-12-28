@@ -373,6 +373,135 @@ impl VbrEngine {
     pub async fn reset(&self) -> Result<()> {
         snapshots::reset_database(self.database.as_ref(), &self.registry).await
     }
+
+    /// Export the complete database state as JSON
+    ///
+    /// This exports all entity data in a format suitable for snapshots.
+    pub async fn export_state(&self) -> Result<serde_json::Value> {
+        let mut state = serde_json::Map::new();
+        let mut entities = serde_json::Map::new();
+
+        for entity_name in self.registry.list() {
+            if let Some(entity) = self.registry.get(&entity_name) {
+                let table_name = entity.table_name();
+                let query = format!("SELECT * FROM {}", table_name);
+                let records = self.database.query(&query, &[]).await?;
+                entities.insert(
+                    entity_name.clone(),
+                    serde_json::Value::Array(
+                        records.into_iter().map(|r| serde_json::json!(r)).collect(),
+                    ),
+                );
+            }
+        }
+
+        state.insert("entities".to_string(), serde_json::Value::Object(entities));
+        state.insert(
+            "storage_backend".to_string(),
+            serde_json::Value::String(self.database.connection_info()),
+        );
+        state.insert(
+            "exported_at".to_string(),
+            serde_json::Value::String(chrono::Utc::now().to_rfc3339()),
+        );
+
+        Ok(serde_json::Value::Object(state))
+    }
+
+    /// Import database state from JSON
+    ///
+    /// This restores entity data from a previous snapshot export.
+    pub async fn import_state(&self, state: serde_json::Value) -> Result<()> {
+        // First, clear existing data
+        self.reset().await?;
+
+        // Extract entities from state
+        let entities = state
+            .get("entities")
+            .and_then(|e| e.as_object())
+            .ok_or_else(|| Error::generic("Invalid state format: missing entities"))?;
+
+        // Import each entity
+        for (entity_name, records_value) in entities {
+            let records = records_value.as_array().ok_or_else(|| {
+                Error::generic(format!("Invalid records for entity {}", entity_name))
+            })?;
+
+            if let Some(entity) = self.registry.get(entity_name) {
+                let table_name = entity.table_name();
+
+                for record in records {
+                    let record_obj = record
+                        .as_object()
+                        .ok_or_else(|| Error::generic("Invalid record format"))?;
+
+                    let fields: Vec<String> = record_obj.keys().cloned().collect();
+                    let placeholders: Vec<String> =
+                        (0..fields.len()).map(|_| "?".to_string()).collect();
+                    let values: Vec<serde_json::Value> = fields
+                        .iter()
+                        .map(|f| record_obj.get(f).cloned().unwrap_or(serde_json::Value::Null))
+                        .collect();
+
+                    let query = format!(
+                        "INSERT INTO {} ({}) VALUES ({})",
+                        table_name,
+                        fields.join(", "),
+                        placeholders.join(", ")
+                    );
+
+                    self.database.execute(&query, &values).await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get a summary of the current state
+    pub async fn state_summary(&self) -> String {
+        let mut total_records = 0usize;
+        let entity_count = self.registry.list().len();
+
+        for entity_name in self.registry.list() {
+            if let Some(entity) = self.registry.get(&entity_name) {
+                let table_name = entity.table_name();
+                let count_query = format!("SELECT COUNT(*) as count FROM {}", table_name);
+                if let Ok(results) = self.database.query(&count_query, &[]).await {
+                    if let Some(count) =
+                        results.first().and_then(|r| r.get("count")).and_then(|v| v.as_u64())
+                    {
+                        total_records += count as usize;
+                    }
+                }
+            }
+        }
+
+        format!("{} entities, {} records", entity_count, total_records)
+    }
+}
+
+// Implement ProtocolStateExporter trait for VbrEngine
+use async_trait::async_trait;
+use mockforge_core::snapshots::ProtocolStateExporter;
+
+#[async_trait]
+impl ProtocolStateExporter for VbrEngine {
+    fn protocol_name(&self) -> &str {
+        "vbr"
+    }
+
+    async fn export_state(&self) -> Result<serde_json::Value> {
+        VbrEngine::export_state(self).await
+    }
+
+    async fn import_state(&self, state: serde_json::Value) -> Result<()> {
+        VbrEngine::import_state(self, state).await
+    }
+
+    async fn state_summary(&self) -> String {
+        VbrEngine::state_summary(self).await
+    }
 }
 
 #[cfg(test)]

@@ -310,9 +310,17 @@ impl OpenApiSpec {
             .collect()
     }
 
-    /// Get a schema by reference
+    /// Get a schema by reference (returns wrapped OpenApiSchema)
     pub fn get_schema(&self, reference: &str) -> Option<crate::openapi::schema::OpenApiSchema> {
         self.resolve_schema(reference).map(crate::openapi::schema::OpenApiSchema::new)
+    }
+
+    /// Resolve a schema reference to the raw Schema
+    ///
+    /// This resolves `$ref` references like `#/components/schemas/User` to the
+    /// actual schema definition, handling nested references recursively.
+    pub fn resolve_schema_ref(&self, reference: &str) -> Option<Schema> {
+        self.resolve_schema(reference)
     }
 
     /// Validate security requirements

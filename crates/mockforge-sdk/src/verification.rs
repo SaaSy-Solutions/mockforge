@@ -201,10 +201,7 @@ mod tests {
     use std::collections::HashMap;
 
     // Helper function to create a verification request
-    fn create_verification_request(
-        method: &str,
-        path: &str,
-    ) -> VerificationRequest {
+    fn create_verification_request(method: &str, path: &str) -> VerificationRequest {
         VerificationRequest {
             method: Some(method.to_string()),
             path: Some(path.to_string()),
@@ -432,9 +429,7 @@ mod tests {
 
     #[test]
     fn test_verification_sequence_single() {
-        let patterns = vec![
-            create_verification_request("GET", "/api/test"),
-        ];
+        let patterns = vec![create_verification_request("GET", "/api/test")];
         assert_eq!(patterns.len(), 1);
     }
 

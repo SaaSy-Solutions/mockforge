@@ -9,6 +9,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
     models::{record_audit_event, AuditEventType, User},
+    redis::{two_factor_backup_codes_key, two_factor_setup_key, TWO_FACTOR_SETUP_TTL_SECONDS},
     two_factor::{
         generate_backup_codes, generate_qr_code_data_url, generate_secret, hash_backup_code,
         verify_totp_code,
@@ -67,10 +68,13 @@ pub async fn setup_2fa(
     }
 
     // Generate TOTP secret
-    let secret = generate_secret();
+    let secret = generate_secret()
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to generate 2FA secret: {}", e)))?;
 
     // Generate backup codes (10 codes)
-    let backup_codes = generate_backup_codes(10);
+    let backup_codes = generate_backup_codes(10).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to generate backup codes: {}", e))
+    })?;
 
     // Generate QR code
     let issuer = "MockForge";
@@ -78,9 +82,33 @@ pub async fn setup_2fa(
     let qr_code_url = generate_qr_code_data_url(&secret, &account_name, issuer)
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to generate QR code: {}", e)))?;
 
-    // Store secret temporarily (user needs to verify before enabling)
-    // For now, we'll return it and require verification in the next step
-    // In production, you might want to store it temporarily in Redis or session
+    // Store secret and backup codes temporarily in Redis (5 minute TTL)
+    if let Some(ref redis) = state.redis {
+        // Store the secret
+        let secret_key = two_factor_setup_key(&user_id);
+        redis
+            .set_with_expiry(&secret_key, &secret, TWO_FACTOR_SETUP_TTL_SECONDS)
+            .await
+            .map_err(|e| {
+                ApiError::Internal(anyhow::anyhow!("Failed to store 2FA secret: {}", e))
+            })?;
+
+        // Store backup codes as JSON
+        let backup_codes_key = two_factor_backup_codes_key(&user_id);
+        let backup_codes_json = serde_json::to_string(&backup_codes).map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Failed to serialize backup codes: {}", e))
+        })?;
+        redis
+            .set_with_expiry(&backup_codes_key, &backup_codes_json, TWO_FACTOR_SETUP_TTL_SECONDS)
+            .await
+            .map_err(|e| {
+                ApiError::Internal(anyhow::anyhow!("Failed to store backup codes: {}", e))
+            })?;
+
+        tracing::debug!("Stored 2FA setup data in Redis for user {}", user_id);
+    } else {
+        tracing::warn!("Redis not configured - 2FA setup will require secret to be passed in verification request");
+    }
 
     Ok(Json(Setup2FAResponse {
         secret: secret.clone(),
@@ -109,25 +137,86 @@ pub async fn verify_2fa_setup(
         return Err(ApiError::InvalidRequest("2FA is already enabled".to_string()));
     }
 
-    // This is a simplified flow - in production, you'd retrieve the secret
-    // from a temporary store (Redis/session) that was set in setup_2fa
-    // For now, we'll require the secret to be passed in the request
-    // In a real implementation, you'd store it temporarily after setup_2fa
+    // Retrieve secret and backup codes from Redis
+    let redis = state.redis.as_ref().ok_or_else(|| {
+        ApiError::Internal(anyhow::anyhow!(
+            "Redis not configured. Use verify_2fa_setup_with_secret endpoint instead."
+        ))
+    })?;
 
-    // For this implementation, we'll require the user to call setup_2fa first
-    // and then immediately verify. The secret should be stored client-side temporarily.
-    // A better approach would be to store it in Redis with a short TTL.
+    let secret_key = two_factor_setup_key(&user_id);
+    let secret = redis
+        .get(&secret_key)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to retrieve 2FA secret: {}", e)))?
+        .ok_or_else(|| {
+            ApiError::InvalidRequest(
+                "2FA setup expired or not started. Please call setup_2fa first.".to_string(),
+            )
+        })?;
 
-    // For now, return an error indicating the setup flow needs to be completed
-    // The actual implementation would:
-    // 1. Retrieve secret from temporary store (set in setup_2fa)
-    // 2. Verify the code
-    // 3. Hash backup codes
-    // 4. Enable 2FA in database
+    let backup_codes_key = two_factor_backup_codes_key(&user_id);
+    let backup_codes_json = redis
+        .get(&backup_codes_key)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to retrieve backup codes: {}", e)))?
+        .ok_or_else(|| {
+            ApiError::InvalidRequest(
+                "2FA setup expired or not started. Please call setup_2fa first.".to_string(),
+            )
+        })?;
 
-    Err(ApiError::InvalidRequest(
-        "Please call setup_2fa first to get a secret, then verify with a code from your authenticator app.".to_string(),
-    ))
+    let backup_codes: Vec<String> = serde_json::from_str(&backup_codes_json)
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to parse backup codes: {}", e)))?;
+
+    // Verify TOTP code
+    let valid = verify_totp_code(&secret, &request.code, Some(1))
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("TOTP verification error: {}", e)))?;
+
+    if !valid {
+        return Err(ApiError::InvalidRequest(
+            "Invalid verification code. Please try again.".to_string(),
+        ));
+    }
+
+    // Hash backup codes for storage
+    let hashed_backup_codes: Vec<String> = backup_codes
+        .iter()
+        .map(|code| hash_backup_code(code))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to hash backup codes: {}", e)))?;
+
+    // Enable 2FA in database
+    User::enable_2fa(pool, user_id, &secret, &hashed_backup_codes)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
+
+    // Clean up Redis keys
+    let _ = redis.delete(&secret_key).await;
+    let _ = redis.delete(&backup_codes_key).await;
+
+    // Record audit log
+    let user_org_id = uuid::Uuid::nil();
+    record_audit_event(
+        pool,
+        user_org_id,
+        Some(user_id),
+        AuditEventType::TwoFactorEnabled,
+        "Two-factor authentication enabled".to_string(),
+        None,
+        None,
+        None,
+    )
+    .await;
+
+    tracing::info!("2FA enabled for user {}", user_id);
+
+    Ok(Json(Verify2FASetupResponse {
+        success: true,
+        message:
+            "2FA has been enabled successfully. Please save your backup codes in a safe place."
+                .to_string(),
+    }))
 }
 
 /// Simplified verify_2fa_setup that accepts secret
@@ -161,7 +250,9 @@ pub async fn verify_2fa_setup_with_secret(
     }
 
     // Generate and hash backup codes
-    let backup_codes = generate_backup_codes(10);
+    let backup_codes = generate_backup_codes(10).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to generate backup codes: {}", e))
+    })?;
     let hashed_backup_codes: Vec<String> = backup_codes
         .iter()
         .map(|code| hash_backup_code(code))

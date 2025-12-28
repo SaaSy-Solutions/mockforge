@@ -22,6 +22,7 @@ mod backend_generator;
 mod blueprint_commands;
 mod client_generator;
 mod cloud_commands;
+mod config_commands;
 mod contract_diff_commands;
 mod contract_sync_commands;
 mod deploy_commands;
@@ -1841,6 +1842,74 @@ enum ConfigCommands {
         /// Configuration file path
         #[arg(short, long)]
         config: Option<PathBuf>,
+
+        /// Show warnings in addition to errors
+        #[arg(long)]
+        warnings: bool,
+    },
+
+    /// Generate a configuration template file
+    ///
+    /// Creates a well-documented YAML configuration template with all
+    /// available options and their default values.
+    ///
+    /// Examples:
+    ///   mockforge config generate-template
+    ///   mockforge config generate-template --output mockforge.yaml
+    ///   mockforge config generate-template --format json --full
+    #[command(verbatim_doc_comment)]
+    GenerateTemplate {
+        /// Output file path (defaults to stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Output format (yaml or json)
+        #[arg(short, long, default_value = "yaml")]
+        format: String,
+
+        /// Include all optional fields with their defaults
+        #[arg(long)]
+        full: bool,
+    },
+
+    /// List all supported environment variables
+    ///
+    /// Displays a comprehensive list of all environment variables that
+    /// MockForge recognizes, along with their descriptions and defaults.
+    ///
+    /// Examples:
+    ///   mockforge config list-env-vars
+    ///   mockforge config list-env-vars --category server
+    ///   mockforge config list-env-vars --format markdown
+    #[command(verbatim_doc_comment)]
+    ListEnvVars {
+        /// Filter by category (server, protocols, database, security, ai, traffic, files, logging)
+        #[arg(short, long)]
+        category: Option<String>,
+
+        /// Output format (table, markdown, json)
+        #[arg(short, long, default_value = "table")]
+        format: String,
+    },
+
+    /// Show current effective configuration
+    ///
+    /// Displays the merged configuration from all sources (defaults,
+    /// config file, environment variables) as it would be used at runtime.
+    ///
+    /// Examples:
+    ///   mockforge config show
+    ///   mockforge config show --config mockforge.yaml
+    ///   mockforge config show --format json
+    #[command(verbatim_doc_comment)]
+    Show {
+        /// Configuration file path
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+
+        /// Output format (yaml or json)
+        #[arg(short, long, default_value = "yaml")]
+        format: String,
     },
 }
 
@@ -4269,6 +4338,13 @@ pub async fn handle_serve(
             max_packet_size: mqtt_config.max_packet_size,
             keep_alive_secs: mqtt_config.keep_alive_secs,
             version: mockforge_mqtt::broker::MqttVersion::default(),
+            // TLS defaults (not yet exposed in core config)
+            tls_enabled: false,
+            tls_port: 8883,
+            tls_cert_path: None,
+            tls_key_path: None,
+            tls_ca_path: None,
+            tls_client_auth: false,
         };
 
         // MQTT registry is already Some, so we can safely clone it
@@ -4888,6 +4964,13 @@ pub async fn handle_serve(
             max_packet_size: mqtt_config.max_packet_size,
             keep_alive_secs: mqtt_config.keep_alive_secs,
             version: mockforge_mqtt::broker::MqttVersion::default(),
+            // TLS defaults (not yet exposed in core config)
+            tls_enabled: false,
+            tls_port: 8883,
+            tls_cert_path: None,
+            tls_key_path: None,
+            tls_ca_path: None,
+            tls_client_auth: false,
         };
 
         Some(tokio::spawn(async move {
@@ -7722,8 +7805,21 @@ async fn handle_config(
     config_command: ConfigCommands,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match config_command {
-        ConfigCommands::Validate { config } => {
-            handle_config_validate(config).await?;
+        ConfigCommands::Validate { config, warnings } => {
+            handle_config_validate(config, warnings).await?;
+        }
+        ConfigCommands::GenerateTemplate {
+            output,
+            format,
+            full,
+        } => {
+            handle_config_generate_template(output, &format, full).await?;
+        }
+        ConfigCommands::ListEnvVars { category, format } => {
+            handle_config_list_env_vars(category.as_deref(), &format).await?;
+        }
+        ConfigCommands::Show { config, format } => {
+            handle_config_show(config, &format).await?;
         }
     }
     Ok(())
@@ -7732,6 +7828,7 @@ async fn handle_config(
 /// Handle config validation
 async fn handle_config_validate(
     config_path: Option<PathBuf>,
+    _show_warnings: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("🔍 Validating MockForge configuration...");
 
@@ -8204,6 +8301,746 @@ fn discover_config_file() -> Result<PathBuf, Box<dyn std::error::Error + Send + 
     }
 
     Err("No configuration file found. Expected one of: mockforge.yaml, mockforge.yml, .mockforge.yaml, .mockforge.yml".into())
+}
+
+/// Handle config generate-template command
+async fn handle_config_generate_template(
+    output: Option<PathBuf>,
+    format: &str,
+    full: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let template = if full {
+        generate_full_config_template()
+    } else {
+        generate_minimal_config_template()
+    };
+
+    let content = match format {
+        "json" => serde_json::to_string_pretty(&template)?,
+        _ => serde_yaml::to_string(&template)?,
+    };
+
+    if let Some(path) = output {
+        tokio::fs::write(&path, &content).await?;
+        println!("✅ Configuration template written to: {}", path.display());
+    } else {
+        println!("{}", content);
+    }
+
+    Ok(())
+}
+
+fn generate_minimal_config_template() -> serde_json::Value {
+    serde_json::json!({
+        "# MockForge Configuration": "https://docs.mockforge.dev/configuration",
+        "server": {
+            "http": {
+                "port": 3000,
+                "host": "0.0.0.0"
+            }
+        },
+        "openapi": {
+            "# Path to OpenAPI specification": "",
+            "spec_path": "./openapi.yaml"
+        },
+        "logging": {
+            "level": "info"
+        }
+    })
+}
+
+fn generate_full_config_template() -> serde_json::Value {
+    serde_json::json!({
+        "# MockForge Full Configuration Template": "https://docs.mockforge.dev/configuration",
+        "server": {
+            "http": {
+                "port": 3000,
+                "host": "0.0.0.0",
+                "cors_enabled": true
+            },
+            "websocket": {
+                "enabled": false,
+                "port": 3001
+            },
+            "grpc": {
+                "enabled": false,
+                "port": 50051
+            },
+            "admin": {
+                "enabled": false,
+                "port": 9080
+            }
+        },
+        "protocols": {
+            "smtp": { "enabled": false, "port": 1025 },
+            "mqtt": { "enabled": false, "port": 1883, "tls_enabled": false, "tls_port": 8883 },
+            "kafka": { "enabled": false, "port": 9092 },
+            "amqp": { "enabled": false, "port": 5672, "tls_enabled": false, "tls_port": 5671 },
+            "tcp": { "enabled": false, "port": 8000 }
+        },
+        "openapi": {
+            "spec_path": "./openapi.yaml",
+            "validate_requests": true,
+            "validate_responses": false
+        },
+        "fixtures": { "directory": "./fixtures", "hot_reload": true },
+        "latency": { "enabled": false, "min_ms": 0, "max_ms": 100, "distribution": "normal" },
+        "failures": { "enabled": false, "rate": 0.0, "status_codes": [500, 502, 503] },
+        "traffic_shaping": { "enabled": false, "bandwidth_limit_bytes": 1000000, "burst_size_bytes": 100000 },
+        "logging": { "level": "info", "format": "json" },
+        "ai": { "enabled": false, "provider": "openai" },
+        "proxy": { "enabled": false, "upstream_url": "", "record": false, "replay": false },
+        "metrics": { "enabled": false, "prometheus_endpoint": "/metrics" },
+        "security": { "rate_limit_rpm": 0, "tls": { "enabled": false, "cert_path": "", "key_path": "" } },
+        "performance": {
+            "compression": { "enabled": true, "algorithm": "gzip", "min_size": 1024, "level": 6 },
+            "connection_pool": { "enabled": true, "max_connections": 100, "max_idle_per_host": 10, "idle_timeout_secs": 90 },
+            "request_limits": { "max_body_size": 10485760, "max_header_size": 16384, "max_headers": 100 },
+            "workers": { "threads": 0, "blocking_threads": 512 },
+            "circuit_breaker": { "enabled": false, "failure_threshold": 5, "success_threshold": 2, "half_open_timeout_secs": 30 }
+        },
+        "plugins": {
+            "enabled": true,
+            "max_memory_per_plugin": 10485760,
+            "max_cpu_per_plugin": 0.5,
+            "max_execution_time_ms": 5000,
+            "allow_network_access": false,
+            "max_concurrent_executions": 10,
+            "max_module_size": 5242880,
+            "max_table_elements": 1000,
+            "max_stack_size": 2097152
+        },
+        "hot_reload": {
+            "enabled": false,
+            "check_interval_secs": 5,
+            "debounce_delay_ms": 1000,
+            "reload_on_spec_change": true,
+            "reload_on_fixture_change": true,
+            "reload_on_plugin_change": true,
+            "graceful_reload": true,
+            "graceful_timeout_secs": 30,
+            "validate_before_reload": true,
+            "rollback_on_failure": true
+        },
+        "secrets": {
+            "provider": "none",
+            "cache_ttl_secs": 300,
+            "retry_attempts": 3,
+            "retry_delay_ms": 1000,
+            "vault": {
+                "address": "http://127.0.0.1:8200",
+                "auth_method": "token",
+                "mount_path": "secret",
+                "path_prefix": "mockforge",
+                "skip_verify": false,
+                "timeout_secs": 30
+            }
+        }
+    })
+}
+
+/// Environment variable definition for listing
+struct EnvVarDef {
+    name: &'static str,
+    category: &'static str,
+    default: &'static str,
+    description: &'static str,
+    required: bool,
+}
+
+fn get_env_var_definitions() -> Vec<EnvVarDef> {
+    vec![
+        // Server
+        EnvVarDef {
+            name: "MOCKFORGE_HTTP_PORT",
+            category: "server",
+            default: "3000",
+            description: "HTTP server port",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_HTTP_HOST",
+            category: "server",
+            default: "0.0.0.0",
+            description: "HTTP server bind host",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_WS_PORT",
+            category: "server",
+            default: "3001",
+            description: "WebSocket server port",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_GRPC_PORT",
+            category: "server",
+            default: "50051",
+            description: "gRPC server port",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_ADMIN_PORT",
+            category: "server",
+            default: "9080",
+            description: "Admin interface port",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_ADMIN_ENABLED",
+            category: "server",
+            default: "false",
+            description: "Enable admin interface",
+            required: false,
+        },
+        // Protocols
+        EnvVarDef {
+            name: "MOCKFORGE_SMTP_PORT",
+            category: "protocols",
+            default: "1025",
+            description: "SMTP server port",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_SMTP_ENABLED",
+            category: "protocols",
+            default: "false",
+            description: "Enable SMTP server",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_MQTT_PORT",
+            category: "protocols",
+            default: "1883",
+            description: "MQTT broker port",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_KAFKA_PORT",
+            category: "protocols",
+            default: "9092",
+            description: "Kafka broker port",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_AMQP_PORT",
+            category: "protocols",
+            default: "5672",
+            description: "AMQP broker port",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_TCP_PORT",
+            category: "protocols",
+            default: "8000",
+            description: "TCP proxy port",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_TCP_ENABLED",
+            category: "protocols",
+            default: "false",
+            description: "Enable TCP proxy",
+            required: false,
+        },
+        // Database
+        EnvVarDef {
+            name: "DATABASE_URL",
+            category: "database",
+            default: "",
+            description: "Database connection URL (required for registry)",
+            required: true,
+        },
+        EnvVarDef {
+            name: "REDIS_URL",
+            category: "database",
+            default: "",
+            description: "Redis connection URL for caching",
+            required: false,
+        },
+        EnvVarDef {
+            name: "RECORDER_DATABASE_PATH",
+            category: "database",
+            default: "recordings.db",
+            description: "Recorder SQLite database path",
+            required: false,
+        },
+        // Security
+        EnvVarDef {
+            name: "JWT_SECRET",
+            category: "security",
+            default: "",
+            description: "JWT signing secret (required for auth)",
+            required: true,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_API_KEY",
+            category: "security",
+            default: "",
+            description: "API key for MockForge cloud",
+            required: false,
+        },
+        // AI
+        EnvVarDef {
+            name: "MOCKFORGE_RAG_PROVIDER",
+            category: "ai",
+            default: "openai",
+            description: "RAG provider (openai/anthropic/ollama)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_RAG_API_KEY",
+            category: "ai",
+            default: "",
+            description: "RAG service API key",
+            required: false,
+        },
+        EnvVarDef {
+            name: "OPENAI_API_KEY",
+            category: "ai",
+            default: "",
+            description: "OpenAI API key (fallback)",
+            required: false,
+        },
+        // Traffic
+        EnvVarDef {
+            name: "MOCKFORGE_LATENCY_ENABLED",
+            category: "traffic",
+            default: "false",
+            description: "Enable latency injection",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_FAILURES_ENABLED",
+            category: "traffic",
+            default: "false",
+            description: "Enable failure injection",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_OVERRIDES_ENABLED",
+            category: "traffic",
+            default: "false",
+            description: "Enable response overrides",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_RATE_LIMIT_RPM",
+            category: "traffic",
+            default: "",
+            description: "Requests per minute rate limit",
+            required: false,
+        },
+        // Files
+        EnvVarDef {
+            name: "MOCKFORGE_FIXTURES_DIR",
+            category: "files",
+            default: "fixtures",
+            description: "Directory for test fixtures",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_MOCK_FILES_DIR",
+            category: "files",
+            default: "mock-files",
+            description: "Directory for mock files",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_SNAPSHOT_DIR",
+            category: "files",
+            default: "",
+            description: "Snapshot storage directory",
+            required: false,
+        },
+        // Logging
+        EnvVarDef {
+            name: "MOCKFORGE_LOG_LEVEL",
+            category: "logging",
+            default: "info",
+            description: "Log level (debug/info/warn/error)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "RUST_LOG",
+            category: "logging",
+            default: "",
+            description: "Rust logging level (standard)",
+            required: false,
+        },
+        // Performance
+        EnvVarDef {
+            name: "MOCKFORGE_COMPRESSION_ENABLED",
+            category: "performance",
+            default: "true",
+            description: "Enable response compression",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_COMPRESSION_ALGORITHM",
+            category: "performance",
+            default: "gzip",
+            description: "Compression algorithm (gzip/deflate/br/zstd)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_COMPRESSION_LEVEL",
+            category: "performance",
+            default: "6",
+            description: "Compression level (1-9 for gzip)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_MAX_BODY_SIZE",
+            category: "performance",
+            default: "10485760",
+            description: "Max request body size in bytes (10MB)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_WORKER_THREADS",
+            category: "performance",
+            default: "0",
+            description: "Worker threads (0=auto-detect)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_POOL_MAX_CONNECTIONS",
+            category: "performance",
+            default: "100",
+            description: "Max connection pool size",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_POOL_IDLE_TIMEOUT",
+            category: "performance",
+            default: "90",
+            description: "Connection pool idle timeout (secs)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_CIRCUIT_BREAKER_ENABLED",
+            category: "performance",
+            default: "false",
+            description: "Enable circuit breaker",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_CIRCUIT_BREAKER_THRESHOLD",
+            category: "performance",
+            default: "5",
+            description: "Circuit breaker failure threshold",
+            required: false,
+        },
+        // Plugins
+        EnvVarDef {
+            name: "MOCKFORGE_PLUGINS_ENABLED",
+            category: "plugins",
+            default: "true",
+            description: "Enable plugin system",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_PLUGIN_MAX_MEMORY",
+            category: "plugins",
+            default: "10485760",
+            description: "Max memory per plugin (10MB)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_PLUGIN_MAX_CPU",
+            category: "plugins",
+            default: "0.5",
+            description: "Max CPU per plugin (0.5 = 50%)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_PLUGIN_TIMEOUT_MS",
+            category: "plugins",
+            default: "5000",
+            description: "Plugin execution timeout (ms)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_PLUGIN_NETWORK_ACCESS",
+            category: "plugins",
+            default: "false",
+            description: "Allow plugins network access",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_PLUGIN_MAX_CONCURRENT",
+            category: "plugins",
+            default: "10",
+            description: "Max concurrent plugin executions",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_PLUGIN_CACHE_DIR",
+            category: "plugins",
+            default: "",
+            description: "Plugin cache directory",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_PLUGIN_MAX_MODULE_SIZE",
+            category: "plugins",
+            default: "5242880",
+            description: "Max WASM module size (5MB)",
+            required: false,
+        },
+        // Hot Reload
+        EnvVarDef {
+            name: "MOCKFORGE_HOT_RELOAD_ENABLED",
+            category: "hot_reload",
+            default: "false",
+            description: "Enable config hot-reload",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_HOT_RELOAD_INTERVAL",
+            category: "hot_reload",
+            default: "5",
+            description: "Config check interval (secs)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_HOT_RELOAD_DEBOUNCE",
+            category: "hot_reload",
+            default: "1000",
+            description: "Debounce delay (ms)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_HOT_RELOAD_SPEC",
+            category: "hot_reload",
+            default: "true",
+            description: "Reload on OpenAPI spec change",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_HOT_RELOAD_FIXTURES",
+            category: "hot_reload",
+            default: "true",
+            description: "Reload on fixture change",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_HOT_RELOAD_GRACEFUL",
+            category: "hot_reload",
+            default: "true",
+            description: "Wait for in-flight requests",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_HOT_RELOAD_TIMEOUT",
+            category: "hot_reload",
+            default: "30",
+            description: "Graceful reload timeout (secs)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_HOT_RELOAD_VALIDATE",
+            category: "hot_reload",
+            default: "true",
+            description: "Validate config before reload",
+            required: false,
+        },
+        // Secrets
+        EnvVarDef {
+            name: "MOCKFORGE_SECRET_PROVIDER",
+            category: "secrets",
+            default: "none",
+            description: "Secret provider (vault/aws/azure/gcp/k8s)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_SECRET_CACHE_TTL",
+            category: "secrets",
+            default: "300",
+            description: "Secret cache TTL (secs)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "VAULT_ADDR",
+            category: "secrets",
+            default: "",
+            description: "Vault server address",
+            required: false,
+        },
+        EnvVarDef {
+            name: "VAULT_TOKEN",
+            category: "secrets",
+            default: "",
+            description: "Vault token",
+            required: false,
+        },
+        EnvVarDef {
+            name: "VAULT_ROLE_ID",
+            category: "secrets",
+            default: "",
+            description: "Vault AppRole role ID",
+            required: false,
+        },
+        EnvVarDef {
+            name: "VAULT_SECRET_ID",
+            category: "secrets",
+            default: "",
+            description: "Vault AppRole secret ID",
+            required: false,
+        },
+        EnvVarDef {
+            name: "VAULT_NAMESPACE",
+            category: "secrets",
+            default: "",
+            description: "Vault namespace (Enterprise)",
+            required: false,
+        },
+        EnvVarDef {
+            name: "VAULT_SKIP_VERIFY",
+            category: "secrets",
+            default: "false",
+            description: "Skip Vault TLS verification",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_AWS_SECRETS_REGION",
+            category: "secrets",
+            default: "us-east-1",
+            description: "AWS Secrets Manager region",
+            required: false,
+        },
+        EnvVarDef {
+            name: "AZURE_KEY_VAULT_URL",
+            category: "secrets",
+            default: "",
+            description: "Azure Key Vault URL",
+            required: false,
+        },
+        EnvVarDef {
+            name: "GCP_SECRET_PROJECT",
+            category: "secrets",
+            default: "",
+            description: "GCP Secret Manager project",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_MASTER_KEY",
+            category: "secrets",
+            default: "",
+            description: "Master key for encrypted secrets",
+            required: false,
+        },
+    ]
+}
+
+/// Handle config list-env-vars command
+async fn handle_config_list_env_vars(
+    category: Option<&str>,
+    format: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let all_vars = get_env_var_definitions();
+
+    let vars: Vec<_> = if let Some(cat) = category {
+        all_vars.into_iter().filter(|v| v.category == cat).collect()
+    } else {
+        all_vars
+    };
+
+    match format {
+        "markdown" => {
+            println!("# MockForge Environment Variables\n");
+            let mut current_category = "";
+            for var in &vars {
+                if var.category != current_category {
+                    current_category = var.category;
+                    println!("\n## {}\n", capitalize_first(current_category));
+                    println!("| Variable | Default | Description |");
+                    println!("|----------|---------|-------------|");
+                }
+                let default = if var.default.is_empty() {
+                    "-"
+                } else {
+                    var.default
+                };
+                let required = if var.required { " **(required)**" } else { "" };
+                println!("| `{}` | `{}` | {}{} |", var.name, default, var.description, required);
+            }
+        }
+        "json" => {
+            let json_vars: Vec<serde_json::Value> = vars
+                .iter()
+                .map(|v| {
+                    serde_json::json!({
+                        "name": v.name,
+                        "category": v.category,
+                        "default": v.default,
+                        "description": v.description,
+                        "required": v.required
+                    })
+                })
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&json_vars)?);
+        }
+        _ => {
+            // Table format
+            println!("{:<40} {:<12} {:<15} {}", "Variable", "Category", "Default", "Description");
+            println!("{}", "-".repeat(100));
+            for var in &vars {
+                let required = if var.required { "*" } else { "" };
+                let default = if var.default.is_empty() {
+                    "-"
+                } else {
+                    var.default
+                };
+                println!(
+                    "{:<40} {:<12} {:<15} {}{}",
+                    var.name, var.category, default, var.description, required
+                );
+            }
+            println!();
+            println!("* = Required variable");
+            println!();
+            println!("Categories: server, protocols, database, security, ai, traffic, files, logging, performance, plugins, hot_reload, secrets");
+        }
+    }
+
+    Ok(())
+}
+
+fn capitalize_first(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
+
+/// Handle config show command
+async fn handle_config_show(
+    config_path: Option<PathBuf>,
+    format: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config_file = if let Some(path) = config_path {
+        path
+    } else {
+        discover_config_file()?
+    };
+
+    let content = tokio::fs::read_to_string(&config_file).await?;
+    let parsed: serde_json::Value = if config_file.extension().map_or(false, |e| e == "json") {
+        serde_json::from_str(&content)?
+    } else {
+        serde_yaml::from_str(&content)?
+    };
+
+    let output = match format {
+        "json" => serde_json::to_string_pretty(&parsed)?,
+        _ => serde_yaml::to_string(&parsed)?,
+    };
+
+    println!("{}", output);
+    Ok(())
 }
 
 /// Handle AI testing commands

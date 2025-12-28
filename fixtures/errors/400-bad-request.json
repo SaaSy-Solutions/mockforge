@@ -1,0 +1,16 @@
+{
+  "response": {
+    "status": 400,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "BAD_REQUEST",
+        "message": "The request was invalid or malformed",
+        "details": [],
+        "request_id": "{{uuid}}"
+      }
+    }
+  }
+}

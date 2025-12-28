@@ -346,8 +346,7 @@ mod tests {
     #[tokio::test]
     async fn test_add_stub_with_custom_status() {
         let mut server = MockServer::default();
-        let stub = ResponseStub::new("POST", "/api/create", json!({"created": true}))
-            .status(201);
+        let stub = ResponseStub::new("POST", "/api/create", json!({"created": true})).status(201);
 
         let result = server.add_stub(stub).await;
         assert!(result.is_ok());
@@ -368,7 +367,10 @@ mod tests {
         assert!(result.is_ok());
 
         let route = &server.routes[0];
-        assert_eq!(route.response.headers.get("Content-Type"), Some(&"application/json".to_string()));
+        assert_eq!(
+            route.response.headers.get("Content-Type"),
+            Some(&"application/json".to_string())
+        );
         assert_eq!(route.response.headers.get("X-Custom"), Some(&"value".to_string()));
     }
 
@@ -403,8 +405,14 @@ mod tests {
         let mut server = MockServer::default();
 
         server.stub_response("GET", "/api/users", json!({"users": []})).await.unwrap();
-        server.stub_response("POST", "/api/users", json!({"created": true})).await.unwrap();
-        server.stub_response("DELETE", "/api/users/1", json!({"deleted": true})).await.unwrap();
+        server
+            .stub_response("POST", "/api/users", json!({"created": true}))
+            .await
+            .unwrap();
+        server
+            .stub_response("DELETE", "/api/users/1", json!({"deleted": true}))
+            .await
+            .unwrap();
 
         assert_eq!(server.routes.len(), 3);
 

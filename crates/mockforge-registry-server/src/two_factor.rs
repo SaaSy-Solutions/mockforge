@@ -10,14 +10,28 @@ use qrcode::QrCode;
 use sha1::Sha1;
 use totp_lite::totp_custom;
 
+/// Get current Unix timestamp in seconds.
+/// Returns an error if the system time is before the Unix epoch (which indicates
+/// a seriously misconfigured system clock).
+fn current_unix_timestamp() -> Result<u64> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .map_err(|_| anyhow!("System clock is set before Unix epoch"))
+}
+
 /// Generate a new TOTP secret
 /// Returns a base32-encoded secret suitable for TOTP
-pub fn generate_secret() -> String {
+///
+/// # Errors
+/// Returns an error if the system's cryptographic random number generator fails
+pub fn generate_secret() -> Result<String> {
     use ring::rand::{SecureRandom, SystemRandom};
     let rng = SystemRandom::new();
     let mut secret_bytes = [0u8; 20]; // 160 bits for TOTP secret
-    rng.fill(&mut secret_bytes).expect("Failed to generate random secret");
-    BASE32.encode(&secret_bytes)
+    rng.fill(&mut secret_bytes)
+        .map_err(|_| anyhow!("Cryptographic random number generator failed"))?;
+    Ok(BASE32.encode(&secret_bytes))
 }
 
 /// Generate a TOTP code from a secret
@@ -33,12 +47,10 @@ pub fn generate_totp_code(secret: &str, timestamp: Option<u64>) -> Result<String
         .decode(secret.as_bytes())
         .map_err(|e| anyhow!("Invalid base32 secret: {}", e))?;
 
-    let time = timestamp.unwrap_or_else(|| {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("system time before UNIX epoch")
-            .as_secs()
-    });
+    let time = match timestamp {
+        Some(t) => t,
+        None => current_unix_timestamp()?,
+    };
 
     // totp-lite 2.0 API: totp_custom<H>(step, digits, secret, time)
     // Using SHA1 algorithm (default for TOTP)
@@ -63,10 +75,7 @@ pub fn generate_totp_code(secret: &str, timestamp: Option<u64>) -> Result<String
 /// true if the code is valid, false otherwise
 pub fn verify_totp_code(secret: &str, code: &str, window: Option<u64>) -> Result<bool> {
     let window = window.unwrap_or(1);
-    let current_time = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system time before UNIX epoch")
-        .as_secs();
+    let current_time = current_unix_timestamp()?;
 
     // Check current time window and adjacent windows (for clock skew tolerance)
     for i in 0..=(window * 2) {
@@ -122,20 +131,24 @@ pub fn generate_qr_code_data_url(secret: &str, account_name: &str, issuer: &str)
 ///
 /// # Returns
 /// Vector of backup codes (8-digit codes)
-pub fn generate_backup_codes(count: usize) -> Vec<String> {
+///
+/// # Errors
+/// Returns an error if the cryptographic random number generator fails
+pub fn generate_backup_codes(count: usize) -> Result<Vec<String>> {
     use ring::rand::{SecureRandom, SystemRandom};
     let rng = SystemRandom::new();
     let mut codes = Vec::new();
 
     for _ in 0..count {
         let mut bytes = [0u8; 4];
-        rng.fill(&mut bytes).expect("Failed to generate backup code");
+        rng.fill(&mut bytes)
+            .map_err(|_| anyhow!("Cryptographic random number generator failed"))?;
         // Generate 8-digit code
         let code = format!("{:08}", u32::from_be_bytes(bytes) % 100_000_000);
         codes.push(code);
     }
 
-    codes
+    Ok(codes)
 }
 
 /// Hash a backup code using bcrypt
@@ -154,7 +167,7 @@ mod tests {
 
     #[test]
     fn test_totp_generation_and_verification() {
-        let secret = generate_secret();
+        let secret = generate_secret().unwrap();
         let code = generate_totp_code(&secret, None).unwrap();
 
         assert_eq!(code.len(), 6);
@@ -166,7 +179,7 @@ mod tests {
 
     #[test]
     fn test_backup_code_generation() {
-        let codes = generate_backup_codes(10);
+        let codes = generate_backup_codes(10).unwrap();
         assert_eq!(codes.len(), 10);
 
         for code in &codes {

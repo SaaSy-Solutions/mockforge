@@ -8,7 +8,7 @@ use axum::{
     response::Json,
 };
 use mockforge_core::consistency::ConsistencyEngine;
-use mockforge_core::snapshots::{SnapshotComponents, SnapshotManager};
+use mockforge_core::snapshots::{ProtocolStateExporter, SnapshotComponents, SnapshotManager};
 use mockforge_core::workspace_persistence::WorkspacePersistence;
 use serde::Deserialize;
 use serde_json::Value;
@@ -25,9 +25,11 @@ pub struct SnapshotState {
     /// Workspace persistence (optional, for saving/loading workspace config)
     pub workspace_persistence: Option<Arc<WorkspacePersistence>>,
     /// VBR engine (optional, for saving/loading VBR state)
-    pub vbr_engine: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    /// Now uses ProtocolStateExporter trait for proper state extraction
+    pub vbr_engine: Option<Arc<dyn ProtocolStateExporter>>,
     /// Recorder database (optional, for saving/loading recorder state)
-    pub recorder: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    /// Now uses ProtocolStateExporter trait for proper state extraction
+    pub recorder: Option<Arc<dyn ProtocolStateExporter>>,
 }
 
 /// Request to save a snapshot
@@ -62,32 +64,44 @@ fn default_workspace() -> String {
 
 /// Extract VBR state from VBR engine if available
 async fn extract_vbr_state(
-    vbr_engine: &Option<Arc<dyn std::any::Any + Send + Sync>>,
+    vbr_engine: &Option<Arc<dyn ProtocolStateExporter>>,
 ) -> Option<serde_json::Value> {
     if let Some(engine) = vbr_engine {
-        // Try to downcast to VbrEngine and extract state
-        // Since we can't directly downcast to VbrEngine (it's in a different crate),
-        // we'll use a trait object approach or type_id checking
-        // For now, return None - this can be extended when VBR engine is integrated
-        debug!("VBR engine available, but state extraction not yet implemented");
-        None
+        match engine.export_state().await {
+            Ok(state) => {
+                let summary = engine.state_summary().await;
+                info!("Extracted VBR state from {} engine: {}", engine.protocol_name(), summary);
+                Some(state)
+            }
+            Err(e) => {
+                warn!("Failed to extract VBR state: {}", e);
+                None
+            }
+        }
     } else {
+        debug!("No VBR engine available for state extraction");
         None
     }
 }
 
 /// Extract Recorder state from Recorder if available
 async fn extract_recorder_state(
-    recorder: &Option<Arc<dyn std::any::Any + Send + Sync>>,
+    recorder: &Option<Arc<dyn ProtocolStateExporter>>,
 ) -> Option<serde_json::Value> {
     if let Some(rec) = recorder {
-        // Try to extract recorder state
-        // Since we can't directly downcast to RecorderDatabase (it's in a different crate),
-        // we'll use a trait object approach
-        // For now, return None - this can be extended when Recorder is integrated
-        debug!("Recorder available, but state extraction not yet implemented");
-        None
+        match rec.export_state().await {
+            Ok(state) => {
+                let summary = rec.state_summary().await;
+                info!("Extracted Recorder state from {} engine: {}", rec.protocol_name(), summary);
+                Some(state)
+            }
+            Err(e) => {
+                warn!("Failed to extract Recorder state: {}", e);
+                None
+            }
+        }
     } else {
+        debug!("No Recorder available for state extraction");
         None
     }
 }

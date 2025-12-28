@@ -209,12 +209,7 @@ mod tests {
             enabled: true,
             host: "127.0.0.1".to_string(),
             port: 5672,
-            max_connections: 100,
-            max_channels_per_connection: 100,
-            frame_max: 131072,
-            heartbeat_interval: 60,
-            fixtures_dir: None,
-            virtual_hosts: vec!["/".to_string()],
+            ..Default::default()
         }
     }
 
@@ -269,12 +264,8 @@ bindings:
             enabled: true,
             host: "127.0.0.1".to_string(),
             port: 5672,
-            max_connections: 100,
-            max_channels_per_connection: 100,
-            frame_max: 131072,
-            heartbeat_interval: 60,
             fixtures_dir: Some(temp_dir.path().to_path_buf()),
-            virtual_hosts: vec!["/".to_string()],
+            ..Default::default()
         };
 
         (config, temp_dir)

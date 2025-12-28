@@ -13,6 +13,45 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Validates that a field name is a safe SQL identifier.
+/// Only allows alphanumeric characters and underscores.
+/// This prevents SQL injection through field names.
+fn is_safe_sql_identifier(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && !name.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(true)
+}
+
+/// Validates a field name against the entity schema AND ensures it's a safe SQL identifier.
+/// Returns the field name if valid, or an error otherwise.
+fn validate_field_name<'a>(
+    field_name: &'a str,
+    entity: &crate::entities::Entity,
+) -> std::result::Result<&'a str, (StatusCode, Json<Value>)> {
+    // First check if it's a safe SQL identifier
+    if !is_safe_sql_identifier(field_name) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": format!("Invalid field name: '{}'. Field names must contain only alphanumeric characters and underscores.", field_name)
+            })),
+        ));
+    }
+
+    // Then check if the field exists in the schema
+    if !entity.schema.base.fields.iter().any(|f| f.name == field_name) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": format!("Unknown field: '{}'. Field does not exist in entity schema.", field_name)
+            })),
+        ));
+    }
+
+    Ok(field_name)
+}
+
 /// Generic handler context
 ///
 /// This context is shared across all handlers via Axum Extension.
@@ -110,10 +149,11 @@ async fn apply_auto_generation(
 }
 
 /// Helper function to build WHERE clause from query parameters
+/// Returns an error if any field name is invalid (SQL injection prevention)
 fn build_where_clause(
     params: &HashMap<String, String>,
     entity: &crate::entities::Entity,
-) -> (String, Vec<Value>) {
+) -> std::result::Result<(String, Vec<Value>), (StatusCode, Json<Value>)> {
     let mut conditions = Vec::new();
     let mut bind_values = Vec::new();
 
@@ -123,11 +163,13 @@ fn build_where_clause(
             continue;
         }
 
-        // Check if field exists in schema
-        if entity.schema.base.fields.iter().any(|f| f.name == *key) {
+        // Validate field name is safe AND exists in schema
+        if is_safe_sql_identifier(key) && entity.schema.base.fields.iter().any(|f| f.name == *key) {
             conditions.push(format!("{} = ?", key));
             bind_values.push(Value::String(value.clone()));
         }
+        // Silently ignore fields that don't exist or are invalid
+        // This maintains backwards compatibility while being safe
     }
 
     let where_clause = if conditions.is_empty() {
@@ -136,14 +178,17 @@ fn build_where_clause(
         format!("WHERE {}", conditions.join(" AND "))
     };
 
-    (where_clause, bind_values)
+    Ok((where_clause, bind_values))
 }
 
 /// Helper function to build ORDER BY clause
+/// Validates sort field is safe and exists in schema (SQL injection prevention)
 fn build_order_by(params: &HashMap<String, String>, entity: &crate::entities::Entity) -> String {
     if let Some(sort_field) = params.get("sort") {
-        // Validate sort field exists
-        if entity.schema.base.fields.iter().any(|f| f.name == *sort_field) {
+        // Validate sort field is a safe SQL identifier AND exists in schema
+        if is_safe_sql_identifier(sort_field)
+            && entity.schema.base.fields.iter().any(|f| f.name == *sort_field)
+        {
             let order = params
                 .get("order")
                 .map(|o| o.to_uppercase())
@@ -171,8 +216,8 @@ pub async fn list_handler(
 ) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
     let (entity, table_name) = get_entity_info(&context.registry, &entity_name)?;
 
-    // Build query
-    let (where_clause, bind_values) = build_where_clause(&params, entity);
+    // Build query with validated field names
+    let (where_clause, bind_values) = build_where_clause(&params, entity)?;
     let order_by = build_order_by(&params, entity);
     let (limit, offset) = get_pagination(&params);
 
@@ -300,15 +345,31 @@ pub async fn create_handler(
 
     // Build INSERT query
     if let Value::Object(obj) = &body {
-        let fields: Vec<String> = obj.keys().cloned().collect();
-        let placeholders: Vec<String> = (0..fields.len()).map(|_| "?".to_string()).collect();
-        let values: Vec<Value> =
-            fields.iter().map(|f| obj.get(f).cloned().unwrap_or(Value::Null)).collect();
+        // Validate all field names are safe SQL identifiers (SQL injection prevention)
+        let mut validated_fields: Vec<String> = Vec::new();
+        let mut values: Vec<Value> = Vec::new();
+
+        for (field_name, value) in obj.iter() {
+            // Validate field name is safe
+            if !is_safe_sql_identifier(field_name) {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "error": format!("Invalid field name: '{}'. Field names must contain only alphanumeric characters and underscores.", field_name)
+                    })),
+                ));
+            }
+            validated_fields.push(field_name.clone());
+            values.push(value.clone());
+        }
+
+        let placeholders: Vec<String> =
+            (0..validated_fields.len()).map(|_| "?".to_string()).collect();
 
         let query = format!(
             "INSERT INTO {} ({}) VALUES ({})",
             table_name,
-            fields.join(", "),
+            validated_fields.join(", "),
             placeholders.join(", ")
         );
 
@@ -420,7 +481,15 @@ pub async fn update_handler(
 
         for (field, value) in obj.iter() {
             if field != primary_key {
-                // Don't update primary key
+                // Validate field name is safe (SQL injection prevention)
+                if !is_safe_sql_identifier(field) {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "error": format!("Invalid field name: '{}'. Field names must contain only alphanumeric characters and underscores.", field)
+                        })),
+                    ));
+                }
                 set_clauses.push(format!("{} = ?", field));
                 values.push(value.clone());
             }
@@ -614,7 +683,7 @@ pub async fn get_relationship_handler(
             let target_table = target_entity.table_name();
 
             // Build query to get related entities
-            let (where_clause, mut bind_values) = build_where_clause(&params, target_entity);
+            let (where_clause, mut bind_values) = build_where_clause(&params, target_entity)?;
             let order_by = build_order_by(&params, target_entity);
             let (limit, offset) = get_pagination(&params);
 
@@ -803,7 +872,7 @@ pub async fn get_relationship_handler(
             let target_table = target_entity.table_name();
 
             // Build query with JOIN through junction table
-            let (where_clause, mut bind_values) = build_where_clause(&params, target_entity);
+            let (where_clause, mut bind_values) = build_where_clause(&params, target_entity)?;
             let order_by = build_order_by(&params, target_entity);
             let (limit, offset) = get_pagination(&params);
 
@@ -1044,6 +1113,29 @@ mod tests {
         }
     }
 
+    // SQL identifier validation tests
+    #[test]
+    fn test_is_safe_sql_identifier_valid() {
+        assert!(is_safe_sql_identifier("name"));
+        assert!(is_safe_sql_identifier("user_id"));
+        assert!(is_safe_sql_identifier("firstName"));
+        assert!(is_safe_sql_identifier("field123"));
+        assert!(is_safe_sql_identifier("a"));
+    }
+
+    #[test]
+    fn test_is_safe_sql_identifier_invalid() {
+        assert!(!is_safe_sql_identifier("")); // Empty
+        assert!(!is_safe_sql_identifier("123abc")); // Starts with digit
+        assert!(!is_safe_sql_identifier("field-name")); // Contains hyphen
+        assert!(!is_safe_sql_identifier("field.name")); // Contains dot
+        assert!(!is_safe_sql_identifier("field; DROP TABLE users")); // SQL injection
+        assert!(!is_safe_sql_identifier("field'name")); // Contains quote
+        assert!(!is_safe_sql_identifier("field\"name")); // Contains double quote
+        assert!(!is_safe_sql_identifier("field name")); // Contains space
+        assert!(!is_safe_sql_identifier(&"a".repeat(65))); // Too long
+    }
+
     // Helper function tests
     #[test]
     fn test_build_where_clause_empty() {
@@ -1052,7 +1144,9 @@ mod tests {
         let vbr_schema = VbrSchemaDefinition::new(base_schema);
         let entity = Entity::new("Test".to_string(), vbr_schema);
 
-        let (where_clause, bind_values) = build_where_clause(&params, &entity);
+        let result = build_where_clause(&params, &entity);
+        assert!(result.is_ok());
+        let (where_clause, bind_values) = result.unwrap();
         assert_eq!(where_clause, "");
         assert_eq!(bind_values.len(), 0);
     }
@@ -1067,7 +1161,9 @@ mod tests {
         let vbr_schema = VbrSchemaDefinition::new(base_schema);
         let entity = Entity::new("User".to_string(), vbr_schema);
 
-        let (where_clause, bind_values) = build_where_clause(&params, &entity);
+        let result = build_where_clause(&params, &entity);
+        assert!(result.is_ok());
+        let (where_clause, bind_values) = result.unwrap();
         assert!(where_clause.contains("WHERE"));
         assert!(where_clause.contains("name = ?"));
         assert_eq!(bind_values.len(), 1);
@@ -1084,9 +1180,33 @@ mod tests {
         let vbr_schema = VbrSchemaDefinition::new(base_schema);
         let entity = Entity::new("Test".to_string(), vbr_schema);
 
-        let (where_clause, bind_values) = build_where_clause(&params, &entity);
+        let result = build_where_clause(&params, &entity);
+        assert!(result.is_ok());
+        let (where_clause, bind_values) = result.unwrap();
         assert_eq!(where_clause, "");
         assert_eq!(bind_values.len(), 0);
+    }
+
+    #[test]
+    fn test_build_where_clause_ignores_invalid_field_names() {
+        let mut params = HashMap::new();
+        params.insert("valid_field".to_string(), "value".to_string());
+        params.insert("invalid-field".to_string(), "value".to_string()); // Invalid: contains hyphen
+        params.insert("name; DROP TABLE".to_string(), "value".to_string()); // SQL injection attempt
+
+        let base_schema = SchemaDefinition::new("Test".to_string())
+            .with_field(FieldDefinition::new("valid_field".to_string(), "string".to_string()));
+        let vbr_schema = VbrSchemaDefinition::new(base_schema);
+        let entity = Entity::new("Test".to_string(), vbr_schema);
+
+        let result = build_where_clause(&params, &entity);
+        assert!(result.is_ok());
+        let (where_clause, bind_values) = result.unwrap();
+        // Only valid_field should be included
+        assert!(where_clause.contains("valid_field = ?"));
+        assert!(!where_clause.contains("invalid-field"));
+        assert!(!where_clause.contains("DROP"));
+        assert_eq!(bind_values.len(), 1);
     }
 
     #[test]

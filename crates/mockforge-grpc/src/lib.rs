@@ -90,6 +90,38 @@
 //! # }
 //! ```
 //!
+//! ### TLS/mTLS Configuration
+//!
+//! Enable TLS encryption for secure gRPC connections:
+//!
+//! ```rust,no_run
+//! use mockforge_grpc::{start_with_config, DynamicGrpcConfig, GrpcTlsConfig};
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+//! // Basic TLS
+//! let config = DynamicGrpcConfig {
+//!     proto_dir: "./proto".to_string(),
+//!     tls: Some(GrpcTlsConfig::new("server.crt", "server.key")),
+//!     ..Default::default()
+//! };
+//!
+//! // Or with mutual TLS (client certificate verification)
+//! let mtls_config = DynamicGrpcConfig {
+//!     proto_dir: "./proto".to_string(),
+//!     tls: Some(GrpcTlsConfig::with_mtls("server.crt", "server.key", "client-ca.crt")),
+//!     ..Default::default()
+//! };
+//!
+//! start_with_config(50051, None, config).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! TLS can also be configured via environment variables:
+//! - `GRPC_TLS_CERT`: Path to server certificate (PEM format)
+//! - `GRPC_TLS_KEY`: Path to server private key (PEM format)
+//! - `GRPC_TLS_CLIENT_CA`: Optional path to client CA for mTLS
+//!
 //! ## Dynamic Service Discovery
 //!
 //! MockForge automatically discovers and mocks all services defined in your `.proto` files:
@@ -193,7 +225,7 @@ pub mod generated {
 
 pub use dynamic::proto_parser::ProtoService;
 pub use dynamic::service_generator::MockResponse;
-pub use dynamic::{DynamicGrpcConfig, ServiceRegistry};
+pub use dynamic::{DynamicGrpcConfig, GrpcTlsConfig, ServiceRegistry};
 pub use reflection::{MockReflectionProxy, ProxyConfig, ReflectionProxy};
 pub use registry::GrpcProtoRegistry;
 

@@ -17,6 +17,59 @@ use tonic::transport::Server;
 use tonic_reflection::server::Builder as ReflectionBuilder;
 use tracing::*;
 
+/// TLS configuration for gRPC server
+#[derive(Debug, Clone)]
+pub struct GrpcTlsConfig {
+    /// Path to the TLS certificate file (PEM format)
+    pub cert_path: String,
+    /// Path to the TLS private key file (PEM format)
+    pub key_path: String,
+    /// Optional path to CA certificate for client certificate verification (mTLS)
+    pub client_ca_path: Option<String>,
+}
+
+impl GrpcTlsConfig {
+    /// Create a new TLS configuration
+    pub fn new(cert_path: impl Into<String>, key_path: impl Into<String>) -> Self {
+        Self {
+            cert_path: cert_path.into(),
+            key_path: key_path.into(),
+            client_ca_path: None,
+        }
+    }
+
+    /// Create TLS configuration with mutual TLS (client certificate verification)
+    pub fn with_mtls(
+        cert_path: impl Into<String>,
+        key_path: impl Into<String>,
+        client_ca_path: impl Into<String>,
+    ) -> Self {
+        Self {
+            cert_path: cert_path.into(),
+            key_path: key_path.into(),
+            client_ca_path: Some(client_ca_path.into()),
+        }
+    }
+
+    /// Create TLS configuration from environment variables
+    ///
+    /// Uses:
+    /// - GRPC_TLS_CERT: Path to certificate file
+    /// - GRPC_TLS_KEY: Path to private key file
+    /// - GRPC_TLS_CLIENT_CA: Optional path to client CA for mTLS
+    pub fn from_env() -> Option<Self> {
+        let cert_path = std::env::var("GRPC_TLS_CERT").ok()?;
+        let key_path = std::env::var("GRPC_TLS_KEY").ok()?;
+        let client_ca_path = std::env::var("GRPC_TLS_CLIENT_CA").ok();
+
+        Some(Self {
+            cert_path,
+            key_path,
+            client_ca_path,
+        })
+    }
+}
+
 /// Configuration for dynamic gRPC service discovery
 #[derive(Debug, Clone)]
 pub struct DynamicGrpcConfig {
@@ -28,6 +81,8 @@ pub struct DynamicGrpcConfig {
     pub excluded_services: Vec<String>,
     /// HTTP bridge configuration
     pub http_bridge: Option<http_bridge::HttpBridgeConfig>,
+    /// TLS configuration (None for plaintext)
+    pub tls: Option<GrpcTlsConfig>,
 }
 
 impl Default for DynamicGrpcConfig {
@@ -40,6 +95,8 @@ impl Default for DynamicGrpcConfig {
                 enabled: true,
                 ..Default::default()
             }),
+            // Check for TLS configuration from environment
+            tls: GrpcTlsConfig::from_env(),
         }
     }
 }
@@ -226,8 +283,57 @@ async fn start_grpc_only_server(
     registry_arc: Arc<ServiceRegistry>,
     _mock_proxy: MockReflectionProxy,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Create a gRPC server with the mock proxy
-    let mut server_builder = Server::builder();
+    use tonic::transport::{Certificate, Identity, ServerTlsConfig};
+
+    // Create server builder with optional TLS
+    let mut server_builder = if let Some(tls_config) = &config.tls {
+        info!("Configuring gRPC server with TLS");
+
+        // Read certificate and key files
+        let cert = tokio::fs::read(&tls_config.cert_path).await.map_err(|e| {
+            error!("Failed to read TLS certificate from {}: {}", tls_config.cert_path, e);
+            Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "Failed to read TLS certificate: {}",
+                e
+            ))
+        })?;
+
+        let key = tokio::fs::read(&tls_config.key_path).await.map_err(|e| {
+            error!("Failed to read TLS key from {}: {}", tls_config.key_path, e);
+            Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "Failed to read TLS key: {}",
+                e
+            ))
+        })?;
+
+        let identity = Identity::from_pem(cert, key);
+
+        let mut tls = ServerTlsConfig::new().identity(identity);
+
+        // Add client CA for mTLS if configured
+        if let Some(client_ca_path) = &tls_config.client_ca_path {
+            info!("Configuring mutual TLS (mTLS) with client certificate verification");
+            let client_ca = tokio::fs::read(client_ca_path).await.map_err(|e| {
+                error!("Failed to read client CA from {}: {}", client_ca_path, e);
+                Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                    "Failed to read client CA: {}",
+                    e
+                ))
+            })?;
+            tls = tls.client_ca_root(Certificate::from_pem(client_ca));
+        }
+
+        Server::builder().tls_config(tls).map_err(|e| {
+            error!("Failed to configure TLS: {}", e);
+            Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                "Failed to configure TLS: {}",
+                e
+            ))
+        })?
+    } else {
+        info!("gRPC server running in plaintext mode (no TLS configured)");
+        Server::builder()
+    };
 
     // Start actual gRPC server on the specified port
     info!(

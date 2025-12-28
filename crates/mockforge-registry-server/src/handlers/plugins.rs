@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::AuthUser,
-    models::{Plugin, PluginVersion, User},
+    middleware::{AuthUser, ScopedAuth},
+    models::{Plugin, PluginVersion, TokenScope, User},
     AppState,
 };
 
@@ -313,9 +313,13 @@ pub struct PublishResponse {
 
 pub async fn publish_plugin(
     AuthUser(author_id): AuthUser,
+    scoped_auth: ScopedAuth,
     State(state): State<AppState>,
     Json(request): Json<PublishRequest>,
 ) -> ApiResult<Json<PublishResponse>> {
+    // Check for PublishPackages scope
+    scoped_auth.require_scope(TokenScope::PublishPackages)?;
+
     let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
     let pool = state.db.pool();
 
@@ -417,9 +421,13 @@ pub async fn publish_plugin(
 }
 
 pub async fn yank_version(
+    scoped_auth: ScopedAuth,
     State(state): State<AppState>,
     Path((name, version)): Path<(String, String)>,
 ) -> ApiResult<Json<serde_json::Value>> {
+    // Check for PublishPackages scope (yanking is a publishing operation)
+    scoped_auth.require_scope(TokenScope::PublishPackages)?;
+
     let pool = state.db.pool();
 
     let plugin = Plugin::find_by_name(pool, &name)

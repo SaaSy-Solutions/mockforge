@@ -84,7 +84,8 @@ impl DiffAnalyzer {
         // Analyze request body against schema
         if let Some(body) = &request.body {
             if let Some(endpoint) = &endpoint_match {
-                let body_mismatches = self.analyze_request_body(body, endpoint, &request.path)?;
+                let body_mismatches =
+                    self.analyze_request_body(body, endpoint, &request.path, spec)?;
                 mismatches.extend(body_mismatches);
             }
         }
@@ -183,6 +184,7 @@ impl DiffAnalyzer {
         body: &Value,
         operation: &openapiv3::Operation,
         path: &str,
+        spec: &OpenApiSpec,
     ) -> Result<Vec<Mismatch>> {
         let mut mismatches = Vec::new();
 
@@ -192,7 +194,7 @@ impl DiffAnalyzer {
             if let Some(content) = request_body.content.get("application/json") {
                 if let Some(schema_ref) = &content.schema {
                     // Convert OpenAPI schema to JSON Schema for validation
-                    let schema_value = self.openapi_schema_to_json(schema_ref)?;
+                    let schema_value = self.openapi_schema_to_json(schema_ref, spec)?;
 
                     // Use existing validation_diff function
                     let validation_errors = validation_diff(&schema_value, body);
@@ -343,85 +345,38 @@ impl DiffAnalyzer {
     }
 
     /// Convert OpenAPI schema to JSON Schema value for validation
+    ///
+    /// This method resolves `$ref` references using the provided OpenAPI spec.
     fn openapi_schema_to_json(
         &self,
         schema: &openapiv3::ReferenceOr<openapiv3::Schema>,
+        spec: &OpenApiSpec,
     ) -> Result<Value> {
         match schema {
             openapiv3::ReferenceOr::Item(schema) => {
-                // Simple conversion - in production, use a proper OpenAPI to JSON Schema converter
-                let mut json_schema = serde_json::Map::new();
-
-                // Add type
-                match &schema.schema_kind {
-                    openapiv3::SchemaKind::Type(openapiv3::Type::String(_)) => {
-                        json_schema.insert("type".to_string(), Value::String("string".to_string()));
-                    }
-                    openapiv3::SchemaKind::Type(openapiv3::Type::Number(_)) => {
-                        json_schema.insert("type".to_string(), Value::String("number".to_string()));
-                    }
-                    openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => {
-                        json_schema
-                            .insert("type".to_string(), Value::String("integer".to_string()));
-                    }
-                    openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => {
-                        json_schema
-                            .insert("type".to_string(), Value::String("boolean".to_string()));
-                    }
-                    openapiv3::SchemaKind::Type(openapiv3::Type::Array(_)) => {
-                        json_schema.insert("type".to_string(), Value::String("array".to_string()));
-                    }
-                    openapiv3::SchemaKind::Type(openapiv3::Type::Object(_)) => {
-                        json_schema.insert("type".to_string(), Value::String("object".to_string()));
-                    }
-                    _ => {}
-                }
-
-                // Add properties if object
-                if let openapiv3::SchemaKind::Type(openapiv3::Type::Object(obj_type)) =
-                    &schema.schema_kind
-                {
-                    let mut props = serde_json::Map::new();
-                    for (name, prop_schema_ref) in &obj_type.properties {
-                        // Handle ReferenceOr<Box<Schema>> by processing the boxed schema directly
-                        let prop_json = match prop_schema_ref {
-                            openapiv3::ReferenceOr::Item(boxed_schema) => {
-                                // Process the boxed schema directly
-                                self.openapi_schema_to_json_from_schema(boxed_schema.as_ref())
-                            }
-                            openapiv3::ReferenceOr::Reference { reference } => {
-                                // For references, return empty schema (TODO: resolve references)
-                                Ok(Value::Object(serde_json::Map::new()))
-                            }
-                        };
-                        if let Ok(prop_json) = prop_json {
-                            props.insert(name.clone(), prop_json);
-                        }
-                    }
-                    if !props.is_empty() {
-                        json_schema.insert("properties".to_string(), Value::Object(props));
-                    }
-
-                    // Add required fields
-                    if !obj_type.required.is_empty() {
-                        let required_array: Vec<Value> =
-                            obj_type.required.iter().map(|s| Value::String(s.clone())).collect();
-                        json_schema.insert("required".to_string(), Value::Array(required_array));
-                    }
-                }
-
-                Ok(Value::Object(json_schema))
+                self.openapi_schema_to_json_from_schema(schema, spec)
             }
-            openapiv3::ReferenceOr::Reference { .. } => {
-                // TODO: Resolve references
-                Ok(Value::Object(serde_json::Map::new()))
+            openapiv3::ReferenceOr::Reference { reference } => {
+                // Resolve the reference using the spec
+                if let Some(resolved_schema) = spec.resolve_schema_ref(reference) {
+                    self.openapi_schema_to_json_from_schema(&resolved_schema, spec)
+                } else {
+                    // Reference couldn't be resolved, return empty schema with warning
+                    tracing::warn!("Could not resolve schema reference: {}", reference);
+                    Ok(Value::Object(serde_json::Map::new()))
+                }
             }
         }
     }
 
     /// Convert a Schema directly (helper for Box<Schema> case)
-    fn openapi_schema_to_json_from_schema(&self, schema: &openapiv3::Schema) -> Result<Value> {
-        // Simple conversion - in production, use a proper OpenAPI to JSON Schema converter
+    ///
+    /// This method resolves `$ref` references for nested properties using the spec.
+    fn openapi_schema_to_json_from_schema(
+        &self,
+        schema: &openapiv3::Schema,
+        spec: &OpenApiSpec,
+    ) -> Result<Value> {
         let mut json_schema = serde_json::Map::new();
 
         // Add type
@@ -438,8 +393,29 @@ impl DiffAnalyzer {
             openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => {
                 json_schema.insert("type".to_string(), Value::String("boolean".to_string()));
             }
-            openapiv3::SchemaKind::Type(openapiv3::Type::Array(_)) => {
+            openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) => {
                 json_schema.insert("type".to_string(), Value::String("array".to_string()));
+                // Handle array items
+                if let Some(items) = &array_type.items {
+                    let items_json = match items {
+                        openapiv3::ReferenceOr::Item(item_schema) => {
+                            self.openapi_schema_to_json_from_schema(item_schema, spec)?
+                        }
+                        openapiv3::ReferenceOr::Reference { reference } => {
+                            // Resolve array item reference
+                            if let Some(resolved) = spec.resolve_schema_ref(reference.as_str()) {
+                                self.openapi_schema_to_json_from_schema(&resolved, spec)?
+                            } else {
+                                tracing::warn!(
+                                    "Could not resolve array item reference: {}",
+                                    reference
+                                );
+                                Value::Object(serde_json::Map::new())
+                            }
+                        }
+                    };
+                    json_schema.insert("items".to_string(), items_json);
+                }
             }
             openapiv3::SchemaKind::Type(openapiv3::Type::Object(_)) => {
                 json_schema.insert("type".to_string(), Value::String("object".to_string()));
@@ -452,15 +428,24 @@ impl DiffAnalyzer {
         {
             let mut props = serde_json::Map::new();
             for (name, prop_schema_ref) in &obj_type.properties {
-                // Handle ReferenceOr<Box<Schema>> by processing the boxed schema directly
+                // Handle ReferenceOr<Box<Schema>> with proper reference resolution
                 let prop_json = match prop_schema_ref {
                     openapiv3::ReferenceOr::Item(boxed_schema) => {
                         // Process the boxed schema directly
-                        self.openapi_schema_to_json_from_schema(boxed_schema.as_ref())
+                        self.openapi_schema_to_json_from_schema(boxed_schema.as_ref(), spec)
                     }
-                    openapiv3::ReferenceOr::Reference { reference: _ } => {
-                        // For references, return empty schema (TODO: resolve references)
-                        Ok(Value::Object(serde_json::Map::new()))
+                    openapiv3::ReferenceOr::Reference { reference } => {
+                        // Resolve the property reference using the spec
+                        if let Some(resolved_schema) = spec.resolve_schema_ref(reference) {
+                            self.openapi_schema_to_json_from_schema(&resolved_schema, spec)
+                        } else {
+                            tracing::warn!(
+                                "Could not resolve property reference for '{}': {}",
+                                name,
+                                reference
+                            );
+                            Ok(Value::Object(serde_json::Map::new()))
+                        }
                     }
                 };
                 if let Ok(prop_json) = prop_json {

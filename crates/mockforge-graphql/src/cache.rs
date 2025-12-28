@@ -5,7 +5,7 @@
 use async_graphql::Response;
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -49,24 +49,85 @@ pub struct CachedResponse {
     /// The GraphQL response data (as serde_json::Value for easy serialization)
     pub data: serde_json::Value,
     /// Any errors in the response
-    pub errors: Vec<serde_json::Value>,
+    pub errors: Vec<CachedError>,
+    /// Extensions from the response
+    pub extensions: Option<serde_json::Value>,
     /// When this was cached
     pub cached_at: Instant,
     /// Number of cache hits
     pub hit_count: usize,
 }
 
+/// Cached error representation
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct CachedError {
+    /// Error message
+    pub message: String,
+    /// Error locations in the query
+    pub locations: Vec<CachedErrorLocation>,
+    /// Path to the field that caused the error
+    pub path: Option<Vec<serde_json::Value>>,
+    /// Additional error extensions
+    pub extensions: Option<serde_json::Value>,
+}
+
+/// Error location in the query
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct CachedErrorLocation {
+    /// Line number in the query (1-indexed)
+    pub line: usize,
+    /// Column number in the query (1-indexed)
+    pub column: usize,
+}
+
 impl CachedResponse {
     /// Convert to GraphQL Response
     pub fn to_response(&self) -> Response {
-        // Create a GraphQL response with the cached data
-        let mut response = Response::new(async_graphql::Value::Null);
+        // Convert serde_json::Value back to async_graphql::Value
+        let graphql_value = json_to_graphql_value(&self.data);
+        let mut response = Response::new(graphql_value);
 
-        // Add data if present
-        if !self.data.is_null() {
-            // For now, we return a simple response
-            // In a production implementation, you'd convert serde_json::Value to async_graphql::Value
-            response = Response::new(async_graphql::Value::Null);
+        // Restore errors
+        for cached_error in &self.errors {
+            let mut server_error =
+                async_graphql::ServerError::new(cached_error.message.clone(), None);
+
+            // Restore locations
+            server_error.locations = cached_error
+                .locations
+                .iter()
+                .map(|loc| async_graphql::Pos {
+                    line: loc.line,
+                    column: loc.column,
+                })
+                .collect();
+
+            // Restore path
+            if let Some(path) = &cached_error.path {
+                server_error.path = path
+                    .iter()
+                    .filter_map(|v| match v {
+                        serde_json::Value::String(s) => {
+                            Some(async_graphql::PathSegment::Field(s.clone()))
+                        }
+                        serde_json::Value::Number(n) => {
+                            n.as_u64().map(|i| async_graphql::PathSegment::Index(i as usize))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+            }
+
+            response.errors.push(server_error);
+        }
+
+        // Restore extensions
+        if let Some(ext) = &self.extensions {
+            if let serde_json::Value::Object(map) = ext {
+                for (key, value) in map {
+                    response.extensions.insert(key.clone(), json_to_graphql_value(value));
+                }
+            }
         }
 
         response
@@ -74,16 +135,138 @@ impl CachedResponse {
 
     /// Create from GraphQL Response
     pub fn from_response(response: &Response) -> Self {
-        // Serialize the response to JSON
-        // Since Response doesn't implement Serialize, we extract what we can
-        let data = serde_json::Value::Null;
-        let errors = Vec::new();
+        // Convert async_graphql::Value to serde_json::Value
+        let data = graphql_value_to_json(&response.data);
+
+        // Convert errors
+        let errors: Vec<CachedError> = response
+            .errors
+            .iter()
+            .map(|e| CachedError {
+                message: e.message.clone(),
+                locations: e
+                    .locations
+                    .iter()
+                    .map(|loc| CachedErrorLocation {
+                        line: loc.line,
+                        column: loc.column,
+                    })
+                    .collect(),
+                path: if e.path.is_empty() {
+                    None
+                } else {
+                    Some(
+                        e.path
+                            .iter()
+                            .map(|seg| match seg {
+                                async_graphql::PathSegment::Field(s) => {
+                                    serde_json::Value::String(s.clone())
+                                }
+                                async_graphql::PathSegment::Index(i) => {
+                                    serde_json::Value::Number((*i as u64).into())
+                                }
+                            })
+                            .collect(),
+                    )
+                },
+                extensions: None, // ServerError extensions are not easily accessible
+            })
+            .collect();
+
+        // Convert extensions
+        let extensions = if response.extensions.is_empty() {
+            None
+        } else {
+            let mut map = serde_json::Map::new();
+            for (key, value) in &response.extensions {
+                map.insert(key.clone(), graphql_value_to_json(value));
+            }
+            Some(serde_json::Value::Object(map))
+        };
 
         Self {
             data,
             errors,
+            extensions,
             cached_at: Instant::now(),
             hit_count: 0,
+        }
+    }
+}
+
+/// Convert async_graphql::Value to serde_json::Value
+fn graphql_value_to_json(value: &async_graphql::Value) -> serde_json::Value {
+    match value {
+        async_graphql::Value::Null => serde_json::Value::Null,
+        async_graphql::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                serde_json::Value::Number(i.into())
+            } else if let Some(u) = n.as_u64() {
+                serde_json::Value::Number(u.into())
+            } else if let Some(f) = n.as_f64() {
+                serde_json::Number::from_f64(f)
+                    .map(serde_json::Value::Number)
+                    .unwrap_or(serde_json::Value::Null)
+            } else {
+                serde_json::Value::Null
+            }
+        }
+        async_graphql::Value::String(s) => serde_json::Value::String(s.clone()),
+        async_graphql::Value::Boolean(b) => serde_json::Value::Bool(*b),
+        async_graphql::Value::List(arr) => {
+            serde_json::Value::Array(arr.iter().map(graphql_value_to_json).collect())
+        }
+        async_graphql::Value::Object(obj) => {
+            let map: serde_json::Map<String, serde_json::Value> =
+                obj.iter().map(|(k, v)| (k.to_string(), graphql_value_to_json(v))).collect();
+            serde_json::Value::Object(map)
+        }
+        async_graphql::Value::Enum(e) => serde_json::Value::String(e.to_string()),
+        async_graphql::Value::Binary(b) => {
+            use base64::Engine;
+            serde_json::Value::String(base64::engine::general_purpose::STANDARD.encode(b))
+        }
+    }
+}
+
+/// Convert serde_json::Value to async_graphql::Value
+fn json_to_graphql_value(value: &serde_json::Value) -> async_graphql::Value {
+    match value {
+        serde_json::Value::Null => async_graphql::Value::Null,
+        serde_json::Value::Bool(b) => async_graphql::Value::Boolean(*b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                async_graphql::Value::Number(i.into())
+            } else if let Some(u) = n.as_u64() {
+                async_graphql::Value::Number(u.into())
+            } else if let Some(f) = n.as_f64() {
+                async_graphql::Value::Number(
+                    async_graphql::Number::from_f64(f).unwrap_or_else(|| 0.into()),
+                )
+            } else {
+                async_graphql::Value::Null
+            }
+        }
+        serde_json::Value::String(s) => async_graphql::Value::String(s.clone()),
+        serde_json::Value::Array(arr) => {
+            async_graphql::Value::List(arr.iter().map(json_to_graphql_value).collect())
+        }
+        serde_json::Value::Object(obj) => {
+            let map: async_graphql::indexmap::IndexMap<async_graphql::Name, async_graphql::Value> =
+                obj.iter()
+                    .filter_map(|(k, v)| {
+                        // GraphQL names must match [_A-Za-z][_0-9A-Za-z]*
+                        let is_valid =
+                            k.chars().next().is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
+                                && k.chars().all(|c| c == '_' || c.is_ascii_alphanumeric());
+                        if is_valid {
+                            Some((async_graphql::Name::new(k), json_to_graphql_value(v)))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+            async_graphql::Value::Object(map)
         }
     }
 }

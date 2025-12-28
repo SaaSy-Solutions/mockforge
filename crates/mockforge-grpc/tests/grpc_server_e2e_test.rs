@@ -24,6 +24,7 @@ async fn test_grpc_server_start_and_call() {
         enable_reflection: true,
         excluded_services: vec![],
         http_bridge: None, // Disable HTTP bridge for pure gRPC test
+        tls: None,
     };
 
     // Discover services
@@ -89,6 +90,7 @@ async fn test_grpc_mock_response_generation() {
         enable_reflection: true,
         excluded_services: vec![],
         http_bridge: None,
+        tls: None,
     };
 
     let registry = discover_services(&config).await;

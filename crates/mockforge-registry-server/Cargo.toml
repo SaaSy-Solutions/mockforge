@@ -83,6 +83,15 @@ prometheus = { version = "0.14", features = ["process"] }
 # HTTP client for Fly.io API
 reqwest = { version = "0.12", features = ["json"] }
 
+# SMTP email sending
+lettre = { version = "0.11", features = ["tokio1-native-tls", "builder", "smtp-transport"] }
+
+# OAuth 2.0
+oauth2 = { version = "4.4", features = ["reqwest"] }
+
+# Stripe payments
+async-stripe = { version = "0.41", default-features = false, features = ["runtime-tokio-hyper", "checkout", "webhook-events", "billing", "connect"] }
+
 [dev-dependencies]
 tokio-test = "0.4"
 reqwest = { version = "0.12", features = ["json"] }

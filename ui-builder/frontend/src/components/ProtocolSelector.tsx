@@ -1,11 +1,11 @@
-import { Globe, Zap, MessageSquare, Activity, Mail, Database, Radio, Server } from 'lucide-react'
+import { Globe, Zap, MessageSquare, Activity, Mail, Database, Radio, Server, LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface ProtocolOption {
   id: string
   name: string
   description: string
-  icon: any
+  icon: LucideIcon
   color: string
 }
 

@@ -1,0 +1,16 @@
+{
+  "response": {
+    "status": 403,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "FORBIDDEN",
+        "message": "You do not have permission to access this resource",
+        "details": [],
+        "request_id": "{{uuid}}"
+      }
+    }
+  }
+}

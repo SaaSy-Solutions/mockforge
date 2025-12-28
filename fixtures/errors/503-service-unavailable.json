@@ -1,0 +1,17 @@
+{
+  "response": {
+    "status": 503,
+    "headers": {
+      "Content-Type": "application/json",
+      "Retry-After": "30"
+    },
+    "body": {
+      "error": {
+        "code": "SERVICE_UNAVAILABLE",
+        "message": "The service is temporarily unavailable. Please try again later.",
+        "details": [],
+        "request_id": "{{uuid}}"
+      }
+    }
+  }
+}

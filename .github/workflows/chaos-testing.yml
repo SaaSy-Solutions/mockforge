@@ -1,0 +1,412 @@
+name: Chaos Testing
+
+on:
+  schedule:
+    # Run chaos tests weekly on Saturday at 4 AM UTC
+    - cron: '0 4 * * 6'
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Chaos scenario to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - network-partition
+          - high-latency
+          - packet-loss
+          - resource-exhaustion
+          - connection-storm
+      duration:
+        description: 'Test duration in seconds'
+        required: false
+        default: '300'
+
+env:
+  CARGO_TERM_COLOR: always
+  MOCKFORGE_CHAOS_ENABLED: true
+  MOCKFORGE_LOG_LEVEL: debug
+
+jobs:
+  build:
+    name: Build Test Binary
+    runs-on: ubuntu-latest
+    outputs:
+      binary_path: ${{ steps.build.outputs.binary_path }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        id: build
+        run: |
+          cargo build --release --bin mockforge
+          echo "binary_path=target/release/mockforge" >> $GITHUB_OUTPUT
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v5
+        with:
+          name: mockforge-binary
+          path: target/release/mockforge
+
+  network-partition:
+    name: Network Partition Test
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'network-partition' || github.event.inputs.scenario == ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download binary
+        uses: actions/download-artifact@v5
+        with:
+          name: mockforge-binary
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/mockforge
+
+      - name: Install chaos tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iproute2 iptables
+
+      - name: Run network partition test
+        run: |
+          echo "## Network Partition Test" >> $GITHUB_STEP_SUMMARY
+
+          # Start MockForge server
+          ./bin/mockforge serve --http-port 3000 &
+          SERVER_PID=$!
+          sleep 5
+
+          # Verify server is running
+          curl -f http://localhost:3000/health || exit 1
+
+          # Simulate network partition (block outgoing connections)
+          echo "Simulating network partition..."
+          sudo iptables -A OUTPUT -p tcp --dport 80 -j DROP
+          sudo iptables -A OUTPUT -p tcp --dport 443 -j DROP
+
+          # Run tests during partition
+          echo "Testing during partition..."
+          for i in {1..10}; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health 2>/dev/null || echo "000")
+            echo "Request $i: HTTP $response"
+          done
+
+          # Restore network
+          echo "Restoring network..."
+          sudo iptables -D OUTPUT -p tcp --dport 80 -j DROP
+          sudo iptables -D OUTPUT -p tcp --dport 443 -j DROP
+
+          # Verify recovery
+          sleep 2
+          curl -f http://localhost:3000/health || exit 1
+
+          # Cleanup
+          kill $SERVER_PID 2>/dev/null || true
+
+          echo "✅ Network partition test passed" >> $GITHUB_STEP_SUMMARY
+
+  high-latency:
+    name: High Latency Test
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'high-latency' || github.event.inputs.scenario == ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download binary
+        uses: actions/download-artifact@v5
+        with:
+          name: mockforge-binary
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/mockforge
+
+      - name: Install tc (traffic control)
+        run: sudo apt-get update && sudo apt-get install -y iproute2
+
+      - name: Run high latency test
+        run: |
+          echo "## High Latency Test" >> $GITHUB_STEP_SUMMARY
+
+          # Start MockForge with latency injection enabled
+          MOCKFORGE_LATENCY_ENABLED=true \
+          MOCKFORGE_LATENCY_MIN_MS=500 \
+          MOCKFORGE_LATENCY_MAX_MS=2000 \
+          ./bin/mockforge serve --http-port 3000 &
+          SERVER_PID=$!
+          sleep 5
+
+          # Run requests and measure latency
+          echo "Testing with high latency..."
+          total_time=0
+          for i in {1..20}; do
+            start_time=$(date +%s%3N)
+            curl -s http://localhost:3000/health > /dev/null
+            end_time=$(date +%s%3N)
+            latency=$((end_time - start_time))
+            total_time=$((total_time + latency))
+            echo "Request $i latency: ${latency}ms"
+          done
+
+          avg_latency=$((total_time / 20))
+          echo "Average latency: ${avg_latency}ms" >> $GITHUB_STEP_SUMMARY
+
+          # Verify latency is being injected (should be > 500ms)
+          if [ $avg_latency -lt 400 ]; then
+            echo "⚠️ Latency injection may not be working (avg: ${avg_latency}ms)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ High latency test passed (avg: ${avg_latency}ms)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          kill $SERVER_PID 2>/dev/null || true
+
+  packet-loss:
+    name: Packet Loss Test
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'packet-loss' || github.event.inputs.scenario == ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download binary
+        uses: actions/download-artifact@v5
+        with:
+          name: mockforge-binary
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/mockforge
+
+      - name: Run packet loss test
+        run: |
+          echo "## Packet Loss Test" >> $GITHUB_STEP_SUMMARY
+
+          # Start MockForge with packet loss enabled
+          MOCKFORGE_BURST_LOSS_ENABLED=true \
+          MOCKFORGE_BURST_LOSS_PROBABILITY=0.1 \
+          MOCKFORGE_BURST_LOSS_RATE=0.5 \
+          ./bin/mockforge serve --http-port 3000 &
+          SERVER_PID=$!
+          sleep 5
+
+          # Run multiple requests
+          success=0
+          failure=0
+          for i in {1..100}; do
+            if curl -s --max-time 5 http://localhost:3000/health > /dev/null 2>&1; then
+              success=$((success + 1))
+            else
+              failure=$((failure + 1))
+            fi
+          done
+
+          echo "Successful requests: $success" >> $GITHUB_STEP_SUMMARY
+          echo "Failed requests: $failure" >> $GITHUB_STEP_SUMMARY
+
+          # Some failures are expected with packet loss
+          if [ $success -lt 50 ]; then
+            echo "⚠️ Too many failures, may indicate a problem" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ Packet loss test passed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          kill $SERVER_PID 2>/dev/null || true
+
+  resource-exhaustion:
+    name: Resource Exhaustion Test
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'resource-exhaustion' || github.event.inputs.scenario == ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download binary
+        uses: actions/download-artifact@v5
+        with:
+          name: mockforge-binary
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/mockforge
+
+      - name: Install stress tools
+        run: sudo apt-get update && sudo apt-get install -y stress-ng
+
+      - name: Run resource exhaustion test
+        run: |
+          echo "## Resource Exhaustion Test" >> $GITHUB_STEP_SUMMARY
+
+          # Start MockForge
+          ./bin/mockforge serve --http-port 3000 &
+          SERVER_PID=$!
+          sleep 5
+
+          # Verify baseline
+          curl -f http://localhost:3000/health || exit 1
+
+          # Start CPU stress
+          echo "Starting CPU stress..."
+          stress-ng --cpu 4 --timeout 30s &
+          STRESS_PID=$!
+
+          # Run requests during stress
+          success=0
+          for i in {1..30}; do
+            if curl -s --max-time 10 http://localhost:3000/health > /dev/null 2>&1; then
+              success=$((success + 1))
+            fi
+            sleep 1
+          done
+
+          wait $STRESS_PID 2>/dev/null || true
+
+          echo "Requests succeeded during CPU stress: $success/30" >> $GITHUB_STEP_SUMMARY
+
+          # Start memory stress
+          echo "Starting memory stress..."
+          stress-ng --vm 2 --vm-bytes 80% --timeout 30s &
+          STRESS_PID=$!
+
+          success=0
+          for i in {1..30}; do
+            if curl -s --max-time 10 http://localhost:3000/health > /dev/null 2>&1; then
+              success=$((success + 1))
+            fi
+            sleep 1
+          done
+
+          wait $STRESS_PID 2>/dev/null || true
+
+          echo "Requests succeeded during memory stress: $success/30" >> $GITHUB_STEP_SUMMARY
+
+          # Check if server is still responsive
+          if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+            echo "✅ Server recovered from resource exhaustion" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Server may have crashed during stress test" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          kill $SERVER_PID 2>/dev/null || true
+
+  connection-storm:
+    name: Connection Storm Test
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'connection-storm' || github.event.inputs.scenario == ''
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download binary
+        uses: actions/download-artifact@v5
+        with:
+          name: mockforge-binary
+          path: bin
+
+      - name: Make binary executable
+        run: chmod +x bin/mockforge
+
+      - name: Install hey (HTTP load generator)
+        run: |
+          wget https://hey-release.s3.us-east-2.amazonaws.com/hey_linux_amd64 -O hey
+          chmod +x hey
+          sudo mv hey /usr/local/bin/
+
+      - name: Run connection storm test
+        run: |
+          echo "## Connection Storm Test" >> $GITHUB_STEP_SUMMARY
+
+          # Start MockForge
+          ./bin/mockforge serve --http-port 3000 &
+          SERVER_PID=$!
+          sleep 5
+
+          # Warm up
+          curl -f http://localhost:3000/health || exit 1
+
+          # Run connection storm
+          echo "Running connection storm with 1000 concurrent connections..."
+          hey -n 10000 -c 1000 -t 30 http://localhost:3000/health | tee storm-results.txt
+
+          # Parse results
+          requests=$(grep "Requests/sec" storm-results.txt | awk '{print $2}')
+          avg_latency=$(grep "Average:" storm-results.txt | head -1 | awk '{print $2}')
+          error_rate=$(grep "Status code distribution" storm-results.txt -A 10 | grep -v "200" | grep -v "Status" | awk '{sum+=$2} END {print sum}')
+
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Requests/sec | $requests |" >> $GITHUB_STEP_SUMMARY
+          echo "| Avg Latency | $avg_latency |" >> $GITHUB_STEP_SUMMARY
+          echo "| Error Count | ${error_rate:-0} |" >> $GITHUB_STEP_SUMMARY
+
+          # Check if server handled the storm
+          if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+            echo "✅ Server survived connection storm" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Server crashed during connection storm" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          kill $SERVER_PID 2>/dev/null || true
+
+      - name: Upload storm results
+        uses: actions/upload-artifact@v5
+        with:
+          name: connection-storm-results
+          path: storm-results.txt
+
+  summary:
+    name: Chaos Test Summary
+    needs: [network-partition, high-latency, packet-loss, resource-exhaustion, connection-storm]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# 🌪️ Chaos Testing Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scenario | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Network Partition | ${{ needs.network-partition.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| High Latency | ${{ needs.high-latency.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Packet Loss | ${{ needs.packet-loss.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource Exhaustion | ${{ needs.resource-exhaustion.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Connection Storm | ${{ needs.connection-storm.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check overall status
+        run: |
+          # Fail if any chaos test failed
+          if [ "${{ needs.network-partition.result }}" == "failure" ] || \
+             [ "${{ needs.high-latency.result }}" == "failure" ] || \
+             [ "${{ needs.packet-loss.result }}" == "failure" ] || \
+             [ "${{ needs.resource-exhaustion.result }}" == "failure" ] || \
+             [ "${{ needs.connection-storm.result }}" == "failure" ]; then
+            echo "::error::One or more chaos tests failed"
+            exit 1
+          fi

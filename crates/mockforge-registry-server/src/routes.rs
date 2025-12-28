@@ -14,6 +14,9 @@ pub fn create_router() -> Router<AppState> {
     // Public routes (with rate limiting)
     let public_routes = Router::new()
         .route("/health", get(handlers::health::health_check))
+        .route("/health/live", get(handlers::health::liveness_check))
+        .route("/health/ready", get(handlers::health::readiness_check))
+        .route("/health/circuits", get(handlers::health::circuit_breaker_status))
         .route("/api/v1/plugins/search", post(handlers::plugins::search_plugins))
         .route("/api/v1/plugins/{name}", get(handlers::plugins::get_plugin))
         .route("/api/v1/plugins/{name}/versions/{version}", get(handlers::plugins::get_version))
@@ -28,7 +31,7 @@ pub fn create_router() -> Router<AppState> {
             post(handlers::auth::request_password_reset),
         )
         .route("/api/v1/auth/password/reset", post(handlers::auth::confirm_password_reset))
-        .layer(middleware::from_fn(rate_limit_middleware));
+        .route_layer(middleware::from_fn(rate_limit_middleware));
 
     // Authenticated routes (require JWT + rate limiting)
     let auth_routes = Router::new()
@@ -75,15 +78,28 @@ pub fn create_router() -> Router<AppState> {
         .route("/api/v1/sso/enable", post(handlers::sso::enable_sso))
         .route("/api/v1/sso/disable", post(handlers::sso::disable_sso))
         .route("/api/v1/sso/saml/metadata/{org_slug}", get(handlers::sso::get_saml_metadata))
-        .layer(middleware::from_fn(auth_middleware))
-        .layer(middleware::from_fn(rate_limit_middleware));
+        // Billing routes
+        .route("/api/v1/billing/subscription", get(handlers::billing::get_subscription))
+        .route("/api/v1/billing/checkout", post(handlers::billing::create_checkout))
+        .route_layer(middleware::from_fn(auth_middleware))
+        .route_layer(middleware::from_fn(rate_limit_middleware));
 
     // Public SSO routes (no auth required - these handle SAML redirects)
     let sso_public_routes = Router::new()
         .route("/api/v1/sso/saml/login/{org_slug}", get(handlers::sso::initiate_saml_login))
         .route("/api/v1/sso/saml/acs/{org_slug}", post(handlers::sso::saml_acs))
         .route("/api/v1/sso/saml/slo/{org_slug}", post(handlers::sso::saml_slo))
-        .layer(middleware::from_fn(rate_limit_middleware));
+        .route_layer(middleware::from_fn(rate_limit_middleware));
+
+    // Public OAuth routes (no auth required - these handle OAuth redirects)
+    let oauth_public_routes = Router::new()
+        .route("/api/v1/auth/oauth/{provider}", get(handlers::oauth::oauth_authorize))
+        .route("/api/v1/auth/oauth/{provider}/callback", get(handlers::oauth::oauth_callback))
+        .route_layer(middleware::from_fn(rate_limit_middleware));
+
+    // Billing webhook route (no auth - uses Stripe signature verification)
+    let billing_webhook_routes =
+        Router::new().route("/api/v1/billing/webhook", post(handlers::billing::stripe_webhook));
 
     // Admin routes (require admin JWT + rate limiting)
     let admin_routes = Router::new()
@@ -94,13 +110,15 @@ pub fn create_router() -> Router<AppState> {
             "/api/v1/admin/analytics/funnel",
             get(handlers::analytics::get_conversion_funnel),
         )
-        .layer(middleware::from_fn(auth_middleware))
-        .layer(middleware::from_fn(rate_limit_middleware));
+        .route_layer(middleware::from_fn(auth_middleware))
+        .route_layer(middleware::from_fn(rate_limit_middleware));
 
     // Combine all routes
     Router::new()
         .merge(public_routes)
         .merge(sso_public_routes)
+        .merge(oauth_public_routes)
+        .merge(billing_webhook_routes)
         .merge(auth_routes)
         .merge(admin_routes)
 }
@@ -167,6 +185,8 @@ mod tests {
         // Verify public route paths are correctly defined
         let routes = vec![
             "/health",
+            "/health/live",
+            "/health/ready",
             "/api/v1/plugins/search",
             "/api/v1/plugins/{name}",
             "/api/v1/plugins/{name}/versions/{version}",

@@ -46,6 +46,33 @@ pub struct Config {
 
     /// Whether two-factor authentication is enabled (requires Redis)
     pub two_factor_enabled: Option<bool>,
+
+    /// Base URL of the application (for OAuth callbacks and email links)
+    pub app_base_url: String,
+
+    /// Stripe secret key for billing
+    pub stripe_secret_key: Option<String>,
+
+    /// Stripe price ID for Pro plan
+    pub stripe_price_id_pro: Option<String>,
+
+    /// Stripe price ID for Team plan
+    pub stripe_price_id_team: Option<String>,
+
+    /// Stripe webhook secret for verifying webhook signatures
+    pub stripe_webhook_secret: Option<String>,
+
+    /// GitHub OAuth client ID
+    pub oauth_github_client_id: Option<String>,
+
+    /// GitHub OAuth client secret
+    pub oauth_github_client_secret: Option<String>,
+
+    /// Google OAuth client ID
+    pub oauth_google_client_id: Option<String>,
+
+    /// Google OAuth client secret
+    pub oauth_google_client_secret: Option<String>,
 }
 
 impl Config {
@@ -123,6 +150,16 @@ impl Config {
             two_factor_enabled: std::env::var("TWO_FACTOR_ENABLED")
                 .ok()
                 .map(|v| v.to_lowercase() == "true" || v == "1"),
+            app_base_url: std::env::var("APP_BASE_URL")
+                .unwrap_or_else(|_| "http://localhost:3000".to_string()),
+            stripe_secret_key: std::env::var("STRIPE_SECRET_KEY").ok(),
+            stripe_price_id_pro: std::env::var("STRIPE_PRICE_ID_PRO").ok(),
+            stripe_price_id_team: std::env::var("STRIPE_PRICE_ID_TEAM").ok(),
+            stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
+            oauth_github_client_id: std::env::var("OAUTH_GITHUB_CLIENT_ID").ok(),
+            oauth_github_client_secret: std::env::var("OAUTH_GITHUB_CLIENT_SECRET").ok(),
+            oauth_google_client_id: std::env::var("OAUTH_GOOGLE_CLIENT_ID").ok(),
+            oauth_google_client_secret: std::env::var("OAUTH_GOOGLE_CLIENT_SECRET").ok(),
         };
 
         Ok(config)
@@ -230,10 +267,7 @@ mod tests {
 
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
-        assert!(
-            error_msg.contains("JWT_SECRET"),
-            "Error should mention JWT_SECRET: {error_msg}"
-        );
+        assert!(error_msg.contains("JWT_SECRET"), "Error should mention JWT_SECRET: {error_msg}");
 
         // Clean up
         std::env::remove_var("DATABASE_URL");

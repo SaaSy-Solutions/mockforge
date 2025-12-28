@@ -26,6 +26,11 @@ thiserror.workspace = true
 async-trait.workspace = true
 futures.workspace = true
 
+# TLS support
+tokio-rustls = "0.26"
+rustls = "0.23"
+rustls-pemfile = "2"
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 criterion.workspace = true

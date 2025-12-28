@@ -1,0 +1,17 @@
+{
+  "response": {
+    "status": 401,
+    "headers": {
+      "Content-Type": "application/json",
+      "WWW-Authenticate": "Bearer realm=\"api\""
+    },
+    "body": {
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "Authentication is required to access this resource",
+        "details": [],
+        "request_id": "{{uuid}}"
+      }
+    }
+  }
+}

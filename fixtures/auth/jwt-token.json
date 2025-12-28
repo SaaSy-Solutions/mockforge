@@ -1,0 +1,16 @@
+{
+  "description": "JWT token response for authentication",
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEyMyIsImVtYWlsIjoidXNlckBleGFtcGxlLmNvbSIsImlhdCI6MTcwMzg2NDAwMCwiZXhwIjoxNzAzBODY3NjAwfQ.mock_signature",
+      "token_type": "Bearer",
+      "expires_in": 3600,
+      "refresh_token": "rt_{{uuid}}",
+      "scope": "read write"
+    }
+  }
+}

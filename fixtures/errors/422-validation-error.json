@@ -1,0 +1,22 @@
+{
+  "response": {
+    "status": 422,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "The request body contains invalid data",
+        "details": [
+          {
+            "field": "email",
+            "message": "Must be a valid email address",
+            "code": "INVALID_FORMAT"
+          }
+        ],
+        "request_id": "{{uuid}}"
+      }
+    }
+  }
+}

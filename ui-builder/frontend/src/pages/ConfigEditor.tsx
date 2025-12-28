@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Download, Upload, Save, Loader2 } from 'lucide-react'
+import { Download, Upload, Save, Loader2, X, RefreshCw } from 'lucide-react'
 import Editor from '@monaco-editor/react'
 import { configApi } from '@/lib/api'
+import EditorSkeleton from '@/components/EditorSkeleton'
 
 export default function ConfigEditor() {
   const queryClient = useQueryClient()
@@ -12,7 +13,7 @@ export default function ConfigEditor() {
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
 
-  const { isLoading } = useQuery({
+  const { isLoading, isError, error } = useQuery({
     queryKey: ['config'],
     queryFn: async () => {
       const response = await configApi.get()
@@ -85,6 +86,29 @@ export default function ConfigEditor() {
         <div className="text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
           <p className="mt-4 text-sm text-muted-foreground">Loading configuration...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+            <X className="h-6 w-6 text-destructive" />
+          </div>
+          <h2 className="text-lg font-semibold text-foreground">Failed to load configuration</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
+          </p>
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['config'] })}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Retry
+          </button>
         </div>
       </div>
     )
@@ -179,6 +203,7 @@ export default function ConfigEditor() {
           value={config}
           onChange={(value) => setConfig(value || '')}
           theme="vs-dark"
+          loading={<EditorSkeleton height="100%" />}
           options={{
             minimap: { enabled: window.innerWidth > 768 },
             fontSize: 14,

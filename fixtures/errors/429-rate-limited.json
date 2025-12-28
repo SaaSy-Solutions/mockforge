@@ -1,0 +1,20 @@
+{
+  "response": {
+    "status": 429,
+    "headers": {
+      "Content-Type": "application/json",
+      "Retry-After": "60",
+      "X-RateLimit-Limit": "100",
+      "X-RateLimit-Remaining": "0",
+      "X-RateLimit-Reset": "{{math (now 'unix') '+' 60}}"
+    },
+    "body": {
+      "error": {
+        "code": "RATE_LIMITED",
+        "message": "Too many requests. Please retry after 60 seconds.",
+        "details": [],
+        "request_id": "{{uuid}}"
+      }
+    }
+  }
+}

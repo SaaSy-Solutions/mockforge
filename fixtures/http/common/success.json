@@ -1,0 +1,16 @@
+{
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "success": true,
+      "data": null,
+      "meta": {
+        "timestamp": "{{now 'iso'}}",
+        "request_id": "{{uuid}}"
+      }
+    }
+  }
+}

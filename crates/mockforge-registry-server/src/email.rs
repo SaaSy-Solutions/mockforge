@@ -3,10 +3,15 @@
 //! Supports multiple email providers:
 //! - Postmark (via API)
 //! - Brevo (via API)
-//! - SMTP (fallback)
+//! - SMTP (direct SMTP sending)
 
 use anyhow::{Context, Result};
 use chrono::Datelike;
+use lettre::{
+    message::{header::ContentType, Mailbox, MultiPart, SinglePart},
+    transport::smtp::authentication::Credentials,
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
+};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -60,17 +65,23 @@ pub struct EmailService {
 
 impl EmailService {
     /// Create a new email service
-    pub fn new(config: EmailConfig) -> Self {
+    ///
+    /// # Errors
+    /// Returns an error if the HTTP client cannot be created
+    pub fn new(config: EmailConfig) -> anyhow::Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
-            .expect("Failed to create HTTP client");
+            .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {}", e))?;
 
-        Self { config, client }
+        Ok(Self { config, client })
     }
 
     /// Create email service from environment variables
-    pub fn from_env() -> Self {
+    ///
+    /// # Errors
+    /// Returns an error if the HTTP client cannot be created
+    pub fn from_env() -> anyhow::Result<Self> {
         let provider = std::env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "disabled".to_string());
 
         let config = EmailConfig {
@@ -93,12 +104,7 @@ impl EmailService {
         match &self.config.provider {
             EmailProvider::Postmark => self.send_via_postmark(message).await,
             EmailProvider::Brevo => self.send_via_brevo(message).await,
-            EmailProvider::Smtp => {
-                // SMTP implementation would go here
-                // For now, log and return success (can be implemented later)
-                tracing::warn!("SMTP email provider not yet implemented, email not sent");
-                Ok(())
-            }
+            EmailProvider::Smtp => self.send_via_smtp(message).await,
             EmailProvider::Disabled => {
                 tracing::info!("Email disabled, would send: {} to {}", message.subject, message.to);
                 Ok(())
@@ -194,6 +200,82 @@ impl EmailService {
             let error_text = response.text().await.unwrap_or_default();
             anyhow::bail!("Brevo API error: {}", error_text);
         }
+
+        Ok(())
+    }
+
+    /// Send email via SMTP
+    async fn send_via_smtp(&self, message: EmailMessage) -> Result<()> {
+        let smtp_host = self.config.smtp_host.as_ref().context("SMTP requires SMTP_HOST")?;
+
+        let smtp_port = self.config.smtp_port.unwrap_or(587);
+
+        // Parse from address
+        let from_mailbox: Mailbox =
+            format!("{} <{}>", self.config.from_name, self.config.from_email)
+                .parse()
+                .context("Invalid from email address")?;
+
+        // Parse to address
+        let to_mailbox: Mailbox = message.to.parse().context("Invalid recipient email address")?;
+
+        // Store for logging after the message is consumed
+        let log_to = message.to.clone();
+        let log_subject = message.subject.clone();
+
+        // Build the email message with both HTML and plain text parts
+        let email = Message::builder()
+            .from(from_mailbox)
+            .to(to_mailbox)
+            .subject(message.subject)
+            .multipart(
+                MultiPart::alternative()
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_PLAIN)
+                            .body(message.text_body),
+                    )
+                    .singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_HTML)
+                            .body(message.html_body),
+                    ),
+            )
+            .context("Failed to build email message")?;
+
+        // Build the SMTP transport
+        let mailer: AsyncSmtpTransport<Tokio1Executor> = if let (Some(username), Some(password)) =
+            (self.config.smtp_username.as_ref(), self.config.smtp_password.as_ref())
+        {
+            // Authenticated SMTP
+            let creds = Credentials::new(username.clone(), password.clone());
+
+            if smtp_port == 465 {
+                // SMTPS (implicit TLS)
+                AsyncSmtpTransport::<Tokio1Executor>::relay(smtp_host)
+                    .context("Failed to create SMTP relay")?
+                    .credentials(creds)
+                    .port(smtp_port)
+                    .build()
+            } else {
+                // STARTTLS (explicit TLS on port 587 or 25)
+                AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(smtp_host)
+                    .context("Failed to create SMTP STARTTLS relay")?
+                    .credentials(creds)
+                    .port(smtp_port)
+                    .build()
+            }
+        } else {
+            // Unauthenticated SMTP (for local/dev mail servers)
+            AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(smtp_host)
+                .port(smtp_port)
+                .build()
+        };
+
+        // Send the email
+        mailer.send(email).await.context("Failed to send email via SMTP")?;
+
+        tracing::info!("Email sent via SMTP to {} with subject: {}", log_to, log_subject);
 
         Ok(())
     }
@@ -1112,7 +1194,7 @@ mod tests {
             smtp_password: None,
         };
 
-        let service = EmailService::new(config.clone());
+        let service = EmailService::new(config.clone()).expect("Failed to create email service");
         assert!(matches!(service.config.provider, EmailProvider::Disabled));
         assert_eq!(service.config.from_email, "test@example.com");
         assert_eq!(service.config.from_name, "Test");
@@ -1131,7 +1213,7 @@ mod tests {
             smtp_password: None,
         };
 
-        let service = EmailService::new(config);
+        let service = EmailService::new(config).expect("Failed to create email service");
         let message = EmailMessage {
             to: "recipient@example.com".to_string(),
             subject: "Test".to_string(),
@@ -1145,19 +1227,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_send_email_smtp_provider() {
+    async fn test_send_email_smtp_missing_host() {
         let config = EmailConfig {
             provider: EmailProvider::Smtp,
             from_email: "test@example.com".to_string(),
             from_name: "Test".to_string(),
             api_key: None,
-            smtp_host: Some("localhost".to_string()),
+            smtp_host: None, // Missing SMTP host
             smtp_port: Some(587),
             smtp_username: Some("user".to_string()),
             smtp_password: Some("pass".to_string()),
         };
 
-        let service = EmailService::new(config);
+        let service = EmailService::new(config).expect("Failed to create email service");
         let message = EmailMessage {
             to: "recipient@example.com".to_string(),
             subject: "Test".to_string(),
@@ -1165,9 +1247,44 @@ mod tests {
             text_body: "Test".to_string(),
         };
 
-        // Should succeed (SMTP not implemented, just logs warning)
+        // Should fail due to missing SMTP host
         let result = service.send(message).await;
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("SMTP requires SMTP_HOST"));
+    }
+
+    #[tokio::test]
+    async fn test_send_email_smtp_connection_error() {
+        // Test that SMTP properly attempts connection (will fail with no server)
+        let config = EmailConfig {
+            provider: EmailProvider::Smtp,
+            from_email: "test@example.com".to_string(),
+            from_name: "Test".to_string(),
+            api_key: None,
+            smtp_host: Some("localhost".to_string()),
+            smtp_port: Some(12345), // Non-existent port
+            smtp_username: None,
+            smtp_password: None,
+        };
+
+        let service = EmailService::new(config).expect("Failed to create email service");
+        let message = EmailMessage {
+            to: "recipient@example.com".to_string(),
+            subject: "Test".to_string(),
+            html_body: "<p>Test</p>".to_string(),
+            text_body: "Test".to_string(),
+        };
+
+        // Should fail due to connection error (no SMTP server running)
+        let result = service.send(message).await;
+        assert!(result.is_err());
+        // The error should indicate a connection/send failure
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("Failed to send email via SMTP") || err.contains("connection"),
+            "Expected SMTP connection error, got: {}",
+            err
+        );
     }
 
     #[tokio::test]
@@ -1183,7 +1300,7 @@ mod tests {
             smtp_password: None,
         };
 
-        let service = EmailService::new(config);
+        let service = EmailService::new(config).expect("Failed to create email service");
         let message = EmailMessage {
             to: "recipient@example.com".to_string(),
             subject: "Test".to_string(),
@@ -1210,7 +1327,7 @@ mod tests {
             smtp_password: None,
         };
 
-        let service = EmailService::new(config);
+        let service = EmailService::new(config).expect("Failed to create email service");
         let message = EmailMessage {
             to: "recipient@example.com".to_string(),
             subject: "Test".to_string(),

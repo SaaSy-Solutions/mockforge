@@ -1,0 +1,26 @@
+{
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "data": [],
+      "pagination": {
+        "page": "{{queryParams.page | default: 1}}",
+        "per_page": "{{queryParams.per_page | default: 20}}",
+        "total": 0,
+        "total_pages": 0,
+        "has_next": false,
+        "has_prev": false
+      },
+      "links": {
+        "self": "{{request.path}}?page={{queryParams.page | default: 1}}",
+        "first": "{{request.path}}?page=1",
+        "last": "{{request.path}}?page=1",
+        "next": null,
+        "prev": null
+      }
+    }
+  }
+}

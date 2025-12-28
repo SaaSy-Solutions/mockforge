@@ -1,0 +1,16 @@
+{
+  "response": {
+    "status": 500,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "INTERNAL_ERROR",
+        "message": "An unexpected error occurred. Please try again later.",
+        "details": [],
+        "request_id": "{{uuid}}"
+      }
+    }
+  }
+}

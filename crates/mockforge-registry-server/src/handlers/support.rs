@@ -73,7 +73,9 @@ pub async fn submit_contact(
     };
 
     // Generate ticket ID (simple format for now)
-    let ticket_id = format!("SUP-{}", uuid::Uuid::new_v4().to_string().split('-').next().unwrap());
+    let uuid_str = uuid::Uuid::new_v4().to_string();
+    let ticket_suffix = uuid_str.split('-').next().unwrap_or(&uuid_str[..8]);
+    let ticket_id = format!("SUP-{}", ticket_suffix);
 
     // Send email to support team
     let email_service = EmailService::from_env();

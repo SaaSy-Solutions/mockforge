@@ -1,10 +1,14 @@
 //! Authentication handlers
 
 use axum::{extract::State, Json};
+use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    auth::{create_token, hash_password, verify_password},
+    auth::{
+        create_token_pair, hash_password, verify_password, verify_refresh_token,
+        REFRESH_TOKEN_EXPIRY_DAYS,
+    },
     error::{ApiError, ApiResult},
     models::User,
     AppState,
@@ -24,6 +28,7 @@ pub struct LoginRequest {
     pub two_factor_code: Option<String>, // Optional 2FA code (required if 2FA is enabled)
 }
 
+/// Legacy auth response (for backwards compatibility)
 #[derive(Debug, Serialize)]
 pub struct AuthResponse {
     pub token: String,
@@ -31,10 +36,21 @@ pub struct AuthResponse {
     pub username: String,
 }
 
+/// New auth response with both access and refresh tokens
+#[derive(Debug, Serialize)]
+pub struct AuthResponseV2 {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub access_token_expires_at: i64,
+    pub refresh_token_expires_at: i64,
+    pub user_id: String,
+    pub username: String,
+}
+
 pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegisterRequest>,
-) -> ApiResult<Json<AuthResponse>> {
+) -> ApiResult<Json<AuthResponseV2>> {
     let pool = state.db.pool();
 
     // Validate input
@@ -71,12 +87,25 @@ pub async fn register(
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-    // Generate JWT token
-    let token = create_token(&user.id.to_string(), &state.config.jwt_secret)
+    // Generate token pair (access + refresh)
+    let (token_pair, jti) = create_token_pair(&user.id.to_string(), &state.config.jwt_secret)
         .map_err(|e| ApiError::Internal(e))?;
 
-    Ok(Json(AuthResponse {
-        token,
+    // Store refresh token JTI in database for revocation support
+    let expires_at = Utc::now()
+        .checked_add_signed(Duration::days(REFRESH_TOKEN_EXPIRY_DAYS))
+        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Failed to calculate token expiry")))?;
+
+    state.db.store_refresh_token_jti(&jti, user.id, expires_at).await.map_err(|e| {
+        tracing::warn!("Failed to store refresh token JTI: {}", e);
+        ApiError::Internal(e)
+    })?;
+
+    Ok(Json(AuthResponseV2 {
+        access_token: token_pair.access_token,
+        refresh_token: token_pair.refresh_token,
+        access_token_expires_at: token_pair.access_token_expires_at,
+        refresh_token_expires_at: token_pair.refresh_token_expires_at,
         user_id: user.id.to_string(),
         username: user.username,
     }))
@@ -85,7 +114,7 @@ pub async fn register(
 pub async fn login(
     State(state): State<AppState>,
     Json(request): Json<LoginRequest>,
-) -> ApiResult<Json<AuthResponse>> {
+) -> ApiResult<Json<AuthResponseV2>> {
     let pool = state.db.pool();
 
     // Find user
@@ -149,12 +178,25 @@ pub async fn login(
             .map_err(|e| ApiError::Database(e))?;
     }
 
-    // Generate JWT token
-    let token = create_token(&user.id.to_string(), &state.config.jwt_secret)
+    // Generate token pair (access + refresh)
+    let (token_pair, jti) = create_token_pair(&user.id.to_string(), &state.config.jwt_secret)
         .map_err(|e| ApiError::Internal(e))?;
 
-    Ok(Json(AuthResponse {
-        token,
+    // Store refresh token JTI in database for revocation support
+    let expires_at = Utc::now()
+        .checked_add_signed(Duration::days(REFRESH_TOKEN_EXPIRY_DAYS))
+        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Failed to calculate token expiry")))?;
+
+    state.db.store_refresh_token_jti(&jti, user.id, expires_at).await.map_err(|e| {
+        tracing::warn!("Failed to store refresh token JTI: {}", e);
+        ApiError::Internal(e)
+    })?;
+
+    Ok(Json(AuthResponseV2 {
+        access_token: token_pair.access_token,
+        refresh_token: token_pair.refresh_token,
+        access_token_expires_at: token_pair.access_token_expires_at,
+        refresh_token_expires_at: token_pair.refresh_token_expires_at,
         user_id: user.id.to_string(),
         username: user.username,
     }))
@@ -162,18 +204,39 @@ pub async fn login(
 
 #[derive(Debug, Deserialize)]
 pub struct RefreshTokenRequest {
-    pub token: String,
+    pub refresh_token: String,
+}
+
+/// Response for refresh token endpoint
+#[derive(Debug, Serialize)]
+pub struct RefreshTokenResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub access_token_expires_at: i64,
+    pub refresh_token_expires_at: i64,
 }
 
 pub async fn refresh_token(
     State(state): State<AppState>,
     Json(request): Json<RefreshTokenRequest>,
-) -> ApiResult<Json<AuthResponse>> {
-    use crate::auth::verify_token;
+) -> ApiResult<Json<RefreshTokenResponse>> {
+    // Verify the refresh token (not just any token)
+    let (claims, old_jti) = verify_refresh_token(&request.refresh_token, &state.config.jwt_secret)
+        .map_err(|e| {
+            tracing::debug!("Refresh token validation failed: {}", e);
+            ApiError::InvalidRequest("Invalid or expired refresh token".to_string())
+        })?;
 
-    // Verify the existing token
-    let claims = verify_token(&request.token, &state.config.jwt_secret)
-        .map_err(|_| ApiError::InvalidRequest("Invalid token".to_string()))?;
+    // Check if the JTI has been revoked in the database
+    let is_revoked = state.db.is_token_revoked(&old_jti).await.map_err(|e| {
+        tracing::warn!("Failed to check token revocation status: {}", e);
+        ApiError::Internal(e)
+    })?;
+
+    if is_revoked {
+        tracing::warn!("Attempt to use revoked refresh token: jti={}", old_jti);
+        return Err(ApiError::InvalidRequest("Refresh token has been revoked".to_string()));
+    }
 
     let pool = state.db.pool();
 
@@ -181,20 +244,41 @@ pub async fn refresh_token(
     let user_id = uuid::Uuid::parse_str(&claims.sub)
         .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
 
-    // Find user
+    // Find user to ensure they still exist and are active
     let user = User::find_by_id(pool, user_id)
         .await
         .map_err(|e| ApiError::Database(e))?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
-    // Generate new JWT token
-    let token = create_token(&user.id.to_string(), &state.config.jwt_secret)
+    // Revoke old refresh token JTI (token rotation for security)
+    state.db.revoke_token(&old_jti, "refresh").await.map_err(|e| {
+        tracing::warn!("Failed to revoke old refresh token: {}", e);
+        ApiError::Internal(e)
+    })?;
+
+    // Generate new token pair
+    let (token_pair, new_jti) = create_token_pair(&user.id.to_string(), &state.config.jwt_secret)
         .map_err(|e| ApiError::Internal(e))?;
 
-    Ok(Json(AuthResponse {
-        token,
-        user_id: user.id.to_string(),
-        username: user.username,
+    // Store new refresh token JTI in database
+    let expires_at = Utc::now()
+        .checked_add_signed(Duration::days(REFRESH_TOKEN_EXPIRY_DAYS))
+        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Failed to calculate token expiry")))?;
+
+    state
+        .db
+        .store_refresh_token_jti(&new_jti, user.id, expires_at)
+        .await
+        .map_err(|e| {
+            tracing::warn!("Failed to store new refresh token JTI: {}", e);
+            ApiError::Internal(e)
+        })?;
+
+    Ok(Json(RefreshTokenResponse {
+        access_token: token_pair.access_token,
+        refresh_token: token_pair.refresh_token,
+        access_token_expires_at: token_pair.access_token_expires_at,
+        refresh_token_expires_at: token_pair.refresh_token_expires_at,
     }))
 }
 
@@ -252,7 +336,18 @@ pub async fn request_password_reset(
     .map_err(|e| ApiError::Database(e))?;
 
     // Send password reset email (non-blocking)
-    let email_service = EmailService::from_env();
+    let email_service = match EmailService::from_env() {
+        Ok(service) => service,
+        Err(e) => {
+            tracing::warn!("Failed to create email service: {}", e);
+            return Ok(Json(PasswordResetRequestResponse {
+                success: true,
+                message:
+                    "If an account with that email exists, a password reset link has been sent."
+                        .to_string(),
+            }));
+        }
+    };
     let reset_email = EmailService::generate_password_reset_email(
         &user.username,
         &user.email,
@@ -327,6 +422,19 @@ pub async fn confirm_password_reset(
         .execute(pool)
         .await
         .map_err(|e| ApiError::Database(e))?;
+
+    // Revoke all existing refresh tokens for security (password changed)
+    let revoked_count =
+        state.db.revoke_all_user_tokens(user.id, "password_reset").await.map_err(|e| {
+            tracing::warn!("Failed to revoke user tokens on password reset: {}", e);
+            ApiError::Internal(e)
+        })?;
+
+    tracing::info!(
+        "Revoked {} refresh tokens for user {} on password reset",
+        revoked_count,
+        user.id
+    );
 
     // Mark token as used
     VerificationToken::mark_as_used(pool, reset_token.id)

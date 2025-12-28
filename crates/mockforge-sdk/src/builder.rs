@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     fn test_builder_latency() {
-        let latency = LatencyProfile::Fixed { ms: 100 };
+        let latency = LatencyProfile::new(100, 0);
         let builder = MockServerBuilder::new().latency(latency);
         assert!(builder.latency_profile.is_some());
     }
@@ -299,9 +299,9 @@ mod tests {
     #[test]
     fn test_builder_failures() {
         let failures = FailureConfig {
-            enabled: true,
-            rate: 0.1,
-            http_codes: vec![500, 503],
+            global_error_rate: 0.1,
+            default_status_codes: vec![500, 503],
+            ..Default::default()
         };
         let builder = MockServerBuilder::new().failures(failures);
         assert!(builder.failure_config.is_some());
@@ -311,8 +311,8 @@ mod tests {
     fn test_builder_proxy() {
         let proxy = ProxyConfig {
             enabled: true,
-            target_url: "http://example.com".to_string(),
-            preserve_host_header: true,
+            target_url: Some("http://example.com".to_string()),
+            ..Default::default()
         };
         let builder = MockServerBuilder::new().proxy(proxy);
         assert!(builder.proxy_config.is_some());
@@ -332,11 +332,11 @@ mod tests {
 
     #[test]
     fn test_builder_fluent_chaining() {
-        let latency = LatencyProfile::Fixed { ms: 50 };
+        let latency = LatencyProfile::new(50, 0);
         let failures = FailureConfig {
-            enabled: true,
-            rate: 0.05,
-            http_codes: vec![500],
+            global_error_rate: 0.05,
+            default_status_codes: vec![500],
+            ..Default::default()
         };
 
         let builder = MockServerBuilder::new()
@@ -454,16 +454,16 @@ mod tests {
 
     #[test]
     fn test_builder_with_all_features() {
-        let latency = LatencyProfile::Fixed { ms: 100 };
+        let latency = LatencyProfile::new(100, 0);
         let failures = FailureConfig {
-            enabled: true,
-            rate: 0.1,
-            http_codes: vec![500, 503],
+            global_error_rate: 0.1,
+            default_status_codes: vec![500, 503],
+            ..Default::default()
         };
         let proxy = ProxyConfig {
             enabled: true,
-            target_url: "http://backend.com".to_string(),
-            preserve_host_header: false,
+            target_url: Some("http://backend.com".to_string()),
+            ..Default::default()
         };
 
         let builder = MockServerBuilder::new()
@@ -497,9 +497,7 @@ mod tests {
 
     #[test]
     fn test_builder_port_range_custom() {
-        let builder = MockServerBuilder::new()
-            .auto_port()
-            .port_range(40000, 50000);
+        let builder = MockServerBuilder::new().auto_port().port_range(40000, 50000);
         assert_eq!(builder.port_range, Some((40000, 50000)));
     }
 }

@@ -1,13 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, Edit, Power, PowerOff, Globe, Zap, MessageSquare, Server, FileJson, Upload, Download, Loader2, Radio, Mail, Code, Search, X, Filter } from 'lucide-react'
+import { Plus, Trash2, Edit, Power, PowerOff, Globe, Zap, MessageSquare, Server, FileJson, Upload, Download, Loader2, Radio, Mail, Code, Search, X, Filter, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import FocusTrap from 'focus-trap-react'
 import { endpointsApi, EndpointConfig, openApiApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { useState, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import { useDebounce } from '@/hooks/useDebounce'
 import yaml from 'js-yaml'
+
+const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
+const DEFAULT_ITEMS_PER_PAGE = 10
 
 const PROTOCOL_OPTIONS = [
   { value: 'all', label: 'All Protocols' },
@@ -34,9 +38,12 @@ export default function Dashboard() {
   })
   const [isExporting, setIsExporting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
   const [protocolFilter, setProtocolFilter] = useState('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['endpoints'],
     queryFn: async () => {
       const response = await endpointsApi.list()
@@ -238,8 +245,9 @@ export default function Dashboard() {
       }
 
       // Search filter (search in name, description, path/topic)
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase()
+      // Uses debounced value for better performance
+      if (debouncedSearchQuery.trim()) {
+        const query = debouncedSearchQuery.toLowerCase()
         const nameMatch = endpoint.name.toLowerCase().includes(query)
         const descMatch = endpoint.description?.toLowerCase().includes(query) || false
 
@@ -266,14 +274,46 @@ export default function Dashboard() {
 
       return true
     })
-  }, [data?.endpoints, searchQuery, protocolFilter])
+  }, [data?.endpoints, debouncedSearchQuery, protocolFilter])
+
+  // Reset to page 1 when filters change
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value)
+    setCurrentPage(1)
+  }, [])
+
+  const handleProtocolChange = useCallback((value: string) => {
+    setProtocolFilter(value)
+    setCurrentPage(1)
+  }, [])
+
+  const handleItemsPerPageChange = useCallback((value: number) => {
+    setItemsPerPage(value)
+    setCurrentPage(1)
+  }, [])
 
   const clearFilters = () => {
     setSearchQuery('')
     setProtocolFilter('all')
+    setCurrentPage(1)
   }
 
-  const hasActiveFilters = searchQuery.trim() !== '' || protocolFilter !== 'all'
+  const hasActiveFilters = debouncedSearchQuery.trim() !== '' || protocolFilter !== 'all'
+
+  // Pagination calculations
+  const totalItems = filteredEndpoints.length
+  const totalPages = Math.ceil(totalItems / itemsPerPage)
+
+  // Ensure current page is valid when filtered results change
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = Math.min(startIndex + itemsPerPage, totalItems)
+  const paginatedEndpoints = filteredEndpoints.slice(startIndex, endIndex)
 
   if (isLoading) {
     return (
@@ -281,6 +321,28 @@ export default function Dashboard() {
         <div className="text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
           <p className="mt-4 text-sm text-muted-foreground">Loading endpoints...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+            <X className="h-6 w-6 text-destructive" />
+          </div>
+          <h2 className="text-lg font-semibold text-foreground">Failed to load endpoints</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
+          </p>
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['endpoints'] })}
+            className="mt-4 inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            Retry
+          </button>
         </div>
       </div>
     )
@@ -333,7 +395,7 @@ export default function Dashboard() {
             type="text"
             placeholder="Search endpoints by name, path, or topic..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full rounded-lg border border-input bg-background py-2 pl-10 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
           {searchQuery && (
@@ -351,7 +413,7 @@ export default function Dashboard() {
             <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <select
               value={protocolFilter}
-              onChange={(e) => setProtocolFilter(e.target.value)}
+              onChange={(e) => handleProtocolChange(e.target.value)}
               className="appearance-none rounded-lg border border-input bg-background py-2 pl-10 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               {PROTOCOL_OPTIONS.map((option) => (
@@ -377,7 +439,7 @@ export default function Dashboard() {
       {hasActiveFilters && (
         <div className="mb-4 text-sm text-muted-foreground">
           Showing {filteredEndpoints.length} of {data?.endpoints?.length || 0} endpoints
-          {searchQuery && <span> matching "{searchQuery}"</span>}
+          {debouncedSearchQuery && <span> matching "{debouncedSearchQuery}"</span>}
           {protocolFilter !== 'all' && <span> in {PROTOCOL_OPTIONS.find(p => p.value === protocolFilter)?.label}</span>}
         </div>
       )}
@@ -575,7 +637,7 @@ export default function Dashboard() {
               </button>
             </div>
           ) : (
-          filteredEndpoints.map((endpoint: EndpointConfig) => (
+          paginatedEndpoints.map((endpoint: EndpointConfig) => (
             <div
               key={endpoint.id}
               className="rounded-lg border border-border bg-card p-4 sm:p-6 transition-shadow hover:shadow-md"
@@ -666,6 +728,98 @@ export default function Dashboard() {
               </div>
             </div>
           ))
+          )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>
+                  Showing {startIndex + 1}-{endIndex} of {totalItems} endpoints
+                </span>
+                <span className="hidden sm:inline">•</span>
+                <div className="hidden sm:flex items-center gap-2">
+                  <label htmlFor="items-per-page" className="sr-only">Items per page</label>
+                  <select
+                    id="items-per-page"
+                    value={itemsPerPage}
+                    onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                    className="rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {ITEMS_PER_PAGE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option} per page
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="Go to first page"
+                >
+                  First
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-md border border-input bg-background p-2 hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="Go to previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className="flex items-center gap-1 px-2">
+                  {/* Page numbers */}
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = currentPage - 2 + i
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={cn(
+                          "min-w-[2rem] rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring",
+                          currentPage === pageNum
+                            ? "bg-primary text-primary-foreground"
+                            : "border border-input bg-background hover:bg-accent"
+                        )}
+                        aria-label={`Go to page ${pageNum}`}
+                        aria-current={currentPage === pageNum ? 'page' : undefined}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  })}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="rounded-md border border-input bg-background p-2 hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="Go to next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="Go to last page"
+                >
+                  Last
+                </button>
+              </div>
+            </div>
           )}
         </div>
       ) : (

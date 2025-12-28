@@ -3,7 +3,9 @@
 pub mod admin;
 pub mod analytics;
 pub mod auth;
+pub mod billing;
 pub mod health;
+pub mod oauth;
 pub mod org_templates;
 pub mod organization_settings;
 pub mod organizations;

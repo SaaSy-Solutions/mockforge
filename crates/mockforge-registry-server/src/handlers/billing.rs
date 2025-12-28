@@ -6,14 +6,20 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use stripe::{CheckoutSession, CheckoutSessionMode, Client, CreateCheckoutSession, CreateCheckoutSessionLineItems, Event, EventObject, EventType};
+use stripe::{
+    CheckoutSession, CheckoutSessionMode, Client, CreateCheckoutSession,
+    CreateCheckoutSessionLineItems, Event, EventObject, EventType,
+};
 use uuid::Uuid;
 
 use crate::{
     email::EmailService,
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, OrgContext, resolve_org_context},
-    models::{AuditEventType, Organization, Plan, Subscription, SubscriptionStatus, UsageCounter, User, record_audit_event},
+    middleware::{resolve_org_context, AuthUser, OrgContext},
+    models::{
+        record_audit_event, AuditEventType, Organization, Plan, Subscription, SubscriptionStatus,
+        UsageCounter, User,
+    },
     AppState,
 };
 
@@ -26,7 +32,8 @@ pub async fn get_subscription(
     let pool = state.db.pool();
 
     // Resolve org context (extensions not available in handler, use None)
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get subscription
@@ -49,24 +56,22 @@ pub async fn get_subscription(
             .as_ref()
             .map(|s| s.status().to_string())
             .unwrap_or_else(|| "free".to_string()),
-        current_period_end: subscription
-            .as_ref()
-            .map(|s| s.current_period_end)
-            .or_else(|| {
-                // For free plan, return None or far future
-                Some(chrono::Utc::now() + chrono::Duration::days(365))
-            }),
+        current_period_end: subscription.as_ref().map(|s| s.current_period_end).or_else(|| {
+            // For free plan, return None or far future
+            Some(chrono::Utc::now() + chrono::Duration::days(365))
+        }),
         usage: UsageStats {
             requests: usage.requests,
-            requests_limit: limits.get("requests_per_30d")
+            requests_limit: limits
+                .get("requests_per_30d")
                 .and_then(|v| v.as_i64())
                 .unwrap_or(10000),
             storage_bytes: usage.storage_bytes,
-            storage_limit_bytes: limits.get("storage_gb")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(1) * 1_000_000_000, // Convert GB to bytes
+            storage_limit_bytes: limits.get("storage_gb").and_then(|v| v.as_i64()).unwrap_or(1)
+                * 1_000_000_000, // Convert GB to bytes
             ai_tokens_used: usage.ai_tokens_used,
-            ai_tokens_limit: limits.get("ai_tokens_per_month")
+            ai_tokens_limit: limits
+                .get("ai_tokens_per_month")
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0),
         },
@@ -116,49 +121,69 @@ pub async fn create_checkout(
     Json(request): Json<CreateCheckoutRequest>,
 ) -> ApiResult<Json<CreateCheckoutResponse>> {
     // Resolve org context (extensions not available in handler, use None)
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Validate plan
     let plan = match request.plan.as_str() {
         "pro" => Plan::Pro,
         "team" => Plan::Team,
-        _ => return Err(ApiError::InvalidRequest("Invalid plan. Must be 'pro' or 'team'".to_string())),
+        _ => {
+            return Err(ApiError::InvalidRequest(
+                "Invalid plan. Must be 'pro' or 'team'".to_string(),
+            ))
+        }
     };
 
     // Get Stripe client
-    let stripe_secret = state.config.stripe_secret_key
+    let stripe_secret = state
+        .config
+        .stripe_secret_key
         .as_ref()
         .ok_or_else(|| ApiError::InvalidRequest("Stripe not configured".to_string()))?;
     let client = Client::new(stripe_secret);
 
     // Get price ID for the plan
     let price_id = match plan {
-        Plan::Pro => state.config.stripe_price_id_pro
-            .as_ref()
-            .ok_or_else(|| ApiError::InvalidRequest("Stripe Pro price ID not configured".to_string()))?,
-        Plan::Team => state.config.stripe_price_id_team
-            .as_ref()
-            .ok_or_else(|| ApiError::InvalidRequest("Stripe Team price ID not configured".to_string()))?,
-        Plan::Free => return Err(ApiError::InvalidRequest("Cannot create checkout for free plan".to_string())),
+        Plan::Pro => state.config.stripe_price_id_pro.as_ref().ok_or_else(|| {
+            ApiError::InvalidRequest("Stripe Pro price ID not configured".to_string())
+        })?,
+        Plan::Team => state.config.stripe_price_id_team.as_ref().ok_or_else(|| {
+            ApiError::InvalidRequest("Stripe Team price ID not configured".to_string())
+        })?,
+        Plan::Free => {
+            return Err(ApiError::InvalidRequest(
+                "Cannot create checkout for free plan".to_string(),
+            ))
+        }
     };
 
     // Build success and cancel URLs
-    let success_url = request.success_url
-        .unwrap_or_else(|| format!("{}/billing/success?session_id={{CHECKOUT_SESSION_ID}}", state.config.app_base_url));
-    let cancel_url = request.cancel_url
+    let success_url = request.success_url.unwrap_or_else(|| {
+        format!(
+            "{}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
+            state.config.app_base_url
+        )
+    });
+    let cancel_url = request
+        .cancel_url
         .unwrap_or_else(|| format!("{}/billing/cancel", state.config.app_base_url));
 
     // Create checkout session
-    let mut checkout_params = CreateCheckoutSession::new(&success_url);
+    let org_id_str = org_ctx.org_id.to_string();
+    let plan_str = plan.to_string();
+
+    let mut checkout_params = CreateCheckoutSession::new();
+    checkout_params.success_url = Some(&success_url);
     checkout_params.cancel_url = Some(&cancel_url);
     checkout_params.mode = Some(CheckoutSessionMode::Subscription);
-    checkout_params.client_reference_id = Some(&org_ctx.org_id.to_string());
+    checkout_params.client_reference_id = Some(&org_id_str);
 
     // Add metadata for org_id (as backup)
     checkout_params.metadata = Some(std::collections::HashMap::from([
-        ("org_id".to_string(), org_ctx.org_id.to_string()),
-        ("plan".to_string(), plan.to_string()),
+        ("org_id".to_string(), org_id_str.clone()),
+        ("plan".to_string(), plan_str.clone()),
     ]));
 
     // Add line item with price
@@ -175,12 +200,12 @@ pub async fn create_checkout(
 
     // Record audit log
     let pool = state.db.pool();
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
     record_audit_event(
         pool,
@@ -198,7 +223,8 @@ pub async fn create_checkout(
     .await;
 
     Ok(Json(CreateCheckoutResponse {
-        checkout_url: session.url
+        checkout_url: session
+            .url
             .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Stripe session missing URL")))?
             .to_string(),
         session_id: session.id.to_string(),
@@ -213,26 +239,27 @@ pub async fn stripe_webhook(
     body: axum::body::Bytes,
 ) -> ApiResult<Json<serde_json::Value>> {
     // Get webhook secret
-    let webhook_secret = state.config.stripe_webhook_secret
-        .as_ref()
-        .ok_or_else(|| ApiError::InvalidRequest("Stripe webhook secret not configured".to_string()))?;
+    let webhook_secret = state.config.stripe_webhook_secret.as_ref().ok_or_else(|| {
+        ApiError::InvalidRequest("Stripe webhook secret not configured".to_string())
+    })?;
 
     // Get signature from headers
-    let signature = headers.get("stripe-signature")
+    let signature = headers
+        .get("stripe-signature")
         .and_then(|h| h.to_str().ok())
         .ok_or_else(|| ApiError::InvalidRequest("Missing stripe-signature header".to_string()))?;
 
     // Verify webhook signature
-    let event = stripe::Webhook::construct_event(
-        &body,
-        signature,
-        webhook_secret,
-    )
-    .map_err(|e| ApiError::InvalidRequest(format!("Webhook signature verification failed: {}", e)))?;
+    let body_str = std::str::from_utf8(&body)
+        .map_err(|e| ApiError::InvalidRequest(format!("Invalid UTF-8 in webhook body: {}", e)))?;
+    let event =
+        stripe::Webhook::construct_event(body_str, signature, webhook_secret).map_err(|e| {
+            ApiError::InvalidRequest(format!("Webhook signature verification failed: {}", e))
+        })?;
 
     let pool = state.db.pool();
 
-    match event.event_type {
+    match event.type_ {
         EventType::CheckoutSessionCompleted => {
             // Handle checkout completion
             if let EventObject::CheckoutSession(session) = event.data.object {
@@ -264,7 +291,7 @@ pub async fn stripe_webhook(
             }
         }
         _ => {
-            tracing::debug!("Unhandled Stripe event: {:?}", event.event_type);
+            tracing::debug!("Unhandled Stripe event: {:?}", event.type_);
         }
     }
 
@@ -277,21 +304,24 @@ async fn handle_checkout_completed(
     session: &CheckoutSession,
 ) -> Result<(), ApiError> {
     // Extract org_id from client_reference_id
-    let org_id_str = session.client_reference_id
-        .as_ref()
-        .ok_or_else(|| ApiError::InvalidRequest("Missing client_reference_id in checkout session".to_string()))?;
+    let org_id_str = session.client_reference_id.as_ref().ok_or_else(|| {
+        ApiError::InvalidRequest("Missing client_reference_id in checkout session".to_string())
+    })?;
 
     let org_id = Uuid::parse_str(org_id_str)
         .map_err(|_| ApiError::InvalidRequest("Invalid org_id in checkout session".to_string()))?;
 
     // Get subscription ID from session
-    let subscription_id = session.subscription
+    let subscription_id = session
+        .subscription
         .as_ref()
         .and_then(|s| match s {
             stripe::Expandable::Id(id) => Some(id.clone()),
             stripe::Expandable::Object(_) => None, // Would need to expand
         })
-        .ok_or_else(|| ApiError::InvalidRequest("Missing subscription in checkout session".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::InvalidRequest("Missing subscription in checkout session".to_string())
+        })?;
 
     tracing::info!("Checkout completed: org_id={}, subscription_id={}", org_id, subscription_id);
 
@@ -299,7 +329,7 @@ async fn handle_checkout_completed(
     // But we can update the org's stripe_customer_id here if needed
     if let Some(customer_id) = &session.customer {
         let customer_id_str = match customer_id {
-            stripe::Expandable::Id(id) => id.clone(),
+            stripe::Expandable::Id(id) => id.to_string(),
             stripe::Expandable::Object(customer) => customer.id.to_string(),
         };
 
@@ -312,7 +342,10 @@ async fn handle_checkout_completed(
 }
 
 /// Get organization owner's email for sending notifications
-async fn get_org_owner_email(pool: &sqlx::PgPool, org_id: Uuid) -> Result<(String, String), ApiError> {
+async fn get_org_owner_email(
+    pool: &sqlx::PgPool,
+    org_id: Uuid,
+) -> Result<(String, String), ApiError> {
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
@@ -336,12 +369,14 @@ async fn handle_subscription_event(
     let stripe_sub_id = subscription.id.to_string();
 
     let stripe_customer_id = match &subscription.customer {
-        stripe::Expandable::Id(id) => id.clone(),
+        stripe::Expandable::Id(id) => id.to_string(),
         stripe::Expandable::Object(customer) => customer.id.to_string(),
     };
 
     // Get price_id from subscription items
-    let price_id = subscription.items.data
+    let price_id = subscription
+        .items
+        .data
         .first()
         .and_then(|item| item.price.as_ref())
         .map(|price| price.id.to_string())
@@ -352,28 +387,25 @@ async fn handle_subscription_event(
 
     let status = SubscriptionStatus::from_string(&subscription.status.to_string());
 
-    let current_period_start = chrono::DateTime::<chrono::Utc>::from_timestamp(
-        subscription.current_period_start,
-        0,
-    )
-    .unwrap_or_else(chrono::Utc::now);
+    let current_period_start =
+        chrono::DateTime::<chrono::Utc>::from_timestamp(subscription.current_period_start, 0)
+            .unwrap_or_else(chrono::Utc::now);
 
-    let current_period_end = chrono::DateTime::<chrono::Utc>::from_timestamp(
-        subscription.current_period_end,
-        0,
-    )
-    .unwrap_or_else(|| chrono::Utc::now() + chrono::Duration::days(30));
+    let current_period_end =
+        chrono::DateTime::<chrono::Utc>::from_timestamp(subscription.current_period_end, 0)
+            .unwrap_or_else(|| chrono::Utc::now() + chrono::Duration::days(30));
 
     let cancel_at_period_end = subscription.cancel_at_period_end;
 
-    let canceled_at = subscription.canceled_at
+    let canceled_at = subscription
+        .canceled_at
         .map(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0))
         .flatten();
 
     // Get org_id from metadata or find by customer_id
-    let org_id = subscription.metadata
+    let org_id = subscription
+        .metadata
         .get("org_id")
-        .and_then(|v| v.as_str())
         .and_then(|s| Uuid::parse_str(s).ok())
         .or_else(|| {
             // Fallback: find org by stripe_customer_id
@@ -381,7 +413,9 @@ async fn handle_subscription_event(
             // For now, require metadata
             None
         })
-        .ok_or_else(|| ApiError::InvalidRequest("Missing org_id in subscription metadata".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::InvalidRequest("Missing org_id in subscription metadata".to_string())
+        })?;
 
     // Upsert subscription
     let subscription_record = Subscription::upsert_from_stripe(
@@ -421,11 +455,16 @@ async fn handle_subscription_event(
 
     // Record audit log (webhook event, so no user_id or IP)
     if old_plan != plan {
-        let event_type = if old_plan == Plan::Free {
-            AuditEventType::BillingUpgrade
-        } else if plan == Plan::Free {
-            AuditEventType::BillingDowngrade
-        } else if plan > old_plan {
+        // Determine if this is an upgrade or downgrade based on plan ordering
+        // Free < Pro < Team
+        let plan_order = |p: Plan| -> u8 {
+            match p {
+                Plan::Free => 0,
+                Plan::Pro => 1,
+                Plan::Team => 2,
+            }
+        };
+        let event_type = if plan_order(plan) > plan_order(old_plan) {
             AuditEventType::BillingUpgrade
         } else {
             AuditEventType::BillingDowngrade
@@ -450,28 +489,31 @@ async fn handle_subscription_event(
     }
 
     // Send subscription confirmation email (non-blocking)
-    if let Ok((email, username)) = get_org_owner_email(pool, org_id).await {
-        let email_service = EmailService::from_env();
-        let amount = subscription.items.data
-            .first()
-            .and_then(|item| item.price.as_ref())
-            .and_then(|price| price.unit_amount)
-            .map(|amount| amount as f64 / 100.0); // Convert cents to dollars
+    if let Ok((email_addr, username)) = get_org_owner_email(pool, org_id).await {
+        if let Ok(email_service) = EmailService::from_env() {
+            let amount = subscription
+                .items
+                .data
+                .first()
+                .and_then(|item| item.price.as_ref())
+                .and_then(|price| price.unit_amount)
+                .map(|amount| amount as f64 / 100.0); // Convert cents to dollars
 
-        let plan_str = plan.to_string();
-        let email_msg = email_service.generate_subscription_confirmation(
-            &username,
-            &email,
-            plan_str,
-            amount,
-            Some(current_period_end),
-        );
+            let plan_str = plan.to_string();
+            let email_msg = EmailService::generate_subscription_confirmation(
+                &username,
+                &email_addr,
+                &plan_str,
+                amount,
+                Some(current_period_end),
+            );
 
-        tokio::spawn(async move {
-            if let Err(e) = email_service.send(email_msg).await {
-                tracing::warn!("Failed to send subscription confirmation email: {}", e);
-            }
-        });
+            tokio::spawn(async move {
+                if let Err(e) = email_service.send(email_msg).await {
+                    tracing::warn!("Failed to send subscription confirmation email: {}", e);
+                }
+            });
+        }
     }
 
     Ok(())
@@ -487,12 +529,21 @@ async fn handle_subscription_deleted(
     let subscription_record = Subscription::find_by_stripe_subscription_id(pool, &stripe_sub_id)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest("Subscription not found in database".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::InvalidRequest("Subscription not found in database".to_string())
+        })?;
 
     // Update status to canceled
     Subscription::update_status(pool, subscription_record.id, SubscriptionStatus::Canceled)
         .await
         .map_err(|e| ApiError::Database(e))?;
+
+    // Get the organization before downgrading to log the old plan
+    let org = Organization::find_by_id(pool, subscription_record.org_id)
+        .await
+        .map_err(|e| ApiError::Database(e))?
+        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
+    let old_plan = org.plan();
 
     // Downgrade org to free plan
     Organization::update_plan(pool, subscription_record.org_id, Plan::Free)
@@ -507,10 +558,10 @@ async fn handle_subscription_deleted(
         subscription_record.org_id,
         None, // Webhook event, no user context
         AuditEventType::BillingCanceled,
-        format!("Subscription canceled for plan: {:?}", org.plan()),
+        format!("Subscription canceled for plan: {:?}", old_plan),
         Some(serde_json::json!({
             "subscription_id": subscription.id.to_string(),
-            "plan": org.plan().to_string(),
+            "plan": old_plan.to_string(),
         })),
         None, // Webhook event, no IP
         None, // Webhook event, no user agent
@@ -518,26 +569,23 @@ async fn handle_subscription_deleted(
     .await;
 
     // Send subscription canceled email (non-blocking)
-    if let Ok((email, username)) = get_org_owner_email(pool, subscription_record.org_id).await {
-        let email_service = EmailService::from_env();
-        let org = Organization::find_by_id(pool, subscription_record.org_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?
-            .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
+    if let Ok((email_addr, username)) = get_org_owner_email(pool, subscription_record.org_id).await
+    {
+        if let Ok(email_service) = EmailService::from_env() {
+            let plan_str = old_plan.to_string();
+            let email_msg = EmailService::generate_subscription_canceled(
+                &username,
+                &email_addr,
+                &plan_str,
+                Some(subscription_record.current_period_end),
+            );
 
-        let plan_str = org.plan().to_string();
-        let email_msg = email_service.generate_subscription_canceled(
-            &username,
-            &email,
-            plan_str,
-            subscription_record.current_period_end,
-        );
-
-        tokio::spawn(async move {
-            if let Err(e) = email_service.send(email_msg).await {
-                tracing::warn!("Failed to send subscription canceled email: {}", e);
-            }
-        });
+            tokio::spawn(async move {
+                if let Err(e) = email_service.send(email_msg).await {
+                    tracing::warn!("Failed to send subscription canceled email: {}", e);
+                }
+            });
+        }
     }
 
     Ok(())
@@ -549,8 +597,9 @@ async fn handle_payment_succeeded(
     invoice: &stripe::Invoice,
 ) -> Result<(), ApiError> {
     let customer_id = match &invoice.customer {
-        stripe::Expandable::Id(id) => id.clone(),
-        stripe::Expandable::Object(customer) => customer.id.to_string(),
+        Some(stripe::Expandable::Id(id)) => id.to_string(),
+        Some(stripe::Expandable::Object(customer)) => customer.id.to_string(),
+        None => return Err(ApiError::InvalidRequest("Invoice missing customer".to_string())),
     };
 
     // Find subscription by customer_id
@@ -580,8 +629,9 @@ async fn handle_payment_failed(
     invoice: &stripe::Invoice,
 ) -> Result<(), ApiError> {
     let customer_id = match &invoice.customer {
-        stripe::Expandable::Id(id) => id.clone(),
-        stripe::Expandable::Object(customer) => customer.id.to_string(),
+        Some(stripe::Expandable::Id(id)) => id.to_string(),
+        Some(stripe::Expandable::Object(customer)) => customer.id.to_string(),
+        None => return Err(ApiError::InvalidRequest("Invoice missing customer".to_string())),
     };
 
     // Find subscription by customer_id
@@ -605,7 +655,7 @@ async fn handle_payment_failed(
     record_audit_event(
         pool,
         subscription.org_id,
-        None, // Webhook event, no user context
+        None,                            // Webhook event, no user context
         AuditEventType::BillingCanceled, // Using canceled as closest match
         format!("Payment failed for subscription: {}", invoice.id),
         Some(serde_json::json!({
@@ -619,32 +669,33 @@ async fn handle_payment_failed(
     .await;
 
     // Send payment failed email (non-blocking)
-    if let Ok((email, username)) = get_org_owner_email(pool, subscription.org_id).await {
-        let email_service = EmailService::from_env();
-        let org = Organization::find_by_id(pool, subscription.org_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?
-            .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
+    if let Ok((email_addr, username)) = get_org_owner_email(pool, subscription.org_id).await {
+        if let Ok(email_service) = EmailService::from_env() {
+            let org = Organization::find_by_id(pool, subscription.org_id)
+                .await
+                .map_err(|e| ApiError::Database(e))?
+                .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-        let amount = invoice.amount_due as f64 / 100.0; // Convert cents to dollars
-        let retry_date = invoice.next_payment_attempt
-            .map(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0))
-            .flatten();
+            let amount = invoice.amount_due.map(|a| a as f64 / 100.0).unwrap_or(0.0); // Convert cents to dollars
+            let retry_date = invoice
+                .next_payment_attempt
+                .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0));
 
-        let plan_str = org.plan().to_string();
-        let email_msg = email_service.generate_payment_failed(
-            &username,
-            &email,
-            plan_str,
-            amount,
-            retry_date,
-        );
+            let plan_str = org.plan().to_string();
+            let email_msg = EmailService::generate_payment_failed(
+                &username,
+                &email_addr,
+                &plan_str,
+                amount,
+                retry_date,
+            );
 
-        tokio::spawn(async move {
-            if let Err(e) = email_service.send(email_msg).await {
-                tracing::warn!("Failed to send payment failed email: {}", e);
-            }
-        });
+            tokio::spawn(async move {
+                if let Err(e) = email_service.send(email_msg).await {
+                    tracing::warn!("Failed to send payment failed email: {}", e);
+                }
+            });
+        }
     }
 
     Ok(())

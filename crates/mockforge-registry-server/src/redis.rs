@@ -105,6 +105,19 @@ pub fn current_month_period() -> String {
     format!("{}-{:02}", now.year(), now.month())
 }
 
+/// Generate Redis key for 2FA setup secret
+pub fn two_factor_setup_key(user_id: &uuid::Uuid) -> String {
+    format!("2fa_setup:{}", user_id)
+}
+
+/// Generate Redis key for 2FA backup codes (stored during setup)
+pub fn two_factor_backup_codes_key(user_id: &uuid::Uuid) -> String {
+    format!("2fa_backup_codes:{}", user_id)
+}
+
+/// TTL for 2FA setup secrets (5 minutes)
+pub const TWO_FACTOR_SETUP_TTL_SECONDS: u64 = 300;
+
 #[cfg(test)]
 mod tests {
     use super::*;

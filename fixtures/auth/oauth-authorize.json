@@ -1,0 +1,10 @@
+{
+  "description": "OAuth authorization code response",
+  "response": {
+    "status": 302,
+    "headers": {
+      "Location": "{{queryParams.redirect_uri}}?code={{uuid}}&state={{queryParams.state}}"
+    },
+    "body": null
+  }
+}

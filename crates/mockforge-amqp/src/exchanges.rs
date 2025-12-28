@@ -173,8 +173,35 @@ impl ExchangeManager {
         self.exchanges.get(name)
     }
 
+    pub fn get_exchange_mut(&mut self, name: &str) -> Option<&mut Exchange> {
+        self.exchanges.get_mut(name)
+    }
+
     pub fn list_exchanges(&self) -> Vec<&Exchange> {
         self.exchanges.values().collect()
+    }
+
+    /// Add a binding to an exchange
+    pub fn add_binding(&mut self, exchange_name: &str, binding: crate::bindings::Binding) -> bool {
+        if let Some(exchange) = self.exchanges.get_mut(exchange_name) {
+            exchange.bindings.push(binding);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Remove a binding from an exchange
+    pub fn remove_binding(&mut self, exchange_name: &str, queue: &str, routing_key: &str) -> bool {
+        if let Some(exchange) = self.exchanges.get_mut(exchange_name) {
+            let initial_len = exchange.bindings.len();
+            exchange
+                .bindings
+                .retain(|b| !(b.queue == queue && b.routing_key == routing_key));
+            exchange.bindings.len() < initial_len
+        } else {
+            false
+        }
     }
 
     pub fn delete_exchange(&mut self, name: &str) -> bool {

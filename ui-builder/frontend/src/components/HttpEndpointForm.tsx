@@ -3,7 +3,9 @@ import { Plus, X, Code, Sparkles, AlertCircle } from 'lucide-react'
 import Editor from '@monaco-editor/react'
 import { cn } from '@/lib/utils'
 import { pathSchema, statusCodeSchema } from '@/lib/validation'
+import EditorSkeleton from '@/components/EditorSkeleton'
 import type { HttpFormProps } from '@/types/protocol-configs'
+import type { HeaderConfig } from '@/lib/api'
 
 interface JsonEditorErrors {
   staticBody: string | null
@@ -218,7 +220,7 @@ export default function HttpEndpointForm({ config, onChange, onValidationChange 
           </div>
           {config.response?.headers?.length > 0 && (
             <div className="space-y-2">
-              {config.response.headers.map((header: any, index: number) => (
+              {config.response.headers.map((header: HeaderConfig, index: number) => (
                 <div key={index} className="flex items-center space-x-2">
                   <input
                     type="text"
@@ -318,6 +320,7 @@ export default function HttpEndpointForm({ config, onChange, onValidationChange 
                     }
                   }}
                   theme="vs-dark"
+                  loading={<EditorSkeleton height="300px" />}
                   options={{
                     minimap: { enabled: false },
                     fontSize: 13,
@@ -371,6 +374,7 @@ export default function HttpEndpointForm({ config, onChange, onValidationChange 
                     }
                   }}
                   theme="vs-dark"
+                  loading={<EditorSkeleton height="300px" />}
                   options={{
                     minimap: { enabled: false },
                     fontSize: 13,

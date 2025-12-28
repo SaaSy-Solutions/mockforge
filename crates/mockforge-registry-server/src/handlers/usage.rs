@@ -43,20 +43,7 @@ pub async fn get_usage(
     Ok(Json(UsageResponse {
         org_id: org_ctx.org_id,
         period_start: usage.period_start,
-        period_end: {
-            // Calculate period end (last day of current month)
-            let next_month = usage.period_start
-                .with_month(usage.period_start.month() + 1)
-                .unwrap_or_else(|| {
-                    // If month overflow, go to next year
-                    usage.period_start
-                        .with_year(usage.period_start.year() + 1)
-                        .unwrap()
-                        .with_month(1)
-                        .unwrap()
-                });
-            next_month.pred_opt().unwrap_or(usage.period_start)
-        },
+        period_end: calculate_period_end(usage.period_start),
         usage: UsageBreakdown {
             requests: UsageMetric {
                 used: usage.requests,
@@ -115,19 +102,7 @@ pub async fn get_usage_history(
         .into_iter()
         .map(|counter| UsagePeriod {
             period_start: counter.period_start,
-            period_end: {
-                // Calculate period end (last day of month)
-                let next_month = counter.period_start
-                    .with_month(counter.period_start.month() + 1)
-                    .unwrap_or_else(|| {
-                        counter.period_start
-                            .with_year(counter.period_start.year() + 1)
-                            .unwrap()
-                            .with_month(1)
-                            .unwrap()
-                    });
-                next_month.pred_opt().unwrap_or(counter.period_start)
-            },
+            period_end: calculate_period_end(counter.period_start),
             requests: counter.requests,
             egress_bytes: counter.egress_bytes,
             storage_bytes: counter.storage_bytes,
@@ -180,4 +155,24 @@ pub struct UsagePeriod {
     pub egress_bytes: i64,
     pub storage_bytes: i64,
     pub ai_tokens_used: i64,
+}
+
+/// Calculate the end of a billing period (last day of the month)
+fn calculate_period_end(period_start: chrono::NaiveDate) -> chrono::NaiveDate {
+    use chrono::NaiveDate;
+
+    let year = period_start.year();
+    let month = period_start.month();
+
+    // Calculate first day of next month
+    let (next_year, next_month) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
+
+    // Get first day of next month, then subtract one day to get last day of current month
+    NaiveDate::from_ymd_opt(next_year, next_month, 1)
+        .and_then(|d| d.pred_opt())
+        .unwrap_or(period_start)
 }

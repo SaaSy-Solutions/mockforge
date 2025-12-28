@@ -23,7 +23,9 @@ These variables configure the MockForge Plugin Registry server.
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `DATABASE_URL` | Database connection URL (PostgreSQL/SQLite) | `postgres://user:pass@localhost/mockforge` |
-| `JWT_SECRET` | Secret key for JWT token signing | `your-secure-secret-key-min-32-chars` |
+| `JWT_SECRET` | Secret key for JWT token signing (min 32 chars) | `your-secure-secret-key-min-32-chars` |
+| `JWT_ISSUER` | JWT issuer claim for token validation | `mockforge-registry` (default) |
+| `JWT_AUDIENCE` | JWT audience claim for token validation | `mockforge-api` (default) |
 
 ### Server Configuration
 
@@ -33,7 +35,7 @@ These variables configure the MockForge Plugin Registry server.
 | `CORS_ALLOWED_ORIGINS` | None | Comma-separated CORS allowed origins |
 | `MAX_REQUEST_BODY_SIZE` | None | Maximum request body size |
 | `SHUTDOWN_TIMEOUT_SECS` | `30` | Graceful shutdown timeout in seconds |
-| `ENVIRONMENT` | None | Deployment environment (dev/staging/prod) |
+| `ENVIRONMENT` | Strict mode | Deployment environment. Defaults to strict (production) mode for security. Set to "development" to enable permissive CSP and disable HSTS. |
 
 ### Database
 
@@ -87,11 +89,29 @@ These variables configure the MockForge Plugin Registry server.
 | `SMTP_USERNAME` | None | SMTP username |
 | `SMTP_PASSWORD` | None | SMTP password |
 
+### OAuth Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OAUTH_GITHUB_CLIENT_ID` | None | GitHub OAuth application client ID |
+| `OAUTH_GITHUB_CLIENT_SECRET` | None | GitHub OAuth application client secret |
+| `OAUTH_GOOGLE_CLIENT_ID` | None | Google OAuth client ID |
+| `OAUTH_GOOGLE_CLIENT_SECRET` | None | Google OAuth client secret |
+
+### Stripe Billing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STRIPE_SECRET_KEY` | None | Stripe API secret key |
+| `STRIPE_WEBHOOK_SECRET` | None | Stripe webhook signing secret |
+| `STRIPE_PRICE_ID_PRO` | None | Stripe price ID for Pro plan |
+| `STRIPE_PRICE_ID_TEAM` | None | Stripe price ID for Team plan |
+
 ### Deployment
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `APP_BASE_URL` | `https://app.mockforge.dev` | Base URL for app links in emails |
+| `APP_BASE_URL` | `http://localhost:3000` | Base URL for OAuth callbacks and email links |
 | `MOCKFORGE_BASE_URL` | None | MockForge API base URL |
 | `FLYIO_API_TOKEN` | None | Fly.io API token for deployments |
 | `FLYIO_ORG_SLUG` | None | Fly.io organization slug |
@@ -405,4 +425,4 @@ RUST_LOG=info
 
 ---
 
-*Last Updated: 2024-12-27*
+*Last Updated: 2025-12-27*

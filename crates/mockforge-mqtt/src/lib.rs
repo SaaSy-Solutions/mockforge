@@ -1,18 +1,67 @@
 //! MQTT protocol support for MockForge
 //!
-//! This crate provides MQTT broker functionality for IoT and pub/sub testing scenarios.
+//! This crate provides a complete MQTT 3.1.1 broker implementation for IoT and pub/sub
+//! testing scenarios.
+//!
+//! ## Features
+//!
+//! - **Full MQTT 3.1.1 Protocol Support**: Handles all control packet types including
+//!   CONNECT, PUBLISH, SUBSCRIBE, and their acknowledgments
+//! - **QoS 0, 1, 2 Support**: Fire-and-forget, at-least-once, and exactly-once delivery
+//! - **Session Management**: Clean and persistent sessions with subscription restoration
+//! - **Topic Wildcards**: Supports + and # wildcards for flexible subscriptions
+//! - **Retained Messages**: Messages are stored and delivered to new subscribers
+//!
+//! ## Metrics and Observability
+//!
+//! The MQTT broker includes built-in metrics collection for monitoring:
+//! - Connection counts (total and active)
+//! - Message publish/delivery rates
+//! - Subscription tracking
+//! - QoS level distribution
+//! - Error rates and latency
+//!
+//! Use [`MqttMetrics`] to collect metrics and [`MqttMetricsExporter`] to export
+//! in Prometheus format.
+//!
+//! ## Usage
+//!
+//! ```no_run
+//! use mockforge_mqtt::{MqttConfig, start_mqtt_server};
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let config = MqttConfig::default();
+//!     start_mqtt_server(config).await.expect("Failed to start MQTT server");
+//! }
+//! ```
 
 pub mod broker;
 pub mod fixtures;
+pub mod metrics;
+pub mod protocol;
 pub mod qos;
 pub mod server;
+pub mod session;
 pub mod spec_registry;
+pub mod tls;
 pub mod topics;
 
 pub use broker::{MqttBroker, MqttConfig};
 pub use fixtures::{AutoPublishConfig, MqttFixture, MqttFixtureRegistry, MqttResponse};
-pub use server::start_mqtt_server;
+pub use metrics::{MqttMetrics, MqttMetricsExporter, MqttMetricsSnapshot};
+pub use protocol::{
+    ConnackCode, ConnackPacket, ConnectPacket, Packet, PacketDecoder, PacketEncoder, ProtocolError,
+    PublishPacket, QoS as ProtocolQoS, SubackPacket, SubackReturnCode, SubscribePacket,
+    UnsubscribePacket,
+};
+pub use server::{
+    start_mqtt_dual_server, start_mqtt_server, start_mqtt_server_with_metrics,
+    start_mqtt_tls_server, MqttServer,
+};
+pub use session::SessionManager;
 pub use spec_registry::MqttSpecRegistry;
+pub use tls::{create_tls_acceptor, create_tls_acceptor_with_client_auth, TlsError};
 pub use topics::TopicTree;
 
 #[cfg(test)]

@@ -815,8 +815,8 @@ mod tests {
     #[test]
     fn test_response_stub_with_fault_injection() {
         let fault_config = StubFaultInjectionConfig::http_error(vec![500]);
-        let stub = ResponseStub::new("GET", "/api/users", json!({}))
-            .with_fault_injection(fault_config);
+        let stub =
+            ResponseStub::new("GET", "/api/users", json!({})).with_fault_injection(fault_config);
 
         assert!(stub.has_fault_injection());
         assert!(stub.fault_injection().is_some());
@@ -845,9 +845,7 @@ mod tests {
 
     #[test]
     fn test_dynamic_stub_new() {
-        let stub = DynamicStub::new("GET", "/api/users", |ctx| {
-            json!({"path": ctx.path.clone()})
-        });
+        let stub = DynamicStub::new("GET", "/api/users", |ctx| json!({"path": ctx.path.clone()}));
 
         assert_eq!(stub.method, "GET");
         assert_eq!(stub.path, "/api/users");
@@ -915,9 +913,7 @@ mod tests {
 
     #[test]
     fn test_stub_builder_basic() {
-        let stub = StubBuilder::new("GET", "/api/users")
-            .body(json!({"users": []}))
-            .build();
+        let stub = StubBuilder::new("GET", "/api/users").body(json!({"users": []})).build();
 
         assert_eq!(stub.method, "GET");
         assert_eq!(stub.path, "/api/users");
@@ -926,9 +922,7 @@ mod tests {
 
     #[test]
     fn test_stub_builder_status() {
-        let stub = StubBuilder::new("GET", "/api/users")
-            .status(404)
-            .build();
+        let stub = StubBuilder::new("GET", "/api/users").status(404).build();
 
         assert_eq!(stub.status, 404);
     }
@@ -945,9 +939,7 @@ mod tests {
 
     #[test]
     fn test_stub_builder_latency() {
-        let stub = StubBuilder::new("GET", "/api/users")
-            .latency(500)
-            .build();
+        let stub = StubBuilder::new("GET", "/api/users").latency(500).build();
 
         assert_eq!(stub.latency_ms, Some(500));
     }
@@ -963,9 +955,7 @@ mod tests {
             state_responses: None,
         };
 
-        let stub = StubBuilder::new("GET", "/api/orders/{order_id}")
-            .state_machine(config)
-            .build();
+        let stub = StubBuilder::new("GET", "/api/orders/{order_id}").state_machine(config).build();
 
         assert!(stub.state_machine.is_some());
     }
@@ -974,9 +964,7 @@ mod tests {
     fn test_stub_builder_fault_injection() {
         let fault = StubFaultInjectionConfig::http_error(vec![500]);
 
-        let stub = StubBuilder::new("GET", "/api/users")
-            .fault_injection(fault)
-            .build();
+        let stub = StubBuilder::new("GET", "/api/users").fault_injection(fault).build();
 
         assert!(stub.fault_injection.is_some());
     }

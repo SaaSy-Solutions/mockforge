@@ -7,12 +7,44 @@
 //! - X-Content-Type-Options
 //! - Referrer-Policy
 //! - Permissions-Policy
+//!
+//! # Security Note
+//!
+//! The CSP policy defaults to strict/production mode for security.
+//! To enable development mode (permissive CSP), you must explicitly set
+//! `ENVIRONMENT=development`. This fail-safe approach ensures that
+//! production deployments are secure by default.
 
 use axum::{
     extract::Request,
     http::{HeaderValue, Response},
     middleware::Next,
 };
+use std::sync::OnceLock;
+use tracing::warn;
+
+/// Cache the environment check result to avoid repeated env var lookups
+static IS_DEVELOPMENT: OnceLock<bool> = OnceLock::new();
+
+/// Check if running in explicit development mode.
+/// Returns true ONLY if ENVIRONMENT is explicitly set to "development".
+/// This is a fail-safe design: unknown or missing values default to production (strict) mode.
+fn is_development_mode() -> bool {
+    *IS_DEVELOPMENT.get_or_init(|| {
+        let is_dev = std::env::var("ENVIRONMENT")
+            .map(|v| v.to_lowercase() == "development")
+            .unwrap_or(false);
+
+        if is_dev {
+            warn!(
+                "Running with ENVIRONMENT=development - using permissive CSP. \
+                 Set ENVIRONMENT=production for strict security headers."
+            );
+        }
+
+        is_dev
+    })
+}
 
 /// Security headers middleware
 /// Adds security headers to all responses
@@ -26,28 +58,31 @@ pub async fn security_headers_middleware(
     let headers = response.headers_mut();
 
     // Content-Security-Policy
-    // Allow self, and common CDNs for assets
-    // In production, this should be more restrictive
-    let csp = if std::env::var("ENVIRONMENT")
-        .unwrap_or_else(|_| "development".to_string()) == "production"
-    {
-        // Production CSP - more restrictive
+    // API servers should have restrictive CSP since they don't serve interactive HTML
+    // NOTE: Defaults to strict (production) CSP unless ENVIRONMENT=development is explicitly set
+    let csp = if is_development_mode() {
+        // Development CSP - more permissive for development tools and hot reload
+        // Only used when ENVIRONMENT=development is explicitly set
         "default-src 'self'; \
-         script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.sentry-cdn.com; \
-         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
+         script-src 'self' 'unsafe-inline' 'unsafe-eval'; \
+         style-src 'self' 'unsafe-inline'; \
+         connect-src 'self' http://localhost:* ws://localhost:* wss://localhost:* https://*.sentry.io; \
+         img-src 'self' data: https:; \
+         font-src 'self' data: https:; \
+         frame-ancestors 'self'"
+    } else {
+        // Production CSP - strict policy for API server (DEFAULT)
+        // No inline scripts/styles needed for JSON API responses
+        "default-src 'none'; \
+         script-src 'self' https://js.sentry-cdn.com; \
+         style-src 'self' https://fonts.googleapis.com; \
          font-src 'self' https://fonts.gstatic.com; \
          img-src 'self' data: https:; \
          connect-src 'self' https://*.sentry.io https://api.postmarkapp.com https://api.brevo.com; \
          frame-ancestors 'none'; \
          base-uri 'self'; \
-         form-action 'self'"
-    } else {
-        // Development CSP - more permissive for development tools
-        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; \
-         connect-src 'self' http://localhost:* ws://localhost:* wss://localhost:* https://*.sentry.io; \
-         img-src 'self' data: https:; \
-         font-src 'self' data: https:; \
-         frame-ancestors 'self'"
+         form-action 'self'; \
+         upgrade-insecure-requests"
     };
     headers.insert(
         "content-security-policy",
@@ -55,10 +90,8 @@ pub async fn security_headers_middleware(
     );
 
     // Strict-Transport-Security (HSTS)
-    // Only in production and when using HTTPS
-    if std::env::var("ENVIRONMENT")
-        .unwrap_or_else(|_| "development".to_string()) == "production"
-    {
+    // Enabled by default (production mode) unless ENVIRONMENT=development
+    if !is_development_mode() {
         // HSTS: max-age=31536000 (1 year), includeSubDomains, preload
         headers.insert(
             "strict-transport-security",
@@ -115,11 +148,11 @@ pub fn security_headers_layer() -> impl tower::Layer<axum::Router> + Clone {
     use tower::Layer;
     use tower_http::set_header::SetResponseHeader;
 
-    // Create layers for each header
+    // Create layers for each header (strict CSP for API server)
     let csp_layer = SetResponseHeader::overriding(
         "content-security-policy",
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';",
+            "default-src 'none'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'self'",
         ),
     );
 

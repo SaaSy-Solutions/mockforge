@@ -1,0 +1,87 @@
+# User CRUD Operations Test Scenario
+# Tests the complete lifecycle of user management
+
+name: "User CRUD Operations"
+description: "Tests create, read, update, and delete operations for users"
+
+steps:
+  - name: "Create User"
+    request:
+      method: POST
+      path: /api/users
+      headers:
+        Content-Type: application/json
+      body:
+        name: "Test User"
+        email: "test@example.com"
+    response:
+      status: 201
+      body:
+        id: "{{uuid}}"
+        name: "Test User"
+        email: "test@example.com"
+        created_at: "{{now 'iso'}}"
+    capture:
+      user_id: "$.id"
+
+  - name: "Get User"
+    request:
+      method: GET
+      path: "/api/users/{{user_id}}"
+    response:
+      status: 200
+      body:
+        id: "{{user_id}}"
+        name: "Test User"
+        email: "test@example.com"
+
+  - name: "Update User"
+    request:
+      method: PUT
+      path: "/api/users/{{user_id}}"
+      headers:
+        Content-Type: application/json
+      body:
+        name: "Updated User"
+    response:
+      status: 200
+      body:
+        id: "{{user_id}}"
+        name: "Updated User"
+        email: "test@example.com"
+        updated_at: "{{now 'iso'}}"
+
+  - name: "List Users"
+    request:
+      method: GET
+      path: /api/users
+      query:
+        page: 1
+        per_page: 10
+    response:
+      status: 200
+      body:
+        data:
+          - id: "{{user_id}}"
+            name: "Updated User"
+        pagination:
+          page: 1
+          per_page: 10
+
+  - name: "Delete User"
+    request:
+      method: DELETE
+      path: "/api/users/{{user_id}}"
+    response:
+      status: 204
+      body: null
+
+  - name: "Verify Deletion"
+    request:
+      method: GET
+      path: "/api/users/{{user_id}}"
+    response:
+      status: 404
+      body:
+        error:
+          code: "NOT_FOUND"

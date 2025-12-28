@@ -1,10 +1,12 @@
 //! Admission webhook for validating and mutating ChaosOrchestration resources
 
 use crate::crd::{ChaosOrchestration, ChaosOrchestrationSpec};
+use cron::Schedule;
 // Note: k8s-openapi doesn't include admission API types, so we define them manually
 // These match the Kubernetes admission webhook API v1
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
 use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,11 +167,25 @@ impl WebhookHandler {
         Ok(())
     }
 
-    /// Check if cron expression is valid (simplified)
-    fn is_valid_cron(&self, _schedule: &str) -> bool {
-        // In production, use a proper cron parser
-        // For now, just check it's not empty
-        true
+    /// Check if cron expression is valid
+    ///
+    /// Validates the cron expression using the `cron` crate which supports
+    /// standard cron syntax with seconds (6 or 7 fields).
+    fn is_valid_cron(&self, schedule: &str) -> bool {
+        if schedule.is_empty() {
+            return false;
+        }
+
+        // Try to parse as a cron expression
+        // The cron crate expects 6 or 7 fields: sec min hour day-of-month month day-of-week [year]
+        // Kubernetes uses 5-field cron (min hour day month weekday), so we prepend "0" for seconds
+        let cron_expr = if schedule.split_whitespace().count() == 5 {
+            format!("0 {}", schedule)
+        } else {
+            schedule.to_string()
+        };
+
+        Schedule::from_str(&cron_expr).is_ok()
     }
 
     /// Mutate orchestration (set defaults)
@@ -227,5 +243,32 @@ mod tests {
         };
 
         assert!(handler.validate_spec(&spec).is_err());
+    }
+
+    #[test]
+    fn test_valid_cron_expressions() {
+        let handler = WebhookHandler::new();
+
+        // Standard 5-field K8s cron expressions
+        assert!(handler.is_valid_cron("0 * * * *")); // Every hour
+        assert!(handler.is_valid_cron("*/15 * * * *")); // Every 15 minutes
+        assert!(handler.is_valid_cron("0 0 * * *")); // Daily at midnight
+        assert!(handler.is_valid_cron("0 0 * * 0")); // Weekly on Sunday
+        assert!(handler.is_valid_cron("0 0 1 * *")); // Monthly on the 1st
+
+        // 6-field cron expressions (with seconds)
+        assert!(handler.is_valid_cron("0 0 * * * *")); // Every hour at :00
+        assert!(handler.is_valid_cron("30 */5 * * * *")); // Every 5 minutes at :30 sec
+    }
+
+    #[test]
+    fn test_invalid_cron_expressions() {
+        let handler = WebhookHandler::new();
+
+        assert!(!handler.is_valid_cron("")); // Empty
+        assert!(!handler.is_valid_cron("invalid")); // Invalid text
+        assert!(!handler.is_valid_cron("60 * * * *")); // Invalid minute (>59)
+        assert!(!handler.is_valid_cron("* 25 * * *")); // Invalid hour (>23)
+        assert!(!handler.is_valid_cron("* * 32 * *")); // Invalid day (>31)
     }
 }

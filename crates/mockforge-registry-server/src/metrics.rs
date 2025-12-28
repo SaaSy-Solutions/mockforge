@@ -74,6 +74,7 @@ pub fn error_code_from_api_error(error: &crate::error::ApiError) -> &'static str
         }
         ApiError::AuthRequired => "auth_required",
         ApiError::PermissionDenied => "permission_denied",
+        ApiError::InsufficientScope { .. } => "insufficient_scope",
         ApiError::OrganizationNotFound => "organization_not_found",
         ApiError::InvalidRequest(_) => "invalid_request",
         ApiError::ValidationFailed(_) => "validation_failed",
@@ -146,6 +147,15 @@ mod tests {
     }
 
     #[test]
+    fn test_error_code_insufficient_scope() {
+        let error = ApiError::InsufficientScope {
+            required: "publish:packages".to_string(),
+            scopes: vec!["read:packages".to_string()],
+        };
+        assert_eq!(error_code_from_api_error(&error), "insufficient_scope");
+    }
+
+    #[test]
     fn test_error_code_organization_not_found() {
         let error = ApiError::OrganizationNotFound;
         assert_eq!(error_code_from_api_error(&error), "organization_not_found");
@@ -200,6 +210,10 @@ mod tests {
             ApiError::ScenarioExists("".to_string()),
             ApiError::AuthRequired,
             ApiError::PermissionDenied,
+            ApiError::InsufficientScope {
+                required: "test".to_string(),
+                scopes: vec![],
+            },
             ApiError::OrganizationNotFound,
             ApiError::InvalidRequest("".to_string()),
             ApiError::ValidationFailed("".to_string()),

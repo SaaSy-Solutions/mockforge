@@ -70,7 +70,15 @@ impl CoreBridge {
 
         // Create TeamWorkspace with the serialized workspace in config
         let mut team_workspace = TeamWorkspace::new(core_workspace.name.clone(), owner_id);
-        team_workspace.id = Uuid::parse_str(&core_workspace.id).unwrap_or_else(|_| Uuid::new_v4()); // Fallback to new UUID if parse fails
+
+        // Parse the workspace ID - return error if invalid to prevent data corruption
+        team_workspace.id = Uuid::parse_str(&core_workspace.id).map_err(|e| {
+            CollabError::Internal(format!(
+                "Invalid workspace ID '{}': {}. Cannot convert to TeamWorkspace with corrupted ID.",
+                core_workspace.id, e
+            ))
+        })?;
+
         team_workspace.description = core_workspace.description.clone();
         team_workspace.config = workspace_json;
         team_workspace.created_at = core_workspace.created_at;
@@ -262,5 +270,46 @@ mod tests {
         // Verify it still works
         let restored = bridge.team_to_core(&team_workspace).unwrap();
         assert_eq!(restored.name, "Test");
+    }
+
+    #[test]
+    fn test_invalid_uuid_returns_error() {
+        let bridge = CoreBridge::new("/tmp/test");
+        let owner_id = Uuid::new_v4();
+
+        // Create a workspace with an invalid UUID
+        let mut core_workspace = CoreWorkspace::new("Test Invalid UUID".to_string());
+        core_workspace.id = "not-a-valid-uuid".to_string();
+
+        // Attempting to convert should return an error, not silently create a new UUID
+        let result = bridge.core_to_team(&core_workspace, owner_id);
+        assert!(result.is_err(), "Expected error for invalid UUID, but conversion succeeded");
+
+        // Verify the error message mentions the invalid ID
+        if let Err(e) = result {
+            let error_msg = format!("{}", e);
+            assert!(
+                error_msg.contains("not-a-valid-uuid"),
+                "Error message should contain the invalid UUID: {}",
+                error_msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_valid_uuid_conversion() {
+        let bridge = CoreBridge::new("/tmp/test");
+        let owner_id = Uuid::new_v4();
+        let workspace_uuid = Uuid::new_v4();
+
+        // Create a workspace with a valid UUID
+        let mut core_workspace = CoreWorkspace::new("Test Valid UUID".to_string());
+        core_workspace.id = workspace_uuid.to_string();
+
+        // Conversion should succeed
+        let team_workspace = bridge.core_to_team(&core_workspace, owner_id).unwrap();
+
+        // Verify the UUID was preserved correctly
+        assert_eq!(team_workspace.id, workspace_uuid);
     }
 }

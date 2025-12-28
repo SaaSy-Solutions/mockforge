@@ -1,5 +1,5 @@
 -- MockOps Coverage Metrics Migration
--- Migration 002: Coverage metrics for scenario usage, persona CI hits, endpoint coverage
+-- Migration 003: Coverage metrics for scenario usage, persona CI hits, endpoint coverage
 
 -- ============================================================================
 -- 1. Scenario Usage Metrics

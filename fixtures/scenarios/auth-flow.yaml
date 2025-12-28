@@ -1,0 +1,87 @@
+# Authentication Flow Test Scenario
+# Tests login, token refresh, and logout
+
+name: "Authentication Flow"
+description: "Complete authentication lifecycle including login, refresh, and logout"
+
+steps:
+  - name: "Login with Credentials"
+    request:
+      method: POST
+      path: /auth/login
+      headers:
+        Content-Type: application/json
+      body:
+        email: "user@example.com"
+        password: "password123"
+    response:
+      status: 200
+      body:
+        access_token: "{{jwt_token}}"
+        refresh_token: "{{uuid}}"
+        token_type: "Bearer"
+        expires_in: 3600
+    capture:
+      access_token: "$.access_token"
+      refresh_token: "$.refresh_token"
+
+  - name: "Access Protected Resource"
+    request:
+      method: GET
+      path: /api/me
+      headers:
+        Authorization: "Bearer {{access_token}}"
+    response:
+      status: 200
+      body:
+        id: "user_123"
+        email: "user@example.com"
+
+  - name: "Refresh Token"
+    request:
+      method: POST
+      path: /auth/refresh
+      headers:
+        Content-Type: application/json
+      body:
+        refresh_token: "{{refresh_token}}"
+    response:
+      status: 200
+      body:
+        access_token: "{{jwt_token}}"
+        refresh_token: "{{uuid}}"
+        token_type: "Bearer"
+        expires_in: 3600
+    capture:
+      new_access_token: "$.access_token"
+      new_refresh_token: "$.refresh_token"
+
+  - name: "Access with New Token"
+    request:
+      method: GET
+      path: /api/me
+      headers:
+        Authorization: "Bearer {{new_access_token}}"
+    response:
+      status: 200
+
+  - name: "Logout"
+    request:
+      method: POST
+      path: /auth/logout
+      headers:
+        Authorization: "Bearer {{new_access_token}}"
+    response:
+      status: 204
+
+  - name: "Verify Token Invalidated"
+    request:
+      method: GET
+      path: /api/me
+      headers:
+        Authorization: "Bearer {{new_access_token}}"
+    response:
+      status: 401
+      body:
+        error:
+          code: "UNAUTHORIZED"

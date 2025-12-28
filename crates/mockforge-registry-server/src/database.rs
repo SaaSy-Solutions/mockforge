@@ -10,7 +10,17 @@ pub struct Database {
 
 impl Database {
     pub async fn connect(database_url: &str) -> Result<Self> {
-        let pool = PgPoolOptions::new().max_connections(5).connect(database_url).await?;
+        // DATABASE_MAX_CONNECTIONS: Maximum number of database connections in the pool
+        // Default: 20
+        let max_connections: u32 = std::env::var("DATABASE_MAX_CONNECTIONS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(20);
+
+        let pool = PgPoolOptions::new()
+            .max_connections(max_connections)
+            .connect(database_url)
+            .await?;
 
         Ok(Self { pool })
     }
@@ -63,6 +73,100 @@ impl Database {
         let count: (i64,) =
             sqlx::query_as("SELECT COUNT(*) FROM users").fetch_one(&self.pool).await?;
         Ok(count.0)
+    }
+
+    // ==================== Token Revocation Functions ====================
+
+    /// Store a refresh token JTI for tracking (called on token creation)
+    pub async fn store_refresh_token_jti(
+        &self,
+        jti: &str,
+        user_id: uuid::Uuid,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO token_revocations (jti, user_id, expires_at)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (jti) DO NOTHING
+            "#,
+        )
+        .bind(jti)
+        .bind(user_id)
+        .bind(expires_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Check if a refresh token JTI has been revoked
+    pub async fn is_token_revoked(&self, jti: &str) -> Result<bool> {
+        let result: Option<(Option<chrono::DateTime<chrono::Utc>>,)> = sqlx::query_as(
+            r#"
+            SELECT revoked_at FROM token_revocations WHERE jti = $1
+            "#,
+        )
+        .bind(jti)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match result {
+            // Token found and has a revoked_at timestamp = revoked
+            Some((Some(_),)) => Ok(true),
+            // Token found but no revoked_at timestamp = not revoked (active)
+            Some((None,)) => Ok(false),
+            // Token not found = treat as revoked (unknown tokens should be rejected)
+            None => Ok(true),
+        }
+    }
+
+    /// Revoke a refresh token JTI (called on logout or token refresh)
+    pub async fn revoke_token(&self, jti: &str, reason: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE token_revocations
+            SET revoked_at = NOW(), revocation_reason = $2
+            WHERE jti = $1 AND revoked_at IS NULL
+            "#,
+        )
+        .bind(jti)
+        .bind(reason)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Revoke all refresh tokens for a user (called on password change, security events)
+    pub async fn revoke_all_user_tokens(&self, user_id: uuid::Uuid, reason: &str) -> Result<u64> {
+        let result = sqlx::query(
+            r#"
+            UPDATE token_revocations
+            SET revoked_at = NOW(), revocation_reason = $2
+            WHERE user_id = $1 AND revoked_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .bind(reason)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// Clean up expired token revocation records (for maintenance)
+    pub async fn cleanup_expired_tokens(&self) -> Result<u64> {
+        let result = sqlx::query(
+            r#"
+            DELETE FROM token_revocations
+            WHERE expires_at < NOW() - INTERVAL '1 day'
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
     }
 }
 
@@ -244,8 +348,8 @@ mod tests {
 
     #[test]
     fn test_max_connections_config() {
-        // Verify the max_connections value is reasonable
-        let max_connections = 5;
+        // Verify the default max_connections value is reasonable
+        let max_connections = 20; // Default value from DATABASE_MAX_CONNECTIONS env var
 
         assert!(max_connections > 0);
         assert!(max_connections <= 100); // Reasonable upper bound

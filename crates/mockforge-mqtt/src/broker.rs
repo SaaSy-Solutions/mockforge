@@ -24,6 +24,18 @@ pub struct MqttConfig {
     pub max_packet_size: usize,
     pub keep_alive_secs: u16,
     pub version: MqttVersion,
+    /// Enable TLS
+    pub tls_enabled: bool,
+    /// TLS port (8883 is standard MQTTS port)
+    pub tls_port: u16,
+    /// Path to TLS certificate file (PEM format)
+    pub tls_cert_path: Option<std::path::PathBuf>,
+    /// Path to TLS private key file (PEM format)
+    pub tls_key_path: Option<std::path::PathBuf>,
+    /// Path to CA certificate for client verification (optional)
+    pub tls_ca_path: Option<std::path::PathBuf>,
+    /// Require client certificate authentication
+    pub tls_client_auth: bool,
 }
 
 impl Default for MqttConfig {
@@ -35,6 +47,12 @@ impl Default for MqttConfig {
             max_packet_size: 1024 * 1024, // 1MB
             keep_alive_secs: 60,
             version: MqttVersion::default(),
+            tls_enabled: false,
+            tls_port: 8883,
+            tls_cert_path: None,
+            tls_key_path: None,
+            tls_ca_path: None,
+            tls_client_auth: false,
         }
     }
 }
@@ -629,6 +647,7 @@ mod tests {
             max_packet_size: 2048,
             keep_alive_secs: 120,
             version: MqttVersion::V3_1_1,
+            ..Default::default()
         };
         assert_eq!(config.port, 8883);
         assert_eq!(config.host, "127.0.0.1");

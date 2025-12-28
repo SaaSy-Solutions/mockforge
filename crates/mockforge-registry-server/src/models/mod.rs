@@ -26,8 +26,9 @@ pub mod verification_token;
 
 pub use verification_token::VerificationToken;
 
-pub use api_token::ApiToken;
-pub use audit_log::{record_audit_event, AuditEventType};
+pub use api_token::{ApiToken, TokenScope};
+pub use audit_log::{record_audit_event, AuditEventType, AuditLog};
+pub use feature_usage::{FeatureType, FeatureUsage};
 pub use hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 pub use mock_environment::{MockEnvironment, MockEnvironmentName};
 pub use org_template::OrgTemplate;
@@ -41,7 +42,10 @@ pub use scenario_promotion::{PromotionStatus, ScenarioEnvironmentVersion, Scenar
 pub use scenario_review::ScenarioReview;
 pub use settings::{AiFeatureFlags, BYOKConfig, OrgAiSettings, OrgSetting, UserSetting};
 pub use sso::{SSOConfiguration, SSOSession};
-pub use subscription::Subscription;
+pub use subscription::{Subscription, SubscriptionStatus, UsageCounter};
+pub use suspicious_activity::{
+    record_suspicious_activity, SuspiciousActivity, SuspiciousActivityType,
+};
 pub use template::{Template, TemplateCategory, TemplateVersion};
 pub use template_review::TemplateReview;
 pub use user::User;

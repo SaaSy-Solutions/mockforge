@@ -1,0 +1,171 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    # Run mutation testing weekly on Sunday at 3 AM UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      crate:
+        description: 'Specific crate to test (or "all" for all crates)'
+        required: false
+        default: 'mockforge-core'
+      timeout:
+        description: 'Timeout per mutant in seconds'
+        required: false
+        default: '60'
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  mutation-test:
+    name: Mutation Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    strategy:
+      fail-fast: false
+      matrix:
+        crate:
+          - mockforge-core
+          - mockforge-http
+          - mockforge-schema
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: mutation-${{ matrix.crate }}
+
+      - name: Run mutation testing on ${{ matrix.crate }}
+        if: github.event.inputs.crate == 'all' || github.event.inputs.crate == matrix.crate || github.event.inputs.crate == ''
+        working-directory: crates/${{ matrix.crate }}
+        run: |
+          cargo mutants \
+            --timeout ${{ github.event.inputs.timeout || 60 }} \
+            --jobs 2 \
+            --output mutation-results \
+            --json mutation-report.json \
+            2>&1 | tee mutation-output.log
+
+      - name: Generate mutation score
+        if: always()
+        working-directory: crates/${{ matrix.crate }}
+        run: |
+          if [ -f mutation-report.json ]; then
+            # Parse JSON report to calculate mutation score
+            caught=$(jq '[.outcomes[] | select(.outcome == "Killed" or .outcome == "Timeout")] | length' mutation-report.json)
+            survived=$(jq '[.outcomes[] | select(.outcome == "Missed")] | length' mutation-report.json)
+            total=$((caught + survived))
+
+            if [ $total -gt 0 ]; then
+              score=$(echo "scale=2; $caught * 100 / $total" | bc)
+              echo "## 🧬 Mutation Testing Results for ${{ matrix.crate }}" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "| Caught (Killed/Timeout) | $caught |" >> $GITHUB_STEP_SUMMARY
+              echo "| Survived (Missed) | $survived |" >> $GITHUB_STEP_SUMMARY
+              echo "| Total Mutants | $total |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Mutation Score** | **${score}%** |" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+
+              # Set threshold (configurable)
+              threshold=70
+              if (( $(echo "$score < $threshold" | bc -l) )); then
+                echo "::warning::Mutation score ($score%) is below threshold ($threshold%)"
+              fi
+            fi
+          else
+            echo "No mutation report found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload mutation results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: mutation-results-${{ matrix.crate }}
+          path: |
+            crates/${{ matrix.crate }}/mutation-results/
+            crates/${{ matrix.crate }}/mutation-report.json
+            crates/${{ matrix.crate }}/mutation-output.log
+          retention-days: 30
+
+  aggregate-results:
+    name: Aggregate Mutation Results
+    needs: mutation-test
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Download all mutation results
+        uses: actions/download-artifact@v5
+        with:
+          pattern: mutation-results-*
+          path: results
+
+      - name: Generate combined report
+        run: |
+          echo "# 🧬 Mutation Testing Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Crate | Caught | Survived | Score |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|----------|-------|" >> $GITHUB_STEP_SUMMARY
+
+          total_caught=0
+          total_survived=0
+
+          for dir in results/mutation-results-*/; do
+            crate=$(basename "$dir" | sed 's/mutation-results-//')
+            if [ -f "$dir/mutation-report.json" ]; then
+              caught=$(jq '[.outcomes[] | select(.outcome == "Killed" or .outcome == "Timeout")] | length' "$dir/mutation-report.json")
+              survived=$(jq '[.outcomes[] | select(.outcome == "Missed")] | length' "$dir/mutation-report.json")
+              total=$((caught + survived))
+              if [ $total -gt 0 ]; then
+                score=$(echo "scale=2; $caught * 100 / $total" | bc)
+                echo "| $crate | $caught | $survived | ${score}% |" >> $GITHUB_STEP_SUMMARY
+                total_caught=$((total_caught + caught))
+                total_survived=$((total_survived + survived))
+              fi
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          overall_total=$((total_caught + total_survived))
+          if [ $overall_total -gt 0 ]; then
+            overall_score=$(echo "scale=2; $total_caught * 100 / $overall_total" | bc)
+            echo "**Overall Mutation Score: ${overall_score}%**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Create issue for low mutation score
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // This runs only on scheduled workflows
+            if (context.eventName !== 'schedule') return;
+
+            // Check if there's an existing open issue
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'mutation-testing',
+              state: 'open'
+            });
+
+            // Only create issue if mutation score is significantly low
+            // This would need to read from the artifacts in a real implementation
+            console.log('Mutation testing completed. Review results in workflow summary.');

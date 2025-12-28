@@ -1,8 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { AlertCircle } from 'lucide-react'
 import Editor from '@monaco-editor/react'
+import { z } from 'zod'
 import { cn } from '@/lib/utils'
+import EditorSkeleton from '@/components/EditorSkeleton'
 import type { WebsocketFormProps } from '@/types/protocol-configs'
+
+// Validation schema for WebSocket configuration
+const websocketConfigSchema = z.object({
+  path: z.string().min(1, 'Path is required').regex(/^\//, 'Path must start with /'),
+})
 
 interface JsonEditorErrors {
   onConnect: string | null
@@ -17,12 +24,31 @@ export default function WebsocketEndpointForm({ config, onChange, onValidationCh
     onMessageSend: null,
     onMessageBroadcast: null,
   })
+  const [touched, setTouched] = useState<Set<string>>(new Set())
+
+  // Validate path field
+  const pathError = useMemo((): string | undefined => {
+    const result = websocketConfigSchema.safeParse(config)
+    if (result.success) return undefined
+
+    const pathIssue = result.error.issues.find(i => i.path[0] === 'path')
+    return pathIssue?.message
+  }, [config])
 
   // Report validation state to parent when errors change
   useEffect(() => {
-    const hasErrors = Object.values(jsonErrors).some((error) => error !== null)
-    onValidationChange?.(!hasErrors)
-  }, [jsonErrors, onValidationChange])
+    const hasJsonErrors = Object.values(jsonErrors).some((error) => error !== null)
+    const hasPathError = !!pathError
+    onValidationChange?.(!hasJsonErrors && !hasPathError)
+  }, [jsonErrors, pathError, onValidationChange])
+
+  const handleBlur = (field: string) => {
+    setTouched(prev => new Set([...prev, field]))
+  }
+
+  const getPathError = (): string | undefined => {
+    return touched.has('path') ? pathError : undefined
+  }
 
   const updateAction = (event: 'on_connect' | 'on_message' | 'on_disconnect', action: any) => {
     onChange({
@@ -37,14 +63,29 @@ export default function WebsocketEndpointForm({ config, onChange, onValidationCh
       <div className="rounded-lg border border-border bg-card p-6">
         <h2 className="mb-4 text-lg font-semibold">WebSocket Configuration</h2>
         <div>
-          <label className="mb-2 block text-sm font-medium">Path</label>
+          <label htmlFor="ws-path" className="mb-2 block text-sm font-medium">
+            Path <span className="text-destructive">*</span>
+          </label>
           <input
+            id="ws-path"
             type="text"
             value={config.path}
             onChange={(e) => onChange({ ...config, path: e.target.value })}
-            className="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            onBlur={() => handleBlur('path')}
+            aria-invalid={!!getPathError()}
+            aria-describedby={getPathError() ? 'ws-path-error' : undefined}
+            className={cn(
+              'w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring',
+              getPathError() ? 'border-destructive' : 'border-input'
+            )}
             placeholder="/ws"
           />
+          {getPathError() && (
+            <p id="ws-path-error" className="mt-1 flex items-center gap-1 text-sm text-destructive">
+              <AlertCircle className="h-3 w-3" />
+              {getPathError()}
+            </p>
+          )}
         </div>
       </div>
 
@@ -53,7 +94,7 @@ export default function WebsocketEndpointForm({ config, onChange, onValidationCh
         <h2 className="mb-4 text-lg font-semibold">Event Handlers</h2>
 
         {/* Tabs */}
-        <div className="mb-4 flex space-x-2 border-b border-border">
+        <div className="mb-4 flex space-x-2 border-b border-border" role="tablist" aria-label="WebSocket event handlers">
           {[
             { id: 'connect', label: 'On Connect' },
             { id: 'message', label: 'On Message' },
@@ -61,9 +102,13 @@ export default function WebsocketEndpointForm({ config, onChange, onValidationCh
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              role="tab"
+              id={`ws-tab-${tab.id}`}
+              aria-selected={activeTab === tab.id}
+              aria-controls={`ws-panel-${tab.id}`}
+              onClick={() => setActiveTab(tab.id as 'connect' | 'message' | 'disconnect')}
               className={cn(
-                'px-4 py-2 text-sm font-medium',
+                'px-4 py-2 text-sm font-medium transition-colors',
                 activeTab === tab.id
                   ? 'border-b-2 border-primary text-primary'
                   : 'text-muted-foreground hover:text-foreground'
@@ -76,7 +121,7 @@ export default function WebsocketEndpointForm({ config, onChange, onValidationCh
 
         {/* On Connect */}
         {activeTab === 'connect' && (
-          <div className="space-y-4">
+          <div role="tabpanel" id="ws-panel-connect" aria-labelledby="ws-tab-connect" className="space-y-4">
             <div>
               <label className="mb-2 flex items-center space-x-2">
                 <input
@@ -122,6 +167,7 @@ export default function WebsocketEndpointForm({ config, onChange, onValidationCh
                       }
                     }}
                     theme="vs-dark"
+                    loading={<EditorSkeleton height="200px" />}
                     options={{
                       minimap: { enabled: false },
                       fontSize: 13,
@@ -141,10 +187,11 @@ export default function WebsocketEndpointForm({ config, onChange, onValidationCh
 
         {/* On Message */}
         {activeTab === 'message' && (
-          <div className="space-y-4">
+          <div role="tabpanel" id="ws-panel-message" aria-labelledby="ws-tab-message" className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-medium">Action</label>
+              <label htmlFor="ws-message-action" className="mb-2 block text-sm font-medium">Action</label>
               <select
+                id="ws-message-action"
                 value={config.on_message?.type || 'none'}
                 onChange={(e) => {
                   if (e.target.value === 'none') {
@@ -191,6 +238,7 @@ export default function WebsocketEndpointForm({ config, onChange, onValidationCh
                       }
                     }}
                     theme="vs-dark"
+                    loading={<EditorSkeleton height="200px" />}
                     options={{
                       minimap: { enabled: false },
                       fontSize: 13,
@@ -230,6 +278,7 @@ export default function WebsocketEndpointForm({ config, onChange, onValidationCh
                       }
                     }}
                     theme="vs-dark"
+                    loading={<EditorSkeleton height="200px" />}
                     options={{
                       minimap: { enabled: false },
                       fontSize: 13,
@@ -249,7 +298,7 @@ export default function WebsocketEndpointForm({ config, onChange, onValidationCh
 
         {/* On Disconnect */}
         {activeTab === 'disconnect' && (
-          <div className="space-y-4">
+          <div role="tabpanel" id="ws-panel-disconnect" aria-labelledby="ws-tab-disconnect" className="space-y-4">
             <p className="text-sm text-muted-foreground">
               No action needed for disconnect events (handled automatically)
             </p>
