@@ -42,18 +42,23 @@ members = [
     "crates/mockforge-world-state",
 
     # SDK
+    "crates/mockforge-sdk",
 
     # Infrastructure
     "crates/mockforge-tunnel",
     "crates/mockforge-vbr",
+    "crates/mockforge-collab",
 
     # Main user-facing crates
+    "crates/mockforge-cli",
     "crates/mockforge-bench",
     "crates/mockforge-test",
+    "crates/mockforge-ui",
 
     # Server applications
     "crates/mockforge-k8s-operator",
     "crates/mockforge-runtime-daemon",
+    "crates/mockforge-registry-server",
 
     # Examples and integration tests
     "examples/plugins/response-graphql",
