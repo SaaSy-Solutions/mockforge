@@ -2,6 +2,32 @@
 
 ### Added
 
+- Nothing yet.
+
+### Changed
+
+- Nothing yet.
+
+### Fixed
+
+- Nothing yet.
+
+## [0.3.17] - 2025-12-28
+
+### Added
+
+- **[DevX] WAFBench YAML integration for security testing**: New `--wafbench-dir` flag to import Microsoft WAFBench CRS (Core Rule Set) attack patterns
+  - Parse WAFBench YAML test files from the [WAFBench project](https://github.com/microsoft/WAFBench)
+  - Support glob patterns for loading specific rule categories (e.g., `REQUEST-941-*` for XSS, `REQUEST-942-*` for SQLi)
+  - Extract attack payloads from URI parameters, headers, and request bodies
+  - Automatic CRS rule ID parsing from test metadata (e.g., `941100` for XSS attacks)
+  - Integrate WAFBench payloads with existing security testing framework
+  - Example usage:
+    ```bash
+    mockforge bench spec.yaml --wafbench-dir ./wafbench/REQUEST-941-*  # XSS rules
+    mockforge bench spec.yaml --wafbench-dir ./wafbench/**/*.yaml      # All rules
+    ```
+
 - **[DevX] Per-URI control mode for data-driven testing** (#79): New `--per-uri-control` flag for CSV/JSON data files that allows each row to specify HTTP method, URI, body, query params, headers, attack type, and expected status code
   - Enables fine-grained control over test requests directly from data files
   - Supports security testing per-URI with `attack_type` column
@@ -13,9 +39,15 @@
     POST,/virtualservice,"{""name"":""test""}",,,sqli,201
     ```
 
+- **[Protocol] AMQP TLS support**: Full TLS/SSL support for AMQP broker with configurable certificates
+- **[Protocol] MQTT protocol improvements**: Enhanced MQTT server with TLS, session management, and metrics
+- **[Protocol] gRPC dynamic service improvements**: Better dynamic proto loading and error handling
+- **[Registry] Security enhancements**: CSRF protection, request ID middleware, trusted proxy support, token revocation
+- **[UI] Frontend improvements**: Type safety fixes, mobile layout improvements, search/filter functionality
+
 ### Changed
 
-- Nothing yet.
+- Comprehensive dependency updates across workspace crates
 
 ### Fixed
 
@@ -23,6 +55,19 @@
   - Body configurations from params file are now correctly applied to POST/PUT/PATCH operations in `--crud-flow` mode
   - Fixed body serialization issue that caused "ReferenceError: object is not defined" error in generated k6 scripts
   - Body is now properly serialized as a JSON string for the Handlebars template
+- **[Core] Race conditions and flaky tests**: Resolved timing issues across test suite
+- **[Core] Panic-prone unwrap calls**: Replaced with safe error handling throughout codebase
+
+## [0.3.16] - 2025-12-27
+
+### Added
+
+- Version bump with dependency updates
+
+### Fixed
+
+- **[Test] Flaky test fixes**: Resolved race conditions and timing issues in integration tests
+- **[Core] Safe error handling**: Replaced panic-prone `.unwrap()` calls with proper error handling
 
 ## [0.3.15] - 2025-12-26
 
