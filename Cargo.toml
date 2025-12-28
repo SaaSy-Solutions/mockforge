@@ -1,64 +1,30 @@
 [workspace]
 members = [
     # Core foundation crates
-    "crates/mockforge-core",
     "crates/mockforge-data",
     "crates/mockforge-template-expansion",
-    "crates/mockforge-schema",
 
     # Protocol implementations
-    "crates/mockforge-http",
-    "crates/mockforge-ws",
-    "crates/mockforge-grpc",
-    "crates/mockforge-graphql",
-    "crates/mockforge-kafka",
-    "crates/mockforge-mqtt",
-    "crates/mockforge-amqp",
-    "crates/mockforge-smtp",
-    "crates/mockforge-ftp",
-    "crates/mockforge-tcp",
 
     # Plugin system
     "crates/mockforge-plugin-core",
-    "crates/mockforge-plugin-sdk",
-    "crates/mockforge-plugin-loader",
     "crates/mockforge-plugin-cli",
     "crates/mockforge-plugin-registry",
 
     # Observability & tracing
-    "crates/mockforge-observability",
     "crates/mockforge-tracing",
     "crates/mockforge-analytics",
 
     # Advanced features
-    "crates/mockforge-chaos",
-    "crates/mockforge-route-chaos",
-    "crates/mockforge-scenarios",
-    "crates/mockforge-vbr",
-    "crates/mockforge-world-state",
-    "crates/mockforge-collab",
-    "crates/mockforge-recorder",
-    "crates/mockforge-federation",
-    "crates/mockforge-pipelines",
 
     # Infrastructure
     "crates/mockforge-tunnel",
-    "crates/mockforge-ui",
-    "crates/mockforge-reporting",
 
     # Main user-facing crates
-    "crates/mockforge-cli",
-    "crates/mockforge-sdk",
 
     # Server applications
-    "crates/mockforge-registry-server",
-    "crates/mockforge-k8s-operator",
-    "crates/mockforge-runtime-daemon",
 
     # Testing & benchmarking
-    "crates/mockforge-test",
-    "crates/mockforge-bench",
-    "crates/mockforge-performance",
 
     # Examples and integration tests
     "examples/plugins/response-graphql",
