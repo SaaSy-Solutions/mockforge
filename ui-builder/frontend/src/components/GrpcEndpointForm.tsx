@@ -1,11 +1,17 @@
+import { useState, useEffect } from 'react'
+import { AlertCircle } from 'lucide-react'
 import Editor from '@monaco-editor/react'
+import { cn } from '@/lib/utils'
+import type { GrpcFormProps } from '@/types/protocol-configs'
 
-interface GrpcEndpointFormProps {
-  config: any
-  onChange: (config: any) => void
-}
+export default function GrpcEndpointForm({ config, onChange, onValidationChange }: GrpcFormProps) {
+  const [jsonError, setJsonError] = useState<string | null>(null)
 
-export default function GrpcEndpointForm({ config, onChange }: GrpcEndpointFormProps) {
+  // Report validation state to parent when error changes
+  useEffect(() => {
+    onValidationChange?.(jsonError === null)
+  }, [jsonError, onValidationChange])
+
   const updateResponse = (updates: any) => {
     onChange({
       ...config,
@@ -82,7 +88,10 @@ export default function GrpcEndpointForm({ config, onChange }: GrpcEndpointFormP
         <h2 className="mb-4 text-lg font-semibold">Response</h2>
         <div>
           <label className="mb-2 block text-sm font-medium">Response Body (JSON)</label>
-          <div className="rounded-lg border border-border">
+          <div className={cn(
+            'rounded-lg border',
+            jsonError ? 'border-destructive' : 'border-border'
+          )}>
             <Editor
               height="300px"
               defaultLanguage="json"
@@ -91,8 +100,10 @@ export default function GrpcEndpointForm({ config, onChange }: GrpcEndpointFormP
                 try {
                   const content = JSON.parse(value || '{}')
                   updateResponse({ body: { type: 'Static', content } })
+                  setJsonError(null)
                 } catch (e) {
-                  // Invalid JSON
+                  const errorMessage = e instanceof Error ? e.message : 'Invalid JSON'
+                  setJsonError(errorMessage)
                 }
               }}
               theme="vs-dark"
@@ -102,6 +113,12 @@ export default function GrpcEndpointForm({ config, onChange }: GrpcEndpointFormP
               }}
             />
           </div>
+          {jsonError && (
+            <div className="mt-2 flex items-center space-x-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              <span>Invalid JSON: {jsonError}</span>
+            </div>
+          )}
           <p className="mt-2 text-xs text-muted-foreground">
             Define the gRPC response message as JSON. It will be converted to protobuf format.
           </p>

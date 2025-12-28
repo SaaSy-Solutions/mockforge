@@ -1,6 +1,6 @@
 //! Plugin binary storage (S3-compatible)
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
     config::{Credentials, Region},
@@ -18,10 +18,34 @@ pub struct PluginStorage {
 impl PluginStorage {
     pub async fn new(config: &Config) -> Result<Self> {
         let aws_config = if let Some(endpoint) = &config.s3_endpoint {
-            // Custom endpoint (MinIO, etc.)
+            // Custom endpoint (MinIO, etc.) - requires explicit credentials
+            let access_key_id = std::env::var("AWS_ACCESS_KEY_ID")
+                .context("AWS_ACCESS_KEY_ID is required when using custom S3 endpoint")?;
+            let secret_access_key = std::env::var("AWS_SECRET_ACCESS_KEY")
+                .context("AWS_SECRET_ACCESS_KEY is required when using custom S3 endpoint")?;
+
+            // Validate that credentials are not empty
+            if access_key_id.trim().is_empty() {
+                anyhow::bail!(
+                    "AWS_ACCESS_KEY_ID cannot be empty when using custom S3 endpoint. \
+                     Please provide valid S3 credentials."
+                );
+            }
+            if secret_access_key.trim().is_empty() {
+                anyhow::bail!(
+                    "AWS_SECRET_ACCESS_KEY cannot be empty when using custom S3 endpoint. \
+                     Please provide valid S3 credentials."
+                );
+            }
+
+            tracing::info!(
+                "Using custom S3 endpoint: {} with explicit credentials",
+                endpoint
+            );
+
             let credentials = Credentials::new(
-                std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_default(),
-                std::env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_default(),
+                access_key_id,
+                secret_access_key,
                 None,
                 None,
                 "static",
@@ -34,7 +58,16 @@ impl PluginStorage {
                 .load()
                 .await
         } else {
-            // AWS S3
+            // AWS S3 - use default credentials provider chain (IAM role, env vars, ~/.aws/credentials, etc.)
+            tracing::info!(
+                "Using AWS S3 with default credentials provider chain (region: {})",
+                config.s3_region
+            );
+            tracing::warn!(
+                "Using AWS default credentials provider. Ensure IAM role, environment variables, \
+                 or ~/.aws/credentials are properly configured."
+            );
+
             aws_config::defaults(BehaviorVersion::latest())
                 .region(Region::new(config.s3_region.clone()))
                 .load()
@@ -223,6 +256,17 @@ impl PluginStorage {
     pub async fn delete_plugin(&self, key: &str) -> Result<()> {
         self.client.delete_object().bucket(&self.bucket).key(key).send().await?;
 
+        Ok(())
+    }
+
+    /// Health check - verify S3 connectivity by performing a HEAD bucket operation
+    pub async fn health_check(&self) -> Result<()> {
+        self.client
+            .head_bucket()
+            .bucket(&self.bucket)
+            .send()
+            .await
+            .context("S3 bucket health check failed")?;
         Ok(())
     }
 }

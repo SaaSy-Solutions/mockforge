@@ -1,14 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { AlertCircle } from 'lucide-react'
 import Editor from '@monaco-editor/react'
 import { cn } from '@/lib/utils'
+import type { WebsocketFormProps } from '@/types/protocol-configs'
 
-interface WebsocketEndpointFormProps {
-  config: any
-  onChange: (config: any) => void
+interface JsonEditorErrors {
+  onConnect: string | null
+  onMessageSend: string | null
+  onMessageBroadcast: string | null
 }
 
-export default function WebsocketEndpointForm({ config, onChange }: WebsocketEndpointFormProps) {
+export default function WebsocketEndpointForm({ config, onChange, onValidationChange }: WebsocketFormProps) {
   const [activeTab, setActiveTab] = useState<'connect' | 'message' | 'disconnect'>('connect')
+  const [jsonErrors, setJsonErrors] = useState<JsonEditorErrors>({
+    onConnect: null,
+    onMessageSend: null,
+    onMessageBroadcast: null,
+  })
+
+  // Report validation state to parent when errors change
+  useEffect(() => {
+    const hasErrors = Object.values(jsonErrors).some((error) => error !== null)
+    onValidationChange?.(!hasErrors)
+  }, [jsonErrors, onValidationChange])
 
   const updateAction = (event: 'on_connect' | 'on_message' | 'on_disconnect', action: any) => {
     onChange({
@@ -86,7 +100,10 @@ export default function WebsocketEndpointForm({ config, onChange }: WebsocketEnd
             {config.on_connect && (
               <div>
                 <label className="mb-2 block text-sm font-medium">Message</label>
-                <div className="rounded-lg border border-border">
+                <div className={cn(
+                  'rounded-lg border',
+                  jsonErrors.onConnect ? 'border-destructive' : 'border-border'
+                )}>
                   <Editor
                     height="200px"
                     defaultLanguage="json"
@@ -98,8 +115,10 @@ export default function WebsocketEndpointForm({ config, onChange }: WebsocketEnd
                           type: 'Send',
                           message: { type: 'Static', content },
                         })
+                        setJsonErrors((prev) => ({ ...prev, onConnect: null }))
                       } catch (e) {
-                        // Invalid JSON
+                        const errorMessage = e instanceof Error ? e.message : 'Invalid JSON'
+                        setJsonErrors((prev) => ({ ...prev, onConnect: errorMessage }))
                       }
                     }}
                     theme="vs-dark"
@@ -109,6 +128,12 @@ export default function WebsocketEndpointForm({ config, onChange }: WebsocketEnd
                     }}
                   />
                 </div>
+                {jsonErrors.onConnect && (
+                  <div className="mt-2 flex items-center space-x-2 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Invalid JSON: {jsonErrors.onConnect}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -144,7 +169,10 @@ export default function WebsocketEndpointForm({ config, onChange }: WebsocketEnd
             {config.on_message?.type === 'Send' && (
               <div>
                 <label className="mb-2 block text-sm font-medium">Response Message</label>
-                <div className="rounded-lg border border-border">
+                <div className={cn(
+                  'rounded-lg border',
+                  jsonErrors.onMessageSend ? 'border-destructive' : 'border-border'
+                )}>
                   <Editor
                     height="200px"
                     defaultLanguage="json"
@@ -156,8 +184,10 @@ export default function WebsocketEndpointForm({ config, onChange }: WebsocketEnd
                           type: 'Send',
                           message: { type: 'Static', content },
                         })
+                        setJsonErrors((prev) => ({ ...prev, onMessageSend: null }))
                       } catch (e) {
-                        // Invalid JSON
+                        const errorMessage = e instanceof Error ? e.message : 'Invalid JSON'
+                        setJsonErrors((prev) => ({ ...prev, onMessageSend: errorMessage }))
                       }
                     }}
                     theme="vs-dark"
@@ -167,12 +197,21 @@ export default function WebsocketEndpointForm({ config, onChange }: WebsocketEnd
                     }}
                   />
                 </div>
+                {jsonErrors.onMessageSend && (
+                  <div className="mt-2 flex items-center space-x-2 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Invalid JSON: {jsonErrors.onMessageSend}</span>
+                  </div>
+                )}
               </div>
             )}
             {config.on_message?.type === 'Broadcast' && (
               <div>
                 <label className="mb-2 block text-sm font-medium">Broadcast Message</label>
-                <div className="rounded-lg border border-border">
+                <div className={cn(
+                  'rounded-lg border',
+                  jsonErrors.onMessageBroadcast ? 'border-destructive' : 'border-border'
+                )}>
                   <Editor
                     height="200px"
                     defaultLanguage="json"
@@ -184,8 +223,10 @@ export default function WebsocketEndpointForm({ config, onChange }: WebsocketEnd
                           type: 'Broadcast',
                           message: { type: 'Static', content },
                         })
+                        setJsonErrors((prev) => ({ ...prev, onMessageBroadcast: null }))
                       } catch (e) {
-                        // Invalid JSON
+                        const errorMessage = e instanceof Error ? e.message : 'Invalid JSON'
+                        setJsonErrors((prev) => ({ ...prev, onMessageBroadcast: errorMessage }))
                       }
                     }}
                     theme="vs-dark"
@@ -195,6 +236,12 @@ export default function WebsocketEndpointForm({ config, onChange }: WebsocketEnd
                     }}
                   />
                 </div>
+                {jsonErrors.onMessageBroadcast && (
+                  <div className="mt-2 flex items-center space-x-2 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Invalid JSON: {jsonErrors.onMessageBroadcast}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

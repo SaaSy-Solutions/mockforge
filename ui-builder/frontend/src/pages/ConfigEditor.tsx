@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Download, Upload, Save } from 'lucide-react'
+import { Download, Upload, Save, Loader2 } from 'lucide-react'
 import Editor from '@monaco-editor/react'
 import { configApi } from '@/lib/api'
 
@@ -9,6 +9,8 @@ export default function ConfigEditor() {
   const queryClient = useQueryClient()
   const [config, setConfig] = useState<string>('')
   const [format, setFormat] = useState<'yaml' | 'json'>('yaml')
+  const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
 
   const { isLoading } = useQuery({
     queryKey: ['config'],
@@ -32,6 +34,7 @@ export default function ConfigEditor() {
   })
 
   const handleExport = async () => {
+    setIsExporting(true)
     try {
       const response = await configApi.export()
       const blob = new Blob([response.data], { type: 'application/x-yaml' })
@@ -44,6 +47,8 @@ export default function ConfigEditor() {
       toast.success('Configuration exported')
     } catch (error) {
       toast.error('Failed to export configuration')
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -55,6 +60,7 @@ export default function ConfigEditor() {
       const file = e.target.files[0]
       if (!file) return
 
+      setIsImporting(true)
       const reader = new FileReader()
       reader.onload = (e) => {
         const content = e.target?.result as string
@@ -62,6 +68,11 @@ export default function ConfigEditor() {
         const ext = file.name.split('.').pop()
         setFormat(ext === 'json' ? 'json' : 'yaml')
         toast.success('Configuration imported')
+        setIsImporting(false)
+      }
+      reader.onerror = () => {
+        toast.error('Failed to read file')
+        setIsImporting(false)
       }
       reader.readAsText(file)
     }
@@ -80,37 +91,54 @@ export default function ConfigEditor() {
   }
 
   return (
-    <div className="h-full p-8">
+    <div className="h-full p-4 md:p-8">
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-6 md:mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Configuration Editor</h1>
-          <p className="mt-1 text-muted-foreground">
+          <h1 className="text-2xl md:text-3xl font-bold">Configuration Editor</h1>
+          <p className="mt-1 text-sm md:text-base text-muted-foreground">
             Edit your MockForge server configuration
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleImport}
-            className="inline-flex items-center space-x-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+            disabled={isImporting || isExporting || saveMutation.isPending}
+            className="inline-flex items-center space-x-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Import configuration"
           >
-            <Upload className="h-4 w-4" />
-            <span>Import</span>
+            {isImporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            <span className="hidden sm:inline">{isImporting ? 'Importing...' : 'Import'}</span>
           </button>
           <button
             onClick={handleExport}
-            className="inline-flex items-center space-x-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+            disabled={isExporting || isImporting || saveMutation.isPending}
+            className="inline-flex items-center space-x-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Export configuration"
           >
-            <Download className="h-4 w-4" />
-            <span>Export</span>
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            <span className="hidden sm:inline">{isExporting ? 'Exporting...' : 'Export'}</span>
           </button>
           <button
             onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
-            className="inline-flex items-center space-x-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            disabled={saveMutation.isPending || isImporting || isExporting}
+            className="inline-flex items-center space-x-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Save configuration"
           >
-            <Save className="h-4 w-4" />
-            <span>{saveMutation.isPending ? 'Saving...' : 'Save'}</span>
+            {saveMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            <span className="hidden sm:inline">{saveMutation.isPending ? 'Saving...' : 'Save'}</span>
           </button>
         </div>
       </div>
@@ -121,20 +149,20 @@ export default function ConfigEditor() {
         <div className="flex space-x-2">
           <button
             onClick={() => setFormat('yaml')}
-            className={`rounded-lg px-3 py-1 text-sm ${
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               format === 'yaml'
                 ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-secondary-foreground'
+                : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
             }`}
           >
             YAML
           </button>
           <button
             onClick={() => setFormat('json')}
-            className={`rounded-lg px-3 py-1 text-sm ${
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               format === 'json'
                 ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-secondary-foreground'
+                : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
             }`}
           >
             JSON
@@ -143,7 +171,7 @@ export default function ConfigEditor() {
       </div>
 
       {/* Editor */}
-      <div className="rounded-lg border border-border overflow-hidden" style={{ height: 'calc(100vh - 300px)' }}>
+      <div className="rounded-lg border border-border overflow-hidden" style={{ height: 'calc(100vh - 280px)', minHeight: '300px' }}>
         <Editor
           height="100%"
           defaultLanguage={format}
@@ -152,7 +180,7 @@ export default function ConfigEditor() {
           onChange={(value) => setConfig(value || '')}
           theme="vs-dark"
           options={{
-            minimap: { enabled: true },
+            minimap: { enabled: window.innerWidth > 768 },
             fontSize: 14,
             wordWrap: 'on',
             formatOnPaste: true,

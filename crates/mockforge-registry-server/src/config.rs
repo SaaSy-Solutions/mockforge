@@ -1,7 +1,17 @@
 //! Server configuration
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::Deserialize;
+
+/// Helper to get a required environment variable with a descriptive error
+fn required_env(name: &str) -> Result<String> {
+    std::env::var(name).with_context(|| {
+        format!(
+            "Required environment variable '{name}' is not set. \
+             Please set it before starting the server."
+        )
+    })
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -27,27 +37,92 @@ pub struct Config {
 
     /// Analytics database path (optional, defaults to "mockforge-analytics.db" in current directory)
     pub analytics_db_path: Option<String>,
+
+    /// Graceful shutdown timeout in seconds
+    pub shutdown_timeout_secs: u64,
+
+    /// Redis URL for caching and temporary storage (optional)
+    pub redis_url: Option<String>,
+
+    /// Whether two-factor authentication is enabled (requires Redis)
+    pub two_factor_enabled: Option<bool>,
 }
 
 impl Config {
+    /// Load configuration from environment variables.
+    ///
+    /// Required environment variables:
+    /// - `DATABASE_URL`: Database connection URL
+    /// - `JWT_SECRET`: Secret key for JWT token signing
+    ///
+    /// Optional environment variables (with defaults):
+    /// - `PORT`: Server port (default: 8080)
+    /// - `S3_BUCKET`: S3 bucket name (default: "mockforge-plugins")
+    /// - `S3_REGION`: S3 region (default: "us-east-1")
+    /// - `S3_ENDPOINT`: Custom S3 endpoint for MinIO/compatible storage
+    /// - `MAX_PLUGIN_SIZE`: Maximum plugin size in bytes (default: 52428800 / 50MB)
+    /// - `RATE_LIMIT_PER_MINUTE`: Rate limit per minute (default: 60)
+    /// - `ANALYTICS_DB_PATH`: Path to analytics database
+    /// - `SHUTDOWN_TIMEOUT_SECS`: Graceful shutdown timeout in seconds (default: 30)
     pub fn load() -> Result<Self> {
         dotenvy::dotenv().ok();
 
+        // Collect all missing required variables first for better error reporting
+        let mut missing_vars = Vec::new();
+
+        let database_url = match required_env("DATABASE_URL") {
+            Ok(url) => Some(url),
+            Err(_) => {
+                missing_vars.push("DATABASE_URL");
+                None
+            }
+        };
+
+        let jwt_secret = match required_env("JWT_SECRET") {
+            Ok(secret) => Some(secret),
+            Err(_) => {
+                missing_vars.push("JWT_SECRET");
+                None
+            }
+        };
+
+        // Report all missing required variables at once
+        if !missing_vars.is_empty() {
+            anyhow::bail!(
+                "Missing required environment variables: {}. \
+                 Please ensure these are set before starting the server.",
+                missing_vars.join(", ")
+            );
+        }
+
         let config = Self {
-            port: std::env::var("PORT").unwrap_or_else(|_| "8080".to_string()).parse()?,
-            database_url: std::env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
-            jwt_secret: std::env::var("JWT_SECRET").expect("JWT_SECRET must be set"),
+            port: std::env::var("PORT")
+                .unwrap_or_else(|_| "8080".to_string())
+                .parse()
+                .context("PORT must be a valid port number (0-65535)")?,
+            database_url: database_url.unwrap(),
+            jwt_secret: jwt_secret.unwrap(),
             s3_bucket: std::env::var("S3_BUCKET")
                 .unwrap_or_else(|_| "mockforge-plugins".to_string()),
             s3_region: std::env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             s3_endpoint: std::env::var("S3_ENDPOINT").ok(),
             max_plugin_size: std::env::var("MAX_PLUGIN_SIZE")
                 .unwrap_or_else(|_| "52428800".to_string()) // 50MB
-                .parse()?,
+                .parse()
+                .context("MAX_PLUGIN_SIZE must be a valid number")?,
             rate_limit_per_minute: std::env::var("RATE_LIMIT_PER_MINUTE")
                 .unwrap_or_else(|_| "60".to_string())
-                .parse()?,
+                .parse()
+                .context("RATE_LIMIT_PER_MINUTE must be a valid number")?,
             analytics_db_path: std::env::var("ANALYTICS_DB_PATH").ok(),
+            shutdown_timeout_secs: std::env::var("SHUTDOWN_TIMEOUT_SECS")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse()
+                .context("SHUTDOWN_TIMEOUT_SECS must be a valid number")?,
+            redis_url: std::env::var("REDIS_URL").ok(),
+            two_factor_enabled: std::env::var("TWO_FACTOR_ENABLED")
+                .ok()
+                .map(|v| v.to_lowercase() == "true" || v == "1"),
         };
 
         Ok(config)
@@ -78,6 +153,7 @@ mod tests {
         assert_eq!(config.rate_limit_per_minute, 60);
         assert!(config.s3_endpoint.is_none());
         assert!(config.analytics_db_path.is_none());
+        assert_eq!(config.shutdown_timeout_secs, 30); // Default shutdown timeout
 
         // Clean up
         std::env::remove_var("DATABASE_URL");
@@ -97,6 +173,7 @@ mod tests {
         std::env::set_var("MAX_PLUGIN_SIZE", "10485760"); // 10MB
         std::env::set_var("RATE_LIMIT_PER_MINUTE", "120");
         std::env::set_var("ANALYTICS_DB_PATH", "/custom/path/analytics.db");
+        std::env::set_var("SHUTDOWN_TIMEOUT_SECS", "60");
 
         let config = Config::load().unwrap();
 
@@ -109,6 +186,7 @@ mod tests {
         assert_eq!(config.max_plugin_size, 10485760);
         assert_eq!(config.rate_limit_per_minute, 120);
         assert_eq!(config.analytics_db_path, Some("/custom/path/analytics.db".to_string()));
+        assert_eq!(config.shutdown_timeout_secs, 60);
 
         // Clean up
         std::env::remove_var("PORT");
@@ -120,6 +198,7 @@ mod tests {
         std::env::remove_var("MAX_PLUGIN_SIZE");
         std::env::remove_var("RATE_LIMIT_PER_MINUTE");
         std::env::remove_var("ANALYTICS_DB_PATH");
+        std::env::remove_var("SHUTDOWN_TIMEOUT_SECS");
     }
 
     #[test]
@@ -128,9 +207,14 @@ mod tests {
         std::env::remove_var("DATABASE_URL");
         std::env::set_var("JWT_SECRET", "test-secret");
 
-        let result = std::panic::catch_unwind(|| Config::load());
+        let result = Config::load();
 
         assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("DATABASE_URL"),
+            "Error should mention DATABASE_URL: {error_msg}"
+        );
 
         // Clean up
         std::env::remove_var("JWT_SECRET");
@@ -142,12 +226,34 @@ mod tests {
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::remove_var("JWT_SECRET");
 
-        let result = std::panic::catch_unwind(|| Config::load());
+        let result = Config::load();
 
         assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("JWT_SECRET"),
+            "Error should mention JWT_SECRET: {error_msg}"
+        );
 
         // Clean up
         std::env::remove_var("DATABASE_URL");
+    }
+
+    #[test]
+    fn test_config_missing_both_required_vars() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        std::env::remove_var("DATABASE_URL");
+        std::env::remove_var("JWT_SECRET");
+
+        let result = Config::load();
+
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        // Should report both missing variables
+        assert!(
+            error_msg.contains("DATABASE_URL") && error_msg.contains("JWT_SECRET"),
+            "Error should mention both missing variables: {error_msg}"
+        );
     }
 
     #[test]
