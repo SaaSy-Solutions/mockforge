@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-amqp"
-version = "0.3.16"
+version = "0.3.17"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -13,7 +13,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-mockforge-core = { version = "0.3.16", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.17", path = "../mockforge-core" }
 tokio.workspace = true
 lapin = "2.3"
 serde.workspace = true
