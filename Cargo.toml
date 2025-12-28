@@ -32,7 +32,6 @@ members = [
 
     # Advanced features
     "crates/mockforge-chaos",
-    "crates/mockforge-collab",
     "crates/mockforge-federation",
     "crates/mockforge-performance",
     "crates/mockforge-pipelines",
@@ -43,21 +42,17 @@ members = [
     "crates/mockforge-world-state",
 
     # SDK
-    "crates/mockforge-sdk",
 
     # Infrastructure
     "crates/mockforge-tunnel",
     "crates/mockforge-vbr",
 
     # Main user-facing crates
-    "crates/mockforge-cli",
     "crates/mockforge-bench",
     "crates/mockforge-test",
-    "crates/mockforge-ui",
 
     # Server applications
     "crates/mockforge-k8s-operator",
-    "crates/mockforge-registry-server",
     "crates/mockforge-runtime-daemon",
 
     # Examples and integration tests
