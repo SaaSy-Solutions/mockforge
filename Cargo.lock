@@ -1552,39 +1552,9 @@ dependencies = [
 
 [[package]]
 name = "azure_core"
-version = "0.19.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70fd680c0d0424a518229b1150922f92653ba2ac933aa000abc8bf1ca08105f7"
-dependencies = [
- "async-trait",
- "base64 0.21.7",
- "bytes",
- "dyn-clone",
- "futures",
- "getrandom 0.2.16",
- "hmac",
- "http-types",
- "log",
- "once_cell",
- "paste",
- "pin-project",
- "quick-xml 0.31.0",
- "rand 0.8.5",
- "reqwest 0.11.27",
- "rustc_version",
- "serde",
- "serde_json",
- "sha2",
- "time",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "azure_core"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34ce3de4b65b1ee2667c81d1fc692949049502a4cf9c38118d811d6d79a7eaef"
+checksum = "7b552ad43a45a746461ec3d3a51dfb6466b4759209414b439c165eb6a6b7729e"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1592,15 +1562,18 @@ dependencies = [
  "dyn-clone",
  "futures",
  "getrandom 0.2.16",
+ "hmac",
  "http-types",
  "once_cell",
  "paste",
  "pin-project",
+ "quick-xml 0.31.0",
  "rand 0.8.5",
  "reqwest 0.12.24",
  "rustc_version",
  "serde",
  "serde_json",
+ "sha2",
  "time",
  "tracing",
  "url",
@@ -1609,14 +1582,14 @@ dependencies = [
 
 [[package]]
 name = "azure_identity"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72c97790480791ec1ee9b76f5c6499b1d0aac0d4cd1e62010bfc19bb545544c5"
+checksum = "88ddd80344317c40c04b603807b63a5cefa532f1b43522e72f480a988141f744"
 dependencies = [
  "async-lock 3.4.1",
  "async-process",
  "async-trait",
- "azure_core 0.20.0",
+ "azure_core",
  "futures",
  "oauth2",
  "pin-project",
@@ -1630,51 +1603,51 @@ dependencies = [
 
 [[package]]
 name = "azure_storage"
-version = "0.19.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15d3da73bfa09350e1bd6ae2a260806fcf90048c7e78cd2d8f88be60b19a7266"
+checksum = "59f838159f4d29cb400a14d9d757578ba495ae64feb07a7516bf9e4415127126"
 dependencies = [
  "RustyXML",
  "async-lock 3.4.1",
  "async-trait",
- "azure_core 0.19.0",
+ "azure_core",
  "bytes",
- "log",
  "serde",
  "serde_derive",
  "time",
+ "tracing",
  "url",
  "uuid",
 ]
 
 [[package]]
 name = "azure_storage_blobs"
-version = "0.19.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "149c21834a4105d761e3dd33d91c2a3064acc05a3c978848ea8089102ae45c94"
+checksum = "97e83c3636ae86d9a6a7962b2112e3b19eb3903915c50ce06ff54ff0a2e6a7e4"
 dependencies = [
  "RustyXML",
- "azure_core 0.19.0",
+ "azure_core",
  "azure_storage",
  "azure_svc_blobstorage",
  "bytes",
  "futures",
- "log",
  "serde",
  "serde_derive",
  "serde_json",
  "time",
+ "tracing",
  "url",
  "uuid",
 ]
 
 [[package]]
 name = "azure_svc_blobstorage"
-version = "0.19.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88c888b7bf522d5405218b8613bf0fae7ddaae6ef3bf4ad42ae005993c96ab8b"
+checksum = "4e6c6f20c5611b885ba94c7bae5e02849a267381aecb8aee577e8c35ff4064c6"
 dependencies = [
- "azure_core 0.19.0",
+ "azure_core",
  "bytes",
  "futures",
  "log",
@@ -7470,8 +7443,10 @@ dependencies = [
  "axum 0.8.7",
  "axum-test",
  "azure_identity",
+ "azure_storage",
  "azure_storage_blobs",
  "blake3 1.8.2",
+ "bytes",
  "chrono",
  "dashmap 6.1.0",
  "futures",
@@ -8324,6 +8299,7 @@ dependencies = [
  "tower 0.5.2",
  "tower-http 0.6.7",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

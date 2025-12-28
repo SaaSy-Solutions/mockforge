@@ -522,7 +522,7 @@ impl VoskBackend {
 #[cfg(feature = "stt-vosk")]
 impl SpeechToTextBackend for VoskBackend {
     fn is_available(&self) -> bool {
-        self.model_path.is_some() && self.model_path.as_ref().unwrap().exists()
+        self.model_path.as_ref().map(|p| p.exists()).unwrap_or(false)
     }
 
     fn transcribe(&self) -> Result<String, SttError> {

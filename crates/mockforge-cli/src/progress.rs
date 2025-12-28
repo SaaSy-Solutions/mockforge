@@ -107,12 +107,14 @@ impl ProgressManager {
         if let Some(ref progress) = self.main_progress {
             progress.finish();
         }
-        self.multi_progress.clear().unwrap();
+        // Ignore errors clearing progress - not critical
+        let _ = self.multi_progress.clear();
     }
 
     /// Clear all progress indicators
     pub fn clear(&self) {
-        self.multi_progress.clear().unwrap();
+        // Ignore errors clearing progress - not critical
+        let _ = self.multi_progress.clear();
     }
 }
 

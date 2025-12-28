@@ -34,6 +34,7 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 reqwest = { workspace = true }
+uuid = { workspace = true }
 
 # FFI support
 libc = "0.2"

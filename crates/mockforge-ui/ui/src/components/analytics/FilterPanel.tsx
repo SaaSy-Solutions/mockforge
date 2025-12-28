@@ -133,7 +133,11 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
               <option value="WebSocket">WebSocket</option>
               <option value="GraphQL">GraphQL</option>
               <option value="MQTT">MQTT</option>
+              <option value="Kafka">Kafka</option>
+              <option value="AMQP">AMQP</option>
               <option value="SMTP">SMTP</option>
+              <option value="FTP">FTP</option>
+              <option value="TCP">TCP</option>
             </select>
           </div>
 

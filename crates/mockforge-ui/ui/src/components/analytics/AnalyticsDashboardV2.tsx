@@ -30,7 +30,7 @@ export const AnalyticsDashboardV2: React.FC = () => {
   });
 
   // WebSocket for real-time updates
-  const { isConnected, lastUpdate } = useAnalyticsStream({
+  const { isConnected, lastUpdate, error: wsError } = useAnalyticsStream({
     enabled: liveUpdatesEnabled,
     config: {
       interval_seconds: 5,
@@ -114,6 +114,15 @@ export const AnalyticsDashboardV2: React.FC = () => {
         <Card className="p-4 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
           <p className="text-sm text-red-600 dark:text-red-400">
             Error loading analytics: {error.message}
+          </p>
+        </Card>
+      )}
+
+      {/* WebSocket error display */}
+      {wsError && liveUpdatesEnabled && (
+        <Card className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+          <p className="text-sm text-yellow-600 dark:text-yellow-400">
+            Live updates unavailable: {wsError}
           </p>
         </Card>
       )}

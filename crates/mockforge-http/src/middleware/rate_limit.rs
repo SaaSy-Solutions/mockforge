@@ -139,18 +139,50 @@ impl GlobalRateLimiter {
 /// This middleware:
 /// 1. Checks if the request should be rate limited
 /// 2. Adds rate limit headers to successful responses (for deceptive deploy)
+/// 3. Returns 429 with Retry-After header when rate limited
 pub async fn rate_limit_middleware(
     State(state): axum::extract::State<crate::HttpServerState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     req: Request<Body>,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Response {
     // Get rate limiter from app state
     let quota_info = if let Some(limiter) = &state.rate_limiter {
         // Check rate limit
         if !limiter.check_rate_limit() {
             warn!("Rate limit exceeded for IP: {}", addr.ip());
-            return Err(StatusCode::TOO_MANY_REQUESTS);
+            // Return 429 with Retry-After header per HTTP spec
+            let mut response = Response::builder()
+                .status(StatusCode::TOO_MANY_REQUESTS)
+                .body(Body::from("Too Many Requests"))
+                .unwrap_or_else(|_| Response::new(Body::from("Too Many Requests")));
+
+            // Add Retry-After header (60 seconds = 1 minute window)
+            if let Ok(retry_after) = HeaderValue::from_static("60").try_into() {
+                response
+                    .headers_mut()
+                    .insert(HeaderName::from_static("retry-after"), retry_after);
+            }
+
+            // Add rate limit headers to the 429 response
+            let quota = limiter.get_quota_info();
+            if let Ok(limit_value) = HeaderValue::from_str(&quota.limit.to_string()) {
+                response
+                    .headers_mut()
+                    .insert(HeaderName::from_static("x-rate-limit-limit"), limit_value);
+            }
+            if let Ok(remaining_value) = HeaderValue::from_str("0") {
+                response
+                    .headers_mut()
+                    .insert(HeaderName::from_static("x-rate-limit-remaining"), remaining_value);
+            }
+            if let Ok(reset_value) = HeaderValue::from_str(&quota.reset.to_string()) {
+                response
+                    .headers_mut()
+                    .insert(HeaderName::from_static("x-rate-limit-reset"), reset_value);
+            }
+
+            return response;
         }
 
         // Get quota information for headers
@@ -186,7 +218,7 @@ pub async fn rate_limit_middleware(
         }
     }
 
-    Ok(response)
+    response
 }
 
 #[cfg(test)]

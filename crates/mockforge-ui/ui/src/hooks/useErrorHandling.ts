@@ -1,12 +1,15 @@
 import { logger } from '@/utils/logger';
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useToastStore } from '@/stores/useToastStore';
 
 export interface ErrorContext {
   operation: string;
   component?: string;
   retryable?: boolean;
   timestamp: number;
+  /** Whether to show a toast notification for this error */
+  showToast?: boolean;
 }
 
 export interface ErrorState {
@@ -24,8 +27,11 @@ export function useErrorHandling(maxRetries = 3) {
   });
 
   const queryClient = useQueryClient();
+  const { error: showErrorToast } = useToastStore();
 
   const handleError = useCallback((error: Error, context?: Partial<ErrorContext>) => {
+    const showToast = context?.showToast ?? true;
+
     setErrorState(prev => ({
       ...prev,
       error,
@@ -34,6 +40,7 @@ export function useErrorHandling(maxRetries = 3) {
         component: context?.component,
         retryable: context?.retryable ?? true,
         timestamp: Date.now(),
+        showToast,
       },
     }));
 
@@ -44,9 +51,17 @@ export function useErrorHandling(maxRetries = 3) {
       context,
     });
 
+    // Show toast notification for the error
+    if (showToast) {
+      const title = context?.operation
+        ? `Failed to ${context.operation}`
+        : 'An error occurred';
+      showErrorToast(title, error.message);
+    }
+
     // In production, you might want to send this to an error tracking service
     // logErrorToService(error, context);
-  }, []);
+  }, [showErrorToast]);
 
   const retry = useCallback(async (operation?: () => Promise<void>) => {
     if (errorState.retryCount >= maxRetries) {

@@ -104,16 +104,14 @@ pub async fn execute_dev_setup(args: DevSetupArgs) -> anyhow::Result<()> {
     let (detected_base_url, detected_reality_level) = detect_mockforge_workspace(&project_root)?;
 
     // Use detected values or fall back to provided/default values
-    let base_url = if args.base_url == "http://localhost:3000" && detected_base_url.is_some() {
-        detected_base_url.as_ref().unwrap().clone()
-    } else {
-        args.base_url.clone()
+    let base_url = match (&detected_base_url, args.base_url.as_str()) {
+        (Some(detected), "http://localhost:3000") => detected.clone(),
+        _ => args.base_url.clone(),
     };
 
-    let reality_level = if args.reality_level == "moderate" && detected_reality_level.is_some() {
-        detected_reality_level.as_ref().unwrap().clone()
-    } else {
-        args.reality_level.clone()
+    let reality_level = match (&detected_reality_level, args.reality_level.as_str()) {
+        (Some(detected), "moderate") => detected.clone(),
+        _ => args.reality_level.clone(),
     };
 
     if detected_base_url.is_some() || detected_reality_level.is_some() {

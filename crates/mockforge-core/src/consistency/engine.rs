@@ -16,6 +16,17 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{debug, error, info, warn};
 
+/// Default broadcast channel capacity for state change events
+const DEFAULT_BROADCAST_CAPACITY: usize = 1000;
+
+/// Get the broadcast channel capacity from environment or use default
+fn get_broadcast_capacity() -> usize {
+    std::env::var("MOCKFORGE_BROADCAST_CAPACITY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_BROADCAST_CAPACITY)
+}
+
 /// Consistency engine for coordinating state across all protocols
 ///
 /// The engine maintains unified state per workspace and broadcasts state
@@ -32,8 +43,12 @@ pub struct ConsistencyEngine {
 
 impl ConsistencyEngine {
     /// Create a new consistency engine
+    ///
+    /// The broadcast channel capacity can be configured via the
+    /// `MOCKFORGE_BROADCAST_CAPACITY` environment variable.
     pub fn new() -> Self {
-        let (event_tx, _) = broadcast::channel(1000);
+        let capacity = get_broadcast_capacity();
+        let (event_tx, _) = broadcast::channel(capacity);
         Self {
             states: Arc::new(RwLock::new(HashMap::new())),
             event_tx,

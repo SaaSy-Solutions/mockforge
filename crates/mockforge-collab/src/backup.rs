@@ -114,8 +114,8 @@ impl BackupService {
     /// Create a backup of a workspace
     ///
     /// Exports the workspace to the specified storage backend.
-    /// For now, we support local filesystem backups. Cloud storage
-    /// backends (S3, Azure, GCS) can be added later.
+    /// Supports local filesystem, Azure Blob Storage, and Google Cloud Storage.
+    /// For cloud storage, use `backup_workspace_with_config` to provide credentials.
     pub async fn backup_workspace(
         &self,
         workspace_id: Uuid,
@@ -123,6 +123,38 @@ impl BackupService {
         storage_backend: StorageBackend,
         format: Option<String>,
         commit_id: Option<Uuid>,
+    ) -> Result<WorkspaceBackup> {
+        self.backup_workspace_with_config(
+            workspace_id,
+            user_id,
+            storage_backend,
+            format,
+            commit_id,
+            None,
+        )
+        .await
+    }
+
+    /// Create a backup of a workspace with storage configuration
+    ///
+    /// Exports the workspace to the specified storage backend.
+    /// For Azure, storage_config should include:
+    /// - `account_name`: Azure storage account name (required)
+    /// - `container_name`: Container name (defaults to "mockforge-backups")
+    /// - `account_key` or `sas_token`: Credentials (optional, uses DefaultAzureCredential if not provided)
+    ///
+    /// For GCS, storage_config should include:
+    /// - `bucket_name`: GCS bucket name (defaults to "mockforge-backups")
+    ///
+    /// For local storage, storage_config is ignored.
+    pub async fn backup_workspace_with_config(
+        &self,
+        workspace_id: Uuid,
+        user_id: Uuid,
+        storage_backend: StorageBackend,
+        format: Option<String>,
+        commit_id: Option<Uuid>,
+        storage_config: Option<serde_json::Value>,
     ) -> Result<WorkspaceBackup> {
         // Get workspace data using CoreBridge to get full workspace state
         let workspace = self
@@ -165,10 +197,17 @@ impl BackupService {
                 return Err(CollabError::Internal("S3 backup not yet implemented".to_string()));
             }
             StorageBackend::Azure => {
-                return Err(CollabError::Internal("Azure backup not yet implemented".to_string()));
+                self.save_to_azure(
+                    workspace_id,
+                    &serialized,
+                    &backup_format,
+                    storage_config.as_ref(),
+                )
+                .await?
             }
             StorageBackend::Gcs => {
-                return Err(CollabError::Internal("GCS backup not yet implemented".to_string()));
+                self.save_to_gcs(workspace_id, &serialized, &backup_format, storage_config.as_ref())
+                    .await?
             }
             StorageBackend::Custom => {
                 return Err(CollabError::Internal(
@@ -181,6 +220,7 @@ impl BackupService {
         let mut backup =
             WorkspaceBackup::new(workspace_id, backup_url, storage_backend, size_bytes, user_id);
         backup.backup_format = backup_format;
+        backup.storage_config = storage_config;
         backup.commit_id = commit_id;
 
         // Use lowercase enum name for storage_backend to match CHECK constraint
@@ -521,6 +561,156 @@ impl BackupService {
             .map_err(|e| CollabError::Internal(format!("Failed to read backup file: {e}")))
     }
 
+    /// Save backup to Azure Blob Storage
+    #[allow(unused_variables)]
+    async fn save_to_azure(
+        &self,
+        workspace_id: Uuid,
+        data: &str,
+        format: &str,
+        storage_config: Option<&serde_json::Value>,
+    ) -> Result<String> {
+        #[cfg(feature = "azure")]
+        {
+            use azure_identity::{DefaultAzureCredential, TokenCredentialOptions};
+            use azure_storage::StorageCredentials;
+            use azure_storage_blobs::prelude::*;
+            use std::sync::Arc;
+
+            // Get storage configuration
+            let config = storage_config.ok_or_else(|| {
+                CollabError::Internal("Azure storage configuration required".to_string())
+            })?;
+
+            let account_name = config
+                .get("account_name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .ok_or_else(|| {
+                    CollabError::Internal(
+                        "Azure account_name required in storage config".to_string(),
+                    )
+                })?;
+
+            let container_name = config
+                .get("container_name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "mockforge-backups".to_string());
+
+            // Build storage credentials
+            let storage_credentials = if let Some(account_key) =
+                config.get("account_key").and_then(|v| v.as_str()).map(|s| s.to_string())
+            {
+                StorageCredentials::access_key(account_name.clone(), account_key)
+            } else if let Some(sas_token) =
+                config.get("sas_token").and_then(|v| v.as_str()).map(|s| s.to_string())
+            {
+                StorageCredentials::sas_token(sas_token)
+                    .map_err(|e| CollabError::Internal(format!("Invalid SAS token: {}", e)))?
+            } else {
+                let credential = Arc::new(
+                    DefaultAzureCredential::create(TokenCredentialOptions::default()).map_err(
+                        |e| {
+                            CollabError::Internal(format!(
+                                "Failed to create Azure credentials: {}",
+                                e
+                            ))
+                        },
+                    )?,
+                );
+                StorageCredentials::token_credential(credential)
+            };
+
+            // Create blob name with timestamp
+            let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
+            let blob_name = format!("workspace_{workspace_id}_{timestamp}.{format}");
+
+            // Create blob client and upload
+            let blob_client = ClientBuilder::new(account_name.clone(), storage_credentials)
+                .blob_client(&container_name, &blob_name);
+
+            blob_client
+                .put_block_blob(data.as_bytes().to_vec())
+                .content_type(match format {
+                    "yaml" => "application/x-yaml",
+                    "json" => "application/json",
+                    _ => "application/octet-stream",
+                })
+                .await
+                .map_err(|e| CollabError::Internal(format!("Failed to upload to Azure: {}", e)))?;
+
+            let backup_url = format!(
+                "https://{}.blob.core.windows.net/{}/{}",
+                account_name, container_name, blob_name
+            );
+            tracing::info!("Successfully uploaded backup to Azure: {}", backup_url);
+            Ok(backup_url)
+        }
+
+        #[cfg(not(feature = "azure"))]
+        {
+            Err(CollabError::Internal(
+                "Azure backup requires 'azure' feature to be enabled. Add 'azure' feature to mockforge-collab in Cargo.toml.".to_string(),
+            ))
+        }
+    }
+
+    /// Save backup to Google Cloud Storage
+    #[allow(unused_variables)]
+    async fn save_to_gcs(
+        &self,
+        workspace_id: Uuid,
+        data: &str,
+        format: &str,
+        storage_config: Option<&serde_json::Value>,
+    ) -> Result<String> {
+        #[cfg(feature = "gcs")]
+        {
+            use bytes::Bytes;
+            use google_cloud_storage::client::Storage;
+
+            // Get storage configuration
+            let config = storage_config.ok_or_else(|| {
+                CollabError::Internal("GCS storage configuration required".to_string())
+            })?;
+
+            let bucket_name = config
+                .get("bucket_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("mockforge-backups");
+
+            // Initialize GCS client using the new builder API
+            let client = Storage::builder().build().await.map_err(|e| {
+                CollabError::Internal(format!("Failed to create GCS client: {}", e))
+            })?;
+
+            // Create object name with timestamp
+            let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
+            let object_name = format!("workspace_{workspace_id}_{timestamp}.{format}");
+
+            // Upload object using the new write_object API
+            // Convert to bytes::Bytes which implements Into<Payload<BytesSource>>
+            let payload = Bytes::from(data.as_bytes().to_vec());
+            client
+                .write_object(bucket_name, &object_name, payload)
+                .send_unbuffered()
+                .await
+                .map_err(|e| CollabError::Internal(format!("Failed to upload to GCS: {}", e)))?;
+
+            let backup_url = format!("gs://{}/{}", bucket_name, object_name);
+            tracing::info!("Successfully uploaded backup to GCS: {}", backup_url);
+            Ok(backup_url)
+        }
+
+        #[cfg(not(feature = "gcs"))]
+        {
+            Err(CollabError::Internal(
+                "GCS backup requires 'gcs' feature to be enabled. Add 'gcs' feature to mockforge-collab in Cargo.toml.".to_string(),
+            ))
+        }
+    }
+
     /// Delete backup from S3
     async fn delete_from_s3(
         &self,
@@ -631,7 +821,8 @@ impl BackupService {
     ) -> Result<()> {
         #[cfg(feature = "azure")]
         {
-            use azure_identity::DefaultAzureCredential;
+            use azure_identity::{DefaultAzureCredential, TokenCredentialOptions};
+            use azure_storage::StorageCredentials;
             use azure_storage_blobs::prelude::*;
             use std::sync::Arc;
 
@@ -662,30 +853,62 @@ impl BackupService {
                 return Err(CollabError::Internal(format!("Invalid Azure blob path: {}", path)));
             }
 
-            let container_name = path_parts[0];
+            let container_name = path_parts[0].to_string();
             let blob_name = path_parts[1..].join("/");
+            let account_name = account_name.to_string();
 
-            // Extract Azure credentials from storage_config
-            // Expected format: {"account_name": "...", "account_key": "..."} or use DefaultAzureCredential
-            //
-            // NOTE: azure_storage_blobs 0.19 API has changed from previous versions.
-            // The API structure requires review of the 0.19 documentation to properly implement
-            // credential handling and client creation. The previous implementation used a different
-            // API structure that is no longer compatible.
-            //
-            // TODO: Review azure_storage_blobs 0.19 API documentation and update implementation:
-            // - StorageCredentials import path and usage
-            // - BlobServiceClient::new() signature and credential types
-            // - DefaultAzureCredential integration with BlobServiceClient
-            return Err(CollabError::Internal(
-                "Azure deletion implementation needs to be updated for azure_storage_blobs 0.19 API. \
-                 The API structure has changed and requires review of the 0.19 documentation."
-                    .to_string(),
-            ));
+            // Helper function to create default credentials
+            let create_default_creds = || -> Result<StorageCredentials> {
+                let credential = Arc::new(
+                    DefaultAzureCredential::create(TokenCredentialOptions::default()).map_err(
+                        |e| {
+                            CollabError::Internal(format!(
+                                "Failed to create Azure credentials: {}",
+                                e
+                            ))
+                        },
+                    )?,
+                );
+                Ok(StorageCredentials::token_credential(credential))
+            };
+
+            // Build storage credentials from config or use DefaultAzureCredential
+            let storage_credentials = if let Some(config) = storage_config {
+                if let Some(account_key) =
+                    config.get("account_key").and_then(|v| v.as_str()).map(|s| s.to_string())
+                {
+                    // Use account key authentication
+                    StorageCredentials::access_key(account_name.clone(), account_key)
+                } else if let Some(sas_token) =
+                    config.get("sas_token").and_then(|v| v.as_str()).map(|s| s.to_string())
+                {
+                    // Use SAS token authentication
+                    StorageCredentials::sas_token(sas_token)
+                        .map_err(|e| CollabError::Internal(format!("Invalid SAS token: {}", e)))?
+                } else {
+                    // Use DefaultAzureCredential for managed identity, environment vars, etc.
+                    create_default_creds()?
+                }
+            } else {
+                // Use DefaultAzureCredential
+                create_default_creds()?
+            };
+
+            // Create blob client and delete
+            let blob_client = ClientBuilder::new(account_name, storage_credentials)
+                .blob_client(&container_name, &blob_name);
+
+            blob_client.delete().await.map_err(|e| {
+                CollabError::Internal(format!("Failed to delete Azure blob: {}", e))
+            })?;
+
+            tracing::info!("Successfully deleted Azure blob: {}", backup_url);
+            Ok(())
         }
 
         #[cfg(not(feature = "azure"))]
         {
+            let _ = (backup_url, storage_config); // Suppress unused warnings
             Err(CollabError::Internal(
                 "Azure deletion requires 'azure' feature to be enabled. Add 'azure' feature to mockforge-collab in Cargo.toml.".to_string(),
             ))
@@ -696,23 +919,11 @@ impl BackupService {
     async fn delete_from_gcs(
         &self,
         backup_url: &str,
-        storage_config: Option<&serde_json::Value>,
+        _storage_config: Option<&serde_json::Value>,
     ) -> Result<()> {
         #[cfg(feature = "gcs")]
         {
-            // Note: google-cloud-storage 1.4.0 API has changed significantly
-            // The API structure is different from previous versions
-            // This implementation may need adjustment based on actual 1.4.0 API documentation
-            return Err(CollabError::Internal(
-                "GCS deletion implementation needs to be updated for google-cloud-storage 1.4.0 API. \
-                 The API structure has changed significantly and requires review of the 1.4.0 documentation."
-                    .to_string(),
-            ));
-
-            /* TODO: Update to google-cloud-storage 1.4.0 API
-            // The 1.4.0 API uses a different structure. Example implementation:
-            use google_cloud_storage::client::Client;
-            use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
+            use google_cloud_storage::client::StorageControl;
 
             // Parse GCS URL (format: gs://bucket-name/path/to/file)
             if !backup_url.starts_with("gs://") {
@@ -731,7 +942,7 @@ impl BackupService {
                 .collect();
             if url_parts.len() != 2 {
                 return Err(CollabError::Internal(format!(
-                    "Invalid GCS URL format: {}",
+                    "Invalid GCS URL format (expected gs://bucket/object): {}",
                     backup_url
                 )));
             }
@@ -739,33 +950,19 @@ impl BackupService {
             let bucket_name = url_parts[0];
             let object_name = url_parts[1];
 
-            // Extract GCS credentials from storage_config
-            // Expected format: {"service_account_key": "...", "project_id": "..."}
-            let project_id = storage_config
-                .and_then(|c| c.get("project_id"))
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    CollabError::Internal("GCS project_id not found in storage_config".to_string())
-                })?;
+            // Initialize GCS StorageControl client using the new API
+            // Uses default credentials from environment (GOOGLE_APPLICATION_CREDENTIALS)
+            // or metadata server when running on GCP
+            let client = StorageControl::builder().build().await.map_err(|e| {
+                CollabError::Internal(format!("Failed to create GCS client: {}", e))
+            })?;
 
-            // Initialize GCS client with google-cloud-storage 1.4.0 API
-            // Note: The 1.4.0 API uses a different structure. For now, we'll use default credentials
-            // and handle service account keys through environment variables or metadata server
-            let client = Client::default()
-                .await
-                .map_err(|e| {
-                    CollabError::Internal(format!("Failed to initialize GCS client: {}", e))
-                })?;
-
-            // Delete object using google-cloud-storage 1.4.0 API
-            let request = DeleteObjectRequest {
-                bucket: bucket_name.to_string(),
-                object: object_name.to_string(),
-                ..Default::default()
-            };
-
+            // Delete object using google-cloud-storage 1.5 API
             client
-                .delete_object(&request)
+                .delete_object()
+                .set_bucket(format!("projects/_/buckets/{}", bucket_name))
+                .set_object(object_name)
+                .send()
                 .await
                 .map_err(|e| {
                     CollabError::Internal(format!("Failed to delete GCS object: {}", e))
@@ -773,11 +970,11 @@ impl BackupService {
 
             tracing::info!("Successfully deleted GCS object: {}", backup_url);
             Ok(())
-            */
         }
 
         #[cfg(not(feature = "gcs"))]
         {
+            let _ = backup_url; // Suppress unused warning
             Err(CollabError::Internal(
                 "GCS deletion requires 'gcs' feature to be enabled. Add 'gcs' feature to mockforge-collab in Cargo.toml.".to_string(),
             ))

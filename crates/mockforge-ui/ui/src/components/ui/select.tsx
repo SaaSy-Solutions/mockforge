@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import * as React from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { cn } from "../../utils/cn"
@@ -10,6 +9,10 @@ interface SelectProps {
   onValueChange?: (value: string) => void;
   defaultValue?: string;
   id?: string;
+  /** Error message - sets aria-invalid on trigger */
+  error?: string;
+  /** ID for error message element */
+  errorId?: string;
 }
 
 const SelectContext = React.createContext<{
@@ -18,12 +21,15 @@ const SelectContext = React.createContext<{
   id?: string;
   options: Array<{ value: string; label: string }>;
   addOption: (value: string, label: string) => void;
+  hasError: boolean;
+  errorId?: string;
 } | null>(null);
 
-const Select = ({ children, value, onValueChange, defaultValue, id }: SelectProps) => {
+const Select = ({ children, value, onValueChange, defaultValue, id, error, errorId }: SelectProps) => {
   const [internalValue, setInternalValue] = React.useState(defaultValue || value || '');
   const [options, setOptions] = React.useState<Array<{ value: string; label: string }>>([]);
   const currentValue = value || internalValue;
+  const hasError = !!error;
 
   const handleValueChange = (newValue: string) => {
     setInternalValue(newValue);
@@ -38,7 +44,7 @@ const Select = ({ children, value, onValueChange, defaultValue, id }: SelectProp
   }, []);
 
   return (
-    <SelectContext.Provider value={{ value: currentValue, onValueChange: handleValueChange, id, options, addOption }}>
+    <SelectContext.Provider value={{ value: currentValue, onValueChange: handleValueChange, id, options, addOption, hasError, errorId }}>
       {children}
     </SelectContext.Provider>
   );
@@ -57,8 +63,9 @@ const SelectTrigger = React.forwardRef<
     children?: React.ReactNode;
     className?: string;
   }
->(({ className, children: _children, ...props }, ref) => {
+>(({ className, children: _children, "aria-describedby": ariaDescribedby, ...props }, ref) => {
   const context = React.useContext(SelectContext);
+  const describedBy = [ariaDescribedby, context?.errorId].filter(Boolean).join(" ") || undefined;
 
   // Render as a native select for testing compatibility
   return (
@@ -68,8 +75,11 @@ const SelectTrigger = React.forwardRef<
       role="combobox"
       value={context?.value}
       onChange={(e) => context?.onValueChange(e.target.value)}
+      aria-invalid={context?.hasError || undefined}
+      aria-describedby={describedBy}
       className={cn(
         "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+        context?.hasError && "border-red-500 focus:ring-red-500",
         className
       )}
       {...props}

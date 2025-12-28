@@ -253,7 +253,7 @@ mod tests {
         assert!(handler.is_valid_cron("0 * * * *")); // Every hour
         assert!(handler.is_valid_cron("*/15 * * * *")); // Every 15 minutes
         assert!(handler.is_valid_cron("0 0 * * *")); // Daily at midnight
-        assert!(handler.is_valid_cron("0 0 * * 0")); // Weekly on Sunday
+        assert!(handler.is_valid_cron("0 0 * * SUN")); // Weekly on Sunday (cron crate uses SUN/1-7, not 0)
         assert!(handler.is_valid_cron("0 0 1 * *")); // Monthly on the 1st
 
         // 6-field cron expressions (with seconds)

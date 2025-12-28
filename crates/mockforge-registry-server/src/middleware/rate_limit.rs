@@ -85,6 +85,31 @@ impl RateLimiterState {
 
     /// Internal constructor
     fn new_internal(requests_per_minute: u32, redis: Option<RedisPool>) -> Self {
+        // Per-user rate limit from environment variable (default: 100 requests per minute)
+        let per_user_limit: u32 = std::env::var("RATE_LIMIT_PER_USER")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(100);
+
+        Self::new_with_config_internal(requests_per_minute, per_user_limit, redis)
+    }
+
+    /// Constructor with explicit configuration (useful for testing)
+    #[cfg(test)]
+    fn new_with_config(
+        requests_per_minute: u32,
+        per_user_limit: u32,
+        redis: Option<RedisPool>,
+    ) -> Self {
+        Self::new_with_config_internal(requests_per_minute, per_user_limit, redis)
+    }
+
+    /// Internal constructor with explicit configuration
+    fn new_with_config_internal(
+        requests_per_minute: u32,
+        per_user_limit: u32,
+        redis: Option<RedisPool>,
+    ) -> Self {
         let global_limit = if requests_per_minute == 0 {
             tracing::warn!("requests_per_minute was 0, defaulting to 60");
             60
@@ -95,14 +120,8 @@ impl RateLimiterState {
         let global_quota = Quota::per_minute(NonZeroU32::new(global_limit).unwrap());
         let global_limiter = Arc::new(RateLimiter::direct(global_quota));
 
-        // Per-user rate limit from environment variable (default: 100 requests per minute)
-        let per_user_limit: u32 = std::env::var("RATE_LIMIT_PER_USER")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(100);
-
         let per_user_limit = if per_user_limit == 0 {
-            tracing::warn!("RATE_LIMIT_PER_USER was 0, defaulting to 100");
+            tracing::warn!("per_user_limit was 0, defaulting to 100");
             100
         } else {
             per_user_limit
@@ -393,10 +412,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_per_user_rate_limiter() {
-        // Set up environment for test
-        std::env::set_var("RATE_LIMIT_PER_USER", "2");
-
-        let limiter = RateLimiterState::new(1000); // High global limit
+        // Use explicit config instead of env vars to avoid race conditions in parallel tests
+        let limiter = RateLimiterState::new_with_config(1000, 2, None); // High global, 2 per user
 
         // First two requests for user1 should succeed
         assert!(limiter.check_user("user:user1").await);
@@ -407,16 +424,12 @@ mod tests {
 
         // But user2 should still be allowed
         assert!(limiter.check_user("user:user2").await);
-
-        // Clean up
-        std::env::remove_var("RATE_LIMIT_PER_USER");
     }
 
     #[tokio::test]
     async fn test_ip_rate_limiter() {
-        std::env::set_var("RATE_LIMIT_PER_USER", "2");
-
-        let limiter = RateLimiterState::new(1000);
+        // Use explicit config instead of env vars to avoid race conditions in parallel tests
+        let limiter = RateLimiterState::new_with_config(1000, 2, None); // High global, 2 per user
 
         // First two requests from IP should succeed
         assert!(limiter.check_user("ip:192.168.1.1").await);
@@ -427,8 +440,6 @@ mod tests {
 
         // Different IP should be allowed
         assert!(limiter.check_user("ip:192.168.1.2").await);
-
-        std::env::remove_var("RATE_LIMIT_PER_USER");
     }
 
     #[test]
@@ -480,9 +491,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_active_entries_count() {
-        std::env::set_var("RATE_LIMIT_PER_USER", "100");
-
-        let limiter = RateLimiterState::new(1000);
+        let limiter = RateLimiterState::new_with_config(1000, 100, None);
 
         assert_eq!(limiter.active_entries_count().await, 0);
 
@@ -495,23 +504,17 @@ mod tests {
         // Same user shouldn't create new entry
         limiter.check_user("user:user1").await;
         assert_eq!(limiter.active_entries_count().await, 2);
-
-        std::env::remove_var("RATE_LIMIT_PER_USER");
     }
 
     #[tokio::test]
     async fn test_global_limit_takes_precedence() {
-        std::env::set_var("RATE_LIMIT_PER_USER", "100");
-
-        // Very low global limit
-        let limiter = RateLimiterState::new(1);
+        // Very low global limit (1), high per-user limit (100)
+        let limiter = RateLimiterState::new_with_config(1, 100, None);
 
         // First request succeeds
         assert!(limiter.check_user("user:user1").await);
 
         // Second request fails due to global limit (even though per-user limit is 100)
         assert!(!limiter.check_user("user:user2").await);
-
-        std::env::remove_var("RATE_LIMIT_PER_USER");
     }
 }

@@ -1,17 +1,22 @@
 import { logger } from '@/utils/logger';
-import React from 'react';
-import { Search } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Search, AlertCircle, RefreshCw } from 'lucide-react';
 import { ServicesPanel } from '../components/services/ServicesPanel';
 import { useServiceStore } from '../stores/useServiceStore';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/button';
 
 export function ServicesPage() {
-  const { services, updateService, toggleRoute, filteredRoutes } = useServiceStore();
+  const { services, updateService, toggleRoute, filteredRoutes, isLoading, error, fetchServices, clearError } = useServiceStore();
+
+  // Fetch services on mount
+  useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
 
   const totalRoutes = services.reduce((acc, s) => acc + s.routes.length, 0);
   const searchActive = filteredRoutes.length !== totalRoutes;
-  const isLoading = false; // Add loading state when implementing async service fetching
   const hasServices = services.length > 0;
 
   if (isLoading) {
@@ -21,6 +26,37 @@ export function ServicesPage() {
           <h1 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">Services</h1>
           <p className="text-base text-gray-600 dark:text-gray-400 mt-1">Loading services...</p>
         </div>
+        <Card title="Loading" icon={<RefreshCw className="h-4 w-4 animate-spin" />}>
+          <div className="text-sm text-gray-600 dark:text-gray-400">Fetching service configuration...</div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-3xl font-semibold text-gray-900 dark:text-gray-100">Services</h1>
+          <p className="text-base text-gray-600 dark:text-gray-400 mt-1">Manage services and routes.</p>
+        </div>
+        <Card title="Error Loading Services" icon={<AlertCircle className="h-4 w-4 text-red-500" />}>
+          <div className="space-y-4">
+            <div className="text-sm text-red-600 dark:text-red-400">{error}</div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                clearError();
+                fetchServices();
+              }}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }

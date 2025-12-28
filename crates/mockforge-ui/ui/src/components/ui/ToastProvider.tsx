@@ -1,8 +1,8 @@
-import { logger } from '@/utils/logger';
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import { Toast } from './Toast';
-import type { ToastProps, ToastType } from './Toast';
+import { ToastContainer } from './Toast';
+import type { ToastType } from './Toast';
+import { useToastStore } from '../../stores/useToastStore';
 
 interface ToastContextType {
   showToast: (type: ToastType, title: string, message?: string, duration?: number) => string;
@@ -12,10 +12,13 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
-let toastCounter = 0;
-
+/**
+ * ToastProvider - Provides toast notification functionality via Context API.
+ * Uses Zustand store under the hood for consistent state management.
+ * Both context hooks (useToast) and imperative API (toast.success()) work together.
+ */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<ToastProps[]>([]);
+  const { addToast, removeToast, clearAllToasts: clearAll } = useToastStore();
 
   const showToast = useCallback((
     type: ToastType,
@@ -23,38 +26,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     message?: string,
     duration?: number
   ): string => {
-    const id = `toast-${++toastCounter}`;
-    const toast: ToastProps = {
-      id,
+    return addToast({
       type,
       title,
       message,
-      duration,
-      onClose: () => hideToast(id),
-    };
-
-    setToasts(prev => [...prev, toast]);
-    return id;
-  }, []);
+      duration: duration ?? (type === 'error' ? 8000 : 5000),
+    });
+  }, [addToast]);
 
   const hideToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(toast => toast.id !== id));
-  }, []);
+    removeToast(id);
+  }, [removeToast]);
 
   const clearAllToasts = useCallback(() => {
-    setToasts([]);
-  }, []);
+    clearAll();
+  }, [clearAll]);
 
   return (
     <ToastContext.Provider value={{ showToast, hideToast, clearAllToasts }}>
       {children}
-
-      {/* Toast Container */}
-      <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
-        {toasts.map(toast => (
-          <Toast key={toast.id} {...toast} />
-        ))}
-      </div>
+      <ToastContainer />
     </ToastContext.Provider>
   );
 }

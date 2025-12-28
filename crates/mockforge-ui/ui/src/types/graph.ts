@@ -10,7 +10,7 @@ export interface GraphNode {
   id: string;
   label: string;
   nodeType: 'endpoint' | 'service' | 'workspace';
-  protocol?: 'http' | 'grpc' | 'websocket' | 'graphql' | 'mqtt' | 'smtp' | 'kafka' | 'amqp' | 'ftp';
+  protocol?: 'http' | 'grpc' | 'websocket' | 'graphql' | 'mqtt' | 'smtp' | 'kafka' | 'amqp' | 'ftp' | 'tcp';
   currentState?: string;
   metadata: Record<string, unknown>;
 }

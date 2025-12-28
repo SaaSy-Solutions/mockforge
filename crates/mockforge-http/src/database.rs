@@ -20,18 +20,44 @@ pub struct Database {
 }
 
 impl Database {
+    /// Default maximum database connections
+    #[cfg(feature = "database")]
+    pub const DEFAULT_MAX_CONNECTIONS: u32 = 10;
+
     /// Create a new database connection (optional)
     ///
     /// If DATABASE_URL is not set or database feature is disabled,
     /// returns a Database with no connection.
     /// This allows the application to run without a database.
+    ///
+    /// The max_connections parameter defaults to 10 if not specified.
+    /// Can be configured via the MOCKFORGE_DB_MAX_CONNECTIONS environment variable.
     #[cfg(feature = "database")]
     pub async fn connect_optional(database_url: Option<&str>) -> AnyhowResult<Self> {
+        Self::connect_optional_with_pool_size(database_url, None).await
+    }
+
+    /// Create a new database connection with configurable pool size
+    ///
+    /// If max_connections is None, uses MOCKFORGE_DB_MAX_CONNECTIONS env var
+    /// or defaults to DEFAULT_MAX_CONNECTIONS (10).
+    #[cfg(feature = "database")]
+    pub async fn connect_optional_with_pool_size(
+        database_url: Option<&str>,
+        max_connections: Option<u32>,
+    ) -> AnyhowResult<Self> {
         let pool = if let Some(url) = database_url {
             if url.is_empty() {
                 None
             } else {
-                let pool = PgPoolOptions::new().max_connections(10).connect(url).await?;
+                let max_conn = max_connections.unwrap_or_else(|| {
+                    std::env::var("MOCKFORGE_DB_MAX_CONNECTIONS")
+                        .ok()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(Self::DEFAULT_MAX_CONNECTIONS)
+                });
+                tracing::info!("Connecting to database with max_connections={}", max_conn);
+                let pool = PgPoolOptions::new().max_connections(max_conn).connect(url).await?;
                 Some(Arc::new(pool))
             }
         } else {

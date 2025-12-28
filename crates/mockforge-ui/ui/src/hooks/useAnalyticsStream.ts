@@ -3,6 +3,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useConnectionStore } from '@/components/layout/ConnectionStatus';
 
 export interface MetricsUpdate {
   timestamp: number;
@@ -65,6 +66,9 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
   const [lastUpdate, setLastUpdate] = useState<MetricsUpdate | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Update global connection status
+  const setWsState = useConnectionStore((state) => state.setWsState);
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -107,6 +111,9 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
       return;
     }
 
+    // Update global state to connecting
+    setWsState('connecting');
+
     // Clear any existing reconnection timer
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -132,6 +139,7 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
     ws.onopen = () => {
       console.log('Analytics stream connected');
       setIsConnected(true);
+      setWsState('connected');
       setError(null);
       reconnectAttemptsRef.current = 0; // Reset on successful connection
       manualDisconnectRef.current = false;
@@ -168,7 +176,10 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
 
       // Attempt reconnection if not manually disconnected and enabled
       if (!manualDisconnectRef.current && enabled) {
+        setWsState('reconnecting');
         attemptReconnect();
+      } else {
+        setWsState('disconnected');
       }
     };
 
@@ -196,6 +207,7 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
     }
 
     setIsConnected(false);
+    setWsState('disconnected');
     reconnectAttemptsRef.current = 0;
   };
 

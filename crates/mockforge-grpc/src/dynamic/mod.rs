@@ -368,16 +368,21 @@ async fn start_grpc_only_server(
     #[derive(Debug, Default)]
     pub struct MockGreeterService;
 
+    use futures::StreamExt;
+    use std::pin::Pin;
+    use tokio_stream::wrappers::ReceiverStream;
+
     #[tonic::async_trait]
     impl Greeter for MockGreeterService {
-        type SayHelloStreamStream = futures::stream::Empty<Result<HelloReply, Status>>;
-        type ChatStream = futures::stream::Empty<Result<HelloReply, Status>>;
+        type SayHelloStreamStream =
+            Pin<Box<dyn futures::Stream<Item = Result<HelloReply, Status>> + Send>>;
+        type ChatStream = Pin<Box<dyn futures::Stream<Item = Result<HelloReply, Status>> + Send>>;
 
         async fn say_hello(
             &self,
             request: Request<HelloRequest>,
         ) -> Result<Response<HelloReply>, Status> {
-            println!("Got a request: {:?}", request);
+            info!("gRPC say_hello request: {:?}", request);
 
             let req = request.into_inner();
             let reply = HelloReply {
@@ -389,25 +394,139 @@ async fn start_grpc_only_server(
             Ok(Response::new(reply))
         }
 
+        /// Server streaming: Returns multiple responses for a single request
         async fn say_hello_stream(
             &self,
-            _request: Request<HelloRequest>,
+            request: Request<HelloRequest>,
         ) -> Result<Response<Self::SayHelloStreamStream>, Status> {
-            Err(Status::unimplemented("say_hello_stream not yet implemented"))
+            info!("gRPC say_hello_stream request: {:?}", request);
+            let req = request.into_inner();
+            let name = req.name.clone();
+
+            // Create a channel to send responses
+            let (tx, rx) = tokio::sync::mpsc::channel(128);
+
+            // Spawn a task to send multiple responses
+            tokio::spawn(async move {
+                for i in 1..=5 {
+                    let reply = HelloReply {
+                        message: format!(
+                            "Hello {}! Stream message {} of 5 from MockForge",
+                            name, i
+                        ),
+                        metadata: None,
+                        items: vec![],
+                    };
+
+                    if tx.send(Ok(reply)).await.is_err() {
+                        // Client disconnected
+                        break;
+                    }
+
+                    // Small delay between messages to simulate streaming
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
+            });
+
+            let stream = ReceiverStream::new(rx);
+            Ok(Response::new(Box::pin(stream) as Self::SayHelloStreamStream))
         }
 
+        /// Client streaming: Collects multiple requests and returns a single response
         async fn say_hello_client_stream(
             &self,
-            _request: Request<tonic::Streaming<HelloRequest>>,
+            request: Request<tonic::Streaming<HelloRequest>>,
         ) -> Result<Response<HelloReply>, Status> {
-            Err(Status::unimplemented("say_hello_client_stream not yet implemented"))
+            info!("gRPC say_hello_client_stream started");
+
+            let mut stream = request.into_inner();
+            let mut names = Vec::new();
+            let mut count = 0;
+
+            // Collect all incoming requests
+            while let Some(req) = stream.next().await {
+                match req {
+                    Ok(hello_request) => {
+                        info!("Received client stream message: {:?}", hello_request);
+                        names.push(hello_request.name);
+                        count += 1;
+                    }
+                    Err(e) => {
+                        error!("Error receiving client stream message: {}", e);
+                        return Err(Status::internal(format!("Stream error: {}", e)));
+                    }
+                }
+            }
+
+            // Create aggregated response
+            let message = if names.is_empty() {
+                "Hello! No names received in the stream.".to_string()
+            } else {
+                format!(
+                    "Hello {}! Received {} messages from MockForge client stream.",
+                    names.join(", "),
+                    count
+                )
+            };
+
+            let reply = HelloReply {
+                message,
+                metadata: None,
+                items: vec![],
+            };
+
+            Ok(Response::new(reply))
         }
 
+        /// Bidirectional streaming: Echo back responses for each request
         async fn chat(
             &self,
-            _request: Request<tonic::Streaming<HelloRequest>>,
+            request: Request<tonic::Streaming<HelloRequest>>,
         ) -> Result<Response<Self::ChatStream>, Status> {
-            Err(Status::unimplemented("chat not yet implemented"))
+            info!("gRPC chat (bidirectional streaming) started");
+
+            let mut stream = request.into_inner();
+            let (tx, rx) = tokio::sync::mpsc::channel(128);
+
+            // Spawn a task to process incoming messages and send responses
+            tokio::spawn(async move {
+                let mut message_count = 0;
+
+                while let Some(req) = stream.next().await {
+                    match req {
+                        Ok(hello_request) => {
+                            message_count += 1;
+                            info!("Chat received: {:?}", hello_request);
+
+                            let reply = HelloReply {
+                                message: format!(
+                                    "Chat response {}: Hello {}! from MockForge",
+                                    message_count, hello_request.name
+                                ),
+                                metadata: None,
+                                items: vec![],
+                            };
+
+                            if tx.send(Ok(reply)).await.is_err() {
+                                // Client disconnected
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Chat stream error: {}", e);
+                            let _ = tx
+                                .send(Err(Status::internal(format!("Stream error: {}", e))))
+                                .await;
+                            break;
+                        }
+                    }
+                }
+
+                info!("Chat session ended after {} messages", message_count);
+            });
+
+            let output_stream = ReceiverStream::new(rx);
+            Ok(Response::new(Box::pin(output_stream) as Self::ChatStream))
         }
     }
 

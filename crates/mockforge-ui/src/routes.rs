@@ -334,6 +334,34 @@ pub fn create_admin_router(
 
     router = router.merge(analytics_router);
 
+    // Protocol Contracts API routes
+    {
+        use crate::handlers::protocol_contracts::{self, ProtocolContractsState};
+
+        let contracts_state = ProtocolContractsState::new();
+
+        let contracts_router = Router::new()
+            .route("/api/v1/contracts", get(protocol_contracts::list_contracts))
+            .route("/api/v1/contracts/grpc", post(protocol_contracts::create_grpc_contract))
+            .route(
+                "/api/v1/contracts/websocket",
+                post(protocol_contracts::create_websocket_contract),
+            )
+            .route("/api/v1/contracts/mqtt", post(protocol_contracts::create_mqtt_contract))
+            .route("/api/v1/contracts/kafka", post(protocol_contracts::create_kafka_contract))
+            .route("/api/v1/contracts/compare", post(protocol_contracts::compare_contracts))
+            .route("/api/v1/contracts/{contract_id}", get(protocol_contracts::get_contract))
+            .route("/api/v1/contracts/{contract_id}", delete(protocol_contracts::delete_contract))
+            .route(
+                "/api/v1/contracts/{contract_id}/validate",
+                post(protocol_contracts::validate_message),
+            )
+            .with_state(contracts_state);
+
+        router = router.merge(contracts_router);
+        tracing::info!("Protocol Contracts API routes mounted at /api/v1/contracts");
+    }
+
     // Coverage metrics routes (MockOps)
     // Note: Database initialization is done lazily when routes are accessed
     // The handlers will initialize the database connection on first use

@@ -25,6 +25,17 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tracing::*;
 
+/// Default broadcast channel capacity for message events
+const DEFAULT_MESSAGE_BROADCAST_CAPACITY: usize = 1000;
+
+/// Get the broadcast channel capacity from environment or use default
+fn get_message_broadcast_capacity() -> usize {
+    std::env::var("MOCKFORGE_MESSAGE_BROADCAST_CAPACITY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_MESSAGE_BROADCAST_CAPACITY)
+}
+
 /// Message event types for real-time monitoring
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "protocol", content = "data")]
@@ -539,7 +550,8 @@ impl ManagementState {
             kafka_broker: None,
             #[cfg(any(feature = "mqtt", feature = "kafka"))]
             message_events: {
-                let (tx, _) = broadcast::channel(1000);
+                let capacity = get_message_broadcast_capacity();
+                let (tx, _) = broadcast::channel(capacity);
                 Arc::new(tx)
             },
             state_machine_manager: Arc::new(RwLock::new(

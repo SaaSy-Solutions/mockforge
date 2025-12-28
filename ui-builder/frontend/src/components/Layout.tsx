@@ -114,7 +114,8 @@ export default function Layout({ children }: LayoutProps) {
 
         <div className="absolute bottom-0 left-0 right-0 border-t border-border p-4">
           <p className="text-xs text-muted-foreground">
-            Version 0.1.0
+            {/* TODO: Fetch version from /__mockforge/dashboard endpoint */}
+            Version 0.3.17
           </p>
         </div>
       </aside>

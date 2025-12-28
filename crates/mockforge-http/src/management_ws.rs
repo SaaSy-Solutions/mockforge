@@ -13,6 +13,17 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::*;
 
+/// Default broadcast channel capacity for WebSocket mock events
+const DEFAULT_WS_BROADCAST_CAPACITY: usize = 100;
+
+/// Get the WebSocket broadcast channel capacity from environment or use default
+fn get_ws_broadcast_capacity() -> usize {
+    std::env::var("MOCKFORGE_WS_BROADCAST_CAPACITY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_WS_BROADCAST_CAPACITY)
+}
+
 /// Events that can be broadcasted to WebSocket clients
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -217,8 +228,12 @@ pub struct WsManagementState {
 
 impl WsManagementState {
     /// Create a new WebSocket management state with broadcast channel
+    ///
+    /// The broadcast channel capacity can be configured via the
+    /// `MOCKFORGE_WS_BROADCAST_CAPACITY` environment variable.
     pub fn new() -> Self {
-        let (tx, _) = broadcast::channel(100);
+        let capacity = get_ws_broadcast_capacity();
+        let (tx, _) = broadcast::channel(capacity);
         Self { tx }
     }
 

@@ -1,12 +1,24 @@
 //! Error types for the registry server
+//!
+//! All error responses include a `request_id` field for correlation and debugging.
+//! The request_id is extracted from the current tracing span (set by request_id_middleware).
 
 use axum::{
-    http::StatusCode,
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
 use serde_json::json;
 use thiserror::Error;
+use tracing::Span;
+
+/// Get the current request ID from the tracing span
+fn get_request_id() -> String {
+    Span::current()
+        .field("request_id")
+        .map(|f| f.to_string())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+}
 
 #[derive(Error, Debug)]
 pub enum ApiError {
@@ -203,18 +215,23 @@ impl IntoResponse for ApiError {
                 }),
             ),
 
-            // Rate limiting (429)
+            // Rate limiting (429) - handled specially to include Retry-After header
             ApiError::RateLimitExceeded(msg) => {
                 tracing::warn!("Rate limit exceeded: {}", msg);
-                (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    "RATE_LIMIT_EXCEEDED",
-                    format!("Rate limit exceeded: {}", msg),
-                    json!({
+                let request_id = get_request_id();
+                let body = Json(json!({
+                    "error": format!("Rate limit exceeded: {}", msg),
+                    "error_code": "RATE_LIMIT_EXCEEDED",
+                    "status": 429,
+                    "request_id": request_id,
+                    "details": {
                         "message": msg,
-                        "hint": "Please wait before making more requests or upgrade your plan"
-                    }),
-                )
+                        "hint": "Please wait before making more requests or upgrade your plan",
+                        "retry_after_seconds": 60
+                    }
+                }));
+                return (StatusCode::TOO_MANY_REQUESTS, [(header::RETRY_AFTER, "60")], body)
+                    .into_response();
             }
 
             // Resource limits (403)
@@ -270,10 +287,12 @@ impl IntoResponse for ApiError {
             }
         };
 
+        let request_id = get_request_id();
         let body = Json(json!({
             "error": error_message,
             "error_code": error_code,
             "status": status.as_u16(),
+            "request_id": request_id,
             "details": details
         }));
 
@@ -475,6 +494,11 @@ mod tests {
         let error = ApiError::RateLimitExceeded("test".to_string());
         let response = error.into_response();
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        // Verify Retry-After header is present
+        assert_eq!(
+            response.headers().get(header::RETRY_AFTER).map(|v| v.to_str().unwrap()),
+            Some("60")
+        );
     }
 
     #[tokio::test]

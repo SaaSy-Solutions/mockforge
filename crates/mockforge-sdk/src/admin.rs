@@ -473,9 +473,11 @@ impl MockConfigBuilder {
     ///
     /// # Examples
     /// ```rust
+    /// use mockforge_sdk::MockConfigBuilder;
+    ///
     /// MockConfigBuilder::new("GET", "/api/users")
     ///     .with_header("Authorization", "Bearer.*")
-    ///     .with_header("Content-Type", "application/json")
+    ///     .with_header("Content-Type", "application/json");
     /// ```
     pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         let match_criteria =
@@ -496,9 +498,11 @@ impl MockConfigBuilder {
     ///
     /// # Examples
     /// ```rust
+    /// use mockforge_sdk::MockConfigBuilder;
+    ///
     /// MockConfigBuilder::new("GET", "/api/users")
     ///     .with_query_param("role", "admin")
-    ///     .with_query_param("limit", "10")
+    ///     .with_query_param("limit", "10");
     /// ```
     pub fn with_query_param(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         let match_criteria =
@@ -519,9 +523,11 @@ impl MockConfigBuilder {
     ///
     /// # Examples
     /// ```rust
+    /// use mockforge_sdk::MockConfigBuilder;
+    ///
     /// MockConfigBuilder::new("POST", "/api/users")
     ///     .with_body_pattern(r#"{"name":".*"}"#)  // Regex pattern
-    ///     .with_body_pattern("exact string match")  // Exact match
+    ///     .with_body_pattern("exact string match");  // Exact match
     /// ```
     pub fn with_body_pattern(mut self, pattern: impl Into<String>) -> Self {
         let match_criteria =
@@ -534,9 +540,11 @@ impl MockConfigBuilder {
     ///
     /// # Examples
     /// ```rust
+    /// use mockforge_sdk::MockConfigBuilder;
+    ///
     /// MockConfigBuilder::new("POST", "/api/users")
     ///     .with_json_path("$.name")  // Body must have a 'name' field
-    ///     .with_json_path("$.age > 18")  // Body must have age > 18
+    ///     .with_json_path("$.age > 18");  // Body must have age > 18
     /// ```
     pub fn with_json_path(mut self, json_path: impl Into<String>) -> Self {
         let match_criteria =
@@ -549,8 +557,10 @@ impl MockConfigBuilder {
     ///
     /// # Examples
     /// ```rust
+    /// use mockforge_sdk::MockConfigBuilder;
+    ///
     /// MockConfigBuilder::new("POST", "/api/users")
-    ///     .with_xpath("/users/user[@id='123']")
+    ///     .with_xpath("/users/user[@id='123']");
     /// ```
     pub fn with_xpath(mut self, xpath: impl Into<String>) -> Self {
         let match_criteria =
@@ -563,9 +573,11 @@ impl MockConfigBuilder {
     ///
     /// # Examples
     /// ```rust
+    /// use mockforge_sdk::MockConfigBuilder;
+    ///
     /// MockConfigBuilder::new("GET", "/api/users")
     ///     .with_custom_matcher("headers.content-type == \"application/json\"")
-    ///     .with_custom_matcher("path =~ \"/api/.*\"")
+    ///     .with_custom_matcher("path =~ \"/api/.*\"");
     /// ```
     pub fn with_custom_matcher(mut self, expression: impl Into<String>) -> Self {
         let match_criteria =

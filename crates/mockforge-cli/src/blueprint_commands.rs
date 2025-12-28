@@ -466,7 +466,9 @@ fn copy_directory(src: &Path, dst: &Path) -> anyhow::Result<()> {
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let path = entry.path();
-        let file_name = path.file_name().unwrap();
+        let Some(file_name) = path.file_name() else {
+            continue; // Skip paths without a file name (e.g., "..")
+        };
         let dst_path = dst.join(file_name);
 
         if path.is_dir() {

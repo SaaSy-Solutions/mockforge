@@ -5,12 +5,16 @@ import type { ServiceInfo, RouteInfo } from '../types';
 interface ServiceStore {
   services: ServiceInfo[];
   filteredRoutes: RouteInfo[];
+  isLoading: boolean;
+  error: string | null;
   setServices: (services: ServiceInfo[]) => void;
   updateService: (serviceId: string, updates: Partial<ServiceInfo>) => void;
   toggleRoute: (serviceId: string, routeId: string, enabled: boolean) => void;
   addService: (service: ServiceInfo) => void;
   removeService: (serviceId: string) => void;
   setGlobalSearch: (query: string | undefined) => void;
+  fetchServices: () => Promise<void>;
+  clearError: () => void;
 }
 
 // Mock data for development
@@ -165,8 +169,77 @@ const filterRoutes = (services: ServiceInfo[], query?: string): RouteInfo[] => {
 export const useServiceStore = create<ServiceStore>((set, _get) => ({
   services: mockServices,
   filteredRoutes: filterRoutes(mockServices),
+  isLoading: false,
+  error: null,
 
   setServices: (services) => set({ services, filteredRoutes: filterRoutes(services) }),
+
+  fetchServices: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await fetch('/__mockforge/routes');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch routes: ${response.statusText}`);
+      }
+      const routes = await response.json();
+
+      // Transform routes into services grouped by base path or tag
+      const serviceMap = new Map<string, ServiceInfo>();
+
+      for (const route of routes) {
+        // Extract service name from path (e.g., /api/users -> users-service)
+        const pathParts = (route.path || '').split('/').filter(Boolean);
+        const serviceName = pathParts[1] || pathParts[0] || 'default';
+        const serviceId = `${serviceName}-service`;
+
+        if (!serviceMap.has(serviceId)) {
+          serviceMap.set(serviceId, {
+            id: serviceId,
+            name: serviceName.charAt(0).toUpperCase() + serviceName.slice(1) + ' Service',
+            baseUrl: window.location.origin,
+            enabled: true,
+            tags: [],
+            description: `Routes for ${serviceName}`,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            routes: [],
+          });
+        }
+
+        const service = serviceMap.get(serviceId)!;
+        service.routes.push({
+          id: `${serviceId}-${route.method}-${route.path}`.replace(/[^a-zA-Z0-9-]/g, '-'),
+          method: route.method || 'ANY',
+          path: route.path || '/',
+          statusCode: route.status_code || 200,
+          priority: route.priority || 1,
+          has_fixtures: route.has_fixtures || false,
+          request_count: route.request_count || 0,
+          error_count: route.error_count || 0,
+          latency_ms: route.latency_ms || 0,
+          enabled: route.enabled !== false,
+          service_id: serviceId,
+          tags: route.tags || [],
+        });
+      }
+
+      const services = Array.from(serviceMap.values());
+
+      // Fall back to mock data if no routes returned
+      if (services.length === 0) {
+        set({ services: mockServices, filteredRoutes: filterRoutes(mockServices), isLoading: false });
+      } else {
+        set({ services, filteredRoutes: filterRoutes(services), isLoading: false });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch services';
+      logger.error('Failed to fetch services', error);
+      // Fall back to mock data on error for development
+      set({ services: mockServices, filteredRoutes: filterRoutes(mockServices), error: errorMessage, isLoading: false });
+    }
+  },
+
+  clearError: () => set({ error: null }),
 
   updateService: (serviceId, updates) => set((state) => ({
     services: state.services.map(service =>

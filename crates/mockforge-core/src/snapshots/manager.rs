@@ -395,6 +395,137 @@ impl SnapshotManager {
         Ok((manifest, vbr_state, recorder_state))
     }
 
+    /// Load a snapshot and restore system state with protocol exporters
+    ///
+    /// Extended version that accepts protocol state exporters to restore
+    /// protocol-specific state from snapshots.
+    ///
+    /// # Arguments
+    /// * `name` - Snapshot name
+    /// * `workspace_id` - Workspace identifier
+    /// * `components` - Which components to restore (uses manifest if None)
+    /// * `consistency_engine` - Optional consistency engine for unified state
+    /// * `workspace_persistence` - Optional workspace persistence for config
+    /// * `protocol_exporters` - Map of protocol exporters for restoring protocol state
+    pub async fn load_snapshot_with_exporters(
+        &self,
+        name: String,
+        workspace_id: String,
+        components: Option<SnapshotComponents>,
+        consistency_engine: Option<&ConsistencyEngine>,
+        workspace_persistence: Option<&WorkspacePersistence>,
+        protocol_exporters: HashMap<String, Arc<dyn ProtocolStateExporter>>,
+    ) -> Result<(SnapshotManifest, Option<serde_json::Value>, Option<serde_json::Value>)> {
+        // First load the base snapshot
+        let (manifest, vbr_state, recorder_state) = self
+            .load_snapshot(
+                name.clone(),
+                workspace_id.clone(),
+                components.clone(),
+                consistency_engine,
+                workspace_persistence,
+            )
+            .await?;
+
+        // Determine which components to restore
+        let components_to_restore = components.unwrap_or_else(|| manifest.components.clone());
+
+        // Restore protocol states if any exporters provided and protocols were saved
+        if !protocol_exporters.is_empty()
+            && (!components_to_restore.protocols.is_empty()
+                || !manifest.components.protocols.is_empty())
+        {
+            let snapshot_dir = self.snapshot_dir(&workspace_id, &name);
+            let protocols_dir = snapshot_dir.join("protocols");
+
+            if protocols_dir.exists() {
+                // Determine which protocols to restore
+                let protocols_to_restore: Vec<String> =
+                    if components_to_restore.protocols.is_empty() {
+                        // If no specific protocols requested, restore all available
+                        manifest.components.protocols.clone()
+                    } else {
+                        components_to_restore.protocols.clone()
+                    };
+
+                for protocol_name in protocols_to_restore {
+                    let protocol_path = protocols_dir.join(format!("{}.json", protocol_name));
+
+                    if protocol_path.exists() {
+                        if let Some(exporter) = protocol_exporters.get(&protocol_name) {
+                            match fs::read_to_string(&protocol_path).await {
+                                Ok(state_json) => {
+                                    match serde_json::from_str::<serde_json::Value>(&state_json) {
+                                        Ok(state) => {
+                                            // Skip placeholder/error states
+                                            if state.get("state")
+                                                == Some(&serde_json::json!("no_exporter_available"))
+                                            {
+                                                debug!(
+                                                    "Skipping {} protocol restore - no exporter was available during save",
+                                                    protocol_name
+                                                );
+                                                continue;
+                                            }
+                                            if state.get("error").is_some() {
+                                                warn!(
+                                                    "Skipping {} protocol restore - state contains error from save",
+                                                    protocol_name
+                                                );
+                                                continue;
+                                            }
+
+                                            match exporter.import_state(state).await {
+                                                Ok(_) => {
+                                                    debug!(
+                                                        "Restored {} protocol state from {}",
+                                                        protocol_name,
+                                                        protocol_path.display()
+                                                    );
+                                                }
+                                                Err(e) => {
+                                                    warn!(
+                                                        "Failed to restore {} protocol state: {}",
+                                                        protocol_name, e
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            warn!(
+                                                "Failed to parse {} protocol state: {}",
+                                                protocol_name, e
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "Failed to read {} protocol state file: {}",
+                                        protocol_name, e
+                                    );
+                                }
+                            }
+                        } else {
+                            debug!(
+                                "No exporter provided for protocol {}, skipping restore",
+                                protocol_name
+                            );
+                        }
+                    } else {
+                        debug!(
+                            "Protocol state file not found for {}: {}",
+                            protocol_name,
+                            protocol_path.display()
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok((manifest, vbr_state, recorder_state))
+    }
+
     /// List all snapshots for a workspace
     pub async fn list_snapshots(&self, workspace_id: &str) -> Result<Vec<SnapshotMetadata>> {
         let workspace_dir = self.workspace_dir(workspace_id);

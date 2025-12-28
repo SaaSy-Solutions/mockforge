@@ -4561,9 +4561,12 @@ pub async fn handle_serve(
             if merged_specs.len() == 1 {
                 // Single merged spec - write to temp file
                 let merged = &merged_specs[0];
-                let merged_json =
-                    serde_json::to_string_pretty(merged.raw_document.as_ref().unwrap())
-                        .map_err(|e| format!("Failed to serialize merged spec: {}", e))?;
+                let raw_doc = merged
+                    .raw_document
+                    .as_ref()
+                    .ok_or_else(|| "Merged spec has no raw document".to_string())?;
+                let merged_json = serde_json::to_string_pretty(raw_doc)
+                    .map_err(|e| format!("Failed to serialize merged spec: {}", e))?;
 
                 // Use persistent temp file (won't be deleted automatically)
                 let temp_dir = std::env::temp_dir();
@@ -4582,10 +4585,12 @@ pub async fn handle_serve(
                     merged_specs.into_iter().map(|s| (PathBuf::from("merged"), s)).collect();
                 match merge_specs(all_specs, conflict_strategy) {
                     Ok(final_merged) => {
-                        let merged_json = serde_json::to_string_pretty(
-                            final_merged.raw_document.as_ref().unwrap(),
-                        )
-                        .map_err(|e| format!("Failed to serialize final merged spec: {}", e))?;
+                        let raw_doc = final_merged
+                            .raw_document
+                            .as_ref()
+                            .ok_or_else(|| "Final merged spec has no raw document".to_string())?;
+                        let merged_json = serde_json::to_string_pretty(raw_doc)
+                            .map_err(|e| format!("Failed to serialize final merged spec: {}", e))?;
 
                         // Use persistent temp file (won't be deleted automatically)
                         let temp_dir = std::env::temp_dir();
@@ -4747,11 +4752,12 @@ pub async fn handle_serve(
         http_app =
             http_app.layer(from_fn(|req: axum::extract::Request, next: axum::middleware::Next| {
                 SendSafeWrapper(async move {
-                    let state = CHAOS_MIDDLEWARE
-                        .get()
-                        .expect("Chaos middleware should be initialized")
-                        .clone();
-                    chaos_middleware_with_state(state, req, next).await
+                    if let Some(state) = CHAOS_MIDDLEWARE.get() {
+                        chaos_middleware_with_state(state.clone(), req, next).await
+                    } else {
+                        // Chaos middleware not initialized, pass through
+                        next.run(req).await
+                    }
                 })
             }));
         println!("✅ Chaos middleware integrated - latency recording enabled");

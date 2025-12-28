@@ -172,19 +172,9 @@ pub async fn run_wizard() -> Result<WizardConfig, Box<dyn std::error::Error + Se
     };
 
     // Step 4: Protocol selection (if custom template)
-    let protocols = if template.is_none() {
-        let protocol_names: Vec<&str> = Protocol::all().iter().map(|p| p.name()).collect();
-
-        let selections = MultiSelect::with_theme(&theme)
-            .with_prompt("Select protocols to enable")
-            .items(&protocol_names)
-            .defaults(&[true, false, false, false, false, false, false]) // HTTP selected by default
-            .interact()?;
-
-        selections.into_iter().map(|i| Protocol::all()[i]).collect()
-    } else {
+    let protocols = if let Some(tmpl) = template {
         // Auto-select protocols based on template
-        match template.unwrap() {
+        match tmpl {
             Template::RestApi => vec![Protocol::Http],
             Template::Grpc => vec![Protocol::Http, Protocol::Grpc],
             Template::WebSocket => vec![Protocol::Http, Protocol::WebSocket],
@@ -196,6 +186,16 @@ pub async fn run_wizard() -> Result<WizardConfig, Box<dyn std::error::Error + Se
                 Protocol::Kafka,
             ],
         }
+    } else {
+        let protocol_names: Vec<&str> = Protocol::all().iter().map(|p| p.name()).collect();
+
+        let selections = MultiSelect::with_theme(&theme)
+            .with_prompt("Select protocols to enable")
+            .items(&protocol_names)
+            .defaults(&[true, false, false, false, false, false, false]) // HTTP selected by default
+            .interact()?;
+
+        selections.into_iter().map(|i| Protocol::all()[i]).collect()
     };
 
     // Step 5: Admin UI

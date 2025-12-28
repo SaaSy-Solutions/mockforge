@@ -55,6 +55,11 @@ impl MockServerBuilder {
     }
 
     /// Automatically discover an available port
+    ///
+    /// By default, uses port 0 which lets the OS assign any available ephemeral port.
+    /// This is atomic and avoids race conditions in parallel tests.
+    ///
+    /// Use `port_range()` if you need ports within a specific range.
     #[must_use]
     pub const fn auto_port(mut self) -> Self {
         self.auto_port = true;
@@ -63,7 +68,12 @@ impl MockServerBuilder {
     }
 
     /// Set the port range for automatic port discovery
-    /// Default range is 30000-30100
+    ///
+    /// When set, `auto_port()` will scan this range for an available port
+    /// instead of using OS-assigned ports.
+    ///
+    /// Note: Scanning a range has a small TOCTOU race condition. For parallel
+    /// tests, prefer using `auto_port()` without a range.
     #[must_use]
     pub const fn port_range(mut self, start: u16, end: u16) -> Self {
         self.port_range = Some((start, end));
@@ -136,10 +146,15 @@ impl MockServerBuilder {
 
         // Apply port settings
         if self.auto_port {
-            // Discover an available port
-            let (start, end) = self.port_range.unwrap_or((30000, 30100));
-            let port = find_available_port(start, end)?;
-            config.http.port = port;
+            if let Some((start, end)) = self.port_range {
+                // User specified a port range - scan for available port
+                let port = find_available_port(start, end)?;
+                config.http.port = port;
+            } else {
+                // No range specified - use port 0 for OS-assigned port
+                // This is atomic and avoids TOCTOU race conditions
+                config.http.port = 0;
+            }
         } else if let Some(port) = self.port {
             config.http.port = port;
         }
@@ -170,7 +185,9 @@ impl MockServerBuilder {
         }
 
         // Create and start the server
-        MockServer::from_config(config, core_config).await
+        let mut server = MockServer::from_config(config, core_config).await?;
+        server.start().await?;
+        Ok(server)
     }
 }
 

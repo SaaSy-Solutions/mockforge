@@ -479,7 +479,9 @@ pub async fn execute_time_command(command: TimeCommands, admin_url: Option<Strin
                     let time = scenario["current_time"].as_str();
                     let scale = scenario["scale_factor"].as_f64().unwrap_or(1.0);
 
-                    println!("  📁 {}", path.file_name().unwrap().to_string_lossy());
+                    let file_name =
+                        path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+                    println!("  📁 {}", file_name);
                     println!("     Name: {}", name);
                     println!("     Created: {}", created);
                     println!("     Enabled: {}", enabled);

@@ -15,7 +15,7 @@ import {
 
 export type LayoutType = 'hierarchical' | 'force-directed' | 'grid' | 'circular';
 export type FilterType = 'all' | 'endpoint' | 'service' | 'workspace';
-export type ProtocolFilter = 'all' | 'http' | 'grpc' | 'websocket' | 'graphql';
+export type ProtocolFilter = 'all' | 'http' | 'grpc' | 'websocket' | 'graphql' | 'mqtt' | 'kafka' | 'amqp' | 'ftp' | 'smtp' | 'tcp';
 
 interface GraphControlsProps {
   layout: LayoutType;
@@ -119,6 +119,12 @@ export function GraphControls({
                     <SelectItem value="grpc">gRPC</SelectItem>
                     <SelectItem value="websocket">WebSocket</SelectItem>
                     <SelectItem value="graphql">GraphQL</SelectItem>
+                    <SelectItem value="mqtt">MQTT</SelectItem>
+                    <SelectItem value="kafka">Kafka</SelectItem>
+                    <SelectItem value="amqp">AMQP</SelectItem>
+                    <SelectItem value="smtp">SMTP</SelectItem>
+                    <SelectItem value="ftp">FTP</SelectItem>
+                    <SelectItem value="tcp">TCP</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

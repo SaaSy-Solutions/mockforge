@@ -391,16 +391,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_in_ffi_context() {
-        // Simulate what the FFI does: create server, use it in async context
-        let runtime = Runtime::new().unwrap();
-
-        runtime.block_on(async {
-            let result = MockServer::new().port(0).start().await;
-            // Port 0 should allow the OS to assign a port
-            if let Ok(mut server) = result {
-                let _ = server.stop().await;
-            }
-        });
+        // Test server creation and cleanup in async context
+        let result = MockServer::new().port(0).start().await;
+        // Port 0 should allow the OS to assign a port
+        if let Ok(mut server) = result {
+            let _ = server.stop().await;
+        }
     }
 
     #[test]

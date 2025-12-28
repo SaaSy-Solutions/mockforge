@@ -736,7 +736,8 @@ async fn export_openapi_spec_handler(
         "paths": {}
     });
 
-    let paths = spec["paths"].as_object_mut().expect("paths must be an object");
+    // Get the paths object - this should always succeed since we just created it above
+    let paths = spec["paths"].as_object_mut().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Group endpoints by path
     for endpoint in endpoints.iter() {

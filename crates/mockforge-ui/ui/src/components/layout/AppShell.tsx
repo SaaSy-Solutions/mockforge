@@ -60,6 +60,7 @@ import {
   Share2,
   Lock as LockIcon,
 } from 'lucide-react';
+import { GlobalConnectionStatus } from './ConnectionStatus';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -357,6 +358,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                 </span>
               </div>
               <div className="flex items-center gap-x-4 lg:gap-x-6">
+                <GlobalConnectionStatus className="hidden sm:flex" />
                 <SimpleThemeToggle />
                 <Button variant="outline" size="sm" onClick={onRefresh} className="flex items-center gap-2">
                   <RefreshCw className="h-4 w-4" />

@@ -1,6 +1,6 @@
 {
   "name": "mockforge-ui-builder",
-  "version": "0.1.0",
+  "version": "0.3.17",
   "type": "module",
   "description": "Low-code UI builder for MockForge",
   "scripts": {

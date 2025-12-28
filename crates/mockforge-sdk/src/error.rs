@@ -67,7 +67,7 @@ pub enum Error {
     },
 
     /// Server shutdown timeout
-    #[error("Server failed to stop within {timeout_secs} seconds.\nSome connections may still be active.")]
+    #[error("Server failed to stop within {timeout_secs} seconds.\nSome connections may still be active.\nTip: Ensure all client connections are closed before stopping the server.")]
     ShutdownTimeout {
         /// Number of seconds waited before timeout
         timeout_secs: u64,
@@ -297,10 +297,9 @@ mod tests {
 
     #[test]
     fn test_http_error_conversion() {
-        // Create an HTTP error using an invalid header value
-        use axum::http::header::InvalidHeaderValue;
+        // Create an HTTP error using an invalid header value (control characters are invalid)
         let http_err: axum::http::Error =
-            axum::http::header::HeaderValue::from_bytes(&[0x80]).unwrap_err().into();
+            axum::http::header::HeaderValue::from_bytes(&[0x00]).unwrap_err().into();
         let err = Error::from(http_err);
         let msg = format!("{err}");
         assert!(msg.contains("HTTP error"));

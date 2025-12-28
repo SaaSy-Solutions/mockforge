@@ -927,8 +927,9 @@ async fn handle_cloud_workspace_link(
 ) -> Result<()> {
     // Create or update .mockforge/sync.yaml
     let sync_config_path = local_workspace.join(".mockforge").join("sync.yaml");
-    std::fs::create_dir_all(sync_config_path.parent().unwrap())
-        .context("Failed to create .mockforge directory")?;
+    if let Some(parent) = sync_config_path.parent() {
+        std::fs::create_dir_all(parent).context("Failed to create .mockforge directory")?;
+    }
 
     // Read cloud config to get service URL and API key
     let cloud_config_path = dirs::home_dir()

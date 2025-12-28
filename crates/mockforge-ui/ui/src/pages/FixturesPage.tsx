@@ -56,27 +56,30 @@ export function FixturesPage() {
     setIsViewingFixture(true);
   };
 
-  const handleDownloadFixture = (fixture: FixtureInfo) => {
-    // For now, we'll create a placeholder content since the API doesn't provide the actual fixture content
-    const placeholderContent = {
-      fixture_id: fixture.id,
-      method: fixture.method,
-      path: fixture.path,
-      protocol: fixture.protocol,
-      saved_at: fixture.saved_at,
-      fingerprint: fixture.fingerprint,
-      metadata: fixture.metadata
-    };
+  const handleDownloadFixture = async (fixture: FixtureInfo) => {
+    try {
+      const response = await fetch(`/__mockforge/fixtures/${fixture.id}/download`);
+      if (!response.ok) {
+        throw new Error(`Failed to download fixture: ${response.statusText}`);
+      }
 
-    const blob = new Blob([JSON.stringify(placeholderContent, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${fixture.id}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Use content-disposition header if available, otherwise default to fixture id
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filenameMatch = contentDisposition?.match(/filename="?([^"]+)"?/);
+      a.download = filenameMatch?.[1] || `${fixture.id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Fixture downloaded successfully');
+    } catch (error) {
+      logger.error('Error downloading fixture', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to download fixture');
+    }
   };
 
   const formatFileSize = (bytes: number): string => {

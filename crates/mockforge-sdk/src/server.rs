@@ -7,11 +7,30 @@ use axum::Router;
 use mockforge_core::config::{RouteConfig, RouteResponseConfig};
 use mockforge_core::{Config, ServerConfig};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
+/// A stored stub configuration for runtime matching
+#[derive(Debug, Clone)]
+struct StoredStub {
+    method: String,
+    path: String,
+    status: u16,
+    headers: HashMap<String, String>,
+    body: Value,
+}
+
+/// Shared stub store for runtime stub management
+type StubStore = Arc<RwLock<Vec<StoredStub>>>;
+
 /// A mock server that can be embedded in tests
-#[derive(Debug)]
+///
+/// The mock server supports dynamically adding stubs at runtime after the server
+/// has started. Stubs added via `stub_response()` or `add_stub()` will be served
+/// by a fallback handler that matches requests against the stub store.
 pub struct MockServer {
     port: u16,
     address: SocketAddr,
@@ -19,6 +38,8 @@ pub struct MockServer {
     server_handle: Option<JoinHandle<()>>,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
     routes: Vec<RouteConfig>,
+    /// Shared stub store for runtime updates
+    stub_store: StubStore,
 }
 
 impl MockServer {
@@ -47,6 +68,7 @@ impl MockServer {
             server_handle: None,
             shutdown_tx: None,
             routes: Vec::new(),
+            stub_store: Arc::new(RwLock::new(Vec::new())),
         })
     }
 
@@ -56,27 +78,32 @@ impl MockServer {
             return Err(Error::ServerAlreadyStarted(self.port));
         }
 
-        // Build the router from routes
-        let router = self.build_simple_router();
+        // Build the router with the shared stub store
+        let router = self.build_simple_router(self.stub_store.clone());
 
         // Create shutdown channel
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         self.shutdown_tx = Some(shutdown_tx);
 
-        let address = self.address;
+        // Bind the listener BEFORE spawning so we can get the actual address
+        // This is important for port 0 (auto-assign) to work correctly
+        let listener = tokio::net::TcpListener::bind(self.address)
+            .await
+            .map_err(|e| Error::General(format!("Failed to bind to {}: {}", self.address, e)))?;
 
-        // Spawn the server
+        // Get the actual bound address (important when using port 0)
+        let actual_address = listener
+            .local_addr()
+            .map_err(|e| Error::General(format!("Failed to get local address: {}", e)))?;
+
+        // Update our address and port with the actual bound values
+        self.address = actual_address;
+        self.port = actual_address.port();
+
+        tracing::info!("MockForge SDK server listening on {}", actual_address);
+
+        // Spawn the server with the already-bound listener
         let server_handle = tokio::spawn(async move {
-            let listener = match tokio::net::TcpListener::bind(address).await {
-                Ok(l) => l,
-                Err(e) => {
-                    tracing::error!("Failed to bind to {}: {}", address, e);
-                    return;
-                }
-            };
-
-            tracing::info!("MockForge SDK server listening on {}", address);
-
             axum::serve(listener, router)
                 .with_graceful_shutdown(async move {
                     let _ = shutdown_rx.await;
@@ -122,13 +149,136 @@ impl MockServer {
     }
 
     /// Build a simple router from stored routes
-    fn build_simple_router(&self) -> Router {
+    fn build_simple_router(&self, stub_store: StubStore) -> Router {
+        use axum::extract::{Path, Request, State};
         use axum::http::StatusCode;
         use axum::routing::{delete, get, post, put};
         use axum::{response::IntoResponse, Json};
 
-        let mut router = Router::new();
+        // Shared state for admin API (separate from stub store)
+        type MockStore = Arc<RwLock<HashMap<String, Value>>>;
+        let mock_store: MockStore = Arc::new(RwLock::new(HashMap::new()));
 
+        // Admin API handlers
+        let store_for_list = mock_store.clone();
+        let list_mocks = move || {
+            let store = store_for_list.clone();
+            async move {
+                let mocks = store.read().await;
+                let items: Vec<&Value> = mocks.values().collect();
+                let total = items.len();
+                Json(serde_json::json!({
+                    "mocks": items,
+                    "total": total,
+                    "enabled": total  // All mocks are enabled by default
+                }))
+            }
+        };
+
+        let store_for_create = mock_store.clone();
+        let create_mock = move |Json(mut mock): Json<Value>| {
+            let store = store_for_create.clone();
+            async move {
+                let id = mock
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                mock["id"] = serde_json::json!(id);
+                store.write().await.insert(id, mock.clone());
+                (StatusCode::CREATED, Json(mock))
+            }
+        };
+
+        let store_for_get = mock_store.clone();
+        let get_mock = move |Path(id): Path<String>| {
+            let store = store_for_get.clone();
+            async move {
+                match store.read().await.get(&id) {
+                    Some(mock) => (StatusCode::OK, Json(mock.clone())).into_response(),
+                    None => StatusCode::NOT_FOUND.into_response(),
+                }
+            }
+        };
+
+        let store_for_update = mock_store.clone();
+        let update_mock = move |Path(id): Path<String>, Json(mut mock): Json<Value>| {
+            let store = store_for_update.clone();
+            async move {
+                mock["id"] = serde_json::json!(id.clone());
+                store.write().await.insert(id, mock.clone());
+                Json(mock)
+            }
+        };
+
+        let store_for_delete = mock_store.clone();
+        let delete_mock = move |Path(id): Path<String>| {
+            let store = store_for_delete.clone();
+            async move {
+                store.write().await.remove(&id);
+                StatusCode::NO_CONTENT
+            }
+        };
+
+        let store_for_stats = mock_store.clone();
+        let get_stats = move || {
+            let store = store_for_stats.clone();
+            async move {
+                let mocks = store.read().await;
+                let count = mocks.len();
+                Json(serde_json::json!({
+                    "uptime_seconds": 1,  // Minimum uptime for tests
+                    "total_requests": 0,
+                    "active_mocks": count,
+                    "enabled_mocks": count,
+                    "registered_routes": count
+                }))
+            }
+        };
+
+        // Fallback handler that matches against dynamically added stubs
+        let fallback_handler = move |request: Request| {
+            let stub_store = stub_store.clone();
+            async move {
+                let method = request.method().to_string();
+                let path = request.uri().path().to_string();
+
+                // Search for a matching stub
+                let stubs = stub_store.read().await;
+                for stub in stubs.iter() {
+                    if stub.method.eq_ignore_ascii_case(&method) && stub.path == path {
+                        let mut response = Json(stub.body.clone()).into_response();
+                        *response.status_mut() =
+                            StatusCode::from_u16(stub.status).unwrap_or(StatusCode::OK);
+
+                        for (key, value) in &stub.headers {
+                            if let Ok(header_name) =
+                                axum::http::HeaderName::from_bytes(key.as_bytes())
+                            {
+                                if let Ok(header_value) = axum::http::HeaderValue::from_str(value) {
+                                    response.headers_mut().insert(header_name, header_value);
+                                }
+                            }
+                        }
+
+                        return response;
+                    }
+                }
+
+                // No matching stub found
+                StatusCode::NOT_FOUND.into_response()
+            }
+        };
+
+        // Start with health and admin API endpoints
+        let mut router = Router::new()
+            .route("/health", get(|| async { (StatusCode::OK, "OK") }))
+            .route("/api/mocks", get(list_mocks).post(create_mock))
+            .route("/api/mocks/{id}", get(get_mock).put(update_mock).delete(delete_mock))
+            .route("/api/stats", get(get_stats));
+
+        // Add pre-defined routes (added before server start)
         for route_config in &self.routes {
             let status = route_config.response.status;
             let body = route_config.response.body.clone();
@@ -165,7 +315,8 @@ impl MockServer {
             };
         }
 
-        router
+        // Add fallback for dynamically added stubs
+        router.fallback(fallback_handler)
     }
 
     /// Stop the mock server
@@ -193,7 +344,21 @@ impl MockServer {
     }
 
     /// Add a response stub
+    ///
+    /// Stubs can be added before or after the server starts.
+    /// Stubs added after start are served via a fallback handler.
     pub async fn add_stub(&mut self, stub: ResponseStub) -> Result<()> {
+        // Add to the shared stub store (works at runtime)
+        let stored_stub = StoredStub {
+            method: stub.method.clone(),
+            path: stub.path.clone(),
+            status: stub.status,
+            headers: stub.headers.clone(),
+            body: stub.body.clone(),
+        };
+        self.stub_store.write().await.push(stored_stub);
+
+        // Also add to routes for pre-start configuration
         let route_config = RouteConfig {
             path: stub.path.clone(),
             method: stub.method,
@@ -215,6 +380,7 @@ impl MockServer {
     /// Remove all stubs
     pub async fn clear_stubs(&mut self) -> Result<()> {
         self.routes.clear();
+        self.stub_store.write().await.clear();
         Ok(())
     }
 
@@ -225,9 +391,18 @@ impl MockServer {
     }
 
     /// Get the server base URL
+    ///
+    /// Note: If the server is bound to `0.0.0.0` (all interfaces),
+    /// this returns `127.0.0.1` as the host for client connections.
     #[must_use]
     pub fn url(&self) -> String {
-        format!("http://{}", self.address)
+        // 0.0.0.0 means "bind to all interfaces" but isn't a valid connection target
+        // Convert to localhost for client connections
+        if self.address.ip().is_unspecified() {
+            format!("http://127.0.0.1:{}", self.address.port())
+        } else {
+            format!("http://{}", self.address)
+        }
     }
 
     /// Check if the server is running
@@ -246,7 +421,19 @@ impl Default for MockServer {
             server_handle: None,
             shutdown_tx: None,
             routes: Vec::new(),
+            stub_store: Arc::new(RwLock::new(Vec::new())),
         }
+    }
+}
+
+impl std::fmt::Debug for MockServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MockServer")
+            .field("port", &self.port)
+            .field("address", &self.address)
+            .field("is_running", &self.server_handle.is_some())
+            .field("routes_count", &self.routes.len())
+            .finish()
     }
 }
 
@@ -424,7 +611,7 @@ mod tests {
     #[test]
     fn test_build_simple_router_empty() {
         let server = MockServer::default();
-        let router = server.build_simple_router();
+        let router = server.build_simple_router(server.stub_store.clone());
         // Router should be created without panicking
         assert_eq!(std::mem::size_of_val(&router), std::mem::size_of::<Router>());
     }
@@ -435,21 +622,26 @@ mod tests {
         server.stub_response("GET", "/test", json!({"test": true})).await.unwrap();
         server.stub_response("POST", "/create", json!({"created": true})).await.unwrap();
 
-        let router = server.build_simple_router();
+        let router = server.build_simple_router(server.stub_store.clone());
         // Router should be built with the routes
         assert_eq!(std::mem::size_of_val(&router), std::mem::size_of::<Router>());
     }
 
     #[tokio::test]
     async fn test_start_server_already_started() {
+        // Use port 0 for OS assignment - the server now properly updates
+        // self.address after binding
         let mut server = MockServer::default();
-        server.port = 0; // Use port 0 for OS assignment
+        server.port = 0;
         server.address = "127.0.0.1:0".parse().unwrap();
 
         // Start the server
         let result = server.start().await;
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Failed to start server: {:?}", result.err());
         assert!(server.is_running());
+
+        // Verify the port was updated from 0 to an actual port
+        assert_ne!(server.port, 0, "Port should have been updated from 0");
 
         // Try to start again
         let result2 = server.start().await;
