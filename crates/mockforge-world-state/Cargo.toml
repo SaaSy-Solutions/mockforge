@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-world-state"
-version = "0.3.17"
+version = "0.3.18"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -30,8 +30,8 @@ chrono = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
 
 # MockForge dependencies
-mockforge-core = { version = "0.3.17", path = "../mockforge-core", features = ["data"] }
-mockforge-data = { version = "0.3.17", path = "../mockforge-data" }
+mockforge-core = { version = "0.3.18", path = "../mockforge-core", features = ["data"] }
+mockforge-data = { version = "0.3.18", path = "../mockforge-data" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "test-util"] }

@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-core"
-version = "0.3.17"
+version = "0.3.18"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -74,7 +74,7 @@ cron = "0.15"
 # JSON Schema generation (optional, for schema crate)
 schemars = { version = "0.8", features = ["derive"], optional = true }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"], optional = true }
-mockforge-data = { version = "0.3.17", path = "../mockforge-data", optional = true }
+mockforge-data = { version = "0.3.18", path = "../mockforge-data", optional = true }
 
 [dev-dependencies]
 tempfile = "3.10"
@@ -82,7 +82,7 @@ tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
 criterion = { workspace = true }
 proptest = "1.8.0"
-mockforge-template-expansion = { version = "0.3.17", path = "../mockforge-template-expansion" }
+mockforge-template-expansion = { version = "0.3.18", path = "../mockforge-template-expansion" }
 # Note: mockforge-cli dev-dependency removed to avoid circular dependency during publishing
 
 [[bench]]

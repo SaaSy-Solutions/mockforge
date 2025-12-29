@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                id as \"id: Uuid\",\n                workspace_id as \"workspace_id: Uuid\",\n                author_id as \"author_id: Uuid\",\n                message,\n                parent_id as \"parent_id: Uuid\",\n                version,\n                snapshot as \"snapshot: serde_json::Value\",\n                changes as \"changes: serde_json::Value\",\n                created_at as \"created_at: chrono::DateTime<chrono::Utc>\"\n            FROM commits\n            WHERE id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "workspace_id: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "author_id: Uuid",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "message",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "parent_id: Uuid",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "version",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "snapshot: serde_json::Value",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "changes: serde_json::Value",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at: chrono::DateTime<chrono::Utc>",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2ca00ea39f5f6feb0374d6fc63a32c119cf6e0ef634675316ccfe8490e80480c"
+}

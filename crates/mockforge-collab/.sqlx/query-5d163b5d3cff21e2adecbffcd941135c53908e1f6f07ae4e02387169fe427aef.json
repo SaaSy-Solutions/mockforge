@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                id as \"id: Uuid\",\n                workspace_id as \"workspace_id: Uuid\",\n                backup_url,\n                storage_backend,\n                storage_config,\n                size_bytes,\n                backup_format,\n                encrypted,\n                commit_id as \"commit_id: Uuid\",\n                created_at,\n                created_by as \"created_by: Uuid\",\n                expires_at\n            FROM workspace_backups\n            WHERE workspace_id = ?\n            ORDER BY created_at DESC\n            LIMIT ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "workspace_id: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "backup_url",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "storage_backend",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "storage_config",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "size_bytes",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "backup_format",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "encrypted",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "commit_id: Uuid",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_by: Uuid",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "expires_at",
+        "ordinal": 11,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "5d163b5d3cff21e2adecbffcd941135c53908e1f6f07ae4e02387169fe427aef"
+}

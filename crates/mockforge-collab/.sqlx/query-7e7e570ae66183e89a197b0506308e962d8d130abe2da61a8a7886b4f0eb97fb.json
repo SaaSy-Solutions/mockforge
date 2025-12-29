@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT change_data\n            FROM workspace_state_changes\n            WHERE workspace_id = ? AND version > ?\n            ORDER BY version ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "change_data",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7e7e570ae66183e89a197b0506308e962d8d130abe2da61a8a7886b4f0eb97fb"
+}

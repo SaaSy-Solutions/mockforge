@@ -12,6 +12,16 @@
 
 - Nothing yet.
 
+## [0.3.18] - 2025-12-29
+
+### Fixed
+
+- **[Collab] SQLx offline mode for crates.io installation** (#79): Fixed compilation errors when installing `mockforge-collab` from crates.io
+  - Added `.sqlx` query cache directory with 51 precompiled query metadata files
+  - The `build.rs` now automatically enables `SQLX_OFFLINE=true` when query cache is present
+  - Users no longer need `DATABASE_URL` or to run `cargo sqlx prepare` to install the crate
+  - Resolves "set DATABASE_URL to use query macros online" compilation errors
+
 ## [0.3.17] - 2025-12-28
 
 ### Added
