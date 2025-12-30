@@ -11,6 +11,9 @@ use std::collections::{HashMap, HashSet};
 /// Configuration for k6 script generation
 pub struct K6Config {
     pub target_url: String,
+    /// API base path prefix (e.g., "/api" or "/v2")
+    /// Prepended to all API endpoint paths
+    pub base_path: Option<String>,
     pub scenario: LoadScenario,
     pub duration_secs: u64,
     pub max_vus: u32,
@@ -97,6 +100,9 @@ impl K6ScriptGenerator {
             .scenario
             .generate_stages(self.config.duration_secs, self.config.max_vus);
 
+        // Get the base path (defaults to empty string if not set)
+        let base_path = self.config.base_path.as_deref().unwrap_or("");
+
         // Track all placeholders used across all operations
         let mut all_placeholders: HashSet<DynamicPlaceholder> = HashSet::new();
 
@@ -120,8 +126,14 @@ impl K6ScriptGenerator {
                 let is_get_or_head = matches!(k6_method.as_str(), "get" | "head");
 
                 // Process path for dynamic placeholders
-                let path = template.generate_path();
-                let processed_path = DynamicParamProcessor::process_path(&path);
+                // Prepend base_path if configured
+                let raw_path = template.generate_path();
+                let full_path = if base_path.is_empty() {
+                    raw_path
+                } else {
+                    format!("{}{}", base_path, raw_path)
+                };
+                let processed_path = DynamicParamProcessor::process_path(&full_path);
                 all_placeholders.extend(processed_path.placeholders.clone());
 
                 // Process body for dynamic placeholders
@@ -139,7 +151,7 @@ impl K6ScriptGenerator {
                     "metric_name": metric_name,  // Use sanitized name for metric name strings (k6 validation)
                     "display_name": display_name,  // Keep original for comments/display
                     "method": k6_method,  // k6 uses lowercase methods (http.get, http.post, http.del)
-                    "path": if processed_path.is_dynamic { processed_path.value } else { path },
+                    "path": if processed_path.is_dynamic { processed_path.value } else { full_path },
                     "path_is_dynamic": processed_path.is_dynamic,
                     "headers": self.build_headers_json(template),  // Returns JSON string for template
                     "body": body_value,
@@ -312,6 +324,7 @@ mod tests {
     fn test_k6_config_creation() {
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::RampUp,
             duration_secs: 60,
             max_vus: 10,
@@ -331,6 +344,7 @@ mod tests {
     fn test_script_generator_creation() {
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
@@ -407,6 +421,7 @@ mod tests {
 
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
@@ -593,6 +608,7 @@ export default function() {{}}
 
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
@@ -637,6 +653,7 @@ export default function() {{}}
 
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
@@ -681,6 +698,7 @@ export default function() {{}}
 
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
@@ -741,6 +759,7 @@ export default function() {{}}
 
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
@@ -800,6 +819,7 @@ export default function() {{}}
 
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
@@ -859,6 +879,7 @@ export default function() {{}}
 
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
@@ -913,6 +934,7 @@ export default function() {{}}
 
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,
@@ -967,6 +989,7 @@ export default function() {{}}
 
         let config = K6Config {
             target_url: "https://api.example.com".to_string(),
+            base_path: None,
             scenario: LoadScenario::Constant,
             duration_secs: 30,
             max_vus: 5,

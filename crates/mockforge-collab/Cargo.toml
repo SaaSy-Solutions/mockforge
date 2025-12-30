@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-collab"
-version = "0.3.18"
+version = "0.3.19"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -18,8 +18,8 @@ workspace = true
 
 [dependencies]
 # Core dependencies
-mockforge-core = { version = "0.3.18", path = "../mockforge-core" }
-mockforge-pipelines = { version = "0.3.18", path = "../mockforge-pipelines", optional = true }
+mockforge-core = { version = "0.3.19", path = "../mockforge-core" }
+mockforge-pipelines = { version = "0.3.19", path = "../mockforge-pipelines", optional = true }
 
 # Serialization
 serde = { workspace = true }

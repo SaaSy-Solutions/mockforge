@@ -12,6 +12,27 @@
 
 - Nothing yet.
 
+## [0.3.19] - 2025-12-30
+
+### Added
+
+- **[DevX] API base path support for bench command** (#79): New `--base-path` option to prepend a path prefix to all API endpoints in generated load tests
+  - Automatically extracts base path from OpenAPI spec's `servers` URL (e.g., `https://api.example.com/api/v1` → `/api/v1`)
+  - CLI option takes priority over spec's base path for explicit control
+  - Use `--base-path ""` to disable base path even if spec defines one
+  - Works with both standard k6 scripts and CRUD flow mode
+  - Example usage:
+    ```bash
+    # Auto-detect from spec's servers URL
+    mockforge bench --spec api.yaml --target http://localhost:8080 --crud-flow
+
+    # Explicitly set base path
+    mockforge bench --spec api.yaml --target http://localhost:8080 --base-path /api
+
+    # Disable base path
+    mockforge bench --spec api.yaml --target http://localhost:8080 --base-path ""
+    ```
+
 ## [0.3.18] - 2025-12-29
 
 ### Fixed

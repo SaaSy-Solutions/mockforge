@@ -201,6 +201,12 @@ impl ParallelExecutor {
         // Parse base headers
         let base_headers = self.base_command.parse_headers()?;
 
+        // Resolve base path (CLI option takes priority over spec's servers URL)
+        let base_path = self.resolve_base_path(&parser);
+        if let Some(ref bp) = base_path {
+            TerminalReporter::print_progress(&format!("Using base path: {}", bp));
+        }
+
         // Parse scenario
         let scenario = LoadScenario::from_str(&self.base_command.scenario)
             .map_err(BenchError::InvalidScenario)?;
@@ -251,6 +257,7 @@ impl ParallelExecutor {
             let semaphore = semaphore.clone();
             let progress_bar = progress_bars[index].clone();
             let target_index = index;
+            let base_path = base_path.clone();
 
             let handle = tokio::spawn(async move {
                 // Acquire semaphore permit
@@ -275,6 +282,7 @@ impl ParallelExecutor {
                     max_error_rate,
                     verbose,
                     skip_tls_verify,
+                    base_path.as_ref(),
                     &target,
                     target_index,
                     &templates,
@@ -346,6 +354,19 @@ impl ParallelExecutor {
         })
     }
 
+    /// Resolve the effective base path for API endpoints
+    fn resolve_base_path(&self, parser: &SpecParser) -> Option<String> {
+        // CLI option takes priority (including empty string to disable)
+        if let Some(cli_base_path) = &self.base_command.base_path {
+            if cli_base_path.is_empty() {
+                return None;
+            }
+            return Some(cli_base_path.clone());
+        }
+        // Fall back to spec's base path
+        parser.get_base_path()
+    }
+
     /// Execute a single target test (internal method that doesn't require BenchCommand)
     #[allow(clippy::too_many_arguments)]
     async fn execute_single_target_internal(
@@ -360,6 +381,7 @@ impl ParallelExecutor {
         max_error_rate: f64,
         verbose: bool,
         skip_tls_verify: bool,
+        base_path: Option<&String>,
         target: &TargetConfig,
         target_index: usize,
         templates: &[crate::request_gen::RequestTemplate],
@@ -380,6 +402,7 @@ impl ParallelExecutor {
         // Create k6 config for this target
         let k6_config = K6Config {
             target_url: target.url.clone(),
+            base_path: base_path.cloned(),
             scenario: scenario.clone(),
             duration_secs,
             max_vus: vus,

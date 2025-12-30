@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-vbr"
-version = "0.3.18"
+version = "0.3.19"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,9 +12,9 @@ publish = false
 
 [dependencies]
 # Core dependencies
-mockforge-core = { version = "0.3.18", path = "../mockforge-core" }
-mockforge-data = { version = "0.3.18", path = "../mockforge-data" }
-mockforge-http = { version = "0.3.18", path = "../mockforge-http" }
+mockforge-core = { version = "0.3.19", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.19", path = "../mockforge-data" }
+mockforge-http = { version = "0.3.19", path = "../mockforge-http" }
 
 # OpenAPI support
 openapiv3 = { workspace = true }

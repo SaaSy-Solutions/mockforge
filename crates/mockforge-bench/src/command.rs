@@ -45,6 +45,9 @@ pub struct BenchCommand {
     /// Dependency configuration file for cross-spec value passing (used with sequential mode)
     pub dependency_config: Option<PathBuf>,
     pub target: String,
+    /// API base path prefix (e.g., "/api" or "/v2/api")
+    /// If None, extracts from OpenAPI spec's servers URL
+    pub base_path: Option<String>,
     pub duration: String,
     pub vus: u32,
     pub scenario: String,
@@ -287,6 +290,12 @@ impl BenchCommand {
         // Parse headers
         let custom_headers = self.parse_headers()?;
 
+        // Resolve base path (CLI option takes priority over spec's servers URL)
+        let base_path = self.resolve_base_path(&parser);
+        if let Some(ref bp) = base_path {
+            TerminalReporter::print_progress(&format!("Using base path: {}", bp));
+        }
+
         // Generate k6 script
         TerminalReporter::print_progress("Generating k6 load test script...");
         let scenario =
@@ -294,6 +303,7 @@ impl BenchCommand {
 
         let k6_config = K6Config {
             target_url: self.target.clone(),
+            base_path,
             scenario,
             duration_secs: Self::parse_duration(&self.duration)?,
             max_vus: self.vus,
@@ -424,6 +434,7 @@ impl BenchCommand {
                 spec_mode: self.spec_mode.clone(),
                 dependency_config: self.dependency_config.clone(),
                 target: self.target.clone(), // Not used in multi-target mode, but kept for compatibility
+                base_path: self.base_path.clone(),
                 duration: self.duration.clone(),
                 vus: self.vus,
                 scenario: self.scenario.clone(),
@@ -569,6 +580,28 @@ impl BenchCommand {
         }
 
         Ok(headers)
+    }
+
+    /// Resolve the effective base path for API endpoints
+    ///
+    /// Priority:
+    /// 1. CLI --base-path option (if provided, even if empty string)
+    /// 2. Base path extracted from OpenAPI spec's servers URL
+    /// 3. None (no base path)
+    ///
+    /// An empty string from CLI explicitly disables base path.
+    fn resolve_base_path(&self, parser: &SpecParser) -> Option<String> {
+        // CLI option takes priority (including empty string to disable)
+        if let Some(cli_base_path) = &self.base_path {
+            if cli_base_path.is_empty() {
+                // Empty string explicitly means "no base path"
+                return None;
+            }
+            return Some(cli_base_path.clone());
+        }
+
+        // Fall back to spec's base path
+        parser.get_base_path()
     }
 
     /// Build mock server integration configuration
@@ -1030,6 +1063,9 @@ impl BenchCommand {
             LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
         let stages = scenario.generate_stages(duration_secs, self.vus);
 
+        // Resolve base path (CLI option takes priority over spec's servers URL)
+        let api_base_path = self.resolve_base_path(parser);
+
         // Build headers JSON string for the template
         let mut all_headers = custom_headers.clone();
         if let Some(auth) = &self.auth {
@@ -1060,7 +1096,13 @@ impl BenchCommand {
                         } else {
                             "get".to_string()
                         };
-                        let path = if parts.len() >= 2 { parts[1] } else { "/" };
+                        let raw_path = if parts.len() >= 2 { parts[1] } else { "/" };
+                        // Prepend API base path if configured
+                        let path = if let Some(ref bp) = api_base_path {
+                            format!("{}{}", bp, raw_path)
+                        } else {
+                            raw_path.to_string()
+                        };
                         let is_get_or_head = method == "get" || method == "head";
                         // POST, PUT, PATCH typically have bodies
                         let has_body = matches!(method.as_str(), "post" | "put" | "patch");
@@ -1068,7 +1110,7 @@ impl BenchCommand {
                         // Look up body from params file if available
                         let body_value = if has_body {
                             param_overrides.as_ref()
-                                .map(|po| po.get_for_operation(None, &method_raw, path))
+                                .map(|po| po.get_for_operation(None, &method_raw, &raw_path))
                                 .and_then(|oo| oo.body)
                                 .unwrap_or_else(|| serde_json::json!({}))
                         } else {
@@ -1170,12 +1212,16 @@ impl BenchCommand {
         // Parse headers
         let custom_headers = self.parse_headers()?;
 
+        // Resolve base path
+        let base_path = self.resolve_base_path(parser);
+
         // Generate k6 script
         let scenario =
             LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
 
         let k6_config = K6Config {
             target_url: self.target.clone(),
+            base_path,
             scenario,
             duration_secs: Self::parse_duration(&self.duration)?,
             max_vus: self.vus,
@@ -1257,6 +1303,12 @@ impl BenchCommand {
             LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
         let stages = scenario.generate_stages(duration_secs, self.vus);
 
+        // Resolve base path (CLI option takes priority over spec's servers URL)
+        let api_base_path = self.resolve_base_path(parser);
+        if let Some(ref bp) = api_base_path {
+            TerminalReporter::print_progress(&format!("Using base path: {}", bp));
+        }
+
         // Build headers JSON string for the template
         let mut all_headers = custom_headers.clone();
         if let Some(auth) = &self.auth {
@@ -1288,15 +1340,21 @@ impl BenchCommand {
                         } else {
                             "get".to_string()
                         };
-                        let path = if parts.len() >= 2 { parts[1] } else { "/" };
+                        let raw_path = if parts.len() >= 2 { parts[1] } else { "/" };
+                        // Prepend API base path if configured
+                        let path = if let Some(ref bp) = api_base_path {
+                            format!("{}{}", bp, raw_path)
+                        } else {
+                            raw_path.to_string()
+                        };
                         let is_get_or_head = method == "get" || method == "head";
                         // POST, PUT, PATCH typically have bodies
                         let has_body = matches!(method.as_str(), "post" | "put" | "patch");
 
-                        // Look up body from params file if available
+                        // Look up body from params file if available (use raw_path for matching)
                         let body_value = if has_body {
                             param_overrides.as_ref()
-                                .map(|po| po.get_for_operation(None, &method_raw, path))
+                                .map(|po| po.get_for_operation(None, &method_raw, raw_path))
                                 .and_then(|oo| oo.body)
                                 .unwrap_or_else(|| serde_json::json!({}))
                         } else {
@@ -1422,6 +1480,7 @@ mod tests {
             spec_mode: "merge".to_string(),
             dependency_config: None,
             target: "http://localhost".to_string(),
+            base_path: None,
             duration: "1m".to_string(),
             vus: 10,
             scenario: "ramp-up".to_string(),
@@ -1472,6 +1531,7 @@ mod tests {
             spec_mode: "merge".to_string(),
             dependency_config: None,
             target: "http://localhost".to_string(),
+            base_path: None,
             duration: "1m".to_string(),
             vus: 10,
             scenario: "ramp-up".to_string(),
@@ -1518,6 +1578,7 @@ mod tests {
             spec_mode: "merge".to_string(),
             dependency_config: None,
             target: "http://localhost".to_string(),
+            base_path: None,
             duration: "1m".to_string(),
             vus: 10,
             scenario: "ramp-up".to_string(),

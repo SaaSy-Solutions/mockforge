@@ -59,6 +59,7 @@ async fn test_billing_subscriptions_spec_generation() {
     // Create k6 config
     let config = K6Config {
         target_url: "https://api-m.sandbox.paypal.com".to_string(),
+        base_path: None,
         scenario: LoadScenario::Constant,
         duration_secs: 30,
         max_vus: 50,
@@ -263,6 +264,7 @@ async fn test_insecure_skip_tls_verify_in_global_options() {
     // Test with skip_tls_verify = true
     let config = K6Config {
         target_url: "https://192.168.1.100".to_string(),
+        base_path: None,
         scenario: LoadScenario::Constant,
         duration_secs: 30,
         max_vus: 5,

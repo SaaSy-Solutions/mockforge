@@ -192,6 +192,38 @@ impl SpecParser {
         self.spec.servers.first().map(|server| server.url.clone())
     }
 
+    /// Extract the base path from the spec's servers URL
+    ///
+    /// This parses the first server URL and extracts the path component.
+    /// For example:
+    /// - "https://api.example.com/api/v1" -> Some("/api/v1")
+    /// - "https://api.example.com" -> None
+    /// - "/api/v1" -> Some("/api/v1")
+    ///
+    /// Returns None if there are no servers or the path is just "/".
+    pub fn get_base_path(&self) -> Option<String> {
+        let server_url = self.spec.servers.first().map(|s| &s.url)?;
+
+        // Handle relative paths directly (e.g., "/api/v1")
+        if server_url.starts_with('/') {
+            let path = server_url.trim_end_matches('/');
+            if !path.is_empty() && path != "/" {
+                return Some(path.to_string());
+            }
+            return None;
+        }
+
+        // Parse as URL to extract path component
+        if let Ok(parsed) = url::Url::parse(server_url) {
+            let path = parsed.path().trim_end_matches('/');
+            if !path.is_empty() && path != "/" {
+                return Some(path.to_string());
+            }
+        }
+
+        None
+    }
+
     /// Get API info
     pub fn get_info(&self) -> (String, String) {
         (self.spec.info.title.clone(), self.spec.info.version.clone())
@@ -318,5 +350,79 @@ mod tests {
         assert!(result.iter().any(|op| op.operation_id == Some("deletePost".to_string())));
         // Should not have deleteUser
         assert!(!result.iter().any(|op| op.operation_id == Some("deleteUser".to_string())));
+    }
+
+    #[test]
+    fn test_get_base_path_with_full_url() {
+        let mut spec = openapiv3::OpenAPI::default();
+        spec.servers.push(openapiv3::Server {
+            url: "https://api.example.com/api/v1".to_string(),
+            description: None,
+            variables: Default::default(),
+            extensions: Default::default(),
+        });
+
+        let parser = SpecParser { spec };
+        let base_path = parser.get_base_path();
+
+        assert_eq!(base_path, Some("/api/v1".to_string()));
+    }
+
+    #[test]
+    fn test_get_base_path_with_relative_path() {
+        let mut spec = openapiv3::OpenAPI::default();
+        spec.servers.push(openapiv3::Server {
+            url: "/api/v2".to_string(),
+            description: None,
+            variables: Default::default(),
+            extensions: Default::default(),
+        });
+
+        let parser = SpecParser { spec };
+        let base_path = parser.get_base_path();
+
+        assert_eq!(base_path, Some("/api/v2".to_string()));
+    }
+
+    #[test]
+    fn test_get_base_path_no_path_in_url() {
+        let mut spec = openapiv3::OpenAPI::default();
+        spec.servers.push(openapiv3::Server {
+            url: "https://api.example.com".to_string(),
+            description: None,
+            variables: Default::default(),
+            extensions: Default::default(),
+        });
+
+        let parser = SpecParser { spec };
+        let base_path = parser.get_base_path();
+
+        assert_eq!(base_path, None);
+    }
+
+    #[test]
+    fn test_get_base_path_no_servers() {
+        let spec = openapiv3::OpenAPI::default();
+        let parser = SpecParser { spec };
+        let base_path = parser.get_base_path();
+
+        assert_eq!(base_path, None);
+    }
+
+    #[test]
+    fn test_get_base_path_trailing_slash_removed() {
+        let mut spec = openapiv3::OpenAPI::default();
+        spec.servers.push(openapiv3::Server {
+            url: "https://api.example.com/api/v1/".to_string(),
+            description: None,
+            variables: Default::default(),
+            extensions: Default::default(),
+        });
+
+        let parser = SpecParser { spec };
+        let base_path = parser.get_base_path();
+
+        // Trailing slash should be removed
+        assert_eq!(base_path, Some("/api/v1".to_string()));
     }
 }

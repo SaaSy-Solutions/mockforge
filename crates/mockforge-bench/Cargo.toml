@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-bench"
-version = "0.3.18"
+version = "0.3.19"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 description = "Load and performance testing for MockForge"
@@ -11,9 +11,9 @@ documentation = "https://docs.rs/mockforge"
 
 [dependencies]
 # Core dependencies
-mockforge-core = { version = "0.3.18", path = "../mockforge-core" }
-mockforge-data = { version = "0.3.18", path = "../mockforge-data" }
-mockforge-recorder = { version = "0.3.18", path = "../mockforge-recorder", optional = true }
+mockforge-core = { version = "0.3.19", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.19", path = "../mockforge-data" }
+mockforge-recorder = { version = "0.3.19", path = "../mockforge-recorder", optional = true }
 
 # OpenAPI and spec parsing
 openapiv3 = "2.0"
@@ -54,6 +54,9 @@ glob = "0.3"
 
 # URL encoding/decoding for WAFBench payload extraction
 urlencoding = "2.1"
+
+# URL parsing for base path extraction from OpenAPI servers
+url = "2.5"
 
 [dev-dependencies]
 mockito = "1.5"

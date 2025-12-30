@@ -1522,6 +1522,22 @@ enum Commands {
         #[arg(long)]
         targets_file: Option<PathBuf>,
 
+        /// API base path prefix (e.g., "/api" or "/v2/api")
+        ///
+        /// Prepends this path to all API endpoint paths in the generated test.
+        /// If not specified, the base path is extracted from the OpenAPI spec's
+        /// servers URL (e.g., "https://example.com/api" → "/api").
+        ///
+        /// The CLI option takes priority over the spec's base path.
+        /// Use empty string "" to override and disable any base path.
+        ///
+        /// Example:
+        ///   --base-path /api           (all requests go to /api/...)
+        ///   --base-path /v2            (all requests go to /v2/...)
+        ///   --base-path ""             (disable base path, use paths as-is)
+        #[arg(long, value_name = "PATH")]
+        base_path: Option<String>,
+
         /// Test duration (e.g., 30s, 5m, 1h)
         #[arg(short, long, default_value = "1m")]
         duration: String,
@@ -3008,6 +3024,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             dependency_config,
             target,
             targets_file,
+            base_path,
             duration,
             vus,
             scenario,
@@ -3070,6 +3087,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 spec_mode,
                 dependency_config,
                 target: target_str,
+                base_path,
                 duration,
                 vus,
                 scenario,
