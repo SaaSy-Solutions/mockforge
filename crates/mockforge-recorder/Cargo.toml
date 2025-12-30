@@ -8,7 +8,7 @@ description = "Recording and replay functionality for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
-publish = false  # Internal component, integrated into CLI
+# Previously internal, now published to crates.io
 
 [dependencies]
 # Database

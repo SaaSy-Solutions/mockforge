@@ -10,7 +10,7 @@ homepage.workspace = true
 documentation.workspace = true
 keywords = ["plugin", "registry", "mockforge", "discovery"]
 categories = ["development-tools"]
-publish = false  # Internal plugin registry component
+# Previously internal, now published to crates.io
 
 [dependencies]
 # Async runtime
