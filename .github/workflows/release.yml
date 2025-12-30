@@ -91,7 +91,9 @@ jobs:
 
     - name: Publish crates
       run: |
-        # Publish in dependency order
+        # Publish in dependency order (core first, then dependent crates)
+        cargo publish -p mockforge-core
+        sleep 30
         cargo publish -p mockforge-ws
         sleep 30
         cargo publish -p mockforge-http
