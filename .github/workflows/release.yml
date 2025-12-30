@@ -91,16 +91,72 @@ jobs:
 
     - name: Publish crates
       run: |
-        # Publish in dependency order (core first, then dependent crates)
-        cargo publish -p mockforge-core
-        sleep 30
-        cargo publish -p mockforge-ws
-        sleep 30
-        cargo publish -p mockforge-http
-        sleep 30
-        cargo publish -p mockforge-grpc
-        sleep 30
-        cargo publish -p mockforge-cli
+        # Publish in dependency order (leaf crates first, then dependent crates)
+        # Each publish needs time for crates.io to index before dependents can be published
+
+        # Tier 0: Leaf crates (no internal dependencies)
+        cargo publish -p mockforge-analytics || true
+        cargo publish -p mockforge-data || true
+        cargo publish -p mockforge-plugin-core || true
+        cargo publish -p mockforge-plugin-registry || true
+        cargo publish -p mockforge-template-expansion || true
+        cargo publish -p mockforge-tracing || true
+        cargo publish -p mockforge-tunnel || true
+        sleep 45
+
+        # Tier 1: Depend only on leaf crates
+        cargo publish -p mockforge-amqp || true
+        cargo publish -p mockforge-federation || true
+        cargo publish -p mockforge-ftp || true
+        cargo publish -p mockforge-k8s-operator || true
+        cargo publish -p mockforge-kafka || true
+        cargo publish -p mockforge-mqtt || true
+        cargo publish -p mockforge-observability || true
+        cargo publish -p mockforge-performance || true
+        cargo publish -p mockforge-pipelines || true
+        cargo publish -p mockforge-plugin-loader || true
+        cargo publish -p mockforge-plugin-sdk || true
+        cargo publish -p mockforge-recorder || true
+        cargo publish -p mockforge-reporting || true
+        cargo publish -p mockforge-route-chaos || true
+        cargo publish -p mockforge-schema || true
+        cargo publish -p mockforge-smtp || true
+        cargo publish -p mockforge-tcp || true
+        sleep 45
+
+        # Tier 2: Core and mid-level crates
+        cargo publish -p mockforge-collab || true
+        cargo publish -p mockforge-core || true
+        cargo publish -p mockforge-runtime-daemon || true
+        cargo publish -p mockforge-world-state || true
+        sleep 45
+
+        # Tier 3: Higher-level crates
+        cargo publish -p mockforge-bench || true
+        cargo publish -p mockforge-chaos || true
+        cargo publish -p mockforge-test || true
+        cargo publish -p mockforge-vbr || true
+        sleep 45
+
+        # Tier 4: Protocol crates
+        cargo publish -p mockforge-graphql || true
+        cargo publish -p mockforge-grpc || true
+        cargo publish -p mockforge-scenarios || true
+        cargo publish -p mockforge-ws || true
+        sleep 45
+
+        # Tier 5: High-level crates
+        cargo publish -p mockforge-registry-server || true
+        cargo publish -p mockforge-sdk || true
+        cargo publish -p mockforge-ui || true
+        sleep 45
+
+        # Tier 6: Top-level crates
+        cargo publish -p mockforge-http || true
+        sleep 45
+
+        # Tier 7: CLI (depends on everything)
+        cargo publish -p mockforge-cli || true
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
 
