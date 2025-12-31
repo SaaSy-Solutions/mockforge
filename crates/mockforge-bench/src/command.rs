@@ -942,10 +942,14 @@ impl BenchCommand {
                 spec_name
             ));
 
-            // Find the spec in our loaded specs
+            // Find the spec in our loaded specs (match by full path or filename)
             let spec = all_specs
                 .iter()
-                .find(|(p, _)| p == spec_path)
+                .find(|(p, _)| {
+                    p == spec_path
+                        || p.file_name() == spec_path.file_name()
+                        || p.file_name() == Some(spec_path.as_os_str())
+                })
                 .map(|(_, s)| s.clone())
                 .ok_or_else(|| {
                     BenchError::Other(format!("Spec not found: {}", spec_path.display()))
@@ -1308,10 +1312,18 @@ impl BenchCommand {
 
     /// Execute CRUD flow testing mode
     async fn execute_crud_flow(&self, parser: &SpecParser) -> Result<()> {
-        TerminalReporter::print_progress("Detecting CRUD operations...");
+        // Check if a custom flow config is provided
+        let config = self.build_crud_flow_config().unwrap_or_default();
 
-        let operations = parser.get_operations();
-        let flows = CrudFlowDetector::detect_flows(&operations);
+        // Use flows from config if provided, otherwise auto-detect
+        let flows = if !config.flows.is_empty() {
+            TerminalReporter::print_progress("Using custom flow configuration...");
+            config.flows.clone()
+        } else {
+            TerminalReporter::print_progress("Detecting CRUD operations...");
+            let operations = parser.get_operations();
+            CrudFlowDetector::detect_flows(&operations)
+        };
 
         if flows.is_empty() {
             return Err(BenchError::Other(
@@ -1319,7 +1331,11 @@ impl BenchCommand {
             ));
         }
 
-        TerminalReporter::print_success(&format!("Detected {} CRUD flow(s)", flows.len()));
+        if config.flows.is_empty() {
+            TerminalReporter::print_success(&format!("Detected {} CRUD flow(s)", flows.len()));
+        } else {
+            TerminalReporter::print_success(&format!("Loaded {} custom flow(s)", flows.len()));
+        }
 
         for flow in &flows {
             TerminalReporter::print_progress(&format!(
@@ -1334,7 +1350,6 @@ impl BenchCommand {
         let template = include_str!("templates/k6_crud_flow.hbs");
 
         let custom_headers = self.parse_headers()?;
-        let config = self.build_crud_flow_config().unwrap_or_default();
 
         // Load parameter overrides if provided (for body configurations)
         let param_overrides = if let Some(params_file) = &self.params_file {
