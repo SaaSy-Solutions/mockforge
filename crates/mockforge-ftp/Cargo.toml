@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-ftp"
-version = "0.3.20"
+version = "0.3.21"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ keywords = ["ftp", "file-transfer", "mock", "testing"]
 categories = ["development-tools::testing", "network-programming"]
 
 [dependencies]
-mockforge-core = { version = "0.3.20", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.21", path = "../mockforge-core" }
 libunftp = "0.21"
 tokio = { workspace = true }
  serde = { workspace = true }
