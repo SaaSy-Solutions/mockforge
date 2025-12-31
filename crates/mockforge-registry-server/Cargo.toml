@@ -6,6 +6,9 @@ resolver = "2"
 authors = ["MockForge Contributors"]
 description = "Plugin registry server for MockForge"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/SaaSy-Solutions/mockforge"
+homepage = "https://mockforge.dev"
+documentation = "https://docs.rs/mockforge-registry-server"
 
 [dependencies]
 # Web framework
