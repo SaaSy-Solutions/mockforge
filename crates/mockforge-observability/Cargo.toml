@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-observability"
-version = "0.3.21"
+version = "0.3.23"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -37,7 +37,7 @@ sysinfo = { version = "0.37", optional = true }
 tracing-opentelemetry = { version = "0.22", optional = true }
 
 # MockForge tracing integration (optional)
-mockforge-tracing = { version = "0.3.21", path = "../mockforge-tracing", optional = true }
+mockforge-tracing = { version = "0.3.22", path = "../mockforge-tracing", optional = true }
 
 [features]
 default = ["sysinfo"]
