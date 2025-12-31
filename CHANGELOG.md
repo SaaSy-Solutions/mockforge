@@ -12,6 +12,15 @@
 
 - Nothing yet.
 
+## [0.3.20] - 2025-12-31
+
+### Fixed
+
+- **[Bench] Dynamic placeholder expansion in CRUD flow params file bodies** (#79): Fixed `${__VU}`, `${__ITER}`, and other dynamic placeholders not being expanded when used in request body content from params files
+  - Previously, placeholders like `"name": "HTTP-WAAP-vsvip-${__VU}-${__ITER}"` were sent literally to the API
+  - Now properly converted to k6 template literals for runtime evaluation
+  - Supports all dynamic placeholders: `${__VU}`, `${__ITER}`, `${__TIMESTAMP}`, `${__UUID}`, `${__RANDOM}`, `${__COUNTER}`, `${__DATE}`, `${__VU_ITER}`
+
 ## [0.3.19] - 2025-12-30
 
 ### Added

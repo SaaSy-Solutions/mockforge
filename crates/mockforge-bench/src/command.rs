@@ -2,6 +2,7 @@
 
 use crate::crud_flow::{CrudFlowConfig, CrudFlowDetector};
 use crate::data_driven::{DataDistribution, DataDrivenConfig, DataDrivenGenerator, DataMapping};
+use crate::dynamic_params::{DynamicParamProcessor, DynamicPlaceholder};
 use crate::error::{BenchError, Result};
 use crate::executor::K6Executor;
 use crate::invalid_data::{InvalidDataConfig, InvalidDataGenerator, InvalidDataType};
@@ -28,7 +29,7 @@ use mockforge_core::openapi::multi_spec::{
     load_specs_from_directory, load_specs_from_files, merge_specs, ConflictStrategy,
 };
 use mockforge_core::openapi::spec::OpenApiSpec;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -1073,70 +1074,122 @@ impl BenchCommand {
         }
         let headers_json = serde_json::to_string(&all_headers).unwrap_or_else(|_| "{}".to_string());
 
+        // Track all dynamic placeholders across all operations
+        let mut all_placeholders: HashSet<DynamicPlaceholder> = HashSet::new();
+
+        let flows_data: Vec<serde_json::Value> = flows.iter().map(|f| {
+            let sanitized_name = K6ScriptGenerator::sanitize_js_identifier(&f.name);
+            serde_json::json!({
+                "name": sanitized_name.clone(),
+                "display_name": f.name,
+                "base_path": f.base_path,
+                "steps": f.steps.iter().enumerate().map(|(idx, s)| {
+                    // Parse operation to get method and path
+                    let parts: Vec<&str> = s.operation.splitn(2, ' ').collect();
+                    let method_raw = if !parts.is_empty() {
+                        parts[0].to_uppercase()
+                    } else {
+                        "GET".to_string()
+                    };
+                    let method = if !parts.is_empty() {
+                        let m = parts[0].to_lowercase();
+                        // k6 uses 'del' for DELETE
+                        if m == "delete" { "del".to_string() } else { m }
+                    } else {
+                        "get".to_string()
+                    };
+                    let raw_path = if parts.len() >= 2 { parts[1] } else { "/" };
+                    // Prepend API base path if configured
+                    let path = if let Some(ref bp) = api_base_path {
+                        format!("{}{}", bp, raw_path)
+                    } else {
+                        raw_path.to_string()
+                    };
+                    let is_get_or_head = method == "get" || method == "head";
+                    // POST, PUT, PATCH typically have bodies
+                    let has_body = matches!(method.as_str(), "post" | "put" | "patch");
+
+                    // Look up body from params file if available
+                    let body_value = if has_body {
+                        param_overrides.as_ref()
+                            .map(|po| po.get_for_operation(None, &method_raw, &raw_path))
+                            .and_then(|oo| oo.body)
+                            .unwrap_or_else(|| serde_json::json!({}))
+                    } else {
+                        serde_json::json!({})
+                    };
+
+                    // Process body for dynamic placeholders like ${__VU}, ${__ITER}, etc.
+                    let processed_body = DynamicParamProcessor::process_json_body(&body_value);
+
+                    serde_json::json!({
+                        "operation": s.operation,
+                        "method": method,
+                        "path": path,
+                        "extract": s.extract,
+                        "use_values": s.use_values,
+                        "description": s.description,
+                        "display_name": s.description.clone().unwrap_or_else(|| format!("Step {}", idx)),
+                        "is_get_or_head": is_get_or_head,
+                        "has_body": has_body,
+                        "body": processed_body.value,
+                        "body_is_dynamic": processed_body.is_dynamic,
+                        "_placeholders": processed_body.placeholders.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>(),
+                    })
+                }).collect::<Vec<_>>(),
+            })
+        }).collect();
+
+        // Collect all placeholders from all steps
+        for flow_data in &flows_data {
+            if let Some(steps) = flow_data.get("steps").and_then(|s| s.as_array()) {
+                for step in steps {
+                    if let Some(placeholders_arr) =
+                        step.get("_placeholders").and_then(|p| p.as_array())
+                    {
+                        for p_str in placeholders_arr {
+                            if let Some(p_name) = p_str.as_str() {
+                                match p_name {
+                                    "VU" => {
+                                        all_placeholders.insert(DynamicPlaceholder::VU);
+                                    }
+                                    "Iteration" => {
+                                        all_placeholders.insert(DynamicPlaceholder::Iteration);
+                                    }
+                                    "Timestamp" => {
+                                        all_placeholders.insert(DynamicPlaceholder::Timestamp);
+                                    }
+                                    "UUID" => {
+                                        all_placeholders.insert(DynamicPlaceholder::UUID);
+                                    }
+                                    "Random" => {
+                                        all_placeholders.insert(DynamicPlaceholder::Random);
+                                    }
+                                    "Counter" => {
+                                        all_placeholders.insert(DynamicPlaceholder::Counter);
+                                    }
+                                    "Date" => {
+                                        all_placeholders.insert(DynamicPlaceholder::Date);
+                                    }
+                                    "VuIter" => {
+                                        all_placeholders.insert(DynamicPlaceholder::VuIter);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Get required imports and globals based on placeholders used
+        let required_imports = DynamicParamProcessor::get_required_imports(&all_placeholders);
+        let required_globals = DynamicParamProcessor::get_required_globals(&all_placeholders);
+
         let data = serde_json::json!({
             "base_url": self.target,
-            "flows": flows.iter().map(|f| {
-                let sanitized_name = K6ScriptGenerator::sanitize_js_identifier(&f.name);
-                serde_json::json!({
-                    "name": sanitized_name.clone(),
-                    "display_name": f.name,
-                    "base_path": f.base_path,
-                    "steps": f.steps.iter().enumerate().map(|(idx, s)| {
-                        // Parse operation to get method and path
-                        let parts: Vec<&str> = s.operation.splitn(2, ' ').collect();
-                        let method_raw = if !parts.is_empty() {
-                            parts[0].to_uppercase()
-                        } else {
-                            "GET".to_string()
-                        };
-                        let method = if !parts.is_empty() {
-                            let m = parts[0].to_lowercase();
-                            // k6 uses 'del' for DELETE
-                            if m == "delete" { "del".to_string() } else { m }
-                        } else {
-                            "get".to_string()
-                        };
-                        let raw_path = if parts.len() >= 2 { parts[1] } else { "/" };
-                        // Prepend API base path if configured
-                        let path = if let Some(ref bp) = api_base_path {
-                            format!("{}{}", bp, raw_path)
-                        } else {
-                            raw_path.to_string()
-                        };
-                        let is_get_or_head = method == "get" || method == "head";
-                        // POST, PUT, PATCH typically have bodies
-                        let has_body = matches!(method.as_str(), "post" | "put" | "patch");
-
-                        // Look up body from params file if available
-                        let body_value = if has_body {
-                            param_overrides.as_ref()
-                                .map(|po| po.get_for_operation(None, &method_raw, &raw_path))
-                                .and_then(|oo| oo.body)
-                                .unwrap_or_else(|| serde_json::json!({}))
-                        } else {
-                            serde_json::json!({})
-                        };
-
-                        // Serialize body as JSON string for the template
-                        let body_json_str = serde_json::to_string(&body_value)
-                            .unwrap_or_else(|_| "{}".to_string());
-
-                        serde_json::json!({
-                            "operation": s.operation,
-                            "method": method,
-                            "path": path,
-                            "extract": s.extract,
-                            "use_values": s.use_values,
-                            "description": s.description,
-                            "display_name": s.description.clone().unwrap_or_else(|| format!("Step {}", idx)),
-                            "is_get_or_head": is_get_or_head,
-                            "has_body": has_body,
-                            "body": body_json_str,  // Body as JSON string for JS literal
-                            "body_is_dynamic": false,
-                        })
-                    }).collect::<Vec<_>>(),
-                })
-            }).collect::<Vec<_>>(),
+            "flows": flows_data,
             "extract_fields": config.default_extract_fields,
             "duration_secs": duration_secs,
             "max_vus": self.vus,
@@ -1152,8 +1205,8 @@ impl BenchCommand {
             "threshold_ms": self.threshold_ms,
             "max_error_rate": self.max_error_rate,
             "headers": headers_json,
-            "dynamic_imports": Vec::<String>::new(),
-            "dynamic_globals": Vec::<String>::new(),
+            "dynamic_imports": required_imports,
+            "dynamic_globals": required_globals,
         });
 
         let script = handlebars
@@ -1316,71 +1369,126 @@ impl BenchCommand {
         }
         let headers_json = serde_json::to_string(&all_headers).unwrap_or_else(|_| "{}".to_string());
 
+        // Track all dynamic placeholders across all operations
+        let mut all_placeholders: HashSet<DynamicPlaceholder> = HashSet::new();
+
+        let flows_data: Vec<serde_json::Value> = flows.iter().map(|f| {
+            // Sanitize flow name for use as JavaScript variable and k6 metric names
+            let sanitized_name = K6ScriptGenerator::sanitize_js_identifier(&f.name);
+            serde_json::json!({
+                "name": sanitized_name.clone(),  // Use sanitized name for variable names
+                "display_name": f.name,          // Keep original for comments/display
+                "base_path": f.base_path,
+                "steps": f.steps.iter().enumerate().map(|(idx, s)| {
+                    // Parse operation to get method and path
+                    let parts: Vec<&str> = s.operation.splitn(2, ' ').collect();
+                    let method_raw = if !parts.is_empty() {
+                        parts[0].to_uppercase()
+                    } else {
+                        "GET".to_string()
+                    };
+                    let method = if !parts.is_empty() {
+                        let m = parts[0].to_lowercase();
+                        // k6 uses 'del' for DELETE
+                        if m == "delete" { "del".to_string() } else { m }
+                    } else {
+                        "get".to_string()
+                    };
+                    let raw_path = if parts.len() >= 2 { parts[1] } else { "/" };
+                    // Prepend API base path if configured
+                    let path = if let Some(ref bp) = api_base_path {
+                        format!("{}{}", bp, raw_path)
+                    } else {
+                        raw_path.to_string()
+                    };
+                    let is_get_or_head = method == "get" || method == "head";
+                    // POST, PUT, PATCH typically have bodies
+                    let has_body = matches!(method.as_str(), "post" | "put" | "patch");
+
+                    // Look up body from params file if available (use raw_path for matching)
+                    let body_value = if has_body {
+                        param_overrides.as_ref()
+                            .map(|po| po.get_for_operation(None, &method_raw, raw_path))
+                            .and_then(|oo| oo.body)
+                            .unwrap_or_else(|| serde_json::json!({}))
+                    } else {
+                        serde_json::json!({})
+                    };
+
+                    // Process body for dynamic placeholders like ${__VU}, ${__ITER}, etc.
+                    let processed_body = DynamicParamProcessor::process_json_body(&body_value);
+                    // Note: all_placeholders is captured by the closure but we can't mutate it directly
+                    // We'll collect placeholders separately below
+
+                    serde_json::json!({
+                        "operation": s.operation,
+                        "method": method,
+                        "path": path,
+                        "extract": s.extract,
+                        "use_values": s.use_values,
+                        "description": s.description,
+                        "display_name": s.description.clone().unwrap_or_else(|| format!("Step {}", idx)),
+                        "is_get_or_head": is_get_or_head,
+                        "has_body": has_body,
+                        "body": processed_body.value,
+                        "body_is_dynamic": processed_body.is_dynamic,
+                        "_placeholders": processed_body.placeholders.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>(),
+                    })
+                }).collect::<Vec<_>>(),
+            })
+        }).collect();
+
+        // Collect all placeholders from all steps
+        for flow_data in &flows_data {
+            if let Some(steps) = flow_data.get("steps").and_then(|s| s.as_array()) {
+                for step in steps {
+                    if let Some(placeholders_arr) =
+                        step.get("_placeholders").and_then(|p| p.as_array())
+                    {
+                        for p_str in placeholders_arr {
+                            if let Some(p_name) = p_str.as_str() {
+                                // Parse placeholder from debug string
+                                match p_name {
+                                    "VU" => {
+                                        all_placeholders.insert(DynamicPlaceholder::VU);
+                                    }
+                                    "Iteration" => {
+                                        all_placeholders.insert(DynamicPlaceholder::Iteration);
+                                    }
+                                    "Timestamp" => {
+                                        all_placeholders.insert(DynamicPlaceholder::Timestamp);
+                                    }
+                                    "UUID" => {
+                                        all_placeholders.insert(DynamicPlaceholder::UUID);
+                                    }
+                                    "Random" => {
+                                        all_placeholders.insert(DynamicPlaceholder::Random);
+                                    }
+                                    "Counter" => {
+                                        all_placeholders.insert(DynamicPlaceholder::Counter);
+                                    }
+                                    "Date" => {
+                                        all_placeholders.insert(DynamicPlaceholder::Date);
+                                    }
+                                    "VuIter" => {
+                                        all_placeholders.insert(DynamicPlaceholder::VuIter);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Get required imports and globals based on placeholders used
+        let required_imports = DynamicParamProcessor::get_required_imports(&all_placeholders);
+        let required_globals = DynamicParamProcessor::get_required_globals(&all_placeholders);
+
         let data = serde_json::json!({
             "base_url": self.target,
-            "flows": flows.iter().map(|f| {
-                // Sanitize flow name for use as JavaScript variable and k6 metric names
-                let sanitized_name = K6ScriptGenerator::sanitize_js_identifier(&f.name);
-                serde_json::json!({
-                    "name": sanitized_name.clone(),  // Use sanitized name for variable names
-                    "display_name": f.name,          // Keep original for comments/display
-                    "base_path": f.base_path,
-                    "steps": f.steps.iter().enumerate().map(|(idx, s)| {
-                        // Parse operation to get method and path
-                        let parts: Vec<&str> = s.operation.splitn(2, ' ').collect();
-                        let method_raw = if !parts.is_empty() {
-                            parts[0].to_uppercase()
-                        } else {
-                            "GET".to_string()
-                        };
-                        let method = if !parts.is_empty() {
-                            let m = parts[0].to_lowercase();
-                            // k6 uses 'del' for DELETE
-                            if m == "delete" { "del".to_string() } else { m }
-                        } else {
-                            "get".to_string()
-                        };
-                        let raw_path = if parts.len() >= 2 { parts[1] } else { "/" };
-                        // Prepend API base path if configured
-                        let path = if let Some(ref bp) = api_base_path {
-                            format!("{}{}", bp, raw_path)
-                        } else {
-                            raw_path.to_string()
-                        };
-                        let is_get_or_head = method == "get" || method == "head";
-                        // POST, PUT, PATCH typically have bodies
-                        let has_body = matches!(method.as_str(), "post" | "put" | "patch");
-
-                        // Look up body from params file if available (use raw_path for matching)
-                        let body_value = if has_body {
-                            param_overrides.as_ref()
-                                .map(|po| po.get_for_operation(None, &method_raw, raw_path))
-                                .and_then(|oo| oo.body)
-                                .unwrap_or_else(|| serde_json::json!({}))
-                        } else {
-                            serde_json::json!({})
-                        };
-
-                        // Serialize body as JSON string for the template
-                        let body_json_str = serde_json::to_string(&body_value)
-                            .unwrap_or_else(|_| "{}".to_string());
-
-                        serde_json::json!({
-                            "operation": s.operation,
-                            "method": method,
-                            "path": path,
-                            "extract": s.extract,
-                            "use_values": s.use_values,
-                            "description": s.description,
-                            "display_name": s.description.clone().unwrap_or_else(|| format!("Step {}", idx)),
-                            "is_get_or_head": is_get_or_head,
-                            "has_body": has_body,
-                            "body": body_json_str,  // Body as JSON string for JS literal
-                            "body_is_dynamic": false,
-                        })
-                    }).collect::<Vec<_>>(),
-                })
-            }).collect::<Vec<_>>(),
+            "flows": flows_data,
             "extract_fields": config.default_extract_fields,
             "duration_secs": duration_secs,
             "max_vus": self.vus,
@@ -1396,8 +1504,8 @@ impl BenchCommand {
             "threshold_ms": self.threshold_ms,
             "max_error_rate": self.max_error_rate,
             "headers": headers_json,
-            "dynamic_imports": Vec::<String>::new(),
-            "dynamic_globals": Vec::<String>::new(),
+            "dynamic_imports": required_imports,
+            "dynamic_globals": required_globals,
         });
 
         let script = handlebars
