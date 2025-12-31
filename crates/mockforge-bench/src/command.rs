@@ -10,6 +10,7 @@ use crate::k6_gen::{K6Config, K6ScriptGenerator};
 use crate::mock_integration::{
     MockIntegrationConfig, MockIntegrationGenerator, MockServerDetector,
 };
+use crate::owasp_api::{OwaspApiConfig, OwaspApiGenerator, OwaspCategory, ReportFormat};
 use crate::parallel_executor::{AggregatedResults, ParallelExecutor};
 use crate::parallel_requests::{ParallelConfig, ParallelRequestGenerator};
 use crate::param_overrides::ParameterOverrides;
@@ -120,6 +121,24 @@ pub struct BenchCommand {
     // === WAFBench Integration ===
     /// WAFBench test directory or glob pattern for loading CRS attack patterns
     pub wafbench_dir: Option<String>,
+
+    // === OWASP API Security Top 10 Testing ===
+    /// Enable OWASP API Security Top 10 testing mode
+    pub owasp_api_top10: bool,
+    /// OWASP API categories to test (comma-separated)
+    pub owasp_categories: Option<String>,
+    /// Authorization header name for OWASP auth tests
+    pub owasp_auth_header: String,
+    /// Valid authorization token for OWASP baseline requests
+    pub owasp_auth_token: Option<String>,
+    /// File containing admin/privileged paths to test
+    pub owasp_admin_paths: Option<PathBuf>,
+    /// Fields containing resource IDs for BOLA testing
+    pub owasp_id_fields: Option<String>,
+    /// OWASP report output file
+    pub owasp_report: Option<PathBuf>,
+    /// OWASP report format (json, sarif)
+    pub owasp_report_format: String,
 }
 
 impl BenchCommand {
@@ -232,6 +251,11 @@ impl BenchCommand {
         // Check for CRUD flow mode
         if self.crud_flow {
             return self.execute_crud_flow(&parser).await;
+        }
+
+        // Check for OWASP API Top 10 testing mode
+        if self.owasp_api_top10 {
+            return self.execute_owasp_test(&parser).await;
         }
 
         // Get operations
@@ -470,6 +494,14 @@ impl BenchCommand {
                 security_categories: self.security_categories.clone(),
                 security_target_fields: self.security_target_fields.clone(),
                 wafbench_dir: self.wafbench_dir.clone(),
+                owasp_api_top10: self.owasp_api_top10,
+                owasp_categories: self.owasp_categories.clone(),
+                owasp_auth_header: self.owasp_auth_header.clone(),
+                owasp_auth_token: self.owasp_auth_token.clone(),
+                owasp_admin_paths: self.owasp_admin_paths.clone(),
+                owasp_id_fields: self.owasp_id_fields.clone(),
+                owasp_report: self.owasp_report.clone(),
+                owasp_report_format: self.owasp_report_format.clone(),
             },
             targets,
             max_concurrency,
@@ -1574,6 +1606,124 @@ impl BenchCommand {
 
         Ok(())
     }
+
+    /// Execute OWASP API Security Top 10 testing mode
+    async fn execute_owasp_test(&self, parser: &SpecParser) -> Result<()> {
+        TerminalReporter::print_progress("OWASP API Security Top 10 Testing Mode");
+
+        // Build OWASP configuration from CLI options
+        let mut config = OwaspApiConfig::new()
+            .with_auth_header(&self.owasp_auth_header)
+            .with_verbose(self.verbose);
+
+        // Set valid auth token if provided
+        if let Some(ref token) = self.owasp_auth_token {
+            config = config.with_valid_auth_token(token);
+        }
+
+        // Parse categories if provided
+        if let Some(ref cats_str) = self.owasp_categories {
+            let categories: Vec<OwaspCategory> = cats_str
+                .split(',')
+                .filter_map(|s| {
+                    let trimmed = s.trim();
+                    match trimmed.parse::<OwaspCategory>() {
+                        Ok(cat) => Some(cat),
+                        Err(e) => {
+                            TerminalReporter::print_warning(&e);
+                            None
+                        }
+                    }
+                })
+                .collect();
+
+            if !categories.is_empty() {
+                config = config.with_categories(categories);
+            }
+        }
+
+        // Load admin paths from file if provided
+        if let Some(ref admin_paths_file) = self.owasp_admin_paths {
+            config.admin_paths_file = Some(admin_paths_file.clone());
+            if let Err(e) = config.load_admin_paths() {
+                TerminalReporter::print_warning(&format!("Failed to load admin paths file: {}", e));
+            }
+        }
+
+        // Set ID fields if provided
+        if let Some(ref id_fields_str) = self.owasp_id_fields {
+            let id_fields: Vec<String> = id_fields_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !id_fields.is_empty() {
+                config = config.with_id_fields(id_fields);
+            }
+        }
+
+        // Set report path and format
+        if let Some(ref report_path) = self.owasp_report {
+            config = config.with_report_path(report_path);
+        }
+        if let Ok(format) = self.owasp_report_format.parse::<ReportFormat>() {
+            config = config.with_report_format(format);
+        }
+
+        // Print configuration summary
+        let categories = config.categories_to_test();
+        TerminalReporter::print_success(&format!(
+            "Testing {} OWASP categories: {}",
+            categories.len(),
+            categories.iter().map(|c| c.cli_name()).collect::<Vec<_>>().join(", ")
+        ));
+
+        if config.valid_auth_token.is_some() {
+            TerminalReporter::print_progress("Using provided auth token for baseline requests");
+        }
+
+        // Create the OWASP generator
+        TerminalReporter::print_progress("Generating OWASP security test script...");
+        let generator = OwaspApiGenerator::new(config, self.target.clone(), parser);
+
+        // Generate the script
+        let script = generator.generate()?;
+        TerminalReporter::print_success("OWASP security test script generated");
+
+        // Write script to file
+        let script_path = if let Some(output) = &self.script_output {
+            output.clone()
+        } else {
+            self.output.join("k6-owasp-security-test.js")
+        };
+
+        if let Some(parent) = script_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&script_path, &script)?;
+        TerminalReporter::print_success(&format!("Script written to: {}", script_path.display()));
+
+        // If generate-only mode, exit here
+        if self.generate_only {
+            println!("\nOWASP security test script generated. Run it with:");
+            println!("  k6 run {}", script_path.display());
+            return Ok(());
+        }
+
+        // Execute k6
+        TerminalReporter::print_progress("Executing OWASP security tests...");
+        let executor = K6Executor::new()?;
+        std::fs::create_dir_all(&self.output)?;
+
+        let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
+
+        let duration_secs = Self::parse_duration(&self.duration)?;
+        TerminalReporter::print_summary(&results, duration_secs);
+
+        println!("\nOWASP security test results saved to: {}", self.output.display());
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1638,6 +1788,14 @@ mod tests {
             security_categories: None,
             security_target_fields: None,
             wafbench_dir: None,
+            owasp_api_top10: false,
+            owasp_categories: None,
+            owasp_auth_header: "Authorization".to_string(),
+            owasp_auth_token: None,
+            owasp_admin_paths: None,
+            owasp_id_fields: None,
+            owasp_report: None,
+            owasp_report_format: "json".to_string(),
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -1689,6 +1847,14 @@ mod tests {
             security_categories: None,
             security_target_fields: None,
             wafbench_dir: None,
+            owasp_api_top10: false,
+            owasp_categories: None,
+            owasp_auth_header: "Authorization".to_string(),
+            owasp_auth_token: None,
+            owasp_admin_paths: None,
+            owasp_id_fields: None,
+            owasp_report: None,
+            owasp_report_format: "json".to_string(),
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -1736,6 +1902,14 @@ mod tests {
             security_categories: None,
             security_target_fields: None,
             wafbench_dir: None,
+            owasp_api_top10: false,
+            owasp_categories: None,
+            owasp_auth_header: "Authorization".to_string(),
+            owasp_auth_token: None,
+            owasp_admin_paths: None,
+            owasp_id_fields: None,
+            owasp_report: None,
+            owasp_report_format: "json".to_string(),
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

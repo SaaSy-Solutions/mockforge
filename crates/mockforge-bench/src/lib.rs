@@ -12,6 +12,7 @@ pub mod executor;
 pub mod invalid_data;
 pub mod k6_gen;
 pub mod mock_integration;
+pub mod owasp_api;
 pub mod parallel_executor;
 pub mod parallel_requests;
 pub mod param_overrides;
@@ -42,3 +43,10 @@ pub use spec_dependencies::{
 };
 pub use target_parser::{parse_targets_file, TargetConfig};
 pub use wafbench::{WafBenchLoader, WafBenchStats, WafBenchTestCase};
+
+// OWASP API Security Top 10 exports
+pub use owasp_api::{
+    AuthToken, DiscoveryConfig, OwaspApiConfig, OwaspApiGenerator, OwaspCategory, OwaspFinding,
+    OwaspPayload, OwaspPayloadGenerator, OwaspReport, OwaspScanInfo, OwaspSummary, OwaspValidator,
+    RateLimitConfig, ReportFormat, Severity, SsrfConfig, ValidationResult,
+};

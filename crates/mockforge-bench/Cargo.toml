@@ -58,6 +58,11 @@ urlencoding = "2.1"
 # URL parsing for base path extraction from OpenAPI servers
 url = "2.5"
 
+# OWASP API testing dependencies
+uuid = { version = "1.0", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+atty = "0.2"
+
 [dev-dependencies]
 mockito = "1.5"
 tempfile = "3.14"

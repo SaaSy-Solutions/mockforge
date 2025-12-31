@@ -163,6 +163,14 @@ async fn test_bench_command_parse_headers() {
         security_categories: None,
         security_target_fields: None,
         wafbench_dir: None,
+        owasp_api_top10: false,
+        owasp_categories: None,
+        owasp_auth_header: "Authorization".to_string(),
+        owasp_auth_token: None,
+        owasp_admin_paths: None,
+        owasp_id_fields: None,
+        owasp_report: None,
+        owasp_report_format: "json".to_string(),
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -216,6 +224,14 @@ async fn test_bench_command_parse_headers_invalid_format() {
         security_categories: None,
         security_target_fields: None,
         wafbench_dir: None,
+        owasp_api_top10: false,
+        owasp_categories: None,
+        owasp_auth_header: "Authorization".to_string(),
+        owasp_auth_token: None,
+        owasp_admin_paths: None,
+        owasp_id_fields: None,
+        owasp_report: None,
+        owasp_report_format: "json".to_string(),
     };
 
     let result = cmd.parse_headers();

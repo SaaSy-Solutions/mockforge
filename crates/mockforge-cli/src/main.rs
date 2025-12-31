@@ -1741,6 +1741,70 @@ enum Commands {
         /// See: https://github.com/microsoft/WAFBench
         #[arg(long, value_name = "PATH")]
         wafbench_dir: Option<String>,
+
+        // === OWASP API Security Top 10 Testing ===
+        /// Enable OWASP API Security Top 10 (2023) testing mode
+        ///
+        /// Runs automated security tests for all 10 OWASP API security categories:
+        /// API1: BOLA, API2: Auth, API3: Mass Assignment, API4: Rate Limiting,
+        /// API5: Function Auth, API6: Business Logic, API7: SSRF,
+        /// API8: Misconfiguration, API9: Inventory, API10: Unsafe Consumption
+        ///
+        /// ONLY use against test/staging environments!
+        #[arg(long)]
+        owasp_api_top10: bool,
+
+        /// OWASP API categories to test (comma-separated)
+        ///
+        /// Options: api1, api2, api3, api4, api5, api6, api7, api8, api9, api10
+        /// Also accepts aliases: bola, auth, ssrf, misconfig, etc.
+        /// Default: all categories
+        ///
+        /// Example: --owasp-categories "api1,api2,api7"
+        #[arg(long)]
+        owasp_categories: Option<String>,
+
+        /// Authorization header name for OWASP auth tests
+        ///
+        /// Default: "Authorization"
+        #[arg(long, default_value = "Authorization")]
+        owasp_auth_header: String,
+
+        /// Valid authorization token for OWASP baseline requests
+        ///
+        /// Required for accurate auth bypass and BOLA testing.
+        /// Example: --owasp-auth-token "Bearer your-token-here"
+        #[arg(long)]
+        owasp_auth_token: Option<String>,
+
+        /// File containing admin/privileged paths to test
+        ///
+        /// One path per line. Used for API5 (Broken Function Authorization).
+        /// Default: built-in list (/admin, /internal, etc.)
+        #[arg(long, value_name = "FILE")]
+        owasp_admin_paths: Option<PathBuf>,
+
+        /// Fields containing resource IDs for BOLA testing
+        ///
+        /// Comma-separated list of field names that contain resource IDs.
+        /// Default: id, uuid, user_id, userId, account_id, accountId
+        ///
+        /// Example: --owasp-id-fields "id,resourceId,orderId"
+        #[arg(long)]
+        owasp_id_fields: Option<String>,
+
+        /// OWASP report output file
+        ///
+        /// Default: owasp-report.json
+        #[arg(long, value_name = "FILE")]
+        owasp_report: Option<PathBuf>,
+
+        /// OWASP report format
+        ///
+        /// Options: json, sarif
+        /// SARIF format integrates with IDEs and CI/CD tools.
+        #[arg(long, default_value = "json")]
+        owasp_report_format: String,
     },
 }
 
@@ -3057,6 +3121,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             security_categories,
             security_target_fields,
             wafbench_dir,
+            owasp_api_top10,
+            owasp_categories,
+            owasp_auth_header,
+            owasp_auth_token,
+            owasp_admin_paths,
+            owasp_id_fields,
+            owasp_report,
+            owasp_report_format,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3122,6 +3194,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 security_categories,
                 security_target_fields,
                 wafbench_dir,
+                owasp_api_top10,
+                owasp_categories,
+                owasp_auth_header,
+                owasp_auth_token,
+                owasp_admin_paths,
+                owasp_id_fields,
+                owasp_report,
+                owasp_report_format,
             };
 
             if let Err(e) = bench_cmd.execute().await {
