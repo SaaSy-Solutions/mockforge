@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-integration-tests"
-version = "0.3.23"
+version = "0.3.25"
 edition = "2021"
 publish = false
 
