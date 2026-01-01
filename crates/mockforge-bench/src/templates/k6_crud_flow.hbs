@@ -111,7 +111,7 @@ export default function () {
       {{#each this.use_values}}
       // Replace {{@key}} with extracted value if present
       if (extractedValues['{{this}}']) {
-        payload = JSON.parse(JSON.stringify(payload).replace(/\$\{extracted\.{{this}}\}/g, extractedValues['{{this}}']));
+        payload = JSON.parse(JSON.stringify(payload).replace(/\$\{extracted\.{{@key}}\}/g, extractedValues['{{this}}']));
       }
       {{/each}}
       {{else}}
