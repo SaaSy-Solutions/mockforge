@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-graphql"
-version = "0.3.26"
+version = "0.3.27"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -38,13 +38,13 @@ notify = "7.0"
 parking_lot = { workspace = true }
 
 # MockForge core
-mockforge-core = { version = "0.3.25", path = "../mockforge-core" }
-mockforge-observability = { version = "0.3.25", path = "../mockforge-observability" }
-mockforge-tracing = { version = "0.3.23", path = "../mockforge-tracing" }
+mockforge-core = { version = "0.3.27", path = "../mockforge-core" }
+mockforge-observability = { version = "0.3.27", path = "../mockforge-observability" }
+mockforge-tracing = { version = "0.3.27", path = "../mockforge-tracing" }
 opentelemetry = { version = "0.22", features = ["trace"] }
 
 # Optional data generation support
-mockforge-data = { version = "0.3.25", path = "../mockforge-data", optional = true }
+mockforge-data = { version = "0.3.27", path = "../mockforge-data", optional = true }
 
 [features]
 default = ["data-faker"]
