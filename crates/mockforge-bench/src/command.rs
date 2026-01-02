@@ -1080,7 +1080,23 @@ impl BenchCommand {
         ));
 
         // Generate and execute the CRUD flow script
-        let handlebars = handlebars::Handlebars::new();
+        let mut handlebars = handlebars::Handlebars::new();
+        // Register json helper for serializing arrays/objects in templates
+        handlebars.register_helper(
+            "json",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &handlebars::Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let param = h.param(0).map(|v| v.value()).unwrap_or(&serde_json::Value::Null);
+                    out.write(&serde_json::to_string(param).unwrap_or_else(|_| "[]".to_string()))?;
+                    Ok(())
+                },
+            ),
+        );
         let template = include_str!("templates/k6_crud_flow.hbs");
 
         let custom_headers = self.parse_headers()?;
@@ -1164,6 +1180,7 @@ impl BenchCommand {
                         "path": path,
                         "extract": s.extract,
                         "use_values": s.use_values,
+                        "use_body": s.use_body,
                         "description": s.description,
                         "display_name": s.description.clone().unwrap_or_else(|| format!("Step {}", idx)),
                         "is_get_or_head": is_get_or_head,
@@ -1378,7 +1395,23 @@ impl BenchCommand {
         }
 
         // Generate CRUD flow script
-        let handlebars = handlebars::Handlebars::new();
+        let mut handlebars = handlebars::Handlebars::new();
+        // Register json helper for serializing arrays/objects in templates
+        handlebars.register_helper(
+            "json",
+            Box::new(
+                |h: &handlebars::Helper,
+                 _: &handlebars::Handlebars,
+                 _: &handlebars::Context,
+                 _: &mut handlebars::RenderContext,
+                 out: &mut dyn handlebars::Output|
+                 -> handlebars::HelperResult {
+                    let param = h.param(0).map(|v| v.value()).unwrap_or(&serde_json::Value::Null);
+                    out.write(&serde_json::to_string(param).unwrap_or_else(|_| "[]".to_string()))?;
+                    Ok(())
+                },
+            ),
+        );
         let template = include_str!("templates/k6_crud_flow.hbs");
 
         let custom_headers = self.parse_headers()?;
@@ -1473,6 +1506,7 @@ impl BenchCommand {
                         "path": path,
                         "extract": s.extract,
                         "use_values": s.use_values,
+                        "use_body": s.use_body,
                         "description": s.description,
                         "display_name": s.description.clone().unwrap_or_else(|| format!("Step {}", idx)),
                         "is_get_or_head": is_get_or_head,

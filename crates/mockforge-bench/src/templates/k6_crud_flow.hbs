@@ -71,6 +71,24 @@ function extractValue(response, fieldPath) {
   }
 }
 
+// Helper function to extract full response body with optional key filtering
+function extractBody(response, excludeKeys) {
+  try {
+    const json = response.json();
+    if (excludeKeys && excludeKeys.length > 0) {
+      const filtered = { ...json };
+      for (const key of excludeKeys) {
+        delete filtered[key];
+      }
+      return filtered;
+    }
+    return json;
+  } catch (e) {
+    console.error(`Failed to extract body: ${e.message}`);
+    return null;
+  }
+}
+
 // Helper function to replace path parameters
 function replacePath(pathTemplate, values) {
   let path = pathTemplate;
@@ -104,7 +122,15 @@ export default function () {
       const path = '{{{this.path}}}';
       {{/if}}
 
-      {{#if this.has_body}}
+      {{#if this.use_body}}
+      // Use previously extracted body
+      let payload = extractedValues['{{this.use_body}}'];
+      if (!payload) {
+        console.error('Extracted body {{this.use_body}} not found');
+        payload = {};
+      }
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers });
+      {{else if this.has_body}}
       {{#if this.body_is_dynamic}}
       // Dynamic body with runtime placeholders and extracted values
       let payload = {{{this.body}}};
@@ -140,7 +166,12 @@ export default function () {
       // Extract values for subsequent steps
       if (success) {
         {{#each this.extract}}
+        {{#if this.body}}
+        // Extract full response body with filtering
+        const extracted_{{this.store_as}} = extractBody(res, {{{json this.exclude}}});
+        {{else}}
         const extracted_{{this.store_as}} = extractValue(res, '{{this.field}}');
+        {{/if}}
         if (extracted_{{this.store_as}}) {
           extractedValues['{{this.store_as}}'] = extracted_{{this.store_as}};
         }

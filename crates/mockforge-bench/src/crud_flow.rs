@@ -10,14 +10,21 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-/// Field extraction configuration - supports both simple field names and aliased extraction
+/// Field extraction configuration - supports field extraction, aliased extraction, and full body extraction
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ExtractField {
-    /// The field name to extract from the response
-    pub field: String,
+    /// The field name to extract from the response (None if extracting full body)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    /// Extract entire response body instead of a single field
+    #[serde(default)]
+    pub body: bool,
     /// The name to store it as (defaults to field name if not specified)
     /// Note: Deserialization accepts "as" via custom Deserialize impl, but serializes as "store_as"
     pub store_as: String,
+    /// Keys to exclude when extracting full body (only used when body=true)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclude: Vec<String>,
 }
 
 impl ExtractField {
@@ -25,13 +32,30 @@ impl ExtractField {
     pub fn simple(field: String) -> Self {
         Self {
             store_as: field.clone(),
-            field,
+            field: Some(field),
+            body: false,
+            exclude: Vec::new(),
         }
     }
 
     /// Create a new extract field with an alias
     pub fn aliased(field: String, store_as: String) -> Self {
-        Self { field, store_as }
+        Self {
+            field: Some(field),
+            store_as,
+            body: false,
+            exclude: Vec::new(),
+        }
+    }
+
+    /// Create a full body extraction with optional key filtering
+    pub fn full_body(store_as: String, exclude: Vec<String>) -> Self {
+        Self {
+            field: None,
+            body: true,
+            store_as,
+            exclude,
+        }
     }
 }
 
@@ -48,7 +72,7 @@ impl<'de> Deserialize<'de> for ExtractField {
             type Value = ExtractField;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a string or an object with 'field' and optional 'as' keys")
+                formatter.write_str("a string, an object with 'field' and optional 'as' keys, or an object with 'body: true' and 'as' keys")
             }
 
             // Handle simple string: "uuid"
@@ -59,13 +83,15 @@ impl<'de> Deserialize<'de> for ExtractField {
                 Ok(ExtractField::simple(value.to_string()))
             }
 
-            // Handle object: {field: "uuid", as: "pool_uuid"}
+            // Handle object: {field: "uuid", as: "pool_uuid"} or {body: true, as: "vs_body", exclude: [...]}
             fn visit_map<M>(self, mut map: M) -> std::result::Result<Self::Value, M::Error>
             where
                 M: MapAccess<'de>,
             {
                 let mut field: Option<String> = None;
                 let mut store_as: Option<String> = None;
+                let mut body: bool = false;
+                let mut exclude: Vec<String> = Vec::new();
 
                 while let Some(key) = map.next_key::<String>()? {
                     match key.as_str() {
@@ -75,16 +101,38 @@ impl<'de> Deserialize<'de> for ExtractField {
                         "as" => {
                             store_as = Some(map.next_value()?);
                         }
+                        "body" => {
+                            body = map.next_value()?;
+                        }
+                        "exclude" => {
+                            exclude = map.next_value()?;
+                        }
                         _ => {
                             let _: serde::de::IgnoredAny = map.next_value()?;
                         }
                     }
                 }
 
-                let field = field.ok_or_else(|| de::Error::missing_field("field"))?;
-                let store_as = store_as.unwrap_or_else(|| field.clone());
-
-                Ok(ExtractField { field, store_as })
+                if body {
+                    // Full body extraction mode
+                    let store_as = store_as.ok_or_else(|| de::Error::missing_field("as"))?;
+                    Ok(ExtractField {
+                        field: None,
+                        body: true,
+                        store_as,
+                        exclude,
+                    })
+                } else {
+                    // Field extraction mode
+                    let field = field.ok_or_else(|| de::Error::missing_field("field"))?;
+                    let store_as = store_as.unwrap_or_else(|| field.clone());
+                    Ok(ExtractField {
+                        field: Some(field),
+                        body: false,
+                        store_as,
+                        exclude: Vec::new(),
+                    })
+                }
             }
         }
 
@@ -98,15 +146,20 @@ pub struct FlowStep {
     /// The operation identifier (e.g., "POST /users" or operation_id)
     pub operation: String,
     /// Fields to extract from the response (for subsequent steps)
-    /// Supports both simple strings and objects with aliases:
+    /// Supports multiple formats:
     /// - Simple: "uuid" (extracts uuid, stores as uuid)
     /// - Aliased: {field: "uuid", as: "pool_uuid"} (extracts uuid, stores as pool_uuid)
+    /// - Full body: {body: true, as: "vs_body", exclude: ["_last_modified"]}
     #[serde(default)]
     pub extract: Vec<ExtractField>,
     /// Mapping of path/body variables to extracted values
     /// Key: variable name in request, Value: extracted field name
     #[serde(default)]
     pub use_values: HashMap<String, String>,
+    /// Use a previously extracted body as the request body for this step
+    /// The value should match the 'as' name from a previous body extraction
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_body: Option<String>,
     /// Optional description for this step
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -119,6 +172,7 @@ impl FlowStep {
             operation,
             extract: Vec::new(),
             use_values: HashMap::new(),
+            use_body: None,
             description: None,
         }
     }
@@ -138,6 +192,12 @@ impl FlowStep {
     /// Add value mappings for this step
     pub fn with_values(mut self, values: HashMap<String, String>) -> Self {
         self.use_values = values;
+        self
+    }
+
+    /// Use a previously extracted body as the request body
+    pub fn with_use_body(mut self, body_name: String) -> Self {
+        self.use_body = Some(body_name);
         self
     }
 
@@ -182,10 +242,11 @@ impl CrudFlow {
     }
 
     /// Get all fields that need to be extracted across all steps (returns field names)
+    /// Note: Only returns field names, not body extractions
     pub fn get_all_extract_fields(&self) -> HashSet<String> {
         self.steps
             .iter()
-            .flat_map(|step| step.extract.iter().map(|e| e.field.clone()))
+            .flat_map(|step| step.extract.iter().filter_map(|e| e.field.clone()))
             .collect()
     }
 
@@ -549,7 +610,7 @@ mod tests {
         // First step should be POST (create)
         assert!(flow.steps[0].operation.starts_with("POST"));
         // Should extract id
-        assert!(flow.steps[0].extract.iter().any(|e| e.field == "id"));
+        assert!(flow.steps[0].extract.iter().any(|e| e.field.as_deref() == Some("id")));
     }
 
     #[test]
