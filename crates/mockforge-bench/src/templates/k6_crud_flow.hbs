@@ -140,9 +140,9 @@ export default function () {
       // Extract values for subsequent steps
       if (success) {
         {{#each this.extract}}
-        const extracted_{{this}} = extractValue(res, '{{this}}');
-        if (extracted_{{this}}) {
-          extractedValues['{{this}}'] = extracted_{{this}};
+        const extracted_{{this.store_as}} = extractValue(res, '{{this.field}}');
+        if (extracted_{{this.store_as}}) {
+          extractedValues['{{this.store_as}}'] = extracted_{{this.store_as}};
         }
         {{/each}}
       }

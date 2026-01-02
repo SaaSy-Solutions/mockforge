@@ -6,9 +6,91 @@
 
 use crate::error::{BenchError, Result};
 use crate::spec_parser::ApiOperation;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+
+/// Field extraction configuration - supports both simple field names and aliased extraction
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ExtractField {
+    /// The field name to extract from the response
+    pub field: String,
+    /// The name to store it as (defaults to field name if not specified)
+    /// Note: Deserialization accepts "as" via custom Deserialize impl, but serializes as "store_as"
+    pub store_as: String,
+}
+
+impl ExtractField {
+    /// Create a new extract field with the same name for field and storage
+    pub fn simple(field: String) -> Self {
+        Self {
+            store_as: field.clone(),
+            field,
+        }
+    }
+
+    /// Create a new extract field with an alias
+    pub fn aliased(field: String, store_as: String) -> Self {
+        Self { field, store_as }
+    }
+}
+
+impl<'de> Deserialize<'de> for ExtractField {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::{self, MapAccess, Visitor};
+
+        struct ExtractFieldVisitor;
+
+        impl<'de> Visitor<'de> for ExtractFieldVisitor {
+            type Value = ExtractField;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string or an object with 'field' and optional 'as' keys")
+            }
+
+            // Handle simple string: "uuid"
+            fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(ExtractField::simple(value.to_string()))
+            }
+
+            // Handle object: {field: "uuid", as: "pool_uuid"}
+            fn visit_map<M>(self, mut map: M) -> std::result::Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut field: Option<String> = None;
+                let mut store_as: Option<String> = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "field" => {
+                            field = Some(map.next_value()?);
+                        }
+                        "as" => {
+                            store_as = Some(map.next_value()?);
+                        }
+                        _ => {
+                            let _: serde::de::IgnoredAny = map.next_value()?;
+                        }
+                    }
+                }
+
+                let field = field.ok_or_else(|| de::Error::missing_field("field"))?;
+                let store_as = store_as.unwrap_or_else(|| field.clone());
+
+                Ok(ExtractField { field, store_as })
+            }
+        }
+
+        deserializer.deserialize_any(ExtractFieldVisitor)
+    }
+}
 
 /// A single step in a CRUD flow
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,8 +98,11 @@ pub struct FlowStep {
     /// The operation identifier (e.g., "POST /users" or operation_id)
     pub operation: String,
     /// Fields to extract from the response (for subsequent steps)
+    /// Supports both simple strings and objects with aliases:
+    /// - Simple: "uuid" (extracts uuid, stores as uuid)
+    /// - Aliased: {field: "uuid", as: "pool_uuid"} (extracts uuid, stores as pool_uuid)
     #[serde(default)]
-    pub extract: Vec<String>,
+    pub extract: Vec<ExtractField>,
     /// Mapping of path/body variables to extracted values
     /// Key: variable name in request, Value: extracted field name
     #[serde(default)]
@@ -38,8 +123,14 @@ impl FlowStep {
         }
     }
 
-    /// Add fields to extract from response
+    /// Add fields to extract from response (simple field names)
     pub fn with_extract(mut self, fields: Vec<String>) -> Self {
+        self.extract = fields.into_iter().map(ExtractField::simple).collect();
+        self
+    }
+
+    /// Add fields to extract with aliases
+    pub fn with_extract_fields(mut self, fields: Vec<ExtractField>) -> Self {
         self.extract = fields;
         self
     }
@@ -90,9 +181,17 @@ impl CrudFlow {
         self.steps.push(step);
     }
 
-    /// Get all fields that need to be extracted across all steps
+    /// Get all fields that need to be extracted across all steps (returns field names)
     pub fn get_all_extract_fields(&self) -> HashSet<String> {
-        self.steps.iter().flat_map(|step| step.extract.iter().cloned()).collect()
+        self.steps
+            .iter()
+            .flat_map(|step| step.extract.iter().map(|e| e.field.clone()))
+            .collect()
+    }
+
+    /// Get all extract field configurations across all steps
+    pub fn get_all_extract_configs(&self) -> Vec<&ExtractField> {
+        self.steps.iter().flat_map(|step| step.extract.iter()).collect()
     }
 }
 
@@ -450,7 +549,7 @@ mod tests {
         // First step should be POST (create)
         assert!(flow.steps[0].operation.starts_with("POST"));
         // Should extract id
-        assert!(flow.steps[0].extract.contains(&"id".to_string()));
+        assert!(flow.steps[0].extract.iter().any(|e| e.field == "id"));
     }
 
     #[test]
