@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-plugin-loader"
-version = "0.3.27"
+version = "0.3.28"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -17,7 +17,7 @@ missing_docs = "deny"
 
 [dependencies]
 # Plugin core types and traits
-mockforge-plugin-core = { version = "0.3.27", path = "../mockforge-plugin-core" }
+mockforge-plugin-core = { version = "0.3.28", path = "../mockforge-plugin-core" }
 
 # Serialization
 serde.workspace = true
