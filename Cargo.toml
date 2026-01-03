@@ -71,7 +71,7 @@ resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.3.28"
+version = "0.3.29"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"

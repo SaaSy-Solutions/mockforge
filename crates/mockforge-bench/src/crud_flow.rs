@@ -185,6 +185,19 @@ pub struct FlowStep {
     /// The value should match the 'as' name from a previous body extraction
     #[serde(skip_serializing_if = "Option::is_none")]
     pub use_body: Option<String>,
+    /// Merge/override fields in the extracted body before sending
+    /// Works with use_body to modify specific fields in the extracted body
+    /// Example: merge_body: {enabled: false, name: "updated-name"}
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub merge_body: HashMap<String, serde_json::Value>,
+    /// Inject security attack payloads into this step's request
+    /// When true, security payloads from wafbench or configured attacks will be injected
+    #[serde(default)]
+    pub inject_attacks: bool,
+    /// Specific attack types to inject (if not all)
+    /// Examples: "sqli", "xss", "rce", "lfi"
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attack_types: Vec<String>,
     /// Optional description for this step
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -198,6 +211,9 @@ impl FlowStep {
             extract: Vec::new(),
             use_values: HashMap::new(),
             use_body: None,
+            merge_body: HashMap::new(),
+            inject_attacks: false,
+            attack_types: Vec::new(),
             description: None,
         }
     }
@@ -223,6 +239,24 @@ impl FlowStep {
     /// Use a previously extracted body as the request body
     pub fn with_use_body(mut self, body_name: String) -> Self {
         self.use_body = Some(body_name);
+        self
+    }
+
+    /// Merge/override fields in the extracted body
+    pub fn with_merge_body(mut self, merge: HashMap<String, serde_json::Value>) -> Self {
+        self.merge_body = merge;
+        self
+    }
+
+    /// Enable security attack injection for this step
+    pub fn with_inject_attacks(mut self, inject: bool) -> Self {
+        self.inject_attacks = inject;
+        self
+    }
+
+    /// Specify which attack types to inject
+    pub fn with_attack_types(mut self, types: Vec<String>) -> Self {
+        self.attack_types = types;
         self
     }
 
@@ -783,5 +817,88 @@ default_extract_fields:
         assert!(fields.contains(&"id".to_string()));
         assert!(fields.contains(&"uuid".to_string()));
         assert_eq!(fields.len(), 2);
+    }
+
+    #[test]
+    fn test_flow_step_with_merge_body() {
+        let mut merge = HashMap::new();
+        merge.insert("enabled".to_string(), serde_json::json!(false));
+        merge.insert("name".to_string(), serde_json::json!("updated-name"));
+
+        let step = FlowStep::new("PUT /resource/{id}".to_string())
+            .with_use_body("resource_body".to_string())
+            .with_merge_body(merge);
+
+        assert_eq!(step.use_body, Some("resource_body".to_string()));
+        assert_eq!(step.merge_body.get("enabled"), Some(&serde_json::json!(false)));
+        assert_eq!(step.merge_body.get("name"), Some(&serde_json::json!("updated-name")));
+    }
+
+    #[test]
+    fn test_flow_config_with_merge_body() {
+        let yaml = r#"
+flows:
+  - name: "Update Flow"
+    steps:
+      - operation: "GET /resource/{id}"
+        use_values:
+          id: "resource_id"
+        extract:
+          - body: true
+            as: resource_body
+            exclude: ["_last_modified"]
+        description: "Get resource"
+      - operation: "PUT /resource/{id}"
+        use_values:
+          id: "resource_id"
+        use_body: "resource_body"
+        merge_body:
+          enabled: false
+          name: "updated"
+        description: "Update resource"
+"#;
+
+        let config = CrudFlowConfig::from_yaml(yaml).expect("Should parse YAML");
+        assert_eq!(config.flows.len(), 1);
+        assert_eq!(config.flows[0].steps.len(), 2);
+
+        let put_step = &config.flows[0].steps[1];
+        assert_eq!(put_step.use_body, Some("resource_body".to_string()));
+        assert!(!put_step.merge_body.is_empty());
+        assert_eq!(put_step.merge_body.get("enabled"), Some(&serde_json::json!(false)));
+        assert_eq!(put_step.merge_body.get("name"), Some(&serde_json::json!("updated")));
+    }
+
+    #[test]
+    fn test_flow_step_with_inject_attacks() {
+        let step = FlowStep::new("POST /resource".to_string())
+            .with_inject_attacks(true)
+            .with_attack_types(vec!["sqli".to_string(), "xss".to_string()]);
+
+        assert!(step.inject_attacks);
+        assert_eq!(step.attack_types, vec!["sqli".to_string(), "xss".to_string()]);
+    }
+
+    #[test]
+    fn test_flow_config_with_inject_attacks() {
+        let yaml = r#"
+flows:
+  - name: "Security Test Flow"
+    steps:
+      - operation: "POST /pool"
+        inject_attacks: true
+        attack_types:
+          - sqli
+          - xss
+        description: "Create pool with attack payloads"
+"#;
+
+        let config = CrudFlowConfig::from_yaml(yaml).expect("Should parse YAML");
+        assert_eq!(config.flows.len(), 1);
+        assert_eq!(config.flows[0].steps.len(), 1);
+
+        let step = &config.flows[0].steps[0];
+        assert!(step.inject_attacks);
+        assert_eq!(step.attack_types, vec!["sqli".to_string(), "xss".to_string()]);
     }
 }

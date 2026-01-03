@@ -192,6 +192,25 @@ function extractBody(response, excludeKeys) {
   }
 }
 
+// Helper function to deep merge objects (target is modified with overrides)
+function mergeObjects(target, overrides) {
+  if (!target || typeof target !== 'object') return overrides;
+  if (!overrides || typeof overrides !== 'object') return target;
+
+  const result = { ...target };
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value && typeof value === 'object' && !Array.isArray(value) &&
+        result[key] && typeof result[key] === 'object' && !Array.isArray(result[key])) {
+      // Deep merge for nested objects
+      result[key] = mergeObjects(result[key], value);
+    } else {
+      // Direct override for primitives and arrays
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 // Helper function to replace path parameters
 function replacePath(pathTemplate, values) {
   let path = pathTemplate;
@@ -212,6 +231,11 @@ export default function () {
     {{#each this.steps}}
     // Step {{@index}}: {{this.description}}
     {
+      {{#if this.inject_attacks}}
+      // NOTE: Security attack injection is enabled for this step
+      // Attack types: {{#if this.attack_types}}{{#each this.attack_types}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}all{{/if}}
+      // Attacks will be injected via the configured attack payload source
+      {{/if}}
       {{#if this.use_values}}
       // Apply extracted values to path
       const pathValues = {};
@@ -232,6 +256,10 @@ export default function () {
         console.error('Extracted body {{this.use_body}} not found');
         payload = {};
       }
+      {{#if this.merge_body}}
+      // Merge with override values
+      payload = mergeObjects(payload, {{{json this.merge_body}}});
+      {{/if}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers });
       {{else if this.has_body}}
       {{#if this.body_is_dynamic}}
