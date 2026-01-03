@@ -14,6 +14,7 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ExtractField {
     /// The field name to extract from the response (None if extracting full body)
+    /// Supports nested paths: "uuid", "data.uuid", "results[0].uuid", "results[?name=\"global\"].uuid"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field: Option<String>,
     /// Extract entire response body instead of a single field
@@ -25,6 +26,10 @@ pub struct ExtractField {
     /// Keys to exclude when extracting full body (only used when body=true)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclude: Vec<String>,
+    /// Match mode for filter expressions: "first" (default) or "last"
+    /// Used when field path contains a filter like results[?name="global"]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub match_mode: Option<String>,
 }
 
 impl ExtractField {
@@ -35,6 +40,7 @@ impl ExtractField {
             field: Some(field),
             body: false,
             exclude: Vec::new(),
+            match_mode: None,
         }
     }
 
@@ -45,6 +51,18 @@ impl ExtractField {
             store_as,
             body: false,
             exclude: Vec::new(),
+            match_mode: None,
+        }
+    }
+
+    /// Create a new extract field with an alias and match mode
+    pub fn aliased_with_match(field: String, store_as: String, match_mode: Option<String>) -> Self {
+        Self {
+            field: Some(field),
+            store_as,
+            body: false,
+            exclude: Vec::new(),
+            match_mode,
         }
     }
 
@@ -55,6 +73,7 @@ impl ExtractField {
             body: true,
             store_as,
             exclude,
+            match_mode: None,
         }
     }
 }
@@ -92,6 +111,7 @@ impl<'de> Deserialize<'de> for ExtractField {
                 let mut store_as: Option<String> = None;
                 let mut body: bool = false;
                 let mut exclude: Vec<String> = Vec::new();
+                let mut match_mode: Option<String> = None;
 
                 while let Some(key) = map.next_key::<String>()? {
                     match key.as_str() {
@@ -107,6 +127,9 @@ impl<'de> Deserialize<'de> for ExtractField {
                         "exclude" => {
                             exclude = map.next_value()?;
                         }
+                        "match" | "match_mode" => {
+                            match_mode = Some(map.next_value()?);
+                        }
                         _ => {
                             let _: serde::de::IgnoredAny = map.next_value()?;
                         }
@@ -121,6 +144,7 @@ impl<'de> Deserialize<'de> for ExtractField {
                         body: true,
                         store_as,
                         exclude,
+                        match_mode: None,
                     })
                 } else {
                     // Field extraction mode
@@ -131,6 +155,7 @@ impl<'de> Deserialize<'de> for ExtractField {
                         body: false,
                         store_as,
                         exclude: Vec::new(),
+                        match_mode,
                     })
                 }
             }

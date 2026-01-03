@@ -52,23 +52,126 @@ const BASE_URL = '{{base_url}}';
 const headers = {{{headers}}};
 
 // Helper function to extract value from JSON response
-function extractValue(response, fieldPath) {
+// Supports: simple fields (uuid), nested paths (data.uuid),
+// array indices (results[0].uuid), and filters (results[?name="global"].uuid)
+function extractValue(response, fieldPath, matchMode) {
   try {
     const json = response.json();
-    const parts = fieldPath.split('.');
-    let value = json;
-    for (const part of parts) {
-      if (value && typeof value === 'object') {
-        value = value[part];
-      } else {
-        return null;
-      }
-    }
-    return value;
+    return extractFromObject(json, fieldPath, matchMode || 'first');
   } catch (e) {
     console.error(`Failed to extract ${fieldPath}: ${e.message}`);
     return null;
   }
+}
+
+// Extract value from object using path expression
+function extractFromObject(obj, fieldPath, matchMode) {
+  if (!obj || !fieldPath) return null;
+
+  // Parse the field path into segments
+  const segments = parseFieldPath(fieldPath);
+  let value = obj;
+
+  for (const segment of segments) {
+    if (value === null || value === undefined) return null;
+
+    if (segment.type === 'field') {
+      // Simple field access
+      value = value[segment.name];
+    } else if (segment.type === 'index') {
+      // Array index access: [0], [1], etc.
+      if (!Array.isArray(value)) return null;
+      const idx = segment.index < 0 ? value.length + segment.index : segment.index;
+      value = value[idx];
+    } else if (segment.type === 'filter') {
+      // Filter access: [?field="value"] or [?field=value]
+      if (!Array.isArray(value)) return null;
+      const matches = value.filter(item => {
+        if (item && typeof item === 'object') {
+          const fieldVal = item[segment.filterField];
+          return String(fieldVal) === String(segment.filterValue);
+        }
+        return false;
+      });
+      if (matches.length === 0) return null;
+      // Return first or last based on matchMode
+      value = matchMode === 'last' ? matches[matches.length - 1] : matches[0];
+    }
+  }
+
+  return value;
+}
+
+// Parse field path into segments
+function parseFieldPath(fieldPath) {
+  const segments = [];
+  let remaining = fieldPath;
+
+  while (remaining.length > 0) {
+    // Check for array index or filter: [0] or [?name="value"]
+    if (remaining.startsWith('[')) {
+      const closeIdx = remaining.indexOf(']');
+      if (closeIdx === -1) break;
+
+      const bracketContent = remaining.substring(1, closeIdx);
+
+      if (bracketContent.startsWith('?')) {
+        // Filter expression: [?name="value"] or [?name=value]
+        const filterExpr = bracketContent.substring(1);
+        const eqIdx = filterExpr.indexOf('=');
+        if (eqIdx !== -1) {
+          const filterField = filterExpr.substring(0, eqIdx).trim();
+          let filterValue = filterExpr.substring(eqIdx + 1).trim();
+          // Remove quotes if present
+          if ((filterValue.startsWith('"') && filterValue.endsWith('"')) ||
+              (filterValue.startsWith("'") && filterValue.endsWith("'"))) {
+            filterValue = filterValue.substring(1, filterValue.length - 1);
+          }
+          segments.push({ type: 'filter', filterField, filterValue });
+        }
+      } else {
+        // Numeric index: [0], [-1], etc.
+        const index = parseInt(bracketContent, 10);
+        if (!isNaN(index)) {
+          segments.push({ type: 'index', index });
+        }
+      }
+
+      remaining = remaining.substring(closeIdx + 1);
+      // Skip leading dot after bracket
+      if (remaining.startsWith('.')) {
+        remaining = remaining.substring(1);
+      }
+    } else {
+      // Field name
+      let dotIdx = remaining.indexOf('.');
+      let bracketIdx = remaining.indexOf('[');
+
+      let endIdx;
+      if (dotIdx === -1 && bracketIdx === -1) {
+        endIdx = remaining.length;
+      } else if (dotIdx === -1) {
+        endIdx = bracketIdx;
+      } else if (bracketIdx === -1) {
+        endIdx = dotIdx;
+      } else {
+        endIdx = Math.min(dotIdx, bracketIdx);
+      }
+
+      const fieldName = remaining.substring(0, endIdx);
+      if (fieldName.length > 0) {
+        segments.push({ type: 'field', name: fieldName });
+      }
+
+      remaining = remaining.substring(endIdx);
+      // Skip leading dot
+      if (remaining.startsWith('.')) {
+        remaining = remaining.substring(1);
+      }
+    }
+  }
+
+  return segments;
 }
 
 // Helper function to extract full response body with optional key filtering
@@ -170,7 +273,8 @@ export default function () {
         // Extract full response body with filtering
         const extracted_{{this.store_as}} = extractBody(res, {{{json this.exclude}}});
         {{else}}
-        const extracted_{{this.store_as}} = extractValue(res, '{{this.field}}');
+        // Extract field: {{{this.field}}}{{#if this.match_mode}} (match: {{this.match_mode}}){{/if}}
+        const extracted_{{this.store_as}} = extractValue(res, '{{{this.field}}}'{{#if this.match_mode}}, '{{this.match_mode}}'{{/if}});
         {{/if}}
         if (extracted_{{this.store_as}}) {
           extractedValues['{{this.store_as}}'] = extracted_{{this.store_as}};
