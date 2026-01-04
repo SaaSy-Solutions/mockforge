@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-scenarios"
-version = "0.3.30"
+version = "0.3.31"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -68,16 +68,16 @@ ring = "0.17"
 hex = "0.4"
 
 # Reuse plugin registry infrastructure
-mockforge-plugin-registry = { version = "0.3.30", path = "../mockforge-plugin-registry" }
+mockforge-plugin-registry = { version = "0.3.31", path = "../mockforge-plugin-registry" }
 
 # Reuse plugin loader patterns
-mockforge-plugin-loader = { version = "0.3.30", path = "../mockforge-plugin-loader" }
+mockforge-plugin-loader = { version = "0.3.31", path = "../mockforge-plugin-loader" }
 
 # Core types for state machines
-mockforge-core = { version = "0.3.30", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.31", path = "../mockforge-core" }
 
 # Data types for schemas
-mockforge-data = { version = "0.3.30", path = "../mockforge-data" }
+mockforge-data = { version = "0.3.31", path = "../mockforge-data" }
 
 [features]
 default = ["git-support"]
