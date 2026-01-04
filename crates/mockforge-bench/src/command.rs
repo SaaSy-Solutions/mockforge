@@ -789,6 +789,13 @@ impl BenchCommand {
                 "No WAFBench YAML files found matching '{}'",
                 wafbench_dir
             ));
+            // Also report any parse errors that may explain why no files were processed
+            if !stats.parse_errors.is_empty() {
+                TerminalReporter::print_warning("Some files were found but failed to parse:");
+                for error in &stats.parse_errors {
+                    TerminalReporter::print_warning(&format!("  - {}", error));
+                }
+            }
             return Vec::new();
         }
 
@@ -1174,6 +1181,10 @@ impl BenchCommand {
                     // Process body for dynamic placeholders like ${__VU}, ${__ITER}, etc.
                     let processed_body = DynamicParamProcessor::process_json_body(&body_value);
 
+                    // Also check for ${extracted.xxx} placeholders which need runtime substitution
+                    let body_has_extracted_placeholders = processed_body.value.contains("${extracted.");
+                    let body_is_dynamic = processed_body.is_dynamic || body_has_extracted_placeholders;
+
                     serde_json::json!({
                         "operation": s.operation,
                         "method": method,
@@ -1189,7 +1200,7 @@ impl BenchCommand {
                         "is_get_or_head": is_get_or_head,
                         "has_body": has_body,
                         "body": processed_body.value,
-                        "body_is_dynamic": processed_body.is_dynamic,
+                        "body_is_dynamic": body_is_dynamic,
                         "_placeholders": processed_body.placeholders.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>(),
                     })
                 }).collect::<Vec<_>>(),
@@ -1503,6 +1514,10 @@ impl BenchCommand {
                     // Note: all_placeholders is captured by the closure but we can't mutate it directly
                     // We'll collect placeholders separately below
 
+                    // Also check for ${extracted.xxx} placeholders which need runtime substitution
+                    let body_has_extracted_placeholders = processed_body.value.contains("${extracted.");
+                    let body_is_dynamic = processed_body.is_dynamic || body_has_extracted_placeholders;
+
                     serde_json::json!({
                         "operation": s.operation,
                         "method": method,
@@ -1518,7 +1533,7 @@ impl BenchCommand {
                         "is_get_or_head": is_get_or_head,
                         "has_body": has_body,
                         "body": processed_body.value,
-                        "body_is_dynamic": processed_body.is_dynamic,
+                        "body_is_dynamic": body_is_dynamic,
                         "_placeholders": processed_body.placeholders.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>(),
                     })
                 }).collect::<Vec<_>>(),

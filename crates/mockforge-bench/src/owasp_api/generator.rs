@@ -297,10 +297,16 @@ const testsRun = new Counter('owasp_tests_run');
 const vulnerableRate = new Rate('owasp_vulnerable_rate');
 const responseTime = new Trend('owasp_response_time');
 
-// Test options
+// Test options - use per-VU iterations scenario for controlled test runs
 export const options = {
-    vus: {{concurrency}},
-    iterations: 1, // Run once per VU
+    scenarios: {
+        owasp_security_test: {
+            executor: 'per-vu-iterations',
+            vus: {{concurrency}},
+            iterations: 1,  // Each VU runs exactly once
+            maxDuration: '30m',
+        },
+    },
     thresholds: {
         'owasp_findings': ['count<100'], // Alert if too many findings
     },
