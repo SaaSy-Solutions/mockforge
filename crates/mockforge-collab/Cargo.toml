@@ -86,7 +86,7 @@ aws-config = { version = "1", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
-tempfile = "3.13"
+tempfile = "3.24"
 tower = { workspace = true, features = ["util"] }
 hyper = { workspace = true, features = ["client", "http1"] }
 axum-test = "16.0"

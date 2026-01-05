@@ -48,7 +48,7 @@ which = "7.0"
 openapiv3 = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.14"
+tempfile = "3.24"
 assert_cmd = "2.0"
 predicates = "3.0"
 
