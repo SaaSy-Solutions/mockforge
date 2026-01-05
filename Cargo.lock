@@ -7491,7 +7491,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.24.0",
  "tower 0.5.2",
- "tower-http 0.6.7",
+ "tower-http 0.6.8",
  "tracing",
  "url",
  "uuid",
@@ -7587,7 +7587,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tower 0.5.2",
- "tower-http 0.6.7",
+ "tower-http 0.6.8",
  "tracing",
  "url",
  "uuid",
@@ -7736,7 +7736,7 @@ dependencies = [
  "tonic-prost-build",
  "tonic-reflection",
  "tower 0.5.2",
- "tower-http 0.6.7",
+ "tower-http 0.6.8",
  "tracing",
  "tracing-subscriber",
 ]
@@ -7801,7 +7801,7 @@ dependencies = [
  "tokio-stream",
  "tokio-tungstenite 0.28.0",
  "tower 0.5.2",
- "tower-http 0.6.7",
+ "tower-http 0.6.8",
  "tracing",
  "url",
  "urlencoding",
@@ -7832,7 +7832,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.20.1",
  "tower 0.5.2",
- "tower-http 0.6.7",
+ "tower-http 0.6.8",
 ]
 
 [[package]]
@@ -8193,7 +8193,7 @@ dependencies = [
  "tokio-test",
  "totp-lite",
  "tower 0.5.2",
- "tower-http 0.6.7",
+ "tower-http 0.6.8",
  "tracing",
  "tracing-subscriber",
  "urlencoding",
@@ -8321,7 +8321,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tower 0.5.2",
- "tower-http 0.6.7",
+ "tower-http 0.6.8",
  "tracing",
  "uuid",
 ]
@@ -8506,7 +8506,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tower 0.5.2",
- "tower-http 0.6.7",
+ "tower-http 0.6.8",
  "tracing",
  "uuid",
  "vergen",
@@ -8538,7 +8538,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tower 0.5.2",
- "tower-http 0.6.7",
+ "tower-http 0.6.8",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -11456,7 +11456,7 @@ dependencies = [
  "tokio-rustls 0.26.4",
  "tokio-util",
  "tower 0.5.2",
- "tower-http 0.6.7",
+ "tower-http 0.6.8",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -14223,9 +14223,9 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.6.7"
+version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cf146f99d442e8e68e585f5d798ccd3cad9a7835b917e09728880a862706456"
+checksum = "d4e6559d53cc268e5031cd8429d05415bc4cb4aefc4aa5d6cc35fbf5b924a1f8"
 dependencies = [
  "async-compression",
  "bitflags 2.10.0",
