@@ -9,6 +9,38 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 
+/// Escape a string for safe use in a JavaScript single-quoted string literal.
+/// Handles all problematic characters including:
+/// - Backslashes, single quotes, newlines, carriage returns
+/// - Backticks (template literals)
+/// - Unicode line/paragraph separators (U+2028, U+2029)
+/// - Null bytes and other control characters
+fn escape_js_string(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() * 2);
+    for c in s.chars() {
+        match c {
+            '\\' => result.push_str("\\\\"),
+            '\'' => result.push_str("\\'"),
+            '"' => result.push_str("\\\""),
+            '`' => result.push_str("\\`"),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            '\0' => result.push_str("\\0"),
+            // Unicode line separator
+            '\u{2028}' => result.push_str("\\u2028"),
+            // Unicode paragraph separator
+            '\u{2029}' => result.push_str("\\u2029"),
+            // Other control characters (0x00-0x1F except already handled)
+            c if c.is_control() => {
+                result.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            c => result.push(c),
+        }
+    }
+    result
+}
+
 /// Security payload categories
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -496,17 +528,13 @@ impl SecurityTestGenerator {
         code.push_str("const securityPayloads = [\n");
 
         for payload in payloads {
-            // Escape the payload for JavaScript
-            let escaped = payload
-                .payload
-                .replace('\\', "\\\\")
-                .replace('\'', "\\'")
-                .replace('\n', "\\n")
-                .replace('\r', "\\r");
+            // Escape the payload for JavaScript string literal
+            let escaped = escape_js_string(&payload.payload);
+            let escaped_desc = escape_js_string(&payload.description);
 
             code.push_str(&format!(
                 "  {{ payload: '{}', category: '{}', description: '{}' }},\n",
-                escaped, payload.category, payload.description
+                escaped, payload.category, escaped_desc
             ));
         }
 

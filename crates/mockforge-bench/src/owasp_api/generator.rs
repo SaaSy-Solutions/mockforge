@@ -361,10 +361,13 @@ function authRequest(method, url, body, additionalHeaders = {}) {
         timeout: TIMEOUT,
     };
 
-    if (method === 'get' || method === 'head') {
-        return http[method](url, params);
+    // k6 uses 'del' instead of 'delete'
+    const httpMethod = method === 'delete' ? 'del' : method;
+
+    if (httpMethod === 'get' || httpMethod === 'head') {
+        return http[httpMethod](url, params);
     } else {
-        return http[method](url, body ? JSON.stringify(body) : null, params);
+        return http[httpMethod](url, body ? JSON.stringify(body) : null, params);
     }
 }
 
@@ -380,10 +383,13 @@ function unauthRequest(method, url, body, additionalHeaders = {}) {
         timeout: TIMEOUT,
     };
 
-    if (method === 'get' || method === 'head') {
-        return http[method](url, params);
+    // k6 uses 'del' instead of 'delete'
+    const httpMethod = method === 'delete' ? 'del' : method;
+
+    if (httpMethod === 'get' || httpMethod === 'head') {
+        return http[httpMethod](url, params);
     } else {
-        return http[method](url, body ? JSON.stringify(body) : null, params);
+        return http[httpMethod](url, body ? JSON.stringify(body) : null, params);
     }
 }
 

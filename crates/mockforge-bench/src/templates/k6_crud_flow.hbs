@@ -13,6 +13,11 @@ import { Rate, Trend, Counter } from 'k6/metrics';
 const flowSuccessRate = new Rate('flow_success_rate');
 const flowDuration = new Trend('flow_duration');
 const flowErrors = new Counter('flow_errors');
+{{#if error_injection_enabled}}
+// Error injection metrics
+const errorInjectionRate = new Rate('error_injection_rate');
+const errorInjectionCount = new Counter('error_injection_count');
+{{/if}}
 
 // Step-level metrics
 {{#each flows}}
@@ -50,6 +55,114 @@ const BASE_URL = '{{base_url}}';
 
 // Common headers
 const headers = {{{headers}}};
+
+{{#if error_injection_enabled}}
+// Error injection configuration
+const ERROR_RATE = {{error_rate}};
+const ERROR_TYPES = [{{#each error_types}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}];
+
+// Determine if this request should be invalidated
+function shouldInvalidate() {
+  const inject = Math.random() < ERROR_RATE;
+  errorInjectionRate.add(inject);
+  return inject;
+}
+
+// Select a random error type
+function selectErrorType() {
+  if (ERROR_TYPES.length === 0) {
+    return 'MissingField'; // Default
+  }
+  return ERROR_TYPES[Math.floor(Math.random() * ERROR_TYPES.length)];
+}
+
+// Apply error injection to a payload
+function injectError(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+
+  const errorType = selectErrorType();
+  const result = { ...payload };
+  const keys = Object.keys(result);
+
+  if (keys.length === 0) {
+    return result;
+  }
+
+  const randomKey = keys[Math.floor(Math.random() * keys.length)];
+  const originalValue = result[randomKey];
+
+  switch (errorType) {
+    case 'MissingField':
+      // Remove a required field
+      delete result[randomKey];
+      console.log(`[ERROR INJECTION] Removed field: ${randomKey}`);
+      break;
+
+    case 'WrongType':
+      // Change the type of a field
+      if (typeof originalValue === 'string') {
+        result[randomKey] = 12345;
+      } else if (typeof originalValue === 'number') {
+        result[randomKey] = 'invalid_string';
+      } else if (typeof originalValue === 'boolean') {
+        result[randomKey] = 'not_a_boolean';
+      } else if (Array.isArray(originalValue)) {
+        result[randomKey] = 'not_an_array';
+      } else {
+        result[randomKey] = null;
+      }
+      console.log(`[ERROR INJECTION] Changed type of ${randomKey}`);
+      break;
+
+    case 'Null':
+      // Set field to null
+      result[randomKey] = null;
+      console.log(`[ERROR INJECTION] Set ${randomKey} to null`);
+      break;
+
+    case 'OutOfRange':
+      // Set numeric fields to extreme values
+      if (typeof originalValue === 'number') {
+        result[randomKey] = originalValue > 0 ? -999999999 : 999999999;
+      } else if (typeof originalValue === 'string') {
+        result[randomKey] = 'x'.repeat(10000); // Very long string
+      }
+      console.log(`[ERROR INJECTION] Set ${randomKey} to out-of-range value`);
+      break;
+
+    case 'Empty':
+      // Set field to empty value
+      if (typeof originalValue === 'string') {
+        result[randomKey] = '';
+      } else if (Array.isArray(originalValue)) {
+        result[randomKey] = [];
+      } else if (typeof originalValue === 'object') {
+        result[randomKey] = {};
+      }
+      console.log(`[ERROR INJECTION] Set ${randomKey} to empty`);
+      break;
+
+    case 'InvalidFormat':
+      // Set field to invalid format
+      if (typeof originalValue === 'string') {
+        // Inject special characters
+        result[randomKey] = '!@#$%^&*()_+{}|:"<>?';
+      }
+      console.log(`[ERROR INJECTION] Set ${randomKey} to invalid format`);
+      break;
+
+    default:
+      // Default: remove the field
+      delete result[randomKey];
+      console.log(`[ERROR INJECTION] Default: removed field ${randomKey}`);
+  }
+
+  errorInjectionCount.add(1);
+  return result;
+}
+{{/if}}
 
 // Helper function to extract value from JSON response
 // Supports: simple fields (uuid), nested paths (data.uuid),
@@ -260,6 +373,13 @@ export default function () {
       // Merge with override values
       payload = mergeObjects(payload, {{{json this.merge_body}}});
       {{/if}}
+      {{#if @root.error_injection_enabled}}
+      // Apply error injection if triggered
+      totalRequestCount++;
+      if (shouldInvalidate()) {
+        payload = injectError(payload);
+      }
+      {{/if}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers });
       {{else if this.has_body}}
       {{#if this.body_is_dynamic}}
@@ -272,7 +392,14 @@ export default function () {
       }
       {{/each}}
       {{else}}
-      const payload = {{{this.body}}};
+      let payload = {{{this.body}}};
+      {{/if}}
+      {{#if @root.error_injection_enabled}}
+      // Apply error injection if triggered
+      totalRequestCount++;
+      if (shouldInvalidate()) {
+        payload = injectError(payload);
+      }
       {{/if}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers });
       {{else if this.is_get_or_head}}
@@ -360,6 +487,17 @@ function textSummary(data, options) {
   if (metrics.flow_errors && metrics.flow_errors.values) {
     const count = metrics.flow_errors.values.count || 0;
     output += indent + `Flow Errors: ${count}\n`;
+  }
+
+  // Error injection metrics (if enabled)
+  if (metrics.error_injection_count && metrics.error_injection_count.values) {
+    const injected = metrics.error_injection_count.values.count || 0;
+    output += indent + `Error Injections: ${injected}\n`;
+  }
+  if (metrics.error_injection_rate && metrics.error_injection_rate.values) {
+    const rate = metrics.error_injection_rate.values.rate;
+    const injectionRate = rate != null ? (rate * 100).toFixed(2) : '0.00';
+    output += indent + `Error Injection Rate: ${injectionRate}%\n`;
   }
 
   output += '\n';

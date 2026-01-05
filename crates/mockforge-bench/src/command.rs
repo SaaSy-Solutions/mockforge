@@ -1588,6 +1588,22 @@ impl BenchCommand {
         let required_imports = DynamicParamProcessor::get_required_imports(&all_placeholders);
         let required_globals = DynamicParamProcessor::get_required_globals(&all_placeholders);
 
+        // Build invalid data config if error injection is enabled
+        let invalid_data_config = self.build_invalid_data_config();
+        let error_injection_enabled = invalid_data_config.is_some();
+        let error_rate = self.error_rate.unwrap_or(0.0);
+        let error_types: Vec<String> = invalid_data_config
+            .as_ref()
+            .map(|c| c.error_types.iter().map(|t| format!("{:?}", t)).collect())
+            .unwrap_or_default();
+
+        if error_injection_enabled {
+            TerminalReporter::print_progress(&format!(
+                "Error injection enabled ({}% rate)",
+                (error_rate * 100.0) as u32
+            ));
+        }
+
         let data = serde_json::json!({
             "base_url": self.target,
             "flows": flows_data,
@@ -1608,6 +1624,10 @@ impl BenchCommand {
             "headers": headers_json,
             "dynamic_imports": required_imports,
             "dynamic_globals": required_globals,
+            // Error injection settings
+            "error_injection_enabled": error_injection_enabled,
+            "error_rate": error_rate,
+            "error_types": error_types,
         });
 
         let script = handlebars
