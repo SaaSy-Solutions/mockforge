@@ -1669,7 +1669,8 @@ impl BenchCommand {
         // Build OWASP configuration from CLI options
         let mut config = OwaspApiConfig::new()
             .with_auth_header(&self.owasp_auth_header)
-            .with_verbose(self.verbose);
+            .with_verbose(self.verbose)
+            .with_insecure(self.skip_tls_verify);
 
         // Set valid auth token if provided
         if let Some(ref token) = self.owasp_auth_token {

@@ -74,12 +74,46 @@ pub struct WafBenchTest {
 }
 
 /// A test stage containing input (request) and expected output (response)
+/// Supports both direct format and CRS v3.3 format with nested `stage:` wrapper
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WafBenchStage {
+    /// The request configuration (direct format)
+    pub input: Option<WafBenchInput>,
+    /// Expected response (direct format)
+    pub output: Option<WafBenchOutput>,
+    /// Nested stage for CRS v3.3 format (stage: { input: ..., output: ... })
+    pub stage: Option<WafBenchStageInner>,
+}
+
+/// Inner stage structure for CRS v3.3 format
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WafBenchStageInner {
     /// The request configuration
     pub input: WafBenchInput,
     /// Expected response
     pub output: Option<WafBenchOutput>,
+}
+
+impl WafBenchStage {
+    /// Get the input from either direct or nested format
+    pub fn get_input(&self) -> Option<&WafBenchInput> {
+        // Prefer nested stage format (CRS v3.3), fall back to direct format
+        if let Some(stage) = &self.stage {
+            Some(&stage.input)
+        } else {
+            self.input.as_ref()
+        }
+    }
+
+    /// Get the output from either direct or nested format
+    pub fn get_output(&self) -> Option<&WafBenchOutput> {
+        // Prefer nested stage format (CRS v3.3), fall back to direct format
+        if let Some(stage) = &self.stage {
+            stage.output.as_ref()
+        } else {
+            self.output.as_ref()
+        }
+    }
 }
 
 /// Request configuration for a WAFBench test
@@ -121,12 +155,71 @@ pub struct WafBenchOutput {
     /// Expected response headers
     #[serde(default)]
     pub response_headers: HashMap<String, String>,
-    /// Log contains patterns
-    #[serde(default)]
+    /// Log contains patterns (can be string or array in different formats)
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     pub log_contains: Vec<String>,
-    /// Log does not contain patterns
-    #[serde(default)]
+    /// Log does not contain patterns (can be string or array in different formats)
+    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     pub no_log_contains: Vec<String>,
+}
+
+/// Deserialize a field that can be either a single string or a Vec of strings
+fn deserialize_string_or_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+
+    struct StringOrVec;
+
+    impl<'de> Visitor<'de> for StringOrVec {
+        type Value = Vec<String>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("string or array of strings")
+        }
+
+        fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![value.to_string()])
+        }
+
+        fn visit_string<E>(self, value: String) -> std::result::Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![value])
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
+        where
+            A: de::SeqAccess<'de>,
+        {
+            let mut vec = Vec::new();
+            while let Some(value) = seq.next_element::<String>()? {
+                vec.push(value);
+            }
+            Ok(vec)
+        }
+
+        fn visit_none<E>(self) -> std::result::Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Vec::new())
+        }
+
+        fn visit_unit<E>(self) -> std::result::Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Vec::new())
+        }
+    }
+
+    deserializer.deserialize_any(StringOrVec)
 }
 
 /// Complete WAFBench test file structure
@@ -370,17 +463,22 @@ impl WafBenchLoader {
         let mut expects_block = false;
 
         for stage in &test.stages {
-            method = stage.input.method.clone();
+            // Get input from either direct or nested format (CRS v3.3 compatibility)
+            let Some(input) = stage.get_input() else {
+                continue;
+            };
+
+            method = input.method.clone();
 
             // Check if this test expects a block (403)
-            if let Some(output) = &stage.output {
+            if let Some(output) = stage.get_output() {
                 if output.status.contains(&403) {
                     expects_block = true;
                 }
             }
 
             // Extract payload from URI
-            if let Some(uri) = &stage.input.uri {
+            if let Some(uri) = &input.uri {
                 // Look for attack patterns in the URI
                 if self.looks_like_attack(uri) {
                     payloads.push(WafBenchPayload {
@@ -392,7 +490,7 @@ impl WafBenchLoader {
             }
 
             // Extract payloads from headers
-            for (header_name, header_value) in &stage.input.headers {
+            for (header_name, header_value) in &input.headers {
                 if self.looks_like_attack(header_value) {
                     payloads.push(WafBenchPayload {
                         location: PayloadLocation::Header,
@@ -403,7 +501,7 @@ impl WafBenchLoader {
             }
 
             // Extract payload from body
-            if let Some(data) = &stage.input.data {
+            if let Some(data) = &input.data {
                 if self.looks_like_attack(data) {
                     payloads.push(WafBenchPayload {
                         location: PayloadLocation::Body,
@@ -417,12 +515,14 @@ impl WafBenchLoader {
         // If no payloads found, still include the test but with full URI as payload
         if payloads.is_empty() {
             if let Some(stage) = test.stages.first() {
-                if let Some(uri) = &stage.input.uri {
-                    payloads.push(WafBenchPayload {
-                        location: PayloadLocation::Uri,
-                        value: uri.clone(),
-                        header_name: None,
-                    });
+                if let Some(input) = stage.get_input() {
+                    if let Some(uri) = &input.uri {
+                        payloads.push(WafBenchPayload {
+                            location: PayloadLocation::Uri,
+                            value: uri.clone(),
+                            header_name: None,
+                        });
+                    }
                 }
             }
         }
@@ -624,5 +724,45 @@ tests:
         let uri = "/test?param=%3Cscript%3Ealert(1)%3C/script%3E";
         let payload = loader.extract_payload_value(uri);
         assert!(payload.contains("<script>") || payload.contains("script"));
+    }
+
+    #[test]
+    fn test_parse_crs_v33_format() {
+        // CRS v3.3/master uses a nested stage: wrapper
+        let yaml = r#"
+meta:
+  author: "Christian Folini"
+  description: Various SQL injection tests
+  enabled: true
+  name: 942100.yaml
+
+tests:
+  - test_title: 942100-1
+    desc: "Simple SQL Injection"
+    stages:
+      - stage:
+          input:
+            dest_addr: 127.0.0.1
+            headers:
+              Host: localhost
+            method: POST
+            port: 80
+            uri: "/"
+            data: "var=1234 OR 1=1"
+            version: HTTP/1.0
+          output:
+            log_contains: id "942100"
+"#;
+
+        let file: WafBenchFile = serde_yaml::from_str(yaml).unwrap();
+        assert!(file.meta.enabled);
+        assert_eq!(file.tests.len(), 1);
+        assert_eq!(file.tests[0].test_title, "942100-1");
+
+        // Verify we can get the input from nested format
+        let stage = &file.tests[0].stages[0];
+        let input = stage.get_input().expect("Should have input");
+        assert_eq!(input.method, "POST");
+        assert_eq!(input.data.as_deref(), Some("var=1234 OR 1=1"));
     }
 }

@@ -73,6 +73,10 @@ pub struct OwaspApiConfig {
     /// Request timeout in milliseconds
     #[serde(default = "default_timeout")]
     pub timeout_ms: u64,
+
+    /// Skip TLS certificate verification (for testing with self-signed certs)
+    #[serde(default)]
+    pub insecure: bool,
 }
 
 fn default_auth_header() -> String {
@@ -123,6 +127,7 @@ impl Default for OwaspApiConfig {
             verbose: false,
             concurrency: default_concurrency(),
             timeout_ms: default_timeout(),
+            insecure: false,
         }
     }
 }
@@ -218,6 +223,12 @@ impl OwaspApiConfig {
     /// Builder method to set verbosity
     pub fn with_verbose(mut self, verbose: bool) -> Self {
         self.verbose = verbose;
+        self
+    }
+
+    /// Builder method to set insecure TLS mode
+    pub fn with_insecure(mut self, insecure: bool) -> Self {
+        self.insecure = insecure;
         self
     }
 }

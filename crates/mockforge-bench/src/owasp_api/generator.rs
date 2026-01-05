@@ -199,6 +199,7 @@ impl OwaspApiGenerator {
             "ops_with_path_params": ops_with_path_params,
             "get_operations": get_operations,
             "verbose": self.config.verbose,
+            "insecure": self.config.insecure,
             // Category flags for simple conditionals
             "test_api1": test_api1,
             "test_api2": test_api2,
@@ -290,6 +291,7 @@ const VALID_TOKEN = null;
 {{/if}}
 const TIMEOUT = '{{timeout_ms}}ms';
 const VERBOSE = {{verbose}};
+const INSECURE = {{insecure}};
 
 // Custom metrics
 const findingsCounter = new Counter('owasp_findings');
@@ -310,6 +312,7 @@ export const options = {
     thresholds: {
         'owasp_findings': ['count<100'], // Alert if too many findings
     },
+    insecureSkipTLSVerify: INSECURE,
 };
 
 // Findings storage
