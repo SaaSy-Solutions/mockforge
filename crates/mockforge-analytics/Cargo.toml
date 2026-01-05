@@ -17,7 +17,7 @@ description = "Traffic analytics and metrics dashboard for MockForge"
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "macros", "chrono", "json"] }
 
 # Async runtime
-tokio = { version = "1.48", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 futures = "0.3"
 
 # Serialization
