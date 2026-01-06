@@ -34,4 +34,4 @@ chrono = { workspace = true }
 tokio-tungstenite = { version = "0.20", features = ["native-tls"] }
 futures-util = "0.3"
 # Test utilities
-tempfile = "3.8"
+tempfile = "3.24"
