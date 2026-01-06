@@ -231,6 +231,12 @@ impl OwaspApiConfig {
         self.insecure = insecure;
         self
     }
+
+    /// Builder method to set concurrency (number of VUs)
+    pub fn with_concurrency(mut self, concurrency: usize) -> Self {
+        self.concurrency = concurrency;
+        self
+    }
 }
 
 /// Authentication token with optional metadata

@@ -7318,7 +7318,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "anyhow",
  "atty",
@@ -7385,7 +7385,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-cli"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "anyhow",
  "assert_cmd",
