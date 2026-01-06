@@ -375,7 +375,6 @@ export default function () {
       {{/if}}
       {{#if @root.error_injection_enabled}}
       // Apply error injection if triggered
-      totalRequestCount++;
       if (shouldInvalidate()) {
         payload = injectError(payload);
       }
@@ -396,7 +395,6 @@ export default function () {
       {{/if}}
       {{#if @root.error_injection_enabled}}
       // Apply error injection if triggered
-      totalRequestCount++;
       if (shouldInvalidate()) {
         payload = injectError(payload);
       }
