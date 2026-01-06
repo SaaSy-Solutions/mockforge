@@ -521,10 +521,12 @@ pub struct SecurityTestGenerator;
 
 impl SecurityTestGenerator {
     /// Generate k6 code for security payload selection
-    pub fn generate_payload_selection(payloads: &[SecurityPayload]) -> String {
+    /// When cycle_all is true, payloads are cycled through sequentially instead of randomly
+    pub fn generate_payload_selection(payloads: &[SecurityPayload], cycle_all: bool) -> String {
         let mut code = String::new();
 
         code.push_str("// Security testing payloads\n");
+        code.push_str(&format!("// Total payloads: {}\n", payloads.len()));
         code.push_str("const securityPayloads = [\n");
 
         for payload in payloads {
@@ -539,8 +541,25 @@ impl SecurityTestGenerator {
         }
 
         code.push_str("];\n\n");
-        code.push_str("// Select random security payload\n");
-        code.push_str("const securityPayload = securityPayloads[Math.floor(Math.random() * securityPayloads.length)];\n");
+
+        if cycle_all {
+            // Cycle through all payloads sequentially
+            code.push_str("// Cycle through ALL payloads sequentially\n");
+            code.push_str("let __payloadIndex = 0;\n");
+            code.push_str("function getNextSecurityPayload() {\n");
+            code.push_str("  const payload = securityPayloads[__payloadIndex];\n");
+            code.push_str("  __payloadIndex = (__payloadIndex + 1) % securityPayloads.length;\n");
+            code.push_str("  return payload;\n");
+            code.push_str("}\n\n");
+        } else {
+            // Random selection (original behavior)
+            code.push_str("// Select random security payload\n");
+            code.push_str("function getNextSecurityPayload() {\n");
+            code.push_str(
+                "  return securityPayloads[Math.floor(Math.random() * securityPayloads.length)];\n",
+            );
+            code.push_str("}\n\n");
+        }
 
         code
     }
@@ -749,17 +768,34 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_payload_selection() {
+    fn test_generate_payload_selection_random() {
         let payloads = vec![SecurityPayload::new(
             "' OR '1'='1".to_string(),
             SecurityCategory::SqlInjection,
             "Basic SQLi".to_string(),
         )];
 
-        let code = SecurityTestGenerator::generate_payload_selection(&payloads);
+        let code = SecurityTestGenerator::generate_payload_selection(&payloads, false);
         assert!(code.contains("securityPayloads"));
         assert!(code.contains("OR"));
         assert!(code.contains("Math.random()"));
+        assert!(code.contains("getNextSecurityPayload"));
+    }
+
+    #[test]
+    fn test_generate_payload_selection_cycle_all() {
+        let payloads = vec![SecurityPayload::new(
+            "' OR '1'='1".to_string(),
+            SecurityCategory::SqlInjection,
+            "Basic SQLi".to_string(),
+        )];
+
+        let code = SecurityTestGenerator::generate_payload_selection(&payloads, true);
+        assert!(code.contains("securityPayloads"));
+        assert!(code.contains("Cycle through ALL payloads"));
+        assert!(code.contains("__payloadIndex"));
+        assert!(code.contains("getNextSecurityPayload"));
+        assert!(!code.contains("Math.random()"));
     }
 
     #[test]
@@ -792,7 +828,7 @@ mod tests {
             "Drop table".to_string(),
         )];
 
-        let code = SecurityTestGenerator::generate_payload_selection(&payloads);
+        let code = SecurityTestGenerator::generate_payload_selection(&payloads, false);
         // Single quotes should be escaped
         assert!(code.contains("\\'"));
     }

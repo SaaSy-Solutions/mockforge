@@ -121,6 +121,8 @@ pub struct BenchCommand {
     // === WAFBench Integration ===
     /// WAFBench test directory or glob pattern for loading CRS attack patterns
     pub wafbench_dir: Option<String>,
+    /// Cycle through ALL WAFBench payloads instead of random sampling
+    pub wafbench_cycle_all: bool,
 
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
@@ -139,6 +141,8 @@ pub struct BenchCommand {
     pub owasp_report: Option<PathBuf>,
     /// OWASP report format (json, sarif)
     pub owasp_report_format: String,
+    /// Number of iterations per VU for OWASP tests (default: 1)
+    pub owasp_iterations: u32,
 }
 
 impl BenchCommand {
@@ -494,6 +498,7 @@ impl BenchCommand {
                 security_categories: self.security_categories.clone(),
                 security_target_fields: self.security_target_fields.clone(),
                 wafbench_dir: self.wafbench_dir.clone(),
+                wafbench_cycle_all: self.wafbench_cycle_all,
                 owasp_api_top10: self.owasp_api_top10,
                 owasp_categories: self.owasp_categories.clone(),
                 owasp_auth_header: self.owasp_auth_header.clone(),
@@ -502,6 +507,7 @@ impl BenchCommand {
                 owasp_id_fields: self.owasp_id_fields.clone(),
                 owasp_report: self.owasp_report.clone(),
                 owasp_report_format: self.owasp_report_format.clone(),
+                owasp_iterations: self.owasp_iterations,
             },
             targets,
             max_concurrency,
@@ -873,17 +879,26 @@ impl BenchCommand {
             let target_fields =
                 security_config.as_ref().map(|c| c.target_fields.clone()).unwrap_or_default();
 
-            additional_code
-                .push_str(&SecurityTestGenerator::generate_payload_selection(&payload_list));
+            additional_code.push_str(&SecurityTestGenerator::generate_payload_selection(
+                &payload_list,
+                self.wafbench_cycle_all,
+            ));
             additional_code.push('\n');
             additional_code
                 .push_str(&SecurityTestGenerator::generate_apply_payload(&target_fields));
             additional_code.push('\n');
             additional_code.push_str(&SecurityTestGenerator::generate_security_checks());
             additional_code.push('\n');
+
+            let mode = if self.wafbench_cycle_all {
+                "cycle-all"
+            } else {
+                "random"
+            };
             TerminalReporter::print_success(&format!(
-                "Security testing enabled ({} payloads)",
-                payload_list.len()
+                "Security testing enabled ({} payloads, {} mode)",
+                payload_list.len(),
+                mode
             ));
         }
 
@@ -1691,7 +1706,8 @@ impl BenchCommand {
             .with_auth_header(&self.owasp_auth_header)
             .with_verbose(self.verbose)
             .with_insecure(self.skip_tls_verify)
-            .with_concurrency(self.vus as usize);
+            .with_concurrency(self.vus as usize)
+            .with_iterations(self.owasp_iterations as usize);
 
         // Set valid auth token if provided
         if let Some(ref token) = self.owasp_auth_token {
@@ -1865,6 +1881,7 @@ mod tests {
             security_categories: None,
             security_target_fields: None,
             wafbench_dir: None,
+            wafbench_cycle_all: false,
             owasp_api_top10: false,
             owasp_categories: None,
             owasp_auth_header: "Authorization".to_string(),
@@ -1873,6 +1890,7 @@ mod tests {
             owasp_id_fields: None,
             owasp_report: None,
             owasp_report_format: "json".to_string(),
+            owasp_iterations: 1,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -1924,6 +1942,7 @@ mod tests {
             security_categories: None,
             security_target_fields: None,
             wafbench_dir: None,
+            wafbench_cycle_all: false,
             owasp_api_top10: false,
             owasp_categories: None,
             owasp_auth_header: "Authorization".to_string(),
@@ -1932,6 +1951,7 @@ mod tests {
             owasp_id_fields: None,
             owasp_report: None,
             owasp_report_format: "json".to_string(),
+            owasp_iterations: 1,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -1979,6 +1999,7 @@ mod tests {
             security_categories: None,
             security_target_fields: None,
             wafbench_dir: None,
+            wafbench_cycle_all: false,
             owasp_api_top10: false,
             owasp_categories: None,
             owasp_auth_header: "Authorization".to_string(),
@@ -1987,6 +2008,7 @@ mod tests {
             owasp_id_fields: None,
             owasp_report: None,
             owasp_report_format: "json".to_string(),
+            owasp_iterations: 1,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

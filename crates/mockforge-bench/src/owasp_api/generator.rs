@@ -184,6 +184,7 @@ impl OwaspApiGenerator {
             "auth_header_name": self.config.auth_header,
             "valid_auth_token": self.config.valid_auth_token,
             "concurrency": self.config.concurrency,
+            "iterations": self.config.iterations,
             "timeout_ms": self.config.timeout_ms,
             "report_path": self.config.report_path.to_string_lossy(),
             "categories_tested": categories.iter().map(|c| c.cli_name()).collect::<Vec<_>>(),
@@ -305,7 +306,7 @@ export const options = {
         owasp_security_test: {
             executor: 'per-vu-iterations',
             vus: {{concurrency}},
-            iterations: 1,  // Each VU runs exactly once
+            iterations: {{iterations}},  // Iterations per VU
             maxDuration: '30m',
         },
     },

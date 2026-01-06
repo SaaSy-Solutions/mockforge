@@ -1742,6 +1742,14 @@ enum Commands {
         #[arg(long, value_name = "PATH")]
         wafbench_dir: Option<String>,
 
+        /// Cycle through ALL WAFBench payloads instead of random sampling
+        ///
+        /// By default, k6 randomly selects payloads for each request.
+        /// With this flag, payloads are cycled through sequentially,
+        /// ensuring all attack patterns are tested.
+        #[arg(long)]
+        wafbench_cycle_all: bool,
+
         // === OWASP API Security Top 10 Testing ===
         /// Enable OWASP API Security Top 10 (2023) testing mode
         ///
@@ -1805,6 +1813,15 @@ enum Commands {
         /// SARIF format integrates with IDEs and CI/CD tools.
         #[arg(long, default_value = "json")]
         owasp_report_format: String,
+
+        /// Number of iterations per VU for OWASP tests
+        ///
+        /// Controls how many times each virtual user runs through
+        /// the security tests. Default: 1
+        ///
+        /// Example: --owasp-iterations 5
+        #[arg(long, default_value = "1")]
+        owasp_iterations: u32,
     },
 }
 
@@ -3121,6 +3138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             security_categories,
             security_target_fields,
             wafbench_dir,
+            wafbench_cycle_all,
             owasp_api_top10,
             owasp_categories,
             owasp_auth_header,
@@ -3129,6 +3147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             owasp_id_fields,
             owasp_report,
             owasp_report_format,
+            owasp_iterations,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3194,6 +3213,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 security_categories,
                 security_target_fields,
                 wafbench_dir,
+                wafbench_cycle_all,
                 owasp_api_top10,
                 owasp_categories,
                 owasp_auth_header,
@@ -3202,6 +3222,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 owasp_id_fields,
                 owasp_report,
                 owasp_report_format,
+                owasp_iterations,
             };
 
             if let Err(e) = bench_cmd.execute().await {

@@ -77,6 +77,10 @@ pub struct OwaspApiConfig {
     /// Skip TLS certificate verification (for testing with self-signed certs)
     #[serde(default)]
     pub insecure: bool,
+
+    /// Number of iterations per VU (default: 1)
+    #[serde(default = "default_iterations")]
+    pub iterations: usize,
 }
 
 fn default_auth_header() -> String {
@@ -104,6 +108,10 @@ fn default_concurrency() -> usize {
     10
 }
 
+fn default_iterations() -> usize {
+    1
+}
+
 fn default_timeout() -> u64 {
     30000
 }
@@ -128,6 +136,7 @@ impl Default for OwaspApiConfig {
             concurrency: default_concurrency(),
             timeout_ms: default_timeout(),
             insecure: false,
+            iterations: default_iterations(),
         }
     }
 }
@@ -235,6 +244,12 @@ impl OwaspApiConfig {
     /// Builder method to set concurrency (number of VUs)
     pub fn with_concurrency(mut self, concurrency: usize) -> Self {
         self.concurrency = concurrency;
+        self
+    }
+
+    /// Builder method to set iterations per VU
+    pub fn with_iterations(mut self, iterations: usize) -> Self {
+        self.iterations = iterations;
         self
     }
 }
