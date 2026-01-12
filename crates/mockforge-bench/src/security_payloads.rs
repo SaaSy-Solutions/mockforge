@@ -15,7 +15,7 @@ use std::path::Path;
 /// - Backticks (template literals)
 /// - Unicode line/paragraph separators (U+2028, U+2029)
 /// - Null bytes and other control characters
-fn escape_js_string(s: &str) -> String {
+pub fn escape_js_string(s: &str) -> String {
     let mut result = String::with_capacity(s.len() * 2);
     for c in s.chars() {
         match c {

@@ -7,6 +7,7 @@ use super::categories::OwaspCategory;
 use super::config::OwaspApiConfig;
 use super::payloads::{InjectionPoint, OwaspPayload, OwaspPayloadGenerator};
 use crate::error::{BenchError, Result};
+use crate::security_payloads::escape_js_string;
 use crate::spec_parser::SpecParser;
 use handlebars::Handlebars;
 use serde_json::{json, Value};
@@ -189,10 +190,14 @@ impl OwaspApiGenerator {
             })
             .collect();
 
+        // Escape auth header and token values for safe use in JavaScript strings
+        let auth_header_name = escape_js_string(&self.config.auth_header);
+        let valid_auth_token = self.config.valid_auth_token.as_ref().map(|t| escape_js_string(t));
+
         Ok(json!({
             "base_url": self.target_url,
-            "auth_header_name": self.config.auth_header,
-            "valid_auth_token": self.config.valid_auth_token,
+            "auth_header_name": auth_header_name,
+            "valid_auth_token": valid_auth_token,
             "concurrency": self.config.concurrency,
             "iterations": self.config.iterations,
             "timeout_ms": self.config.timeout_ms,
