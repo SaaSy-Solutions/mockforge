@@ -1707,7 +1707,8 @@ impl BenchCommand {
             .with_verbose(self.verbose)
             .with_insecure(self.skip_tls_verify)
             .with_concurrency(self.vus as usize)
-            .with_iterations(self.owasp_iterations as usize);
+            .with_iterations(self.owasp_iterations as usize)
+            .with_base_path(self.base_path.clone());
 
         // Set valid auth token if provided
         if let Some(ref token) = self.owasp_auth_token {

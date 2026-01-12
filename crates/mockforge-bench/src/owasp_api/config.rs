@@ -81,6 +81,10 @@ pub struct OwaspApiConfig {
     /// Number of iterations per VU (default: 1)
     #[serde(default = "default_iterations")]
     pub iterations: usize,
+
+    /// Base path to prepend to all API paths (e.g., "/api")
+    #[serde(default)]
+    pub base_path: Option<String>,
 }
 
 fn default_auth_header() -> String {
@@ -137,6 +141,7 @@ impl Default for OwaspApiConfig {
             timeout_ms: default_timeout(),
             insecure: false,
             iterations: default_iterations(),
+            base_path: None,
         }
     }
 }
@@ -250,6 +255,12 @@ impl OwaspApiConfig {
     /// Builder method to set iterations per VU
     pub fn with_iterations(mut self, iterations: usize) -> Self {
         self.iterations = iterations;
+        self
+    }
+
+    /// Builder method to set base path for API endpoints
+    pub fn with_base_path(mut self, base_path: Option<String>) -> Self {
+        self.base_path = base_path;
         self
     }
 }

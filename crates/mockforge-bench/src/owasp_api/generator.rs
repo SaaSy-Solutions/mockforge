@@ -153,6 +153,16 @@ impl OwaspApiGenerator {
         let test_api10 =
             categories.iter().any(|c| matches!(c, OwaspCategory::Api10UnsafeConsumption));
 
+        // Helper to prepend base_path to API paths
+        let base_path = self.config.base_path.clone().unwrap_or_default();
+        let build_path = |path: &str| -> String {
+            if base_path.is_empty() {
+                path.to_string()
+            } else {
+                format!("{}{}", base_path.trim_end_matches('/'), path)
+            }
+        };
+
         // Pre-compute operations with path parameters for BOLA testing
         let ops_with_path_params: Vec<Value> = self
             .operations
@@ -161,7 +171,7 @@ impl OwaspApiGenerator {
             .map(|op| {
                 json!({
                     "method": op.method.to_lowercase(),
-                    "path": op.path,
+                    "path": build_path(&op.path),
                 })
             })
             .collect();
@@ -174,7 +184,7 @@ impl OwaspApiGenerator {
             .map(|op| {
                 json!({
                     "method": op.method.to_lowercase(),
-                    "path": op.path,
+                    "path": build_path(&op.path),
                 })
             })
             .collect();
@@ -191,7 +201,7 @@ impl OwaspApiGenerator {
             "test_cases": test_cases,
             "operations": self.operations.iter().map(|op| json!({
                 "method": op.method.to_lowercase(),
-                "path": op.path,
+                "path": build_path(&op.path),
                 "operation_id": op.operation_id,
                 "has_body": op.has_body,
                 "requires_auth": op.requires_auth,
@@ -456,7 +466,12 @@ function testBrokenAuth() {
 
         // Test {{path}} with empty token
         {
-            const response = http.{{method}}(BASE_URL + '{{path}}', null, {
+            const httpMethod = '{{method}}' === 'delete' ? 'del' : '{{method}}';
+            const makeEmptyTokenRequest = (m, url, body, params) => {
+                if (m === 'get' || m === 'head') return http[m](url, params);
+                return http[m](url, body, params);
+            };
+            const response = makeEmptyTokenRequest(httpMethod, BASE_URL + '{{path}}', null, {
                 headers: { [AUTH_HEADER]: 'Bearer ' },
                 timeout: TIMEOUT,
             });
