@@ -298,10 +298,10 @@ import { check, sleep, group } from 'k6';
 import { Trend, Counter, Rate } from 'k6/metrics';
 
 // Configuration
-const BASE_URL = '{{base_url}}';
-const AUTH_HEADER = '{{auth_header_name}}';
+const BASE_URL = '{{{base_url}}}';
+const AUTH_HEADER = '{{{auth_header_name}}}';
 {{#if valid_auth_token}}
-const VALID_TOKEN = '{{valid_auth_token}}';
+const VALID_TOKEN = '{{{valid_auth_token}}}';
 {{else}}
 const VALID_TOKEN = null;
 {{/if}}
