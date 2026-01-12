@@ -1269,6 +1269,9 @@ impl BenchCommand {
         let required_imports = DynamicParamProcessor::get_required_imports(&all_placeholders);
         let required_globals = DynamicParamProcessor::get_required_globals(&all_placeholders);
 
+        // Check if security testing is enabled
+        let security_testing_enabled = self.wafbench_dir.is_some() || self.security_test;
+
         let data = serde_json::json!({
             "base_url": self.target,
             "flows": flows_data,
@@ -1289,11 +1292,18 @@ impl BenchCommand {
             "headers": headers_json,
             "dynamic_imports": required_imports,
             "dynamic_globals": required_globals,
+            // Security testing settings
+            "security_testing_enabled": security_testing_enabled,
         });
 
-        let script = handlebars
+        let mut script = handlebars
             .render_template(template, &data)
             .map_err(|e| BenchError::ScriptGenerationFailed(e.to_string()))?;
+
+        // Enhance script with security testing support if enabled
+        if security_testing_enabled {
+            script = self.generate_enhanced_script(&script)?;
+        }
 
         // Write and execute script
         let script_path =
@@ -1619,6 +1629,9 @@ impl BenchCommand {
             ));
         }
 
+        // Check if security testing is enabled
+        let security_testing_enabled = self.wafbench_dir.is_some() || self.security_test;
+
         let data = serde_json::json!({
             "base_url": self.target,
             "flows": flows_data,
@@ -1643,11 +1656,18 @@ impl BenchCommand {
             "error_injection_enabled": error_injection_enabled,
             "error_rate": error_rate,
             "error_types": error_types,
+            // Security testing settings
+            "security_testing_enabled": security_testing_enabled,
         });
 
-        let script = handlebars
+        let mut script = handlebars
             .render_template(template, &data)
             .map_err(|e| BenchError::ScriptGenerationFailed(e.to_string()))?;
+
+        // Enhance script with security testing support if enabled
+        if security_testing_enabled {
+            script = self.generate_enhanced_script(&script)?;
+        }
 
         // Validate the generated CRUD flow script
         TerminalReporter::print_progress("Validating CRUD flow script...");

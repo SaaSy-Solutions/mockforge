@@ -344,11 +344,6 @@ export default function () {
     {{#each this.steps}}
     // Step {{@index}}: {{this.description}}
     {
-      {{#if this.inject_attacks}}
-      // NOTE: Security attack injection is enabled for this step
-      // Attack types: {{#if this.attack_types}}{{#each this.attack_types}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}{{else}}all{{/if}}
-      // Attacks will be injected via the configured attack payload source
-      {{/if}}
       {{#if this.use_values}}
       // Apply extracted values to path
       const pathValues = {};
@@ -357,9 +352,22 @@ export default function () {
         pathValues['{{@key}}'] = extractedValues['{{this}}'];
       }
       {{/each}}
-      const path = replacePath('{{{this.path}}}', pathValues);
+      let path = replacePath('{{{this.path}}}', pathValues);
       {{else}}
-      const path = '{{{this.path}}}';
+      let path = '{{{this.path}}}';
+      {{/if}}
+
+      {{#if @root.security_testing_enabled}}
+      // Security testing: get next payload and apply to request
+      const secPayload = typeof getNextSecurityPayload === 'function' ? getNextSecurityPayload() : null;
+      let requestHeaders = { ...headers };
+      if (secPayload) {
+        // Log the security payload being tested
+        console.log(`[SECURITY TEST] Rule: ${secPayload.description}, Category: ${secPayload.category}`);
+        // Inject payload into URL query parameter
+        const separator = path.includes('?') ? '&' : '?';
+        path = `${path}${separator}test=${encodeURIComponent(secPayload.payload)}`;
+      }
       {{/if}}
 
       {{#if this.use_body}}
@@ -373,13 +381,23 @@ export default function () {
       // Merge with override values
       payload = mergeObjects(payload, {{{json this.merge_body}}});
       {{/if}}
+      {{#if @root.security_testing_enabled}}
+      // Apply security payload to body if available
+      if (secPayload && typeof applySecurityPayload === 'function') {
+        payload = applySecurityPayload(payload, [], secPayload);
+      }
+      {{/if}}
       {{#if @root.error_injection_enabled}}
       // Apply error injection if triggered
       if (shouldInvalidate()) {
         payload = injectError(payload);
       }
       {{/if}}
+      {{#if @root.security_testing_enabled}}
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders });
+      {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers });
+      {{/if}}
       {{else if this.has_body}}
       {{#if this.body_is_dynamic}}
       // Dynamic body with runtime placeholders and extracted values
@@ -393,17 +411,35 @@ export default function () {
       {{else}}
       let payload = {{{this.body}}};
       {{/if}}
+      {{#if @root.security_testing_enabled}}
+      // Apply security payload to body if available
+      if (secPayload && typeof applySecurityPayload === 'function') {
+        payload = applySecurityPayload(payload, [], secPayload);
+      }
+      {{/if}}
       {{#if @root.error_injection_enabled}}
       // Apply error injection if triggered
       if (shouldInvalidate()) {
         payload = injectError(payload);
       }
       {{/if}}
+      {{#if @root.security_testing_enabled}}
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders });
+      {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers });
+      {{/if}}
       {{else if this.is_get_or_head}}
+      {{#if @root.security_testing_enabled}}
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers: requestHeaders });
+      {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers });
+      {{/if}}
+      {{else}}
+      {{#if @root.security_testing_enabled}}
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers: requestHeaders });
       {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers });
+      {{/if}}
       {{/if}}
 
       const success = check(res, {
