@@ -361,6 +361,18 @@ function logPass(category, endpoint, method) {
     }
 }
 
+// Helper: Generate a random UUID for path parameters
+// Uses crypto.randomUUID() which is globally available in k6 v1.0.0+
+function generateRandomId() {
+    return crypto.randomUUID();
+}
+
+// Helper: Replace path parameters with random UUIDs
+// Replaces all {param} patterns with new random UUIDs
+function replacePathParams(path) {
+    return path.replace(/{[^}]+}/g, () => generateRandomId());
+}
+
 // Helper: Make authenticated request
 function authRequest(method, url, body, additionalHeaders = {}) {
     const headers = {
@@ -418,23 +430,30 @@ function testBola() {
         {{#if has_path_params}}
         // Test {{path}}
         {
-            const originalPath = '{{path}}'.replace(/{[^}]+}/g, '1');
-            const modifiedPath = '{{path}}'.replace(/{[^}]+}/g, '2');
+            // Generate different random UUIDs for each test
+            const originalId = generateRandomId();
+            const targetId = generateRandomId();
+            const originalPath = '{{path}}'.replace(/{[^}]+}/g, originalId);
+            const targetPath = '{{path}}'.replace(/{[^}]+}/g, targetId);
 
-            // Get baseline with ID=1
+            if (VERBOSE) {
+                console.log(`[API1] Testing with IDs: ${originalId} -> ${targetId}`);
+            }
+
+            // Get baseline with first random ID
             const baseline = authRequest('{{method}}', BASE_URL + originalPath, null);
 
-            // Try to access ID=2
-            const response = authRequest('{{method}}', BASE_URL + modifiedPath, null);
+            // Try to access different random ID (simulating another user's resource)
+            const response = authRequest('{{method}}', BASE_URL + targetPath, null);
             testsRun.add(1);
             responseTime.add(response.timings.duration);
 
             if (response.status >= 200 && response.status < 300) {
-                // Check if we got different data
+                // Check if we got different data (potential BOLA vulnerability)
                 if (response.body !== baseline.body && response.body.length > 0) {
                     logFinding('api1', '{{path}}', '{{method}}',
-                        'ID manipulation accepted - accessed different user data',
-                        { status: response.status, bodyLength: response.body.length });
+                        'ID manipulation accepted - accessed different resource',
+                        { status: response.status, originalId, targetId, bodyLength: response.body.length });
                 } else {
                     logPass('api1', '{{path}}', '{{method}}');
                 }
@@ -456,7 +475,8 @@ function testBrokenAuth() {
         {{#if requires_auth}}
         // Test {{path}} without auth
         {
-            const response = unauthRequest('{{method}}', BASE_URL + '{{path}}', null);
+            const testPath = replacePathParams('{{path}}');
+            const response = unauthRequest('{{method}}', BASE_URL + testPath, null);
             testsRun.add(1);
             responseTime.add(response.timings.duration);
 
@@ -471,12 +491,13 @@ function testBrokenAuth() {
 
         // Test {{path}} with empty token
         {
+            const testPath = replacePathParams('{{path}}');
             const httpMethod = '{{method}}' === 'delete' ? 'del' : '{{method}}';
             const makeEmptyTokenRequest = (m, url, body, params) => {
                 if (m === 'get' || m === 'head') return http[m](url, params);
                 return http[m](url, body, params);
             };
-            const response = makeEmptyTokenRequest(httpMethod, BASE_URL + '{{path}}', null, {
+            const response = makeEmptyTokenRequest(httpMethod, BASE_URL + testPath, null, {
                 headers: { [AUTH_HEADER]: 'Bearer ' },
                 timeout: TIMEOUT,
             });
@@ -512,8 +533,9 @@ function testMassAssignment() {
         {{#if has_body}}
         // Test {{path}}
         {
+            const testPath = replacePathParams('{{path}}');
             massAssignmentPayloads.forEach(payload => {
-                const response = authRequest('{{method}}', BASE_URL + '{{path}}', payload);
+                const response = authRequest('{{method}}', BASE_URL + testPath, payload);
                 testsRun.add(1);
                 responseTime.add(response.timings.duration);
 
@@ -545,7 +567,8 @@ function testResourceConsumption() {
         {{#each operations}}
         // Test {{path}} with excessive limit
         {
-            const url = BASE_URL + '{{path}}' + '?limit=100000&per_page=100000';
+            const testPath = replacePathParams('{{path}}');
+            const url = BASE_URL + testPath + '?limit=100000&per_page=100000';
             const response = authRequest('{{method}}', url, null);
             testsRun.add(1);
             responseTime.add(response.timings.duration);
@@ -600,7 +623,8 @@ function testFunctionAuth() {
         // Also test changing methods on read-only endpoints
         {{#each get_operations}}
         {
-            const response = authRequest('delete', BASE_URL + '{{path}}', null);
+            const testPath = replacePathParams('{{path}}');
+            const response = authRequest('delete', BASE_URL + testPath, null);
             testsRun.add(1);
 
             if (response.status >= 200 && response.status < 300) {
@@ -630,6 +654,7 @@ function testSsrf() {
         {{#if has_body}}
         // Test {{path}} with SSRF payloads
         {
+            const testPath = replacePathParams('{{path}}');
             ssrfPayloads.forEach(payload => {
                 const body = {
                     url: payload,
@@ -638,7 +663,7 @@ function testSsrf() {
                     image_url: payload,
                 };
 
-                const response = authRequest('{{method}}', BASE_URL + '{{path}}', body);
+                const response = authRequest('{{method}}', BASE_URL + testPath, body);
                 testsRun.add(1);
                 responseTime.add(response.timings.duration);
 
@@ -668,7 +693,8 @@ function testMisconfiguration() {
         {{#each operations}}
         // Test {{path}} for security headers
         {
-            const response = authRequest('{{method}}', BASE_URL + '{{path}}', null);
+            const testPath = replacePathParams('{{path}}');
+            const response = authRequest('{{method}}', BASE_URL + testPath, null);
             testsRun.add(1);
             responseTime.add(response.timings.duration);
 
@@ -704,8 +730,9 @@ function testMisconfiguration() {
         {{#each operations}}
         {{#if has_body}}
         {
+            const testPath = replacePathParams('{{path}}');
             const malformedBody = '{"invalid": "json';
-            const response = http.{{method}}(BASE_URL + '{{path}}', malformedBody, {
+            const response = http.{{method}}(BASE_URL + testPath, malformedBody, {
                 headers: { 'Content-Type': 'application/json' },
                 timeout: TIMEOUT,
             });
@@ -792,8 +819,9 @@ function testUnsafeConsumption() {
         {{#if has_body}}
         // Test {{path}} with injection payloads
         {
+            const testPath = replacePathParams('{{path}}');
             injectionPayloads.forEach(payload => {
-                const response = authRequest('{{method}}', BASE_URL + '{{path}}', payload);
+                const response = authRequest('{{method}}', BASE_URL + testPath, payload);
                 testsRun.add(1);
                 responseTime.add(response.timings.duration);
 
