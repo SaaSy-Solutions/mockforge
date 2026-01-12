@@ -24,6 +24,26 @@
 
 - Nothing yet.
 
+## [0.3.37] - 2026-01-12
+
+### Added
+
+- **[Bench]** feat(bench): add WAFBench cycle-all mode (`--wafbench-cycle-all`) to test all payloads sequentially (#79)
+- **[Bench]** feat(bench): add `--owasp-iterations` parameter to control OWASP test iterations per VU (#79)
+- **[Bench]** feat(bench): OWASP tests now respect `--vus` parameter for concurrent testing (#79)
+
+### Fixed
+
+- **[Bench]** fix(bench): WAFBench payloads now properly injected in standard bench mode (not just CRUD flow)
+- **[Bench]** fix(bench): OWASP APIs now use random UUIDs per request instead of static IDs for BOLA testing (#79)
+- **[Bench]** fix(bench): OWASP auth tokens with special characters (quotes, backslashes) now properly escaped (#79)
+- **[Bench]** fix(bench): prevent Handlebars double-escaping of pre-escaped JavaScript values
+- **[Bench]** fix(bench): WAFBench security payloads now integrated into CRUD flow requests (#79)
+- **[Bench]** fix(owasp): use `http.del()` instead of `http.delete()` for k6 compatibility (#79)
+- **[Bench]** fix(owasp): add `--base-path` support for OWASP API testing (#79)
+- **[Bench]** fix(bench): remove undefined `totalRequestCount` variable reference
+- **[Bench]** fix(bench): support CRS v3.3 WAFBench format and pass `--insecure` to OWASP tests
+
 ## [0.3.21] - 2025-12-31
 
 ### Fixed
