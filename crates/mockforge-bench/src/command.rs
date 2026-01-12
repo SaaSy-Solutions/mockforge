@@ -352,7 +352,8 @@ impl BenchCommand {
         let has_advanced_features = self.data_file.is_some()
             || self.error_rate.is_some()
             || self.security_test
-            || self.parallel_create.is_some();
+            || self.parallel_create.is_some()
+            || self.wafbench_dir.is_some();
 
         // Enhance script with advanced features
         if has_advanced_features {
