@@ -24,6 +24,19 @@
 
 - Nothing yet.
 
+## [0.3.38] - 2026-01-13
+
+### Fixed
+
+- **[Bench]** fix(bench): pass custom headers from `--headers` flag to OWASP tests (#79)
+  - Cookie and other custom headers are now included in all OWASP request helpers
+  - Fixes issue where `avi-sessionid=None` was being sent instead of actual cookie values
+- **[Bench]** fix(bench): WAFBench loader now handles single YAML file paths (#79)
+  - Previously only directories or glob patterns were supported
+  - Single file paths like `/path/to/941100.yaml` now work correctly
+- **[Bench]** Verified CRS v3.3 format compatibility with full CoreRuleSet test suite
+  - Tested with 175 files, 1512 payloads (692 XSS, 505 SQLi, 304 Command Injection, 11 Path Traversal)
+
 ## [0.3.37] - 2026-01-12
 
 ### Added
