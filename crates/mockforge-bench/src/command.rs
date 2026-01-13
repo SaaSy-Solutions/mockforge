@@ -1722,6 +1722,9 @@ impl BenchCommand {
     async fn execute_owasp_test(&self, parser: &SpecParser) -> Result<()> {
         TerminalReporter::print_progress("OWASP API Security Top 10 Testing Mode");
 
+        // Parse custom headers from CLI
+        let custom_headers = self.parse_headers()?;
+
         // Build OWASP configuration from CLI options
         let mut config = OwaspApiConfig::new()
             .with_auth_header(&self.owasp_auth_header)
@@ -1729,7 +1732,8 @@ impl BenchCommand {
             .with_insecure(self.skip_tls_verify)
             .with_concurrency(self.vus as usize)
             .with_iterations(self.owasp_iterations as usize)
-            .with_base_path(self.base_path.clone());
+            .with_base_path(self.base_path.clone())
+            .with_custom_headers(custom_headers);
 
         // Set valid auth token if provided
         if let Some(ref token) = self.owasp_auth_token {

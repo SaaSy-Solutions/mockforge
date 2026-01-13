@@ -4,7 +4,7 @@
 
 use super::categories::{OwaspCategory, Severity};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 /// Configuration for OWASP API Security Top 10 testing
@@ -85,6 +85,10 @@ pub struct OwaspApiConfig {
     /// Base path to prepend to all API paths (e.g., "/api")
     #[serde(default)]
     pub base_path: Option<String>,
+
+    /// Custom headers to include in all requests (e.g., Cookie, X-Custom-Header)
+    #[serde(default)]
+    pub custom_headers: HashMap<String, String>,
 }
 
 fn default_auth_header() -> String {
@@ -142,6 +146,7 @@ impl Default for OwaspApiConfig {
             insecure: false,
             iterations: default_iterations(),
             base_path: None,
+            custom_headers: HashMap::new(),
         }
     }
 }
@@ -261,6 +266,12 @@ impl OwaspApiConfig {
     /// Builder method to set base path for API endpoints
     pub fn with_base_path(mut self, base_path: Option<String>) -> Self {
         self.base_path = base_path;
+        self
+    }
+
+    /// Builder method to set custom headers for all requests
+    pub fn with_custom_headers(mut self, headers: HashMap<String, String>) -> Self {
+        self.custom_headers = headers;
         self
     }
 }

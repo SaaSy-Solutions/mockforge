@@ -326,9 +326,20 @@ impl WafBenchLoader {
     /// loader.load_from_pattern("./wafbench/REQUEST-941-APPLICATION-ATTACK-XSS/**/*.yaml")?;
     /// ```
     pub fn load_from_pattern(&mut self, pattern: &str) -> Result<()> {
-        // If pattern doesn't contain wildcards, treat as directory
+        // If pattern doesn't contain wildcards, check if it's a file or directory
         if !pattern.contains('*') && !pattern.contains('?') {
-            return self.load_from_directory(Path::new(pattern));
+            let path = Path::new(pattern);
+            if path.is_file() {
+                // Load single file directly
+                return self.load_file(path);
+            } else if path.is_dir() {
+                return self.load_from_directory(path);
+            } else {
+                return Err(BenchError::Other(format!(
+                    "WAFBench path does not exist: {}",
+                    pattern
+                )));
+            }
         }
 
         // Use glob to find matching files

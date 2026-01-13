@@ -216,6 +216,11 @@ impl OwaspApiGenerator {
             "get_operations": get_operations,
             "verbose": self.config.verbose,
             "insecure": self.config.insecure,
+            // Custom headers from CLI (e.g., Cookie, X-Custom-Header)
+            "custom_headers": self.config.custom_headers.iter()
+                .map(|(k, v)| json!({"name": escape_js_string(k), "value": escape_js_string(v)}))
+                .collect::<Vec<_>>(),
+            "has_custom_headers": !self.config.custom_headers.is_empty(),
             // Category flags for simple conditionals
             "test_api1": test_api1,
             "test_api2": test_api2,
@@ -309,6 +314,13 @@ const TIMEOUT = '{{timeout_ms}}ms';
 const VERBOSE = {{verbose}};
 const INSECURE = {{insecure}};
 
+// Custom headers from CLI (e.g., Cookie, X-Custom-Header)
+const CUSTOM_HEADERS = {
+{{#each custom_headers}}
+    '{{{name}}}': '{{{value}}}',
+{{/each}}
+};
+
 // Custom metrics
 const findingsCounter = new Counter('owasp_findings');
 const testsRun = new Counter('owasp_tests_run');
@@ -377,6 +389,7 @@ function replacePathParams(path) {
 function authRequest(method, url, body, additionalHeaders = {}) {
     const headers = {
         'Content-Type': 'application/json',
+        ...CUSTOM_HEADERS,
         ...additionalHeaders,
     };
 
@@ -403,6 +416,7 @@ function authRequest(method, url, body, additionalHeaders = {}) {
 function unauthRequest(method, url, body, additionalHeaders = {}) {
     const headers = {
         'Content-Type': 'application/json',
+        ...CUSTOM_HEADERS,
         ...additionalHeaders,
     };
 
