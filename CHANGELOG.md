@@ -24,6 +24,19 @@
 
 - Nothing yet.
 
+## [0.3.39] - 2026-01-14
+
+### Fixed
+
+- **[Bench]** fix(bench): WAFBench XSS attacks now properly injected into request body (#79)
+  - Removed location check from `applySecurityPayload()` - ALL payloads now injected into body for POST/PUT
+  - WAFBench payloads correctly pass location info (uri/header/body) to k6 scripts
+  - Header payloads include header name for proper injection into specified headers
+- **[Bench]** fix(bench): Cookie header duplication in OWASP and security tests (#79)
+  - Added `jar: null` to all HTTP request params to disable k6's automatic cookie jar
+  - Prevents duplicate cookies when user provides Cookie header via `--headers` flag
+  - Applied to k6_script.hbs, k6_crud_flow.hbs, and OWASP generator
+
 ## [0.3.38] - 2026-01-13
 
 ### Fixed
