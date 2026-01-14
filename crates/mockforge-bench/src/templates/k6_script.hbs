@@ -55,25 +55,25 @@ export default function () {
     {{/if}}
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};
-    const res = http.{{this.method}}(`${BASE_URL}${url}`, JSON.stringify(payload), { headers });
+    const res = http.{{this.method}}(`${BASE_URL}${url}`, JSON.stringify(payload), { headers, jar: null });
     {{else}}
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, JSON.stringify(payload), { headers });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, JSON.stringify(payload), { headers, jar: null });
     {{/if}}
     {{else if this.is_get_or_head}}
     // GET and HEAD only take 2 args: http.get(url, params)
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};
-    const res = http.{{this.method}}(`${BASE_URL}${url}`, { headers });
+    const res = http.{{this.method}}(`${BASE_URL}${url}`, { headers, jar: null });
     {{else}}
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, { headers });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, { headers, jar: null });
     {{/if}}
     {{else}}
     // POST, PUT, PATCH, DELETE take 3 args: http.post(url, body, params)
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};
-    const res = http.{{this.method}}(`${BASE_URL}${url}`, null, { headers });
+    const res = http.{{this.method}}(`${BASE_URL}${url}`, null, { headers, jar: null });
     {{else}}
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, { headers });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, { headers, jar: null });
     {{/if}}
     {{/if}}
 

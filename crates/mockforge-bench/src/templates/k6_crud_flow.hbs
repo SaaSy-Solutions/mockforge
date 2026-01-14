@@ -363,10 +363,23 @@ export default function () {
       let requestHeaders = { ...headers };
       if (secPayload) {
         // Log the security payload being tested
-        console.log(`[SECURITY TEST] Rule: ${secPayload.description}, Category: ${secPayload.category}`);
-        // Inject payload into URL query parameter
-        const separator = path.includes('?') ? '&' : '?';
-        path = `${path}${separator}test=${encodeURIComponent(secPayload.payload)}`;
+        console.log(`[SECURITY TEST] Rule: ${secPayload.description}, Category: ${secPayload.category}, Location: ${secPayload.location}`);
+
+        // Inject payload based on its designated location
+        if (secPayload.location === 'uri') {
+          // Inject into URL - use the full payload as the URI if it starts with /
+          // Otherwise append as query parameter
+          if (secPayload.payload.startsWith('/')) {
+            path = secPayload.payload;
+          } else {
+            const separator = path.includes('?') ? '&' : '?';
+            path = `${path}${separator}test=${encodeURIComponent(secPayload.payload)}`;
+          }
+        } else if (secPayload.location === 'header' && secPayload.headerName) {
+          // Inject into the specified header
+          requestHeaders[secPayload.headerName] = secPayload.payload;
+        }
+        // Note: body payloads are handled by applySecurityPayload below
       }
       {{/if}}
 
@@ -394,9 +407,9 @@ export default function () {
       }
       {{/if}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: null });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: null });
       {{/if}}
       {{else if this.has_body}}
       {{#if this.body_is_dynamic}}
@@ -424,21 +437,21 @@ export default function () {
       }
       {{/if}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: null });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: null });
       {{/if}}
       {{else if this.is_get_or_head}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers: requestHeaders });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers: requestHeaders, jar: null });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers, jar: null });
       {{/if}}
       {{else}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers: requestHeaders });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers: requestHeaders, jar: null });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers, jar: null });
       {{/if}}
       {{/if}}
 

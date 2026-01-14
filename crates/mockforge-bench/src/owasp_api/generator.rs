@@ -400,6 +400,9 @@ function authRequest(method, url, body, additionalHeaders = {}) {
     const params = {
         headers,
         timeout: TIMEOUT,
+        // Disable k6's automatic cookie jar to prevent cookie duplication
+        // when user provides Cookie header manually via --headers
+        jar: null,
     };
 
     // k6 uses 'del' instead of 'delete'
@@ -423,6 +426,9 @@ function unauthRequest(method, url, body, additionalHeaders = {}) {
     const params = {
         headers,
         timeout: TIMEOUT,
+        // Disable k6's automatic cookie jar to prevent cookie duplication
+        // when user provides Cookie header manually via --headers
+        jar: null,
     };
 
     // k6 uses 'del' instead of 'delete'

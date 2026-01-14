@@ -37,7 +37,9 @@
 //! ```
 
 use crate::error::{BenchError, Result};
-use crate::security_payloads::{SecurityCategory, SecurityPayload};
+use crate::security_payloads::{
+    PayloadLocation as SecurityPayloadLocation, SecurityCategory, SecurityPayload,
+};
 use glob::glob;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -615,17 +617,30 @@ impl WafBenchLoader {
                 // Extract just the attack payload part if possible
                 let payload_str = self.extract_payload_value(&payload.value);
 
-                payloads.push(
-                    SecurityPayload::new(
-                        payload_str,
-                        test_case.category,
-                        format!(
-                            "[WAFBench {}] {} ({})",
-                            test_case.rule_id, test_case.description, payload.location
-                        ),
-                    )
-                    .high_risk(),
-                );
+                // Convert local PayloadLocation to SecurityPayloadLocation
+                let location = match payload.location {
+                    PayloadLocation::Uri => SecurityPayloadLocation::Uri,
+                    PayloadLocation::Header => SecurityPayloadLocation::Header,
+                    PayloadLocation::Body => SecurityPayloadLocation::Body,
+                };
+
+                let mut sec_payload = SecurityPayload::new(
+                    payload_str,
+                    test_case.category,
+                    format!(
+                        "[WAFBench {}] {} ({})",
+                        test_case.rule_id, test_case.description, payload.location
+                    ),
+                )
+                .high_risk()
+                .with_location(location);
+
+                // Add header name for header payloads
+                if let Some(header_name) = &payload.header_name {
+                    sec_payload = sec_payload.with_header_name(header_name.clone());
+                }
+
+                payloads.push(sec_payload);
             }
         }
 

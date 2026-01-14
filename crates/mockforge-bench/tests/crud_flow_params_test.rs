@@ -122,8 +122,9 @@ fn test_crud_flow_without_params_file_has_empty_body() {
     let script = generate_crud_flow_script_with_params(&flows, None, false);
 
     // Verify the POST request has an empty body (the default)
+    // Note: Uses 'let' instead of 'const' to allow potential reassignment for security testing
     assert!(
-        script.contains("const payload = {};"),
+        script.contains("let payload = {};"),
         "POST request should have empty body when no params file is provided.\nScript:\n{}",
         script
     );
@@ -284,10 +285,11 @@ fn test_crud_flow_body_serialization_is_valid_javascript() {
     assert!(script.contains("\"nested_object\":{"));
     assert!(script.contains("\"inner_string\":\"nested value\""));
 
-    // Verify the body is assigned to a const properly (JSON field order may vary)
+    // Verify the body is assigned to a variable properly (JSON field order may vary)
+    // Note: Uses 'let' instead of 'const' to allow potential reassignment for security testing
     assert!(
-        script.contains("const payload = {") && script.contains("\"string_field\":\"hello world\""),
-        "Body should be assigned to const payload as valid JSON.\nScript:\n{}",
+        script.contains("let payload = {") && script.contains("\"string_field\":\"hello world\""),
+        "Body should be assigned to let payload as valid JSON.\nScript:\n{}",
         script
     );
 
@@ -324,9 +326,9 @@ fn test_crud_flow_get_request_has_no_body() {
 
     let script = generate_crud_flow_script_with_params(&flows, Some(&param_overrides), false);
 
-    // GET requests should use http.get with just headers, no body
+    // GET requests should use http.get with just headers (and jar: null for cookie jar disable), no body
     // Count occurrences of the GET pattern without body
-    let get_without_body = script.matches("http.get(`${BASE_URL}${path}`, { headers })").count();
+    let get_without_body = script.matches("http.get(`${BASE_URL}${path}`, { headers, jar: null })").count();
 
     assert_eq!(
         get_without_body, 2,

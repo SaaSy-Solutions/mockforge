@@ -92,6 +92,29 @@ impl std::str::FromStr for SecurityCategory {
     }
 }
 
+/// Where the payload should be injected
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum PayloadLocation {
+    /// Payload in URI/query string (default for generic payloads)
+    #[default]
+    Uri,
+    /// Payload in HTTP header
+    Header,
+    /// Payload in request body
+    Body,
+}
+
+impl std::fmt::Display for PayloadLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Uri => write!(f, "uri"),
+            Self::Header => write!(f, "header"),
+            Self::Body => write!(f, "body"),
+        }
+    }
+}
+
 /// A security testing payload
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityPayload {
@@ -103,6 +126,12 @@ pub struct SecurityPayload {
     pub description: String,
     /// Whether this is considered a high-risk payload
     pub high_risk: bool,
+    /// Where to inject the payload (uri, header, body)
+    #[serde(default)]
+    pub location: PayloadLocation,
+    /// Header name if location is Header (e.g., "User-Agent", "Cookie")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub header_name: Option<String>,
 }
 
 impl SecurityPayload {
@@ -113,12 +142,26 @@ impl SecurityPayload {
             category,
             description,
             high_risk: false,
+            location: PayloadLocation::Uri,
+            header_name: None,
         }
     }
 
     /// Mark as high risk
     pub fn high_risk(mut self) -> Self {
         self.high_risk = true;
+        self
+    }
+
+    /// Set the injection location
+    pub fn with_location(mut self, location: PayloadLocation) -> Self {
+        self.location = location;
+        self
+    }
+
+    /// Set header name for header payloads
+    pub fn with_header_name(mut self, name: String) -> Self {
+        self.header_name = Some(name);
         self
     }
 }
@@ -533,10 +576,15 @@ impl SecurityTestGenerator {
             // Escape the payload for JavaScript string literal
             let escaped = escape_js_string(&payload.payload);
             let escaped_desc = escape_js_string(&payload.description);
+            let header_name = payload
+                .header_name
+                .as_ref()
+                .map(|h| format!("'{}'", escape_js_string(h)))
+                .unwrap_or_else(|| "null".to_string());
 
             code.push_str(&format!(
-                "  {{ payload: '{}', category: '{}', description: '{}' }},\n",
-                escaped, payload.category, escaped_desc
+                "  {{ payload: '{}', category: '{}', description: '{}', location: '{}', headerName: {} }},\n",
+                escaped, payload.category, escaped_desc, payload.location, header_name
             ));
         }
 
@@ -568,7 +616,9 @@ impl SecurityTestGenerator {
     pub fn generate_apply_payload(target_fields: &[String]) -> String {
         let mut code = String::new();
 
-        code.push_str("// Apply security payload to request\n");
+        code.push_str("// Apply security payload to request body\n");
+        code.push_str("// For POST/PUT/PATCH requests, inject ALL payloads into body for effective WAF testing\n");
+        code.push_str("// (URI and Header payloads are also injected into their respective locations in the template)\n");
         code.push_str("function applySecurityPayload(payload, targetFields, secPayload) {\n");
         code.push_str("  const result = { ...payload };\n");
         code.push_str("  \n");
