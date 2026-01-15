@@ -24,6 +24,21 @@
 
 - Nothing yet.
 
+## [0.3.42] - 2026-01-15
+
+### Fixed
+
+- **[Bench]** fix(bench): XSS payloads now inject into ALL string fields, not just the first one (#79)
+  - Removed `break` statement from `applySecurityPayload()` loop in security_payloads.rs
+  - Ensures WAF can detect payloads regardless of which field it scans
+- **[Bench]** fix(bench): Added `jar: null` to remaining OWASP HTTP calls to prevent cookie duplication (#79)
+  - Fixed testBrokenAuth empty token test
+  - Fixed testMisconfiguration verbose error test
+  - Fixed testInventory discovery paths and API versions checks
+- **[CLI]** fix(cli): Fixed format string compilation error in plugin_commands.rs (#79)
+  - Escaped all braces (`{` → `{{`, `}` → `}}`) inside `format!` macro for auth plugin template
+  - Fixes "invalid format string: expected `}`, found `r`" compilation error
+
 ## [0.3.39] - 2026-01-14
 
 ### Fixed

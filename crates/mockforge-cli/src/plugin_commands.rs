@@ -711,14 +711,168 @@ impl AuthPlugin for {}Plugin {{
                 let token = credentials.credentials.get("token")
                     .ok_or_else(|| "Missing token")?;
 
-                // TODO: Validate token
-                // For now, accept any non-empty token
+                // Token validation: Check format and basic structure
                 if token.is_empty() {{
-                    return PluginResult::failure("Invalid token".to_string(), 401);
+                    return PluginResult::failure("Invalid token: token is empty".to_string(), 401);
                 }}
 
+                // Basic token format validation
+                // JWT tokens have 3 parts separated by dots
+                if token.contains('.') {{
+                    let parts: Vec<&str> = token.split('.').collect();
+                    if parts.len() != 3 {{
+                        return PluginResult::failure(
+                            "Invalid token: JWT format invalid (expected 3 parts)".to_string(),
+                            401
+                        );
+                    }}
+                    // Basic validation: JWT parts should not be empty
+                    for part in &parts[0..2] {{
+                        if part.is_empty() {{
+                            return PluginResult::failure(
+                                "Invalid token: JWT parts cannot be empty".to_string(),
+                                401
+                            );
+                        }}
+                    }}
+                }}
+
+                // Additional validation: Check token length (reasonable bounds)
+                if token.len() < 10 {{
+                    return PluginResult::failure(
+                        "Invalid token: token too short".to_string(),
+                        401
+                    );
+                }}
+
+                if token.len() > 8192 {{
+                    return PluginResult::failure(
+                        "Invalid token: token too long".to_string(),
+                        401
+                    );
+                }}
+
+                // TODO: Add signature verification for JWT tokens
+                // TODO: Add token expiration check
+                // TODO: Add token revocation check (if using a token store)
+
+                // Extract user ID from token if possible (basic implementation)
+                let user_id = if token.contains('.') {{
+                    // Try to extract from JWT payload (simplified - production would decode properly)
+                    // For now, use a hash of the token as user ID
+                    format!("user_{{}}", token.chars().take(8).collect::<String>())
+                }} else {{
+                    "user123".to_string()
+                }};
+
                 PluginResult::success(AuthResult::Authenticated {{
-                    user_id: "user123".to_string(),
+                    user_id,
+                    claims: HashMap::new(),
+                }})
+            }}
+            "api_key" => {{
+                // API Key authentication
+                let api_key = credentials.credentials.get("api_key")
+                    .ok_or_else(|| "Missing API key")?;
+
+                if api_key.is_empty() {{
+                    return PluginResult::failure("Invalid API key: key is empty".to_string(), 401);
+                }}
+
+                // Basic API key validation
+                if api_key.len() < 8 {{
+                    return PluginResult::failure(
+                        "Invalid API key: key too short (minimum 8 characters)".to_string(),
+                        401
+                    );
+                }}
+
+                if api_key.len() > 256 {{
+                    return PluginResult::failure(
+                        "Invalid API key: key too long (maximum 256 characters)".to_string(),
+                        401
+                    );
+                }}
+
+                // TODO: Validate API key against configured keys
+                // TODO: Check API key expiration
+                // TODO: Check API key rate limits
+
+                PluginResult::success(AuthResult::Authenticated {{
+                    user_id: format!("api_user_{{}}", api_key.chars().take(8).collect::<String>()),
+                    claims: HashMap::new(),
+                }})
+            }}
+            "basic" => {{
+                // Basic authentication (username/password)
+                let username = credentials.credentials.get("username")
+                    .ok_or_else(|| "Missing username")?;
+                let password = credentials.credentials.get("password")
+                    .ok_or_else(|| "Missing password")?;
+
+                if username.is_empty() {{
+                    return PluginResult::failure("Invalid username: username is empty".to_string(), 401);
+                }}
+
+                if password.is_empty() {{
+                    return PluginResult::failure("Invalid password: password is empty".to_string(), 401);
+                }}
+
+                // Basic validation
+                if username.len() < 3 {{
+                    return PluginResult::failure(
+                        "Invalid username: too short (minimum 3 characters)".to_string(),
+                        401
+                    );
+                }}
+
+                if password.len() < 6 {{
+                    return PluginResult::failure(
+                        "Invalid password: too short (minimum 6 characters)".to_string(),
+                        401
+                    );
+                }}
+
+                // TODO: Validate against user database
+                // TODO: Check password hash
+                // TODO: Implement rate limiting for failed attempts
+
+                PluginResult::success(AuthResult::Authenticated {{
+                    user_id: username.clone(),
+                    claims: {{
+                        let mut claims = HashMap::new();
+                        claims.insert("username".to_string(), username.clone());
+                        claims
+                    }},
+                }})
+            }}
+            "oauth2" => {{
+                // OAuth2 authentication
+                let access_token = credentials.credentials.get("access_token")
+                    .ok_or_else(|| "Missing access token")?;
+
+                if access_token.is_empty() {{
+                    return PluginResult::failure(
+                        "Invalid access token: token is empty".to_string(),
+                        401
+                    );
+                }}
+
+                // Basic token validation
+                if access_token.len() < 10 {{
+                    return PluginResult::failure(
+                        "Invalid access token: token too short".to_string(),
+                        401
+                    );
+                }}
+
+                // TODO: Validate OAuth2 token with provider
+                // TODO: Check token expiration
+                // TODO: Verify token signature
+                // TODO: Extract user info from token
+
+                PluginResult::success(AuthResult::Authenticated {{
+                    user_id: format!("oauth_user_{{}}", access_token.chars().take(8).collect::<String>()),
                     claims: HashMap::new(),
                 }})
             }}

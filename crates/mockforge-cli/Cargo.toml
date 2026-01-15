@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-cli"
-version = "0.3.40"
+version = "0.3.42"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -34,7 +34,7 @@ mockforge-ui = { version = "0.3.31", path = "../mockforge-ui" }
 mockforge-observability = { version = "0.3.31", path = "../mockforge-observability" }
 mockforge-tracing = { version = "0.3.31", path = "../mockforge-tracing" }
 mockforge-recorder = { version = "0.3.31", path = "../mockforge-recorder" }
-mockforge-bench = { version = "0.3.40", path = "../mockforge-bench" }
+mockforge-bench = { version = "0.3.42", path = "../mockforge-bench" }
 mockforge-ftp = { version = "0.3.31", path = "../mockforge-ftp", optional = true }
 mockforge-kafka = { version = "0.3.31", path = "../mockforge-kafka", optional = true }
 mockforge-amqp = { version = "0.3.31", path = "../mockforge-amqp", optional = true }
