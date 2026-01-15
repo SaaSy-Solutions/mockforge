@@ -520,6 +520,7 @@ function testBrokenAuth() {
             const response = makeEmptyTokenRequest(httpMethod, BASE_URL + testPath, null, {
                 headers: { [AUTH_HEADER]: 'Bearer ' },
                 timeout: TIMEOUT,
+                jar: null,
             });
             testsRun.add(1);
 
@@ -755,6 +756,7 @@ function testMisconfiguration() {
             const response = http.{{method}}(BASE_URL + testPath, malformedBody, {
                 headers: { 'Content-Type': 'application/json' },
                 timeout: TIMEOUT,
+                jar: null,
             });
             testsRun.add(1);
 
@@ -798,7 +800,7 @@ function testInventory() {
         const apiVersions = ['v1', 'v2', 'v3', 'api/v1', 'api/v2'];
 
         discoveryPaths.forEach(path => {
-            const response = http.get(BASE_URL + path, { timeout: TIMEOUT });
+            const response = http.get(BASE_URL + path, { timeout: TIMEOUT, jar: null });
             testsRun.add(1);
             responseTime.add(response.timings.duration);
 
@@ -811,7 +813,7 @@ function testInventory() {
 
         // Check for old API versions
         apiVersions.forEach(version => {
-            const response = http.get(BASE_URL + '/' + version + '/', { timeout: TIMEOUT });
+            const response = http.get(BASE_URL + '/' + version + '/', { timeout: TIMEOUT, jar: null });
             testsRun.add(1);
 
             if (response.status !== 404) {

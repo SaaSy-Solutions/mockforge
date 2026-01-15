@@ -618,17 +618,17 @@ impl SecurityTestGenerator {
 
         code.push_str("// Apply security payload to request body\n");
         code.push_str("// For POST/PUT/PATCH requests, inject ALL payloads into body for effective WAF testing\n");
-        code.push_str("// (URI and Header payloads are also injected into their respective locations in the template)\n");
+        code.push_str("// Injects into ALL string fields to maximize WAF detection surface area\n");
         code.push_str("function applySecurityPayload(payload, targetFields, secPayload) {\n");
         code.push_str("  const result = { ...payload };\n");
         code.push_str("  \n");
 
         if target_fields.is_empty() {
-            code.push_str("  // No specific target fields - inject into first string field\n");
+            code.push_str("  // No specific target fields - inject into ALL string fields for maximum coverage\n");
+            code.push_str("  // This ensures WAF can detect payloads regardless of which field it scans\n");
             code.push_str("  for (const key of Object.keys(result)) {\n");
             code.push_str("    if (typeof result[key] === 'string') {\n");
             code.push_str("      result[key] = secPayload.payload;\n");
-            code.push_str("      break;\n");
             code.push_str("    }\n");
             code.push_str("  }\n");
         } else {
@@ -852,7 +852,7 @@ mod tests {
     fn test_generate_apply_payload_no_targets() {
         let code = SecurityTestGenerator::generate_apply_payload(&[]);
         assert!(code.contains("applySecurityPayload"));
-        assert!(code.contains("first string field"));
+        assert!(code.contains("ALL string fields"));
     }
 
     #[test]
