@@ -56,7 +56,7 @@ base64 = { workspace = true }
 axum = { workspace = true }
 hyper = { workspace = true }
 reqwest = { workspace = true, features = ["multipart"] }
-tempfile = "3.8"
+tempfile = "3.24"
 rumqttc = { version = "0.25", optional = true }
 hex = { workspace = true }
 zip = "2.2"
@@ -103,4 +103,4 @@ pipelines = ["dep:mockforge-pipelines"]
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.0"
-tempfile = "3.8"
+tempfile = "3.24"

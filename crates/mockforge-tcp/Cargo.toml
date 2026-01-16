@@ -36,5 +36,5 @@ base64 = "0.22"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
-tempfile = "3.0"
+tempfile = "3.24"
 criterion = { workspace = true }
