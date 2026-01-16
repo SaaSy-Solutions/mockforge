@@ -24,6 +24,16 @@
 
 - Nothing yet.
 
+## [0.3.43] - 2026-01-16
+
+### Fixed
+
+- **[Bench]** fix(bench): Security payloads now actually applied to requests in k6 scripts (#79)
+  - Updated k6_script.hbs template to call `getNextSecurityPayload()` and `applySecurityPayload()`
+  - Previously, security payload functions were defined but never called in generated scripts
+  - Security payloads now properly injected into request bodies for POST/PUT/PATCH
+  - Header-based payloads now properly injected into request headers
+
 ## [0.3.42] - 2026-01-15
 
 ### Fixed

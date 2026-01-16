@@ -41,39 +41,60 @@ export const options = {
 const BASE_URL = '{{base_url}}';
 
 export default function () {
+  {{#if security_testing_enabled}}
+  // Get security payload for this iteration
+  const secPayload = typeof getNextSecurityPayload === 'function' ? getNextSecurityPayload() : null;
+  {{/if}}
+
   {{#each operations}}
   // Operation {{@index}}: {{this.display_name}}
   {
-    const headers = {{{this.headers}}};
+    {{#if @root.security_testing_enabled}}
+    // Copy headers and apply security payload to headers if needed
+    const requestHeaders = { ...{{{this.headers}}} };
+    if (secPayload) {
+      if (secPayload.location === 'header' && secPayload.headerName) {
+        requestHeaders[secPayload.headerName] = secPayload.payload;
+      }
+    }
+    {{else}}
+    const requestHeaders = {{{this.headers}}};
+    {{/if}}
 
     {{#if this.has_body}}
     {{#if this.body_is_dynamic}}
     // Dynamic body with runtime placeholders
-    const payload = {{{this.body}}};
+    let payload = {{{this.body}}};
     {{else}}
-    const payload = {{{this.body}}};
+    let payload = {{{this.body}}};
+    {{/if}}
+    {{#if @root.security_testing_enabled}}
+    // Apply security payload to body if available
+    if (secPayload && typeof applySecurityPayload === 'function') {
+      payload = applySecurityPayload(payload, [], secPayload);
+    }
     {{/if}}
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};
-    const res = http.{{this.method}}(`${BASE_URL}${url}`, JSON.stringify(payload), { headers, jar: null });
+    const res = http.{{this.method}}(`${BASE_URL}${url}`, JSON.stringify(payload), { headers: requestHeaders, jar: null });
     {{else}}
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, JSON.stringify(payload), { headers, jar: null });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, JSON.stringify(payload), { headers: requestHeaders, jar: null });
     {{/if}}
     {{else if this.is_get_or_head}}
     // GET and HEAD only take 2 args: http.get(url, params)
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};
-    const res = http.{{this.method}}(`${BASE_URL}${url}`, { headers, jar: null });
+    const res = http.{{this.method}}(`${BASE_URL}${url}`, { headers: requestHeaders, jar: null });
     {{else}}
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, { headers, jar: null });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, { headers: requestHeaders, jar: null });
     {{/if}}
     {{else}}
     // POST, PUT, PATCH, DELETE take 3 args: http.post(url, body, params)
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};
-    const res = http.{{this.method}}(`${BASE_URL}${url}`, null, { headers, jar: null });
+    const res = http.{{this.method}}(`${BASE_URL}${url}`, null, { headers: requestHeaders, jar: null });
     {{else}}
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, { headers, jar: null });
+    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, { headers: requestHeaders, jar: null });
     {{/if}}
     {{/if}}
 
