@@ -16,7 +16,7 @@ missing_docs = "deny"
 
 [dependencies]
 # GraphQL implementation - simplified for basic functionality
-async-graphql = { version = "7.0", features = ["apollo_tracing"] }
+async-graphql = { version = "7.2", features = ["apollo_tracing"] }
 async-graphql-axum = "7.0"
 
 # Workspace dependencies
