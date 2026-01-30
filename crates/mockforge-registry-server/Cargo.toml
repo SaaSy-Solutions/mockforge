@@ -33,7 +33,7 @@ data-encoding = "2.5" # Base32 encoding for TOTP secrets
 rand = "0.8" # Random number generation for tokens
 
 # Storage
-aws-sdk-s3 = "1.10"
+aws-sdk-s3 = "1.120"
 aws-config = "1.1"
 
 # Utilities
