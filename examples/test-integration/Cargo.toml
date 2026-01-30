@@ -10,7 +10,7 @@ path = "src/bin/test_server.rs"
 
 [dependencies]
 mockforge-test = { path = "../../crates/mockforge-test" }
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 which = "7.0"
