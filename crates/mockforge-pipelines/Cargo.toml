@@ -60,4 +60,4 @@ lettre = { version = "0.11", features = ["smtp-transport", "tokio1-native-tls"] 
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
-tempfile = "3.13"
+tempfile = "3.24"

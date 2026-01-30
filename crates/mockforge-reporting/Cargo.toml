@@ -47,4 +47,4 @@ mockforge-chaos = { version = "0.3.31", path = "../mockforge-chaos" }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = "3.24"

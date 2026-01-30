@@ -58,7 +58,7 @@ mockall = { version = "0.13", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
-tempfile = "3.0"
+tempfile = "3.24"
 
 [features]
 default = ["testing"]

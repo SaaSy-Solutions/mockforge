@@ -78,4 +78,4 @@ distributed = ["redis"]
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "test-util"] }
-tempfile = "3.8"
+tempfile = "3.24"
