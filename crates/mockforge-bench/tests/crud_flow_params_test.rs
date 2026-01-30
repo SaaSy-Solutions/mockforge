@@ -328,7 +328,8 @@ fn test_crud_flow_get_request_has_no_body() {
 
     // GET requests should use http.get with just headers (and jar: null for cookie jar disable), no body
     // Count occurrences of the GET pattern without body
-    let get_without_body = script.matches("http.get(`${BASE_URL}${path}`, { headers, jar: null })").count();
+    let get_without_body =
+        script.matches("http.get(`${BASE_URL}${path}`, { headers, jar: null })").count();
 
     assert_eq!(
         get_without_body, 2,
