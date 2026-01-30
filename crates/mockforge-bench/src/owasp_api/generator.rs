@@ -754,7 +754,7 @@ function testMisconfiguration() {
             const testPath = replacePathParams('{{path}}');
             const malformedBody = '{"invalid": "json';
             const response = http.{{method}}(BASE_URL + testPath, malformedBody, {
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...CUSTOM_HEADERS },
                 timeout: TIMEOUT,
                 jar: null,
             });
@@ -800,7 +800,7 @@ function testInventory() {
         const apiVersions = ['v1', 'v2', 'v3', 'api/v1', 'api/v2'];
 
         discoveryPaths.forEach(path => {
-            const response = http.get(BASE_URL + path, { timeout: TIMEOUT, jar: null });
+            const response = http.get(BASE_URL + path, { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: null });
             testsRun.add(1);
             responseTime.add(response.timings.duration);
 
@@ -813,7 +813,7 @@ function testInventory() {
 
         // Check for old API versions
         apiVersions.forEach(version => {
-            const response = http.get(BASE_URL + '/' + version + '/', { timeout: TIMEOUT, jar: null });
+            const response = http.get(BASE_URL + '/' + version + '/', { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: null });
             testsRun.add(1);
 
             if (response.status !== 404) {

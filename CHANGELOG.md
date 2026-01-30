@@ -24,6 +24,22 @@
 
 - Nothing yet.
 
+## [0.3.46] - 2026-01-30
+
+### Fixed
+
+- **[Bench]** fix(bench): WAFBench payloads now distributed across VUs for better coverage (#79)
+  - Changed payload cycling to use VU-based offset: `(__VU - 1) % payloads.length`
+  - Previously all 50 VUs started at index 0 and cycled through same sequence
+  - Now each VU starts at a different payload, maximizing attack coverage in shorter test runs
+  - With 50 VUs and 30 payloads, all payloads are tested from the start
+
+- **[Bench]** fix(bench): OWASP API tests now include custom headers in all requests (#79)
+  - Added `CUSTOM_HEADERS` to API8 verbose error test (malformed JSON body test)
+  - Added `CUSTOM_HEADERS` to API9 discovery paths test
+  - Added `CUSTOM_HEADERS` to API9 API versions test
+  - Fixes auth failures when using `--headers "Cookie:..."` with OWASP testing
+
 ## [0.3.43] - 2026-01-16
 
 ### Fixed

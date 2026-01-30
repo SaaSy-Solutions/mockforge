@@ -591,9 +591,11 @@ impl SecurityTestGenerator {
         code.push_str("];\n\n");
 
         if cycle_all {
-            // Cycle through all payloads sequentially
+            // Cycle through all payloads sequentially, but distribute starting points across VUs
+            // This ensures different VUs test different payloads, maximizing coverage
             code.push_str("// Cycle through ALL payloads sequentially\n");
-            code.push_str("let __payloadIndex = 0;\n");
+            code.push_str("// Each VU starts at a different offset based on its VU number for better payload distribution\n");
+            code.push_str("let __payloadIndex = (__VU - 1) % securityPayloads.length;\n");
             code.push_str("function getNextSecurityPayload() {\n");
             code.push_str("  const payload = securityPayloads[__payloadIndex];\n");
             code.push_str("  __payloadIndex = (__payloadIndex + 1) % securityPayloads.length;\n");
@@ -625,7 +627,9 @@ impl SecurityTestGenerator {
 
         if target_fields.is_empty() {
             code.push_str("  // No specific target fields - inject into ALL string fields for maximum coverage\n");
-            code.push_str("  // This ensures WAF can detect payloads regardless of which field it scans\n");
+            code.push_str(
+                "  // This ensures WAF can detect payloads regardless of which field it scans\n",
+            );
             code.push_str("  for (const key of Object.keys(result)) {\n");
             code.push_str("    if (typeof result[key] === 'string') {\n");
             code.push_str("      result[key] = secPayload.payload;\n");
@@ -846,6 +850,11 @@ mod tests {
         assert!(code.contains("__payloadIndex"));
         assert!(code.contains("getNextSecurityPayload"));
         assert!(!code.contains("Math.random()"));
+        // Verify VU-based offset for better payload distribution across VUs
+        assert!(
+            code.contains("(__VU - 1) % securityPayloads.length"),
+            "Should use VU-based offset for payload distribution"
+        );
     }
 
     #[test]
