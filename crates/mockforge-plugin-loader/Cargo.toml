@@ -83,7 +83,7 @@ indicatif = "0.17"
 dirs = "5.0"
 
 # Temporary file handling
-tempfile = "3.0"
+tempfile = "3.24"
 
 [features]
 default = ["git-support"]
@@ -91,5 +91,5 @@ git-support = ["git2"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
-tempfile = "3.0"
+tempfile = "3.24"
 wiremock = "0.6"
