@@ -86,6 +86,9 @@ temp/
 
 # Python
 __pycache__/
+
+# Claude Code hookify personal rules
+.claude/hookify.*.local.md
 *.py[cod]
 *$py.class
 *.so

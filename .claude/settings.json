@@ -1,0 +1,60 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,sys;data=json.load(sys.stdin);path=data.get('tool_input',{}).get('file_path','');protected=['.env','.git/','node_modules/','target/'];blocked=any(p in path for p in protected);print(f'Protected path: {path}' if blocked else '');sys.exit(2 if blocked else 0)\"",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|MultiEdit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/hookify/pretooluse.py\"'",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/hookify/posttooluse.py\"'",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/hookify/stop.py\"'",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'python3 \"$(git rev-parse --show-toplevel)/.claude/hooks/hookify/userpromptsubmit.py\"'",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
