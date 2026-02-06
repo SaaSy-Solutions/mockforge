@@ -334,6 +334,12 @@ function replacePath(pathTemplate, values) {
 }
 
 export default function () {
+  {{#if has_custom_headers}}
+  // Clear cookie jar to prevent duplication with manually specified Cookie headers.
+  // k6 accumulates cookies from Set-Cookie response headers in its VU cookie jar,
+  // which can cause duplicate cookie values even when jar:null is set per-request.
+  http.cookieJar().clear(BASE_URL);
+  {{/if}}
   {{#each flows}}
   // Flow: {{this.display_name}}
   group('{{this.display_name}}', function() {

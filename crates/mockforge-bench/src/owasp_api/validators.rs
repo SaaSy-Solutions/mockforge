@@ -3,7 +3,7 @@
 //! This module provides validation logic to detect vulnerabilities
 //! based on API responses during security testing.
 
-use super::categories::{OwaspCategory, Severity};
+use super::categories::OwaspCategory;
 use super::payloads::ExpectedBehavior;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

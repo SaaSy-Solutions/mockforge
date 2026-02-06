@@ -56,7 +56,7 @@ impl ParallelConfig {
         if self.max_batch_size == 0 {
             return 1;
         }
-        (self.count + self.max_batch_size - 1) / self.max_batch_size
+        self.count.div_ceil(self.max_batch_size)
     }
 
     /// Get the size of a specific batch (last batch may be smaller)
@@ -270,11 +270,11 @@ function collectIds(responses, idField = 'id') {
 
         // Create resources
         code.push_str(&Self::generate_parallel_post(config, base_path, body_template, id_field));
-        code.push_str("\n");
+        code.push('\n');
 
         // Read all created resources
         code.push_str(&Self::generate_parallel_get(detail_path, id_param));
-        code.push_str("\n");
+        code.push('\n');
 
         // Cleanup if requested
         if include_cleanup {

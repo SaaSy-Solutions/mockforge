@@ -5,14 +5,15 @@
 
 use crate::error::{BenchError, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::Path;
 
 /// Strategy for distributing data across VUs and iterations
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum DataDistribution {
     /// Each VU gets a unique row (VU 1 gets row 0, VU 2 gets row 1, etc.)
+    #[default]
     UniquePerVu,
     /// Each iteration gets a unique row (wraps around when data is exhausted)
     UniquePerIteration,
@@ -20,12 +21,6 @@ pub enum DataDistribution {
     Random,
     /// Sequential iteration through all rows (same for all VUs)
     Sequential,
-}
-
-impl Default for DataDistribution {
-    fn default() -> Self {
-        Self::UniquePerVu
-    }
 }
 
 impl std::str::FromStr for DataDistribution {

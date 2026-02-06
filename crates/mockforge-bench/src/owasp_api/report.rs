@@ -236,16 +236,14 @@ impl OwaspReport {
 
     /// Write report to JSON file
     pub fn write_json(&self, path: &Path) -> std::io::Result<()> {
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let json = serde_json::to_string_pretty(self).map_err(std::io::Error::other)?;
         std::fs::write(path, json)
     }
 
     /// Write report to SARIF format
     pub fn write_sarif(&self, path: &Path) -> std::io::Result<()> {
         let sarif = self.to_sarif();
-        let json = serde_json::to_string_pretty(&sarif)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let json = serde_json::to_string_pretty(&sarif).map_err(std::io::Error::other)?;
         std::fs::write(path, json)
     }
 

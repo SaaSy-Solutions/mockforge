@@ -11,7 +11,6 @@ use crate::security_payloads::escape_js_string;
 use crate::spec_parser::SpecParser;
 use handlebars::Handlebars;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 
 /// Generator for OWASP API security test scripts
 pub struct OwaspApiGenerator {
@@ -387,6 +386,12 @@ function replacePathParams(path) {
 
 // Helper: Make authenticated request
 function authRequest(method, url, body, additionalHeaders = {}) {
+    // Clear cookie jar before EVERY request to prevent k6 from merging
+    // Set-Cookie response cookies with our manually specified Cookie header
+    {{#if has_custom_headers}}
+    http.cookieJar().clear(url);
+    {{/if}}
+
     const headers = {
         'Content-Type': 'application/json',
         ...CUSTOM_HEADERS,
@@ -400,8 +405,6 @@ function authRequest(method, url, body, additionalHeaders = {}) {
     const params = {
         headers,
         timeout: TIMEOUT,
-        // Disable k6's automatic cookie jar to prevent cookie duplication
-        // when user provides Cookie header manually via --headers
         jar: null,
     };
 
@@ -417,6 +420,10 @@ function authRequest(method, url, body, additionalHeaders = {}) {
 
 // Helper: Make unauthenticated request
 function unauthRequest(method, url, body, additionalHeaders = {}) {
+    {{#if has_custom_headers}}
+    http.cookieJar().clear(url);
+    {{/if}}
+
     const headers = {
         'Content-Type': 'application/json',
         ...CUSTOM_HEADERS,
@@ -426,8 +433,6 @@ function unauthRequest(method, url, body, additionalHeaders = {}) {
     const params = {
         headers,
         timeout: TIMEOUT,
-        // Disable k6's automatic cookie jar to prevent cookie duplication
-        // when user provides Cookie header manually via --headers
         jar: null,
     };
 
@@ -753,6 +758,9 @@ function testMisconfiguration() {
         {
             const testPath = replacePathParams('{{path}}');
             const malformedBody = '{"invalid": "json';
+            {{#if @root.has_custom_headers}}
+            http.cookieJar().clear(BASE_URL + testPath);
+            {{/if}}
             const response = http.{{method}}(BASE_URL + testPath, malformedBody, {
                 headers: { 'Content-Type': 'application/json', ...CUSTOM_HEADERS },
                 timeout: TIMEOUT,
@@ -800,6 +808,9 @@ function testInventory() {
         const apiVersions = ['v1', 'v2', 'v3', 'api/v1', 'api/v2'];
 
         discoveryPaths.forEach(path => {
+            {{#if @root.has_custom_headers}}
+            http.cookieJar().clear(BASE_URL + path);
+            {{/if}}
             const response = http.get(BASE_URL + path, { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: null });
             testsRun.add(1);
             responseTime.add(response.timings.duration);
@@ -813,6 +824,9 @@ function testInventory() {
 
         // Check for old API versions
         apiVersions.forEach(version => {
+            {{#if @root.has_custom_headers}}
+            http.cookieJar().clear(BASE_URL + '/' + version + '/');
+            {{/if}}
             const response = http.get(BASE_URL + '/' + version + '/', { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: null });
             testsRun.add(1);
 
@@ -862,6 +876,13 @@ function testUnsafeConsumption() {
 
 // Main test function
 export default function() {
+    // Clear cookie jar to prevent duplication with manually specified Cookie headers.
+    // k6 accumulates cookies from Set-Cookie response headers in its VU cookie jar,
+    // which can cause duplicate cookie values even when jar:null is set per-request.
+    {{#if has_custom_headers}}
+    http.cookieJar().clear(BASE_URL);
+    {{/if}}
+
     console.log('Starting OWASP API Top 10 Security Scan...');
     console.log('Target: ' + BASE_URL);
     console.log('');
@@ -1006,5 +1027,34 @@ const TOKEN = '{{valid_auth_token}}';
         assert!(result.contains("Authorization"));
         assert!(result.contains("Bearer test123"));
         assert!(result.contains("api1"));
+    }
+
+    #[test]
+    fn test_owasp_cookie_jar_cleared_with_custom_headers() {
+        // Test that the OWASP template clears cookie jar when custom headers are present
+        let template = r#"
+{{#if has_custom_headers}}
+http.cookieJar().clear(BASE_URL);
+{{/if}}
+export default function() {}
+"#;
+        let handlebars = Handlebars::new();
+        let data = json!({
+            "has_custom_headers": true,
+        });
+        let result = handlebars.render_template(template, &data).unwrap();
+        assert!(
+            result.contains("http.cookieJar().clear(BASE_URL)"),
+            "Should clear cookie jar when custom headers are present"
+        );
+
+        let data_no_headers = json!({
+            "has_custom_headers": false,
+        });
+        let result_no_headers = handlebars.render_template(template, &data_no_headers).unwrap();
+        assert!(
+            !result_no_headers.contains("cookieJar"),
+            "Should NOT clear cookie jar when no custom headers"
+        );
     }
 }

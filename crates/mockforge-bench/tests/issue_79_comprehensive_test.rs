@@ -15,12 +15,13 @@
 //! 12. Spec merge conflicts
 
 use mockforge_bench::k6_gen::{K6Config, K6ScriptGenerator};
-use mockforge_bench::param_overrides::{OperationOverrides, ParameterOverrides};
 use mockforge_bench::request_gen::RequestGenerator;
 use mockforge_bench::scenarios::LoadScenario;
+use mockforge_bench::security_payloads::{
+    SecurityPayloads, SecurityTestConfig, SecurityTestGenerator,
+};
 use mockforge_bench::spec_parser::SpecParser;
 use mockforge_bench::target_parser::parse_targets_file;
-use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -58,6 +59,7 @@ async fn test_issue_79_comprehensive_summary() {
         auth_header: None,
         custom_headers: headers,
         skip_tls_verify: true,
+        security_testing_enabled: false,
     };
 
     let generator = K6ScriptGenerator::new(config, templates);
@@ -150,4 +152,169 @@ async fn test_issue_79_multi_target_parsing() {
     );
 
     println!("✓ Issue #79(11): Multi-target parsing - WORKS");
+}
+
+/// Full pipeline integration test: parse real spec → generate templates → create K6Config
+/// with security enabled → generate script → enhance with security definitions → verify
+/// final output has both definitions AND calling code for ALL injection types.
+#[tokio::test]
+async fn test_issue_79_full_security_pipeline_with_real_spec() {
+    let spec_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("billing_subscriptions_v1.json");
+
+    // Step 1: Parse spec (same as BenchCommand::execute)
+    let parser = SpecParser::from_file(&spec_path)
+        .await
+        .expect("Should parse billing subscriptions spec");
+
+    let operations = parser.get_operations();
+    assert!(!operations.is_empty(), "Should find operations in spec");
+
+    // Step 2: Generate request templates (same as BenchCommand::execute)
+    let templates: Vec<_> = operations
+        .iter()
+        .map(RequestGenerator::generate_template)
+        .collect::<mockforge_bench::error::Result<Vec<_>>>()
+        .expect("Should generate request templates");
+
+    // Step 3: Create K6Config with security_testing_enabled=true (same as execute with --security-test)
+    let config = K6Config {
+        target_url: "https://api-m.sandbox.paypal.com".to_string(),
+        base_path: None,
+        scenario: LoadScenario::Constant,
+        duration_secs: 30,
+        max_vus: 10,
+        threshold_percentile: "p(95)".to_string(),
+        threshold_ms: 500,
+        max_error_rate: 0.05,
+        auth_header: Some("Bearer test-token-12345".to_string()),
+        custom_headers: HashMap::new(),
+        skip_tls_verify: false,
+        security_testing_enabled: true,
+    };
+
+    // Step 4: Generate base script (same as K6ScriptGenerator::generate)
+    let generator = K6ScriptGenerator::new(config, templates);
+    let mut script = generator.generate().expect("Should generate k6 script");
+
+    // Step 5: Simulate generate_enhanced_script() - inject security function definitions
+    let security_config = SecurityTestConfig::default().enable();
+    let payloads = SecurityPayloads::get_payloads(&security_config);
+    assert!(!payloads.is_empty(), "Should have built-in security payloads");
+
+    let mut additional_code = String::new();
+    additional_code.push_str(&SecurityTestGenerator::generate_payload_selection(&payloads, false));
+    additional_code.push('\n');
+    additional_code.push_str(&SecurityTestGenerator::generate_apply_payload(&[]));
+    additional_code.push('\n');
+    additional_code.push_str(&SecurityTestGenerator::generate_security_checks());
+    additional_code.push('\n');
+
+    if let Some(pos) = script.find("export const options") {
+        script.insert_str(
+            pos,
+            &format!("\n// === Advanced Testing Features ===\n{}\n", additional_code),
+        );
+    }
+
+    // === VERIFICATION ===
+
+    // V1: Function DEFINITIONS are present
+    assert!(
+        script.contains("function getNextSecurityPayload()"),
+        "Must contain getNextSecurityPayload() function DEFINITION"
+    );
+    assert!(
+        script.contains("function applySecurityPayload("),
+        "Must contain applySecurityPayload() function DEFINITION"
+    );
+    assert!(
+        script.contains("function checkSecurityResponse("),
+        "Must contain checkSecurityResponse() function DEFINITION"
+    );
+    assert!(
+        script.contains("const securityPayloads = ["),
+        "Must contain securityPayloads array"
+    );
+
+    // V2: CALLING code is present (rendered by template with security_testing_enabled=true)
+    assert!(
+        script.contains("const secPayload = typeof getNextSecurityPayload"),
+        "Must contain secPayload = getNextSecurityPayload() CALL"
+    );
+
+    // V3: Header injection code
+    assert!(
+        script.contains("secPayload.location === 'header'"),
+        "Must contain header location check for header injection"
+    );
+    assert!(
+        script.contains("const requestHeaders = { ..."),
+        "Must spread headers into mutable copy for injection"
+    );
+
+    // V4: URI injection code (the new fix for GET-only APIs)
+    assert!(
+        script.contains("secPayload.location === 'uri'"),
+        "Must contain URI location check for query parameter injection"
+    );
+    assert!(
+        script.contains("encodeURIComponent(secPayload.payload)"),
+        "Must URL-encode payloads for query string injection"
+    );
+    assert!(
+        script.contains("requestUrl"),
+        "Must build requestUrl variable for URI injection"
+    );
+
+    // V5: Body injection code (for POST/PUT/PATCH operations)
+    assert!(
+        script.contains("applySecurityPayload(payload, [], secPayload)"),
+        "Must contain applySecurityPayload() CALL for body injection"
+    );
+
+    // V6: Ordering - definitions before options, calls inside default function
+    let def_pos = script.find("function getNextSecurityPayload()").unwrap();
+    let options_pos = script.find("export const options").unwrap();
+    let default_fn_pos = script.find("export default function").unwrap();
+    let call_pos = script.find("const secPayload = typeof getNextSecurityPayload").unwrap();
+
+    assert!(def_pos < options_pos, "Definitions must come before export const options");
+    assert!(call_pos > default_fn_pos, "Calling code must be inside export default function");
+
+    // V7: Payloads array contains actual payloads (not empty)
+    let payload_array_start = script.find("const securityPayloads = [").unwrap();
+    let payload_array_end = script[payload_array_start..].find("];").unwrap();
+    let payload_array = &script[payload_array_start..payload_array_start + payload_array_end];
+    assert!(
+        payload_array.contains("payload:"),
+        "securityPayloads array must contain actual payload entries, not be empty"
+    );
+
+    // V8: All operations use requestUrl (not inline URLs) when security is enabled
+    let default_fn_section = &script[default_fn_pos..];
+    // Every http.get/post/put/patch/delete call inside the default function should use requestUrl
+    for line in default_fn_section.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("const res = http.") {
+            assert!(
+                trimmed.contains("requestUrl"),
+                "HTTP call should use requestUrl for URI injection: {}",
+                trimmed
+            );
+        }
+    }
+
+    println!("\n✓ Issue #79: Full security pipeline integration test PASSED");
+    println!("  - Real spec file: billing_subscriptions_v1.json");
+    println!("  - {} operations processed", operations.len());
+    println!("  - {} security payloads loaded", payloads.len());
+    println!("  - Function definitions: ✓");
+    println!("  - Calling code (header injection): ✓");
+    println!("  - Calling code (URI injection): ✓");
+    println!("  - Calling code (body injection): ✓");
+    println!("  - Correct ordering: ✓");
+    println!("  - requestUrl used in all HTTP calls: ✓");
 }

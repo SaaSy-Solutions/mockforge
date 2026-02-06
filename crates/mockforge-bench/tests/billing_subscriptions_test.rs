@@ -69,6 +69,7 @@ async fn test_billing_subscriptions_spec_generation() {
         auth_header: None,
         custom_headers: HashMap::new(),
         skip_tls_verify: false,
+        security_testing_enabled: false,
     };
 
     // Generate the k6 script
@@ -274,6 +275,7 @@ async fn test_insecure_skip_tls_verify_in_global_options() {
         auth_header: None,
         custom_headers: HashMap::new(),
         skip_tls_verify: true, // Enable insecure mode
+        security_testing_enabled: false,
     };
 
     let generator = K6ScriptGenerator::new(config, templates);

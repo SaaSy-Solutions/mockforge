@@ -2,7 +2,7 @@
 
 use crate::error::{BenchError, Result};
 use mockforge_core::openapi::spec::OpenApiSpec;
-use openapiv3::{OpenAPI, Operation, PathItem, ReferenceOr};
+use openapiv3::{OpenAPI, Operation, Parameter, PathItem, ReferenceOr};
 use std::path::Path;
 
 /// An API operation extracted from an OpenAPI spec
@@ -151,6 +151,13 @@ impl SpecParser {
         path_item: &PathItem,
         operations: &mut Vec<ApiOperation>,
     ) {
+        // Resolve path-level parameters (apply to all operations under this path)
+        let path_level_params: Vec<ReferenceOr<Parameter>> = path_item
+            .parameters
+            .iter()
+            .filter_map(|p| self.resolve_parameter(p).map(ReferenceOr::Item))
+            .collect();
+
         let method_ops = vec![
             ("get", &path_item.get),
             ("post", &path_item.post),
@@ -163,12 +170,48 @@ impl SpecParser {
 
         for (method, op_ref) in method_ops {
             if let Some(op) = op_ref {
+                // Resolve operation-level $ref parameters and merge with path-level params
+                let mut resolved_op = op.clone();
+                let mut resolved_params: Vec<ReferenceOr<Parameter>> = Vec::new();
+
+                // Start with path-level params
+                resolved_params.extend(path_level_params.clone());
+
+                // Add operation-level params (override path-level for same name)
+                for param_ref in &op.parameters {
+                    if let Some(resolved) = self.resolve_parameter(param_ref) {
+                        resolved_params.push(ReferenceOr::Item(resolved));
+                    }
+                }
+
+                resolved_op.parameters = resolved_params;
+
                 operations.push(ApiOperation {
                     method: method.to_string(),
                     path: path.to_string(),
-                    operation: op.clone(),
+                    operation: resolved_op,
                     operation_id: op.operation_id.clone(),
                 });
+            }
+        }
+    }
+
+    /// Resolve a parameter reference to its concrete definition
+    fn resolve_parameter(&self, param_ref: &ReferenceOr<Parameter>) -> Option<Parameter> {
+        match param_ref {
+            ReferenceOr::Item(param) => Some(param.clone()),
+            ReferenceOr::Reference { reference } => {
+                // Parse reference like "#/components/parameters/id"
+                let parts: Vec<&str> = reference.split('/').collect();
+                if parts.len() >= 4 && parts[1] == "components" && parts[2] == "parameters" {
+                    let param_name = parts[3];
+                    if let Some(components) = &self.spec.components {
+                        if let ReferenceOr::Item(param) = components.parameters.get(param_name)? {
+                            return Some(param.clone());
+                        }
+                    }
+                }
+                None
             }
         }
     }

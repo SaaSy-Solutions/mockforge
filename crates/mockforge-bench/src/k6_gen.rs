@@ -23,6 +23,7 @@ pub struct K6Config {
     pub auth_header: Option<String>,
     pub custom_headers: HashMap<String, String>,
     pub skip_tls_verify: bool,
+    pub security_testing_enabled: bool,
 }
 
 /// Generate k6 load test script
@@ -182,6 +183,8 @@ impl K6ScriptGenerator {
             "has_dynamic_values": has_dynamic_values,
             "dynamic_imports": required_imports,
             "dynamic_globals": required_globals,
+            "security_testing_enabled": self.config.security_testing_enabled,
+            "has_custom_headers": !self.config.custom_headers.is_empty(),
         }))
     }
 
@@ -334,6 +337,7 @@ mod tests {
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
+            security_testing_enabled: false,
         };
 
         assert_eq!(config.duration_secs, 60);
@@ -354,6 +358,7 @@ mod tests {
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
+            security_testing_enabled: false,
         };
 
         let templates = vec![];
@@ -431,6 +436,7 @@ mod tests {
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
+            security_testing_enabled: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -618,6 +624,7 @@ export default function() {{}}
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: true,
+            security_testing_enabled: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -663,6 +670,7 @@ export default function() {{}}
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: true,
+            security_testing_enabled: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -708,6 +716,7 @@ export default function() {{}}
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
+            security_testing_enabled: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -769,6 +778,7 @@ export default function() {{}}
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: true,
+            security_testing_enabled: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template1, template2]);
@@ -829,6 +839,7 @@ export default function() {{}}
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
+            security_testing_enabled: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -889,6 +900,7 @@ export default function() {{}}
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
+            security_testing_enabled: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -944,6 +956,7 @@ export default function() {{}}
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
+            security_testing_enabled: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -999,6 +1012,7 @@ export default function() {{}}
             auth_header: None,
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
+            security_testing_enabled: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1020,6 +1034,492 @@ export default function() {{}}
         assert!(
             !script.contains("let globalCounter"),
             "Script should NOT include globalCounter for static body"
+        );
+    }
+
+    #[test]
+    fn test_security_testing_enabled_generates_calling_code() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+        use serde_json::json;
+
+        let operation = ApiOperation {
+            method: "post".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("createUser".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: Some(json!({"name": "test"})),
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: true,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify calling code is generated (not just function definitions)
+        assert!(
+            script.contains("getNextSecurityPayload"),
+            "Script should contain getNextSecurityPayload() call when security_testing_enabled is true"
+        );
+        assert!(
+            script.contains("applySecurityPayload"),
+            "Script should contain applySecurityPayload() call when security_testing_enabled is true"
+        );
+        assert!(
+            script.contains("secPayload"),
+            "Script should contain secPayload variable when security_testing_enabled is true"
+        );
+        // Verify mutable headers copy for injection
+        assert!(
+            script.contains("const requestHeaders = { ..."),
+            "Script should spread headers into mutable copy for security payload injection"
+        );
+    }
+
+    #[test]
+    fn test_security_testing_disabled_no_calling_code() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+        use serde_json::json;
+
+        let operation = ApiOperation {
+            method: "post".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("createUser".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: Some(json!({"name": "test"})),
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify calling code is NOT generated
+        assert!(
+            !script.contains("getNextSecurityPayload"),
+            "Script should NOT contain getNextSecurityPayload() when security_testing_enabled is false"
+        );
+        assert!(
+            !script.contains("applySecurityPayload"),
+            "Script should NOT contain applySecurityPayload() when security_testing_enabled is false"
+        );
+        assert!(
+            !script.contains("secPayload"),
+            "Script should NOT contain secPayload variable when security_testing_enabled is false"
+        );
+    }
+
+    /// End-to-end test: simulates the real pipeline of template rendering + enhanced script
+    /// injection. This is what actually runs when a user passes `--security-test`.
+    /// Verifies that the FINAL script has both function definitions AND calling code.
+    #[test]
+    fn test_security_e2e_definitions_and_calls_both_present() {
+        use crate::security_payloads::{
+            SecurityPayloads, SecurityTestConfig, SecurityTestGenerator,
+        };
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+        use serde_json::json;
+
+        // Step 1: Generate base script with security_testing_enabled=true (template renders calling code)
+        let operation = ApiOperation {
+            method: "post".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("createUser".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: Some(json!({"name": "test"})),
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: true,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let mut script = generator.generate().expect("Should generate base script");
+
+        // Step 2: Simulate what generate_enhanced_script() does — inject function definitions
+        let security_config = SecurityTestConfig::default().enable();
+        let payloads = SecurityPayloads::get_payloads(&security_config);
+        assert!(!payloads.is_empty(), "Should have built-in payloads");
+
+        let mut additional_code = String::new();
+        additional_code
+            .push_str(&SecurityTestGenerator::generate_payload_selection(&payloads, false));
+        additional_code.push('\n');
+        additional_code.push_str(&SecurityTestGenerator::generate_apply_payload(&[]));
+        additional_code.push('\n');
+
+        // Insert definitions before 'export const options' (same as generate_enhanced_script)
+        if let Some(pos) = script.find("export const options") {
+            script.insert_str(
+                pos,
+                &format!("\n// === Advanced Testing Features ===\n{}\n", additional_code),
+            );
+        }
+
+        // Step 3: Verify the FINAL script has BOTH definitions AND calls
+        // Function definitions (injected by generate_enhanced_script)
+        assert!(
+            script.contains("function getNextSecurityPayload()"),
+            "Final script must contain getNextSecurityPayload function DEFINITION"
+        );
+        assert!(
+            script.contains("function applySecurityPayload("),
+            "Final script must contain applySecurityPayload function DEFINITION"
+        );
+        assert!(
+            script.contains("securityPayloads"),
+            "Final script must contain securityPayloads array"
+        );
+
+        // Calling code (rendered by template)
+        assert!(
+            script.contains("const secPayload = typeof getNextSecurityPayload"),
+            "Final script must contain secPayload assignment (template calling code)"
+        );
+        assert!(
+            script.contains("applySecurityPayload(payload, [], secPayload)"),
+            "Final script must contain applySecurityPayload CALL in request body injection"
+        );
+        assert!(
+            script.contains("const requestHeaders = { ..."),
+            "Final script must spread headers for security payload header injection"
+        );
+
+        // Verify ordering: definitions come BEFORE export default function (which has the calls)
+        let def_pos = script.find("function getNextSecurityPayload()").unwrap();
+        let call_pos = script.find("const secPayload = typeof getNextSecurityPayload").unwrap();
+        let options_pos = script.find("export const options").unwrap();
+        let default_fn_pos = script.find("export default function").unwrap();
+
+        assert!(
+            def_pos < options_pos,
+            "Function definitions must appear before export const options"
+        );
+        assert!(
+            call_pos > default_fn_pos,
+            "Calling code must appear inside export default function"
+        );
+    }
+
+    /// Test that URI security payload injection is generated for GET requests
+    #[test]
+    fn test_security_uri_injection_for_get_requests() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("listUsers".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: true,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify URI injection code is present for GET requests
+        assert!(
+            script.contains("requestUrl"),
+            "Script should build requestUrl variable for URI payload injection"
+        );
+        assert!(
+            script.contains("secPayload.location === 'uri'"),
+            "Script should check for URI-location payloads"
+        );
+        assert!(
+            script.contains("encodeURIComponent(secPayload.payload)"),
+            "Script should URL-encode the security payload for query string injection"
+        );
+        // Verify the GET request uses requestUrl
+        assert!(
+            script.contains("http.get(requestUrl,"),
+            "GET request should use requestUrl (with URI injection) instead of inline URL"
+        );
+    }
+
+    /// Test that URI security payload injection is generated for POST requests with body
+    #[test]
+    fn test_security_uri_injection_for_post_requests() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+        use serde_json::json;
+
+        let operation = ApiOperation {
+            method: "post".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("createUser".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: Some(json!({"name": "test"})),
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: true,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // POST with body should get BOTH URI injection AND body injection
+        assert!(
+            script.contains("requestUrl"),
+            "POST script should build requestUrl for URI payload injection"
+        );
+        assert!(
+            script.contains("secPayload.location === 'uri'"),
+            "POST script should check for URI-location payloads"
+        );
+        assert!(
+            script.contains("applySecurityPayload(payload, [], secPayload)"),
+            "POST script should also apply security payload to request body"
+        );
+        // Verify the POST request uses requestUrl
+        assert!(
+            script.contains("http.post(requestUrl,"),
+            "POST request should use requestUrl (with URI injection) instead of inline URL"
+        );
+    }
+
+    /// Test that security is disabled - no URI injection code present
+    #[test]
+    fn test_no_uri_injection_when_security_disabled() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("listUsers".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        // Verify NO security injection code when disabled
+        assert!(
+            !script.contains("requestUrl"),
+            "Script should NOT have requestUrl when security is disabled"
+        );
+        assert!(
+            !script.contains("secPayload"),
+            "Script should NOT have secPayload when security is disabled"
+        );
+    }
+
+    /// Test that cookie jar clearing is generated when custom headers are present
+    #[test]
+    fn test_cookie_jar_cleared_with_custom_headers() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("listUsers".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+
+        let mut custom_headers = HashMap::new();
+        custom_headers.insert("Cookie".to_string(), "session=abc123".to_string());
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers,
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        assert!(
+            script.contains("http.cookieJar().clear(BASE_URL)"),
+            "Script should clear cookie jar when custom headers are present to prevent duplication"
+        );
+    }
+
+    /// Test that cookie jar clearing is NOT generated when no custom headers
+    #[test]
+    fn test_no_cookie_jar_clear_without_custom_headers() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/api/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("listUsers".to_string()),
+        };
+
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        assert!(
+            !script.contains("cookieJar"),
+            "Script should NOT clear cookie jar when no custom headers are present"
         );
     }
 }

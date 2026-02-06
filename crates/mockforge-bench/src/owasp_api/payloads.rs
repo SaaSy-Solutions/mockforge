@@ -928,7 +928,7 @@ impl OwaspPayloadGenerator {
         for _ in 0..depth {
             json.push_str(r#"{"a":"#);
         }
-        json.push_str("1");
+        json.push('1');
         for _ in 0..=depth {
             json.push('}');
         }

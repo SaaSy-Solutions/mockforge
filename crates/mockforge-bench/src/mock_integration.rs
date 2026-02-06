@@ -63,7 +63,7 @@ impl MockIntegrationConfig {
 }
 
 /// Mock server detection result
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MockServerInfo {
     /// Whether the target is a MockForge mock server
     pub is_mockforge: bool,
@@ -73,17 +73,6 @@ pub struct MockServerInfo {
     pub control_endpoints: Vec<String>,
     /// Current stateful mode status
     pub stateful_enabled: bool,
-}
-
-impl Default for MockServerInfo {
-    fn default() -> Self {
-        Self {
-            is_mockforge: false,
-            version: None,
-            control_endpoints: Vec::new(),
-            stateful_enabled: false,
-        }
-    }
 }
 
 /// Detects if a target URL is a MockForge mock server

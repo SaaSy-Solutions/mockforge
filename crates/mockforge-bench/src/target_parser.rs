@@ -121,7 +121,7 @@ fn parse_json_targets(content: &str) -> Result<Vec<TargetConfig>> {
             // Object with "targets" key: {"targets": [...]}
             if let Some(targets_val) = obj.get("targets") {
                 if let Some(arr) = targets_val.as_array() {
-                    arr.into_iter()
+                    arr.iter()
                         .map(|item| {
                             if let Ok(target) = serde_json::from_value::<JsonTarget>(item.clone()) {
                                 Ok(match target {

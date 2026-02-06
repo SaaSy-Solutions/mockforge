@@ -5,7 +5,7 @@ use crate::data_driven::{DataDistribution, DataDrivenConfig, DataDrivenGenerator
 use crate::dynamic_params::{DynamicParamProcessor, DynamicPlaceholder};
 use crate::error::{BenchError, Result};
 use crate::executor::K6Executor;
-use crate::invalid_data::{InvalidDataConfig, InvalidDataGenerator, InvalidDataType};
+use crate::invalid_data::{InvalidDataConfig, InvalidDataGenerator};
 use crate::k6_gen::{K6Config, K6ScriptGenerator};
 use crate::mock_integration::{
     MockIntegrationConfig, MockIntegrationGenerator, MockServerDetector,
@@ -330,6 +330,8 @@ impl BenchCommand {
         let scenario =
             LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
 
+        let security_testing_enabled = self.security_test || self.wafbench_dir.is_some();
+
         let k6_config = K6Config {
             target_url: self.target.clone(),
             base_path,
@@ -342,6 +344,7 @@ impl BenchCommand {
             auth_header: self.auth.clone(),
             custom_headers,
             skip_tls_verify: self.skip_tls_verify,
+            security_testing_enabled,
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates);
@@ -825,7 +828,7 @@ impl BenchCommand {
     }
 
     /// Generate enhanced k6 script with advanced features
-    fn generate_enhanced_script(&self, base_script: &str) -> Result<String> {
+    pub(crate) fn generate_enhanced_script(&self, base_script: &str) -> Result<String> {
         let mut enhanced_script = base_script.to_string();
         let mut additional_code = String::new();
 
@@ -857,6 +860,7 @@ impl BenchCommand {
         // Add security testing code
         let security_config = self.build_security_config();
         let wafbench_payloads = self.load_wafbench_payloads();
+        let security_requested = security_config.is_some() || self.wafbench_dir.is_some();
 
         if security_config.is_some() || !wafbench_payloads.is_empty() {
             TerminalReporter::print_progress("Adding security testing support...");
@@ -901,6 +905,19 @@ impl BenchCommand {
                 payload_list.len(),
                 mode
             ));
+        } else if security_requested {
+            // User requested security testing (e.g., --wafbench-dir) but no payloads were loaded.
+            // The template has security_testing_enabled=true so it renders calling code.
+            // We must inject stub definitions to avoid undefined function references.
+            TerminalReporter::print_warning(
+                "Security testing was requested but no payloads were loaded. \
+                 Ensure --wafbench-dir points to valid CRS YAML files or add --security-test.",
+            );
+            additional_code
+                .push_str(&SecurityTestGenerator::generate_payload_selection(&[], false));
+            additional_code.push('\n');
+            additional_code.push_str(&SecurityTestGenerator::generate_apply_payload(&[]));
+            additional_code.push('\n');
         }
 
         // Add parallel execution code
@@ -1187,7 +1204,7 @@ impl BenchCommand {
                     // Look up body from params file if available
                     let body_value = if has_body {
                         param_overrides.as_ref()
-                            .map(|po| po.get_for_operation(None, &method_raw, &raw_path))
+                            .map(|po| po.get_for_operation(None, &method_raw, raw_path))
                             .and_then(|oo| oo.body)
                             .unwrap_or_else(|| serde_json::json!({}))
                     } else {
@@ -1295,6 +1312,7 @@ impl BenchCommand {
             "dynamic_globals": required_globals,
             // Security testing settings
             "security_testing_enabled": security_testing_enabled,
+            "has_custom_headers": !custom_headers.is_empty(),
         });
 
         let mut script = handlebars
@@ -1365,6 +1383,8 @@ impl BenchCommand {
         let scenario =
             LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
 
+        let security_testing_enabled = self.security_test || self.wafbench_dir.is_some();
+
         let k6_config = K6Config {
             target_url: self.target.clone(),
             base_path,
@@ -1377,10 +1397,22 @@ impl BenchCommand {
             auth_header: self.auth.clone(),
             custom_headers,
             skip_tls_verify: self.skip_tls_verify,
+            security_testing_enabled,
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates);
-        let script = generator.generate()?;
+        let mut script = generator.generate()?;
+
+        // Enhance script with advanced features (security testing, etc.)
+        let has_advanced_features = self.data_file.is_some()
+            || self.error_rate.is_some()
+            || self.security_test
+            || self.parallel_create.is_some()
+            || self.wafbench_dir.is_some();
+
+        if has_advanced_features {
+            script = self.generate_enhanced_script(&script)?;
+        }
 
         // Write and execute script
         let script_path = self.output.join(format!("k6-{}.js", spec_name.replace('.', "_")));
@@ -1659,6 +1691,7 @@ impl BenchCommand {
             "error_types": error_types,
             // Security testing settings
             "security_testing_enabled": security_testing_enabled,
+            "has_custom_headers": !custom_headers.is_empty(),
         });
 
         let mut script = handlebars

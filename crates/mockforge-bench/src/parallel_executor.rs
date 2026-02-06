@@ -213,6 +213,29 @@ impl ParallelExecutor {
 
         let duration_secs = BenchCommand::parse_duration(&self.base_command.duration)?;
 
+        // Compute security testing flag
+        let security_testing_enabled =
+            self.base_command.security_test || self.base_command.wafbench_dir.is_some();
+
+        // Pre-compute enhancement code once (same for all targets)
+        let has_advanced_features = self.base_command.data_file.is_some()
+            || self.base_command.error_rate.is_some()
+            || self.base_command.security_test
+            || self.base_command.parallel_create.is_some()
+            || self.base_command.wafbench_dir.is_some();
+
+        let enhancement_code = if has_advanced_features {
+            let dummy_script = "export const options = {};";
+            let enhanced = self.base_command.generate_enhanced_script(dummy_script)?;
+            if let Some(pos) = enhanced.find("export const options") {
+                enhanced[..pos].to_string()
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
         // Create semaphore for concurrency control
         let semaphore = Arc::new(Semaphore::new(self.max_concurrency));
         let multi_progress = MultiProgress::new();
@@ -258,6 +281,8 @@ impl ParallelExecutor {
             let progress_bar = progress_bars[index].clone();
             let target_index = index;
             let base_path = base_path.clone();
+            let security_testing_enabled = security_testing_enabled;
+            let enhancement_code = enhancement_code.clone();
 
             let handle = tokio::spawn(async move {
                 // Acquire semaphore permit
@@ -267,8 +292,6 @@ impl ParallelExecutor {
 
                 progress_bar.set_message(format!("Testing {}", target.url));
 
-                // Create a temporary BenchCommand for this target execution
-                // We only need it to call execute_single_target, so we'll pass individual fields
                 // Execute test for this target
                 let result = Self::execute_single_target_internal(
                     &duration,
@@ -290,6 +313,8 @@ impl ParallelExecutor {
                     &scenario,
                     duration_secs,
                     &base_output,
+                    security_testing_enabled,
+                    &enhancement_code,
                 )
                 .await;
 
@@ -389,6 +414,8 @@ impl ParallelExecutor {
         scenario: &LoadScenario,
         duration_secs: u64,
         base_output: &Path,
+        security_testing_enabled: bool,
+        enhancement_code: &str,
     ) -> Result<TargetResult> {
         // Merge target-specific headers with base headers
         let mut custom_headers = base_headers.clone();
@@ -412,11 +439,19 @@ impl ParallelExecutor {
             auth_header,
             custom_headers,
             skip_tls_verify,
+            security_testing_enabled,
         };
 
         // Generate k6 script
         let generator = K6ScriptGenerator::new(k6_config, templates.to_vec());
-        let script = generator.generate()?;
+        let mut script = generator.generate()?;
+
+        // Apply pre-computed enhancement code (security definitions, etc.)
+        if !enhancement_code.is_empty() {
+            if let Some(pos) = script.find("export const options") {
+                script.insert_str(pos, enhancement_code);
+            }
+        }
 
         // Validate script
         let validation_errors = K6ScriptGenerator::validate_script(&script);
