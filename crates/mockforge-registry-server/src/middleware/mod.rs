@@ -2,6 +2,8 @@
 
 pub mod csrf;
 pub mod org_context;
+pub mod permission_check;
+pub mod permissions;
 pub mod rate_limit;
 pub mod request_id;
 pub mod scope_check;
@@ -21,6 +23,10 @@ pub use org_context::resolve_org_context;
 pub use rate_limit::rate_limit_middleware;
 pub use request_id::{request_id_middleware, RequestIdExt, X_REQUEST_ID};
 pub use scope_check::{AuthType, ScopedAuth};
+
+/// Export permission types
+pub use permission_check::PermissionChecker;
+pub use permissions::{Permission, PermissionCategory};
 
 /// Extractor for authenticated user ID from JWT middleware
 #[derive(Debug, Clone)]

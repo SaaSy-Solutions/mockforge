@@ -687,4 +687,171 @@ mod tests {
         assert_eq!(org.name, cloned.name);
         assert_eq!(org.slug, cloned.slug);
     }
+
+    #[test]
+    fn test_owner_has_all_permissions() {
+        use crate::middleware::permissions::Permission;
+
+        let perms = OrgRole::Owner.get_permissions();
+        // Owner should have AdminAll
+        assert!(perms.contains(&Permission::AdminAll));
+        // Owner should have all 28 permission variants
+        assert_eq!(perms.len(), 28);
+    }
+
+    #[test]
+    fn test_admin_permissions_subset_of_owner() {
+        let owner_perms = OrgRole::Owner.get_permissions();
+        let admin_perms = OrgRole::Admin.get_permissions();
+
+        // Every admin permission should also be in owner's set
+        for perm in &admin_perms {
+            assert!(owner_perms.contains(perm), "Admin has {:?} but Owner does not", perm);
+        }
+        // Admin should have fewer permissions than Owner
+        assert!(admin_perms.len() < owner_perms.len());
+    }
+
+    #[test]
+    fn test_member_permissions_subset_of_admin() {
+        let admin_perms = OrgRole::Admin.get_permissions();
+        let member_perms = OrgRole::Member.get_permissions();
+
+        // Every member permission should also be in admin's set
+        for perm in &member_perms {
+            assert!(admin_perms.contains(perm), "Member has {:?} but Admin does not", perm);
+        }
+        // Member should have fewer permissions than Admin
+        assert!(member_perms.len() < admin_perms.len());
+    }
+
+    #[test]
+    fn test_admin_cannot_delete() {
+        use crate::middleware::permissions::Permission;
+
+        let admin_perms = OrgRole::Admin.get_permissions();
+        assert!(!admin_perms.contains(&Permission::OrgDelete));
+        assert!(!admin_perms.contains(&Permission::TemplateDelete));
+        assert!(!admin_perms.contains(&Permission::ScenarioDelete));
+        assert!(!admin_perms.contains(&Permission::ReviewDelete));
+        assert!(!admin_perms.contains(&Permission::HostedMockDelete));
+        assert!(!admin_perms.contains(&Permission::AdminAll));
+    }
+
+    #[test]
+    fn test_member_is_read_only_plus_review_create() {
+        use crate::middleware::permissions::Permission;
+
+        let member_perms = OrgRole::Member.get_permissions();
+        let expected = vec![
+            Permission::OrgRead,
+            Permission::PluginRead,
+            Permission::TemplateRead,
+            Permission::ScenarioRead,
+            Permission::ReviewCreate,
+            Permission::HostedMockRead,
+            Permission::UsageRead,
+        ];
+        assert_eq!(member_perms.len(), expected.len());
+        for perm in &expected {
+            assert!(member_perms.contains(perm), "Member missing {:?}", perm);
+        }
+    }
+}
+
+/// Get permissions for a role
+/// Returns Vec<Permission> with all granted permissions based on role inheritance
+/// Owner: All permissions
+/// Admin: OrgRead, OrgManageMembers + marketplace publish/update permissions + hosted mocks
+/// Member: Read-only permissions for all resources
+impl OrgRole {
+    pub fn get_permissions(&self) -> Vec<crate::middleware::permissions::Permission> {
+        use crate::middleware::permissions::Permission;
+
+        match self {
+            OrgRole::Owner => vec![
+                // Organization permissions
+                Permission::OrgRead,
+                Permission::OrgUpdate,
+                Permission::OrgDelete,
+                Permission::OrgManageMembers,
+                Permission::OrgManageBilling,
+                // Plugin permissions
+                Permission::PluginRead,
+                Permission::PluginPublish,
+                Permission::PluginYank,
+                Permission::PluginVerify,
+                // Template permissions
+                Permission::TemplateRead,
+                Permission::TemplatePublish,
+                Permission::TemplateUpdate,
+                Permission::TemplateDelete,
+                // Scenario permissions
+                Permission::ScenarioRead,
+                Permission::ScenarioPublish,
+                Permission::ScenarioUpdate,
+                Permission::ScenarioDelete,
+                // Review permissions
+                Permission::ReviewCreate,
+                Permission::ReviewUpdate,
+                Permission::ReviewDelete,
+                Permission::ReviewModerate,
+                // Hosted Mock permissions
+                Permission::HostedMockRead,
+                Permission::HostedMockCreate,
+                Permission::HostedMockUpdate,
+                Permission::HostedMockDelete,
+                Permission::HostedMockMetrics,
+                // Usage permissions
+                Permission::UsageRead,
+                // Admin permissions
+                Permission::AdminAll,
+            ],
+
+            OrgRole::Admin => vec![
+                // Organization permissions
+                Permission::OrgRead,
+                Permission::OrgManageMembers,
+                // Plugin permissions
+                Permission::PluginRead,
+                Permission::PluginPublish,
+                // Template permissions
+                Permission::TemplateRead,
+                Permission::TemplatePublish,
+                Permission::TemplateUpdate,
+                // Scenario permissions
+                Permission::ScenarioRead,
+                Permission::ScenarioPublish,
+                Permission::ScenarioUpdate,
+                // Review permissions
+                Permission::ReviewCreate,
+                Permission::ReviewUpdate,
+                Permission::ReviewModerate,
+                // Hosted Mock permissions
+                Permission::HostedMockRead,
+                Permission::HostedMockCreate,
+                Permission::HostedMockUpdate,
+                Permission::HostedMockMetrics,
+                // Usage permissions
+                Permission::UsageRead,
+            ],
+
+            OrgRole::Member => vec![
+                // Organization permissions
+                Permission::OrgRead,
+                // Plugin permissions
+                Permission::PluginRead,
+                // Template permissions
+                Permission::TemplateRead,
+                // Scenario permissions
+                Permission::ScenarioRead,
+                // Review permissions
+                Permission::ReviewCreate,
+                // Hosted Mock permissions
+                Permission::HostedMockRead,
+                // Usage permissions
+                Permission::UsageRead,
+            ],
+        }
+    }
 }
