@@ -1094,6 +1094,17 @@ export default function() {{}}
             script.contains("const requestHeaders = { ..."),
             "Script should spread headers into mutable copy for security payload injection"
         );
+        // Verify secPayload is fetched per-operation (inside operation block), not per-iteration
+        // The getNextSecurityPayload call should appear AFTER "Operation 0:" comment
+        let op_comment_pos =
+            script.find("// Operation 0:").expect("Should have Operation 0 comment");
+        let sec_payload_pos = script
+            .find("const secPayload = typeof getNextSecurityPayload")
+            .expect("Should have secPayload assignment");
+        assert!(
+            sec_payload_pos > op_comment_pos,
+            "secPayload should be fetched inside operation block (per-operation), not before it (per-iteration)"
+        );
     }
 
     #[test]

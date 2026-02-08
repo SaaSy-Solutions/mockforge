@@ -47,15 +47,12 @@ export default function () {
   // which can cause duplicate cookie values even when jar:null is set per-request.
   http.cookieJar().clear(BASE_URL);
   {{/if}}
-  {{#if security_testing_enabled}}
-  // Get security payload for this iteration
-  const secPayload = typeof getNextSecurityPayload === 'function' ? getNextSecurityPayload() : null;
-  {{/if}}
-
   {{#each operations}}
   // Operation {{@index}}: {{this.display_name}}
   {
     {{#if @root.security_testing_enabled}}
+    // Get a fresh security payload for each operation so all payloads cycle
+    const secPayload = typeof getNextSecurityPayload === 'function' ? getNextSecurityPayload() : null;
     // Copy headers and apply security payload to headers if needed
     const requestHeaders = { ...{{{this.headers}}} };
     if (secPayload) {

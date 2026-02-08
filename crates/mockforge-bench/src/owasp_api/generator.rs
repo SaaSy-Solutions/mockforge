@@ -518,6 +518,9 @@ function testBrokenAuth() {
         {
             const testPath = replacePathParams('{{path}}');
             const httpMethod = '{{method}}' === 'delete' ? 'del' : '{{method}}';
+            {{#if @root.has_custom_headers}}
+            http.cookieJar().clear(BASE_URL + testPath);
+            {{/if}}
             const makeEmptyTokenRequest = (m, url, body, params) => {
                 if (m === 'get' || m === 'head') return http[m](url, params);
                 return http[m](url, body, params);
