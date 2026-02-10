@@ -630,9 +630,15 @@ impl SecurityTestGenerator {
             code.push_str(
                 "  // This ensures WAF can detect payloads regardless of which field it scans\n",
             );
-            code.push_str("  for (const key of Object.keys(result)) {\n");
-            code.push_str("    if (typeof result[key] === 'string') {\n");
-            code.push_str("      result[key] = secPayload.payload;\n");
+            code.push_str("  const keys = Object.keys(result);\n");
+            code.push_str("  if (keys.length === 0 && secPayload.location === 'body') {\n");
+            code.push_str("    // Empty body object - add a test field with the payload\n");
+            code.push_str("    result.__test = secPayload.payload;\n");
+            code.push_str("  } else {\n");
+            code.push_str("    for (const key of keys) {\n");
+            code.push_str("      if (typeof result[key] === 'string') {\n");
+            code.push_str("        result[key] = secPayload.payload;\n");
+            code.push_str("      }\n");
             code.push_str("    }\n");
             code.push_str("  }\n");
         } else {

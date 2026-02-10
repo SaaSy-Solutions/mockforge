@@ -1320,9 +1320,10 @@ export default function() {{}}
             script.contains("secPayload.location === 'uri'"),
             "Script should check for URI-location payloads"
         );
+        // URI payloads are sent RAW (not encoded) so WAFs can detect them
         assert!(
-            script.contains("encodeURIComponent(secPayload.payload)"),
-            "Script should URL-encode the security payload for query string injection"
+            script.contains("'test=' + secPayload.payload"),
+            "Script should inject raw (unencoded) security payload into query string"
         );
         // Verify the GET request uses requestUrl
         assert!(
@@ -1441,57 +1442,9 @@ export default function() {{}}
         );
     }
 
-    /// Test that cookie jar clearing is generated when custom headers are present
+    /// Test that scripts use EMPTY_JAR instead of jar: null
     #[test]
-    fn test_cookie_jar_cleared_with_custom_headers() {
-        use crate::spec_parser::ApiOperation;
-        use openapiv3::Operation;
-
-        let operation = ApiOperation {
-            method: "get".to_string(),
-            path: "/api/users".to_string(),
-            operation: Operation::default(),
-            operation_id: Some("listUsers".to_string()),
-        };
-
-        let template = RequestTemplate {
-            operation,
-            path_params: HashMap::new(),
-            query_params: HashMap::new(),
-            headers: HashMap::new(),
-            body: None,
-        };
-
-        let mut custom_headers = HashMap::new();
-        custom_headers.insert("Cookie".to_string(), "session=abc123".to_string());
-
-        let config = K6Config {
-            target_url: "https://api.example.com".to_string(),
-            base_path: None,
-            scenario: LoadScenario::Constant,
-            duration_secs: 30,
-            max_vus: 5,
-            threshold_percentile: "p(95)".to_string(),
-            threshold_ms: 500,
-            max_error_rate: 0.05,
-            auth_header: None,
-            custom_headers,
-            skip_tls_verify: false,
-            security_testing_enabled: false,
-        };
-
-        let generator = K6ScriptGenerator::new(config, vec![template]);
-        let script = generator.generate().expect("Should generate script");
-
-        assert!(
-            script.contains("http.cookieJar().clear(BASE_URL)"),
-            "Script should clear cookie jar when custom headers are present to prevent duplication"
-        );
-    }
-
-    /// Test that cookie jar clearing is NOT generated when no custom headers
-    #[test]
-    fn test_no_cookie_jar_clear_without_custom_headers() {
+    fn test_uses_empty_jar_not_null() {
         use crate::spec_parser::ApiOperation;
         use openapiv3::Operation;
 
@@ -1529,8 +1482,16 @@ export default function() {{}}
         let script = generator.generate().expect("Should generate script");
 
         assert!(
-            !script.contains("cookieJar"),
-            "Script should NOT clear cookie jar when no custom headers are present"
+            script.contains("const EMPTY_JAR = new http.CookieJar()"),
+            "Script should declare EMPTY_JAR"
+        );
+        assert!(
+            script.contains("jar: EMPTY_JAR"),
+            "Script should use jar: EMPTY_JAR instead of jar: null"
+        );
+        assert!(
+            !script.contains("jar: null"),
+            "Script should NOT use jar: null (does not disable default VU cookie jar in k6)"
         );
     }
 }

@@ -53,6 +53,10 @@ export const options = {
 
 const BASE_URL = '{{base_url}}';
 
+// Use a dedicated empty cookie jar to prevent k6's default VU cookie jar
+// from merging Set-Cookie response cookies with manually specified headers.
+const EMPTY_JAR = new http.CookieJar();
+
 // Common headers
 const headers = {{{headers}}};
 
@@ -334,12 +338,6 @@ function replacePath(pathTemplate, values) {
 }
 
 export default function () {
-  {{#if has_custom_headers}}
-  // Clear cookie jar to prevent duplication with manually specified Cookie headers.
-  // k6 accumulates cookies from Set-Cookie response headers in its VU cookie jar,
-  // which can cause duplicate cookie values even when jar:null is set per-request.
-  http.cookieJar().clear(BASE_URL);
-  {{/if}}
   {{#each flows}}
   // Flow: {{this.display_name}}
   group('{{this.display_name}}', function() {
@@ -379,7 +377,7 @@ export default function () {
             path = secPayload.payload;
           } else {
             const separator = path.includes('?') ? '&' : '?';
-            path = `${path}${separator}test=${encodeURIComponent(secPayload.payload)}`;
+            path = `${path}${separator}test=${secPayload.payload}`;
           }
         } else if (secPayload.location === 'header' && secPayload.headerName) {
           // Inject into the specified header
@@ -413,9 +411,9 @@ export default function () {
       }
       {{/if}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: null });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: EMPTY_JAR });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: null });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: EMPTY_JAR });
       {{/if}}
       {{else if this.has_body}}
       {{#if this.body_is_dynamic}}
@@ -443,21 +441,21 @@ export default function () {
       }
       {{/if}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: null });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: EMPTY_JAR });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: null });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: EMPTY_JAR });
       {{/if}}
       {{else if this.is_get_or_head}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers: requestHeaders, jar: null });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers: requestHeaders, jar: EMPTY_JAR });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers, jar: null });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers, jar: EMPTY_JAR });
       {{/if}}
       {{else}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers: requestHeaders, jar: null });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers: requestHeaders, jar: EMPTY_JAR });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers, jar: null });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers, jar: EMPTY_JAR });
       {{/if}}
       {{/if}}
 

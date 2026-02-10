@@ -313,6 +313,11 @@ const TIMEOUT = '{{timeout_ms}}ms';
 const VERBOSE = {{verbose}};
 const INSECURE = {{insecure}};
 
+// Use a dedicated empty cookie jar to prevent k6's default VU cookie jar
+// from merging Set-Cookie response cookies with manually specified headers.
+// Note: jar:null does NOT disable the default jar - it just skips the param.
+const EMPTY_JAR = new http.CookieJar();
+
 // Custom headers from CLI (e.g., Cookie, X-Custom-Header)
 const CUSTOM_HEADERS = {
 {{#each custom_headers}}
@@ -386,12 +391,6 @@ function replacePathParams(path) {
 
 // Helper: Make authenticated request
 function authRequest(method, url, body, additionalHeaders = {}) {
-    // Clear cookie jar before EVERY request to prevent k6 from merging
-    // Set-Cookie response cookies with our manually specified Cookie header
-    {{#if has_custom_headers}}
-    http.cookieJar().clear(url);
-    {{/if}}
-
     const headers = {
         'Content-Type': 'application/json',
         ...CUSTOM_HEADERS,
@@ -405,7 +404,7 @@ function authRequest(method, url, body, additionalHeaders = {}) {
     const params = {
         headers,
         timeout: TIMEOUT,
-        jar: null,
+        jar: EMPTY_JAR,
     };
 
     // k6 uses 'del' instead of 'delete'
@@ -420,10 +419,6 @@ function authRequest(method, url, body, additionalHeaders = {}) {
 
 // Helper: Make unauthenticated request
 function unauthRequest(method, url, body, additionalHeaders = {}) {
-    {{#if has_custom_headers}}
-    http.cookieJar().clear(url);
-    {{/if}}
-
     const headers = {
         'Content-Type': 'application/json',
         ...CUSTOM_HEADERS,
@@ -433,7 +428,7 @@ function unauthRequest(method, url, body, additionalHeaders = {}) {
     const params = {
         headers,
         timeout: TIMEOUT,
-        jar: null,
+        jar: EMPTY_JAR,
     };
 
     // k6 uses 'del' instead of 'delete'
@@ -518,9 +513,6 @@ function testBrokenAuth() {
         {
             const testPath = replacePathParams('{{path}}');
             const httpMethod = '{{method}}' === 'delete' ? 'del' : '{{method}}';
-            {{#if @root.has_custom_headers}}
-            http.cookieJar().clear(BASE_URL + testPath);
-            {{/if}}
             const makeEmptyTokenRequest = (m, url, body, params) => {
                 if (m === 'get' || m === 'head') return http[m](url, params);
                 return http[m](url, body, params);
@@ -528,7 +520,7 @@ function testBrokenAuth() {
             const response = makeEmptyTokenRequest(httpMethod, BASE_URL + testPath, null, {
                 headers: { [AUTH_HEADER]: 'Bearer ' },
                 timeout: TIMEOUT,
-                jar: null,
+                jar: EMPTY_JAR,
             });
             testsRun.add(1);
 
@@ -761,13 +753,10 @@ function testMisconfiguration() {
         {
             const testPath = replacePathParams('{{path}}');
             const malformedBody = '{"invalid": "json';
-            {{#if @root.has_custom_headers}}
-            http.cookieJar().clear(BASE_URL + testPath);
-            {{/if}}
             const response = http.{{method}}(BASE_URL + testPath, malformedBody, {
                 headers: { 'Content-Type': 'application/json', ...CUSTOM_HEADERS },
                 timeout: TIMEOUT,
-                jar: null,
+                jar: EMPTY_JAR,
             });
             testsRun.add(1);
 
@@ -811,10 +800,7 @@ function testInventory() {
         const apiVersions = ['v1', 'v2', 'v3', 'api/v1', 'api/v2'];
 
         discoveryPaths.forEach(path => {
-            {{#if @root.has_custom_headers}}
-            http.cookieJar().clear(BASE_URL + path);
-            {{/if}}
-            const response = http.get(BASE_URL + path, { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: null });
+            const response = http.get(BASE_URL + path, { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: EMPTY_JAR });
             testsRun.add(1);
             responseTime.add(response.timings.duration);
 
@@ -827,10 +813,7 @@ function testInventory() {
 
         // Check for old API versions
         apiVersions.forEach(version => {
-            {{#if @root.has_custom_headers}}
-            http.cookieJar().clear(BASE_URL + '/' + version + '/');
-            {{/if}}
-            const response = http.get(BASE_URL + '/' + version + '/', { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: null });
+            const response = http.get(BASE_URL + '/' + version + '/', { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: EMPTY_JAR });
             testsRun.add(1);
 
             if (response.status !== 404) {
@@ -879,13 +862,6 @@ function testUnsafeConsumption() {
 
 // Main test function
 export default function() {
-    // Clear cookie jar to prevent duplication with manually specified Cookie headers.
-    // k6 accumulates cookies from Set-Cookie response headers in its VU cookie jar,
-    // which can cause duplicate cookie values even when jar:null is set per-request.
-    {{#if has_custom_headers}}
-    http.cookieJar().clear(BASE_URL);
-    {{/if}}
-
     console.log('Starting OWASP API Top 10 Security Scan...');
     console.log('Target: ' + BASE_URL);
     console.log('');
@@ -1033,31 +1009,19 @@ const TOKEN = '{{valid_auth_token}}';
     }
 
     #[test]
-    fn test_owasp_cookie_jar_cleared_with_custom_headers() {
-        // Test that the OWASP template clears cookie jar when custom headers are present
+    fn test_owasp_uses_empty_jar_not_null() {
+        // Test that the OWASP template uses EMPTY_JAR instead of jar: null
+        // jar: null in k6 does NOT disable the default VU cookie jar
         let template = r#"
-{{#if has_custom_headers}}
-http.cookieJar().clear(BASE_URL);
-{{/if}}
-export default function() {}
+const EMPTY_JAR = new http.CookieJar();
+function authRequest(method, url) {
+    const params = { jar: EMPTY_JAR };
+}
 "#;
         let handlebars = Handlebars::new();
-        let data = json!({
-            "has_custom_headers": true,
-        });
+        let data = json!({});
         let result = handlebars.render_template(template, &data).unwrap();
-        assert!(
-            result.contains("http.cookieJar().clear(BASE_URL)"),
-            "Should clear cookie jar when custom headers are present"
-        );
-
-        let data_no_headers = json!({
-            "has_custom_headers": false,
-        });
-        let result_no_headers = handlebars.render_template(template, &data_no_headers).unwrap();
-        assert!(
-            !result_no_headers.contains("cookieJar"),
-            "Should NOT clear cookie jar when no custom headers"
-        );
+        assert!(result.contains("EMPTY_JAR"), "Should use EMPTY_JAR instead of jar: null");
+        assert!(!result.contains("jar: null"), "Should NOT use jar: null");
     }
 }

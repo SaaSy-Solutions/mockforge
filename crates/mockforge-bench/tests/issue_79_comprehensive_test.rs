@@ -255,14 +255,15 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
         "Must spread headers into mutable copy for injection"
     );
 
-    // V4: URI injection code (the new fix for GET-only APIs)
+    // V4: URI injection code (raw payloads for WAF detection)
     assert!(
         script.contains("secPayload.location === 'uri'"),
         "Must contain URI location check for query parameter injection"
     );
+    // URI payloads are sent RAW (not encoded) so WAFs can detect them
     assert!(
-        script.contains("encodeURIComponent(secPayload.payload)"),
-        "Must URL-encode payloads for query string injection"
+        script.contains("'test=' + secPayload.payload"),
+        "Must inject raw (unencoded) security payload into query string for WAF detection"
     );
     assert!(
         script.contains("requestUrl"),
