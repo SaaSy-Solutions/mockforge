@@ -490,10 +490,12 @@ impl WafBenchLoader {
                 }
             }
 
-            // Extract payload from URI
+            // Extract payload from URI — CRS test files are attack payloads by
+            // definition, so we accept all values without filtering. Previously
+            // a narrow looks_like_attack() check discarded exotic payloads like
+            // VML, VBScript, UTF-7, JSFuck, and bracket-notation XSS.
             if let Some(uri) = &input.uri {
-                // Look for attack patterns in the URI
-                if self.looks_like_attack(uri) {
+                if !uri.is_empty() {
                     payloads.push(WafBenchPayload {
                         location: PayloadLocation::Uri,
                         value: uri.clone(),
@@ -504,7 +506,7 @@ impl WafBenchLoader {
 
             // Extract payloads from headers
             for (header_name, header_value) in &input.headers {
-                if self.looks_like_attack(header_value) {
+                if !header_value.is_empty() {
                     payloads.push(WafBenchPayload {
                         location: PayloadLocation::Header,
                         value: header_value.clone(),
@@ -515,7 +517,7 @@ impl WafBenchLoader {
 
             // Extract payload from body
             if let Some(data) = &input.data {
-                if self.looks_like_attack(data) {
+                if !data.is_empty() {
                     payloads.push(WafBenchPayload {
                         location: PayloadLocation::Body,
                         value: data.clone(),
@@ -557,7 +559,8 @@ impl WafBenchLoader {
         })
     }
 
-    /// Check if a string looks like an attack payload
+    /// Check if a string looks like an attack payload (used in tests)
+    #[cfg(test)]
     fn looks_like_attack(&self, s: &str) -> bool {
         // Common attack patterns
         let attack_patterns = [
@@ -649,14 +652,14 @@ impl WafBenchLoader {
 
     /// Extract the actual attack payload from a URI or value
     fn extract_payload_value(&self, value: &str) -> String {
-        // If it's a URI, try to extract query parameter values
+        // If it's a URI with query params, extract the first parameter value
+        // (URL-decoded). CRS test files put the attack in query params.
         if value.contains('?') {
             if let Some(query) = value.split('?').nth(1) {
-                // Get the first parameter value that looks malicious
                 for param in query.split('&') {
                     if let Some(val) = param.split('=').nth(1) {
                         let decoded = urlencoding::decode(val).unwrap_or_else(|_| val.into());
-                        if self.looks_like_attack(&decoded) {
+                        if !decoded.is_empty() {
                             return decoded.to_string();
                         }
                     }
