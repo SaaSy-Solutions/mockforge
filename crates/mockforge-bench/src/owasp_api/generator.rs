@@ -313,11 +313,6 @@ const TIMEOUT = '{{timeout_ms}}ms';
 const VERBOSE = {{verbose}};
 const INSECURE = {{insecure}};
 
-// Use a dedicated empty cookie jar to prevent k6's default VU cookie jar
-// from merging Set-Cookie response cookies with manually specified headers.
-// Note: jar:null does NOT disable the default jar - it just skips the param.
-const EMPTY_JAR = new http.CookieJar();
-
 // Custom headers from CLI (e.g., Cookie, X-Custom-Header)
 const CUSTOM_HEADERS = {
 {{#each custom_headers}}
@@ -404,7 +399,7 @@ function authRequest(method, url, body, additionalHeaders = {}) {
     const params = {
         headers,
         timeout: TIMEOUT,
-        jar: EMPTY_JAR,
+        jar: new http.CookieJar(),
     };
 
     // k6 uses 'del' instead of 'delete'
@@ -428,7 +423,7 @@ function unauthRequest(method, url, body, additionalHeaders = {}) {
     const params = {
         headers,
         timeout: TIMEOUT,
-        jar: EMPTY_JAR,
+        jar: new http.CookieJar(),
     };
 
     // k6 uses 'del' instead of 'delete'
@@ -520,7 +515,7 @@ function testBrokenAuth() {
             const response = makeEmptyTokenRequest(httpMethod, BASE_URL + testPath, null, {
                 headers: { [AUTH_HEADER]: 'Bearer ' },
                 timeout: TIMEOUT,
-                jar: EMPTY_JAR,
+                jar: new http.CookieJar(),
             });
             testsRun.add(1);
 
@@ -756,7 +751,7 @@ function testMisconfiguration() {
             const response = http.{{method}}(BASE_URL + testPath, malformedBody, {
                 headers: { 'Content-Type': 'application/json', ...CUSTOM_HEADERS },
                 timeout: TIMEOUT,
-                jar: EMPTY_JAR,
+                jar: new http.CookieJar(),
             });
             testsRun.add(1);
 
@@ -800,7 +795,7 @@ function testInventory() {
         const apiVersions = ['v1', 'v2', 'v3', 'api/v1', 'api/v2'];
 
         discoveryPaths.forEach(path => {
-            const response = http.get(BASE_URL + path, { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: EMPTY_JAR });
+            const response = http.get(BASE_URL + path, { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: new http.CookieJar() });
             testsRun.add(1);
             responseTime.add(response.timings.duration);
 
@@ -813,7 +808,7 @@ function testInventory() {
 
         // Check for old API versions
         apiVersions.forEach(version => {
-            const response = http.get(BASE_URL + '/' + version + '/', { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: EMPTY_JAR });
+            const response = http.get(BASE_URL + '/' + version + '/', { headers: CUSTOM_HEADERS, timeout: TIMEOUT, jar: new http.CookieJar() });
             testsRun.add(1);
 
             if (response.status !== 404) {
@@ -1009,19 +1004,25 @@ const TOKEN = '{{valid_auth_token}}';
     }
 
     #[test]
-    fn test_owasp_uses_empty_jar_not_null() {
-        // Test that the OWASP template uses EMPTY_JAR instead of jar: null
-        // jar: null in k6 does NOT disable the default VU cookie jar
+    fn test_owasp_uses_per_request_cookie_jar() {
+        // Test that the OWASP template creates a fresh CookieJar per request
+        // A shared jar accumulates Set-Cookie responses, causing duplication
         let template = r#"
-const EMPTY_JAR = new http.CookieJar();
 function authRequest(method, url) {
-    const params = { jar: EMPTY_JAR };
+    const params = { jar: new http.CookieJar() };
 }
 "#;
         let handlebars = Handlebars::new();
         let data = json!({});
         let result = handlebars.render_template(template, &data).unwrap();
-        assert!(result.contains("EMPTY_JAR"), "Should use EMPTY_JAR instead of jar: null");
+        assert!(
+            result.contains("new http.CookieJar()"),
+            "Should create fresh CookieJar per request"
+        );
         assert!(!result.contains("jar: null"), "Should NOT use jar: null");
+        assert!(
+            !result.contains("EMPTY_JAR"),
+            "Should NOT use shared EMPTY_JAR (accumulates Set-Cookie responses)"
+        );
     }
 }

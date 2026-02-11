@@ -1442,9 +1442,9 @@ export default function() {{}}
         );
     }
 
-    /// Test that scripts use EMPTY_JAR instead of jar: null
+    /// Test that scripts create a fresh CookieJar per request (not a shared constant)
     #[test]
-    fn test_uses_empty_jar_not_null() {
+    fn test_uses_per_request_cookie_jar() {
         use crate::spec_parser::ApiOperation;
         use openapiv3::Operation;
 
@@ -1481,17 +1481,18 @@ export default function() {{}}
         let generator = K6ScriptGenerator::new(config, vec![template]);
         let script = generator.generate().expect("Should generate script");
 
+        // Each request must create a fresh CookieJar to prevent Set-Cookie accumulation
         assert!(
-            script.contains("const EMPTY_JAR = new http.CookieJar()"),
-            "Script should declare EMPTY_JAR"
-        );
-        assert!(
-            script.contains("jar: EMPTY_JAR"),
-            "Script should use jar: EMPTY_JAR instead of jar: null"
+            script.contains("jar: new http.CookieJar()"),
+            "Script should create fresh CookieJar per request"
         );
         assert!(
             !script.contains("jar: null"),
             "Script should NOT use jar: null (does not disable default VU cookie jar in k6)"
+        );
+        assert!(
+            !script.contains("EMPTY_JAR"),
+            "Script should NOT use shared EMPTY_JAR (accumulates Set-Cookie responses)"
         );
     }
 }

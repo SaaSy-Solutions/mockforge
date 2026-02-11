@@ -326,10 +326,10 @@ fn test_crud_flow_get_request_has_no_body() {
 
     let script = generate_crud_flow_script_with_params(&flows, Some(&param_overrides), false);
 
-    // GET requests should use http.get with just headers and EMPTY_JAR, no body
+    // GET requests should use http.get with just headers and fresh CookieJar, no body
     // Count occurrences of the GET pattern without body
     let get_without_body = script
-        .matches("http.get(`${BASE_URL}${path}`, { headers, jar: EMPTY_JAR })")
+        .matches("http.get(`${BASE_URL}${path}`, { headers, jar: new http.CookieJar() })")
         .count();
 
     assert_eq!(

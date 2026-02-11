@@ -53,10 +53,6 @@ export const options = {
 
 const BASE_URL = '{{base_url}}';
 
-// Use a dedicated empty cookie jar to prevent k6's default VU cookie jar
-// from merging Set-Cookie response cookies with manually specified headers.
-const EMPTY_JAR = new http.CookieJar();
-
 // Common headers
 const headers = {{{headers}}};
 
@@ -411,9 +407,9 @@ export default function () {
       }
       {{/if}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: EMPTY_JAR });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: new http.CookieJar() });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: EMPTY_JAR });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: new http.CookieJar() });
       {{/if}}
       {{else if this.has_body}}
       {{#if this.body_is_dynamic}}
@@ -441,21 +437,21 @@ export default function () {
       }
       {{/if}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: EMPTY_JAR });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: new http.CookieJar() });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: EMPTY_JAR });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: new http.CookieJar() });
       {{/if}}
       {{else if this.is_get_or_head}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers: requestHeaders, jar: EMPTY_JAR });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers: requestHeaders, jar: new http.CookieJar() });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers, jar: EMPTY_JAR });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers, jar: new http.CookieJar() });
       {{/if}}
       {{else}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers: requestHeaders, jar: EMPTY_JAR });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers: requestHeaders, jar: new http.CookieJar() });
       {{else}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers, jar: EMPTY_JAR });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers, jar: new http.CookieJar() });
       {{/if}}
       {{/if}}
 
