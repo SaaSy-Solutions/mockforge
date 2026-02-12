@@ -24,6 +24,73 @@
 
 - Nothing yet.
 
+## [0.3.52] - 2026-02-12
+
+### Fixed
+
+- **[Bench]** fix(bench): Group multi-part WAFBench payloads + decode body payloads + fix Cookie/CookieJar conflict (#79)
+  - Multi-part CRS test cases (URI + headers + body) now grouped by `group_id` and sent together in one HTTP request instead of being split across separate requests (fixes 942290)
+  - Body payloads from CRS YAML files are now form-URL-decoded before injection (`%22+WAITFOR+DELAY+%27` → `" WAITFOR DELAY '`) so WAFs see actual SQL patterns in JSON bodies (fixes 942240, 942320, 942432)
+  - URI payloads from path-only CRS tests are now URL-decoded and stripped of leading `/` artifact (fixes 942101)
+  - Cookie header payloads no longer overridden by empty CookieJar — `secRequestOpts` conditionally skips `jar: new http.CookieJar()` when a security Cookie header is present (fixes 942420, 942421)
+  - Added `groupedPayloads` array-of-arrays in generated k6 scripts; `getNextSecurityPayload()` returns arrays of related payloads
+  - Template loop applies URI/header/body parts simultaneously per request via `secPayloadGroup`
+  - Expected SQLi detection improvement: 37/46 → 44/46 (80.4% → 95.7%)
+
+## [0.3.51] - 2026-02-11
+
+### Fixed
+
+- **[Bench]** fix(bench): Accept all WAFBench CRS payloads without attack-pattern filter (#79)
+  - Removed overly strict `attack-pattern` category filter that was silently dropping valid CRS test cases
+  - All CRS YAML test cases now loaded regardless of their `attack_type` metadata
+
+## [0.3.50] - 2026-02-10
+
+### Fixed
+
+- **[Bench]** fix(bench): Use per-request CookieJar instead of shared EMPTY_JAR (#79)
+  - Each HTTP request now creates its own `new http.CookieJar()` instead of sharing a global empty jar
+  - Prevents cookie cross-contamination between requests in security testing
+
+## [0.3.49] - 2026-02-09
+
+### Fixed
+
+- **[Bench]** fix(bench): Send raw security payloads + use dedicated empty cookie jar (#79)
+  - Security payloads now sent as raw strings without additional encoding
+  - Dedicated empty CookieJar per request prevents k6's default cookie accumulation
+
+## [0.3.48] - 2026-02-08
+
+### Fixed
+
+- **[Bench]** fix(bench): Cycle security payloads per-operation + clear cookies in API2 tests (#79)
+  - Security payloads now cycle per-operation block (each API endpoint gets a different payload)
+  - Previously all operations in one VU iteration used the same payload
+  - OWASP API2 (Broken Auth) tests now properly clear cookies between requests
+
+## [0.3.47] - 2026-02-06
+
+### Added
+
+- **[DevX]** chore: Add Claude Code setup (CLAUDE.md, agents, skills, hooks, hookify)
+  - Project-specific Claude Code configuration with rules, agents, and skills
+  - Custom skills for verification, template checking, code review, and bench review
+  - Hookify rules engine for behavioral guardrails
+
+### Fixed
+
+- **[Bench]** fix(bench): Security payloads now injected + cookie dedup in all templates (#79)
+  - Security payloads now properly injected in both k6_script.hbs and k6_crud_flow.hbs templates
+  - Cookie deduplication applied to all HTTP request paths in both templates
+  - Comprehensive test suite added for issue #79 security pipeline
+
+- **[Registry]** fix(registry): Add RBAC permission system with Display, AdminAll bypass, and PermissionChecker
+  - New RBAC permission model with role-based access control
+  - AdminAll role bypasses all permission checks
+  - PermissionChecker trait for consistent authorization across endpoints
+
 ## [0.3.46] - 2026-01-30
 
 ### Fixed

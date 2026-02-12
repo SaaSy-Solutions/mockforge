@@ -1086,24 +1086,36 @@ export default function() {{}}
             "Script should contain applySecurityPayload() call when security_testing_enabled is true"
         );
         assert!(
-            script.contains("secPayload"),
-            "Script should contain secPayload variable when security_testing_enabled is true"
+            script.contains("secPayloadGroup"),
+            "Script should contain secPayloadGroup variable when security_testing_enabled is true"
+        );
+        assert!(
+            script.contains("secBodyPayload"),
+            "Script should contain secBodyPayload variable when security_testing_enabled is true"
+        );
+        // Verify CookieJar skip when Cookie header payload is present
+        assert!(
+            script.contains("hasSecCookie"),
+            "Script should track hasSecCookie for CookieJar conflict avoidance"
+        );
+        assert!(
+            script.contains("secRequestOpts"),
+            "Script should use secRequestOpts to conditionally skip CookieJar"
         );
         // Verify mutable headers copy for injection
         assert!(
             script.contains("const requestHeaders = { ..."),
             "Script should spread headers into mutable copy for security payload injection"
         );
-        // Verify secPayload is fetched per-operation (inside operation block), not per-iteration
-        // The getNextSecurityPayload call should appear AFTER "Operation 0:" comment
+        // Verify secPayloadGroup is fetched per-operation (inside operation block), not per-iteration
         let op_comment_pos =
             script.find("// Operation 0:").expect("Should have Operation 0 comment");
         let sec_payload_pos = script
-            .find("const secPayload = typeof getNextSecurityPayload")
-            .expect("Should have secPayload assignment");
+            .find("const secPayloadGroup = typeof getNextSecurityPayload")
+            .expect("Should have secPayloadGroup assignment");
         assert!(
             sec_payload_pos > op_comment_pos,
-            "secPayload should be fetched inside operation block (per-operation), not before it (per-iteration)"
+            "secPayloadGroup should be fetched inside operation block (per-operation), not before it (per-iteration)"
         );
     }
 
@@ -1156,8 +1168,20 @@ export default function() {{}}
             "Script should NOT contain applySecurityPayload() when security_testing_enabled is false"
         );
         assert!(
-            !script.contains("secPayload"),
-            "Script should NOT contain secPayload variable when security_testing_enabled is false"
+            !script.contains("secPayloadGroup"),
+            "Script should NOT contain secPayloadGroup variable when security_testing_enabled is false"
+        );
+        assert!(
+            !script.contains("secBodyPayload"),
+            "Script should NOT contain secBodyPayload variable when security_testing_enabled is false"
+        );
+        assert!(
+            !script.contains("hasSecCookie"),
+            "Script should NOT contain hasSecCookie when security_testing_enabled is false"
+        );
+        assert!(
+            !script.contains("secRequestOpts"),
+            "Script should NOT contain secRequestOpts when security_testing_enabled is false"
         );
     }
 
@@ -1244,21 +1268,26 @@ export default function() {{}}
 
         // Calling code (rendered by template)
         assert!(
-            script.contains("const secPayload = typeof getNextSecurityPayload"),
-            "Final script must contain secPayload assignment (template calling code)"
+            script.contains("const secPayloadGroup = typeof getNextSecurityPayload"),
+            "Final script must contain secPayloadGroup assignment (template calling code)"
         );
         assert!(
-            script.contains("applySecurityPayload(payload, [], secPayload)"),
-            "Final script must contain applySecurityPayload CALL in request body injection"
+            script.contains("applySecurityPayload(payload, [], secBodyPayload)"),
+            "Final script must contain applySecurityPayload CALL with secBodyPayload"
         );
         assert!(
             script.contains("const requestHeaders = { ..."),
             "Final script must spread headers for security payload header injection"
         );
+        assert!(
+            script.contains("for (const secPayload of secPayloadGroup)"),
+            "Final script must loop over secPayloadGroup"
+        );
 
         // Verify ordering: definitions come BEFORE export default function (which has the calls)
         let def_pos = script.find("function getNextSecurityPayload()").unwrap();
-        let call_pos = script.find("const secPayload = typeof getNextSecurityPayload").unwrap();
+        let call_pos =
+            script.find("const secPayloadGroup = typeof getNextSecurityPayload").unwrap();
         let options_pos = script.find("export const options").unwrap();
         let default_fn_pos = script.find("export default function").unwrap();
 
@@ -1382,8 +1411,8 @@ export default function() {{}}
             "POST script should check for URI-location payloads"
         );
         assert!(
-            script.contains("applySecurityPayload(payload, [], secPayload)"),
-            "POST script should also apply security payload to request body"
+            script.contains("applySecurityPayload(payload, [], secBodyPayload)"),
+            "POST script should apply security body payload to request body"
         );
         // Verify the POST request uses requestUrl
         assert!(
@@ -1437,8 +1466,12 @@ export default function() {{}}
             "Script should NOT have requestUrl when security is disabled"
         );
         assert!(
-            !script.contains("secPayload"),
-            "Script should NOT have secPayload when security is disabled"
+            !script.contains("secPayloadGroup"),
+            "Script should NOT have secPayloadGroup when security is disabled"
+        );
+        assert!(
+            !script.contains("secBodyPayload"),
+            "Script should NOT have secBodyPayload when security is disabled"
         );
     }
 

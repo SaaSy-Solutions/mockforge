@@ -132,6 +132,10 @@ pub struct SecurityPayload {
     /// Header name if location is Header (e.g., "User-Agent", "Cookie")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub header_name: Option<String>,
+    /// Group ID for multi-part payloads that must be sent together in one request
+    /// (e.g., CRS test cases with URI + headers + body parts)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
 }
 
 impl SecurityPayload {
@@ -144,6 +148,7 @@ impl SecurityPayload {
             high_risk: false,
             location: PayloadLocation::Uri,
             header_name: None,
+            group_id: None,
         }
     }
 
@@ -162,6 +167,12 @@ impl SecurityPayload {
     /// Set header name for header payloads
     pub fn with_header_name(mut self, name: String) -> Self {
         self.header_name = Some(name);
+        self
+    }
+
+    /// Set group ID for multi-part payloads that must be sent together
+    pub fn with_group_id(mut self, group_id: String) -> Self {
+        self.group_id = Some(group_id);
         self
     }
 }
@@ -581,32 +592,58 @@ impl SecurityTestGenerator {
                 .as_ref()
                 .map(|h| format!("'{}'", escape_js_string(h)))
                 .unwrap_or_else(|| "null".to_string());
+            let group_id = payload
+                .group_id
+                .as_ref()
+                .map(|g| format!("'{}'", escape_js_string(g)))
+                .unwrap_or_else(|| "null".to_string());
 
             code.push_str(&format!(
-                "  {{ payload: '{}', category: '{}', description: '{}', location: '{}', headerName: {} }},\n",
-                escaped, payload.category, escaped_desc, payload.location, header_name
+                "  {{ payload: '{}', category: '{}', description: '{}', location: '{}', headerName: {}, groupId: {} }},\n",
+                escaped, payload.category, escaped_desc, payload.location, header_name, group_id
             ));
         }
 
         code.push_str("];\n\n");
 
+        // Build grouped payloads: entries sharing a groupId are collected together,
+        // ungrouped entries become single-element arrays
+        code.push_str(
+            "// Grouped payloads: multi-part test cases are sent together in one request\n",
+        );
+        code.push_str("const groupedPayloads = (function() {\n");
+        code.push_str("  const groups = [];\n");
+        code.push_str("  const groupMap = {};\n");
+        code.push_str("  for (const p of securityPayloads) {\n");
+        code.push_str("    if (p.groupId) {\n");
+        code.push_str("      if (!groupMap[p.groupId]) {\n");
+        code.push_str("        groupMap[p.groupId] = [];\n");
+        code.push_str("        groups.push(groupMap[p.groupId]);\n");
+        code.push_str("      }\n");
+        code.push_str("      groupMap[p.groupId].push(p);\n");
+        code.push_str("    } else {\n");
+        code.push_str("      groups.push([p]);\n");
+        code.push_str("    }\n");
+        code.push_str("  }\n");
+        code.push_str("  return groups;\n");
+        code.push_str("})();\n\n");
+
         if cycle_all {
-            // Cycle through all payloads sequentially, but distribute starting points across VUs
-            // This ensures different VUs test different payloads, maximizing coverage
-            code.push_str("// Cycle through ALL payloads sequentially\n");
+            // Cycle through all payload groups sequentially
+            code.push_str("// Cycle through ALL payload groups sequentially\n");
             code.push_str("// Each VU starts at a different offset based on its VU number for better payload distribution\n");
-            code.push_str("let __payloadIndex = (__VU - 1) % securityPayloads.length;\n");
+            code.push_str("let __payloadIndex = (__VU - 1) % groupedPayloads.length;\n");
             code.push_str("function getNextSecurityPayload() {\n");
-            code.push_str("  const payload = securityPayloads[__payloadIndex];\n");
-            code.push_str("  __payloadIndex = (__payloadIndex + 1) % securityPayloads.length;\n");
-            code.push_str("  return payload;\n");
+            code.push_str("  const group = groupedPayloads[__payloadIndex];\n");
+            code.push_str("  __payloadIndex = (__payloadIndex + 1) % groupedPayloads.length;\n");
+            code.push_str("  return group;\n");
             code.push_str("}\n\n");
         } else {
             // Random selection (original behavior)
-            code.push_str("// Select random security payload\n");
+            code.push_str("// Select random security payload group\n");
             code.push_str("function getNextSecurityPayload() {\n");
             code.push_str(
-                "  return securityPayloads[Math.floor(Math.random() * securityPayloads.length)];\n",
+                "  return groupedPayloads[Math.floor(Math.random() * groupedPayloads.length)];\n",
             );
             code.push_str("}\n\n");
         }
@@ -837,9 +874,12 @@ mod tests {
 
         let code = SecurityTestGenerator::generate_payload_selection(&payloads, false);
         assert!(code.contains("securityPayloads"));
+        assert!(code.contains("groupedPayloads"));
         assert!(code.contains("OR"));
         assert!(code.contains("Math.random()"));
         assert!(code.contains("getNextSecurityPayload"));
+        // getNextSecurityPayload should return from groupedPayloads (arrays)
+        assert!(code.contains("groupedPayloads[Math.floor"));
     }
 
     #[test]
@@ -852,15 +892,52 @@ mod tests {
 
         let code = SecurityTestGenerator::generate_payload_selection(&payloads, true);
         assert!(code.contains("securityPayloads"));
-        assert!(code.contains("Cycle through ALL payloads"));
+        assert!(code.contains("groupedPayloads"));
+        assert!(code.contains("Cycle through ALL payload groups"));
         assert!(code.contains("__payloadIndex"));
         assert!(code.contains("getNextSecurityPayload"));
         assert!(!code.contains("Math.random()"));
         // Verify VU-based offset for better payload distribution across VUs
         assert!(
-            code.contains("(__VU - 1) % securityPayloads.length"),
+            code.contains("(__VU - 1) % groupedPayloads.length"),
             "Should use VU-based offset for payload distribution"
         );
+    }
+
+    #[test]
+    fn test_generate_payload_selection_with_group_id() {
+        let payloads = vec![
+            SecurityPayload::new(
+                "/test?param=attack".to_string(),
+                SecurityCategory::SqlInjection,
+                "URI part".to_string(),
+            )
+            .with_group_id("942290-1".to_string()),
+            SecurityPayload::new(
+                "ModSecurity CRS 3 Tests".to_string(),
+                SecurityCategory::SqlInjection,
+                "Header part".to_string(),
+            )
+            .with_location(PayloadLocation::Header)
+            .with_header_name("User-Agent".to_string())
+            .with_group_id("942290-1".to_string()),
+        ];
+
+        let code = SecurityTestGenerator::generate_payload_selection(&payloads, false);
+        assert!(code.contains("groupId: '942290-1'"), "Grouped payloads should have groupId set");
+        assert!(code.contains("groupedPayloads"), "Should emit groupedPayloads array-of-arrays");
+    }
+
+    #[test]
+    fn test_generate_payload_selection_ungrouped_null_group_id() {
+        let payloads = vec![SecurityPayload::new(
+            "' OR '1'='1".to_string(),
+            SecurityCategory::SqlInjection,
+            "Basic SQLi".to_string(),
+        )];
+
+        let code = SecurityTestGenerator::generate_payload_selection(&payloads, false);
+        assert!(code.contains("groupId: null"), "Ungrouped payloads should have groupId: null");
     }
 
     #[test]

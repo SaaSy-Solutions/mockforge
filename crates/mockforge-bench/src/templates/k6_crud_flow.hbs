@@ -358,29 +358,30 @@ export default function () {
       {{/if}}
 
       {{#if @root.security_testing_enabled}}
-      // Security testing: get next payload and apply to request
-      const secPayload = typeof getNextSecurityPayload === 'function' ? getNextSecurityPayload() : null;
+      // Security testing: get next payload group and apply to request
+      const secPayloadGroup = typeof getNextSecurityPayload === 'function' ? getNextSecurityPayload() : [];
       let requestHeaders = { ...headers };
-      if (secPayload) {
-        // Log the security payload being tested
-        console.log(`[SECURITY TEST] Rule: ${secPayload.description}, Category: ${secPayload.category}, Location: ${secPayload.location}`);
-
-        // Inject payload based on its designated location
+      let secBodyPayload = null;
+      let hasSecCookie = false;
+      for (const secPayload of secPayloadGroup) {
+        if (secPayload.location === 'header' && secPayload.headerName) {
+          requestHeaders[secPayload.headerName] = secPayload.payload;
+          if (secPayload.headerName === 'Cookie') hasSecCookie = true;
+        }
         if (secPayload.location === 'uri') {
-          // Inject into URL - use the full payload as the URI if it starts with /
-          // Otherwise append as query parameter
           if (secPayload.payload.startsWith('/')) {
             path = secPayload.payload;
           } else {
             const separator = path.includes('?') ? '&' : '?';
             path = `${path}${separator}test=${secPayload.payload}`;
           }
-        } else if (secPayload.location === 'header' && secPayload.headerName) {
-          // Inject into the specified header
-          requestHeaders[secPayload.headerName] = secPayload.payload;
         }
-        // Note: body payloads are handled by applySecurityPayload below
+        if (secPayload.location === 'body') {
+          secBodyPayload = secPayload;
+        }
       }
+      // Skip CookieJar when security payload sets Cookie header (jar overrides manual Cookie headers)
+      const secRequestOpts = hasSecCookie ? { headers: requestHeaders } : { headers: requestHeaders, jar: new http.CookieJar() };
       {{/if}}
 
       {{#if this.use_body}}
@@ -396,8 +397,8 @@ export default function () {
       {{/if}}
       {{#if @root.security_testing_enabled}}
       // Apply security payload to body if available
-      if (secPayload && typeof applySecurityPayload === 'function') {
-        payload = applySecurityPayload(payload, [], secPayload);
+      if (secBodyPayload && typeof applySecurityPayload === 'function') {
+        payload = applySecurityPayload(payload, [], secBodyPayload);
       }
       {{/if}}
       {{#if @root.error_injection_enabled}}
@@ -407,7 +408,7 @@ export default function () {
       }
       {{/if}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: new http.CookieJar() });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), secRequestOpts);
       {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: new http.CookieJar() });
       {{/if}}
@@ -426,8 +427,8 @@ export default function () {
       {{/if}}
       {{#if @root.security_testing_enabled}}
       // Apply security payload to body if available
-      if (secPayload && typeof applySecurityPayload === 'function') {
-        payload = applySecurityPayload(payload, [], secPayload);
+      if (secBodyPayload && typeof applySecurityPayload === 'function') {
+        payload = applySecurityPayload(payload, [], secBodyPayload);
       }
       {{/if}}
       {{#if @root.error_injection_enabled}}
@@ -437,19 +438,19 @@ export default function () {
       }
       {{/if}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers: requestHeaders, jar: new http.CookieJar() });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), secRequestOpts);
       {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: new http.CookieJar() });
       {{/if}}
       {{else if this.is_get_or_head}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers: requestHeaders, jar: new http.CookieJar() });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, secRequestOpts);
       {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, { headers, jar: new http.CookieJar() });
       {{/if}}
       {{else}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers: requestHeaders, jar: new http.CookieJar() });
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, secRequestOpts);
       {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers, jar: new http.CookieJar() });
       {{/if}}

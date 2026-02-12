@@ -22,6 +22,7 @@ use mockforge_bench::security_payloads::{
 };
 use mockforge_bench::spec_parser::SpecParser;
 use mockforge_bench::target_parser::parse_targets_file;
+use mockforge_bench::wafbench::WafBenchLoader;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -241,11 +242,11 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
 
     // V2: CALLING code is present (rendered by template with security_testing_enabled=true)
     assert!(
-        script.contains("const secPayload = typeof getNextSecurityPayload"),
-        "Must contain secPayload = getNextSecurityPayload() CALL"
+        script.contains("const secPayloadGroup = typeof getNextSecurityPayload"),
+        "Must contain secPayloadGroup = getNextSecurityPayload() CALL"
     );
 
-    // V3: Header injection code
+    // V3: Header injection code (inside the for loop over secPayloadGroup)
     assert!(
         script.contains("secPayload.location === 'header'"),
         "Must contain header location check for header injection"
@@ -253,6 +254,10 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
     assert!(
         script.contains("const requestHeaders = { ..."),
         "Must spread headers into mutable copy for injection"
+    );
+    assert!(
+        script.contains("for (const secPayload of secPayloadGroup)"),
+        "Must loop over secPayloadGroup"
     );
 
     // V4: URI injection code (raw payloads for WAF detection)
@@ -272,15 +277,15 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
 
     // V5: Body injection code (for POST/PUT/PATCH operations)
     assert!(
-        script.contains("applySecurityPayload(payload, [], secPayload)"),
-        "Must contain applySecurityPayload() CALL for body injection"
+        script.contains("applySecurityPayload(payload, [], secBodyPayload)"),
+        "Must contain applySecurityPayload() CALL with secBodyPayload for body injection"
     );
 
     // V6: Ordering - definitions before options, calls inside default function
     let def_pos = script.find("function getNextSecurityPayload()").unwrap();
     let options_pos = script.find("export const options").unwrap();
     let default_fn_pos = script.find("export default function").unwrap();
-    let call_pos = script.find("const secPayload = typeof getNextSecurityPayload").unwrap();
+    let call_pos = script.find("const secPayloadGroup = typeof getNextSecurityPayload").unwrap();
 
     assert!(def_pos < options_pos, "Definitions must come before export const options");
     assert!(call_pos > default_fn_pos, "Calling code must be inside export default function");
@@ -318,4 +323,239 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
     println!("  - Calling code (body injection): ✓");
     println!("  - Correct ordering: ✓");
     println!("  - requestUrl used in all HTTP calls: ✓");
+}
+
+/// End-to-end test: create synthetic WAFBench YAML with multi-part test cases,
+/// load them through the real pipeline, generate a k6 script, and verify:
+/// 1. Multi-part test cases are grouped together in groupedPayloads
+/// 2. Body payloads are form-URL-decoded
+/// 3. getNextSecurityPayload() returns arrays
+/// 4. Template uses secPayloadGroup loop
+#[tokio::test]
+async fn test_issue_79_wafbench_grouped_payloads_e2e() {
+    // Step 1: Create synthetic WAFBench YAML with a multi-part test case
+    // (rule 942290 needs URI + User-Agent header together)
+    let temp_dir = std::env::temp_dir().join("mockforge_test_wafbench_grouping");
+    std::fs::create_dir_all(&temp_dir).expect("Should create temp dir");
+
+    let yaml_content = r#"
+meta:
+  author: test
+  description: "Tests for SQL injection rule 942290"
+  enabled: true
+  name: "942290.yaml"
+
+tests:
+  - desc: "SQL injection with URI and User-Agent"
+    test_title: "942290-1"
+    stages:
+      - stage:
+          input:
+            dest_addr: 127.0.0.1
+            headers:
+              Host: localhost
+              User-Agent: "ModSecurity CRS 3 Tests"
+            method: GET
+            port: 80
+            uri: "/test?id=2"
+          output:
+            log_contains: id "942290"
+  - desc: "SQL injection with body payload"
+    test_title: "942240-1"
+    stages:
+      - stage:
+          input:
+            dest_addr: 127.0.0.1
+            headers:
+              Host: localhost
+              Content-Type: "application/x-www-form-urlencoded"
+            method: POST
+            port: 80
+            uri: "/"
+            data: "%22+WAITFOR+DELAY+%270%3A0%3A5%27"
+          output:
+            log_contains: id "942240"
+  - desc: "Simple SQL injection in URI only"
+    test_title: "942100-1"
+    stages:
+      - stage:
+          input:
+            dest_addr: 127.0.0.1
+            headers: {}
+            method: GET
+            port: 80
+            uri: "/test?param=1+OR+1%3D1"
+          output:
+            log_contains: id "942100"
+"#;
+
+    let yaml_path = temp_dir.join("942290.yaml");
+    std::fs::write(&yaml_path, yaml_content).expect("Should write test YAML");
+
+    // Step 2: Load WAFBench payloads through real loader
+    let mut loader = WafBenchLoader::new();
+    loader.load_file(&yaml_path).expect("Should load WAFBench file");
+
+    let wafbench_payloads = loader.to_security_payloads();
+    assert!(!wafbench_payloads.is_empty(), "Should have loaded WAFBench payloads");
+
+    // Step 2a: Verify multi-part test 942290-1 has group_id
+    let grouped: Vec<_> = wafbench_payloads
+        .iter()
+        .filter(|p| p.group_id.as_deref() == Some("942290-1"))
+        .collect();
+    assert!(
+        grouped.len() >= 2,
+        "942290-1 should have at least 2 grouped payloads (URI + headers), got {}",
+        grouped.len()
+    );
+
+    // Step 2b: Verify single-part test 942100-1 has no group_id
+    let ungrouped: Vec<_> =
+        wafbench_payloads.iter().filter(|p| p.description.contains("942100")).collect();
+    assert!(!ungrouped.is_empty(), "Should have 942100 payloads");
+    assert!(
+        ungrouped.iter().all(|p| p.group_id.is_none()),
+        "Single-part test 942100-1 should NOT have group_id"
+    );
+
+    // Step 2c: Verify body payload is form-URL-decoded
+    use mockforge_bench::security_payloads::PayloadLocation;
+    let body_payloads: Vec<_> = wafbench_payloads
+        .iter()
+        .filter(|p| p.description.contains("942240") && p.location == PayloadLocation::Body)
+        .collect();
+    assert!(!body_payloads.is_empty(), "Should have body payload for 942240");
+    let body_payload = &body_payloads[0];
+    assert!(
+        body_payload.payload.contains('"'),
+        "Body payload should have %22 decoded to double-quote, got: {}",
+        body_payload.payload
+    );
+    assert!(
+        !body_payload.payload.contains("%22"),
+        "Body payload should NOT contain literal %22, got: {}",
+        body_payload.payload
+    );
+    assert!(
+        body_payload.payload.contains(' '),
+        "Body payload should have + decoded to space, got: {}",
+        body_payload.payload
+    );
+
+    // Step 3: Generate k6 script using real spec + WAFBench payloads
+    let spec_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("billing_subscriptions_v1.json");
+
+    let parser = SpecParser::from_file(&spec_path).await.expect("Should parse spec");
+    let operations = parser.get_operations();
+    let templates: Vec<_> = operations
+        .iter()
+        .map(RequestGenerator::generate_template)
+        .collect::<mockforge_bench::error::Result<Vec<_>>>()
+        .expect("Should generate templates");
+
+    let config = K6Config {
+        target_url: "https://api.example.com".to_string(),
+        base_path: None,
+        scenario: LoadScenario::Constant,
+        duration_secs: 30,
+        max_vus: 10,
+        threshold_percentile: "p(95)".to_string(),
+        threshold_ms: 500,
+        max_error_rate: 0.05,
+        auth_header: None,
+        custom_headers: HashMap::new(),
+        skip_tls_verify: false,
+        security_testing_enabled: true,
+    };
+
+    let generator = K6ScriptGenerator::new(config, templates);
+    let mut script = generator.generate().expect("Should generate base k6 script");
+
+    // Step 4: Inject WAFBench payload definitions (simulating generate_enhanced_script)
+    let mut additional_code = String::new();
+    additional_code.push_str(&SecurityTestGenerator::generate_payload_selection(
+        &wafbench_payloads,
+        true, // cycle_all like real WAFBench mode
+    ));
+    additional_code.push('\n');
+    additional_code.push_str(&SecurityTestGenerator::generate_apply_payload(&[]));
+    additional_code.push('\n');
+
+    if let Some(pos) = script.find("export const options") {
+        script.insert_str(
+            pos,
+            &format!("\n// === Advanced Testing Features ===\n{}\n", additional_code),
+        );
+    }
+
+    // === VERIFICATION: Generated Script ===
+
+    // V1: groupedPayloads array exists
+    assert!(
+        script.contains("const groupedPayloads"),
+        "Script must contain groupedPayloads array"
+    );
+
+    // V2: Multi-part test case 942290 has groupId set
+    assert!(
+        script.contains("groupId: '942290-1'"),
+        "Script must have groupId: '942290-1' for multi-part test case"
+    );
+
+    // V3: Single-part test has groupId: null
+    assert!(
+        script.contains("groupId: null"),
+        "Script must have groupId: null for single-part test cases"
+    );
+
+    // V4: getNextSecurityPayload returns from groupedPayloads (arrays)
+    assert!(
+        script.contains("groupedPayloads[__payloadIndex]"),
+        "getNextSecurityPayload should index into groupedPayloads (cycle-all mode)"
+    );
+
+    // V5: Template uses secPayloadGroup loop
+    assert!(
+        script.contains("for (const secPayload of secPayloadGroup)"),
+        "Template must loop over secPayloadGroup"
+    );
+
+    // V6: Template uses secBodyPayload for body injection
+    assert!(
+        script.contains("applySecurityPayload(payload, [], secBodyPayload)"),
+        "Template must use secBodyPayload (not secPayload) for body injection"
+    );
+
+    // V7: Body payload for 942240 is decoded (not literal %22)
+    assert!(
+        script.contains("WAITFOR DELAY"),
+        "Body payload must be decoded - should contain 'WAITFOR DELAY' with spaces"
+    );
+    assert!(
+        !script.contains("%22+WAITFOR"),
+        "Body payload must NOT contain literal '%22+WAITFOR' (should be decoded)"
+    );
+
+    // V8: groupedPayloads builder logic is present
+    assert!(
+        script.contains("groupMap[p.groupId]"),
+        "Script must contain grouping logic that collects by groupId"
+    );
+
+    // Cleanup
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    println!("\n✓ Issue #79: WAFBench grouped payloads E2E test PASSED");
+    println!("  - WAFBench YAML loaded: 3 test cases");
+    println!("  - Multi-part grouping (942290-1): ✓");
+    println!("  - Single-part no group (942100-1): ✓");
+    println!("  - Body URL-decoding (942240-1): ✓");
+    println!("  - groupedPayloads array: ✓");
+    println!("  - secPayloadGroup loop in template: ✓");
+    println!("  - secBodyPayload for body injection: ✓");
+    println!("  - getNextSecurityPayload returns arrays: ✓");
 }

@@ -45,25 +45,32 @@ export default function () {
   // Operation {{@index}}: {{this.display_name}}
   {
     {{#if @root.security_testing_enabled}}
-    // Get a fresh security payload for each operation so all payloads cycle
-    const secPayload = typeof getNextSecurityPayload === 'function' ? getNextSecurityPayload() : null;
-    // Copy headers and apply security payload to headers if needed
+    // Get a grouped security payload for each operation (array of related payloads)
+    const secPayloadGroup = typeof getNextSecurityPayload === 'function' ? getNextSecurityPayload() : [];
+    // Copy headers and build request URL, applying all payloads from the group
     const requestHeaders = { ...{{{this.headers}}} };
-    if (secPayload) {
-      if (secPayload.location === 'header' && secPayload.headerName) {
-        requestHeaders[secPayload.headerName] = secPayload.payload;
-      }
-    }
-    // Build request URL with optional URI security payload injection
     {{#if this.path_is_dynamic}}
     const __path = {{{this.path}}};
     let requestUrl = `${BASE_URL}${__path}`;
     {{else}}
     let requestUrl = `${BASE_URL}{{{this.path}}}`;
     {{/if}}
-    if (secPayload && secPayload.location === 'uri') {
-      requestUrl += (requestUrl.includes('?') ? '&' : '?') + 'test=' + secPayload.payload;
+    let secBodyPayload = null;
+    let hasSecCookie = false;
+    for (const secPayload of secPayloadGroup) {
+      if (secPayload.location === 'header' && secPayload.headerName) {
+        requestHeaders[secPayload.headerName] = secPayload.payload;
+        if (secPayload.headerName === 'Cookie') hasSecCookie = true;
+      }
+      if (secPayload.location === 'uri') {
+        requestUrl += (requestUrl.includes('?') ? '&' : '?') + 'test=' + secPayload.payload;
+      }
+      if (secPayload.location === 'body') {
+        secBodyPayload = secPayload;
+      }
     }
+    // Skip CookieJar when security payload sets Cookie header (jar overrides manual Cookie headers)
+    const secRequestOpts = hasSecCookie ? { headers: requestHeaders } : { headers: requestHeaders, jar: new http.CookieJar() };
     {{else}}
     const requestHeaders = {{{this.headers}}};
     {{/if}}
@@ -77,10 +84,10 @@ export default function () {
     {{/if}}
     {{#if @root.security_testing_enabled}}
     // Apply security payload to body if available
-    if (secPayload && typeof applySecurityPayload === 'function') {
-      payload = applySecurityPayload(payload, [], secPayload);
+    if (secBodyPayload && typeof applySecurityPayload === 'function') {
+      payload = applySecurityPayload(payload, [], secBodyPayload);
     }
-    const res = http.{{this.method}}(requestUrl, JSON.stringify(payload), { headers: requestHeaders, jar: new http.CookieJar() });
+    const res = http.{{this.method}}(requestUrl, JSON.stringify(payload), secRequestOpts);
     {{else}}
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};
@@ -92,7 +99,7 @@ export default function () {
     {{else if this.is_get_or_head}}
     // GET and HEAD only take 2 args: http.get(url, params)
     {{#if @root.security_testing_enabled}}
-    const res = http.{{this.method}}(requestUrl, { headers: requestHeaders, jar: new http.CookieJar() });
+    const res = http.{{this.method}}(requestUrl, secRequestOpts);
     {{else}}
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};
@@ -104,7 +111,7 @@ export default function () {
     {{else}}
     // POST, PUT, PATCH, DELETE take 3 args: http.post(url, body, params)
     {{#if @root.security_testing_enabled}}
-    const res = http.{{this.method}}(requestUrl, null, { headers: requestHeaders, jar: new http.CookieJar() });
+    const res = http.{{this.method}}(requestUrl, null, secRequestOpts);
     {{else}}
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};

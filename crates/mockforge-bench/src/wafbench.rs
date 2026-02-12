@@ -611,14 +611,45 @@ impl WafBenchLoader {
         &self.stats
     }
 
+    /// Decode a form-URL-encoded body payload.
+    /// Replaces `+` with space (form-encoding convention), then decodes `%XX` sequences.
+    fn decode_form_encoded_body(value: &str) -> String {
+        // Replace + with space first (form-encoding convention)
+        let plus_decoded = value.replace('+', " ");
+        // Then decode %XX sequences
+        urlencoding::decode(&plus_decoded)
+            .map(|s| s.into_owned())
+            .unwrap_or(plus_decoded)
+    }
+
     /// Convert loaded tests to SecurityPayload format for use with existing security testing
     pub fn to_security_payloads(&self) -> Vec<SecurityPayload> {
         let mut payloads = Vec::new();
 
         for test_case in &self.test_cases {
+            // Assign group_id when a test case has multiple payloads
+            let group_id = if test_case.payloads.len() > 1 {
+                Some(test_case.test_id.clone())
+            } else {
+                None
+            };
+
             for payload in &test_case.payloads {
                 // Extract just the attack payload part if possible
-                let payload_str = self.extract_payload_value(&payload.value);
+                let payload_str = match payload.location {
+                    PayloadLocation::Body => {
+                        // Form-URL-decode body payloads so WAFs see the real characters
+                        Self::decode_form_encoded_body(&payload.value)
+                    }
+                    PayloadLocation::Uri => {
+                        // Extract attack payload from URI, URL-decode, strip path prefix
+                        self.extract_uri_payload(&payload.value)
+                    }
+                    PayloadLocation::Header => {
+                        // Headers are used as-is (Cookie values, User-Agent, etc.)
+                        payload.value.clone()
+                    }
+                };
 
                 // Convert local PayloadLocation to SecurityPayloadLocation
                 let location = match payload.location {
@@ -643,6 +674,11 @@ impl WafBenchLoader {
                     sec_payload = sec_payload.with_header_name(header_name.clone());
                 }
 
+                // Add group ID for multi-part test cases
+                if let Some(gid) = &group_id {
+                    sec_payload = sec_payload.with_group_id(gid.clone());
+                }
+
                 payloads.push(sec_payload);
             }
         }
@@ -650,8 +686,14 @@ impl WafBenchLoader {
         payloads
     }
 
-    /// Extract the actual attack payload from a URI or value
-    fn extract_payload_value(&self, value: &str) -> String {
+    /// Extract the actual attack payload from a URI.
+    ///
+    /// For URIs with query parameters (e.g., `/?var=EXECUTE%20IMMEDIATE%20%22`),
+    /// extracts and URL-decodes the first parameter value.
+    ///
+    /// For path-only URIs (e.g., `/1234%20OR%201=1`), URL-decodes the path and
+    /// strips the leading `/` which is a URI artifact, not part of the attack.
+    fn extract_uri_payload(&self, value: &str) -> String {
         // If it's a URI with query params, extract the first parameter value
         // (URL-decoded). CRS test files put the attack in query params.
         if value.contains('?') {
@@ -667,8 +709,17 @@ impl WafBenchLoader {
             }
         }
 
-        // Return the full value if we can't extract a specific payload
-        value.to_string()
+        // For path-only URIs, URL-decode and strip leading /
+        // e.g., /1234%20OR%201=1 → 1234 OR 1=1
+        let decoded = urlencoding::decode(value)
+            .map(|s| s.into_owned())
+            .unwrap_or_else(|_| value.to_string());
+        let trimmed = decoded.trim_start_matches('/');
+        if trimmed.is_empty() {
+            // Don't return empty string for bare "/" paths
+            return decoded;
+        }
+        trimmed.to_string()
     }
 }
 
@@ -747,12 +798,197 @@ tests:
     }
 
     #[test]
-    fn test_extract_payload_value() {
+    fn test_extract_uri_payload_with_query_params() {
         let loader = WafBenchLoader::new();
 
+        // URI with query params: extracts and decodes the parameter value
         let uri = "/test?param=%3Cscript%3Ealert(1)%3C/script%3E";
-        let payload = loader.extract_payload_value(uri);
-        assert!(payload.contains("<script>") || payload.contains("script"));
+        let payload = loader.extract_uri_payload(uri);
+        assert_eq!(payload, "<script>alert(1)</script>");
+    }
+
+    #[test]
+    fn test_extract_uri_payload_path_only() {
+        let loader = WafBenchLoader::new();
+
+        // Path-only URI: URL-decodes and strips leading /
+        let uri = "/1234%20OR%201=1";
+        let payload = loader.extract_uri_payload(uri);
+        assert_eq!(payload, "1234 OR 1=1");
+
+        // Path with quotes and special chars
+        let uri2 = "/foo')waitfor%20delay'5%3a0%3a20'--";
+        let payload2 = loader.extract_uri_payload(uri2);
+        assert_eq!(payload2, "foo')waitfor delay'5:0:20'--");
+
+        // Bare slash returns "/" (not empty)
+        let uri3 = "/";
+        let payload3 = loader.extract_uri_payload(uri3);
+        assert_eq!(payload3, "/");
+    }
+
+    #[test]
+    fn test_group_id_assigned_for_multi_part_test_cases() {
+        let yaml = r#"
+meta:
+  author: test
+  description: Multi-part test
+  enabled: true
+  name: test.yaml
+
+tests:
+  - desc: "Multi-part attack with URI and header"
+    test_title: "942290-1"
+    stages:
+      - input:
+          dest_addr: "127.0.0.1"
+          headers:
+            Host: "localhost"
+            User-Agent: "ModSecurity CRS 3 Tests"
+          method: "GET"
+          port: 80
+          uri: "/test?param=attack"
+        output:
+          status: [403]
+"#;
+
+        let file: WafBenchFile = serde_yaml::from_str(yaml).unwrap();
+        let mut loader = WafBenchLoader::new();
+        loader.stats.files_processed += 1;
+
+        let category = SecurityCategory::SqlInjection;
+        for test in &file.tests {
+            if let Some(test_case) = loader.parse_test_case(test, category) {
+                loader.test_cases.push(test_case);
+            }
+        }
+
+        let payloads = loader.to_security_payloads();
+        // This test has URI + 2 headers = 3 payloads, all should share a group_id
+        assert!(payloads.len() >= 2, "Should have at least 2 payloads");
+        let group_ids: Vec<_> = payloads.iter().map(|p| p.group_id.clone()).collect();
+        assert!(
+            group_ids.iter().all(|g| g.is_some()),
+            "All payloads in multi-part test should have group_id"
+        );
+        assert!(
+            group_ids.iter().all(|g| g.as_deref() == Some("942290-1")),
+            "All payloads should share the same group_id"
+        );
+    }
+
+    #[test]
+    fn test_single_payload_no_group_id() {
+        let yaml = r#"
+meta:
+  author: test
+  description: Single payload test
+  enabled: true
+  name: test.yaml
+
+tests:
+  - desc: "Simple XSS"
+    test_title: "941100-1"
+    stages:
+      - input:
+          dest_addr: "127.0.0.1"
+          headers: {}
+          method: "GET"
+          port: 80
+          uri: "/test?param=<script>alert(1)</script>"
+        output:
+          status: [403]
+"#;
+
+        let file: WafBenchFile = serde_yaml::from_str(yaml).unwrap();
+        let mut loader = WafBenchLoader::new();
+        loader.stats.files_processed += 1;
+
+        let category = SecurityCategory::Xss;
+        for test in &file.tests {
+            if let Some(test_case) = loader.parse_test_case(test, category) {
+                loader.test_cases.push(test_case);
+            }
+        }
+
+        let payloads = loader.to_security_payloads();
+        assert_eq!(payloads.len(), 1, "Should have exactly 1 payload");
+        assert!(payloads[0].group_id.is_none(), "Single-payload test should NOT have group_id");
+    }
+
+    #[test]
+    fn test_body_payload_form_url_decoded() {
+        let yaml = r#"
+meta:
+  author: test
+  description: Body payload test
+  enabled: true
+  name: test.yaml
+
+tests:
+  - desc: "SQL injection in body"
+    test_title: "942240-1"
+    stages:
+      - stage:
+          input:
+            dest_addr: 127.0.0.1
+            headers:
+              Host: localhost
+            method: POST
+            port: 80
+            uri: "/"
+            data: "%22+WAITFOR+DELAY+%270%3A0%3A5%27"
+          output:
+            log_contains: id "942240"
+"#;
+
+        let file: WafBenchFile = serde_yaml::from_str(yaml).unwrap();
+        let mut loader = WafBenchLoader::new();
+        loader.stats.files_processed += 1;
+
+        let category = SecurityCategory::SqlInjection;
+        for test in &file.tests {
+            if let Some(test_case) = loader.parse_test_case(test, category) {
+                loader.test_cases.push(test_case);
+            }
+        }
+
+        let payloads = loader.to_security_payloads();
+        // Find the body payload
+        let body_payload = payloads
+            .iter()
+            .find(|p| p.location == SecurityPayloadLocation::Body)
+            .expect("Should have a body payload");
+
+        // The body payload should be form-URL-decoded
+        assert!(
+            body_payload.payload.contains('"'),
+            "Body payload should have decoded %22 to double-quote: {}",
+            body_payload.payload
+        );
+        assert!(
+            body_payload.payload.contains(' '),
+            "Body payload should have decoded + to space: {}",
+            body_payload.payload
+        );
+        assert!(
+            !body_payload.payload.contains("%22"),
+            "Body payload should NOT contain literal %22: {}",
+            body_payload.payload
+        );
+    }
+
+    #[test]
+    fn test_decode_form_encoded_body() {
+        assert_eq!(
+            WafBenchLoader::decode_form_encoded_body("%22+WAITFOR+DELAY+%27%0A"),
+            "\" WAITFOR DELAY '\n"
+        );
+        assert_eq!(WafBenchLoader::decode_form_encoded_body("normal+text"), "normal text");
+        assert_eq!(
+            WafBenchLoader::decode_form_encoded_body("no+encoding+needed"),
+            "no encoding needed"
+        );
     }
 
     #[test]
