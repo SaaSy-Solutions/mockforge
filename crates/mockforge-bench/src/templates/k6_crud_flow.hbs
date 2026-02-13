@@ -369,8 +369,9 @@ export default function () {
           if (secPayload.headerName === 'Cookie') hasSecCookie = true;
         }
         if (secPayload.location === 'uri') {
-          if (secPayload.payload.startsWith('/')) {
-            path = secPayload.payload;
+          if (secPayload.injectAsPath) {
+            // Replace URL path so WAF inspects via REQUEST_FILENAME (e.g., CRS 942101)
+            path = `/${encodeURI(secPayload.payload)}`;
           } else {
             const separator = path.includes('?') ? '&' : '?';
             path = `${path}${separator}test=${encodeURIComponent(secPayload.payload)}`;
@@ -397,8 +398,15 @@ export default function () {
       {{/if}}
       {{#if @root.security_testing_enabled}}
       // Apply security payload to body if available
-      if (secBodyPayload && typeof applySecurityPayload === 'function') {
+      let requestBody;
+      if (secBodyPayload && secBodyPayload.formBody) {
+        requestBody = secBodyPayload.formBody;
+        requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+      } else if (secBodyPayload && typeof applySecurityPayload === 'function') {
         payload = applySecurityPayload(payload, [], secBodyPayload);
+        requestBody = JSON.stringify(payload);
+      } else {
+        requestBody = JSON.stringify(payload);
       }
       {{/if}}
       {{#if @root.error_injection_enabled}}
@@ -408,7 +416,7 @@ export default function () {
       }
       {{/if}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), secRequestOpts);
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, requestBody, secRequestOpts);
       {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: new http.CookieJar() });
       {{/if}}
@@ -427,8 +435,15 @@ export default function () {
       {{/if}}
       {{#if @root.security_testing_enabled}}
       // Apply security payload to body if available
-      if (secBodyPayload && typeof applySecurityPayload === 'function') {
+      let requestBody;
+      if (secBodyPayload && secBodyPayload.formBody) {
+        requestBody = secBodyPayload.formBody;
+        requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+      } else if (secBodyPayload && typeof applySecurityPayload === 'function') {
         payload = applySecurityPayload(payload, [], secBodyPayload);
+        requestBody = JSON.stringify(payload);
+      } else {
+        requestBody = JSON.stringify(payload);
       }
       {{/if}}
       {{#if @root.error_injection_enabled}}
@@ -438,7 +453,7 @@ export default function () {
       }
       {{/if}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), secRequestOpts);
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, requestBody, secRequestOpts);
       {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, JSON.stringify(payload), { headers, jar: new http.CookieJar() });
       {{/if}}
@@ -450,7 +465,13 @@ export default function () {
       {{/if}}
       {{else}}
       {{#if @root.security_testing_enabled}}
-      const res = http.{{this.method}}(`${BASE_URL}${path}`, null, secRequestOpts);
+      // Send form-encoded body if available, otherwise null
+      let requestBody = null;
+      if (secBodyPayload && secBodyPayload.formBody) {
+        requestBody = secBodyPayload.formBody;
+        requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+      }
+      const res = http.{{this.method}}(`${BASE_URL}${path}`, requestBody, secRequestOpts);
       {{else}}
       const res = http.{{this.method}}(`${BASE_URL}${path}`, null, { headers, jar: new http.CookieJar() });
       {{/if}}

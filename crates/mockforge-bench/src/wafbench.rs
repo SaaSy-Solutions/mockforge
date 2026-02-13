@@ -702,6 +702,18 @@ impl WafBenchLoader {
                     sec_payload = sec_payload.with_group_id(gid.clone());
                 }
 
+                // URI payloads without '?' are path-only attacks (e.g., 942101: POST /1234%20OR%201=1)
+                // These need to replace the request path so WAF inspects via REQUEST_FILENAME
+                if payload.location == PayloadLocation::Uri && !payload.value.contains('?') {
+                    sec_payload = sec_payload.with_inject_as_path();
+                }
+
+                // Body payloads: preserve the raw CRS data field for form-encoded delivery
+                // (e.g., 942432: data "var=;;dd foo bar" sent as application/x-www-form-urlencoded)
+                if payload.location == PayloadLocation::Body {
+                    sec_payload = sec_payload.with_form_encoded_body(payload.value.clone());
+                }
+
                 payloads.push(sec_payload);
             }
         }
@@ -1038,6 +1050,156 @@ tests:
         assert_eq!(WafBenchLoader::strip_form_key(""), "");
         // Only key, no value
         assert_eq!(WafBenchLoader::strip_form_key("var="), "");
+    }
+
+    #[test]
+    fn test_uri_path_only_gets_inject_as_path() {
+        let yaml = r#"
+meta:
+  author: test
+  description: Path injection test
+  enabled: true
+  name: test.yaml
+
+tests:
+  - desc: "Path-based SQL injection"
+    test_title: "942101-1"
+    stages:
+      - stage:
+          input:
+            dest_addr: 127.0.0.1
+            headers:
+              Host: localhost
+            method: POST
+            port: 80
+            uri: "/1234%20OR%201=1"
+          output:
+            log_contains: id "942101"
+"#;
+
+        let file: WafBenchFile = serde_yaml::from_str(yaml).unwrap();
+        let mut loader = WafBenchLoader::new();
+        loader.stats.files_processed += 1;
+
+        let category = SecurityCategory::SqlInjection;
+        for test in &file.tests {
+            if let Some(test_case) = loader.parse_test_case(test, category) {
+                loader.test_cases.push(test_case);
+            }
+        }
+
+        let payloads = loader.to_security_payloads();
+        let uri_payload = payloads
+            .iter()
+            .find(|p| p.location == SecurityPayloadLocation::Uri)
+            .expect("Should have URI payload");
+
+        assert_eq!(
+            uri_payload.inject_as_path,
+            Some(true),
+            "Path-only URI should have inject_as_path=true"
+        );
+    }
+
+    #[test]
+    fn test_uri_with_query_no_inject_as_path() {
+        let yaml = r#"
+meta:
+  author: test
+  description: Query param test
+  enabled: true
+  name: test.yaml
+
+tests:
+  - desc: "Query-param SQL injection"
+    test_title: "942100-1"
+    stages:
+      - stage:
+          input:
+            dest_addr: 127.0.0.1
+            headers: {}
+            method: GET
+            port: 80
+            uri: "/test?param=1+OR+1%3D1"
+          output:
+            log_contains: id "942100"
+"#;
+
+        let file: WafBenchFile = serde_yaml::from_str(yaml).unwrap();
+        let mut loader = WafBenchLoader::new();
+        loader.stats.files_processed += 1;
+
+        let category = SecurityCategory::SqlInjection;
+        for test in &file.tests {
+            if let Some(test_case) = loader.parse_test_case(test, category) {
+                loader.test_cases.push(test_case);
+            }
+        }
+
+        let payloads = loader.to_security_payloads();
+        let uri_payload = payloads
+            .iter()
+            .find(|p| p.location == SecurityPayloadLocation::Uri)
+            .expect("Should have URI payload");
+
+        assert!(
+            uri_payload.inject_as_path.is_none(),
+            "URI with query params should NOT have inject_as_path"
+        );
+    }
+
+    #[test]
+    fn test_body_payload_gets_form_encoded_body() {
+        let yaml = r#"
+meta:
+  author: test
+  description: Form body test
+  enabled: true
+  name: test.yaml
+
+tests:
+  - desc: "Form-encoded body attack"
+    test_title: "942432-1"
+    stages:
+      - stage:
+          input:
+            dest_addr: 127.0.0.1
+            headers:
+              Host: localhost
+            method: POST
+            port: 80
+            uri: "/"
+            data: "var=%3B%3Bdd+foo+bar"
+          output:
+            log_contains: id "942432"
+"#;
+
+        let file: WafBenchFile = serde_yaml::from_str(yaml).unwrap();
+        let mut loader = WafBenchLoader::new();
+        loader.stats.files_processed += 1;
+
+        let category = SecurityCategory::SqlInjection;
+        for test in &file.tests {
+            if let Some(test_case) = loader.parse_test_case(test, category) {
+                loader.test_cases.push(test_case);
+            }
+        }
+
+        let payloads = loader.to_security_payloads();
+        let body_payload = payloads
+            .iter()
+            .find(|p| p.location == SecurityPayloadLocation::Body)
+            .expect("Should have body payload");
+
+        assert!(
+            body_payload.form_encoded_body.is_some(),
+            "Body payload should have form_encoded_body set"
+        );
+        assert_eq!(
+            body_payload.form_encoded_body.as_deref().unwrap(),
+            "var=%3B%3Bdd+foo+bar",
+            "form_encoded_body should contain the raw CRS data value"
+        );
     }
 
     #[test]

@@ -24,6 +24,17 @@
 
 - Nothing yet.
 
+## [0.3.54] - 2026-02-13
+
+### Fixed
+
+- **[Bench]** fix(bench): deliver CRS payloads as path injection + form-encoded body (#79)
+  - Added `inject_as_path` field to `SecurityPayload` — URI payloads without query params (e.g., CRS 942101: `POST /1234%20OR%201=1`) now replace the request path via `encodeURI()` so WAFs inspect `REQUEST_FILENAME` instead of `ARGS`
+  - Added `form_encoded_body` field to `SecurityPayload` — body payloads from CRS tests (e.g., 942432: `var=;;dd foo bar`) now sent as `application/x-www-form-urlencoded` so WAFs parse form data into `ARGS` for character counting
+  - Updated `k6_script.hbs` and `k6_crud_flow.hbs` templates to handle both new delivery mechanisms
+  - Replaced unreliable `startsWith('/')` URI heuristic in CRUD flow template with explicit `injectAsPath` flag
+  - Expected SQLi detection: 46/46 rules (100%), up from 45/46 (97.8%)
+
 ## [0.3.53] - 2026-02-13
 
 ### Fixed

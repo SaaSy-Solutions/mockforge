@@ -1107,6 +1107,20 @@ export default function() {{}}
             script.contains("const requestHeaders = { ..."),
             "Script should spread headers into mutable copy for security payload injection"
         );
+        // Verify injectAsPath handling for path-based URI injection
+        assert!(
+            script.contains("secPayload.injectAsPath"),
+            "Script should check injectAsPath for path-based URI injection"
+        );
+        // Verify formBody handling for form-encoded body delivery
+        assert!(
+            script.contains("secBodyPayload.formBody"),
+            "Script should check formBody for form-encoded body delivery"
+        );
+        assert!(
+            script.contains("application/x-www-form-urlencoded"),
+            "Script should set Content-Type for form-encoded body"
+        );
         // Verify secPayloadGroup is fetched per-operation (inside operation block), not per-iteration
         let op_comment_pos =
             script.find("// Operation 0:").expect("Should have Operation 0 comment");
@@ -1182,6 +1196,14 @@ export default function() {{}}
         assert!(
             !script.contains("secRequestOpts"),
             "Script should NOT contain secRequestOpts when security_testing_enabled is false"
+        );
+        assert!(
+            !script.contains("injectAsPath"),
+            "Script should NOT contain injectAsPath when security_testing_enabled is false"
+        );
+        assert!(
+            !script.contains("formBody"),
+            "Script should NOT contain formBody when security_testing_enabled is false"
         );
     }
 
@@ -1283,6 +1305,14 @@ export default function() {{}}
             script.contains("for (const secPayload of secPayloadGroup)"),
             "Final script must loop over secPayloadGroup"
         );
+        assert!(
+            script.contains("secPayload.injectAsPath"),
+            "Final script must check injectAsPath for path-based URI injection"
+        );
+        assert!(
+            script.contains("secBodyPayload.formBody"),
+            "Final script must check formBody for form-encoded body delivery"
+        );
 
         // Verify ordering: definitions come BEFORE export default function (which has the calls)
         let def_pos = script.find("function getNextSecurityPayload()").unwrap();
@@ -1353,6 +1383,15 @@ export default function() {{}}
         assert!(
             script.contains("'test=' + encodeURIComponent(secPayload.payload)"),
             "Script should URL-encode security payload in query string for valid HTTP"
+        );
+        // Verify injectAsPath check for path-based injection
+        assert!(
+            script.contains("secPayload.injectAsPath"),
+            "Script should check injectAsPath for path-based URI injection"
+        );
+        assert!(
+            script.contains("encodeURI(secPayload.payload)"),
+            "Script should use encodeURI for path-based injection"
         );
         // Verify the GET request uses requestUrl
         assert!(

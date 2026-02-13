@@ -63,7 +63,12 @@ export default function () {
         if (secPayload.headerName === 'Cookie') hasSecCookie = true;
       }
       if (secPayload.location === 'uri') {
-        requestUrl += (requestUrl.includes('?') ? '&' : '?') + 'test=' + encodeURIComponent(secPayload.payload);
+        if (secPayload.injectAsPath) {
+          // Replace URL path so WAF inspects via REQUEST_FILENAME (e.g., CRS 942101)
+          requestUrl = `${BASE_URL}/${encodeURI(secPayload.payload)}`;
+        } else {
+          requestUrl += (requestUrl.includes('?') ? '&' : '?') + 'test=' + encodeURIComponent(secPayload.payload);
+        }
       }
       if (secPayload.location === 'body') {
         secBodyPayload = secPayload;
@@ -84,10 +89,18 @@ export default function () {
     {{/if}}
     {{#if @root.security_testing_enabled}}
     // Apply security payload to body if available
-    if (secBodyPayload && typeof applySecurityPayload === 'function') {
+    let requestBody;
+    if (secBodyPayload && secBodyPayload.formBody) {
+      // Send raw form-encoded body for WAF form-field parsing (e.g., CRS 942432)
+      requestBody = secBodyPayload.formBody;
+      requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+    } else if (secBodyPayload && typeof applySecurityPayload === 'function') {
       payload = applySecurityPayload(payload, [], secBodyPayload);
+      requestBody = JSON.stringify(payload);
+    } else {
+      requestBody = JSON.stringify(payload);
     }
-    const res = http.{{this.method}}(requestUrl, JSON.stringify(payload), secRequestOpts);
+    const res = http.{{this.method}}(requestUrl, requestBody, secRequestOpts);
     {{else}}
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};
@@ -111,7 +124,13 @@ export default function () {
     {{else}}
     // POST, PUT, PATCH, DELETE take 3 args: http.post(url, body, params)
     {{#if @root.security_testing_enabled}}
-    const res = http.{{this.method}}(requestUrl, null, secRequestOpts);
+    // Send form-encoded body if available, otherwise null
+    let requestBody = null;
+    if (secBodyPayload && secBodyPayload.formBody) {
+      requestBody = secBodyPayload.formBody;
+      requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+    }
+    const res = http.{{this.method}}(requestUrl, requestBody, secRequestOpts);
     {{else}}
     {{#if this.path_is_dynamic}}
     const url = {{{this.path}}};

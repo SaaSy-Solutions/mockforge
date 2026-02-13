@@ -136,6 +136,14 @@ pub struct SecurityPayload {
     /// (e.g., CRS test cases with URI + headers + body parts)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_id: Option<String>,
+    /// When true, URI payload replaces the request path instead of being appended as a query param.
+    /// Used for CRS tests where the attack IS the path (e.g., 942101: `POST /1234%20OR%201=1`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inject_as_path: Option<bool>,
+    /// Raw form-encoded body string for sending as `application/x-www-form-urlencoded`.
+    /// Used for CRS tests that send form-encoded data (e.g., 942432: `var=;;dd foo bar`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub form_encoded_body: Option<String>,
 }
 
 impl SecurityPayload {
@@ -149,6 +157,8 @@ impl SecurityPayload {
             location: PayloadLocation::Uri,
             header_name: None,
             group_id: None,
+            inject_as_path: None,
+            form_encoded_body: None,
         }
     }
 
@@ -173,6 +183,18 @@ impl SecurityPayload {
     /// Set group ID for multi-part payloads that must be sent together
     pub fn with_group_id(mut self, group_id: String) -> Self {
         self.group_id = Some(group_id);
+        self
+    }
+
+    /// Mark this URI payload as path injection (replaces path instead of query param)
+    pub fn with_inject_as_path(mut self) -> Self {
+        self.inject_as_path = Some(true);
+        self
+    }
+
+    /// Set raw form-encoded body for `application/x-www-form-urlencoded` delivery
+    pub fn with_form_encoded_body(mut self, raw: String) -> Self {
+        self.form_encoded_body = Some(raw);
         self
     }
 }
@@ -598,9 +620,20 @@ impl SecurityTestGenerator {
                 .map(|g| format!("'{}'", escape_js_string(g)))
                 .unwrap_or_else(|| "null".to_string());
 
+            let inject_as_path = if payload.inject_as_path == Some(true) {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            };
+            let form_body = payload
+                .form_encoded_body
+                .as_ref()
+                .map(|b| format!("'{}'", escape_js_string(b)))
+                .unwrap_or_else(|| "null".to_string());
+
             code.push_str(&format!(
-                "  {{ payload: '{}', category: '{}', description: '{}', location: '{}', headerName: {}, groupId: {} }},\n",
-                escaped, payload.category, escaped_desc, payload.location, header_name, group_id
+                "  {{ payload: '{}', category: '{}', description: '{}', location: '{}', headerName: {}, groupId: {}, injectAsPath: {}, formBody: {} }},\n",
+                escaped, payload.category, escaped_desc, payload.location, header_name, group_id, inject_as_path, form_body
             ));
         }
 
@@ -938,6 +971,60 @@ mod tests {
 
         let code = SecurityTestGenerator::generate_payload_selection(&payloads, false);
         assert!(code.contains("groupId: null"), "Ungrouped payloads should have groupId: null");
+    }
+
+    #[test]
+    fn test_generate_payload_selection_inject_as_path() {
+        let payloads = vec![SecurityPayload::new(
+            "1234 OR 1=1".to_string(),
+            SecurityCategory::SqlInjection,
+            "Path-based SQLi".to_string(),
+        )
+        .with_inject_as_path()];
+
+        let code = SecurityTestGenerator::generate_payload_selection(&payloads, false);
+        assert!(
+            code.contains("injectAsPath: true"),
+            "Path injection payloads should have injectAsPath: true"
+        );
+        assert!(code.contains("formBody: null"), "Non-form payloads should have formBody: null");
+    }
+
+    #[test]
+    fn test_generate_payload_selection_form_body() {
+        let payloads = vec![SecurityPayload::new(
+            ";;dd foo bar".to_string(),
+            SecurityCategory::SqlInjection,
+            "Form-encoded body".to_string(),
+        )
+        .with_location(PayloadLocation::Body)
+        .with_form_encoded_body("var=;;dd foo bar".to_string())];
+
+        let code = SecurityTestGenerator::generate_payload_selection(&payloads, false);
+        assert!(
+            code.contains("formBody: 'var=;;dd foo bar'"),
+            "Form-encoded payloads should have formBody set"
+        );
+        assert!(
+            code.contains("injectAsPath: false"),
+            "Body payloads should have injectAsPath: false"
+        );
+    }
+
+    #[test]
+    fn test_generate_payload_selection_default_fields() {
+        let payloads = vec![SecurityPayload::new(
+            "' OR '1'='1".to_string(),
+            SecurityCategory::SqlInjection,
+            "Basic SQLi".to_string(),
+        )];
+
+        let code = SecurityTestGenerator::generate_payload_selection(&payloads, false);
+        assert!(
+            code.contains("injectAsPath: false"),
+            "Default payloads should have injectAsPath: false"
+        );
+        assert!(code.contains("formBody: null"), "Default payloads should have formBody: null");
     }
 
     #[test]

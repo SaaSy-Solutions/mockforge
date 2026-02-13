@@ -274,6 +274,24 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
         script.contains("requestUrl"),
         "Must build requestUrl variable for URI injection"
     );
+    // V4b: Path-based URI injection (injectAsPath)
+    assert!(
+        script.contains("secPayload.injectAsPath"),
+        "Must check injectAsPath for path-based URI injection (CRS 942101)"
+    );
+    assert!(
+        script.contains("encodeURI(secPayload.payload)"),
+        "Must use encodeURI for path-based injection"
+    );
+    // V4c: Form-encoded body delivery (formBody)
+    assert!(
+        script.contains("secBodyPayload.formBody"),
+        "Must check formBody for form-encoded body delivery (CRS 942432)"
+    );
+    assert!(
+        script.contains("application/x-www-form-urlencoded"),
+        "Must set Content-Type for form-encoded body"
+    );
 
     // V5: Body injection code (for POST/PUT/PATCH operations)
     assert!(
@@ -323,6 +341,8 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
     println!("  - Calling code (body injection): ✓");
     println!("  - Correct ordering: ✓");
     println!("  - requestUrl used in all HTTP calls: ✓");
+    println!("  - injectAsPath for path-based injection: ✓");
+    println!("  - formBody for form-encoded delivery: ✓");
 }
 
 /// End-to-end test: create synthetic WAFBench YAML with multi-part test cases,
@@ -443,6 +463,29 @@ tests:
         body_payload.payload
     );
 
+    // Step 2d: Verify body payload has form_encoded_body set (raw CRS data)
+    assert!(
+        body_payload.form_encoded_body.is_some(),
+        "Body payload should have form_encoded_body set for form-encoded delivery"
+    );
+    assert_eq!(
+        body_payload.form_encoded_body.as_deref().unwrap(),
+        "%22+WAITFOR+DELAY+%270%3A0%3A5%27",
+        "form_encoded_body should preserve the raw CRS data value"
+    );
+
+    // Step 2e: Verify URI-only payload (942100) does NOT have inject_as_path
+    // because it uses query params (has ?)
+    let uri_with_query: Vec<_> = wafbench_payloads
+        .iter()
+        .filter(|p| p.description.contains("942100") && p.location == PayloadLocation::Uri)
+        .collect();
+    assert!(!uri_with_query.is_empty(), "Should have URI payload for 942100");
+    assert!(
+        uri_with_query[0].inject_as_path.is_none(),
+        "URI payload with query params should NOT have inject_as_path"
+    );
+
     // Step 3: Generate k6 script using real spec + WAFBench payloads
     let spec_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -530,20 +573,41 @@ tests:
         "Template must use secBodyPayload (not secPayload) for body injection"
     );
 
-    // V7: Body payload for 942240 is decoded (not literal %22)
+    // V7: Body payload for 942240 — the 'payload' field is decoded, while 'formBody' carries the raw form
     assert!(
         script.contains("WAITFOR DELAY"),
-        "Body payload must be decoded - should contain 'WAITFOR DELAY' with spaces"
+        "Body payload 'payload' field must be decoded - should contain 'WAITFOR DELAY' with spaces"
     );
+    // formBody carries the raw CRS data (encoded) for form-encoded delivery
     assert!(
-        !script.contains("%22+WAITFOR"),
-        "Body payload must NOT contain literal '%22+WAITFOR' (should be decoded)"
+        script.contains("formBody: '%22+WAITFOR"),
+        "Body payload should have formBody with raw CRS data for form-encoded delivery"
     );
 
     // V8: groupedPayloads builder logic is present
     assert!(
         script.contains("groupMap[p.groupId]"),
         "Script must contain grouping logic that collects by groupId"
+    );
+
+    // V9: injectAsPath handling in template
+    assert!(
+        script.contains("secPayload.injectAsPath"),
+        "Script must check injectAsPath for path-based URI injection"
+    );
+    assert!(
+        script.contains("encodeURI(secPayload.payload)"),
+        "Script must use encodeURI for path replacement"
+    );
+
+    // V10: formBody handling in template
+    assert!(
+        script.contains("secBodyPayload.formBody"),
+        "Script must check formBody for form-encoded body delivery"
+    );
+    assert!(
+        script.contains("application/x-www-form-urlencoded"),
+        "Script must set Content-Type for form-encoded body"
     );
 
     // Cleanup
@@ -558,4 +622,6 @@ tests:
     println!("  - secPayloadGroup loop in template: ✓");
     println!("  - secBodyPayload for body injection: ✓");
     println!("  - getNextSecurityPayload returns arrays: ✓");
+    println!("  - injectAsPath for path-based injection: ✓");
+    println!("  - formBody for form-encoded delivery: ✓");
 }
