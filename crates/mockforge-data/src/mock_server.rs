@@ -270,6 +270,7 @@ impl MockServer {
     ///
     /// This handler can be used for catch-all routes to serve mock data
     /// based on the request method and path.
+    #[allow(dead_code)]
     async fn generic_handler(
         axum::extract::State(state): axum::extract::State<MockServerState>,
         method: axum::http::Method,

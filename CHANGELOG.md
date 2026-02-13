@@ -24,6 +24,15 @@
 
 - Nothing yet.
 
+## [0.3.53] - 2026-02-13
+
+### Fixed
+
+- **[Bench]** fix(bench): URL-encode URI payloads + strip form keys from body payloads (#79)
+  - URI security payloads now wrapped in `encodeURIComponent()` for valid HTTP transport — WAFs decode before inspection (fixes 942101)
+  - Form-encoded body payloads now have form key prefix stripped (`var=;;dd foo bar` → `;;dd foo bar`) so WAF ARGS parsing sees the attack payload directly (fixes 942432)
+  - Confirmed SQLi detection: 45/46 rules (97.8%), up from 43/46 (93.5%)
+
 ## [0.3.52] - 2026-02-12
 
 ### Fixed

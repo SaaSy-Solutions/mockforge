@@ -6,6 +6,7 @@ use crate::faker::EnhancedFaker;
 // This functionality should be implemented in a higher-level crate that depends on both
 // mockforge-core and mockforge-data
 
+#[allow(dead_code)]
 struct DataFakerProvider(std::sync::Mutex<EnhancedFaker>);
 
 impl DataFakerProvider {

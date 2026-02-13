@@ -613,13 +613,36 @@ impl WafBenchLoader {
 
     /// Decode a form-URL-encoded body payload.
     /// Replaces `+` with space (form-encoding convention), then decodes `%XX` sequences.
+    /// Strips form field name prefix (e.g., `var=;;dd foo bar` → `;;dd foo bar`)
+    /// since JSON injection puts the value in a field, not the form key.
     fn decode_form_encoded_body(value: &str) -> String {
         // Replace + with space first (form-encoding convention)
         let plus_decoded = value.replace('+', " ");
         // Then decode %XX sequences
-        urlencoding::decode(&plus_decoded)
+        let decoded = urlencoding::decode(&plus_decoded)
             .map(|s| s.into_owned())
-            .unwrap_or(plus_decoded)
+            .unwrap_or(plus_decoded);
+        // Strip form field name prefix (e.g., "var=value" → "value")
+        // CRS test data like "var=;;dd foo bar" has the form key included,
+        // but we inject only the value into a JSON field.
+        Self::strip_form_key(&decoded)
+    }
+
+    /// Strip a single leading form key from a form-encoded value.
+    /// `"var=;;dd foo bar"` → `";;dd foo bar"`
+    /// `"pay=exec (@\n"` → `"exec (@\n"`
+    /// Values without `=` or starting with special chars are returned as-is.
+    fn strip_form_key(value: &str) -> String {
+        // Only strip if the prefix before the first = looks like a form field name
+        // (alphanumeric/underscore chars). Don't strip if the = is part of the attack.
+        if let Some(eq_pos) = value.find('=') {
+            let key = &value[..eq_pos];
+            // Form field names are alphanumeric with underscores
+            if !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                return value[eq_pos + 1..].to_string();
+            }
+        }
+        value.to_string()
     }
 
     /// Convert loaded tests to SecurityPayload format for use with existing security testing
@@ -980,6 +1003,7 @@ tests:
 
     #[test]
     fn test_decode_form_encoded_body() {
+        // Basic decoding
         assert_eq!(
             WafBenchLoader::decode_form_encoded_body("%22+WAITFOR+DELAY+%27%0A"),
             "\" WAITFOR DELAY '\n"
@@ -989,6 +1013,31 @@ tests:
             WafBenchLoader::decode_form_encoded_body("no+encoding+needed"),
             "no encoding needed"
         );
+        // Form key stripping: var=value → value
+        assert_eq!(
+            WafBenchLoader::decode_form_encoded_body("var%3D%3B%3Bdd+foo+bar"),
+            ";;dd foo bar"
+        );
+        // Form key stripping: pay=exec → exec
+        assert_eq!(WafBenchLoader::decode_form_encoded_body("pay%3Dexec+%28%40%0A"), "exec (@\n");
+        // No form key: starts with special char → returned as-is
+        assert_eq!(WafBenchLoader::decode_form_encoded_body("%22+WAITFOR"), "\" WAITFOR");
+    }
+
+    #[test]
+    fn test_strip_form_key() {
+        // Standard form key=value
+        assert_eq!(WafBenchLoader::strip_form_key("var=;;dd foo bar"), ";;dd foo bar");
+        assert_eq!(WafBenchLoader::strip_form_key("pay=exec (@\n"), "exec (@\n");
+        assert_eq!(WafBenchLoader::strip_form_key("pay=DECLARE/**/@x\n"), "DECLARE/**/@x\n");
+        // No form key (starts with special char)
+        assert_eq!(WafBenchLoader::strip_form_key("\" WAITFOR DELAY '\n"), "\" WAITFOR DELAY '\n");
+        // = inside attack payload, key is not alphanumeric
+        assert_eq!(WafBenchLoader::strip_form_key("' OR 1=1"), "' OR 1=1");
+        // Empty input
+        assert_eq!(WafBenchLoader::strip_form_key(""), "");
+        // Only key, no value
+        assert_eq!(WafBenchLoader::strip_form_key("var="), "");
     }
 
     #[test]

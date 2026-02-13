@@ -347,6 +347,7 @@ impl MockDataGenerator {
     }
 
     /// Generate mock response for an OpenAPI operation
+    #[allow(dead_code)]
     fn generate_endpoint_response(
         &mut self,
         operation: &openapiv3::Operation,
@@ -368,6 +369,7 @@ impl MockDataGenerator {
     }
 
     /// Find the best response schema from an operation
+    #[allow(dead_code)]
     fn find_best_response_schema(&self, operation: &openapiv3::Operation) -> Result<Option<Value>> {
         let responses = &operation.responses;
 
@@ -441,6 +443,7 @@ impl MockDataGenerator {
     }
 
     /// Extract schema from an OpenAPI response
+    #[allow(dead_code)]
     fn extract_response_schema(
         &self,
         response: &openapiv3::ReferenceOr<openapiv3::Response>,
@@ -491,7 +494,7 @@ impl MockDataGenerator {
                 // Check if this is a priority pattern
                 let is_priority = priority_patterns.contains(&pattern.as_str());
 
-                if let Some((best_pattern, best_faker_type)) = best_match {
+                if let Some((best_pattern, _best_faker_type)) = best_match {
                     let best_is_priority = priority_patterns.contains(&best_pattern.as_str());
 
                     // Priority patterns always win, or longer patterns win
@@ -1021,6 +1024,7 @@ pub struct OpenApiInfo {
 
 /// Simplified OpenAPI spec structure
 #[derive(Debug)]
+#[allow(dead_code)]
 struct OpenApiSpec {
     info: OpenApiInfo,
     paths: HashMap<String, PathItem>,
@@ -1028,11 +1032,13 @@ struct OpenApiSpec {
 
 /// Simplified path item structure
 #[derive(Debug)]
+#[allow(dead_code)]
 struct PathItem {
     operations: HashMap<String, openapiv3::Operation>,
 }
 
 impl PathItem {
+    #[allow(dead_code)]
     fn operations(&self) -> &HashMap<String, openapiv3::Operation> {
         &self.operations
     }

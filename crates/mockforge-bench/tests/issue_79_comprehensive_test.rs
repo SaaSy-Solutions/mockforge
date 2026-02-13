@@ -265,10 +265,10 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
         script.contains("secPayload.location === 'uri'"),
         "Must contain URI location check for query parameter injection"
     );
-    // URI payloads are sent RAW (not encoded) so WAFs can detect them
+    // URI payloads are URL-encoded for valid HTTP; WAF decodes before inspection
     assert!(
-        script.contains("'test=' + secPayload.payload"),
-        "Must inject raw (unencoded) security payload into query string for WAF detection"
+        script.contains("'test=' + encodeURIComponent(secPayload.payload)"),
+        "Must URL-encode security payload in query string for valid HTTP"
     );
     assert!(
         script.contains("requestUrl"),

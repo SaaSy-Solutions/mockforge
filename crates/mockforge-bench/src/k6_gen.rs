@@ -1349,10 +1349,10 @@ export default function() {{}}
             script.contains("secPayload.location === 'uri'"),
             "Script should check for URI-location payloads"
         );
-        // URI payloads are sent RAW (not encoded) so WAFs can detect them
+        // URI payloads are URL-encoded for valid HTTP; WAF decodes before inspection
         assert!(
-            script.contains("'test=' + secPayload.payload"),
-            "Script should inject raw (unencoded) security payload into query string"
+            script.contains("'test=' + encodeURIComponent(secPayload.payload)"),
+            "Script should URL-encode security payload in query string for valid HTTP"
         );
         // Verify the GET request uses requestUrl
         assert!(

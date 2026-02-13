@@ -63,7 +63,7 @@ export default function () {
         if (secPayload.headerName === 'Cookie') hasSecCookie = true;
       }
       if (secPayload.location === 'uri') {
-        requestUrl += (requestUrl.includes('?') ? '&' : '?') + 'test=' + secPayload.payload;
+        requestUrl += (requestUrl.includes('?') ? '&' : '?') + 'test=' + encodeURIComponent(secPayload.payload);
       }
       if (secPayload.location === 'body') {
         secBodyPayload = secPayload;

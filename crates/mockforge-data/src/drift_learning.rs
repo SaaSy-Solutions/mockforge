@@ -115,6 +115,7 @@ pub enum LearningMode {
 /// Drift Learning Engine
 ///
 /// Extends DataDriftEngine with learning capabilities from recorded traffic.
+#[allow(dead_code)]
 pub struct DriftLearningEngine {
     /// Base drift engine
     drift_engine: DataDriftEngine,
@@ -217,7 +218,7 @@ impl DriftLearningEngine {
 
         // Apply learned patterns
         let patterns = self.learned_patterns.read().await;
-        for (pattern_id, pattern) in patterns.iter() {
+        for (_pattern_id, pattern) in patterns.iter() {
             // Check if pattern should be applied based on confidence and decay
             if pattern.confidence < 0.5 {
                 continue; // Low confidence, skip
@@ -277,6 +278,7 @@ impl DriftLearningEngine {
 /// Traffic Pattern Learner
 ///
 /// Analyzes recorded traffic to detect patterns and trends.
+#[allow(dead_code)]
 pub struct TrafficPatternLearner {
     /// Learning configuration
     config: LearningConfig,
@@ -288,6 +290,7 @@ pub struct TrafficPatternLearner {
 
 /// Traffic pattern detected from analysis
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct TrafficPattern {
     /// Pattern identifier
     pattern_id: String,
