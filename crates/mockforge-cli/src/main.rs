@@ -1862,7 +1862,8 @@ enum Commands {
         ///
         /// Only run conformance tests for specific categories.
         /// Valid categories: parameters, request-bodies, schema-types, composition,
-        /// string-formats, constraints, response-codes, http-methods, content-types, security
+        /// string-formats, constraints, response-codes, http-methods, content-types, security,
+        /// response-validation
         ///
         /// Example: --conformance-categories "parameters,security"
         #[arg(long)]

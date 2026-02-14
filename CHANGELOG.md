@@ -1,3 +1,23 @@
+## [0.3.57] - 2026-02-14
+
+### Fixed
+
+- **[Bench]** Spec-driven conformance: global security requirement detection (#79)
+  - `annotate_security()` now falls back to `spec.security` (root-level) when an operation has no operation-level security defined
+  - APIs that only define security globally are now correctly detected
+- **[Bench]** Spec-driven conformance: SecurityScheme type resolution (#79)
+  - Security schemes are now resolved from `components.securitySchemes` to detect actual type (`HTTP/bearer`, `APIKey`, `HTTP/basic`) instead of relying on name heuristics alone
+  - A scheme named "myAuth" that is actually an `apiKey` type is now correctly identified
+  - Name-based heuristic retained as fallback for unresolvable schemes
+- **[Bench]** Spec-driven conformance: ContentNegotiation detection (#79)
+  - `ContentNegotiation` feature is now detected when a response defines multiple content types (e.g., both `application/json` and `application/xml`)
+  - Previously only worked in reference mode
+- **[Bench]** CLI help text for `--conformance-categories` now includes `response-validation` (#79)
+
+### Added
+
+- **[Bench]** 5 new conformance tests: ResponseValidation with schema check, global security, SecurityScheme resolution, ContentNegotiation detection, single-type negative case (#79)
+
 ## [0.3.56] - 2026-02-14
 
 ### Added

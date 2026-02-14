@@ -11,7 +11,7 @@ use crate::request_gen::RequestGenerator;
 use crate::spec_parser::ApiOperation;
 use openapiv3::{
     OpenAPI, Operation, Parameter, ParameterSchemaOrContent, ReferenceOr, RequestBody, Response,
-    Schema, SchemaKind, StringFormat, Type, VariantOrUnknownOrEmpty,
+    Schema, SchemaKind, SecurityScheme, StringFormat, Type, VariantOrUnknownOrEmpty,
 };
 use std::collections::HashSet;
 
@@ -252,6 +252,9 @@ impl SpecDrivenConformanceGenerator {
         if response_schema.is_some() {
             features.push(ConformanceFeature::ResponseValidation);
         }
+
+        // Detect content negotiation (response with multiple content types)
+        Self::annotate_content_negotiation(&op.operation, spec, &mut features);
 
         // Detect security features
         Self::annotate_security(&op.operation, spec, &mut features);
@@ -503,25 +506,74 @@ impl SpecDrivenConformanceGenerator {
         None
     }
 
-    /// Detect security scheme features
-    fn annotate_security(
+    /// Detect content negotiation: response supports multiple content types
+    fn annotate_content_negotiation(
         operation: &Operation,
-        _spec: &OpenAPI,
+        spec: &OpenAPI,
         features: &mut Vec<ConformanceFeature>,
     ) {
-        if let Some(security) = &operation.security {
+        for (_status_code, resp_ref) in &operation.responses.responses {
+            if let Some(response) = ref_resolver::resolve_response(resp_ref, spec) {
+                if response.content.len() > 1 {
+                    features.push(ConformanceFeature::ContentNegotiation);
+                    return; // Only need to detect once per operation
+                }
+            }
+        }
+    }
+
+    /// Detect security scheme features.
+    /// Checks operation-level security first, falling back to global security requirements.
+    /// Resolves scheme names against SecurityScheme definitions in components.
+    fn annotate_security(
+        operation: &Operation,
+        spec: &OpenAPI,
+        features: &mut Vec<ConformanceFeature>,
+    ) {
+        // Use operation-level security if present, otherwise fall back to global
+        let security_reqs = operation.security.as_ref().or(spec.security.as_ref());
+
+        if let Some(security) = security_reqs {
             for security_req in security {
                 for scheme_name in security_req.keys() {
-                    let name_lower = scheme_name.to_lowercase();
-                    if name_lower.contains("bearer") || name_lower.contains("jwt") {
-                        features.push(ConformanceFeature::SecurityBearer);
-                    } else if name_lower.contains("api") && name_lower.contains("key") {
-                        features.push(ConformanceFeature::SecurityApiKey);
-                    } else if name_lower.contains("basic") {
-                        features.push(ConformanceFeature::SecurityBasic);
+                    // Try to resolve the scheme from components for accurate type detection
+                    if let Some(resolved) = Self::resolve_security_scheme(scheme_name, spec) {
+                        match resolved {
+                            SecurityScheme::HTTP { ref scheme, .. } => {
+                                if scheme.eq_ignore_ascii_case("bearer") {
+                                    features.push(ConformanceFeature::SecurityBearer);
+                                } else if scheme.eq_ignore_ascii_case("basic") {
+                                    features.push(ConformanceFeature::SecurityBasic);
+                                }
+                            }
+                            SecurityScheme::APIKey { .. } => {
+                                features.push(ConformanceFeature::SecurityApiKey);
+                            }
+                            // OAuth2 and OpenIDConnect don't map to our current feature set
+                            _ => {}
+                        }
+                    } else {
+                        // Fallback: heuristic name matching for unresolvable schemes
+                        let name_lower = scheme_name.to_lowercase();
+                        if name_lower.contains("bearer") || name_lower.contains("jwt") {
+                            features.push(ConformanceFeature::SecurityBearer);
+                        } else if name_lower.contains("api") && name_lower.contains("key") {
+                            features.push(ConformanceFeature::SecurityApiKey);
+                        } else if name_lower.contains("basic") {
+                            features.push(ConformanceFeature::SecurityBasic);
+                        }
                     }
                 }
             }
+        }
+    }
+
+    /// Resolve a security scheme name to its SecurityScheme definition
+    fn resolve_security_scheme<'a>(name: &str, spec: &'a OpenAPI) -> Option<&'a SecurityScheme> {
+        let components = spec.components.as_ref()?;
+        match components.security_schemes.get(name)? {
+            ReferenceOr::Item(scheme) => Some(scheme),
+            ReferenceOr::Reference { .. } => None,
         }
     }
 
@@ -915,5 +967,164 @@ mod tests {
 
         assert!(script.contains("group('Parameters'"));
         assert!(!script.contains("group('HTTP Methods'"));
+    }
+
+    #[test]
+    fn test_annotate_response_validation() {
+        use openapiv3::ObjectType;
+
+        // Operation with a 200 response that has a JSON schema
+        let mut op = Operation::default();
+        let mut response = Response::default();
+        let mut media = openapiv3::MediaType::default();
+        let mut obj_type = ObjectType::default();
+        obj_type.properties.insert(
+            "name".to_string(),
+            ReferenceOr::Item(Box::new(Schema {
+                schema_data: SchemaData::default(),
+                schema_kind: SchemaKind::Type(Type::String(StringType::default())),
+            })),
+        );
+        obj_type.required = vec!["name".to_string()];
+        media.schema = Some(ReferenceOr::Item(Schema {
+            schema_data: SchemaData::default(),
+            schema_kind: SchemaKind::Type(Type::Object(obj_type)),
+        }));
+        response.content.insert("application/json".to_string(), media);
+        op.responses
+            .responses
+            .insert(openapiv3::StatusCode::Code(200), ReferenceOr::Item(response));
+
+        let api_op = make_op("get", "/users", op);
+        let annotated = SpecDrivenConformanceGenerator::annotate_operation(&api_op, &empty_spec());
+
+        assert!(
+            annotated.features.contains(&ConformanceFeature::ResponseValidation),
+            "Should detect ResponseValidation when response has a JSON schema"
+        );
+        assert!(annotated.response_schema.is_some(), "Should extract the response schema");
+
+        // Verify generated script includes schema validation with try-catch
+        let config = ConformanceConfig {
+            target_url: "http://localhost:3000".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: false,
+            categories: None,
+        };
+        let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
+        let script = gen.generate().unwrap();
+
+        assert!(
+            script.contains("response:schema:validation"),
+            "Script should contain the validation check name"
+        );
+        assert!(script.contains("try {"), "Script should wrap validation in try-catch");
+        assert!(script.contains("res.json()"), "Script should parse response as JSON");
+    }
+
+    #[test]
+    fn test_annotate_global_security() {
+        // Spec with global security requirement, operation without its own security
+        let op = Operation::default();
+        let mut spec = OpenAPI::default();
+        let mut global_req = openapiv3::SecurityRequirement::new();
+        global_req.insert("bearerAuth".to_string(), vec![]);
+        spec.security = Some(vec![global_req]);
+        // Define the security scheme in components
+        let mut components = openapiv3::Components::default();
+        components.security_schemes.insert(
+            "bearerAuth".to_string(),
+            ReferenceOr::Item(SecurityScheme::HTTP {
+                scheme: "bearer".to_string(),
+                bearer_format: Some("JWT".to_string()),
+                description: None,
+                extensions: Default::default(),
+            }),
+        );
+        spec.components = Some(components);
+
+        let api_op = make_op("get", "/protected", op);
+        let annotated = SpecDrivenConformanceGenerator::annotate_operation(&api_op, &spec);
+
+        assert!(
+            annotated.features.contains(&ConformanceFeature::SecurityBearer),
+            "Should detect SecurityBearer from global security + components"
+        );
+    }
+
+    #[test]
+    fn test_annotate_security_scheme_resolution() {
+        // Test that security scheme type is resolved from components, not just name heuristic
+        let mut op = Operation::default();
+        // Use a generic name that wouldn't match name heuristics
+        let mut req = openapiv3::SecurityRequirement::new();
+        req.insert("myAuth".to_string(), vec![]);
+        op.security = Some(vec![req]);
+
+        let mut spec = OpenAPI::default();
+        let mut components = openapiv3::Components::default();
+        components.security_schemes.insert(
+            "myAuth".to_string(),
+            ReferenceOr::Item(SecurityScheme::APIKey {
+                location: openapiv3::APIKeyLocation::Header,
+                name: "X-API-Key".to_string(),
+                description: None,
+                extensions: Default::default(),
+            }),
+        );
+        spec.components = Some(components);
+
+        let api_op = make_op("get", "/data", op);
+        let annotated = SpecDrivenConformanceGenerator::annotate_operation(&api_op, &spec);
+
+        assert!(
+            annotated.features.contains(&ConformanceFeature::SecurityApiKey),
+            "Should detect SecurityApiKey from SecurityScheme::APIKey, not name heuristic"
+        );
+    }
+
+    #[test]
+    fn test_annotate_content_negotiation() {
+        let mut op = Operation::default();
+        let mut response = Response::default();
+        // Response with multiple content types
+        response
+            .content
+            .insert("application/json".to_string(), openapiv3::MediaType::default());
+        response
+            .content
+            .insert("application/xml".to_string(), openapiv3::MediaType::default());
+        op.responses
+            .responses
+            .insert(openapiv3::StatusCode::Code(200), ReferenceOr::Item(response));
+
+        let api_op = make_op("get", "/items", op);
+        let annotated = SpecDrivenConformanceGenerator::annotate_operation(&api_op, &empty_spec());
+
+        assert!(
+            annotated.features.contains(&ConformanceFeature::ContentNegotiation),
+            "Should detect ContentNegotiation when response has multiple content types"
+        );
+    }
+
+    #[test]
+    fn test_no_content_negotiation_for_single_type() {
+        let mut op = Operation::default();
+        let mut response = Response::default();
+        response
+            .content
+            .insert("application/json".to_string(), openapiv3::MediaType::default());
+        op.responses
+            .responses
+            .insert(openapiv3::StatusCode::Code(200), ReferenceOr::Item(response));
+
+        let api_op = make_op("get", "/items", op);
+        let annotated = SpecDrivenConformanceGenerator::annotate_operation(&api_op, &empty_spec());
+
+        assert!(
+            !annotated.features.contains(&ConformanceFeature::ContentNegotiation),
+            "Should NOT detect ContentNegotiation for a single content type"
+        );
     }
 }
