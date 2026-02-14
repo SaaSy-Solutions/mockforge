@@ -150,20 +150,22 @@ impl K6Executor {
         let json: serde_json::Value = serde_json::from_str(&content)
             .map_err(|e| BenchError::ResultsParseError(e.to_string()))?;
 
+        let duration_values = &json["metrics"]["http_req_duration"]["values"];
+
         Ok(K6Results {
             total_requests: json["metrics"]["http_reqs"]["values"]["count"].as_u64().unwrap_or(0),
             failed_requests: json["metrics"]["http_req_failed"]["values"]["passes"]
                 .as_u64()
                 .unwrap_or(0),
-            avg_duration_ms: json["metrics"]["http_req_duration"]["values"]["avg"]
-                .as_f64()
-                .unwrap_or(0.0),
-            p95_duration_ms: json["metrics"]["http_req_duration"]["values"]["p(95)"]
-                .as_f64()
-                .unwrap_or(0.0),
-            p99_duration_ms: json["metrics"]["http_req_duration"]["values"]["p(99)"]
-                .as_f64()
-                .unwrap_or(0.0),
+            avg_duration_ms: duration_values["avg"].as_f64().unwrap_or(0.0),
+            p95_duration_ms: duration_values["p(95)"].as_f64().unwrap_or(0.0),
+            p99_duration_ms: duration_values["p(99)"].as_f64().unwrap_or(0.0),
+            rps: json["metrics"]["http_reqs"]["values"]["rate"].as_f64().unwrap_or(0.0),
+            vus_max: json["metrics"]["vus_max"]["values"]["value"].as_u64().unwrap_or(0) as u32,
+            min_duration_ms: duration_values["min"].as_f64().unwrap_or(0.0),
+            max_duration_ms: duration_values["max"].as_f64().unwrap_or(0.0),
+            med_duration_ms: duration_values["med"].as_f64().unwrap_or(0.0),
+            p90_duration_ms: duration_values["p(90)"].as_f64().unwrap_or(0.0),
         })
     }
 }
@@ -182,6 +184,12 @@ pub struct K6Results {
     pub avg_duration_ms: f64,
     pub p95_duration_ms: f64,
     pub p99_duration_ms: f64,
+    pub rps: f64,
+    pub vus_max: u32,
+    pub min_duration_ms: f64,
+    pub max_duration_ms: f64,
+    pub med_duration_ms: f64,
+    pub p90_duration_ms: f64,
 }
 
 impl K6Results {
@@ -211,6 +219,7 @@ mod tests {
             avg_duration_ms: 100.0,
             p95_duration_ms: 200.0,
             p99_duration_ms: 300.0,
+            ..Default::default()
         };
 
         assert_eq!(results.error_rate(), 5.0);

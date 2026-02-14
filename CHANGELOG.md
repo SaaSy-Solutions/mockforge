@@ -1,28 +1,21 @@
-## [Unreleased]
+## [0.3.55] - 2026-02-14
 
 ### Added
 
-- Nothing yet.
-
-### Changed
-
-- Nothing yet.
-
-### Deprecated
-
-- Nothing yet.
-
-### Removed
-
-- Nothing yet.
-
-### Fixed
-
-- Nothing yet.
-
-### Security
-
-- Nothing yet.
+- **[Bench]** Per-server stats in multi-target mode (#79)
+  - `K6Results` now parses RPS, VUs, and full latency breakdown (min/med/p90/p95/p99/max) from k6 `summary.json`
+  - `AggregatedMetrics` includes `total_rps`, `avg_rps`, `total_vus_max`
+  - Multi-target reporter shows per-target RPS, VUs, and full latency breakdown
+  - `aggregated_summary.json` includes all new metrics in both aggregated and per-target sections
+- **[Bench]** Per-target spec support for multi-target mode (#79)
+  - Targets file JSON format now supports `"spec"` field for per-target OpenAPI specs
+  - Each target can use a different spec file for heterogeneous fan-out
+  - Example: `[{"url": "https://server1", "spec": "spec_a.json"}, {"url": "https://server2", "spec": "spec_b.json"}]`
+- **[Bench]** OpenAPI 3.0.0 conformance testing (#79)
+  - New `--conformance` flag generates and runs comprehensive k6 scripts exercising 47 OpenAPI 3.0.0 features across 10 categories (Parameters, Request Bodies, Schema Types, Composition, String Formats, Constraints, Response Codes, HTTP Methods, Content Negotiation, Security)
+  - Reports per-category pass/fail rates with colored terminal output
+  - Supports `--conformance-api-key`, `--conformance-basic-auth`, `--conformance-report` for security scheme testing
+  - Example: `mockforge bench --conformance --target http://localhost:3000`
 
 ## [0.3.54] - 2026-02-13
 

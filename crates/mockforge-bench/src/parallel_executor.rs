@@ -66,6 +66,12 @@ pub struct AggregatedMetrics {
     pub p99_duration_ms: f64,
     /// Overall error rate percentage
     pub error_rate: f64,
+    /// Total RPS across all targets
+    pub total_rps: f64,
+    /// Average RPS per target
+    pub avg_rps: f64,
+    /// Total max VUs across all targets
+    pub total_vus_max: u32,
 }
 
 impl AggregatedMetrics {
@@ -76,6 +82,9 @@ impl AggregatedMetrics {
         let mut durations = Vec::new();
         let mut p95_values = Vec::new();
         let mut p99_values = Vec::new();
+        let mut total_rps = 0.0f64;
+        let mut total_vus_max = 0u32;
+        let mut successful_count = 0usize;
 
         for result in results {
             if result.success {
@@ -84,6 +93,9 @@ impl AggregatedMetrics {
                 durations.push(result.results.avg_duration_ms);
                 p95_values.push(result.results.p95_duration_ms);
                 p99_values.push(result.results.p99_duration_ms);
+                total_rps += result.results.rps;
+                total_vus_max += result.results.vus_max;
+                successful_count += 1;
             }
         }
 
@@ -115,6 +127,12 @@ impl AggregatedMetrics {
             0.0
         };
 
+        let avg_rps = if successful_count > 0 {
+            total_rps / successful_count as f64
+        } else {
+            0.0
+        };
+
         Self {
             total_requests,
             total_failed_requests,
@@ -122,6 +140,9 @@ impl AggregatedMetrics {
             p95_duration_ms,
             p99_duration_ms,
             error_rate,
+            total_rps,
+            avg_rps,
+            total_vus_max,
         }
     }
 }
@@ -198,6 +219,85 @@ impl ParallelExecutor {
             .collect::<Result<Vec<_>>>()?;
         TerminalReporter::print_success("Request templates generated");
 
+        // Pre-load per-target specs
+        let mut per_target_data: HashMap<
+            PathBuf,
+            (Vec<crate::request_gen::RequestTemplate>, Option<String>),
+        > = HashMap::new();
+        {
+            let mut unique_specs: Vec<PathBuf> = Vec::new();
+            for t in &self.targets {
+                if let Some(spec_path) = &t.spec {
+                    if !unique_specs.contains(spec_path) {
+                        unique_specs.push(spec_path.clone());
+                    }
+                }
+            }
+            for spec_path in &unique_specs {
+                TerminalReporter::print_progress(&format!(
+                    "Loading per-target spec: {}",
+                    spec_path.display()
+                ));
+                match SpecParser::from_file(spec_path).await {
+                    Ok(target_parser) => {
+                        let target_ops = if let Some(filter) = &self.base_command.operations {
+                            match target_parser.filter_operations(filter) {
+                                Ok(ops) => ops,
+                                Err(e) => {
+                                    TerminalReporter::print_warning(&format!(
+                                        "Failed to filter operations from {}: {}. Using shared spec.",
+                                        spec_path.display(),
+                                        e
+                                    ));
+                                    continue;
+                                }
+                            }
+                        } else {
+                            target_parser.get_operations()
+                        };
+                        let target_templates: Vec<_> = match target_ops
+                            .iter()
+                            .map(RequestGenerator::generate_template)
+                            .collect::<Result<Vec<_>>>()
+                        {
+                            Ok(t) => t,
+                            Err(e) => {
+                                TerminalReporter::print_warning(&format!(
+                                    "Failed to generate templates from {}: {}. Using shared spec.",
+                                    spec_path.display(),
+                                    e
+                                ));
+                                continue;
+                            }
+                        };
+                        let target_base_path = if let Some(cli_bp) = &self.base_command.base_path {
+                            if cli_bp.is_empty() {
+                                None
+                            } else {
+                                Some(cli_bp.clone())
+                            }
+                        } else {
+                            target_parser.get_base_path()
+                        };
+                        TerminalReporter::print_success(&format!(
+                            "Loaded {} operations from {}",
+                            target_templates.len(),
+                            spec_path.display()
+                        ));
+                        per_target_data
+                            .insert(spec_path.clone(), (target_templates, target_base_path));
+                    }
+                    Err(e) => {
+                        TerminalReporter::print_warning(&format!(
+                            "Failed to load per-target spec {}: {}. Targets using this spec will use the shared spec.",
+                            spec_path.display(),
+                            e
+                        ));
+                    }
+                }
+            }
+        }
+
         // Parse base headers
         let base_headers = self.base_command.parse_headers()?;
 
@@ -272,7 +372,17 @@ impl ParallelExecutor {
             let verbose = self.base_command.verbose;
             let skip_tls_verify = self.base_command.skip_tls_verify;
 
-            let templates = templates.clone();
+            // Select per-target templates/base_path if this target has a custom spec
+            let (templates, base_path) = if let Some(spec_path) = &target.spec {
+                if let Some((t, bp)) = per_target_data.get(spec_path) {
+                    (t.clone(), bp.clone())
+                } else {
+                    (templates.clone(), base_path.clone())
+                }
+            } else {
+                (templates.clone(), base_path.clone())
+            };
+
             let base_headers = base_headers.clone();
             let scenario = scenario.clone();
             let duration_secs = duration_secs;
@@ -280,7 +390,6 @@ impl ParallelExecutor {
             let semaphore = semaphore.clone();
             let progress_bar = progress_bars[index].clone();
             let target_index = index;
-            let base_path = base_path.clone();
             let security_testing_enabled = security_testing_enabled;
             let enhancement_code = enhancement_code.clone();
 
@@ -512,6 +621,7 @@ mod tests {
                     avg_duration_ms: 100.0,
                     p95_duration_ms: 200.0,
                     p99_duration_ms: 300.0,
+                    ..Default::default()
                 },
                 output_dir: PathBuf::from("output1"),
                 success: true,
@@ -526,6 +636,7 @@ mod tests {
                     avg_duration_ms: 150.0,
                     p95_duration_ms: 250.0,
                     p99_duration_ms: 350.0,
+                    ..Default::default()
                 },
                 output_dir: PathBuf::from("output2"),
                 success: true,
@@ -551,6 +662,7 @@ mod tests {
                     avg_duration_ms: 100.0,
                     p95_duration_ms: 200.0,
                     p99_duration_ms: 300.0,
+                    ..Default::default()
                 },
                 output_dir: PathBuf::from("output1"),
                 success: true,
@@ -594,6 +706,7 @@ mod tests {
                 avg_duration_ms: 100.0,
                 p95_duration_ms: 200.0,
                 p99_duration_ms: 300.0,
+                ..Default::default()
             },
             output_dir: PathBuf::from("output1"),
             success: true,
@@ -616,6 +729,7 @@ mod tests {
                     avg_duration_ms: 100.0,
                     p95_duration_ms: 150.0,
                     p99_duration_ms: 200.0,
+                    ..Default::default()
                 },
                 output_dir: PathBuf::from("output1"),
                 success: true,
@@ -630,6 +744,7 @@ mod tests {
                     avg_duration_ms: 200.0,
                     p95_duration_ms: 250.0,
                     p99_duration_ms: 300.0,
+                    ..Default::default()
                 },
                 output_dir: PathBuf::from("output2"),
                 success: true,
@@ -644,6 +759,7 @@ mod tests {
                     avg_duration_ms: 300.0,
                     p95_duration_ms: 350.0,
                     p99_duration_ms: 400.0,
+                    ..Default::default()
                 },
                 output_dir: PathBuf::from("output3"),
                 success: true,

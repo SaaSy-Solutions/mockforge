@@ -124,6 +124,16 @@ pub struct BenchCommand {
     /// Cycle through ALL WAFBench payloads instead of random sampling
     pub wafbench_cycle_all: bool,
 
+    // === OpenAPI 3.0.0 Conformance Testing ===
+    /// Enable conformance testing mode
+    pub conformance: bool,
+    /// API key for conformance security tests
+    pub conformance_api_key: Option<String>,
+    /// Basic auth credentials for conformance security tests (user:pass)
+    pub conformance_basic_auth: Option<String>,
+    /// Conformance report output file
+    pub conformance_report: PathBuf,
+
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
     pub owasp_api_top10: bool,
@@ -231,6 +241,11 @@ impl BenchCommand {
                 "Install k6 from: https://k6.io/docs/get-started/installation/",
             );
             return Err(BenchError::K6NotFound);
+        }
+
+        // Check for conformance testing mode (before spec loading — conformance doesn't need a user spec)
+        if self.conformance {
+            return self.execute_conformance_test().await;
         }
 
         // Load and parse spec(s)
@@ -512,6 +527,10 @@ impl BenchCommand {
                 owasp_report: self.owasp_report.clone(),
                 owasp_report_format: self.owasp_report_format.clone(),
                 owasp_iterations: self.owasp_iterations,
+                conformance: false,
+                conformance_api_key: None,
+                conformance_basic_auth: None,
+                conformance_report: PathBuf::from("conformance-report.json"),
             },
             targets,
             max_concurrency,
@@ -545,6 +564,9 @@ impl BenchCommand {
                     "p95_duration_ms": results.aggregated_metrics.p95_duration_ms,
                     "p99_duration_ms": results.aggregated_metrics.p99_duration_ms,
                     "error_rate": results.aggregated_metrics.error_rate,
+                    "total_rps": results.aggregated_metrics.total_rps,
+                    "avg_rps": results.aggregated_metrics.avg_rps,
+                    "total_vus_max": results.aggregated_metrics.total_vus_max,
                 },
                 "target_results": results.target_results.iter().map(|r| {
                     serde_json::json!({
@@ -555,8 +577,14 @@ impl BenchCommand {
                         "total_requests": r.results.total_requests,
                         "failed_requests": r.results.failed_requests,
                         "avg_duration_ms": r.results.avg_duration_ms,
+                        "min_duration_ms": r.results.min_duration_ms,
+                        "med_duration_ms": r.results.med_duration_ms,
+                        "p90_duration_ms": r.results.p90_duration_ms,
                         "p95_duration_ms": r.results.p95_duration_ms,
                         "p99_duration_ms": r.results.p99_duration_ms,
+                        "max_duration_ms": r.results.max_duration_ms,
+                        "rps": r.results.rps,
+                        "vus_max": r.results.vus_max,
                         "output_dir": r.output_dir.to_string_lossy(),
                     })
                 }).collect::<Vec<_>>(),
@@ -1751,6 +1779,75 @@ impl BenchCommand {
         Ok(())
     }
 
+    /// Execute OpenAPI 3.0.0 conformance testing mode
+    async fn execute_conformance_test(&self) -> Result<()> {
+        use crate::conformance::generator::{ConformanceConfig, ConformanceGenerator};
+        use crate::conformance::report::ConformanceReport;
+
+        TerminalReporter::print_progress("OpenAPI 3.0.0 Conformance Testing Mode");
+
+        let config = ConformanceConfig {
+            target_url: self.target.clone(),
+            api_key: self.conformance_api_key.clone(),
+            basic_auth: self.conformance_basic_auth.clone(),
+            skip_tls_verify: self.skip_tls_verify,
+        };
+
+        let generator = ConformanceGenerator::new(config);
+
+        // Generate and write script
+        std::fs::create_dir_all(&self.output)?;
+        let script_path = self.output.join("k6-conformance.js");
+        generator.write_script(&script_path)?;
+        TerminalReporter::print_success(&format!(
+            "Conformance script generated: {}",
+            script_path.display()
+        ));
+
+        // If generate-only, stop here
+        if self.generate_only {
+            println!("\nScript generated. Run with:");
+            println!("  k6 run {}", script_path.display());
+            return Ok(());
+        }
+
+        // Validate k6
+        if !K6Executor::is_k6_installed() {
+            TerminalReporter::print_error("k6 is not installed");
+            TerminalReporter::print_warning(
+                "Install k6 from: https://k6.io/docs/get-started/installation/",
+            );
+            return Err(BenchError::K6NotFound);
+        }
+
+        // Execute
+        TerminalReporter::print_progress("Running conformance tests...");
+        let executor = K6Executor::new()?;
+        executor.execute(&script_path, Some(&self.output), self.verbose).await?;
+
+        // Parse and display report
+        let report_path = self.output.join("conformance-report.json");
+        if report_path.exists() {
+            let report = ConformanceReport::from_file(&report_path)?;
+            report.print_report();
+
+            // Copy to user-specified location if different
+            if self.conformance_report != report_path {
+                std::fs::copy(&report_path, &self.conformance_report)?;
+                TerminalReporter::print_success(&format!(
+                    "Report saved to: {}",
+                    self.conformance_report.display()
+                ));
+            }
+        } else {
+            TerminalReporter::print_warning(
+                "Conformance report not generated (k6 handleSummary may not have run)",
+            );
+        }
+
+        Ok(())
+    }
+
     /// Execute OWASP API Security Top 10 testing mode
     async fn execute_owasp_test(&self, parser: &SpecParser) -> Result<()> {
         TerminalReporter::print_progress("OWASP API Security Top 10 Testing Mode");
@@ -1950,6 +2047,10 @@ mod tests {
             owasp_report: None,
             owasp_report_format: "json".to_string(),
             owasp_iterations: 1,
+            conformance: false,
+            conformance_api_key: None,
+            conformance_basic_auth: None,
+            conformance_report: PathBuf::from("conformance-report.json"),
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -2011,6 +2112,10 @@ mod tests {
             owasp_report: None,
             owasp_report_format: "json".to_string(),
             owasp_iterations: 1,
+            conformance: false,
+            conformance_api_key: None,
+            conformance_basic_auth: None,
+            conformance_report: PathBuf::from("conformance-report.json"),
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -2068,6 +2173,10 @@ mod tests {
             owasp_report: None,
             owasp_report_format: "json".to_string(),
             owasp_iterations: 1,
+            conformance: false,
+            conformance_api_key: None,
+            conformance_basic_auth: None,
+            conformance_report: PathBuf::from("conformance-report.json"),
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

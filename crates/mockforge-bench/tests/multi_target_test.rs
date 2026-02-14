@@ -173,6 +173,10 @@ async fn test_bench_command_parse_headers() {
         owasp_report: None,
         owasp_report_format: "json".to_string(),
         owasp_iterations: 1,
+        conformance: false,
+        conformance_api_key: None,
+        conformance_basic_auth: None,
+        conformance_report: PathBuf::from("conformance-report.json"),
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -236,6 +240,10 @@ async fn test_bench_command_parse_headers_invalid_format() {
         owasp_report: None,
         owasp_report_format: "json".to_string(),
         owasp_iterations: 1,
+        conformance: false,
+        conformance_api_key: None,
+        conformance_basic_auth: None,
+        conformance_report: PathBuf::from("conformance-report.json"),
     };
 
     let result = cmd.parse_headers();
@@ -281,6 +289,7 @@ async fn test_target_config_with_auth_and_headers() {
         url: "https://api.example.com".to_string(),
         auth: Some("Bearer token123".to_string()),
         headers: Some(headers),
+        spec: None,
     };
 
     assert_eq!(target.url, "https://api.example.com");

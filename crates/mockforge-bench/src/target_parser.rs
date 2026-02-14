@@ -7,7 +7,7 @@
 use crate::error::{BenchError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Configuration for a single target
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +18,8 @@ pub struct TargetConfig {
     pub auth: Option<String>,
     /// Optional custom headers for this target
     pub headers: Option<HashMap<String, String>>,
+    /// Optional per-target OpenAPI spec file (JSON format only)
+    pub spec: Option<PathBuf>,
 }
 
 impl TargetConfig {
@@ -27,6 +29,7 @@ impl TargetConfig {
             url,
             auth: None,
             headers: None,
+            spec: None,
         }
     }
 
@@ -64,6 +67,7 @@ enum JsonTarget {
         url: String,
         auth: Option<String>,
         headers: Option<HashMap<String, String>>,
+        spec: Option<PathBuf>,
     },
 }
 
@@ -107,9 +111,17 @@ fn parse_json_targets(content: &str) -> Result<Vec<TargetConfig>> {
                     if let Ok(target) = serde_json::from_value::<JsonTarget>(item) {
                         Ok(match target {
                             JsonTarget::Simple(url) => TargetConfig::from_url(url),
-                            JsonTarget::Object { url, auth, headers } => {
-                                TargetConfig { url, auth, headers }
-                            }
+                            JsonTarget::Object {
+                                url,
+                                auth,
+                                headers,
+                                spec,
+                            } => TargetConfig {
+                                url,
+                                auth,
+                                headers,
+                                spec,
+                            },
                         })
                     } else {
                         Err(BenchError::Other("Invalid target format in JSON array".to_string()))
@@ -126,9 +138,17 @@ fn parse_json_targets(content: &str) -> Result<Vec<TargetConfig>> {
                             if let Ok(target) = serde_json::from_value::<JsonTarget>(item.clone()) {
                                 Ok(match target {
                                     JsonTarget::Simple(url) => TargetConfig::from_url(url),
-                                    JsonTarget::Object { url, auth, headers } => {
-                                        TargetConfig { url, auth, headers }
-                                    }
+                                    JsonTarget::Object {
+                                        url,
+                                        auth,
+                                        headers,
+                                        spec,
+                                    } => TargetConfig {
+                                        url,
+                                        auth,
+                                        headers,
+                                        spec,
+                                    },
                                 })
                             } else {
                                 Err(BenchError::Other("Invalid target format in JSON".to_string()))
@@ -342,6 +362,47 @@ api3.example.com
             targets[0].headers.as_ref().unwrap().get("X-Another"),
             Some(&"value2".to_string())
         );
+    }
+
+    #[test]
+    fn test_parse_json_targets_with_per_target_spec() {
+        let content = r#"
+[
+  {"url": "https://api1.example.com", "spec": "spec_a.json"},
+  {"url": "https://api2.example.com", "spec": "spec_b.json"},
+  {"url": "https://api3.example.com"}
+]
+        "#;
+
+        let targets = parse_json_targets(content).unwrap();
+        assert_eq!(targets.len(), 3);
+        assert_eq!(targets[0].spec, Some(PathBuf::from("spec_a.json")));
+        assert_eq!(targets[1].spec, Some(PathBuf::from("spec_b.json")));
+        assert_eq!(targets[2].spec, None);
+    }
+
+    #[test]
+    fn test_parse_json_targets_with_per_target_spec_mixed() {
+        // Targets with some specs and some without should parse correctly
+        let content = r#"[
+  {"url": "https://api1.example.com", "spec": "/absolute/path/spec.json"},
+  {"url": "https://api2.example.com"},
+  {"url": "https://api3.example.com", "spec": "relative/spec.yaml"}
+]"#;
+
+        let targets = parse_json_targets(content).unwrap();
+        assert_eq!(targets.len(), 3);
+        assert_eq!(targets[0].spec, Some(PathBuf::from("/absolute/path/spec.json")));
+        assert_eq!(targets[1].spec, None);
+        assert_eq!(targets[2].spec, Some(PathBuf::from("relative/spec.yaml")));
+    }
+
+    #[test]
+    fn test_from_url_has_no_spec() {
+        let target = TargetConfig::from_url("http://example.com".to_string());
+        assert_eq!(target.spec, None);
+        assert_eq!(target.auth, None);
+        assert_eq!(target.headers, None);
     }
 
     #[test]

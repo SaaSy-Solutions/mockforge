@@ -4,6 +4,7 @@
 //! using OpenAPI specifications to generate realistic traffic patterns.
 
 pub mod command;
+pub mod conformance;
 pub mod crud_flow;
 pub mod data_driven;
 pub mod dynamic_params;
@@ -43,6 +44,11 @@ pub use spec_dependencies::{
 };
 pub use target_parser::{parse_targets_file, TargetConfig};
 pub use wafbench::{WafBenchLoader, WafBenchStats, WafBenchTestCase};
+
+// OpenAPI 3.0.0 Conformance Testing exports
+pub use conformance::{
+    ConformanceConfig, ConformanceFeature, ConformanceGenerator, ConformanceReport,
+};
 
 // OWASP API Security Top 10 exports
 pub use owasp_api::{

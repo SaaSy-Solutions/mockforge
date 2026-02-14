@@ -1822,6 +1822,41 @@ enum Commands {
         /// Example: --owasp-iterations 5
         #[arg(long, default_value = "1")]
         owasp_iterations: u32,
+
+        /// Run OpenAPI 3.0.0 conformance testing
+        ///
+        /// Generates and runs a comprehensive k6 script that exercises
+        /// all OpenAPI 3.0.0 features (parameters, request bodies, schema types,
+        /// composition, string formats, constraints, response codes, HTTP methods,
+        /// content negotiation, and security schemes).
+        ///
+        /// Reports per-feature pass/fail results.
+        ///
+        /// Example: mockforge bench --conformance --target http://localhost:3000
+        #[arg(long)]
+        conformance: bool,
+
+        /// API key for conformance security scheme tests
+        ///
+        /// Used to test API key authentication in conformance mode.
+        ///
+        /// Example: --conformance-api-key "my-api-key"
+        #[arg(long)]
+        conformance_api_key: Option<String>,
+
+        /// Basic auth credentials for conformance security scheme tests
+        ///
+        /// Format: username:password
+        ///
+        /// Example: --conformance-basic-auth "admin:secret"
+        #[arg(long)]
+        conformance_basic_auth: Option<String>,
+
+        /// Conformance report output file
+        ///
+        /// Default: conformance-report.json
+        #[arg(long, value_name = "FILE", default_value = "conformance-report.json")]
+        conformance_report: PathBuf,
     },
 }
 
@@ -3148,6 +3183,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             owasp_report,
             owasp_report_format,
             owasp_iterations,
+            conformance,
+            conformance_api_key,
+            conformance_basic_auth,
+            conformance_report,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3223,6 +3262,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 owasp_report,
                 owasp_report_format,
                 owasp_iterations,
+                conformance,
+                conformance_api_key,
+                conformance_basic_auth,
+                conformance_report,
             };
 
             if let Err(e) = bench_cmd.execute().await {
