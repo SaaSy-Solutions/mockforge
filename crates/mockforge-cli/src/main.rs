@@ -1857,6 +1857,25 @@ enum Commands {
         /// Default: conformance-report.json
         #[arg(long, value_name = "FILE", default_value = "conformance-report.json")]
         conformance_report: PathBuf,
+
+        /// Conformance categories to test (comma-separated)
+        ///
+        /// Only run conformance tests for specific categories.
+        /// Valid categories: parameters, request-bodies, schema-types, composition,
+        /// string-formats, constraints, response-codes, http-methods, content-types, security
+        ///
+        /// Example: --conformance-categories "parameters,security"
+        #[arg(long)]
+        conformance_categories: Option<String>,
+
+        /// Conformance report format
+        ///
+        /// Output format for the conformance report: "json" (default) or "sarif" (SARIF 2.1.0).
+        /// SARIF format is compatible with GitHub Code Scanning and VS Code SARIF Viewer.
+        ///
+        /// Example: --conformance-report-format sarif
+        #[arg(long, default_value = "json")]
+        conformance_report_format: String,
     },
 }
 
@@ -3187,6 +3206,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             conformance_api_key,
             conformance_basic_auth,
             conformance_report,
+            conformance_categories,
+            conformance_report_format,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3266,6 +3287,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 conformance_api_key,
                 conformance_basic_auth,
                 conformance_report,
+                conformance_categories,
+                conformance_report_format,
             };
 
             if let Err(e) = bench_cmd.execute().await {

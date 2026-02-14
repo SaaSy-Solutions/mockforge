@@ -133,6 +133,10 @@ pub struct BenchCommand {
     pub conformance_basic_auth: Option<String>,
     /// Conformance report output file
     pub conformance_report: PathBuf,
+    /// Conformance categories to test (comma-separated, e.g. "parameters,security")
+    pub conformance_categories: Option<String>,
+    /// Conformance report format: "json" or "sarif"
+    pub conformance_report_format: String,
 
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
@@ -531,6 +535,8 @@ impl BenchCommand {
                 conformance_api_key: None,
                 conformance_basic_auth: None,
                 conformance_report: PathBuf::from("conformance-report.json"),
+                conformance_categories: None,
+                conformance_report_format: "json".to_string(),
             },
             targets,
             max_concurrency,
@@ -1783,22 +1789,75 @@ impl BenchCommand {
     async fn execute_conformance_test(&self) -> Result<()> {
         use crate::conformance::generator::{ConformanceConfig, ConformanceGenerator};
         use crate::conformance::report::ConformanceReport;
+        use crate::conformance::spec::ConformanceFeature;
 
         TerminalReporter::print_progress("OpenAPI 3.0.0 Conformance Testing Mode");
+
+        // Parse category filter
+        let categories = self.conformance_categories.as_ref().map(|cats_str| {
+            cats_str
+                .split(',')
+                .filter_map(|s| {
+                    let trimmed = s.trim();
+                    if let Some(canonical) = ConformanceFeature::category_from_cli_name(trimmed) {
+                        Some(canonical.to_string())
+                    } else {
+                        TerminalReporter::print_warning(&format!(
+                            "Unknown conformance category: '{}'. Valid categories: {}",
+                            trimmed,
+                            ConformanceFeature::cli_category_names()
+                                .iter()
+                                .map(|(cli, _)| *cli)
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ));
+                        None
+                    }
+                })
+                .collect::<Vec<String>>()
+        });
 
         let config = ConformanceConfig {
             target_url: self.target.clone(),
             api_key: self.conformance_api_key.clone(),
             basic_auth: self.conformance_basic_auth.clone(),
             skip_tls_verify: self.skip_tls_verify,
+            categories,
         };
 
-        let generator = ConformanceGenerator::new(config);
+        // Branch: spec-driven mode vs reference mode
+        let script = if !self.spec.is_empty() {
+            // Spec-driven mode: analyze user's spec
+            TerminalReporter::print_progress("Spec-driven conformance mode: analyzing spec...");
+            let parser = SpecParser::from_file(&self.spec[0]).await?;
+            let operations = parser.get_operations();
 
-        // Generate and write script
+            let annotated =
+                crate::conformance::spec_driven::SpecDrivenConformanceGenerator::annotate_operations(
+                    &operations,
+                    parser.spec(),
+                );
+            TerminalReporter::print_success(&format!(
+                "Analyzed {} operations, found {} feature annotations",
+                operations.len(),
+                annotated.iter().map(|a| a.features.len()).sum::<usize>()
+            ));
+
+            let gen = crate::conformance::spec_driven::SpecDrivenConformanceGenerator::new(
+                config, annotated,
+            );
+            gen.generate()?
+        } else {
+            // Reference mode: uses /conformance/ endpoints
+            let generator = ConformanceGenerator::new(config);
+            generator.generate()?
+        };
+
+        // Write script
         std::fs::create_dir_all(&self.output)?;
         let script_path = self.output.join("k6-conformance.js");
-        generator.write_script(&script_path)?;
+        std::fs::write(&script_path, &script)
+            .map_err(|e| BenchError::Other(format!("Failed to write conformance script: {}", e)))?;
         TerminalReporter::print_success(&format!(
             "Conformance script generated: {}",
             script_path.display()
@@ -1831,8 +1890,16 @@ impl BenchCommand {
             let report = ConformanceReport::from_file(&report_path)?;
             report.print_report();
 
-            // Copy to user-specified location if different
-            if self.conformance_report != report_path {
+            // Output in requested format
+            if self.conformance_report_format == "sarif" {
+                use crate::conformance::sarif::ConformanceSarifReport;
+                ConformanceSarifReport::write(&report, &self.target, &self.conformance_report)?;
+                TerminalReporter::print_success(&format!(
+                    "SARIF report saved to: {}",
+                    self.conformance_report.display()
+                ));
+            } else if self.conformance_report != report_path {
+                // Copy JSON report to user-specified location
                 std::fs::copy(&report_path, &self.conformance_report)?;
                 TerminalReporter::print_success(&format!(
                     "Report saved to: {}",
@@ -2051,6 +2118,8 @@ mod tests {
             conformance_api_key: None,
             conformance_basic_auth: None,
             conformance_report: PathBuf::from("conformance-report.json"),
+            conformance_categories: None,
+            conformance_report_format: "json".to_string(),
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -2116,6 +2185,8 @@ mod tests {
             conformance_api_key: None,
             conformance_basic_auth: None,
             conformance_report: PathBuf::from("conformance-report.json"),
+            conformance_categories: None,
+            conformance_report_format: "json".to_string(),
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -2177,6 +2248,8 @@ mod tests {
             conformance_api_key: None,
             conformance_basic_auth: None,
             conformance_report: PathBuf::from("conformance-report.json"),
+            conformance_categories: None,
+            conformance_report_format: "json".to_string(),
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

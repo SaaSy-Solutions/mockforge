@@ -13,6 +13,18 @@ pub struct ConformanceConfig {
     pub basic_auth: Option<String>,
     /// Skip TLS verification
     pub skip_tls_verify: bool,
+    /// Optional category filter — None means all categories
+    pub categories: Option<Vec<String>>,
+}
+
+impl ConformanceConfig {
+    /// Check if a category should be included based on the filter
+    pub fn should_include_category(&self, category: &str) -> bool {
+        match &self.categories {
+            None => true,
+            Some(cats) => cats.iter().any(|c| c.eq_ignore_ascii_case(category)),
+        }
+    }
 }
 
 /// Generates k6 scripts for OpenAPI 3.0.0 conformance testing
@@ -54,26 +66,36 @@ impl ConformanceGenerator {
         // Default function
         script.push_str("export default function () {\n");
 
-        // Parameters group
-        self.generate_parameters_group(&mut script);
-        // Request Bodies group
-        self.generate_request_bodies_group(&mut script);
-        // Schema Types group
-        self.generate_schema_types_group(&mut script);
-        // Composition group
-        self.generate_composition_group(&mut script);
-        // String Formats group
-        self.generate_string_formats_group(&mut script);
-        // Constraints group
-        self.generate_constraints_group(&mut script);
-        // Response Codes group
-        self.generate_response_codes_group(&mut script);
-        // HTTP Methods group
-        self.generate_http_methods_group(&mut script);
-        // Content Negotiation group
-        self.generate_content_negotiation_group(&mut script);
-        // Security group
-        self.generate_security_group(&mut script);
+        if self.config.should_include_category("Parameters") {
+            self.generate_parameters_group(&mut script);
+        }
+        if self.config.should_include_category("Request Bodies") {
+            self.generate_request_bodies_group(&mut script);
+        }
+        if self.config.should_include_category("Schema Types") {
+            self.generate_schema_types_group(&mut script);
+        }
+        if self.config.should_include_category("Composition") {
+            self.generate_composition_group(&mut script);
+        }
+        if self.config.should_include_category("String Formats") {
+            self.generate_string_formats_group(&mut script);
+        }
+        if self.config.should_include_category("Constraints") {
+            self.generate_constraints_group(&mut script);
+        }
+        if self.config.should_include_category("Response Codes") {
+            self.generate_response_codes_group(&mut script);
+        }
+        if self.config.should_include_category("HTTP Methods") {
+            self.generate_http_methods_group(&mut script);
+        }
+        if self.config.should_include_category("Content Types") {
+            self.generate_content_negotiation_group(&mut script);
+        }
+        if self.config.should_include_category("Security") {
+            self.generate_security_group(&mut script);
+        }
 
         script.push_str("}\n\n");
 
@@ -570,6 +592,7 @@ mod tests {
             api_key: None,
             basic_auth: None,
             skip_tls_verify: false,
+            categories: None,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -605,6 +628,7 @@ mod tests {
             api_key: Some("my-api-key".to_string()),
             basic_auth: Some("admin:secret".to_string()),
             skip_tls_verify: true,
+            categories: None,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -612,5 +636,54 @@ mod tests {
         assert!(script.contains("insecureSkipTLSVerify: true"));
         assert!(script.contains("my-api-key"));
         assert!(script.contains(&base64_encode("admin:secret")));
+    }
+
+    #[test]
+    fn test_should_include_category_none_includes_all() {
+        let config = ConformanceConfig {
+            target_url: "http://localhost:8080".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: false,
+            categories: None,
+        };
+        assert!(config.should_include_category("Parameters"));
+        assert!(config.should_include_category("Security"));
+        assert!(config.should_include_category("Anything"));
+    }
+
+    #[test]
+    fn test_should_include_category_filtered() {
+        let config = ConformanceConfig {
+            target_url: "http://localhost:8080".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: false,
+            categories: Some(vec!["Parameters".to_string(), "Security".to_string()]),
+        };
+        assert!(config.should_include_category("Parameters"));
+        assert!(config.should_include_category("Security"));
+        assert!(config.should_include_category("parameters")); // case-insensitive
+        assert!(!config.should_include_category("Composition"));
+        assert!(!config.should_include_category("Schema Types"));
+    }
+
+    #[test]
+    fn test_generate_with_category_filter() {
+        let config = ConformanceConfig {
+            target_url: "http://localhost:8080".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: false,
+            categories: Some(vec!["Parameters".to_string(), "Security".to_string()]),
+        };
+        let generator = ConformanceGenerator::new(config);
+        let script = generator.generate().unwrap();
+
+        assert!(script.contains("group('Parameters'"));
+        assert!(script.contains("group('Security'"));
+        assert!(!script.contains("group('Request Bodies'"));
+        assert!(!script.contains("group('Schema Types'"));
+        assert!(!script.contains("group('Composition'"));
     }
 }

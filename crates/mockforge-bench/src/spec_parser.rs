@@ -45,6 +45,11 @@ impl SpecParser {
         Self { spec: spec.spec }
     }
 
+    /// Get a reference to the underlying OpenAPI spec
+    pub fn spec(&self) -> &OpenAPI {
+        &self.spec
+    }
+
     /// Get all operations from the spec
     pub fn get_operations(&self) -> Vec<ApiOperation> {
         let mut operations = Vec::new();

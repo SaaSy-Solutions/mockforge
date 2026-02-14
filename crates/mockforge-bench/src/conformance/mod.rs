@@ -5,8 +5,14 @@
 
 pub mod generator;
 pub mod report;
+pub mod sarif;
+pub mod schema_validator;
 pub mod spec;
+pub mod spec_driven;
 
 pub use generator::{ConformanceConfig, ConformanceGenerator};
 pub use report::ConformanceReport;
+pub use sarif::ConformanceSarifReport;
+pub use schema_validator::SchemaValidatorGenerator;
 pub use spec::ConformanceFeature;
+pub use spec_driven::SpecDrivenConformanceGenerator;

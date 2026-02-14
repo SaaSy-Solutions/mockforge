@@ -48,6 +48,7 @@ pub use wafbench::{WafBenchLoader, WafBenchStats, WafBenchTestCase};
 // OpenAPI 3.0.0 Conformance Testing exports
 pub use conformance::{
     ConformanceConfig, ConformanceFeature, ConformanceGenerator, ConformanceReport,
+    ConformanceSarifReport, SchemaValidatorGenerator, SpecDrivenConformanceGenerator,
 };
 
 // OWASP API Security Top 10 exports

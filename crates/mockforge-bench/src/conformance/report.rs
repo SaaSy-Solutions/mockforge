@@ -165,6 +165,11 @@ impl ConformanceReport {
         println!();
     }
 
+    /// Get raw per-check results (for SARIF conversion)
+    pub fn raw_check_results(&self) -> &HashMap<String, (u64, u64)> {
+        &self.check_results
+    }
+
     /// Overall pass rate (0.0 - 100.0)
     pub fn overall_rate(&self) -> f64 {
         let categories = self.by_category();

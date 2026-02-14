@@ -1,3 +1,26 @@
+## [0.3.56] - 2026-02-14
+
+### Added
+
+- **[Bench]** Conformance category filtering (#79)
+  - New `--conformance-categories` flag to run only specific conformance categories (e.g., `--conformance-categories "parameters,security"`)
+  - Case-insensitive category matching with validation against known categories
+- **[Bench]** Spec-driven conformance testing (#79)
+  - When `--conformance --spec my-api.json` is provided, analyzes the user's actual OpenAPI spec to detect which features their API exercises
+  - Generates conformance tests against real endpoints instead of reference `/conformance/` paths
+  - Full `$ref` resolution with cycle detection for parameters, schemas, request bodies, and responses
+  - Detects: parameter types, request body formats, schema types/composition/formats/constraints, response codes, security schemes
+- **[Bench]** Response schema validation (#79)
+  - In spec-driven mode, validates response bodies against OpenAPI response schemas
+  - `SchemaValidatorGenerator` produces JavaScript validation expressions from OpenAPI schemas
+  - Supports object (required fields, property types), array, string (format regex, enum, length), integer/number (range), boolean validation
+  - Wrapped in try-catch for resilient k6 execution
+- **[Bench]** SARIF 2.1.0 report output (#79)
+  - New `--conformance-report-format sarif` flag outputs conformance results in SARIF 2.1.0 format
+  - Compatible with GitHub Code Scanning, VS Code SARIF Viewer, and CI/CD pipelines
+  - Maps each conformance feature to a SARIF rule with OpenAPI spec section links
+  - Passed features emit `level: "note"`, failed features emit `level: "error"`
+
 ## [0.3.55] - 2026-02-14
 
 ### Added

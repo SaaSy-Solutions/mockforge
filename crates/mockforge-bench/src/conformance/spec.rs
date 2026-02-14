@@ -60,6 +60,8 @@ pub enum ConformanceFeature {
     SecurityBearer,
     SecurityApiKey,
     SecurityBasic,
+    // Response Validation (spec-driven mode)
+    ResponseValidation,
 }
 
 impl ConformanceFeature {
@@ -109,6 +111,7 @@ impl ConformanceFeature {
             | Self::MethodOptions => "HTTP Methods",
             Self::ContentNegotiation => "Content Types",
             Self::SecurityBearer | Self::SecurityApiKey | Self::SecurityBasic => "Security",
+            Self::ResponseValidation => "Response Validation",
         }
     }
 
@@ -162,6 +165,7 @@ impl ConformanceFeature {
             Self::SecurityBearer => "security:bearer",
             Self::SecurityApiKey => "security:apikey",
             Self::SecurityBasic => "security:basic",
+            Self::ResponseValidation => "response:schema:validation",
         }
     }
 
@@ -215,6 +219,7 @@ impl ConformanceFeature {
             Self::SecurityBearer,
             Self::SecurityApiKey,
             Self::SecurityBasic,
+            Self::ResponseValidation,
         ]
     }
 
@@ -231,7 +236,61 @@ impl ConformanceFeature {
             "HTTP Methods",
             "Content Types",
             "Security",
+            "Response Validation",
         ]
+    }
+
+    /// Convert a CLI category name (lowercase, hyphenated) to the canonical category name
+    pub fn category_from_cli_name(name: &str) -> Option<&'static str> {
+        match name.to_lowercase().replace('_', "-").as_str() {
+            "parameters" => Some("Parameters"),
+            "request-bodies" => Some("Request Bodies"),
+            "schema-types" => Some("Schema Types"),
+            "composition" => Some("Composition"),
+            "string-formats" => Some("String Formats"),
+            "constraints" => Some("Constraints"),
+            "response-codes" => Some("Response Codes"),
+            "http-methods" => Some("HTTP Methods"),
+            "content-types" => Some("Content Types"),
+            "security" => Some("Security"),
+            "response-validation" => Some("Response Validation"),
+            _ => None,
+        }
+    }
+
+    /// All valid CLI category names with their canonical names
+    pub fn cli_category_names() -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("parameters", "Parameters"),
+            ("request-bodies", "Request Bodies"),
+            ("schema-types", "Schema Types"),
+            ("composition", "Composition"),
+            ("string-formats", "String Formats"),
+            ("constraints", "Constraints"),
+            ("response-codes", "Response Codes"),
+            ("http-methods", "HTTP Methods"),
+            ("content-types", "Content Types"),
+            ("security", "Security"),
+            ("response-validation", "Response Validation"),
+        ]
+    }
+
+    /// Get the OpenAPI spec URL for this feature's category (used in SARIF reports)
+    pub fn spec_url(&self) -> &'static str {
+        match self.category() {
+            "Parameters" => "https://spec.openapis.org/oas/v3.0.0#parameter-object",
+            "Request Bodies" => "https://spec.openapis.org/oas/v3.0.0#request-body-object",
+            "Schema Types" => "https://spec.openapis.org/oas/v3.0.0#schema-object",
+            "Composition" => "https://spec.openapis.org/oas/v3.0.0#schema-object",
+            "String Formats" => "https://spec.openapis.org/oas/v3.0.0#data-types",
+            "Constraints" => "https://spec.openapis.org/oas/v3.0.0#schema-object",
+            "Response Codes" => "https://spec.openapis.org/oas/v3.0.0#responses-object",
+            "HTTP Methods" => "https://spec.openapis.org/oas/v3.0.0#path-item-object",
+            "Content Types" => "https://spec.openapis.org/oas/v3.0.0#media-type-object",
+            "Security" => "https://spec.openapis.org/oas/v3.0.0#security-scheme-object",
+            "Response Validation" => "https://spec.openapis.org/oas/v3.0.0#response-object",
+            _ => "https://spec.openapis.org/oas/v3.0.0",
+        }
     }
 }
 
@@ -253,6 +312,46 @@ mod tests {
             ConformanceFeature::all().iter().map(|f| f.category()).collect();
         for cat in ConformanceFeature::categories() {
             assert!(categories.contains(cat), "Category '{}' has no features", cat);
+        }
+    }
+
+    #[test]
+    fn test_category_from_cli_name() {
+        assert_eq!(ConformanceFeature::category_from_cli_name("parameters"), Some("Parameters"));
+        assert_eq!(
+            ConformanceFeature::category_from_cli_name("request-bodies"),
+            Some("Request Bodies")
+        );
+        assert_eq!(
+            ConformanceFeature::category_from_cli_name("schema-types"),
+            Some("Schema Types")
+        );
+        assert_eq!(ConformanceFeature::category_from_cli_name("PARAMETERS"), Some("Parameters"));
+        assert_eq!(
+            ConformanceFeature::category_from_cli_name("Request-Bodies"),
+            Some("Request Bodies")
+        );
+        assert_eq!(ConformanceFeature::category_from_cli_name("invalid"), None);
+    }
+
+    #[test]
+    fn test_cli_category_names_complete() {
+        let cli_names = ConformanceFeature::cli_category_names();
+        let categories = ConformanceFeature::categories();
+        assert_eq!(cli_names.len(), categories.len());
+        for (_, canonical) in &cli_names {
+            assert!(
+                categories.contains(canonical),
+                "CLI name maps to unknown category: {}",
+                canonical
+            );
+        }
+    }
+
+    #[test]
+    fn test_spec_urls_not_empty() {
+        for feature in ConformanceFeature::all() {
+            assert!(!feature.spec_url().is_empty(), "Feature {:?} has empty spec URL", feature);
         }
     }
 }
