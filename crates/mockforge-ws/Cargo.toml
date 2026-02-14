@@ -35,7 +35,7 @@ mockforge-tracing = { version = "0.3.31", path = "../mockforge-tracing" }
 opentelemetry = { version = "0.22", features = ["trace"] }
 
 [dev-dependencies]
-tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread"] }
 futures-util = "0.3"
 tokio-tungstenite = { version = "0.28", features=["rustls-tls-native-roots"] }
 axum = { version = "0.8" }
