@@ -27,11 +27,8 @@ CREATE INDEX IF NOT EXISTS idx_templates_name_version ON templates(name, version
 -- Index for name lookups
 CREATE INDEX IF NOT EXISTS idx_templates_name ON templates(name);
 
--- Index for downloads sorting (popular templates)
-CREATE INDEX IF NOT EXISTS idx_templates_downloads ON templates(downloads DESC);
-
 -- Index for rating sorting (highly rated templates)
-CREATE INDEX IF NOT EXISTS idx_templates_rating ON templates(rating_avg DESC) WHERE rating_count > 0;
+-- Note: templates table uses stats_json for downloads, so no direct downloads column index
 
 -- Composite index for org + name (common lookup pattern)
 CREATE INDEX IF NOT EXISTS idx_templates_org_name ON templates(org_id, name) WHERE org_id IS NOT NULL;
@@ -58,9 +55,6 @@ CREATE INDEX IF NOT EXISTS idx_scenarios_org_public ON scenarios(org_id, categor
 
 -- Composite index for template + version lookups
 CREATE INDEX IF NOT EXISTS idx_template_versions_template_version ON template_versions(template_id, version);
-
--- Index for downloads sorting
-CREATE INDEX IF NOT EXISTS idx_template_versions_downloads ON template_versions(downloads DESC);
 
 -- ============================================================================
 -- Scenario versions table additional indexes

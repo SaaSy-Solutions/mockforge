@@ -24,9 +24,9 @@ CREATE TABLE suspicious_activities (
     ip_address VARCHAR(45), -- IPv6 max length
     user_agent TEXT,
     resolved BOOLEAN DEFAULT FALSE,
-    resolved_at TIMESTAMP,
+    resolved_at TIMESTAMPTZ,
     resolved_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_suspicious_activities_org ON suspicious_activities(org_id, created_at DESC);

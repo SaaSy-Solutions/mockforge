@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS org_ai_budgets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE, -- NULL for org-level, specific UUID for workspace-level
+    workspace_id UUID, -- NULL for org-level, specific UUID for workspace-level
     max_tokens_per_period BIGINT NOT NULL DEFAULT 1000000, -- Maximum tokens per period
     period_type VARCHAR(50) NOT NULL DEFAULT 'month', -- 'day', 'week', 'month', 'year'
     max_calls_per_period BIGINT NOT NULL DEFAULT 10000, -- Maximum AI calls per period
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS org_ai_budgets (
 CREATE TABLE IF NOT EXISTS org_ai_rate_limits (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE, -- NULL for org-level, specific UUID for workspace-level
+    workspace_id UUID, -- NULL for org-level, specific UUID for workspace-level
     rate_limit_per_minute INTEGER NOT NULL DEFAULT 100, -- Requests per minute
     rate_limit_per_hour INTEGER, -- Optional: requests per hour
     rate_limit_per_day INTEGER, -- Optional: requests per day
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS org_ai_rate_limits (
 CREATE TABLE IF NOT EXISTS org_ai_feature_toggles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE, -- NULL for org-level, specific UUID for workspace-level
+    workspace_id UUID, -- NULL for org-level, specific UUID for workspace-level
     feature_name VARCHAR(100) NOT NULL, -- 'mock_generation', 'contract_diff', 'persona_generation', 'free_form_generation', 'debug_analysis'
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -53,20 +53,20 @@ CREATE TABLE IF NOT EXISTS org_ai_feature_toggles (
 CREATE TABLE IF NOT EXISTS org_ai_usage_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    workspace_id UUID REFERENCES workspaces(id) ON DELETE SET NULL,
+    workspace_id UUID,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     feature_name VARCHAR(100) NOT NULL, -- Which AI feature was used
     tokens_used INTEGER NOT NULL DEFAULT 0,
     cost_usd DECIMAL(10, 6) NOT NULL DEFAULT 0.0, -- Cost in USD
     request_id VARCHAR(255), -- Optional: request identifier for tracking
     metadata JSONB DEFAULT '{}'::jsonb, -- Additional metadata (model used, provider, etc.)
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    -- Index for time-based queries
-    INDEX idx_org_ai_usage_logs_created_at (created_at),
-    INDEX idx_org_ai_usage_logs_org_workspace (org_id, workspace_id),
-    INDEX idx_org_ai_usage_logs_feature (feature_name)
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Indexes for usage logs
+CREATE INDEX IF NOT EXISTS idx_org_ai_usage_logs_created_at ON org_ai_usage_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_org_ai_usage_logs_org_workspace ON org_ai_usage_logs(org_id, workspace_id);
+CREATE INDEX IF NOT EXISTS idx_org_ai_usage_logs_feature ON org_ai_usage_logs(feature_name);
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_org_ai_budgets_org ON org_ai_budgets(org_id);

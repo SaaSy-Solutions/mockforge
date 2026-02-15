@@ -5,7 +5,7 @@ CREATE TABLE login_attempts (
     email VARCHAR(255) NOT NULL,
     ip_address VARCHAR(45), -- IPv6 max length
     success BOOLEAN NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_login_attempts_email ON login_attempts(email, created_at DESC);

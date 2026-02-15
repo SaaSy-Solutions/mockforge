@@ -10,8 +10,8 @@ CREATE TABLE organizations (
     plan VARCHAR(50) NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'team')),
     limits_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     stripe_customer_id VARCHAR(255) UNIQUE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Organization members table
@@ -20,8 +20,8 @@ CREATE TABLE org_members (
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role VARCHAR(50) NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'member')),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(org_id, user_id)
 );
 
@@ -34,8 +34,8 @@ CREATE TABLE projects (
     description TEXT,
     visibility VARCHAR(50) NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'public')),
     default_env VARCHAR(50) NOT NULL DEFAULT 'prod',
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(org_id, slug)
 );
 

@@ -40,7 +40,7 @@ CREATE TABLE audit_logs (
     metadata JSONB,
     ip_address VARCHAR(45), -- IPv6 max length
     user_agent TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_audit_logs_org ON audit_logs(org_id, created_at DESC);

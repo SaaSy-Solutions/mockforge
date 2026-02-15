@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS user_settings (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     setting_key VARCHAR(255) NOT NULL,
     setting_value JSONB NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, setting_key)
 );
 
@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS org_settings (
     org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     setting_key VARCHAR(255) NOT NULL,
     setting_value JSONB NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(org_id, setting_key)
 );
 

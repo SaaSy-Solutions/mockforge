@@ -28,8 +28,8 @@ CREATE TABLE sso_configurations (
     require_signed_responses BOOLEAN DEFAULT TRUE,
     allow_unsolicited_responses BOOLEAN DEFAULT FALSE,
 
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
 
     UNIQUE(org_id) -- One SSO config per organization
 );
@@ -41,8 +41,8 @@ CREATE TABLE sso_sessions (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     session_index VARCHAR(255), -- SAML SessionIndex
     name_id VARCHAR(255), -- SAML NameID
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW()
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Indexes for performance

@@ -26,7 +26,7 @@ CREATE TABLE feature_usage (
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     feature feature_type NOT NULL,
     metadata JSONB,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_feature_usage_org ON feature_usage(org_id, created_at DESC);

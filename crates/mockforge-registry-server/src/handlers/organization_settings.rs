@@ -14,7 +14,8 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
     models::{
-        BYOKConfig, OrgAiSettings, OrgMember, OrgRole, OrgSetting, Organization, Subscription, User,
+        record_audit_event, AuditEventType, BYOKConfig, OrgAiSettings, OrgMember, OrgRole,
+        OrgSetting, Organization, Subscription, User,
     },
     AppState,
 };
@@ -144,6 +145,22 @@ pub async fn update_organization_settings(
         (false, None)
     };
 
+    // Record audit event
+    record_audit_event(
+        pool,
+        org_id,
+        Some(user_id),
+        AuditEventType::ByokConfigUpdated,
+        "Organization BYOK settings updated".to_string(),
+        Some(serde_json::json!({
+            "byok_enabled": byok_enabled,
+            "byok_provider": byok_provider,
+        })),
+        None,
+        None,
+    )
+    .await;
+
     Ok(Json(OrganizationSettingsResponse {
         org_id: updated_org.id,
         org_name: updated_org.name.clone(),
@@ -185,14 +202,14 @@ pub async fn get_organization_usage(
 
     // Get usage statistics
     let total_requests: (Option<i64>,) =
-        sqlx::query_as("SELECT SUM(request_count) FROM usage_stats WHERE org_id = $1")
+        sqlx::query_as("SELECT COALESCE(SUM(requests), 0)::BIGINT FROM usage_counters WHERE org_id = $1")
             .bind(org_id)
             .fetch_one(pool)
             .await
             .map_err(|e| ApiError::Database(e))?;
 
     let total_storage_gb: (Option<f64>,) = sqlx::query_as(
-        "SELECT SUM(storage_bytes) / 1073741824.0 FROM usage_stats WHERE org_id = $1",
+        "SELECT COALESCE(SUM(storage_bytes), 0)::FLOAT8 / 1073741824.0 FROM usage_counters WHERE org_id = $1",
     )
     .bind(org_id)
     .fetch_one(pool)
@@ -200,7 +217,7 @@ pub async fn get_organization_usage(
     .map_err(|e| ApiError::Database(e))?;
 
     let total_ai_tokens: (Option<i64>,) =
-        sqlx::query_as("SELECT SUM(ai_tokens_used) FROM usage_stats WHERE org_id = $1")
+        sqlx::query_as("SELECT COALESCE(SUM(ai_tokens_used), 0)::BIGINT FROM usage_counters WHERE org_id = $1")
             .bind(org_id)
             .fetch_one(pool)
             .await
@@ -404,6 +421,19 @@ pub async fn update_organization_ai_settings(
     OrgSetting::set(pool, org_id, "ai_settings", config_value)
         .await
         .map_err(|e| ApiError::Database(e))?;
+
+    // Record audit event
+    record_audit_event(
+        pool,
+        org_id,
+        Some(user_id),
+        AuditEventType::SettingsUpdated,
+        "Organization AI settings updated".to_string(),
+        None,
+        None,
+        None,
+    )
+    .await;
 
     Ok(Json(request))
 }

@@ -9,8 +9,8 @@ CREATE TABLE users (
     api_token VARCHAR(255) UNIQUE,
     is_verified BOOLEAN DEFAULT FALSE,
     is_admin BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Plugins table
@@ -27,9 +27,9 @@ CREATE TABLE plugins (
     rating_avg DECIMAL(3,2) DEFAULT 0,
     rating_count INT DEFAULT 0,
     author_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    verified_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    verified_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
 
     -- Constraints
     CONSTRAINT category_values CHECK (category IN ('auth', 'template', 'response', 'datasource', 'middleware', 'testing', 'observability', 'other'))
@@ -46,7 +46,7 @@ CREATE TABLE plugin_versions (
     min_mockforge_version VARCHAR(50),
     yanked BOOLEAN DEFAULT FALSE,
     downloads INT DEFAULT 0,
-    published_at TIMESTAMP DEFAULT NOW(),
+    published_at TIMESTAMPTZ DEFAULT NOW(),
 
     UNIQUE(plugin_id, version)
 );
@@ -84,8 +84,8 @@ CREATE TABLE reviews (
     helpful_count INT DEFAULT 0,
     unhelpful_count INT DEFAULT 0,
     verified BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
 
     UNIQUE(plugin_id, user_id)
 );

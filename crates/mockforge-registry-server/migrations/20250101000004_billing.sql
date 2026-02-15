@@ -9,12 +9,12 @@ CREATE TABLE subscriptions (
     price_id VARCHAR(255) NOT NULL,
     plan VARCHAR(50) NOT NULL CHECK (plan IN ('free', 'pro', 'team')),
     status VARCHAR(50) NOT NULL CHECK (status IN ('active', 'trialing', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired')),
-    current_period_start TIMESTAMP NOT NULL,
-    current_period_end TIMESTAMP NOT NULL,
+    current_period_start TIMESTAMPTZ NOT NULL,
+    current_period_end TIMESTAMPTZ NOT NULL,
     cancel_at_period_end BOOLEAN DEFAULT FALSE,
-    canceled_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    canceled_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Usage counters table (monthly aggregation)
@@ -26,8 +26,8 @@ CREATE TABLE usage_counters (
     egress_bytes BIGINT NOT NULL DEFAULT 0,
     storage_bytes BIGINT NOT NULL DEFAULT 0,
     ai_tokens_used BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(org_id, period_start)
 );
 
@@ -40,10 +40,10 @@ CREATE TABLE api_tokens (
     token_prefix VARCHAR(20) NOT NULL, -- First 8 chars for display (e.g., "mfx_abc1")
     hashed_token TEXT NOT NULL, -- Full token hashed with bcrypt/argon2
     scopes TEXT[] NOT NULL DEFAULT ARRAY['read:packages']::TEXT[],
-    last_used_at TIMESTAMP,
-    expires_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    last_used_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Create indexes for performance
