@@ -201,12 +201,13 @@ pub async fn get_organization_usage(
     }
 
     // Get usage statistics
-    let total_requests: (Option<i64>,) =
-        sqlx::query_as("SELECT COALESCE(SUM(requests), 0)::BIGINT FROM usage_counters WHERE org_id = $1")
-            .bind(org_id)
-            .fetch_one(pool)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+    let total_requests: (Option<i64>,) = sqlx::query_as(
+        "SELECT COALESCE(SUM(requests), 0)::BIGINT FROM usage_counters WHERE org_id = $1",
+    )
+    .bind(org_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| ApiError::Database(e))?;
 
     let total_storage_gb: (Option<f64>,) = sqlx::query_as(
         "SELECT COALESCE(SUM(storage_bytes), 0)::FLOAT8 / 1073741824.0 FROM usage_counters WHERE org_id = $1",
@@ -216,12 +217,13 @@ pub async fn get_organization_usage(
     .await
     .map_err(|e| ApiError::Database(e))?;
 
-    let total_ai_tokens: (Option<i64>,) =
-        sqlx::query_as("SELECT COALESCE(SUM(ai_tokens_used), 0)::BIGINT FROM usage_counters WHERE org_id = $1")
-            .bind(org_id)
-            .fetch_one(pool)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+    let total_ai_tokens: (Option<i64>,) = sqlx::query_as(
+        "SELECT COALESCE(SUM(ai_tokens_used), 0)::BIGINT FROM usage_counters WHERE org_id = $1",
+    )
+    .bind(org_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| ApiError::Database(e))?;
 
     // Get feature usage counts
     let hosted_mocks_count: (i64,) =

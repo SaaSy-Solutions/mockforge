@@ -645,6 +645,41 @@ impl WafBenchLoader {
         value.to_string()
     }
 
+    /// Normalize a form body value to valid `application/x-www-form-urlencoded` format.
+    ///
+    /// CRS YAML `data` fields may be pre-encoded (`var=%3B%3Bdd+foo+bar`) or decoded
+    /// (`var=;;dd foo bar`). This function ensures the output is always properly encoded
+    /// so WAFs can parse it into ARGS and fire rules like 942432.
+    ///
+    /// Strategy: decode fully first (handling `+` as space and `%XX` sequences), then
+    /// re-encode. Pre-encoded input round-trips correctly; decoded input gets encoded.
+    fn ensure_form_encoded(value: &str) -> String {
+        value
+            .split('&')
+            .map(|pair| {
+                if let Some(eq_pos) = pair.find('=') {
+                    let key = &pair[..eq_pos];
+                    let val = &pair[eq_pos + 1..];
+                    // Decode: + → space, then %XX → chars
+                    let key_plus = key.replace('+', " ");
+                    let val_plus = val.replace('+', " ");
+                    let decoded_key = urlencoding::decode(&key_plus).unwrap_or(key.into());
+                    let decoded_val = urlencoding::decode(&val_plus).unwrap_or(val.into());
+                    // Re-encode with form-encoding (spaces as +)
+                    let enc_key = urlencoding::encode(&decoded_key).replace("%20", "+");
+                    let enc_val = urlencoding::encode(&decoded_val).replace("%20", "+");
+                    format!("{enc_key}={enc_val}")
+                } else {
+                    // No key=value structure — encode the whole thing
+                    let pair_plus = pair.replace('+', " ");
+                    let decoded = urlencoding::decode(&pair_plus).unwrap_or(pair.into());
+                    urlencoding::encode(&decoded).replace("%20", "+").to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("&")
+    }
+
     /// Convert loaded tests to SecurityPayload format for use with existing security testing
     pub fn to_security_payloads(&self) -> Vec<SecurityPayload> {
         let mut payloads = Vec::new();
@@ -708,10 +743,11 @@ impl WafBenchLoader {
                     sec_payload = sec_payload.with_inject_as_path();
                 }
 
-                // Body payloads: preserve the raw CRS data field for form-encoded delivery
-                // (e.g., 942432: data "var=;;dd foo bar" sent as application/x-www-form-urlencoded)
+                // Body payloads: normalize to valid form-encoded format for WAF ARGS parsing
+                // (e.g., 942432: data "var=%3B%3Bdd+foo+bar" or decoded "var=;;dd foo bar")
                 if payload.location == PayloadLocation::Body {
-                    sec_payload = sec_payload.with_form_encoded_body(payload.value.clone());
+                    sec_payload = sec_payload
+                        .with_form_encoded_body(Self::ensure_form_encoded(&payload.value));
                 }
 
                 payloads.push(sec_payload);
@@ -1053,6 +1089,36 @@ tests:
     }
 
     #[test]
+    fn test_ensure_form_encoded() {
+        // Pre-encoded input round-trips correctly
+        assert_eq!(
+            WafBenchLoader::ensure_form_encoded("var=%3B%3Bdd+foo+bar"),
+            "var=%3B%3Bdd+foo+bar"
+        );
+        // Decoded input gets properly encoded
+        assert_eq!(WafBenchLoader::ensure_form_encoded("var=;;dd foo bar"), "var=%3B%3Bdd+foo+bar");
+        // Multi-field form
+        assert_eq!(
+            WafBenchLoader::ensure_form_encoded("var=-------------------&var2=whatever"),
+            "var=-------------------&var2=whatever"
+        );
+        // Already-encoded multi-field
+        assert_eq!(
+            WafBenchLoader::ensure_form_encoded("key=%22value%22&other=test+data"),
+            "key=%22value%22&other=test+data"
+        );
+        // Decoded multi-field
+        assert_eq!(
+            WafBenchLoader::ensure_form_encoded("key=\"value\"&other=test data"),
+            "key=%22value%22&other=test+data"
+        );
+        // No key=value structure
+        assert_eq!(WafBenchLoader::ensure_form_encoded("plain text"), "plain+text");
+        // Empty string
+        assert_eq!(WafBenchLoader::ensure_form_encoded(""), "");
+    }
+
+    #[test]
     fn test_uri_path_only_gets_inject_as_path() {
         let yaml = r#"
 meta:
@@ -1195,11 +1261,70 @@ tests:
             body_payload.form_encoded_body.is_some(),
             "Body payload should have form_encoded_body set"
         );
+        // Pre-encoded CRS YAML value round-trips through ensure_form_encoded
         assert_eq!(
             body_payload.form_encoded_body.as_deref().unwrap(),
             "var=%3B%3Bdd+foo+bar",
-            "form_encoded_body should contain the raw CRS data value"
+            "form_encoded_body should be properly URL-encoded"
         );
+    }
+
+    #[test]
+    fn test_body_payload_decoded_yaml_gets_encoded() {
+        // CRS YAML with already-decoded data value (some CRS distributions)
+        let yaml = r#"
+meta:
+  author: test
+  description: Form body test (decoded)
+  enabled: true
+  name: test.yaml
+
+tests:
+  - desc: "Form-encoded body attack (decoded)"
+    test_title: "942432-2"
+    stages:
+      - stage:
+          input:
+            dest_addr: 127.0.0.1
+            headers:
+              Host: localhost
+            method: POST
+            port: 80
+            uri: "/"
+            data: "var=;;dd foo bar"
+          output:
+            log_contains: id "942432"
+"#;
+
+        let file: WafBenchFile = serde_yaml::from_str(yaml).unwrap();
+        let mut loader = WafBenchLoader::new();
+        loader.stats.files_processed += 1;
+
+        let category = SecurityCategory::SqlInjection;
+        for test in &file.tests {
+            if let Some(test_case) = loader.parse_test_case(test, category) {
+                loader.test_cases.push(test_case);
+            }
+        }
+
+        let payloads = loader.to_security_payloads();
+        let body_payload = payloads
+            .iter()
+            .find(|p| p.location == SecurityPayloadLocation::Body)
+            .expect("Should have body payload");
+
+        assert!(
+            body_payload.form_encoded_body.is_some(),
+            "Body payload should have form_encoded_body set"
+        );
+        // Decoded input must be re-encoded for WAF ARGS parsing
+        let encoded = body_payload.form_encoded_body.as_deref().unwrap();
+        assert!(
+            encoded.contains("%3B%3B") || encoded.contains("%3b%3b"),
+            "Semicolons must be URL-encoded: {encoded}"
+        );
+        assert!(!encoded.contains(' '), "Spaces must be encoded as + in form body: {encoded}");
+        assert!(encoded.starts_with("var="), "Form key must be preserved: {encoded}");
     }
 
     #[test]
