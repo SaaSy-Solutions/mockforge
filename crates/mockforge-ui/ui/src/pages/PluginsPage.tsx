@@ -28,8 +28,10 @@ import { PluginStatus } from '../components/plugins/PluginStatus';
 import { InstallPluginModal } from '../components/plugins/InstallPluginModal';
 import type { PluginType, PluginStatus as PluginStatusType } from '../types';
 import { pluginsApi } from '../services/api';
+import { useI18n } from '../i18n/I18nProvider';
 
 export function PluginsPage() {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState('installed');
   const [selectedPlugin, setSelectedPlugin] = useState<string | null>(null);
   const [showInstallModal, setShowInstallModal] = useState(false);
@@ -60,22 +62,14 @@ export function PluginsPage() {
   }, []);
 
   const handleBrowseMarketplace = useCallback(() => {
-    // Open marketplace page (if it exists) or navigate to marketplace section
-    const marketplacePath = '/plugins/marketplace';
-    // Try to navigate within the app first
-    if (window.location.hash) {
-      window.location.hash = 'plugins-marketplace';
-    } else {
-      // Fallback to opening in new tab
-      window.open(marketplacePath, '_blank');
-    }
+    window.dispatchEvent(new CustomEvent('navigate-tab', { detail: { tab: 'plugin-registry' } }));
   }, []);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Plugin Management"
-        subtitle="Manage authentication, template, response, and datasource plugins"
+        title={t('page.plugins.title')}
+        subtitle={t('page.plugins.subtitle')}
         action={
           <div className="flex gap-3">
             <Button
@@ -86,7 +80,7 @@ export function PluginsPage() {
               aria-label="Install new plugin"
             >
               <Plus className="w-4 h-4" />
-              Install Plugin
+              {t('page.plugins.installPlugin')}
             </Button>
             <Button
               variant="outline"
@@ -96,14 +90,14 @@ export function PluginsPage() {
               aria-label="Reload all plugins"
             >
               <RefreshCw className={`w-4 h-4 ${isReloading ? 'animate-spin' : ''}`} />
-              Reload All
+              {t('page.plugins.reloadAll')}
             </Button>
           </div>
         }
       />
 
       {error && (
-        <Alert type="error" title="Error">
+        <Alert type="error" title={t('page.plugins.error')}>
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4" />
             <span>{error}</span>
@@ -188,8 +182,8 @@ export function PluginsPage() {
             <div className="p-6">
               <EmptyState
                 icon={<Puzzle className="w-12 h-12 text-gray-400" />}
-                title="Plugin Marketplace"
-                description="Browse and install plugins from the official marketplace"
+                title={t('page.plugins.marketplaceTitle')}
+                description={t('page.plugins.marketplaceBody')}
                 action={
                   <Button
                     className="flex items-center gap-2"
@@ -197,7 +191,7 @@ export function PluginsPage() {
                     aria-label="Browse plugin marketplace"
                   >
                     <Upload className="w-4 h-4" />
-                    Browse Marketplace
+                    {t('page.plugins.browseMarketplace')}
                   </Button>
                 }
               />

@@ -2,12 +2,13 @@
 
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
     auth::hash_password,
     email::EmailService,
     error::{ApiError, ApiResult},
-    models::{User, VerificationToken},
+    models::{record_audit_event, AuditEventType, User, VerificationToken},
     AppState,
 };
 
@@ -156,6 +157,19 @@ pub async fn confirm_password_reset(
         .map_err(|e| ApiError::Database(e))?;
 
     tracing::info!("Password reset completed: user_id={}, email={}", user.id, user.email);
+
+    // Record audit event for password change
+    record_audit_event(
+        pool,
+        Uuid::nil(), // System-level operation (no org context)
+        Some(user.id),
+        AuditEventType::PasswordChanged,
+        format!("Password reset completed for user {}", user.email),
+        None,
+        None,
+        None,
+    )
+    .await;
 
     Ok(Json(PasswordResetConfirmResponse {
         success: true,

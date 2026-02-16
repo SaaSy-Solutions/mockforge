@@ -56,6 +56,7 @@ import {
   ThumbUp as ThumbUpIcon,
   ThumbDown as ThumbDownIcon,
 } from '@mui/icons-material';
+import { authenticatedFetch } from '../utils/apiClient';
 
 interface Plugin {
   name: string;
@@ -181,7 +182,7 @@ export const PluginRegistryPage: React.FC = () => {
 
   const loadPlugins = async () => {
     try {
-      const response = await fetch('/api/v1/plugins/search', {
+      const response = await authenticatedFetch('/api/v1/plugins/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -273,7 +274,7 @@ export const PluginRegistryPage: React.FC = () => {
 
     // Load reviews
     try {
-      const response = await fetch(`/api/v1/plugins/${plugin.name}/reviews`);
+      const response = await authenticatedFetch(`/api/v1/plugins/${plugin.name}/reviews`);
       if (response.ok) {
         const data = await response.json();
         setReviews(data.reviews || []);
@@ -284,7 +285,7 @@ export const PluginRegistryPage: React.FC = () => {
 
     // Load security scan
     try {
-      const response = await fetch(`/api/v1/plugins/${plugin.name}/security`);
+      const response = await authenticatedFetch(`/api/v1/plugins/${plugin.name}/security`);
       if (response.ok) {
         const data = await response.json();
         setSecurityScan(data);
@@ -294,47 +295,60 @@ export const PluginRegistryPage: React.FC = () => {
     }
   };
 
-  const handleInstall = async (pluginName: string, version?: string) => {
-    setInstalling(pluginName);
+  const handleInstall = async (plugin: Plugin, version?: VersionInfo) => {
+    setInstalling(plugin.name);
     setInstallProgress(0);
 
     try {
-      const spec = version ? `${pluginName}@${version}` : pluginName;
+      const selectedVersion = version || plugin.versions[0];
+      const source = selectedVersion?.downloadUrl;
+      if (!source) {
+        throw new Error(`No downloadable artifact found for ${plugin.name}`);
+      }
 
       // Simulate progress
       const progressInterval = setInterval(() => {
         setInstallProgress((prev) => Math.min(prev + 10, 90));
       }, 200);
 
-      const response = await fetch('/api/plugins/install', {
+      const response = await authenticatedFetch('/api/plugins/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plugin: spec }),
+        body: JSON.stringify({
+          source,
+          force: false,
+          checksum: selectedVersion?.checksum || undefined,
+        }),
       });
 
+      const data = await response.json().catch(() => ({ success: false, error: 'Invalid response' }));
       clearInterval(progressInterval);
       setInstallProgress(100);
 
-      if (response.ok) {
+      if (response.ok && data?.success) {
         setTimeout(() => {
           setInstalling(null);
           setInstallProgress(0);
-          alert(`Plugin ${pluginName} installed successfully!`);
+          alert(`Plugin ${plugin.name} installed successfully!`);
         }, 500);
       } else {
-        throw new Error('Installation failed');
+        throw new Error(data?.error || 'Installation failed');
       }
     } catch (error) {
       console.error('Failed to install plugin:', error);
       setInstalling(null);
       setInstallProgress(0);
-      alert(`Failed to install ${pluginName}`);
+      const message = error instanceof Error ? error.message : `Failed to install ${plugin.name}`;
+      alert(message);
     }
   };
 
   const handleVoteReview = async (reviewId: string, helpful: boolean) => {
     try {
-      await fetch(`/api/v1/reviews/${reviewId}/vote`, {
+      if (!selectedPlugin) {
+        return;
+      }
+      await authenticatedFetch(`/api/v1/plugins/${selectedPlugin.name}/reviews/${reviewId}/vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ helpful }),
@@ -550,7 +564,7 @@ export const PluginRegistryPage: React.FC = () => {
                     size="small"
                     variant="contained"
                     startIcon={installing === plugin.name ? <UpdateIcon /> : <DownloadIcon />}
-                    onClick={() => handleInstall(plugin.name)}
+                    onClick={() => handleInstall(plugin)}
                     disabled={installing === plugin.name}
                   >
                     {installing === plugin.name ? 'Installing...' : 'Install'}
@@ -815,7 +829,7 @@ export const PluginRegistryPage: React.FC = () => {
                           <Button
                             size="small"
                             variant="outlined"
-                            onClick={() => handleInstall(selectedPlugin.name, version.version)}
+                            onClick={() => handleInstall(selectedPlugin, version)}
                             disabled={version.yanked}
                           >
                             {version.yanked ? 'Yanked' : 'Install'}
@@ -847,7 +861,7 @@ export const PluginRegistryPage: React.FC = () => {
                 variant="contained"
                 startIcon={<DownloadIcon />}
                 onClick={() => {
-                  handleInstall(selectedPlugin.name);
+                  handleInstall(selectedPlugin);
                   setDetailsOpen(false);
                 }}
               >

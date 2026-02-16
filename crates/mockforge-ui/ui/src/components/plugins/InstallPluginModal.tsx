@@ -14,6 +14,7 @@ import {
   TabsList,
   TabsTrigger
 } from '../ui/Tabs';
+import { authenticatedFetch } from '../../utils/apiClient';
 
 interface InstallPluginModalProps {
   onClose: () => void;
@@ -23,8 +24,6 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
   const [installMethod, setInstallMethod] = useState<'file' | 'url'>('file');
   const [filePath, setFilePath] = useState('');
   const [url, setUrl] = useState('');
-  const [pluginId, setPluginId] = useState('');
-  const [skipValidation, setSkipValidation] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -41,14 +40,12 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/__mockforge/plugins/install', {
+      const response = await authenticatedFetch('/__mockforge/plugins/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           source: source.trim(),
-          id: pluginId.trim() || undefined,
           force: false, // For now, don't force
-          skip_validation: skipValidation,
         }),
       });
 
@@ -80,7 +77,7 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/__mockforge/plugins/validate', {
+      const response = await authenticatedFetch('/__mockforge/plugins/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -153,34 +150,6 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
             </div>
           </TabsContent>
         </Tabs>
-
-        <div className="space-y-4 mt-6">
-          <div>
-            <Label htmlFor="plugin-id">Plugin ID (Optional)</Label>
-            <Input
-              id="plugin-id"
-              placeholder="auto-generated"
-              value={pluginId}
-              onChange={(e) => setPluginId(e.target.value)}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Leave empty to auto-detect from plugin manifest
-            </p>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="skip-validation"
-              checked={skipValidation}
-              onChange={(e) => setSkipValidation(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            <Label htmlFor="skip-validation" className="text-sm">
-              Skip validation (not recommended)
-            </Label>
-          </div>
-        </div>
 
         {error && (
           <Alert variant="destructive" className="mt-4">

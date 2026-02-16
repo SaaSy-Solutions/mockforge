@@ -128,7 +128,7 @@ groups:
           summary: "MockForge SLO fast burn rate detected"
           description: "Consuming error budget at 14.4x rate. At this rate, entire monthly budget will be exhausted in 2 hours."
           impact: "Service availability SLO (99.9%) will be breached within 2 hours if not resolved."
-          runbook_url: "https://docs.example.com/runbooks/slo-fast-burn"
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/slo-fast-burn.md"
 
       # Warning: Medium burn rate
       - alert: MockForgeSLOMediumBurn
@@ -144,7 +144,7 @@ groups:
         annotations:
           summary: "MockForge SLO medium burn rate detected"
           description: "Consuming error budget at 6x rate. At this rate, entire monthly budget will be exhausted in 5 days."
-          runbook_url: "https://docs.example.com/runbooks/slo-medium-burn"
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/slo-medium-burn.md"
 
       # Info: Slow burn rate
       - alert: MockForgeSLOSlowBurn
@@ -160,7 +160,7 @@ groups:
         annotations:
           summary: "MockForge SLO slow burn rate detected"
           description: "Consuming error budget at normal rate. Monitor for trends."
-          runbook_url: "https://docs.example.com/runbooks/slo-slow-burn"
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/slo-slow-burn.md"
 
       # Error budget exhausted
       - alert: MockForgeSLOErrorBudgetExhausted
@@ -173,4 +173,4 @@ groups:
           summary: "MockForge SLO error budget exhausted"
           description: "Monthly error budget has been exhausted. Incident response required."
           impact: "No remaining error budget for the current 30-day window."
-          runbook_url: "https://docs.example.com/runbooks/slo-budget-exhausted"
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/slo-budget-exhausted.md"

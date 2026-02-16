@@ -256,10 +256,14 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   clearError: () => set({ error: null }),
 }));
 
-// Auto-refresh analytics every 10 seconds
-setInterval(() => {
-  const store = useAnalyticsStore.getState();
-  if (!store.isLoading && !store.error) {
-    store.fetchAll();
-  }
-}, 10000);
+const shouldAutoRefresh = typeof window !== 'undefined' && !import.meta.env.TEST;
+
+// Auto-refresh analytics every 10 seconds in runtime, but avoid leaking timers in tests.
+if (shouldAutoRefresh) {
+  setInterval(() => {
+    const store = useAnalyticsStore.getState();
+    if (!store.isLoading && !store.error) {
+      store.fetchAll();
+    }
+  }, 10000);
+}

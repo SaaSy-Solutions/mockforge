@@ -41,8 +41,11 @@ export function useWebSocket(
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const shouldReconnectRef = useRef(true);
 
   const connect = useCallback(() => {
+    shouldReconnectRef.current = true;
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return; // Already connected
     }
@@ -75,7 +78,7 @@ export function useWebSocket(
         setLastMessage(null);
 
         // Attempt reconnection if enabled
-        if (reconnect.enabled) {
+        if (reconnect.enabled && shouldReconnectRef.current) {
           const maxAttempts = reconnect.maxAttempts || 5;
           const delay = reconnect.delay || 2000;
 
@@ -100,6 +103,8 @@ export function useWebSocket(
   }, [url, reconnect]);
 
   const disconnect = useCallback(() => {
+    shouldReconnectRef.current = false;
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;

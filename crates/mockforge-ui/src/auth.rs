@@ -30,8 +30,86 @@ use mockforge_collab::models::UserRole;
 mod password_policy;
 pub use password_policy::{PasswordPolicy, PasswordValidationError};
 
-/// JWT secret key (in production, load from environment variable)
-static JWT_SECRET: &[u8] = b"mockforge-secret-key-change-in-production";
+const MIN_JWT_SECRET_LEN: usize = 32;
+
+fn is_truthy_env(name: &str) -> bool {
+    matches!(
+        std::env::var(name).ok().as_deref().map(str::to_ascii_lowercase).as_deref(),
+        Some("1") | Some("true") | Some("yes") | Some("on")
+    )
+}
+
+fn is_development_environment() -> bool {
+    if cfg!(test) {
+        return true;
+    }
+
+    matches!(
+        std::env::var("ENVIRONMENT")
+            .unwrap_or_else(|_| "production".to_string())
+            .to_ascii_lowercase()
+            .as_str(),
+        "development" | "dev" | "local"
+    )
+}
+
+fn is_dev_auth_enabled() -> bool {
+    cfg!(test) || is_truthy_env("MOCKFORGE_ENABLE_DEV_AUTH")
+}
+
+fn should_seed_default_users() -> bool {
+    is_development_environment()
+        && is_dev_auth_enabled()
+        && !is_truthy_env("MOCKFORGE_DISABLE_DEV_SEED_USERS")
+}
+
+fn get_jwt_secret_bytes() -> Result<Vec<u8>, jsonwebtoken::errors::Error> {
+    if cfg!(test) {
+        return Ok(b"test-jwt-secret-which-is-long-enough".to_vec());
+    }
+
+    if let Ok(secret) = std::env::var("JWT_SECRET") {
+        if secret.len() < MIN_JWT_SECRET_LEN {
+            tracing::error!(
+                "JWT_SECRET is too short ({} chars). Minimum required is {} chars.",
+                secret.len(),
+                MIN_JWT_SECRET_LEN
+            );
+            return Err(jsonwebtoken::errors::Error::from(
+                jsonwebtoken::errors::ErrorKind::InvalidToken,
+            ));
+        }
+        return Ok(secret.into_bytes());
+    }
+
+    if is_development_environment() && is_dev_auth_enabled() {
+        let dev_secret = std::env::var("MOCKFORGE_DEV_JWT_SECRET")
+            .unwrap_or_else(|_| "mockforge-dev-only-secret-change-me-12345".to_string());
+        tracing::warn!(
+            "Using development JWT secret fallback. Set JWT_SECRET for production-like testing."
+        );
+        return Ok(dev_secret.into_bytes());
+    }
+
+    tracing::error!(
+        "JWT_SECRET is required in production. Set JWT_SECRET with at least {} characters.",
+        MIN_JWT_SECRET_LEN
+    );
+    Err(jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken))
+}
+
+pub fn validate_auth_config_on_startup() -> Result<(), String> {
+    if !is_development_environment() && !is_truthy_env("MOCKFORGE_ALLOW_INMEMORY_AUTH") {
+        return Err(
+            "In-memory auth is disabled in production. Configure production auth backend or set MOCKFORGE_ALLOW_INMEMORY_AUTH=true explicitly."
+                .to_string(),
+        );
+    }
+
+    get_jwt_secret_bytes()
+        .map(|_| ())
+        .map_err(|_| "JWT_SECRET is missing or invalid for current environment".to_string())
+}
 
 /// JWT claims structure
 #[derive(Debug, Serialize, Deserialize)]
@@ -224,17 +302,6 @@ impl UserStore {
         let account_lockout = AccountLockout::new(5, 900); // 5 attempts, 15 minute lockout
         let password_policy = PasswordPolicy::default(); // Use default policy
 
-        // Initialize with default users (in production, load from database)
-        // Passwords are hashed with bcrypt
-        let default_users = vec![
-            // admin / admin123
-            ("admin", "admin123", UserRole::Admin, "admin@mockforge.dev"),
-            // viewer / viewer123
-            ("viewer", "viewer123", UserRole::Viewer, "viewer@mockforge.dev"),
-            // editor / editor123
-            ("editor", "editor123", UserRole::Editor, "editor@mockforge.dev"),
-        ];
-
         let store = Self {
             users,
             rate_limiter,
@@ -242,26 +309,33 @@ impl UserStore {
             password_policy,
         };
 
-        // Hash passwords and create users asynchronously
-        let store_clone = store.clone();
-        tokio::spawn(async move {
-            let mut users = store_clone.users.write().await;
-            for (username, password, role, email) in default_users {
-                // Hash password with bcrypt
-                if let Ok(password_hash) = hash(password, DEFAULT_COST) {
-                    let user = User {
-                        id: format!("{}-001", username),
-                        username: username.to_string(),
-                        password_hash,
-                        role,
-                        email: Some(email.to_string()),
-                    };
-                    users.insert(username.to_string(), user);
-                } else {
-                    tracing::error!("Failed to hash password for user: {}", username);
+        if should_seed_default_users() {
+            // Development-only seeded users for local testing
+            let default_users = vec![
+                ("admin", "admin123", UserRole::Admin, "admin@mockforge.dev"),
+                ("viewer", "viewer123", UserRole::Viewer, "viewer@mockforge.dev"),
+                ("editor", "editor123", UserRole::Editor, "editor@mockforge.dev"),
+            ];
+
+            let store_clone = store.clone();
+            tokio::spawn(async move {
+                let mut users = store_clone.users.write().await;
+                for (username, password, role, email) in default_users {
+                    if let Ok(password_hash) = hash(password, DEFAULT_COST) {
+                        let user = User {
+                            id: format!("{}-001", username),
+                            username: username.to_string(),
+                            password_hash,
+                            role,
+                            email: Some(email.to_string()),
+                        };
+                        users.insert(username.to_string(), user);
+                    } else {
+                        tracing::error!("Failed to hash password for user: {}", username);
+                    }
                 }
-            }
-        });
+            });
+        }
 
         store
     }
@@ -356,6 +430,9 @@ static GLOBAL_USER_STORE: std::sync::OnceLock<Arc<UserStore>> = std::sync::OnceL
 
 /// Initialize the global user store
 pub fn init_global_user_store() -> Arc<UserStore> {
+    if let Err(e) = validate_auth_config_on_startup() {
+        panic!("Authentication startup validation failed: {}", e);
+    }
     GLOBAL_USER_STORE.get_or_init(|| Arc::new(UserStore::new())).clone()
 }
 
@@ -371,7 +448,7 @@ pub fn generate_token(
 ) -> Result<String, jsonwebtoken::errors::Error> {
     let now = Utc::now();
     let exp = now + Duration::seconds(expires_in_seconds);
-    let secret = JWT_SECRET;
+    let secret = get_jwt_secret_bytes()?;
 
     let claims = Claims {
         sub: user.id.clone(),
@@ -382,7 +459,7 @@ pub fn generate_token(
         exp: exp.timestamp(),
     };
 
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(secret))
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(&secret))
 }
 
 /// Generate refresh token
@@ -393,9 +470,9 @@ pub fn generate_refresh_token(user: &User) -> Result<String, jsonwebtoken::error
 
 /// Validate JWT token
 pub fn validate_token(token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
-    let secret = JWT_SECRET;
+    let secret = get_jwt_secret_bytes()?;
     let token_data =
-        decode::<Claims>(token, &DecodingKey::from_secret(secret), &Validation::default())?;
+        decode::<Claims>(token, &DecodingKey::from_secret(&secret), &Validation::default())?;
 
     Ok(token_data.claims)
 }
@@ -503,11 +580,24 @@ pub async fn refresh_token(
 
 /// Get current user endpoint
 pub async fn get_current_user(
-    State(_state): State<AdminState>,
+    headers: axum::http::HeaderMap,
 ) -> Result<Json<ApiResponse<UserInfo>>, StatusCode> {
-    // This would extract user from request extensions (set by middleware)
-    // For now, return error - should be called after authentication
-    Err(StatusCode::NOT_IMPLEMENTED)
+    let auth_header = headers
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let token = auth_header.strip_prefix("Bearer ").ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let claims = validate_token(token).map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let role = claims_to_user_context(&claims).role;
+
+    Ok(Json(ApiResponse::success(UserInfo {
+        id: claims.sub,
+        username: claims.username,
+        role: format!("{:?}", role).to_lowercase(),
+        email: claims.email,
+    })))
 }
 
 /// Logout endpoint (client-side token removal, but can invalidate refresh tokens)

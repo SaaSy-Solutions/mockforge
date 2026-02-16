@@ -4,7 +4,10 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use tower_http::{compression::CompressionLayer, cors::CorsLayer};
+use tower_http::{
+    compression::CompressionLayer,
+    cors::{AllowOrigin, Any, CorsLayer},
+};
 
 use crate::audit::init_global_audit_store;
 use crate::auth::init_global_user_store;
@@ -58,6 +61,30 @@ pub fn create_admin_router(
     // Initialize user store for authentication
     let _user_store = init_global_user_store();
 
+    let cors = match std::env::var("CORS_ALLOWED_ORIGINS") {
+        Ok(origins) if !origins.is_empty() => {
+            let allowed_origins: Vec<_> =
+                origins.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+            tracing::info!(
+                "Admin UI CORS configured with {} allowed origins",
+                allowed_origins.len()
+            );
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(allowed_origins))
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+        _ => {
+            tracing::info!("Admin UI CORS configured with strict same-origin policy");
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::exact(
+                    "null".parse().expect("'null' is a valid header value"),
+                ))
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+    };
+
     let state = AdminState::new(
         http_server_addr,
         ws_server_addr,
@@ -96,6 +123,7 @@ pub fn create_admin_router(
         .route("/__mockforge/auth/login", post(crate::auth::login))
         .route("/__mockforge/auth/refresh", post(crate::auth::refresh_token))
         .route("/__mockforge/auth/logout", post(crate::auth::logout))
+        .route("/__mockforge/auth/me", get(crate::auth::get_current_user))
         .route("/__mockforge/health", get(get_health));
 
     // Protected routes (require authentication and RBAC)
@@ -138,6 +166,9 @@ pub fn create_admin_router(
         .route("/__mockforge/plugins/status", get(get_plugin_status))
         .route("/__mockforge/plugins/{id}", get(get_plugin_details))
         .route("/__mockforge/plugins/{id}", delete(delete_plugin))
+        .route("/__mockforge/plugins/install", post(install_plugin))
+        .route("/__mockforge/plugins/validate", post(validate_plugin))
+        .route("/api/plugins/install", post(install_plugin))
         .route("/__mockforge/plugins/reload", post(reload_plugin))
         // Workspace management routes (moved to workspace router with WorkspaceState)
         // These routes are now handled by the workspace router below
@@ -467,11 +498,10 @@ pub fn create_admin_router(
             .route("/__mockforge/workspaces/{workspace_id}/environments/{env_name}", get(workspaces::get_mock_environment))
             .route("/__mockforge/workspaces/{workspace_id}/environments/{env_name}", axum::routing::put(workspaces::update_mock_environment))
             .route("/__mockforge/workspaces/{workspace_id}/environments/active", axum::routing::post(workspaces::set_active_mock_environment))
-            // Note: set_active_workspace handler not yet implemented
-            // .route(
-            //     "/__mockforge/workspaces/{workspace_id}/activate",
-            //     post(workspaces::set_active_workspace),
-            // )
+            .route(
+                "/__mockforge/workspaces/{workspace_id}/activate",
+                post(workspaces::set_active_workspace),
+            )
             .route("/api/v2/voice/create-workspace-confirm", post(voice::create_workspace_confirm))
             .route(
                 "/__mockforge/voice/create-workspace-confirm",
@@ -532,10 +562,7 @@ pub fn create_admin_router(
     // Public routes (auth endpoints, static assets) should be handled gracefully
     router = router.layer(from_fn(rbac_middleware));
 
-    router
-        .layer(CompressionLayer::new())
-        .layer(CorsLayer::permissive())
-        .with_state(state)
+    router.layer(CompressionLayer::new()).layer(cors).with_state(state)
 }
 
 #[cfg(test)]

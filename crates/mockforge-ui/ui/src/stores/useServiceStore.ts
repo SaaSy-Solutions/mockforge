@@ -1,6 +1,7 @@
 import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import type { ServiceInfo, RouteInfo } from '../types';
+import { authenticatedFetch } from '../utils/apiClient';
 
 interface ServiceStore {
   services: ServiceInfo[];
@@ -166,9 +167,12 @@ const filterRoutes = (services: ServiceInfo[], query?: string): RouteInfo[] => {
   );
 };
 
+const SHOULD_USE_MOCK_FALLBACK =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCK_DATA === 'true';
+
 export const useServiceStore = create<ServiceStore>((set, _get) => ({
-  services: mockServices,
-  filteredRoutes: filterRoutes(mockServices),
+  services: SHOULD_USE_MOCK_FALLBACK ? mockServices : [],
+  filteredRoutes: SHOULD_USE_MOCK_FALLBACK ? filterRoutes(mockServices) : [],
   isLoading: false,
   error: null,
 
@@ -177,7 +181,7 @@ export const useServiceStore = create<ServiceStore>((set, _get) => ({
   fetchServices: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch('/__mockforge/routes');
+      const response = await authenticatedFetch('/__mockforge/routes');
       if (!response.ok) {
         throw new Error(`Failed to fetch routes: ${response.statusText}`);
       }
@@ -225,8 +229,8 @@ export const useServiceStore = create<ServiceStore>((set, _get) => ({
 
       const services = Array.from(serviceMap.values());
 
-      // Fall back to mock data if no routes returned
-      if (services.length === 0) {
+      // Fall back to mock data only in development-mode workflows.
+      if (services.length === 0 && SHOULD_USE_MOCK_FALLBACK) {
         set({ services: mockServices, filteredRoutes: filterRoutes(mockServices), isLoading: false });
       } else {
         set({ services, filteredRoutes: filterRoutes(services), isLoading: false });
@@ -234,8 +238,17 @@ export const useServiceStore = create<ServiceStore>((set, _get) => ({
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch services';
       logger.error('Failed to fetch services', error);
-      // Fall back to mock data on error for development
-      set({ services: mockServices, filteredRoutes: filterRoutes(mockServices), error: errorMessage, isLoading: false });
+      // Fall back to mock data on error only for development.
+      if (SHOULD_USE_MOCK_FALLBACK) {
+        set({
+          services: mockServices,
+          filteredRoutes: filterRoutes(mockServices),
+          error: errorMessage,
+          isLoading: false,
+        });
+      } else {
+        set({ services: [], filteredRoutes: [], error: errorMessage, isLoading: false });
+      }
     }
   },
 

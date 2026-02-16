@@ -33,8 +33,6 @@ import {
   Assessment as AssessmentIcon,
   AutoFixHigh as AutoFixHighIcon,
 } from '@mui/icons-material';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface TestFixture {
   name: string;
@@ -59,6 +57,28 @@ interface TestGapAnalysis {
   missing_error_scenarios: string[];
   coverage_percentage: number;
   recommendations: string[];
+}
+
+function CodeBlock({ content, maxHeight = '500px' }: { content: string; maxHeight?: string }) {
+  return (
+    <Box
+      component="pre"
+      sx={{
+        maxHeight,
+        overflow: 'auto',
+        p: 2,
+        m: 0,
+        borderRadius: 1,
+        backgroundColor: '#0f172a',
+        color: '#e2e8f0',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        fontSize: '0.8rem',
+        lineHeight: 1.5,
+      }}
+    >
+      <Box component="code">{content}</Box>
+    </Box>
+  );
 }
 
 const TestGeneratorPage: React.FC = () => {
@@ -168,20 +188,6 @@ const TestGeneratorPage: React.FC = () => {
       k6: 'js',
     };
     return extensions[format] || 'txt';
-  };
-
-  const getLanguage = (format: string): string => {
-    if (format.includes('rust')) return 'rust';
-    if (format.includes('python')) return 'python';
-    if (format.includes('javascript')) return 'javascript';
-    if (format.includes('go')) return 'go';
-    if (format.includes('ruby')) return 'ruby';
-    if (format.includes('java')) return 'java';
-    if (format.includes('csharp')) return 'csharp';
-    if (format.includes('http')) return 'http';
-    if (format.includes('curl')) return 'bash';
-    if (format.includes('postman')) return 'json';
-    return 'javascript';
   };
 
   return (
@@ -326,13 +332,7 @@ const TestGeneratorPage: React.FC = () => {
                   </Button>
                 </Box>
 
-                <SyntaxHighlighter
-                  language={getLanguage(format)}
-                  style={vscDarkPlus}
-                  customStyle={{ maxHeight: '500px' }}
-                >
-                  {generatedTests}
-                </SyntaxHighlighter>
+                <CodeBlock content={generatedTests} maxHeight="500px" />
 
                 {/* Fixtures */}
                 {fixtures.length > 0 && (
@@ -348,9 +348,7 @@ const TestGeneratorPage: React.FC = () => {
                         <Box key={idx} sx={{ mb: 2 }}>
                           <Typography variant="subtitle2">{fixture.name}</Typography>
                           <Typography variant="body2" color="text.secondary">{fixture.description}</Typography>
-                          <SyntaxHighlighter language="json" style={vscDarkPlus} customStyle={{ maxHeight: '200px' }}>
-                            {JSON.stringify(fixture.data, null, 2)}
-                          </SyntaxHighlighter>
+                          <CodeBlock content={JSON.stringify(fixture.data, null, 2)} maxHeight="200px" />
                         </Box>
                       ))}
                     </AccordionDetails>

@@ -46,9 +46,11 @@ vi.mock('../../hooks/useHistory', () => ({
 // Mock React Flow
 vi.mock('@xyflow/react', async () => {
   const actual = await vi.importActual('@xyflow/react');
+  const MockReactFlow = ({ children }: any) => <div data-testid="react-flow">{children}</div>;
   return {
     ...actual,
-    ReactFlow: ({ children }: any) => <div data-testid="react-flow">{children}</div>,
+    default: MockReactFlow,
+    ReactFlow: MockReactFlow,
     Background: () => <div data-testid="background" />,
     Controls: () => <div data-testid="controls" />,
     MiniMap: () => <div data-testid="minimap" />,
@@ -64,7 +66,9 @@ describe('ScenarioStateMachineEditor', () => {
 
   it('should render editor page', () => {
     render(<ScenarioStateMachineEditor />);
-    expect(screen.getByText(/Add State|Save|Export/i)).toBeInTheDocument();
+    expect(screen.getByText('Add State')).toBeInTheDocument();
+    expect(screen.getByText('Save')).toBeInTheDocument();
+    expect(screen.getByText('Export')).toBeInTheDocument();
   });
 
   it('should show loading state initially when loading state machine', () => {

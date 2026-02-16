@@ -26,8 +26,19 @@ impl Database {
     }
 
     pub async fn migrate(&self) -> Result<()> {
+        // Acquire a PostgreSQL advisory lock to prevent concurrent migration runs
+        // across multiple replicas. Lock ID 8675309 is an arbitrary but stable identifier.
+        const MIGRATION_LOCK_ID: i64 = 8675309;
+
+        tracing::info!("Acquiring advisory lock for database migrations...");
+        sqlx::query("SELECT pg_advisory_lock($1)")
+            .bind(MIGRATION_LOCK_ID)
+            .execute(&self.pool)
+            .await?;
+        tracing::info!("Advisory lock acquired, running migrations...");
+
         // Run migrations - ignore "previously applied but missing" errors for manually applied migrations
-        match sqlx::migrate!("./migrations").run(&self.pool).await {
+        let result = match sqlx::migrate!("./migrations").run(&self.pool).await {
             Ok(_) => Ok(()),
             Err(e) => {
                 // If migration was manually applied (e.g., timestamp fix), log warning but continue
@@ -44,7 +55,20 @@ impl Database {
                     Err(e.into())
                 }
             }
+        };
+
+        // Release the advisory lock regardless of migration outcome
+        if let Err(unlock_err) = sqlx::query("SELECT pg_advisory_unlock($1)")
+            .bind(MIGRATION_LOCK_ID)
+            .execute(&self.pool)
+            .await
+        {
+            tracing::error!("Failed to release migration advisory lock: {}", unlock_err);
+        } else {
+            tracing::info!("Migration advisory lock released");
         }
+
+        result
     }
 
     pub fn pool(&self) -> &PgPool {

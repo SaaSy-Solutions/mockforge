@@ -21,6 +21,7 @@ import { apiService } from '../services/api';
 import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
 import { AIStudioNav, BackToAIStudio } from '../components/ai/AIStudioNav';
+import { useI18n } from '../i18n/I18nProvider';
 
 interface FeatureCardProps {
   title: string;
@@ -68,6 +69,7 @@ function FeatureCard({
 }
 
 export function MockAIPage() {
+  const { t } = useI18n();
   const [stats, setStats] = useState<{
     rulesCount: number;
     openApiGenerated: boolean;
@@ -122,23 +124,23 @@ export function MockAIPage() {
       link: 'mockai-rules',
     },
     {
-      title: 'Intelligent Responses',
+      title: 'Intelligent Responses API',
       description:
-        'Generate context-aware mock responses using LLM-powered decision making',
+        'Generate context-aware mock responses using the server-side MockAI response endpoint',
       icon: <Sparkles className="h-6 w-6 text-blue-600 dark:text-blue-400" />,
       link: '#',
-      badge: 'Coming Soon',
+      badge: 'API',
       onClick: () => {
-        toast.info('Intelligent Responses feature coming soon. Use the API endpoint POST /__mockforge/api/mockai/generate-response for AI-powered responses.');
+        toast.info('Use POST /__mockforge/api/mockai/generate-response to generate AI-powered mock responses.');
       },
     },
     {
-      title: 'Learn from Examples',
+      title: 'Learning API',
       description:
-        'Train MockAI to understand your API patterns from example request/response pairs',
+        'Train MockAI with example request/response pairs using the learning endpoint',
       icon: <Brain className="h-6 w-6 text-blue-600 dark:text-blue-400" />,
       link: '#',
-      badge: 'Coming Soon',
+      badge: 'API',
       onClick: () => {
         toast.info('Use the API endpoint POST /__mockforge/api/mockai/learn to train MockAI from example request/response pairs.');
       },
@@ -149,8 +151,8 @@ export function MockAIPage() {
     <div className="space-y-6">
       <AIStudioNav currentPage="MockAI" showQuickActions={false} />
       <PageHeader
-        title="MockAI"
-        description="AI-powered mock API intelligence for realistic, context-aware responses"
+        title={t('page.mockai.title')}
+        description={t('page.mockai.description')}
         icon={<Brain className="h-6 w-6" />}
       />
 
@@ -187,7 +189,7 @@ export function MockAIPage() {
       )}
 
       {/* Quick Actions */}
-      <Section title="Quick Actions">
+      <Section title={t('page.mockai.quickActions')}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Button
             variant="primary"
@@ -226,7 +228,7 @@ export function MockAIPage() {
       </Section>
 
       {/* Features Grid */}
-      <Section title="Features">
+      <Section title={t('page.mockai.features')}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {features.map((feature) => (
             <FeatureCard key={feature.title} {...feature} />

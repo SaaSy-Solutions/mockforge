@@ -75,7 +75,7 @@ describe('SubScenarioEditor', () => {
     render(<SubScenarioEditor {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Add')).toBeInTheDocument();
+      expect(screen.getAllByText('Add').length).toBeGreaterThan(1);
     });
 
     const addButtons = screen.getAllByText('Add');
@@ -90,7 +90,7 @@ describe('SubScenarioEditor', () => {
     render(<SubScenarioEditor {...defaultProps} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Add')).toBeInTheDocument();
+      expect(screen.getAllByText('Add').length).toBeGreaterThan(1);
     });
 
     const addButtons = screen.getAllByText('Add');
@@ -112,7 +112,7 @@ describe('SubScenarioEditor', () => {
     render(<SubScenarioEditor {...defaultProps} />);
 
     await waitFor(() => {
-      const variableInput = screen.getByPlaceholderText('Parent variable');
+      const variableInput = screen.getAllByPlaceholderText('Parent variable')[0];
       fireEvent.change(variableInput, { target: { value: 'parentVar' } });
       expect(variableInput).toHaveValue('parentVar');
     });

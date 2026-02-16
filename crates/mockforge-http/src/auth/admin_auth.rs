@@ -3,6 +3,7 @@
 //! This module provides authentication for admin UI endpoints
 
 use axum::body::Body;
+use axum::http::header::HeaderValue;
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
 use base64::{engine::general_purpose, Engine as _};
@@ -63,7 +64,7 @@ pub fn check_admin_auth(
     ));
     *res.status_mut() = StatusCode::UNAUTHORIZED;
     res.headers_mut()
-        .insert("www-authenticate", "Basic realm=\"MockForge Admin\"".parse().unwrap());
+        .insert("www-authenticate", HeaderValue::from_static("Basic realm=\"MockForge Admin\""));
 
     Err(res)
 }

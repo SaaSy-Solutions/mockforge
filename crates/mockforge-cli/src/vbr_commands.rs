@@ -462,27 +462,33 @@ async fn execute_manage_command(command: ManageCommands) -> Result<(), Box<dyn s
         ManageCommands::Entities { entities_command } => {
             match entities_command {
                 EntitiesCommands::List => {
-                    // For now, just show a message
-                    // In a full implementation, this would load entities from a file or database
-                    println!("{} Entity management:", "ℹ".bright_blue());
-                    println!("  Use 'mockforge vbr create entity' to create entities");
-                    println!("  Use 'mockforge vbr serve' to start a server with entities");
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Unsupported,
+                        "mockforge vbr manage entities list is not implemented yet; use 'mockforge vbr serve' for runtime inspection and 'mockforge vbr create entity' to define entities",
+                    )
+                    .into());
                 }
                 EntitiesCommands::Show { name } => {
-                    println!("{} Showing entity: {}", "ℹ".bright_blue(), name);
-                    println!("  Entity details would be shown here");
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Unsupported,
+                        format!(
+                            "mockforge vbr manage entities show '{}' is not implemented yet; use API endpoints exposed by 'mockforge vbr serve'",
+                            name
+                        ),
+                    )
+                    .into());
                 }
             }
-            Ok(())
         }
         ManageCommands::Data { query } => {
-            println!("{} Executing query: {}", "ℹ".bright_blue(), query);
-            println!("  Query execution would happen here");
-            // In a full implementation, this would:
-            // 1. Load the VBR engine
-            // 2. Execute the query
-            // 3. Display results
-            Ok(())
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                format!(
+                    "mockforge vbr manage data is not implemented yet (query: '{}'); run queries against the VBR HTTP API from 'mockforge vbr serve'",
+                    query
+                ),
+            )
+            .into())
         }
     }
 }

@@ -1,6 +1,7 @@
 import { logger } from '@/utils/logger';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   Node,
   Edge,
   Background,

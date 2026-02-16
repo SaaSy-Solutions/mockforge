@@ -44,6 +44,10 @@ pub struct Config {
     /// Redis URL for caching and temporary storage (optional)
     pub redis_url: Option<String>,
 
+    /// Skip running database migrations on startup (default: false)
+    /// Set SKIP_MIGRATIONS=true when running migrations as a separate K8s Job
+    pub skip_migrations: bool,
+
     /// Whether two-factor authentication is enabled (requires Redis)
     pub two_factor_enabled: Option<bool>,
 
@@ -146,6 +150,10 @@ impl Config {
                 .unwrap_or_else(|_| "30".to_string())
                 .parse()
                 .context("SHUTDOWN_TIMEOUT_SECS must be a valid number")?,
+            skip_migrations: std::env::var("SKIP_MIGRATIONS")
+                .ok()
+                .map(|v| v.to_lowercase() == "true" || v == "1")
+                .unwrap_or(false),
             redis_url: std::env::var("REDIS_URL").ok(),
             two_factor_enabled: std::env::var("TWO_FACTOR_ENABLED")
                 .ok()

@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{AuthUser, OptionalAuthUser, resolve_org_context},
-    models::{Template, TemplateVersion, TemplateCategory, Organization, User, UsageCounter},
+    models::{record_audit_event, AuditEventType, FeatureType, FeatureUsage, Template, TemplateVersion, TemplateCategory, Organization, User, UsageCounter},
     AppState,
 };
 
@@ -380,6 +380,29 @@ pub async fn publish_template(
             "template_name": request.name,
             "version": request.version,
         })),
+    )
+    .await;
+
+    // Record audit event
+    let ip_address = headers
+        .get("X-Forwarded-For")
+        .or_else(|| headers.get("X-Real-IP"))
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
+
+    record_audit_event(
+        pool,
+        org_ctx.org_id,
+        Some(author_id),
+        AuditEventType::TemplatePublished,
+        format!("Template {} version {} published", request.name, request.version),
+        Some(serde_json::json!({
+            "template_name": request.name,
+            "version": request.version,
+        })),
+        ip_address,
+        user_agent,
     )
     .await;
 

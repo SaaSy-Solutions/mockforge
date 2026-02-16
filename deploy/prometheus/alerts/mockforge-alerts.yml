@@ -11,7 +11,7 @@ groups:
         annotations:
           summary: "MockForge instance is down"
           description: "MockForge instance {{ $labels.instance }} has been down for more than 1 minute."
-          runbook_url: "https://docs.example.com/runbooks/mockforge-down"
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/mockforge-down.md"
 
       - alert: MockForgeInstancesLow
         expr: count(up{job="mockforge"} == 1) < 2
@@ -22,6 +22,7 @@ groups:
         annotations:
           summary: "Low number of MockForge instances"
           description: "Only {{ $value }} MockForge instance(s) are running. Expected at least 2 for high availability."
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/instances-low.md"
 
   - name: mockforge_performance
     interval: 30s
@@ -35,7 +36,7 @@ groups:
         annotations:
           summary: "MockForge high request latency"
           description: "95th percentile request latency is {{ $value }}s, exceeding 500ms threshold."
-          runbook_url: "https://docs.example.com/runbooks/high-latency"
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/high-latency.md"
 
       - alert: MockForgeCriticalLatency
         expr: histogram_quantile(0.95, sum(rate(mockforge_http_request_duration_seconds_bucket[5m])) by (le)) > 1
@@ -46,6 +47,7 @@ groups:
         annotations:
           summary: "MockForge critical request latency"
           description: "95th percentile request latency is {{ $value }}s, exceeding 1s critical threshold."
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/high-latency.md"
 
       - alert: MockForgeHighErrorRate
         expr: sum(rate(mockforge_http_requests_total{status=~"5.."}[5m])) / sum(rate(mockforge_http_requests_total[5m])) > 0.05
@@ -56,7 +58,7 @@ groups:
         annotations:
           summary: "MockForge high error rate"
           description: "Error rate is {{ $value | humanizePercentage }}, exceeding 5% threshold."
-          runbook_url: "https://docs.example.com/runbooks/high-error-rate"
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/high-error-rate.md"
 
       - alert: MockForgeHighMemoryUsage
         expr: process_resident_memory_bytes{job="mockforge"} / 1024 / 1024 > 400
@@ -67,6 +69,7 @@ groups:
         annotations:
           summary: "MockForge high memory usage"
           description: "Instance {{ $labels.instance }} is using {{ $value }}MB of memory, exceeding 400MB threshold."
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/high-memory.md"
 
       - alert: MockForgeHighCPUUsage
         expr: rate(process_cpu_seconds_total{job="mockforge"}[5m]) * 100 > 80
@@ -77,6 +80,7 @@ groups:
         annotations:
           summary: "MockForge high CPU usage"
           description: "Instance {{ $labels.instance }} CPU usage is {{ $value }}%, exceeding 80% threshold."
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/high-cpu.md"
 
   - name: mockforge_slo
     interval: 1m
@@ -96,7 +100,7 @@ groups:
         annotations:
           summary: "MockForge SLO availability breach"
           description: "Availability SLO is {{ $value | humanizePercentage }}, below 99.9% target."
-          runbook_url: "https://docs.example.com/runbooks/slo-breach"
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/slo-breach.md"
 
       - alert: MockForgeSLOLatencyBreach
         expr: |
@@ -111,6 +115,7 @@ groups:
         annotations:
           summary: "MockForge SLO latency breach"
           description: "p95 latency is {{ $value }}s, exceeding 200ms SLO target."
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/slo-breach.md"
 
   - name: mockforge_chaos
     interval: 30s
@@ -124,6 +129,7 @@ groups:
         annotations:
           summary: "MockForge chaos scenario failed"
           description: "Chaos scenario {{ $labels.scenario }} has failed on instance {{ $labels.instance }}."
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/chaos-scenario-failed.md"
 
       - alert: MockForgeCircuitBreakerOpen
         expr: mockforge_circuit_breaker_state{state="open"} == 1
@@ -134,6 +140,7 @@ groups:
         annotations:
           summary: "MockForge circuit breaker is open"
           description: "Circuit breaker for {{ $labels.service }} is open, indicating potential issues."
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/circuit-breaker-open.md"
 
   - name: mockforge_resources
     interval: 30s
@@ -152,6 +159,7 @@ groups:
         annotations:
           summary: "MockForge PVC almost full"
           description: "Recorder PVC is {{ $value | humanizePercentage }} full, exceeding 85% threshold."
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/pvc-almost-full.md"
 
       - alert: MockForgeConnectionPoolExhaustion
         expr: mockforge_connection_pool_active / mockforge_connection_pool_max > 0.9
@@ -162,3 +170,4 @@ groups:
         annotations:
           summary: "MockForge connection pool near exhaustion"
           description: "Connection pool utilization is {{ $value | humanizePercentage }}."
+          runbook_url: "https://github.com/SaaSy-Solutions/mockforge/blob/main/deploy/runbooks/connection-pool-exhaustion.md"

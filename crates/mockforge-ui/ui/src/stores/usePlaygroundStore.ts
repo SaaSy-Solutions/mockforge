@@ -2,6 +2,7 @@ import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiService } from '../services/api';
+import { useWorkspaceStore } from './useWorkspaceStore';
 
 /**
  * Playground endpoint information

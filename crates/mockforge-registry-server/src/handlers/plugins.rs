@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{AuthUser, ScopedAuth},
-    models::{Plugin, PluginVersion, TokenScope, User},
+    models::{record_audit_event, AuditEventType, Plugin, PluginVersion, TokenScope, User},
     AppState,
 };
 
@@ -406,6 +406,23 @@ pub async fn publish_plugin(
                 .map_err(|e| ApiError::Database(e))?;
         }
     }
+
+    // Record audit event
+    record_audit_event(
+        pool,
+        uuid::Uuid::nil(),
+        Some(author_id),
+        AuditEventType::PluginPublished,
+        format!("Plugin {} version {} published", request.name, request.version),
+        Some(serde_json::json!({
+            "plugin_name": request.name,
+            "version": request.version,
+            "category": request.category,
+        })),
+        None,
+        None,
+    )
+    .await;
 
     // Record metrics
     metrics.record_publish_success();

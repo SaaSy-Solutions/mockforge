@@ -23,9 +23,9 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { Card } from '../ui/Card';
-import { Button } from '../components/ui/button';
-import { Textarea } from '../components/ui/textarea';
-import { Label } from '../components/ui/label';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
+import { Label } from '../ui/label';
 import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
 

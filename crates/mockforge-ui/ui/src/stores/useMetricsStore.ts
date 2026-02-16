@@ -160,15 +160,19 @@ export const useMetricsStore = create<MetricsStore>((set, _get) => ({
   },
 }));
 
-// Auto-refresh metrics every 30 seconds
-setInterval(() => {
-  const store = useMetricsStore.getState();
-  if (!store.isLoading) {
-    // Silently update metrics without showing loading state
-    const newLatencyMetrics = generateLatencyMetrics();
-    const newFailureMetrics = generateFailureMetrics();
+const shouldAutoRefresh = typeof window !== 'undefined' && !import.meta.env.TEST;
 
-    store.setLatencyMetrics(newLatencyMetrics);
-    store.setFailureMetrics(newFailureMetrics);
-  }
-}, 30000);
+// Auto-refresh metrics every 30 seconds in runtime, but avoid leaking timers in tests.
+if (shouldAutoRefresh) {
+  setInterval(() => {
+    const store = useMetricsStore.getState();
+    if (!store.isLoading) {
+      // Silently update metrics without showing loading state
+      const newLatencyMetrics = generateLatencyMetrics();
+      const newFailureMetrics = generateFailureMetrics();
+
+      store.setLatencyMetrics(newLatencyMetrics);
+      store.setFailureMetrics(newFailureMetrics);
+    }
+  }, 30000);
+}

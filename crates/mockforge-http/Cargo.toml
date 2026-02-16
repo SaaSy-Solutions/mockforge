@@ -75,6 +75,16 @@ axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
 default = []
 # Enable richer faker-backed tokens in templating via mockforge-data
 data-faker = []
+# Database-backed analytics/forecasting handlers
+database = []
+# Pipeline handler routes
+pipelines = []
+# Persona graph response enrichment
+persona-graph = []
+# Behavioral cloning middleware and handlers
+behavioral-cloning = []
+# Runtime daemon integration hooks
+runtime-daemon = []
 # Enable SMTP support
 smtp = ["mockforge-smtp"]
 # Enable MQTT integration

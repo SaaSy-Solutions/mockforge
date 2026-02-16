@@ -12,9 +12,9 @@ const mockLog = {
   timestamp: '2024-01-01T12:00:00Z',
   method: 'GET',
   path: '/api/users',
-  statusCode: 200,
-  duration: 45,
-  size: 1024,
+  status_code: 200,
+  response_time_ms: 45,
+  response_size_bytes: 1024,
 };
 
 describe('LogEntry', () => {
@@ -33,7 +33,7 @@ describe('LogEntry', () => {
   });
 
   it('applies correct status color for 4xx codes', () => {
-    const log404 = { ...mockLog, statusCode: 404 };
+    const log404 = { ...mockLog, status_code: 404 };
     const { container } = render(<LogEntry log={log404} />);
 
     const statusElement = container.querySelector('.text-yellow-600');
@@ -41,7 +41,7 @@ describe('LogEntry', () => {
   });
 
   it('applies correct status color for 5xx codes', () => {
-    const log500 = { ...mockLog, statusCode: 500 };
+    const log500 = { ...mockLog, status_code: 500 };
     const { container } = render(<LogEntry log={log500} />);
 
     const statusElement = container.querySelector('.text-red-600');

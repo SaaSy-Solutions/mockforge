@@ -108,6 +108,10 @@ jobs:
         working-directory: crates/mockforge-ui/ui
         run: npm ci
 
+      - name: Build UI
+        working-directory: crates/mockforge-ui/ui
+        run: npm run build
+
       - name: Run tests
         working-directory: crates/mockforge-ui/ui
         run: npm test

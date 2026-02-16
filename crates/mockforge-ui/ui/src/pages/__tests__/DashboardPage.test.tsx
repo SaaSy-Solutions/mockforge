@@ -11,6 +11,24 @@ import { useDashboard, useLogs } from '../../hooks/useApi';
 
 // Mock the hooks
 vi.mock('../../hooks/useApi');
+vi.mock('../../components/time-travel/TimeTravelWidget', () => ({
+  TimeTravelWidget: () => <div>TimeTravelWidget</div>,
+}));
+vi.mock('../../components/reality/RealitySlider', () => ({
+  RealitySlider: () => <div>RealitySlider</div>,
+}));
+vi.mock('../../components/reality/RealityIndicator', () => ({
+  RealityIndicator: () => <div>RealityIndicator</div>,
+}));
+vi.mock('../../components/dashboard/ServerTable', () => ({
+  ServerTable: () => <div>ServerTable</div>,
+}));
+vi.mock('../../components/dashboard/RequestLog', () => ({
+  RequestLog: () => <div>RequestLog</div>,
+}));
+vi.mock('../../components/metrics/LatencyHistogram', () => ({
+  LatencyHistogram: () => <div>LatencyHistogram</div>,
+}));
 
 const createWrapper = () => {
   const queryClient = new QueryClient({
@@ -48,27 +66,17 @@ describe('DashboardPage', () => {
       </Wrapper>
     );
 
-    // Loading state should be displayed
-    expect(screen.queryByText('Server Instances')).not.toBeInTheDocument();
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
   });
 
   it('renders dashboard with data', async () => {
     const mockDashboard = {
-      servers: [
-        {
-          server_type: 'HTTP',
-          address: 'http://127.0.0.1:9080',
-          running: true,
-          uptime_seconds: 3600,
-          total_requests: 100,
-          active_connections: 5,
-        },
-      ],
-      metrics: {
-        total_requests: 100,
-        total_2xx: 95,
-        total_4xx: 3,
-        total_5xx: 2,
+      system: {
+        uptime_seconds: 3600,
+        cpu_usage_percent: 10.5,
+        memory_usage_mb: 512,
+        active_threads: 4,
+        version: '1.0.0',
       },
     };
 
@@ -99,7 +107,7 @@ describe('DashboardPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Server Instances')).toBeInTheDocument();
+      expect(screen.getByText('System Metrics')).toBeInTheDocument();
     });
   });
 
@@ -122,7 +130,7 @@ describe('DashboardPage', () => {
 
     // Error state should be displayed
     await waitFor(() => {
-      expect(screen.queryByText('Server Instances')).not.toBeInTheDocument();
+      expect(screen.getByText('Failed to load dashboard')).toBeInTheDocument();
     });
   });
 
@@ -152,7 +160,15 @@ describe('DashboardPage', () => {
     ];
 
     useDashboard.mockReturnValue({
-      data: { servers: [] },
+      data: {
+        system: {
+          uptime_seconds: 3600,
+          cpu_usage_percent: 10.5,
+          memory_usage_mb: 512,
+          active_threads: 4,
+          version: '1.0.0',
+        },
+      },
       isLoading: false,
       error: null,
     });
@@ -167,9 +183,10 @@ describe('DashboardPage', () => {
       </Wrapper>
     );
 
-    // Metrics should be calculated (1x 2xx, 1x 4xx, 1x 5xx)
     await waitFor(() => {
-      expect(screen.getByText('Server Instances')).toBeInTheDocument();
+      expect(screen.getByText('Success Responses')).toBeInTheDocument();
+      expect(screen.getByText('Client Errors')).toBeInTheDocument();
+      expect(screen.getByText('Server Errors')).toBeInTheDocument();
     });
   });
 });

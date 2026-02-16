@@ -2,10 +2,10 @@ import { logger } from '@/utils/logger';
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../services/api';
 import type { ResponseHistoryEntry } from '../../types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
-import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/Badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/Tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/Card';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/Badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
 import { Clock, Play, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 

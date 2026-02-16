@@ -5,6 +5,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PluginsPage } from '../PluginsPage';
+import { I18nProvider } from '../../i18n/I18nProvider';
+import { pluginsApi } from '../../services/api';
 
 vi.mock('../../services/api', () => ({
   pluginsApi: {
@@ -50,27 +52,34 @@ vi.mock('sonner', () => ({
 }));
 
 describe('PluginsPage', () => {
+  const renderWithProviders = () =>
+    render(
+      <I18nProvider>
+        <PluginsPage />
+      </I18nProvider>
+    );
+
   beforeEach(() => {
     vi.clearAllMocks();
     global.open = vi.fn();
   });
 
   it('renders plugins page header', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     expect(screen.getByText('Plugin Management')).toBeInTheDocument();
     expect(screen.getByText(/Manage authentication, template, response, and datasource plugins/)).toBeInTheDocument();
   });
 
   it('displays install and reload buttons', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     expect(screen.getByText('Install Plugin')).toBeInTheDocument();
     expect(screen.getByText('Reload All')).toBeInTheDocument();
   });
 
   it('opens install plugin modal', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const installButton = screen.getByText('Install Plugin');
     fireEvent.click(installButton);
@@ -79,7 +88,7 @@ describe('PluginsPage', () => {
   });
 
   it('closes install plugin modal', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     fireEvent.click(screen.getByText('Install Plugin'));
     expect(screen.getByText('Install Plugin Modal')).toBeInTheDocument();
@@ -92,7 +101,7 @@ describe('PluginsPage', () => {
 
   it('reloads all plugins', async () => {
 
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const reloadButton = screen.getByText('Reload All');
     fireEvent.click(reloadButton);
@@ -110,7 +119,7 @@ describe('PluginsPage', () => {
       })
     );
 
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const reloadButton = screen.getByText('Reload All');
     fireEvent.click(reloadButton);
@@ -126,7 +135,7 @@ describe('PluginsPage', () => {
   it('displays error when reload fails', async () => {
     pluginsApi.reloadAllPlugins.mockRejectedValue(new Error('Reload failed'));
 
-    render(<PluginsPage />);
+    renderWithProviders();
 
     fireEvent.click(screen.getByText('Reload All'));
 
@@ -136,7 +145,7 @@ describe('PluginsPage', () => {
   });
 
   it('filters plugins by search query', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const searchInput = screen.getByPlaceholderText('Search plugins by name or description...');
     fireEvent.change(searchInput, { target: { value: 'auth' } });
@@ -145,7 +154,7 @@ describe('PluginsPage', () => {
   });
 
   it('filters plugins by type', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const typeInput = screen.getByPlaceholderText('Filter by type');
     fireEvent.change(typeInput, { target: { value: 'authentication' } });
@@ -155,7 +164,7 @@ describe('PluginsPage', () => {
   });
 
   it('filters plugins by status', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const statusInput = screen.getByPlaceholderText('Filter by status');
     fireEvent.change(statusInput, { target: { value: 'active' } });
@@ -165,7 +174,7 @@ describe('PluginsPage', () => {
   });
 
   it('displays plugin type datalist options', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const typeDatalist = document.getElementById('plugin-types');
     expect(typeDatalist).toBeInTheDocument();
@@ -173,7 +182,7 @@ describe('PluginsPage', () => {
   });
 
   it('displays plugin status datalist options', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const statusDatalist = document.getElementById('plugin-statuses');
     expect(statusDatalist).toBeInTheDocument();
@@ -181,7 +190,7 @@ describe('PluginsPage', () => {
   });
 
   it('switches to installed plugins tab', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const installedTab = screen.getByText('Installed Plugins');
     fireEvent.click(installedTab);
@@ -190,7 +199,7 @@ describe('PluginsPage', () => {
   });
 
   it('switches to status tab', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const statusTab = screen.getByText('System Status');
     fireEvent.click(statusTab);
@@ -199,7 +208,7 @@ describe('PluginsPage', () => {
   });
 
   it('switches to marketplace tab', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     const marketplaceTab = screen.getByText('Marketplace');
     fireEvent.click(marketplaceTab);
@@ -209,21 +218,20 @@ describe('PluginsPage', () => {
   });
 
   it('opens marketplace in new tab', () => {
-    render(<PluginsPage />);
+    renderWithProviders();
 
     fireEvent.click(screen.getByText('Marketplace'));
 
     const browseButton = screen.getByText('Browse Marketplace');
     fireEvent.click(browseButton);
 
-    expect(global.open).toHaveBeenCalledWith('/plugins/marketplace', '_blank');
+    // Marketplace now routes inside the app via a navigation event.
+    expect(global.open).not.toHaveBeenCalled();
   });
 
   it('re-renders plugin list when reload key changes', async () => {
 
-    render(<PluginsPage />);
-
-    const initialList = screen.getByTestId('plugin-list');
+    renderWithProviders();
 
     fireEvent.click(screen.getByText('Reload All'));
 

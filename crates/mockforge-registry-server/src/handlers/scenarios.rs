@@ -12,8 +12,8 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{OptionalAuthUser, resolve_org_context},
-    models::{FeatureType, FeatureUsage, Scenario, ScenarioReview, ScenarioVersion, User, UsageCounter},
+    middleware::{AuthUser, OptionalAuthUser, resolve_org_context},
+    models::{record_audit_event, AuditEventType, FeatureType, FeatureUsage, Scenario, ScenarioReview, ScenarioVersion, User, UsageCounter},
     AppState,
 };
 
@@ -553,6 +553,29 @@ pub async fn publish_scenario(
             "scenario_name": name,
             "version": version,
         })),
+    )
+    .await;
+
+    // Record audit event
+    let ip_address = headers
+        .get("X-Forwarded-For")
+        .or_else(|| headers.get("X-Real-IP"))
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
+
+    record_audit_event(
+        pool,
+        org_ctx.org_id,
+        Some(author_id),
+        AuditEventType::ScenarioPublished,
+        format!("Scenario {} version {} published", name, version),
+        Some(serde_json::json!({
+            "scenario_name": name,
+            "version": version,
+        })),
+        ip_address,
+        user_agent,
     )
     .await;
 

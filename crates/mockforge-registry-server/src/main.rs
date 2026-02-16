@@ -77,9 +77,13 @@ async fn main() -> Result<()> {
     let db = Database::connect(&config.database_url).await?;
     tracing::info!("Database connected");
 
-    // Run migrations
-    db.migrate().await?;
-    tracing::info!("Database migrations complete");
+    // Run migrations (unless SKIP_MIGRATIONS=true, for K8s Job-based migrations)
+    if config.skip_migrations {
+        tracing::info!("Skipping database migrations (SKIP_MIGRATIONS=true)");
+    } else {
+        db.migrate().await?;
+        tracing::info!("Database migrations complete");
+    }
 
     // Initialize storage
     let storage = PluginStorage::new(&config).await?;

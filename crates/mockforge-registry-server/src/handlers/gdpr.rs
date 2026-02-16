@@ -11,8 +11,8 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
     models::{
-        ApiToken, HostedMock, Organization, OrgMember, OrgSetting, Project, Subscription,
-        UsageCounter, User, UserSetting,
+        record_audit_event, AuditEventType, ApiToken, HostedMock, Organization, OrgMember,
+        OrgSetting, Project, Subscription, UsageCounter, User, UserSetting,
     },
     AppState,
 };
@@ -438,6 +438,23 @@ pub async fn delete_data(
     );
 
     tx.commit().await.map_err(|e| ApiError::Database(e))?;
+
+    // Record audit event after commit (user is deleted, but this is compliance-required)
+    record_audit_event(
+        state.db.pool(),
+        Uuid::nil(),
+        Some(user_id),
+        AuditEventType::OrgDeleted, // Reusing closest event type for data erasure
+        format!("GDPR data erasure completed for user {}", user.email),
+        Some(serde_json::json!({
+            "action": "gdpr_data_erasure",
+            "reason": request.reason,
+            "orgs_affected": owned_orgs.len(),
+        })),
+        None,
+        None,
+    )
+    .await;
 
     Ok(Json(DeleteResponse {
         success: true,

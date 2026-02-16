@@ -8,8 +8,9 @@
 
 use anyhow::Result;
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::sync::OnceLock;
 
 /// Default issuer for JWT tokens
@@ -23,6 +24,20 @@ static JWT_ISSUER: OnceLock<String> = OnceLock::new();
 
 /// Cache the JWT audience value
 static JWT_AUDIENCE: OnceLock<String> = OnceLock::new();
+
+/// Derive a stable key ID from a secret by hashing its first 8 bytes (SHA-256 prefix).
+/// This allows token verification to identify which key was used without exposing the secret.
+fn derive_kid(secret: &str) -> String {
+    let hash = Sha256::digest(secret.as_bytes());
+    hex::encode(&hash[..4])
+}
+
+/// Build a JWT header with the `kid` field set, identifying which signing key was used.
+fn build_header(secret: &str) -> Header {
+    let mut header = Header::new(Algorithm::HS256);
+    header.kid = Some(derive_kid(secret));
+    header
+}
 
 /// Get the JWT issuer (from environment or default)
 fn get_jwt_issuer() -> &'static str {
@@ -96,7 +111,8 @@ pub fn create_access_token(user_id: &str, secret: &str) -> Result<String> {
         jti: None,
     };
 
-    let token = encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))?;
+    let header = build_header(secret);
+    let token = encode(&header, &claims, &EncodingKey::from_secret(secret.as_bytes()))?;
     Ok(token)
 }
 
@@ -122,7 +138,8 @@ pub fn create_refresh_token(user_id: &str, secret: &str) -> Result<(String, Stri
         jti: Some(jti.clone()),
     };
 
-    let token = encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))?;
+    let header = build_header(secret);
+    let token = encode(&header, &claims, &EncodingKey::from_secret(secret.as_bytes()))?;
     Ok((token, jti, expiration))
 }
 
@@ -154,6 +171,28 @@ pub fn create_token(user_id: &str, secret: &str) -> Result<String> {
 }
 
 pub fn verify_token(token: &str, secret: &str) -> Result<Claims> {
+    // Try the primary secret first
+    match verify_token_with_secret(token, secret) {
+        Ok(claims) => return Ok(claims),
+        Err(primary_err) => {
+            // If a previous secret is configured, try it for key rotation overlap
+            if let Ok(previous_secret) = std::env::var("JWT_SECRET_PREVIOUS") {
+                if !previous_secret.is_empty() {
+                    if let Ok(claims) = verify_token_with_secret(token, &previous_secret) {
+                        tracing::info!(
+                            "Token verified with previous JWT secret (key rotation in progress)"
+                        );
+                        return Ok(claims);
+                    }
+                }
+            }
+            Err(primary_err)
+        }
+    }
+}
+
+/// Verify a token against a specific secret
+fn verify_token_with_secret(token: &str, secret: &str) -> Result<Claims> {
     let mut validation = Validation::default();
 
     // Configure audience validation
@@ -523,5 +562,47 @@ mod tests {
 
         assert!(!claims.iss.is_empty());
         assert!(!claims.aud.is_empty());
+    }
+
+    #[test]
+    fn test_token_includes_kid_header() {
+        let user_id = "user-kid";
+        let token = create_access_token(user_id, TEST_SECRET).unwrap();
+
+        // Decode the header without verification to check kid
+        let header = jsonwebtoken::decode_header(&token).unwrap();
+        assert!(header.kid.is_some(), "Token should include kid header");
+        assert_eq!(header.kid.unwrap(), derive_kid(TEST_SECRET));
+    }
+
+    #[test]
+    fn test_key_rotation_with_previous_secret() {
+        let old_secret = "old-secret-key-for-jwt-minimum-32-characters";
+        let new_secret = "new-secret-key-for-jwt-minimum-32-characters";
+
+        // Create a token with the old secret
+        let user_id = "user-rotation";
+        let token = create_access_token(user_id, old_secret).unwrap();
+
+        // Token should NOT verify with new secret alone
+        assert!(verify_token_with_secret(&token, new_secret).is_err());
+
+        // Token should still verify with old secret
+        let claims = verify_token_with_secret(&token, old_secret).unwrap();
+        assert_eq!(claims.sub, user_id);
+    }
+
+    #[test]
+    fn test_derive_kid_deterministic() {
+        let kid1 = derive_kid(TEST_SECRET);
+        let kid2 = derive_kid(TEST_SECRET);
+        assert_eq!(kid1, kid2, "derive_kid should be deterministic");
+    }
+
+    #[test]
+    fn test_derive_kid_different_for_different_secrets() {
+        let kid1 = derive_kid("secret-one-minimum-32-characters-long");
+        let kid2 = derive_kid("secret-two-minimum-32-characters-long");
+        assert_ne!(kid1, kid2, "Different secrets should produce different kids");
     }
 }

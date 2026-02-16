@@ -38,8 +38,6 @@ import {
   ArrowDownward as ArrowDownwardIcon,
   Edit as EditIcon,
 } from '@mui/icons-material';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface WorkflowStep {
   id: string;
@@ -539,9 +537,23 @@ const IntegrationTestBuilder: React.FC = () => {
       <Dialog open={codeDialogOpen} onClose={() => setCodeDialogOpen(false)} maxWidth="lg" fullWidth>
         <DialogTitle>Generated Integration Test ({selectedFormat})</DialogTitle>
         <DialogContent>
-          <SyntaxHighlighter language={getLanguage(selectedFormat)} style={vscDarkPlus}>
-            {generatedCode}
-          </SyntaxHighlighter>
+          <Box
+            component="pre"
+            sx={{
+              maxHeight: '520px',
+              overflow: 'auto',
+              p: 2,
+              m: 0,
+              borderRadius: 1,
+              backgroundColor: '#0f172a',
+              color: '#e2e8f0',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+              fontSize: '0.8rem',
+              lineHeight: 1.5,
+            }}
+          >
+            <Box component="code">{generatedCode}</Box>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCodeDialogOpen(false)}>Close</Button>

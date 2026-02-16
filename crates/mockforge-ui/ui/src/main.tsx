@@ -7,6 +7,8 @@ import './index.css'
 import App from './App.tsx'
 import { useThemePaletteStore } from './stores/useThemePaletteStore'
 import { registerServiceWorker, unregisterServiceWorker } from './utils/serviceWorker'
+import { I18nProvider } from './i18n/I18nProvider'
+import { initErrorReporting } from './services/errorReporting'
 
 // Lazy load React Query DevTools only in development
 const ReactQueryDevtools = import.meta.env.DEV
@@ -19,6 +21,7 @@ const ReactQueryDevtools = import.meta.env.DEV
 
 // Initialize theme store
 useThemePaletteStore.getState().init();
+void initErrorReporting();
 
 // Always unregister service workers in dev to prevent stale cache issues
 if (import.meta.env.DEV) {
@@ -81,12 +84,14 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
-      {ReactQueryDevtools && (
-        <Suspense fallback={null}>
-          <ReactQueryDevtools initialIsOpen={false} />
-        </Suspense>
-      )}
+      <I18nProvider>
+        <App />
+        {ReactQueryDevtools && (
+          <Suspense fallback={null}>
+            <ReactQueryDevtools initialIsOpen={false} />
+          </Suspense>
+        )}
+      </I18nProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

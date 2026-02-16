@@ -117,6 +117,7 @@ describe('generateId', () => {
 describe('announceToScreenReader', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    document.body.innerHTML = '';
   });
 
   afterEach(() => {
@@ -127,7 +128,8 @@ describe('announceToScreenReader', () => {
   it('creates announcement element with message', () => {
     announceToScreenReader('Test message');
 
-    const announcement = document.body.querySelector('[aria-live]');
+    const announcements = document.body.querySelectorAll('[aria-live]');
+    const announcement = announcements[announcements.length - 1];
     expect(announcement).toBeTruthy();
     expect(announcement?.textContent).toBe('Test message');
   });
@@ -135,34 +137,35 @@ describe('announceToScreenReader', () => {
   it('uses polite priority by default', () => {
     announceToScreenReader('Test message');
 
-    const announcement = document.body.querySelector('[aria-live]');
+    const announcements = document.body.querySelectorAll('[aria-live]');
+    const announcement = announcements[announcements.length - 1];
     expect(announcement?.getAttribute('aria-live')).toBe('polite');
   });
 
   it('uses assertive priority when specified', () => {
     announceToScreenReader('Urgent message', 'assertive');
 
-    const announcement = document.body.querySelector('[aria-live]');
+    const announcements = document.body.querySelectorAll('[aria-live]');
+    const announcement = announcements[announcements.length - 1];
     expect(announcement?.getAttribute('aria-live')).toBe('assertive');
   });
 
   it('sets aria-atomic attribute', () => {
     announceToScreenReader('Test message');
 
-    const announcement = document.body.querySelector('[aria-live]');
+    const announcements = document.body.querySelectorAll('[aria-live]');
+    const announcement = announcements[announcements.length - 1];
     expect(announcement?.getAttribute('aria-atomic')).toBe('true');
   });
 
   it('removes announcement after timeout', () => {
     announceToScreenReader('Test message');
 
-    let announcement = document.body.querySelector('[aria-live]');
-    expect(announcement).toBeTruthy();
+    expect(document.body.textContent).toContain('Test message');
 
     vi.advanceTimersByTime(1000);
 
-    announcement = document.body.querySelector('[aria-live]');
-    expect(announcement).toBeNull();
+    expect(document.body.textContent).not.toContain('Test message');
   });
 });
 

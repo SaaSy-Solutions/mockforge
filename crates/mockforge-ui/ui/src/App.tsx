@@ -21,6 +21,7 @@ import { ApiTokensPage } from './pages/ApiTokensPage';
 import { UsageDashboardPage } from './pages/UsageDashboardPage';
 import { TimeTravelPage } from './pages/TimeTravelPage';
 import { ProxyInspectorPage } from './pages/ProxyInspectorPage';
+import { useI18n } from './i18n/I18nProvider';
 
 // Lazy load all pages for better code splitting
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
@@ -96,6 +97,7 @@ const VoicePage = lazy(() => import('./pages/VoicePage').then(m => ({ default: m
 const AIStudioPage = lazy(() => import('./pages/AIStudioPage').then(m => ({ default: m.AIStudioPage })));
 
 function App() {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState('dashboard');
   const loadWorkspaces = useWorkspaceStore(state => state.loadWorkspaces);
 
@@ -342,16 +344,16 @@ function App() {
               <div className="text-center">
                 <div className="text-6xl mb-4">🚧</div>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                  Page Not Found
+                  {t('app.pageNotFoundTitle')}
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  The page you're looking for doesn't exist yet.
+                  {t('app.pageNotFoundBody')}
                 </p>
                 <button
                   onClick={() => setActiveTab('dashboard')}
                   className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
                 >
-                  Go to Dashboard
+                  {t('app.goToDashboard')}
                 </button>
               </div>
             </div>
@@ -370,7 +372,7 @@ function App() {
                 <div className="flex items-center justify-center h-64">
                   <div className="text-center">
                     <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+                    <p className="mt-4 text-gray-600 dark:text-gray-400">{t('app.loading')}</p>
                   </div>
                 </div>
               }>

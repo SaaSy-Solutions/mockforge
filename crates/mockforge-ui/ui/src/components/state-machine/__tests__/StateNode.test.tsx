@@ -5,10 +5,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { StateNode } from '../StateNode';
-import type { NodeProps } from '@xyflow/react';
+import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 
 describe('StateNode', () => {
-  const defaultProps: NodeProps = {
+  const getDefaultProps = (): NodeProps => ({
     id: 'test-node',
     type: 'state',
     position: { x: 0, y: 0 },
@@ -19,16 +19,21 @@ describe('StateNode', () => {
       isFinal: false,
     },
     selected: false,
-  };
+  });
+
+  const renderWithProvider = (ui: JSX.Element) =>
+    render(<ReactFlowProvider>{ui}</ReactFlowProvider>);
 
   it('should render state node with label', () => {
-    render(<StateNode {...defaultProps} />);
+    const defaultProps = getDefaultProps();
+    renderWithProvider(<StateNode {...defaultProps} />);
     expect(screen.getByText('Test State')).toBeInTheDocument();
     expect(screen.getByText('test-state')).toBeInTheDocument();
   });
 
   it('should show initial badge when isInitial is true', () => {
-    render(
+    const defaultProps = getDefaultProps();
+    renderWithProvider(
       <StateNode
         {...defaultProps}
         data={{ ...defaultProps.data, isInitial: true }}
@@ -38,7 +43,8 @@ describe('StateNode', () => {
   });
 
   it('should show final badge when isFinal is true', () => {
-    render(
+    const defaultProps = getDefaultProps();
+    renderWithProvider(
       <StateNode
         {...defaultProps}
         data={{ ...defaultProps.data, isFinal: true }}
@@ -48,7 +54,8 @@ describe('StateNode', () => {
   });
 
   it('should enter edit mode on double click', () => {
-    render(<StateNode {...defaultProps} />);
+    const defaultProps = getDefaultProps();
+    renderWithProvider(<StateNode {...defaultProps} />);
     const labelElement = screen.getByText('Test State');
 
     fireEvent.doubleClick(labelElement);
@@ -58,7 +65,8 @@ describe('StateNode', () => {
   });
 
   it('should update label on input change', () => {
-    render(<StateNode {...defaultProps} />);
+    const defaultProps = getDefaultProps();
+    renderWithProvider(<StateNode {...defaultProps} />);
     const labelElement = screen.getByText('Test State');
 
     fireEvent.doubleClick(labelElement);
@@ -70,7 +78,8 @@ describe('StateNode', () => {
   });
 
   it('should exit edit mode on blur', () => {
-    render(<StateNode {...defaultProps} />);
+    const defaultProps = getDefaultProps();
+    renderWithProvider(<StateNode {...defaultProps} />);
     const labelElement = screen.getByText('Test State');
 
     fireEvent.doubleClick(labelElement);
@@ -83,7 +92,8 @@ describe('StateNode', () => {
   });
 
   it('should exit edit mode on Enter key', () => {
-    render(<StateNode {...defaultProps} />);
+    const defaultProps = getDefaultProps();
+    renderWithProvider(<StateNode {...defaultProps} />);
     const labelElement = screen.getByText('Test State');
 
     fireEvent.doubleClick(labelElement);
@@ -95,7 +105,8 @@ describe('StateNode', () => {
   });
 
   it('should apply selected styling when selected', () => {
-    const { container } = render(
+    const defaultProps = getDefaultProps();
+    const { container } = renderWithProvider(
       <StateNode {...defaultProps} selected={true} />
     );
 
@@ -104,7 +115,8 @@ describe('StateNode', () => {
   });
 
   it('should apply initial state styling', () => {
-    const { container } = render(
+    const defaultProps = getDefaultProps();
+    const { container } = renderWithProvider(
       <StateNode
         {...defaultProps}
         data={{ ...defaultProps.data, isInitial: true }}
@@ -116,7 +128,8 @@ describe('StateNode', () => {
   });
 
   it('should apply final state styling', () => {
-    const { container } = render(
+    const defaultProps = getDefaultProps();
+    const { container } = renderWithProvider(
       <StateNode
         {...defaultProps}
         data={{ ...defaultProps.data, isFinal: true }}

@@ -8,23 +8,51 @@ import { WorkflowValidator } from '../WorkflowValidator';
 import { useServiceStore } from '../../../stores/useServiceStore';
 import { useAuthStore } from '../../../stores/useAuthStore';
 
+const mockState = vi.hoisted(() => ({
+  services: [
+    { id: 'service-1', name: 'Test Service', enabled: true, routes: [{ method: 'GET', path: '/test', enabled: true }] },
+    { id: 'service-2', name: 'Aux Service', enabled: false, routes: [{ method: 'POST', path: '/aux', enabled: true }] },
+  ],
+  fixtures: [
+    { id: 'fixture-1', name: 'test.json', content: '{"test": true}' },
+  ],
+}));
+
 vi.mock('../../../stores/useServiceStore', () => ({
   useServiceStore: vi.fn(() => ({
-    services: [
-      { id: 'service-1', name: 'Test Service', enabled: true, routes: [{ method: 'GET', path: '/test', enabled: true }] },
-    ],
-    updateService: vi.fn(),
-    toggleRoute: vi.fn(),
+    services: mockState.services,
+    updateService: vi.fn((serviceId: string, updates: { enabled?: boolean }) => {
+      const service = mockState.services.find(s => s.id === serviceId);
+      if (service && typeof updates.enabled === 'boolean') {
+        service.enabled = updates.enabled;
+      }
+    }),
+    toggleRoute: vi.fn((serviceId: string, routeId: string, enabled: boolean) => {
+      const service = mockState.services.find(s => s.id === serviceId);
+      if (!service) return;
+      const route = service.routes.find(r => (r.method ? `${r.method}-${r.path}` : r.path) === routeId);
+      if (route) {
+        route.enabled = enabled;
+      }
+    }),
   })),
 }));
 
 vi.mock('../../../stores/useFixtureStore', () => ({
   useFixtureStore: vi.fn(() => ({
-    fixtures: [
-      { id: 'fixture-1', name: 'test.json', content: '{"test": true}' },
-    ],
-    updateFixture: vi.fn(),
-    renameFixture: vi.fn(),
+    fixtures: mockState.fixtures,
+    updateFixture: vi.fn((fixtureId: string, content: string) => {
+      const fixture = mockState.fixtures.find(f => f.id === fixtureId);
+      if (fixture) {
+        fixture.content = content;
+      }
+    }),
+    renameFixture: vi.fn((fixtureId: string, name: string) => {
+      const fixture = mockState.fixtures.find(f => f.id === fixtureId);
+      if (fixture) {
+        fixture.name = name;
+      }
+    }),
     generateDiff: vi.fn(() => ({ changes: [{ type: 'modified', line: 1 }] })),
   })),
 }));
@@ -64,6 +92,11 @@ vi.mock('../../../stores/useAuthStore', () => ({
 describe('WorkflowValidator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockState.services = [
+      { id: 'service-1', name: 'Test Service', enabled: true, routes: [{ method: 'GET', path: '/test', enabled: true }] },
+      { id: 'service-2', name: 'Aux Service', enabled: false, routes: [{ method: 'POST', path: '/aux', enabled: true }] },
+    ];
+    mockState.fixtures = [{ id: 'fixture-1', name: 'test.json', content: '{"test": true}' }];
   });
 
   it('renders workflow validator header', () => {

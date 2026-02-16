@@ -64,6 +64,12 @@ Object.defineProperty(global, 'crypto', {
 global.URL.createObjectURL = vi.fn(() => 'mock-object-url');
 global.URL.revokeObjectURL = vi.fn();
 
+// Prevent jsdom navigation errors when tests click synthetic download anchors.
+HTMLAnchorElement.prototype.click = vi.fn();
+
+// Prevent jsdom canvas warnings from chart libraries.
+HTMLCanvasElement.prototype.getContext = vi.fn(() => ({}) as any);
+
 // Mock clipboard API
 Object.defineProperty(navigator, 'clipboard', {
   value: {

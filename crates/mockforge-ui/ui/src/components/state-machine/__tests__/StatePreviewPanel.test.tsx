@@ -115,15 +115,9 @@ describe('StatePreviewPanel', () => {
 
     render(<StatePreviewPanel {...defaultProps} />);
 
-    const closeButton = screen.getByRole('button', { name: /close/i });
-    // Find by title or aria-label
     const buttons = screen.getAllByRole('button');
-    const closeBtn = buttons.find(btn => btn.querySelector('svg'));
-
-    if (closeBtn) {
-      fireEvent.click(closeBtn);
-      // Note: onClose might not be called if button doesn't have proper handler
-      // This is a basic test structure
-    }
+    const closeBtn = buttons[1];
+    fireEvent.click(closeBtn);
+    expect(defaultProps.onClose).toHaveBeenCalled();
   });
 });

@@ -62,20 +62,12 @@ jobs:
         run: |
           # Run integration tests (including ignored ones)
           # Tests use #[ignore] because they require the binary, but we'll run them in CI
-          cargo test --package mockforge-integration-tests --test '*' -- --ignored --nocapture || {
-            echo "⚠️  Some integration tests may have failed or been skipped"
-            echo "This is expected if the binary is not available or services aren't configured"
-            # Don't fail the CI job - integration tests may require specific setup
-            exit 0
-          }
+          cargo test --package mockforge-integration-tests --test '*' -- --ignored --nocapture
 
       - name: Run integration tests (non-ignored)
         run: |
           # Run any non-ignored integration tests
-          cargo test --package mockforge-integration-tests --test '*' --nocapture || {
-            echo "⚠️  Some tests failed or were skipped"
-            exit 0
-          }
+          cargo test --package mockforge-integration-tests --test '*' --nocapture
 
       - name: Upload test artifacts
         if: always()

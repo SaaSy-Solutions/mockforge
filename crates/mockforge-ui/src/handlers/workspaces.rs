@@ -278,6 +278,26 @@ pub async fn update_workspace(
     }
 }
 
+/// Set active workspace (currently validates workspace existence and returns activation result)
+pub async fn set_active_workspace(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, Response> {
+    let registry = state.registry.read().await;
+
+    match registry.get_workspace(&workspace_id) {
+        Ok(_) => Ok(Json(ApiResponse::success(json!({
+            "workspace_id": workspace_id,
+            "active": true
+        })))),
+        Err(_) => Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()),
+    }
+}
+
 /// Delete a workspace
 pub async fn delete_workspace(
     State(state): State<WorkspaceState>,

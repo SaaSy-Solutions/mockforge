@@ -98,6 +98,31 @@ fn parse_components(components: Option<Vec<String>>) -> SnapshotComponents {
     }
 }
 
+fn strip_unintegrated_components(
+    mut components: SnapshotComponents,
+) -> (SnapshotComponents, Vec<&'static str>) {
+    let mut skipped = Vec::new();
+
+    if components.unified_state {
+        components.unified_state = false;
+        skipped.push("unified_state");
+    }
+    if components.vbr_state {
+        components.vbr_state = false;
+        skipped.push("vbr_state");
+    }
+    if components.recorder_state {
+        components.recorder_state = false;
+        skipped.push("recorder_state");
+    }
+    if components.workspace_config {
+        components.workspace_config = false;
+        skipped.push("workspace_config");
+    }
+
+    (components, skipped)
+}
+
 /// Handle snapshot commands
 pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
     // Initialize snapshot manager
@@ -113,6 +138,13 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
         } => {
             info!("Saving snapshot '{}' for workspace '{}'", name, workspace);
             let components = parse_components(components);
+            let (components, skipped_components) = strip_unintegrated_components(components);
+            if !skipped_components.is_empty() {
+                println!(
+                    "⚠ Snapshot state integration is partial in CLI mode; skipping unsupported components: {}",
+                    skipped_components.join(", ")
+                );
+            }
 
             // TODO: Get consistency engine, workspace persistence, VBR engine, and Recorder from server state when integrated
             // For now, we'll create a placeholder that can be extended
@@ -154,7 +186,17 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
                 }
             } else {
                 info!("Loading snapshot '{}' for workspace '{}'", name, workspace);
-                let components = components.map(|c| parse_components(Some(c)));
+                let components = components.map(|c| {
+                    let requested = parse_components(Some(c));
+                    let (filtered, skipped_components) = strip_unintegrated_components(requested);
+                    if !skipped_components.is_empty() {
+                        println!(
+                            "⚠ Snapshot restore integration is partial in CLI mode; skipping unsupported components: {}",
+                            skipped_components.join(", ")
+                        );
+                    }
+                    filtered
+                });
 
                 // TODO: Get consistency engine and workspace persistence from server state when integrated
                 let (manifest, vbr_state, recorder_state) = manager

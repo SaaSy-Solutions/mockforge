@@ -36,11 +36,16 @@ use tokio::sync::RwLock;
 use crate::models::{
     ApiResponse, ConfigUpdate, DashboardData, DashboardSystemInfo, FaultConfig, HealthCheck,
     LatencyProfile, LogFilter, MetricsData, ProxyConfig, RequestLog, RouteInfo, ServerInfo,
-    ServerStatus, SimpleMetricsData, SystemInfo, ValidationSettings, ValidationUpdate,
+    ServerStatus, SimpleMetricsData, SystemInfo, TrafficShapingConfig, ValidationSettings,
+    ValidationUpdate,
 };
 
 // Import import types from core
 use mockforge_core::workspace_import::{ImportResponse, ImportRoute};
+use mockforge_plugin_loader::{
+    GitPluginConfig, GitPluginLoader, PluginLoader, PluginLoaderConfig, PluginSource,
+    RemotePluginConfig, RemotePluginLoader,
+};
 
 // Handler sub-modules
 pub mod admin;
@@ -215,6 +220,8 @@ pub struct ConfigurationState {
     pub proxy_config: ProxyConfig,
     /// Validation settings
     pub validation_settings: ValidationSettings,
+    /// Traffic shaping settings
+    pub traffic_shaping: TrafficShapingConfig,
 }
 
 /// Import history entry
@@ -419,6 +426,23 @@ impl AdminState {
                     aggregate_errors: true,
                     validate_responses: false,
                     overrides: HashMap::new(),
+                },
+                traffic_shaping: TrafficShapingConfig {
+                    enabled: false,
+                    bandwidth: crate::models::BandwidthConfig {
+                        enabled: false,
+                        max_bytes_per_sec: 1_048_576,
+                        burst_capacity_bytes: 10_485_760,
+                        tag_overrides: HashMap::new(),
+                    },
+                    burst_loss: crate::models::BurstLossConfig {
+                        enabled: false,
+                        burst_probability: 0.1,
+                        burst_duration_ms: 5000,
+                        loss_rate_during_burst: 0.5,
+                        recovery_time_ms: 30000,
+                        tag_overrides: HashMap::new(),
+                    },
                 },
             })),
             logs: Arc::new(RwLock::new(Vec::new())),
@@ -1786,6 +1810,11 @@ pub async fn get_config(State(state): State<AdminState>) -> Json<ApiResponse<ser
             "upstream_url": config_state.proxy_config.upstream_url,
             "timeout_seconds": config_state.proxy_config.timeout_seconds
         },
+        "traffic_shaping": {
+            "enabled": config_state.traffic_shaping.enabled,
+            "bandwidth": config_state.traffic_shaping.bandwidth,
+            "burst_loss": config_state.traffic_shaping.burst_loss
+        },
         "validation": {
             "mode": config_state.validation_settings.mode,
             "aggregate_errors": config_state.validation_settings.aggregate_errors,
@@ -3142,11 +3171,75 @@ async fn execute_single_smoke_test(
     }
 }
 
-/// Install a plugin from a path or URL
-pub async fn install_plugin(Json(request): Json<serde_json::Value>) -> impl IntoResponse {
-    // Extract source from request
-    let source = request.get("source").and_then(|s| s.as_str()).unwrap_or("");
+#[derive(Debug, Deserialize)]
+pub struct PluginInstallRequest {
+    pub source: String,
+    #[serde(default)]
+    pub force: bool,
+    #[serde(default)]
+    pub skip_validation: bool,
+    #[serde(default)]
+    pub no_verify: bool,
+    pub checksum: Option<String>,
+}
 
+#[derive(Debug, Deserialize)]
+pub struct PluginValidateRequest {
+    pub source: String,
+}
+
+fn find_plugin_directory(path: &std::path::Path) -> Option<std::path::PathBuf> {
+    if path.join("plugin.yaml").exists() {
+        return Some(path.to_path_buf());
+    }
+
+    let entries = std::fs::read_dir(path).ok()?;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let child = entry.path();
+        if child.is_dir() && child.join("plugin.yaml").exists() {
+            return Some(child);
+        }
+    }
+
+    None
+}
+
+async fn resolve_plugin_source_path(
+    source: PluginSource,
+    checksum: Option<&str>,
+) -> std::result::Result<std::path::PathBuf, String> {
+    match source {
+        PluginSource::Local(path) => Ok(path),
+        PluginSource::Url { url, .. } => {
+            let loader = RemotePluginLoader::new(RemotePluginConfig::default())
+                .map_err(|e| format!("Failed to initialize remote plugin loader: {}", e))?;
+            loader
+                .download_with_checksum(&url, checksum)
+                .await
+                .map_err(|e| format!("Failed to download plugin from URL: {}", e))
+        }
+        PluginSource::Git(git_source) => {
+            let loader = GitPluginLoader::new(GitPluginConfig::default())
+                .map_err(|e| format!("Failed to initialize git plugin loader: {}", e))?;
+            loader
+                .clone_from_git(&git_source)
+                .await
+                .map_err(|e| format!("Failed to clone plugin from git: {}", e))
+        }
+        PluginSource::Registry { name, version } => Err(format!(
+            "Registry plugin installation is not yet supported from the admin API (requested {}@{})",
+            name,
+            version.unwrap_or_else(|| "latest".to_string())
+        )),
+    }
+}
+
+/// Install a plugin from a path, URL, or Git source and register it in-process.
+pub async fn install_plugin(
+    State(state): State<AdminState>,
+    Json(request): Json<PluginInstallRequest>,
+) -> impl IntoResponse {
+    let source = request.source.trim().to_string();
     if source.is_empty() {
         return Json(json!({
             "success": false,
@@ -3154,102 +3247,241 @@ pub async fn install_plugin(Json(request): Json<serde_json::Value>) -> impl Into
         }));
     }
 
-    // Determine if source is a URL or local path
-    let plugin_path = if source.starts_with("http://") || source.starts_with("https://") {
-        // Download the plugin from URL
-        match download_plugin_from_url(source).await {
-            Ok(temp_path) => temp_path,
-            Err(e) => {
-                return Json(json!({
-                    "success": false,
-                    "error": format!("Failed to download plugin: {}", e)
-                }))
-            }
-        }
-    } else {
-        // Use local file path
-        std::path::PathBuf::from(source)
-    };
-
-    // Check if the plugin file exists
-    if !plugin_path.exists() {
+    if request.skip_validation {
         return Json(json!({
             "success": false,
-            "error": format!("Plugin file not found: {}", source)
+            "error": "Skipping validation is not supported in admin install flow."
         }));
     }
 
-    // For now, just return success since we don't have the plugin loader infrastructure
+    if request.no_verify {
+        return Json(json!({
+            "success": false,
+            "error": "Disabling signature verification is not supported in admin install flow."
+        }));
+    }
+
+    let force = request.force;
+    let checksum = request.checksum.clone();
+    let state_for_install = state.clone();
+
+    let install_result = tokio::task::spawn_blocking(
+        move || -> std::result::Result<(String, String, String), String> {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| format!("Failed to initialize install runtime: {}", e))?;
+
+            let (plugin_instance, plugin_id, plugin_name, plugin_version) =
+                runtime.block_on(async move {
+                    let parsed_source = PluginSource::parse(&source)
+                        .map_err(|e| format!("Invalid plugin source: {}", e))?;
+
+                    let source_path =
+                        resolve_plugin_source_path(parsed_source, checksum.as_deref()).await?;
+
+                    let plugin_root = if source_path.is_dir() {
+                        find_plugin_directory(&source_path).unwrap_or(source_path.clone())
+                    } else {
+                        source_path.clone()
+                    };
+
+                    if !plugin_root.exists() || !plugin_root.is_dir() {
+                        return Err(format!(
+                            "Resolved plugin path is not a directory: {}",
+                            plugin_root.display()
+                        ));
+                    }
+
+                    let loader = PluginLoader::new(PluginLoaderConfig::default());
+                    let manifest = loader
+                        .validate_plugin(&plugin_root)
+                        .await
+                        .map_err(|e| format!("Failed to validate plugin: {}", e))?;
+
+                    let plugin_id = manifest.info.id.clone();
+                    let plugin_name = manifest.info.name.clone();
+                    let plugin_version = manifest.info.version.to_string();
+
+                    let parent_dir = plugin_root
+                        .parent()
+                        .unwrap_or_else(|| std::path::Path::new("."))
+                        .to_string_lossy()
+                        .to_string();
+
+                    let runtime_loader = PluginLoader::new(PluginLoaderConfig {
+                        plugin_dirs: vec![parent_dir],
+                        ..PluginLoaderConfig::default()
+                    });
+
+                    runtime_loader
+                        .load_plugin(&plugin_id)
+                        .await
+                        .map_err(|e| format!("Failed to load plugin into runtime: {}", e))?;
+
+                    let plugin_instance =
+                        runtime_loader.get_plugin(&plugin_id).await.ok_or_else(|| {
+                            "Plugin loaded but instance was not retrievable from loader".to_string()
+                        })?;
+
+                    Ok::<_, String>((
+                        plugin_instance,
+                        plugin_id.to_string(),
+                        plugin_name,
+                        plugin_version,
+                    ))
+                })?;
+
+            let mut registry = state_for_install.plugin_registry.blocking_write();
+
+            if let Some(existing_id) =
+                registry.list_plugins().into_iter().find(|id| id.as_str() == plugin_id)
+            {
+                if force {
+                    registry.remove_plugin(&existing_id).map_err(|e| {
+                        format!("Failed to remove existing plugin before reinstall: {}", e)
+                    })?;
+                } else {
+                    return Err(format!(
+                        "Plugin '{}' is already installed. Use force=true to reinstall.",
+                        plugin_id
+                    ));
+                }
+            }
+
+            registry
+                .add_plugin(plugin_instance)
+                .map_err(|e| format!("Failed to register plugin in admin registry: {}", e))?;
+
+            Ok((plugin_id, plugin_name, plugin_version))
+        },
+    )
+    .await;
+
+    let (plugin_id, plugin_name, plugin_version) = match install_result {
+        Ok(Ok(result)) => result,
+        Ok(Err(err)) => {
+            return Json(json!({
+                "success": false,
+                "error": err
+            }))
+        }
+        Err(err) => {
+            return Json(json!({
+                "success": false,
+                "error": format!("Plugin installation task failed: {}", err)
+            }))
+        }
+    };
+
     Json(json!({
         "success": true,
-        "message": format!("Plugin would be installed from: {}", source)
+        "data": {
+            "plugin_id": plugin_id,
+            "name": plugin_name,
+            "version": plugin_version
+        },
+        "message": "Plugin installed and registered in runtime."
     }))
 }
 
-/// Download a plugin from a URL and return the temporary file path
-async fn download_plugin_from_url(url: &str) -> Result<std::path::PathBuf> {
-    // Create a temporary file
-    let temp_file =
-        std::env::temp_dir().join(format!("plugin_{}.tmp", chrono::Utc::now().timestamp()));
-    let temp_path = temp_file.clone();
-
-    // Download the file
-    let response = reqwest::get(url)
-        .await
-        .map_err(|e| Error::generic(format!("Failed to download from URL: {}", e)))?;
-
-    if !response.status().is_success() {
-        return Err(Error::generic(format!(
-            "HTTP error {}: {}",
-            response.status().as_u16(),
-            response.status().canonical_reason().unwrap_or("Unknown")
-        )));
+/// Validate a plugin source without installing it.
+pub async fn validate_plugin(Json(request): Json<PluginValidateRequest>) -> impl IntoResponse {
+    let source = request.source.trim();
+    if source.is_empty() {
+        return Json(json!({
+            "success": false,
+            "error": "Plugin source is required"
+        }));
     }
 
-    // Read the response bytes
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| Error::generic(format!("Failed to read response: {}", e)))?;
+    let source = match PluginSource::parse(source) {
+        Ok(source) => source,
+        Err(e) => {
+            return Json(json!({
+                "success": false,
+                "error": format!("Invalid plugin source: {}", e)
+            }));
+        }
+    };
 
-    // Write to temporary file
-    tokio::fs::write(&temp_file, &bytes)
-        .await
-        .map_err(|e| Error::generic(format!("Failed to write temporary file: {}", e)))?;
+    let path = match source.clone() {
+        PluginSource::Local(path) => path,
+        PluginSource::Url { .. } | PluginSource::Git(_) => {
+            match resolve_plugin_source_path(source, None).await {
+                Ok(path) => path,
+                Err(err) => {
+                    return Json(json!({
+                        "success": false,
+                        "error": err
+                    }))
+                }
+            }
+        }
+        PluginSource::Registry { .. } => {
+            return Json(json!({
+                "success": false,
+                "error": "Registry plugin validation is not yet supported from the admin API."
+            }))
+        }
+    };
 
-    Ok(temp_path)
-}
+    let plugin_root = if path.is_dir() {
+        find_plugin_directory(&path).unwrap_or(path.clone())
+    } else {
+        path
+    };
 
-pub async fn serve_icon() -> impl IntoResponse {
-    // Return a simple placeholder icon response
-    ([(http::header::CONTENT_TYPE, "image/png")], "")
-}
-
-pub async fn serve_icon_32() -> impl IntoResponse {
-    ([(http::header::CONTENT_TYPE, "image/png")], "")
-}
-
-pub async fn serve_icon_48() -> impl IntoResponse {
-    ([(http::header::CONTENT_TYPE, "image/png")], "")
-}
-
-pub async fn serve_logo() -> impl IntoResponse {
-    ([(http::header::CONTENT_TYPE, "image/png")], "")
-}
-
-pub async fn serve_logo_40() -> impl IntoResponse {
-    ([(http::header::CONTENT_TYPE, "image/png")], "")
-}
-
-pub async fn serve_logo_80() -> impl IntoResponse {
-    ([(http::header::CONTENT_TYPE, "image/png")], "")
+    let loader = PluginLoader::new(PluginLoaderConfig::default());
+    match loader.validate_plugin(&plugin_root).await {
+        Ok(manifest) => Json(json!({
+            "success": true,
+            "data": {
+                "valid": true,
+                "id": manifest.info.id.to_string(),
+                "name": manifest.info.name,
+                "version": manifest.info.version.to_string()
+            }
+        })),
+        Err(e) => Json(json!({
+            "success": false,
+            "data": { "valid": false },
+            "error": format!("Plugin validation failed: {}", e)
+        })),
+    }
 }
 
 // Missing handler functions that routes.rs expects
 pub async fn update_traffic_shaping(
-    State(_state): State<AdminState>,
-    Json(_config): Json<serde_json::Value>,
+    State(state): State<AdminState>,
+    Json(config): Json<TrafficShapingConfig>,
 ) -> Json<ApiResponse<String>> {
+    if config.burst_loss.burst_probability > 1.0
+        || config.burst_loss.loss_rate_during_burst > 1.0
+        || config.burst_loss.burst_probability < 0.0
+        || config.burst_loss.loss_rate_during_burst < 0.0
+    {
+        return Json(ApiResponse::error(
+            "Burst loss probabilities must be between 0.0 and 1.0".to_string(),
+        ));
+    }
+
+    {
+        let mut cfg = state.config.write().await;
+        cfg.traffic_shaping = config.clone();
+    }
+
+    if let Some(ref chaos_api_state) = state.chaos_api_state {
+        let mut chaos_config = chaos_api_state.config.write().await;
+        chaos_config.traffic_shaping = Some(mockforge_chaos::config::TrafficShapingConfig {
+            enabled: config.enabled,
+            bandwidth_limit_bps: config.bandwidth.max_bytes_per_sec,
+            packet_loss_percent: config.burst_loss.loss_rate_during_burst * 100.0,
+            max_connections: 0,
+            connection_timeout_ms: 30000,
+        });
+    }
+
     Json(ApiResponse::success("Traffic shaping updated".to_string()))
 }
 
@@ -4533,14 +4765,6 @@ pub async fn confirm_sync_changes(
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Sync changes confirmed".to_string()))
-}
-
-// Plugin management functions
-pub async fn validate_plugin(
-    State(_state): State<AdminState>,
-    Json(_request): Json<serde_json::Value>,
-) -> Json<ApiResponse<String>> {
-    Json(ApiResponse::success("Plugin validated".to_string()))
 }
 
 // Missing functions that routes.rs expects

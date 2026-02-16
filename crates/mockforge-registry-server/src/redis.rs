@@ -41,7 +41,7 @@ impl RedisPool {
 
         // Set expiry on first increment (count == 1)
         if count == 1 {
-            conn.expire(key, expiry_seconds as i64).await?;
+            conn.expire::<_, ()>(key, expiry_seconds as i64).await?;
         }
 
         Ok(count)
@@ -57,7 +57,7 @@ impl RedisPool {
     /// Set a key with expiration
     pub async fn set_with_expiry(&self, key: &str, value: &str, expiry_seconds: u64) -> Result<()> {
         let mut conn = (*self.manager).clone();
-        conn.set_ex(key, value, expiry_seconds).await?;
+        conn.set_ex::<_, _, ()>(key, value, expiry_seconds).await?;
         Ok(())
     }
 

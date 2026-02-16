@@ -176,10 +176,32 @@ describe('useFixtureStore', () => {
 
   it('generates diff for fixture changes', () => {
     const { result } = renderHook(() => useFixtureStore());
+    const mockFixtures = [
+      {
+        id: '1',
+        name: 'test.json',
+        path: 'http/get/test.json',
+        content: '{"test": true}',
+        size_bytes: 15,
+        last_modified: '2024-01-01T00:00:00Z',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+        version: '1',
+        route_path: '/api/test',
+        method: 'GET',
+      },
+    ];
+
+    act(() => {
+      result.current.setFixtures(mockFixtures as any);
+    });
 
     const diff = result.current.generateDiff('1', '{"new": "content"}');
 
-    expect(diff).toHaveProperty('fixtureId');
+    expect(diff).toHaveProperty('id');
+    expect(diff).toHaveProperty('name', 'test.json');
+    expect(diff).toHaveProperty('old_content', '{"test": true}');
+    expect(diff).toHaveProperty('new_content', '{"new": "content"}');
     expect(diff).toHaveProperty('changes');
     expect(diff).toHaveProperty('timestamp');
   });

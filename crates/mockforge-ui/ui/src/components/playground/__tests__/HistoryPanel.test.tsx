@@ -123,8 +123,7 @@ describe('HistoryPanel', () => {
 
     render(<HistoryPanel />);
 
-    const replayButton = screen.getByRole('button', { name: '' });
-    fireEvent.click(replayButton);
+    fireEvent.click(screen.getByText('/api/users'));
 
     await waitFor(() => {
       expect(mockReplayRequest).toHaveBeenCalledWith('1');

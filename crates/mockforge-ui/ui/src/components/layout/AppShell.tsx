@@ -9,6 +9,8 @@ import { useLogStore } from '../../stores/useLogStore';
 import { useServiceStore } from '../../stores/useServiceStore';
 import { useAppShortcuts } from '../../hooks/useKeyboardNavigation';
 import { useSkipLinks } from '../../hooks/useFocusManagement';
+import { useI18n } from '../../i18n/I18nProvider';
+import type { Locale } from '../../i18n/translations';
 import {
   BarChart3,
   Server,
@@ -71,113 +73,113 @@ interface AppShellProps {
 
 const navSections = [
   {
-    title: 'Core',
+    titleKey: 'nav.core',
     items: [
-      { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-      { id: 'workspaces', label: 'Workspaces', icon: FolderOpen },
-      { id: 'federation', label: 'Federation', icon: Share2 },
+      { id: 'dashboard', labelKey: 'tab.dashboard', icon: BarChart3 },
+      { id: 'workspaces', labelKey: 'tab.workspaces', icon: FolderOpen },
+      { id: 'federation', labelKey: 'tab.federation', icon: Share2 },
     ]
   },
   {
-    title: 'Services & Data',
+    titleKey: 'nav.servicesData',
     items: [
-      { id: 'services', label: 'Services', icon: Server },
-      { id: 'virtual-backends', label: 'Virtual Backends', icon: Database },
-      { id: 'fixtures', label: 'Fixtures', icon: FileJson },
-      { id: 'hosted-mocks', label: 'Hosted Mocks', icon: Cloud },
-      { id: 'tunnels', label: 'Tunnels', icon: Wifi },
-      { id: 'proxy-inspector', label: 'Proxy Inspector', icon: Search },
+      { id: 'services', labelKey: 'tab.services', icon: Server },
+      { id: 'virtual-backends', labelKey: 'tab.virtualBackends', icon: Database },
+      { id: 'fixtures', labelKey: 'tab.fixtures', icon: FileJson },
+      { id: 'hosted-mocks', labelKey: 'tab.hostedMocks', icon: Cloud },
+      { id: 'tunnels', labelKey: 'tab.tunnels', icon: Wifi },
+      { id: 'proxy-inspector', labelKey: 'tab.proxyInspector', icon: Search },
     ]
   },
   {
-    title: 'Orchestration',
+    titleKey: 'nav.orchestration',
     items: [
-      { id: 'chains', label: 'Chains', icon: Link2 },
-      { id: 'graph', label: 'Graph', icon: GraphIcon },
-      { id: 'state-machine-editor', label: 'State Machines', icon: GitBranch },
-      { id: 'scenario-studio', label: 'Scenario Studio', icon: Film },
-      { id: 'orchestration-builder', label: 'Orchestration Builder', icon: GitBranch },
-      { id: 'orchestration-execution', label: 'Orchestration Execution', icon: PlayCircle },
+      { id: 'chains', labelKey: 'tab.chains', icon: Link2 },
+      { id: 'graph', labelKey: 'tab.graph', icon: GraphIcon },
+      { id: 'state-machine-editor', labelKey: 'tab.stateMachines', icon: GitBranch },
+      { id: 'scenario-studio', labelKey: 'tab.scenarioStudio', icon: Film },
+      { id: 'orchestration-builder', labelKey: 'tab.orchestrationBuilder', icon: GitBranch },
+      { id: 'orchestration-execution', labelKey: 'tab.orchestrationExecution', icon: PlayCircle },
     ]
   },
   {
-    title: 'Observability',
+    titleKey: 'nav.observability',
     items: [
-      { id: 'observability', label: 'Observability', icon: Eye },
-      { id: 'world-state', label: 'World State', icon: Layers },
-      { id: 'performance', label: 'Performance', icon: Activity },
-      { id: 'status', label: 'System Status', icon: Globe },
-      { id: 'incidents', label: 'Incidents', icon: AlertTriangle },
-      { id: 'logs', label: 'Logs', icon: FileText },
-      { id: 'traces', label: 'Traces', icon: Network },
-      { id: 'metrics', label: 'Metrics', icon: Activity },
-      { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-      { id: 'pillar-analytics', label: 'Pillar Analytics', icon: Layout },
-      { id: 'fitness-functions', label: 'Fitness Functions', icon: HeartPulse },
-      { id: 'verification', label: 'Verification', icon: CheckCircle2 },
-      { id: 'contract-diff', label: 'Contract Diff', icon: GitCompare },
+      { id: 'observability', labelKey: 'tab.observability', icon: Eye },
+      { id: 'world-state', labelKey: 'tab.worldState', icon: Layers },
+      { id: 'performance', labelKey: 'tab.performance', icon: Activity },
+      { id: 'status', labelKey: 'tab.systemStatus', icon: Globe },
+      { id: 'incidents', labelKey: 'tab.incidents', icon: AlertTriangle },
+      { id: 'logs', labelKey: 'tab.logs', icon: FileText },
+      { id: 'traces', labelKey: 'tab.traces', icon: Network },
+      { id: 'metrics', labelKey: 'tab.metrics', icon: Activity },
+      { id: 'analytics', labelKey: 'tab.analytics', icon: BarChart3 },
+      { id: 'pillar-analytics', labelKey: 'tab.pillarAnalytics', icon: Layout },
+      { id: 'fitness-functions', labelKey: 'tab.fitnessFunctions', icon: HeartPulse },
+      { id: 'verification', labelKey: 'tab.verification', icon: CheckCircle2 },
+      { id: 'contract-diff', labelKey: 'tab.contractDiff', icon: GitCompare },
     ]
   },
   {
-    title: 'Testing',
+    titleKey: 'nav.testing',
     items: [
-      { id: 'testing', label: 'Testing', icon: TestTube },
-      { id: 'test-generator', label: 'Test Generator', icon: Code2 },
-      { id: 'test-execution', label: 'Test Execution', icon: PlayCircle },
-      { id: 'integration-test-builder', label: 'Integration Tests', icon: Layers },
-      { id: 'time-travel', label: 'Time Travel', icon: History },
+      { id: 'testing', labelKey: 'tab.testing', icon: TestTube },
+      { id: 'test-generator', labelKey: 'tab.testGenerator', icon: Code2 },
+      { id: 'test-execution', labelKey: 'tab.testExecution', icon: PlayCircle },
+      { id: 'integration-test-builder', labelKey: 'tab.integrationTests', icon: Layers },
+      { id: 'time-travel', labelKey: 'tab.timeTravel', icon: History },
     ]
   },
   {
-    title: 'Chaos & Resilience',
+    titleKey: 'nav.chaosResilience',
     items: [
-      { id: 'chaos', label: 'Chaos Engineering', icon: Zap },
-      { id: 'resilience', label: 'Resilience', icon: Shield },
-      { id: 'recorder', label: 'Recorder', icon: Radio },
-      { id: 'behavioral-cloning', label: 'Behavioral Cloning', icon: Copy },
+      { id: 'chaos', labelKey: 'tab.chaosEngineering', icon: Zap },
+      { id: 'resilience', labelKey: 'tab.resilience', icon: Shield },
+      { id: 'recorder', labelKey: 'tab.recorder', icon: Radio },
+      { id: 'behavioral-cloning', labelKey: 'tab.behavioralCloning', icon: Copy },
     ]
   },
   {
-    title: 'Import & Templates',
+    titleKey: 'nav.importTemplates',
     items: [
-      { id: 'import', label: 'Import', icon: Import },
-      { id: 'template-marketplace', label: 'Template Marketplace', icon: Store },
+      { id: 'import', labelKey: 'tab.import', icon: Import },
+      { id: 'template-marketplace', labelKey: 'tab.templateMarketplace', icon: Store },
     ]
   },
   {
-    title: 'AI & Intelligence',
+    titleKey: 'nav.aiIntelligence',
     items: [
-      { id: 'ai-studio', label: 'AI Studio', icon: Brain },
-      { id: 'mockai', label: 'MockAI', icon: Brain },
-      { id: 'mockai-openapi-generator', label: 'MockAI OpenAPI Generator', icon: Code2 },
-      { id: 'mockai-rules', label: 'MockAI Rules', icon: BarChart3 },
-      { id: 'voice', label: 'Voice + LLM', icon: Mic },
+      { id: 'ai-studio', labelKey: 'tab.aiStudio', icon: Brain },
+      { id: 'mockai', labelKey: 'tab.mockai', icon: Brain },
+      { id: 'mockai-openapi-generator', labelKey: 'tab.mockaiOpenApiGenerator', icon: Code2 },
+      { id: 'mockai-rules', labelKey: 'tab.mockaiRules', icon: BarChart3 },
+      { id: 'voice', labelKey: 'tab.voiceLlm', icon: Mic },
     ]
   },
   {
-    title: 'Community',
+    titleKey: 'nav.community',
     items: [
-      { id: 'showcase', label: 'Showcase', icon: Star },
-      { id: 'learning-hub', label: 'Learning Hub', icon: BookOpen },
+      { id: 'showcase', labelKey: 'tab.showcase', icon: Star },
+      { id: 'learning-hub', labelKey: 'tab.learningHub', icon: BookOpen },
     ]
   },
   {
-    title: 'Plugins',
+    titleKey: 'nav.plugins',
     items: [
-      { id: 'plugins', label: 'Plugins', icon: Puzzle },
-      { id: 'plugin-registry', label: 'Plugin Registry', icon: Package },
+      { id: 'plugins', labelKey: 'tab.plugins', icon: Puzzle },
+      { id: 'plugin-registry', labelKey: 'tab.pluginRegistry', icon: Package },
     ]
   },
   {
-    title: 'Configuration',
+    titleKey: 'nav.configuration',
     items: [
-      { id: 'config', label: 'Config', icon: Settings },
-      { id: 'organization', label: 'Organization', icon: Users },
-      { id: 'billing', label: 'Billing', icon: CreditCard },
-      { id: 'api-tokens', label: 'API Tokens', icon: Key },
-      { id: 'byok', label: 'BYOK Keys', icon: LockIcon },
-      { id: 'usage', label: 'Plan & Usage', icon: LineChart },
-      { id: 'user-management', label: 'User Management', icon: Users },
+      { id: 'config', labelKey: 'tab.config', icon: Settings },
+      { id: 'organization', labelKey: 'tab.organization', icon: Users },
+      { id: 'billing', labelKey: 'tab.billing', icon: CreditCard },
+      { id: 'api-tokens', labelKey: 'tab.apiTokens', icon: Key },
+      { id: 'byok', labelKey: 'tab.byok', icon: LockIcon },
+      { id: 'usage', labelKey: 'tab.usage', icon: LineChart },
+      { id: 'user-management', labelKey: 'tab.userManagement', icon: Users },
     ]
   }
 ];
@@ -186,6 +188,7 @@ const navSections = [
 const allNavItems = navSections.flatMap(section => section.items);
 
 export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShellProps) {
+  const { t, locale, supportedLocales, setLocale } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { setFilter: setLogFilter } = useLogStore();
   const { setGlobalSearch } = useServiceStore();
@@ -214,9 +217,9 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
     <div className="min-h-screen bg-bg-secondary">
       {/* Skip Links */}
       <nav className="sr-only focus-within:not-sr-only">
-        <a {...createSkipLink('main-navigation', 'Skip to navigation')} />
-        <a {...createSkipLink('main-content', 'Skip to main content')} />
-        <a {...createSkipLink('global-search-input', 'Skip to search')} />
+        <a {...createSkipLink('main-navigation', t('a11y.skipNavigation'))} />
+        <a {...createSkipLink('main-content', t('a11y.skipMain'))} />
+        <a {...createSkipLink('global-search-input', t('a11y.skipSearch'))} />
       </nav>
 
       {sidebarOpen && (
@@ -229,7 +232,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800 bg-card">
               <div className="flex items-center gap-3">
                 <Logo variant="icon" size="md" />
-                <span className="text-xl font-bold text-gray-900 dark:text-gray-100">MockForge</span>
+                <span className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
               </div>
               <Button
                 variant="secondary"
@@ -242,9 +245,9 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
             </div>
             <nav className="p-6 space-y-6 overflow-y-auto h-[calc(100%-88px)]">
               {navSections.map((section, sectionIndex) => (
-                <div key={section.title} className="space-y-2">
+                <div key={section.titleKey} className="space-y-2">
                   <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {section.title}
+                    {t(section.titleKey)}
                   </h3>
                   <div className="space-y-1">
                     {section.items.map((item, itemIndex) => {
@@ -267,7 +270,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                           }}
                         >
                           <Icon className="h-4 w-4" />
-                          {item.label}
+                          {t(item.labelKey)}
                         </Button>
                       );
                     })}
@@ -285,13 +288,13 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
           <div className="flex flex-col flex-grow bg-bg-primary border-r border-border">
             <div className="flex items-center gap-3 px-6 py-4 border-b border-border flex-shrink-0">
               <Logo variant="icon" size="md" />
-              <span className="font-semibold text-gray-900 dark:text-gray-100">MockForge</span>
+              <span className="font-semibold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
             </div>
-            <nav id="main-navigation" className="flex-1 px-4 py-6 space-y-6 overflow-y-auto" role="navigation" aria-label="Main navigation">
+            <nav id="main-navigation" className="flex-1 px-4 py-6 space-y-6 overflow-y-auto" role="navigation" aria-label={t('a11y.mainNavigation')}>
               {navSections.map((section) => (
-                <div key={section.title} className="space-y-2">
+                <div key={section.titleKey} className="space-y-2">
                   <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {section.title}
+                    {t(section.titleKey)}
                   </h3>
                   <div className="space-y-1">
                     {section.items.map((item) => {
@@ -309,7 +312,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                           onClick={() => onTabChange(item.id)}
                         >
                           <Icon className="h-4 w-4" />
-                          {item.label}
+                          {t(item.labelKey)}
                         </Button>
                       );
                     })}
@@ -327,14 +330,16 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="flex items-center gap-3 min-w-0">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Home</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">{t('app.home')}</span>
                 <span className="text-gray-600 dark:text-gray-400">/</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate capitalize">{allNavItems.find(n => n.id === activeTab)?.label ?? activeTab}</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate capitalize">
+                  {t(allNavItems.find(n => n.id === activeTab)?.labelKey ?? '', activeTab)}
+                </span>
               </div>
               <div className="flex flex-1" />
               <div className="hidden sm:flex w-72 relative items-center">
                 <Input
-                  placeholder="Global search…"
+                  placeholder={t('app.searchPlaceholder')}
                   id="global-search-input"
                   value={globalQuery}
                   onChange={(e) => {
@@ -359,17 +364,31 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
               </div>
               <div className="flex items-center gap-x-4 lg:gap-x-6">
                 <GlobalConnectionStatus className="hidden sm:flex" />
+                {supportedLocales.length > 1 && (
+                  <select
+                    value={locale}
+                    onChange={(e) => setLocale(e.target.value as Locale)}
+                    className="hidden sm:block h-9 rounded-md border border-border bg-bg-primary px-2 text-xs"
+                    aria-label="Language"
+                  >
+                    {supportedLocales.map((supportedLocale) => (
+                      <option key={supportedLocale} value={supportedLocale}>
+                        {supportedLocale.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <SimpleThemeToggle />
                 <Button variant="outline" size="sm" onClick={onRefresh} className="flex items-center gap-2">
                   <RefreshCw className="h-4 w-4" />
-                  <span className="hidden sm:inline">Refresh</span>
+                  <span className="hidden sm:inline">{t('app.refresh')}</span>
                 </Button>
                 <UserProfile />
               </div>
             </div>
           </header>
 
-          <main id="main-content" className="flex-1" role="main" aria-label="Main content">
+          <main id="main-content" className="flex-1" role="main" aria-label={t('a11y.mainContent')}>
             <div className="w-full max-w-[1400px] mx-auto px-6 py-6">{children}</div>
           </main>
         </div>

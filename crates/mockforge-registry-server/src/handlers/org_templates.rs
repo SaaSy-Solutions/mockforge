@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{OrgMember, OrgRole, OrgTemplate},
+    models::{record_audit_event, AuditEventType, OrgMember, OrgRole, OrgTemplate},
     AppState,
 };
 
@@ -134,6 +134,23 @@ pub async fn create_template(
     .await
     .map_err(|e| ApiError::Database(e))?;
 
+    // Record audit event
+    record_audit_event(
+        pool,
+        org_ctx.org_id,
+        Some(user_id),
+        AuditEventType::SettingsUpdated,
+        format!("Organization template '{}' created", request.name),
+        Some(serde_json::json!({
+            "template_id": template.id,
+            "template_name": request.name,
+            "action": "create",
+        })),
+        None,
+        None,
+    )
+    .await;
+
     Ok(Json(template))
 }
 
@@ -199,6 +216,22 @@ pub async fn update_template(
         .await
         .map_err(|e| ApiError::Database(e))?;
 
+    // Record audit event
+    record_audit_event(
+        pool,
+        org_ctx.org_id,
+        Some(user_id),
+        AuditEventType::SettingsUpdated,
+        format!("Organization template '{}' updated", updated.name),
+        Some(serde_json::json!({
+            "template_id": template_id,
+            "action": "update",
+        })),
+        None,
+        None,
+    )
+    .await;
+
     Ok(Json(updated))
 }
 
@@ -253,6 +286,22 @@ pub async fn delete_template(
     OrgTemplate::delete(pool, template_id)
         .await
         .map_err(|e| ApiError::Database(e))?;
+
+    // Record audit event
+    record_audit_event(
+        pool,
+        org_ctx.org_id,
+        Some(user_id),
+        AuditEventType::SettingsUpdated,
+        format!("Organization template '{}' deleted", template.name),
+        Some(serde_json::json!({
+            "template_id": template_id,
+            "action": "delete",
+        })),
+        None,
+        None,
+    )
+    .await;
 
     Ok(Json(DeleteTemplateResponse {
         success: true,

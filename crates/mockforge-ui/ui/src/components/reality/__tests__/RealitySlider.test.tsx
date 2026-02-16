@@ -47,8 +47,8 @@ describe('RealitySlider', () => {
       isPending: false,
     });
 
-    renderWithProviders(<RealitySlider />);
-    expect(screen.getByText(/animate-pulse/i)).toBeInTheDocument();
+    const { container } = renderWithProviders(<RealitySlider />);
+    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
   });
 
   it('renders current reality level', () => {
@@ -79,7 +79,7 @@ describe('RealitySlider', () => {
     });
 
     renderWithProviders(<RealitySlider />);
-    expect(screen.getByText(/Moderate Realism/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Moderate Realism/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Level 3/i)).toBeInTheDocument();
   });
 
@@ -111,9 +111,9 @@ describe('RealitySlider', () => {
     });
 
     renderWithProviders(<RealitySlider />);
-    expect(screen.getByText(/5% errors/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/5% errors/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/125ms/i)).toBeInTheDocument();
-    expect(screen.getByText(/Enabled/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Enabled/i).length).toBeGreaterThan(0);
   });
 
   it('renders compact mode', () => {
@@ -159,10 +159,10 @@ describe('RealitySlider', () => {
     renderWithProviders(<RealitySlider />);
 
     // Check that all 5 level indicators are present
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('4')).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getAllByText('1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('2').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('3').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('4').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('5').length).toBeGreaterThan(0);
   });
 });

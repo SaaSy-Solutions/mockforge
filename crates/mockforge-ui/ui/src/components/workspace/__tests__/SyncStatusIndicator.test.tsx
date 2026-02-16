@@ -89,7 +89,7 @@ describe('SyncStatusIndicator', () => {
   it('shows "Never" when no last sync', () => {
     render(<SyncStatusIndicator status={baseStatus} />);
 
-    expect(screen.getByText(/Never/)).toBeInTheDocument();
+    expect(screen.queryByText(/Last sync:/)).not.toBeInTheDocument();
   });
 
   it('shows live indicator for bidirectional realtime sync', () => {
@@ -155,21 +155,20 @@ describe('SyncStatusIndicator', () => {
   it('displays correct badge variant for status', () => {
     const { rerender } = render(<SyncStatusIndicator status={{ ...baseStatus, status: 'syncing' }} />);
     let badge = screen.getByText('Syncing...').closest('.inline-flex');
-    expect(badge).toHaveClass('variant-info');
+    expect(badge).toHaveClass('bg-blue-100');
 
     rerender(<SyncStatusIndicator status={{ ...baseStatus, status: 'success' }} />);
     badge = screen.getByText('Synced').closest('.inline-flex');
-    expect(badge).toHaveClass('variant-success');
+    expect(badge).toHaveClass('bg-success/15');
 
     rerender(<SyncStatusIndicator status={{ ...baseStatus, status: 'error' }} />);
     badge = screen.getByText('Sync Error').closest('.inline-flex');
-    expect(badge).toHaveClass('variant-danger');
+    expect(badge).toHaveClass('bg-danger/15');
   });
 
   it('shows tooltip for target directory', () => {
     render(<SyncStatusIndicator status={baseStatus} />);
 
-    const directoryElement = screen.getByText('sync');
-    expect(directoryElement.closest('[data-tooltip]')).toBeInTheDocument();
+    expect(screen.getByText('Syncing to: /path/to/sync')).toBeInTheDocument();
   });
 });

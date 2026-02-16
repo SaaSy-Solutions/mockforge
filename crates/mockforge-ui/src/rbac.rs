@@ -13,6 +13,38 @@ use mockforge_collab::models::UserRole;
 use mockforge_collab::permissions::{Permission, RolePermissions};
 use serde::{Deserialize, Serialize};
 
+fn is_truthy_env(name: &str) -> bool {
+    matches!(
+        std::env::var(name).ok().as_deref().map(str::to_ascii_lowercase).as_deref(),
+        Some("1") | Some("true") | Some("yes") | Some("on")
+    )
+}
+
+fn is_development_environment() -> bool {
+    if cfg!(test) {
+        return true;
+    }
+
+    matches!(
+        std::env::var("ENVIRONMENT")
+            .unwrap_or_else(|_| "production".to_string())
+            .to_ascii_lowercase()
+            .as_str(),
+        "development" | "dev" | "local"
+    )
+}
+
+fn is_dev_auth_enabled() -> bool {
+    cfg!(test) || is_truthy_env("MOCKFORGE_ENABLE_DEV_AUTH")
+}
+
+fn allow_unauthenticated_dev_access() -> bool {
+    is_development_environment()
+        && is_dev_auth_enabled()
+        && (is_truthy_env("MOCKFORGE_ALLOW_UNAUTHENTICATED")
+            || is_truthy_env("MOCKFORGE_ALLOW_UNAUTHENTICATED_DEV"))
+}
+
 /// User context extracted from request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserContext {
@@ -151,18 +183,22 @@ pub fn extract_user_context(headers: &HeaderMap) -> Option<UserContext> {
         }
     }
 
-    // Fallback: Extract from custom headers (for development/testing)
-    let user_id = headers.get("x-user-id")?.to_str().ok()?.to_string();
-    let username = headers.get("x-username")?.to_str().ok()?.to_string();
-    let role_str = headers.get("x-user-role")?.to_str().ok()?;
-    let role = parse_role(role_str)?;
+    // Fallback: Extract from custom headers (development/testing only)
+    if is_development_environment() && is_dev_auth_enabled() {
+        let user_id = headers.get("x-user-id")?.to_str().ok()?.to_string();
+        let username = headers.get("x-username")?.to_str().ok()?.to_string();
+        let role_str = headers.get("x-user-role")?.to_str().ok()?;
+        let role = parse_role(role_str)?;
 
-    Some(UserContext {
-        user_id,
-        username,
-        role,
-        email: headers.get("x-user-email").and_then(|h| h.to_str().ok()).map(|s| s.to_string()),
-    })
+        return Some(UserContext {
+            user_id,
+            username,
+            role,
+            email: headers.get("x-user-email").and_then(|h| h.to_str().ok()).map(|s| s.to_string()),
+        });
+    }
+
+    None
 }
 
 /// Parse JWT token and extract user context
@@ -175,8 +211,8 @@ fn parse_jwt_token(token: &str) -> Option<UserContext> {
         return Some(claims_to_user_context(&claims));
     }
 
-    // Fallback: handle mock tokens from the frontend (for backward compatibility)
-    if token.starts_with("mock.") {
+    // Fallback: handle mock tokens from frontend (development/testing only)
+    if is_development_environment() && is_dev_auth_enabled() && token.starts_with("mock.") {
         let parts: Vec<&str> = token.split('.').collect();
         if parts.len() >= 3 {
             // Decode payload (base64url)
@@ -233,7 +269,7 @@ fn parse_role(role_str: &str) -> Option<UserRole> {
 pub fn get_default_user_context() -> Option<UserContext> {
     // For development: allow unauthenticated access with admin role
     // In production, this should be disabled
-    if std::env::var("MOCKFORGE_ALLOW_UNAUTHENTICATED").is_ok() {
+    if allow_unauthenticated_dev_access() {
         Some(UserContext {
             user_id: "system".to_string(),
             username: "system".to_string(),
@@ -255,7 +291,9 @@ pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Respons
     // Skip RBAC for public routes
     let is_public_route = path == "/"
         || path.starts_with("/assets/")
-        || path.starts_with("/__mockforge/auth/")
+        || path == "/__mockforge/auth/login"
+        || path == "/__mockforge/auth/refresh"
+        || path == "/__mockforge/auth/logout"
         || path == "/__mockforge/health"
         || path.starts_with("/mockforge-")
         || path == "/manifest.json"
@@ -292,7 +330,7 @@ pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Respons
         None => {
             // For development: allow unauthenticated access if explicitly enabled
             // In production, this should be disabled
-            if std::env::var("MOCKFORGE_ALLOW_UNAUTHENTICATED").is_ok() {
+            if allow_unauthenticated_dev_access() {
                 // Use default admin context for development
                 get_default_user_context().unwrap_or_else(|| UserContext {
                     user_id: "system".to_string(),

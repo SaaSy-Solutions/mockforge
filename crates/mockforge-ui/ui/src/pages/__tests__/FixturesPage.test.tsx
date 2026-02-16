@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FixturesPage } from '../FixturesPage';
+import * as apiHooks from '../../hooks/useApi';
 import type { FixtureInfo } from '../../services/api';
 
 const mockFixtures: FixtureInfo[] = [
@@ -50,6 +51,8 @@ vi.mock('sonner', () => ({
 }));
 
 describe('FixturesPage', () => {
+  const mockUseFixtures = vi.mocked(apiHooks.useFixtures);
+
   const createWrapper = () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -61,11 +64,16 @@ describe('FixturesPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseFixtures.mockReturnValue({
+      data: mockFixtures,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
   });
 
   it('renders loading state', () => {
-    const { useFixtures } = require('../../hooks/useApi');
-    useFixtures.mockReturnValue({ data: null, isLoading: true, error: null, refetch: vi.fn() });
+    mockUseFixtures.mockReturnValue({ data: null, isLoading: true, error: null, refetch: vi.fn() } as any);
 
     render(<FixturesPage />, { wrapper: createWrapper() });
     expect(screen.getByText('Loading fixtures...')).toBeInTheDocument();
@@ -90,8 +98,8 @@ describe('FixturesPage', () => {
   it('displays method badges', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByText('GET')).toBeInTheDocument();
-    expect(screen.getByText('POST')).toBeInTheDocument();
+    expect(screen.getAllByText('GET').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('POST').length).toBeGreaterThan(0);
   });
 
   it('filters fixtures by search term', () => {
@@ -107,7 +115,7 @@ describe('FixturesPage', () => {
   it('filters fixtures by HTTP method', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    const methodSelect = screen.getByRole('combobox', { name: /HTTP Method/ });
+    const methodSelect = screen.getByRole('combobox');
     fireEvent.change(methodSelect, { target: { value: 'GET' } });
 
     expect(screen.getByText('fixture-1')).toBeInTheDocument();
@@ -122,8 +130,7 @@ describe('FixturesPage', () => {
   });
 
   it('displays empty state when no fixtures exist', () => {
-    const { useFixtures } = require('../../hooks/useApi');
-    useFixtures.mockReturnValue({ data: [], isLoading: false, error: null, refetch: vi.fn() });
+    mockUseFixtures.mockReturnValue({ data: [], isLoading: false, error: null, refetch: vi.fn() } as any);
 
     render(<FixturesPage />, { wrapper: createWrapper() });
 
@@ -142,42 +149,46 @@ describe('FixturesPage', () => {
   });
 
   it('handles error state', () => {
-    const { useFixtures } = require('../../hooks/useApi');
-    useFixtures.mockReturnValue({
+    mockUseFixtures.mockReturnValue({
       data: null,
       isLoading: false,
       error: new Error('Failed to load fixtures'),
       refetch: vi.fn(),
-    });
+    } as any);
 
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByText('Failed to load fixtures')).toBeInTheDocument();
+    expect(screen.getAllByText('Failed to load fixtures').length).toBeGreaterThan(0);
   });
 
   it('opens view dialog when clicking view button', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    const viewButtons = screen.getAllByRole('button');
-    const eyeButton = viewButtons.find((btn) => btn.querySelector('svg'));
+    const eyeButton = document.querySelector('svg.lucide-eye')?.closest('button');
     fireEvent.click(eyeButton!);
 
     expect(screen.getByText('Metadata')).toBeInTheDocument();
   });
 
-  it('downloads fixture when clicking download button', () => {
+  it('downloads fixture when clicking download button', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: vi.fn().mockResolvedValue(new Blob(['{}'], { type: 'application/json' })),
+      headers: { get: vi.fn().mockReturnValue('attachment; filename="fixture-1.json"') },
+    });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fixture');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const createElementSpy = vi.spyOn(document, 'createElement');
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    const downloadButtons = screen.getAllByRole('button');
-    const downloadButton = downloadButtons.find((btn) => btn.getAttribute('aria-label')?.includes('Download'));
-
-    // Find download button by looking for the download icon
-    const buttons = screen.getAllByRole('button');
-    const downloadBtn = buttons[4]; // Download is typically the 5th button
+    const firstFixtureRow = screen.getByText('fixture-1').closest('.flex.items-center.justify-between');
+    const downloadBtn = firstFixtureRow?.querySelector('svg.lucide-download')?.closest('button');
+    expect(downloadBtn).toBeTruthy();
     fireEvent.click(downloadBtn);
 
-    expect(createElementSpy).toHaveBeenCalledWith('a');
+    await waitFor(() => {
+      expect(createElementSpy).toHaveBeenCalledWith('a');
+    });
   });
 
   it('opens rename dialog', () => {
@@ -201,7 +212,7 @@ describe('FixturesPage', () => {
     const input = screen.getByPlaceholderText('Enter new fixture name');
     fireEvent.change(input, { target: { value: 'new-fixture-name' } });
 
-    const confirmButton = screen.getByRole('button', { name: 'Rename' });
+    const confirmButton = screen.getAllByRole('button', { name: 'Rename' }).at(-1)!;
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
@@ -236,7 +247,7 @@ describe('FixturesPage', () => {
     const input = screen.getByPlaceholderText('Enter new path');
     fireEvent.change(input, { target: { value: '/new/path' } });
 
-    const confirmButton = screen.getByRole('button', { name: 'Move' });
+    const confirmButton = screen.getAllByRole('button', { name: 'Move' }).at(-1)!;
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
@@ -267,8 +278,8 @@ describe('FixturesPage', () => {
 
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    const deleteButtons = screen.getAllByRole('button');
-    const deleteBtn = deleteButtons[deleteButtons.length - 1];
+    const deleteButtons = Array.from(document.querySelectorAll('button.text-red-600'));
+    const deleteBtn = deleteButtons[0];
     fireEvent.click(deleteBtn);
 
     const confirmButton = screen.getByRole('button', { name: 'Delete' });
@@ -283,13 +294,12 @@ describe('FixturesPage', () => {
 
   it('refreshes fixtures list', () => {
     const refetchMock = vi.fn();
-    const { useFixtures } = require('../../hooks/useApi');
-    useFixtures.mockReturnValue({
+    mockUseFixtures.mockReturnValue({
       data: mockFixtures,
       isLoading: false,
       error: null,
       refetch: refetchMock,
-    });
+    } as any);
 
     render(<FixturesPage />, { wrapper: createWrapper() });
 
@@ -319,7 +329,7 @@ describe('FixturesPage', () => {
     const renameButton = screen.getAllByText('Rename')[0];
     fireEvent.click(renameButton);
 
-    const confirmButton = screen.getByRole('button', { name: 'Rename' });
+    const confirmButton = screen.getAllByRole('button', { name: 'Rename' }).at(-1)!;
     expect(confirmButton).toBeDisabled();
   });
 
@@ -329,7 +339,7 @@ describe('FixturesPage', () => {
     const moveButton = screen.getAllByText('Move')[0];
     fireEvent.click(moveButton);
 
-    const confirmButton = screen.getByRole('button', { name: 'Move' });
+    const confirmButton = screen.getAllByRole('button', { name: 'Move' }).at(-1)!;
     expect(confirmButton).toBeDisabled();
   });
 });

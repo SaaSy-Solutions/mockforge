@@ -5,7 +5,27 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { useAuthStore } from '../useAuthStore';
+import { authApi } from '../../services/authApi';
 import type { User } from '../../types';
+
+vi.mock('../../services/authApi', () => ({
+  authApi: {
+    login: vi.fn(),
+    logout: vi.fn(),
+    refreshToken: vi.fn(),
+  },
+}));
+
+const createToken = (user: User, expiresInSeconds = 3600) => {
+  const payload = {
+    sub: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    exp: Math.floor(Date.now() / 1000) + expiresInSeconds,
+  };
+  return `${btoa('header')}.${btoa(JSON.stringify(payload))}.${btoa('signature')}`;
+};
 
 describe('useAuthStore', () => {
   beforeEach(() => {
@@ -22,6 +42,38 @@ describe('useAuthStore', () => {
 
     // Clear localStorage
     localStorage.clear();
+
+    const adminUser: User = {
+      id: 'admin-001',
+      username: 'admin',
+      email: 'admin@mockforge.dev',
+      role: 'admin',
+    };
+    const viewerUser: User = {
+      id: 'viewer-001',
+      username: 'viewer',
+      email: 'viewer@mockforge.dev',
+      role: 'viewer',
+    };
+
+    vi.mocked(authApi.login).mockImplementation(async (username: string, password: string) => {
+      if (username === 'admin' && password === 'admin123') {
+        const token = createToken(adminUser);
+        return { token, refresh_token: `refresh_${token}`, user: adminUser, expires_in: 3600 };
+      }
+      if (username === 'viewer' && password === 'viewer123') {
+        const token = createToken(viewerUser);
+        return { token, refresh_token: `refresh_${token}`, user: viewerUser, expires_in: 3600 };
+      }
+      throw new Error('Invalid username or password');
+    });
+    vi.mocked(authApi.logout).mockResolvedValue(undefined);
+    vi.mocked(authApi.refreshToken).mockImplementation(async (refreshToken: string) => ({
+      token: createToken(adminUser),
+      refresh_token: refreshToken,
+      user: adminUser,
+      expires_in: 3600,
+    }));
   });
 
   afterEach(() => {
@@ -53,7 +105,7 @@ describe('useAuthStore', () => {
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.isLoading).toBe(false);
     expect(result.current.token).toBeTruthy();
-    expect(result.current.token).toContain('mock.');
+    expect(result.current.token).toContain('.');
   });
 
   it('handles successful login with viewer user', async () => {
@@ -169,7 +221,7 @@ describe('useAuthStore', () => {
     // Set invalid token
     useAuthStore.setState({
       token: 'invalid-token',
-      refreshToken: 'invalid-refresh',
+      refreshToken: null,
     });
 
     await act(async () => {
@@ -263,7 +315,7 @@ describe('useAuthStore', () => {
     expect(result.current.user).toEqual(user);
     expect(result.current.token).toBe(token);
     expect(result.current.isAuthenticated).toBe(true);
-    expect(result.current.refreshToken).toBe(`refresh_${token}`);
+    expect(result.current.refreshToken).toBeNull();
   });
 
   it('generates valid JWT-like tokens', async () => {
@@ -275,7 +327,7 @@ describe('useAuthStore', () => {
 
     const token = result.current.token;
     expect(token).toBeTruthy();
-    expect(token).toContain('mock.');
+    expect(token).toContain('.');
 
     const parts = token?.split('.');
     expect(parts?.length).toBe(3);

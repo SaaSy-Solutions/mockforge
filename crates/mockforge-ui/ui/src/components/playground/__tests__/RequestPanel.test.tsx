@@ -56,7 +56,7 @@ describe('RequestPanel', () => {
   it('switches to GraphQL protocol', () => {
     render(<RequestPanel />);
 
-    const protocolSelect = screen.getByRole('combobox');
+    const protocolSelect = screen.getAllByRole('combobox')[0];
     fireEvent.change(protocolSelect, { target: { value: 'graphql' } });
 
     expect(mockSetProtocol).toHaveBeenCalledWith('graphql');

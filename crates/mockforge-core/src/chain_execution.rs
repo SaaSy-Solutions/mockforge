@@ -192,7 +192,12 @@ impl ChainExecutionEngine {
                     .links
                     .iter()
                     .find(|l| l.request.id == *request_id)
-                    .unwrap();
+                    .ok_or_else(|| {
+                        Error::generic(format!(
+                            "Chain link not found for request_id '{}' during parallel execution",
+                            request_id
+                        ))
+                    })?;
 
                 let link_clone = link.clone();
                 self.execute_request(&link_clone, execution_context).await?;
@@ -200,14 +205,22 @@ impl ChainExecutionEngine {
                 // Execute level in parallel
                 let tasks = level
                     .into_iter()
-                    .map(|request_id| {
+                    .filter_map(|request_id| {
                         let link = execution_context
                             .definition
                             .links
                             .iter()
-                            .find(|l| l.request.id == request_id)
-                            .unwrap()
-                            .clone();
+                            .find(|l| l.request.id == request_id);
+                        let link = match link {
+                            Some(l) => l.clone(),
+                            None => {
+                                tracing::error!(
+                                    "Chain link not found for request_id '{}' during parallel execution",
+                                    request_id
+                                );
+                                return None;
+                            }
+                        };
                         // Create a new context for parallel execution
                         let parallel_context = ChainExecutionContext {
                             definition: execution_context.definition.clone(),
@@ -220,10 +233,10 @@ impl ChainExecutionEngine {
                         let engine =
                             ChainExecutionEngine::new(self.registry.clone(), self.config.clone());
 
-                        tokio::spawn(async move {
+                        Some(tokio::spawn(async move {
                             let mut ctx = context.lock().await;
                             engine.execute_request(&link, &mut ctx).await
-                        })
+                        }))
                     })
                     .collect::<Vec<_>>();
 

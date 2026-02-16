@@ -41,7 +41,8 @@ describe('RealityIndicator', () => {
     });
 
     renderWithProviders(<RealityIndicator />);
-    expect(screen.getByText(/animate-pulse/i)).toBeInTheDocument();
+    const loadingBadge = document.querySelector('.animate-pulse');
+    expect(loadingBadge).toBeInTheDocument();
   });
 
   it('displays level number', () => {
@@ -92,6 +93,6 @@ describe('RealityIndicator', () => {
     });
 
     renderWithProviders(<RealityIndicator showLabel />);
-    expect(screen.getByText(/Moderate Realism/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Moderate Realism/i).length).toBeGreaterThan(0);
   });
 });

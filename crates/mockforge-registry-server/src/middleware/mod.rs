@@ -1,5 +1,6 @@
 //! HTTP middleware
 
+pub mod api_token_auth;
 pub mod csrf;
 pub mod org_context;
 pub mod permission_check;
@@ -18,6 +19,8 @@ use axum::{
 use uuid::Uuid;
 
 use crate::auth::verify_token;
+use crate::middleware::api_token_auth::authenticate_api_token;
+use crate::AppState;
 
 pub use org_context::resolve_org_context;
 pub use rate_limit::rate_limit_middleware;
@@ -81,6 +84,12 @@ pub async fn auth_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    let state = request
+        .extensions()
+        .get::<AppState>()
+        .cloned()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
     let auth_header = headers
         .get("Authorization")
         .and_then(|h| h.to_str().ok())
@@ -91,21 +100,22 @@ pub async fn auth_middleware(
 
     // Check if this is an API token (starts with mfx_)
     if token.starts_with("mfx_") {
-        // API token authentication
-        // We need to verify the token against the database
-        // For now, mark this as API token auth and let the handler verify
-        // In a full implementation, we'd inject AppState here
-        request.extensions_mut().insert(AuthType::ApiToken);
-        request.extensions_mut().insert(format!("api_token:{}", token));
-
-        return Ok(next.run(request).await);
+        match authenticate_api_token(&state, token).await? {
+            Some(auth_result) => {
+                request.extensions_mut().insert(auth_result.user_id.to_string());
+                request.extensions_mut().insert(AuthType::ApiToken);
+                request.extensions_mut().insert(auth_result.token);
+                return Ok(next.run(request).await);
+            }
+            None => {
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+        }
     }
 
     // JWT authentication
-    // Get JWT secret from app state (need to implement this properly)
-    let secret = std::env::var("JWT_SECRET").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let claims = verify_token(token, &secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let claims =
+        verify_token(token, &state.config.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     // Add user_id to request extensions
     request.extensions_mut().insert(claims.sub.clone());

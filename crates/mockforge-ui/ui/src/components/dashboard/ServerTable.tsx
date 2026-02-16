@@ -4,7 +4,7 @@ import { cn } from '../../utils/cn';
 import { Server, Globe, Zap, Database, RefreshCw, AlertTriangle } from 'lucide-react';
 import { ModernCard, ModernBadge, EmptyState, Alert } from '../ui/DesignSystem';
 import { useDashboard } from '../../hooks/useApi';
-import { useErrorToast } from '../../components/ui/ToastProvider';
+import { useErrorToast } from '../ui/ToastProvider';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
 import { SkeletonCard } from '../ui/Skeleton';
 

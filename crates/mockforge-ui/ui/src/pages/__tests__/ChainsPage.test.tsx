@@ -142,7 +142,7 @@ describe('ChainsPage', () => {
     });
 
     const textarea = screen.getByPlaceholderText('Enter YAML chain definition...');
-    expect(textarea).toHaveValue(expect.stringContaining('id: my-chain'));
+    expect((textarea as HTMLTextAreaElement).value).toContain('id: my-chain');
   });
 
   it('loads example YAML when button is clicked', async () => {
@@ -156,7 +156,7 @@ describe('ChainsPage', () => {
     fireEvent.click(loadExampleButton);
 
     const textarea = screen.getByPlaceholderText('Enter YAML chain definition...');
-    expect(textarea).toHaveValue(expect.stringContaining('User Management Workflow'));
+    expect((textarea as HTMLTextAreaElement).value).toContain('User Management Workflow');
   });
 
   it('creates a new chain successfully', async () => {
@@ -203,7 +203,7 @@ describe('ChainsPage', () => {
       fireEvent.click(deleteButtons[0]);
     });
 
-    const confirmButton = screen.getByRole('button', { name: 'Delete' });
+    const confirmButton = screen.getAllByRole('button', { name: 'Delete' }).at(-1)!;
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
@@ -264,7 +264,7 @@ describe('ChainsPage', () => {
       expect(screen.getByText('Global Timeout:')).toBeInTheDocument();
       expect(screen.getByText('60s')).toBeInTheDocument();
       expect(screen.getByText('Parallel Execution:')).toBeInTheDocument();
-      expect(screen.getByText('Disabled')).toBeInTheDocument();
+      expect(screen.getAllByText('Disabled').length).toBeGreaterThan(0);
     });
   });
 

@@ -39,6 +39,9 @@ describe('useHistory', () => {
 
     act(() => {
       result.current.push(newState);
+    });
+
+    act(() => {
       result.current.undo();
     });
 
@@ -55,7 +58,13 @@ describe('useHistory', () => {
 
     act(() => {
       result.current.push(newState);
+    });
+
+    act(() => {
       result.current.undo();
+    });
+
+    act(() => {
       result.current.redo();
     });
 

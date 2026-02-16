@@ -34,7 +34,7 @@ describe('CodeSnippetGenerator', () => {
 
     render(<CodeSnippetGenerator />);
 
-    expect(screen.getByText(/Configure a request to generate code snippets/i)).toBeInTheDocument();
+    expect(screen.getByText(/Generating snippets.../i)).toBeInTheDocument();
   });
 
   it('generates snippets for REST request', async () => {

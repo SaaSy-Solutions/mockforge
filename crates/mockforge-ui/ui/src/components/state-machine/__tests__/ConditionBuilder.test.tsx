@@ -60,10 +60,11 @@ describe('ConditionBuilder', () => {
   it('should add visual condition', () => {
     render(<ConditionBuilder {...defaultProps} />);
     fireEvent.click(screen.getByText('Visual'));
+    expect(screen.queryAllByPlaceholderText('variable')).toHaveLength(0);
     fireEvent.click(screen.getByText('Add Condition'));
 
     const variableInputs = screen.getAllByPlaceholderText('variable');
-    expect(variableInputs.length).toBeGreaterThan(1);
+    expect(variableInputs.length).toBe(1);
   });
 
   it('should remove visual condition', async () => {
@@ -91,6 +92,7 @@ describe('ConditionBuilder', () => {
   it('should update visual condition fields', () => {
     render(<ConditionBuilder {...defaultProps} />);
     fireEvent.click(screen.getByText('Visual'));
+    fireEvent.click(screen.getByText('Add Condition'));
 
     const variableInput = screen.getByPlaceholderText('variable');
     fireEvent.change(variableInput, { target: { value: 'count' } });
@@ -101,6 +103,7 @@ describe('ConditionBuilder', () => {
   it('should convert visual conditions to expression', () => {
     render(<ConditionBuilder {...defaultProps} />);
     fireEvent.click(screen.getByText('Visual'));
+    fireEvent.click(screen.getByText('Add Condition'));
 
     const variableInput = screen.getByPlaceholderText('variable');
     const valueInput = screen.getByPlaceholderText('value');

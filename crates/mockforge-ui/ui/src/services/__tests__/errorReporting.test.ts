@@ -4,16 +4,17 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { reportError, clearErrors } from '../errorReporting';
+import { logger } from '../../utils/logger';
 
 describe('errorReporting', () => {
-  let consoleErrorSpy: any;
+  let loggerErrorSpy: any;
 
   beforeEach(() => {
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    consoleErrorSpy.mockRestore();
+    loggerErrorSpy.mockRestore();
   });
 
   describe('reportError', () => {
@@ -23,7 +24,7 @@ describe('errorReporting', () => {
 
       reportError(error, context);
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         '[Error Report]',
         error,
         context
@@ -35,7 +36,7 @@ describe('errorReporting', () => {
 
       reportError(error);
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
         '[Error Report]',
         error,
         undefined
@@ -49,7 +50,7 @@ describe('errorReporting', () => {
       reportError(typeError);
       reportError(rangeError);
 
-      expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(2);
     });
   });
 

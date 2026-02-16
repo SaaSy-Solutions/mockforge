@@ -1,6 +1,7 @@
 # Rust
 **/target/
 **/*.rs.bk
+.cargo/credentials.toml
 
 # Fuzzing
 **/fuzz/corpus/

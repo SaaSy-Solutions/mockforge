@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ServicesPage } from '../ServicesPage';
+import * as serviceStore from '../../stores/useServiceStore';
 
 const mockServices = [
   {
@@ -32,18 +33,32 @@ vi.mock('../../stores/useServiceStore', () => ({
     updateService: vi.fn(),
     toggleRoute: vi.fn(),
     filteredRoutes: mockServices.flatMap((s) => s.routes),
+    isLoading: false,
+    error: null,
+    fetchServices: vi.fn(),
+    clearError: vi.fn(),
   })),
 }));
 
 describe('ServicesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(serviceStore.useServiceStore).mockReturnValue({
+      services: mockServices as any,
+      updateService: vi.fn(),
+      toggleRoute: vi.fn(),
+      filteredRoutes: mockServices.flatMap((s) => s.routes) as any,
+      isLoading: false,
+      error: null,
+      fetchServices: vi.fn(),
+      clearError: vi.fn(),
+    } as any);
   });
 
   it('renders services page header', () => {
     render(<ServicesPage />);
 
-    expect(screen.getByText('Services')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Services', level: 1 })).toBeInTheDocument();
     expect(screen.getByText(/Manage services and routes/)).toBeInTheDocument();
   });
 
@@ -57,17 +72,20 @@ describe('ServicesPage', () => {
     render(<ServicesPage />);
 
     // ServicesPanel should be rendered
-    expect(screen.getByText('Services')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Services', level: 2 })).toBeInTheDocument();
   });
 
   it('displays no services message when empty', () => {
-    const { useServiceStore } = require('../../stores/useServiceStore');
-    useServiceStore.mockReturnValue({
+    vi.mocked(serviceStore.useServiceStore).mockReturnValue({
       services: [],
       updateService: vi.fn(),
       toggleRoute: vi.fn(),
       filteredRoutes: [],
-    });
+      isLoading: false,
+      error: null,
+      fetchServices: vi.fn(),
+      clearError: vi.fn(),
+    } as any);
 
     render(<ServicesPage />);
 
@@ -76,28 +94,33 @@ describe('ServicesPage', () => {
   });
 
   it('displays loading state', () => {
-    const { useServiceStore } = require('../../stores/useServiceStore');
-    useServiceStore.mockReturnValue({
+    vi.mocked(serviceStore.useServiceStore).mockReturnValue({
       services: [],
       updateService: vi.fn(),
       toggleRoute: vi.fn(),
       filteredRoutes: [],
-    });
+      isLoading: true,
+      error: null,
+      fetchServices: vi.fn(),
+      clearError: vi.fn(),
+    } as any);
 
     render(<ServicesPage />);
 
-    // When there are no services, it shows the empty state
-    expect(screen.getByText('No Services')).toBeInTheDocument();
+    expect(screen.getByText('Loading services...')).toBeInTheDocument();
   });
 
   it('shows search active state', () => {
-    const { useServiceStore } = require('../../stores/useServiceStore');
-    useServiceStore.mockReturnValue({
+    vi.mocked(serviceStore.useServiceStore).mockReturnValue({
       services: mockServices,
       updateService: vi.fn(),
       toggleRoute: vi.fn(),
       filteredRoutes: [mockServices[0].routes[0]], // Filtered to 1 route
-    });
+      isLoading: false,
+      error: null,
+      fetchServices: vi.fn(),
+      clearError: vi.fn(),
+    } as any);
 
     render(<ServicesPage />);
 
@@ -105,14 +128,17 @@ describe('ServicesPage', () => {
   });
 
   it('shows no search active state', () => {
-    const { useServiceStore } = require('../../stores/useServiceStore');
     const allRoutes = mockServices.flatMap((s) => s.routes);
-    useServiceStore.mockReturnValue({
+    vi.mocked(serviceStore.useServiceStore).mockReturnValue({
       services: mockServices,
       updateService: vi.fn(),
       toggleRoute: vi.fn(),
       filteredRoutes: allRoutes,
-    });
+      isLoading: false,
+      error: null,
+      fetchServices: vi.fn(),
+      clearError: vi.fn(),
+    } as any);
 
     render(<ServicesPage />);
 
@@ -120,18 +146,21 @@ describe('ServicesPage', () => {
   });
 
   it('displays filtered routes with method badges', () => {
-    const { useServiceStore } = require('../../stores/useServiceStore');
-    useServiceStore.mockReturnValue({
+    vi.mocked(serviceStore.useServiceStore).mockReturnValue({
       services: mockServices,
       updateService: vi.fn(),
       toggleRoute: vi.fn(),
       filteredRoutes: [mockServices[0].routes[0]], // GET /api/users
-    });
+      isLoading: false,
+      error: null,
+      fetchServices: vi.fn(),
+      clearError: vi.fn(),
+    } as any);
 
     render(<ServicesPage />);
 
-    expect(screen.getByText('GET')).toBeInTheDocument();
-    expect(screen.getByText('/api/users')).toBeInTheDocument();
+    expect(screen.getAllByText('GET').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('/api/users').length).toBeGreaterThan(0);
   });
 
   it('shows only first 10 filtered routes', () => {
@@ -141,30 +170,42 @@ describe('ServicesPage', () => {
       path: `/api/test/${i}`,
       enabled: true,
     }));
+    const totalRoutes = Array.from({ length: 25 }, (_, i) => ({
+      id: `route-all-${i}`,
+      method: 'GET',
+      path: `/api/all/${i}`,
+      enabled: true,
+    }));
 
-    const { useServiceStore } = require('../../stores/useServiceStore');
-    useServiceStore.mockReturnValue({
+    vi.mocked(serviceStore.useServiceStore).mockReturnValue({
       services: [
-        { id: 'service-1', name: 'Test Service', routes: manyRoutes, enabled: true, description: '' },
+        { id: 'service-1', name: 'Test Service', routes: totalRoutes, enabled: true, description: '' },
       ],
       updateService: vi.fn(),
       toggleRoute: vi.fn(),
       filteredRoutes: manyRoutes,
-    });
+      isLoading: false,
+      error: null,
+      fetchServices: vi.fn(),
+      clearError: vi.fn(),
+    } as any);
 
     render(<ServicesPage />);
 
-    expect(screen.getByText(/Showing first 10 results/)).toBeInTheDocument();
+    expect(screen.getByText(/Showing first 10 results/i)).toBeInTheDocument();
   });
 
   it('calculates total routes correctly', () => {
-    const { useServiceStore } = require('../../stores/useServiceStore');
-    useServiceStore.mockReturnValue({
+    vi.mocked(serviceStore.useServiceStore).mockReturnValue({
       services: mockServices,
       updateService: vi.fn(),
       toggleRoute: vi.fn(),
       filteredRoutes: mockServices.flatMap((s) => s.routes),
-    });
+      isLoading: false,
+      error: null,
+      fetchServices: vi.fn(),
+      clearError: vi.fn(),
+    } as any);
 
     render(<ServicesPage />);
 

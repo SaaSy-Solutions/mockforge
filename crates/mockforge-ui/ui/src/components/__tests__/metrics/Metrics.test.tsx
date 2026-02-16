@@ -6,12 +6,12 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MetricsDashboard } from '../../metrics/MetricsDashboard';
+import { useMetricsStore } from '../../../stores/useMetricsStore';
 
 // Mock the metrics store
 vi.mock('../../../stores/useMetricsStore');
 
 describe('MetricsDashboard', () => {
-  const { useMetricsStore } = await import('../../../stores/useMetricsStore');
   const mockUseMetricsStore = vi.mocked(useMetricsStore);
 
   beforeEach(() => {

@@ -31,7 +31,8 @@ const SENTRY_RELEASE = import.meta.env.VITE_SENTRY_RELEASE;
 export async function initErrorReporting(): Promise<void> {
   if (SENTRY_DSN) {
     try {
-      Sentry = await import('@sentry/react');
+      const sentryModule = '@sentry/react';
+      Sentry = await import(/* @vite-ignore */ sentryModule);
       Sentry.init({
         dsn: SENTRY_DSN,
         environment: SENTRY_ENVIRONMENT,

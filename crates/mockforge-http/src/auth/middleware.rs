@@ -4,6 +4,7 @@
 //! across HTTP requests.
 
 use axum::body::Body;
+use axum::http::header::HeaderValue;
 use axum::http::{Request, StatusCode};
 use axum::{extract::State, middleware::Next, response::Response};
 use tracing::{debug, error, warn};
@@ -150,7 +151,7 @@ pub async fn auth_middleware(
                 .to_string(),
             ));
             *res.status_mut() = StatusCode::UNAUTHORIZED;
-            res.headers_mut().insert("www-authenticate", "Bearer".parse().unwrap());
+            res.headers_mut().insert("www-authenticate", HeaderValue::from_static("Bearer"));
             res
         }
         AuthResult::NetworkError(reason) => {
@@ -208,9 +209,9 @@ pub async fn auth_middleware(
             *res.status_mut() = StatusCode::UNAUTHORIZED;
             res.headers_mut().insert(
                 "www-authenticate",
-                "Bearer error=\"invalid_token\", error_description=\"The token has expired\""
-                    .parse()
-                    .unwrap(),
+                HeaderValue::from_static(
+                    "Bearer error=\"invalid_token\", error_description=\"The token has expired\"",
+                ),
             );
             res
         }
@@ -244,8 +245,10 @@ pub async fn auth_middleware(
                 .to_string(),
             ));
             *res.status_mut() = StatusCode::UNAUTHORIZED;
-            res.headers_mut()
-                .insert("www-authenticate", "Bearer error=\"invalid_token\"".parse().unwrap());
+            res.headers_mut().insert(
+                "www-authenticate",
+                HeaderValue::from_static("Bearer error=\"invalid_token\""),
+            );
             res
         }
         AuthResult::None => {
@@ -276,7 +279,7 @@ pub async fn auth_middleware(
                     .to_string(),
                 ));
                 *res.status_mut() = StatusCode::UNAUTHORIZED;
-                res.headers_mut().insert("www-authenticate", "Bearer".parse().unwrap());
+                res.headers_mut().insert("www-authenticate", HeaderValue::from_static("Bearer"));
                 res
             } else {
                 debug!("No authentication provided, proceeding without auth");

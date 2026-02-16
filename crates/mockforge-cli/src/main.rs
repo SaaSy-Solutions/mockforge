@@ -4765,8 +4765,14 @@ pub async fn handle_serve(
             } else if merged_specs.is_empty() {
                 config.http.openapi_spec.clone()
             } else {
+                if serve_args.api_versioning == "path-prefix" {
+                    return Err(
+                        "Multiple API versions detected with --api-versioning=path-prefix, but automatic route prefixing is not implemented yet. Use --api-versioning=info or provide explicit --spec selection."
+                            .into(),
+                    );
+                }
+
                 // Multiple merged specs - for now, merge them all
-                // TODO: Support path prefixes for different API versions
                 let all_specs: Vec<_> =
                     merged_specs.into_iter().map(|s| (PathBuf::from("merged"), s)).collect();
                 match merge_specs(all_specs, conflict_strategy) {
@@ -4799,7 +4805,15 @@ pub async fn handle_serve(
         config.http.openapi_spec.clone()
     };
 
-    // Use standard router (traffic shaping temporarily disabled)
+    // Configure traffic shaping for HTTP middleware when enabled
+    let traffic_shaping_enabled = config.core.traffic_shaping_enabled;
+    let traffic_shaper = if traffic_shaping_enabled {
+        Some(mockforge_core::TrafficShaper::new(config.core.traffic_shaping.clone()))
+    } else {
+        None
+    };
+
+    // Use standard router
     let mut http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
         final_spec_path,
         Some(validation_options),
@@ -4810,8 +4824,8 @@ pub async fn handle_serve(
         None, // ai_generator
         smtp_registry.as_ref().cloned(),
         mqtt_broker_for_http,
-        None,                                  // traffic_shaper
-        false,                                 // traffic_shaping_enabled
+        traffic_shaper,                        // traffic_shaper
+        traffic_shaping_enabled,               // traffic_shaping_enabled
         Some(health_manager_for_router),       // health_manager
         mockai.clone(),                        // mockai
         Some(config.deceptive_deploy.clone()), // deceptive_deploy_config
@@ -4883,7 +4897,11 @@ pub async fn handle_serve(
     // Create and merge chaos API router
     // Pass MockAI instance if available for dynamic error message generation
     // Note: Temporarily passing None to avoid type mismatch between different versions of MockAI
-    // TODO: Fix type compatibility between mockforge-cli and mockforge-chaos MockAI types
+    if mockai.is_some() && chaos_config.enabled {
+        tracing::warn!(
+            "Chaos API is running without MockAI-assisted fault generation due temporary cross-crate type compatibility limits"
+        );
+    }
     let (chaos_router, chaos_config_arc, latency_tracker, chaos_api_state) =
         create_chaos_api_router(chaos_config.clone(), None);
     http_app = http_app.merge(chaos_router);

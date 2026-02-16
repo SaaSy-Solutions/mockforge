@@ -28,6 +28,8 @@ import { RealitySlider } from '../components/reality/RealitySlider';
 import { RealityIndicator } from '../components/reality/RealityIndicator';
 import { RealityPresetManager } from '../components/reality/RealityPresetManager';
 import { useRealityShortcuts } from '../hooks/useRealityShortcuts';
+import { authenticatedFetch } from '../utils/apiClient';
+import { useI18n } from '../i18n/I18nProvider';
 
 function extractPort(address?: string): string {
   if (!address) return '';
@@ -51,11 +53,15 @@ function isValidPort(port: number): boolean {
 }
 
 export function ConfigPage() {
+  const { t } = useI18n();
   const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment' | 'protocols' | 'reality'>('general');
   const { activeWorkspace } = useWorkspaceStore();
   const workspaceId = activeWorkspace?.id || 'default-workspace';
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showRestartDialog, setShowRestartDialog] = useState(false);
+  const [hasPendingPortConfig, setHasPendingPortConfig] = useState(
+    () => Boolean(localStorage.getItem('mockforge_pending_port_config'))
+  );
 
   // Enable keyboard shortcuts for reality level changes
   useRealityShortcuts({
@@ -146,9 +152,11 @@ export function ConfigPage() {
           ...prev,
           general: { ...prev.general, ...ports }
         }));
+        setHasPendingPortConfig(true);
       } catch (error) {
         logger.error('Failed to parse pending port config',error);
         localStorage.removeItem('mockforge_pending_port_config');
+        setHasPendingPortConfig(false);
       }
     }
   }, []);
@@ -160,6 +168,7 @@ export function ConfigPage() {
         setFormData(prev => ({ ...prev, restartInProgress: false }));
         toast.success('Server restarted successfully! Port configuration applied.');
         localStorage.removeItem('mockforge_pending_port_config');
+        setHasPendingPortConfig(false);
       }
     }
   }, [restartStatus, formData.restartInProgress]);
@@ -198,7 +207,7 @@ export function ConfigPage() {
   }, [config]);
 
   useEffect(() => {
-    if (serverInfo) {
+    if (serverInfo && !hasPendingPortConfig) {
       setFormData(prev => ({
         ...prev,
         general: {
@@ -209,7 +218,7 @@ export function ConfigPage() {
         }
       }));
     }
-  }, [serverInfo]);
+  }, [serverInfo, hasPendingPortConfig]);
 
   useEffect(() => {
     if (validation) {
@@ -385,13 +394,10 @@ export function ConfigPage() {
         case 'traffic-shaping':
           // Traffic shaping configuration
           try {
-            const response = await fetch('/__mockforge/config/traffic-shaping', {
+            const response = await authenticatedFetch('/__mockforge/config/traffic-shaping', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                config_type: 'traffic-shaping',
-                data: formData.trafficShaping
-              })
+              body: JSON.stringify(formData.trafficShaping)
             });
 
             if (!response.ok) {
@@ -570,8 +576,8 @@ export function ConfigPage() {
     return (
       <div className="space-y-8">
         <PageHeader
-          title="Configuration"
-          subtitle="Manage MockForge settings and preferences"
+          title={t('page.config.title')}
+          subtitle={t('page.config.subtitle')}
         />
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -596,11 +602,11 @@ export function ConfigPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Configuration"
+        title={t('page.config.title')}
         subtitle={
           hasUnsavedChanges
             ? "⚠️ You have unsaved changes"
-            : "Manage MockForge settings and preferences"
+            : t('page.config.subtitle')
         }
         action={
           <div className="flex items-center gap-3">
