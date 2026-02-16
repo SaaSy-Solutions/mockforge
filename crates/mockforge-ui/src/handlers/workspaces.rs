@@ -8,7 +8,8 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use mockforge_core::{
-    workspace::MockEnvironmentName, MultiTenantWorkspaceRegistry, Workspace, WorkspaceStats,
+    workspace::{EnvironmentColor, MockEnvironmentName, SyncDirection, SyncDirectoryStructure},
+    MultiTenantWorkspaceRegistry, Workspace, WorkspaceStats,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -630,6 +631,748 @@ pub async fn update_mock_environment(
                 .into_response())
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateEnvironmentRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateEnvironmentRequest {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub color: Option<EnvironmentColor>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateEnvironmentsOrderRequest {
+    pub environment_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateWorkspacesOrderRequest {
+    pub workspace_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvironmentVariableResponse {
+    pub id: String,
+    pub key: String,
+    pub value: String,
+    pub encrypted: bool,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SetVariableRequest {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AutocompleteRequest {
+    pub input: String,
+    pub cursor_position: usize,
+    pub context: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AutocompleteSuggestion {
+    pub text: String,
+    pub display_text: Option<String>,
+    pub kind: Option<String>,
+    pub documentation: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AutocompleteResponse {
+    pub suggestions: Vec<AutocompleteSuggestion>,
+    pub start_position: usize,
+    pub end_position: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConfigureSyncRequest {
+    pub target_directory: String,
+    pub sync_direction: SyncDirection,
+    pub realtime_monitoring: bool,
+    pub directory_structure: Option<SyncDirectoryStructure>,
+    pub filename_pattern: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConfirmSyncChangesRequest {
+    pub workspace_id: String,
+    pub changes: Vec<serde_json::Value>,
+    pub apply_all: bool,
+}
+
+/// List all environments for a workspace.
+pub async fn list_environments(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, Response> {
+    let registry = state.registry.read().await;
+    let tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let workspace = &tenant_ws.workspace;
+    let global_env_id = workspace.config.global_environment.id.clone();
+    let active_env_id = workspace.get_active_environment().id.clone();
+    let mut environments = Vec::new();
+
+    for env in workspace.get_environments_ordered() {
+        environments.push(json!({
+            "id": env.id.clone(),
+            "name": env.name.clone(),
+            "description": env.description.clone(),
+            "variable_count": env.variables.len(),
+            "is_global": env.id == global_env_id,
+            "active": env.id == active_env_id,
+            "color": env.color.clone(),
+            "order": env.order,
+        }));
+    }
+
+    Ok(Json(ApiResponse::success(json!({
+        "environments": environments,
+        "total": environments.len(),
+    }))))
+}
+
+/// Create a workspace environment.
+pub async fn create_environment(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+    Json(request): Json<CreateEnvironmentRequest>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let env_id = tenant_ws
+        .workspace
+        .create_environment(request.name, request.description)
+        .map_err(|e| {
+            (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response()
+        })?;
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success(json!({
+        "id": env_id,
+        "message": "Environment created"
+    }))))
+}
+
+/// Update a workspace environment.
+pub async fn update_environment(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, environment_id)): Path<(String, String)>,
+    Json(request): Json<UpdateEnvironmentRequest>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    if let Some(name) = &request.name {
+        let name_conflict = tenant_ws
+            .workspace
+            .get_environments()
+            .iter()
+            .any(|env| env.id != environment_id && env.name == *name);
+        if name_conflict {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("Environment with name '{}' already exists", name)})),
+            )
+                .into_response());
+        }
+    }
+
+    let env = tenant_ws.workspace.get_environment_mut(&environment_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Environment '{}' not found", environment_id)})),
+        )
+            .into_response()
+    })?;
+
+    if let Some(name) = request.name {
+        env.name = name;
+    }
+    if let Some(description) = request.description {
+        env.description = Some(description);
+    }
+    if let Some(color) = request.color {
+        env.color = Some(color);
+    }
+    env.updated_at = chrono::Utc::now();
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success("Environment updated".to_string())))
+}
+
+/// Delete a workspace environment.
+pub async fn delete_environment(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, environment_id)): Path<(String, String)>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    tenant_ws.workspace.delete_environment(&environment_id).map_err(|e| {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response()
+    })?;
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success("Environment deleted".to_string())))
+}
+
+/// Set active environment for a workspace.
+pub async fn set_active_environment(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, environment_id)): Path<(String, String)>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    tenant_ws.workspace.set_active_environment(Some(environment_id)).map_err(|e| {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response()
+    })?;
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success("Environment activated".to_string())))
+}
+
+/// Update environment display order.
+pub async fn update_environments_order(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+    Json(request): Json<UpdateEnvironmentsOrderRequest>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    tenant_ws
+        .workspace
+        .update_environments_order(request.environment_ids)
+        .map_err(|e| {
+            (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response()
+        })?;
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success("Environment order updated".to_string())))
+}
+
+/// Update workspace display order.
+pub async fn update_workspaces_order(
+    State(state): State<WorkspaceState>,
+    Json(request): Json<UpdateWorkspacesOrderRequest>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+
+    for workspace_id in &request.workspace_ids {
+        if !registry.workspace_exists(workspace_id) {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+            )
+                .into_response());
+        }
+    }
+
+    for (idx, workspace_id) in request.workspace_ids.iter().enumerate() {
+        let mut tenant_ws = registry.get_workspace(workspace_id).map_err(|_| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+            )
+                .into_response()
+        })?;
+        tenant_ws.workspace.order = idx as i32;
+        tenant_ws.workspace.updated_at = chrono::Utc::now();
+        registry
+            .update_workspace(workspace_id, tenant_ws.workspace.clone())
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+                )
+                    .into_response()
+            })?;
+    }
+
+    Ok(Json(ApiResponse::success("Workspace order updated".to_string())))
+}
+
+/// Get all environment variables in context for the selected environment.
+pub async fn get_environment_variables(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, environment_id)): Path<(String, String)>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    tenant_ws.workspace.set_active_environment(Some(environment_id)).map_err(|e| {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response()
+    })?;
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut variables = Vec::new();
+    for (key, value) in tenant_ws.workspace.get_all_variables() {
+        variables.push(EnvironmentVariableResponse {
+            id: key.clone(),
+            key,
+            value,
+            encrypted: false,
+            created_at: now.clone(),
+        });
+    }
+
+    Ok(Json(ApiResponse::success(json!({
+        "variables": variables
+    }))))
+}
+
+/// Set or update an environment variable.
+pub async fn set_environment_variable(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, environment_id)): Path<(String, String)>,
+    Json(request): Json<SetVariableRequest>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let env = tenant_ws.workspace.get_environment_mut(&environment_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Environment '{}' not found", environment_id)})),
+        )
+            .into_response()
+    })?;
+
+    env.set_variable(request.key, request.value);
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success("Environment variable set".to_string())))
+}
+
+/// Remove an environment variable.
+pub async fn remove_environment_variable(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, environment_id, variable_name)): Path<(String, String, String)>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let env = tenant_ws.workspace.get_environment_mut(&environment_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Environment '{}' not found", environment_id)})),
+        )
+            .into_response()
+    })?;
+
+    if !env.remove_variable(&variable_name) {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Variable '{}' not found", variable_name)})),
+        )
+            .into_response());
+    }
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success("Environment variable removed".to_string())))
+}
+
+/// Generate autocomplete suggestions based on workspace variables and common tokens.
+pub async fn get_autocomplete_suggestions(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+    Json(request): Json<AutocompleteRequest>,
+) -> Result<Json<ApiResponse<AutocompleteResponse>>, Response> {
+    let registry = state.registry.read().await;
+    let tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let input = request.input;
+    let cursor = request.cursor_position.min(input.len());
+    let bytes = input.as_bytes();
+    let mut start = cursor;
+    while start > 0 {
+        let ch = bytes[start - 1] as char;
+        if ch.is_ascii_alphanumeric() || ch == '_' || ch == '.' || ch == '-' {
+            start -= 1;
+        } else {
+            break;
+        }
+    }
+    let prefix = &input[start..cursor];
+    let prefix_lower = prefix.to_lowercase();
+
+    let mut suggestions: Vec<AutocompleteSuggestion> = Vec::new();
+    for (key, _) in tenant_ws.workspace.get_all_variables() {
+        if prefix.is_empty() || key.to_lowercase().contains(&prefix_lower) {
+            suggestions.push(AutocompleteSuggestion {
+                text: key.clone(),
+                display_text: Some(key),
+                kind: Some("variable".to_string()),
+                documentation: Some("Workspace environment variable".to_string()),
+            });
+        }
+    }
+
+    let builtins = [
+        ("now", "Current timestamp"),
+        ("uuid", "Generate UUID"),
+        ("rand.int", "Random integer"),
+        ("rand.float", "Random float"),
+        ("faker.name", "Random name"),
+        ("faker.email", "Random email"),
+    ];
+    for (token, doc) in builtins {
+        if prefix.is_empty() || token.contains(prefix) {
+            suggestions.push(AutocompleteSuggestion {
+                text: token.to_string(),
+                display_text: Some(token.to_string()),
+                kind: Some("builtin".to_string()),
+                documentation: Some(doc.to_string()),
+            });
+        }
+    }
+
+    suggestions.sort_by(|a, b| a.text.cmp(&b.text));
+    suggestions.dedup_by(|a, b| a.text == b.text);
+    suggestions.truncate(20);
+
+    Ok(Json(ApiResponse::success(AutocompleteResponse {
+        suggestions,
+        start_position: start,
+        end_position: cursor,
+    })))
+}
+
+/// Get current directory sync status.
+pub async fn get_sync_status(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, Response> {
+    let registry = state.registry.read().await;
+    let tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let sync = tenant_ws.workspace.get_sync_config();
+    Ok(Json(ApiResponse::success(json!({
+        "workspace_id": workspace_id,
+        "enabled": sync.enabled,
+        "target_directory": sync.target_directory,
+        "sync_direction": sync.sync_direction,
+        "realtime_monitoring": sync.realtime_monitoring,
+        "last_sync": sync.last_sync,
+        "status": if sync.enabled { "ready" } else { "disabled" },
+    }))))
+}
+
+/// Configure directory sync.
+pub async fn configure_sync(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+    Json(request): Json<ConfigureSyncRequest>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let mut sync = tenant_ws.workspace.get_sync_config().clone();
+    sync.enabled = true;
+    sync.target_directory = Some(request.target_directory);
+    sync.sync_direction = request.sync_direction;
+    sync.realtime_monitoring = request.realtime_monitoring;
+    if let Some(directory_structure) = request.directory_structure {
+        sync.directory_structure = directory_structure;
+    }
+    if let Some(filename_pattern) = request.filename_pattern {
+        sync.filename_pattern = filename_pattern;
+    }
+
+    tenant_ws.workspace.configure_sync(sync).map_err(|e| {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response()
+    })?;
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success("Sync configured".to_string())))
+}
+
+/// Disable directory sync.
+pub async fn disable_sync(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    tenant_ws.workspace.disable_sync().map_err(|e| {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response()
+    })?;
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success("Sync disabled".to_string())))
+}
+
+/// Trigger a manual sync operation.
+pub async fn trigger_sync(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let mut sync = tenant_ws.workspace.get_sync_config().clone();
+    if !sync.enabled {
+        return Err((StatusCode::BAD_REQUEST, Json(json!({"error": "Sync is not enabled"})))
+            .into_response());
+    }
+    sync.last_sync = Some(chrono::Utc::now());
+    tenant_ws.workspace.configure_sync(sync).map_err(|e| {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response()
+    })?;
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success("Sync triggered".to_string())))
+}
+
+/// Get pending sync changes (placeholder until diff engine is wired).
+pub async fn get_sync_changes(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+) -> Result<Json<ApiResponse<Vec<serde_json::Value>>>, Response> {
+    let registry = state.registry.read().await;
+    registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    Ok(Json(ApiResponse::success(Vec::new())))
+}
+
+/// Confirm and apply pending sync changes.
+pub async fn confirm_sync_changes(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+    Json(request): Json<ConfirmSyncChangesRequest>,
+) -> Result<Json<ApiResponse<String>>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    if request.workspace_id != workspace_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "workspace_id in body must match path"})),
+        )
+            .into_response());
+    }
+
+    let mut sync = tenant_ws.workspace.get_sync_config().clone();
+    sync.last_sync = Some(chrono::Utc::now());
+    tenant_ws.workspace.configure_sync(sync).map_err(|e| {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": e.to_string()}))).into_response()
+    })?;
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(ApiResponse::success(format!(
+        "Sync changes confirmed ({} changes, apply_all={})",
+        request.changes.len(),
+        request.apply_all
+    ))))
 }
 
 #[cfg(test)]

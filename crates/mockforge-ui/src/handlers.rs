@@ -4862,6 +4862,23 @@ mod tests {
                 validate_responses: false,
                 overrides: HashMap::new(),
             },
+            traffic_shaping: crate::models::TrafficShapingConfig {
+                enabled: false,
+                bandwidth: crate::models::BandwidthConfig {
+                    enabled: false,
+                    max_bytes_per_sec: 1_048_576,
+                    burst_capacity_bytes: 10_485_760,
+                    tag_overrides: HashMap::new(),
+                },
+                burst_loss: crate::models::BurstLossConfig {
+                    enabled: false,
+                    burst_probability: 0.1,
+                    burst_duration_ms: 5000,
+                    loss_rate_during_burst: 0.5,
+                    recovery_time_ms: 30000,
+                    tag_overrides: HashMap::new(),
+                },
+            },
         };
 
         assert_eq!(state.latency_profile.name, "default");

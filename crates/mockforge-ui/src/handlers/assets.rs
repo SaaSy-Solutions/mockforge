@@ -111,11 +111,10 @@ pub async fn serve_api_docs() -> impl IntoResponse {
 /// Note: Vite generates its own manifest.json, so we use pwa-manifest.json
 /// which is copied from ui/public/manifest.json by the build script
 pub async fn serve_manifest() -> impl IntoResponse {
-    // Use the PWA manifest that's copied from public/ during build
-    // The build script ensures this file exists
+    // Serve the source manifest directly so compilation does not depend on dist artifacts.
     (
         [(http::header::CONTENT_TYPE, "application/manifest+json")],
-        include_str!("../../ui/dist/pwa-manifest.json"),
+        include_str!("../../ui/public/manifest.json"),
     )
 }
 

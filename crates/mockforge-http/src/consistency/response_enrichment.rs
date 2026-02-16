@@ -81,6 +81,7 @@ pub async fn enrich_response(
 }
 
 /// Extract entity ID from path (e.g., /users/123 -> Some("123"))
+#[cfg(feature = "persona-graph")]
 fn extract_entity_id_from_path(path: &str) -> Option<String> {
     // Simple extraction: find the last segment that looks like an ID
     let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
@@ -167,18 +168,6 @@ fn enrich_with_persona_graph(
             }
         }
     }
-}
-
-/// Stub for when persona-graph feature is disabled
-#[cfg(not(feature = "persona-graph"))]
-fn enrich_with_persona_graph(
-    _graph: &(),
-    _persona_id: &str,
-    _response: &mut Value,
-    _path: &str,
-    _entity_id: Option<&str>,
-) {
-    // No-op when feature is disabled
 }
 
 /// Extract workspace ID from request

@@ -3515,6 +3515,7 @@ async fn learn_from_examples(
     Json(response).into_response()
 }
 
+#[cfg(feature = "data-faker")]
 fn extract_yaml_spec(text: &str) -> String {
     // Try to find YAML code blocks
     if let Some(start) = text.find("```yaml") {
@@ -3540,6 +3541,7 @@ fn extract_yaml_spec(text: &str) -> String {
 }
 
 /// Extract GraphQL schema from text content
+#[cfg(feature = "data-faker")]
 fn extract_graphql_schema(text: &str) -> String {
     // Try to find GraphQL code blocks
     if let Some(start) = text.find("```graphql") {
