@@ -91,9 +91,17 @@ export default function () {
     // Apply security payload to body if available
     let requestBody;
     if (secBodyPayload && secBodyPayload.formBody) {
-      // Send raw form-encoded body for WAF form-field parsing (e.g., CRS 942432)
-      requestBody = secBodyPayload.formBody;
-      requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+      // Parse form body into object for k6's native form encoding (CRS 942432)
+      // k6 auto-encodes objects as application/x-www-form-urlencoded
+      const formData = {};
+      secBodyPayload.formBody.split('&').forEach(function(pair) {
+        const eq = pair.indexOf('=');
+        if (eq >= 0) {
+          formData[decodeURIComponent(pair.substring(0, eq).replace(/\+/g, ' '))] =
+            decodeURIComponent(pair.substring(eq + 1).replace(/\+/g, ' '));
+        }
+      });
+      requestBody = formData;
     } else if (secBodyPayload && typeof applySecurityPayload === 'function') {
       payload = applySecurityPayload(payload, [], secBodyPayload);
       requestBody = JSON.stringify(payload);

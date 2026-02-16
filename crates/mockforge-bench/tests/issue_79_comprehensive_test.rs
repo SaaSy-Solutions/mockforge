@@ -283,14 +283,14 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
         script.contains("encodeURI(secPayload.payload)"),
         "Must use encodeURI for path-based injection"
     );
-    // V4c: Form-encoded body delivery (formBody)
+    // V4c: Form-encoded body delivery (formBody) via k6 native object encoding
     assert!(
         script.contains("secBodyPayload.formBody"),
         "Must check formBody for form-encoded body delivery (CRS 942432)"
     );
     assert!(
-        script.contains("application/x-www-form-urlencoded"),
-        "Must set Content-Type for form-encoded body"
+        script.contains("decodeURIComponent"),
+        "Must decode formBody into object for k6 native form encoding"
     );
 
     // V5: Body injection code (for POST/PUT/PATCH operations)
@@ -600,14 +600,14 @@ tests:
         "Script must use encodeURI for path replacement"
     );
 
-    // V10: formBody handling in template
+    // V10: formBody handling in template via k6 native object encoding
     assert!(
         script.contains("secBodyPayload.formBody"),
         "Script must check formBody for form-encoded body delivery"
     );
     assert!(
-        script.contains("application/x-www-form-urlencoded"),
-        "Script must set Content-Type for form-encoded body"
+        script.contains("decodeURIComponent"),
+        "Script must decode formBody into object for k6 native form encoding"
     );
 
     // Cleanup

@@ -400,8 +400,16 @@ export default function () {
       // Apply security payload to body if available
       let requestBody;
       if (secBodyPayload && secBodyPayload.formBody) {
-        requestBody = secBodyPayload.formBody;
-        requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+        // Parse form body into object for k6's native form encoding (CRS 942432)
+        const formData = {};
+        secBodyPayload.formBody.split('&').forEach(function(pair) {
+          const eq = pair.indexOf('=');
+          if (eq >= 0) {
+            formData[decodeURIComponent(pair.substring(0, eq).replace(/\+/g, ' '))] =
+              decodeURIComponent(pair.substring(eq + 1).replace(/\+/g, ' '));
+          }
+        });
+        requestBody = formData;
       } else if (secBodyPayload && typeof applySecurityPayload === 'function') {
         payload = applySecurityPayload(payload, [], secBodyPayload);
         requestBody = JSON.stringify(payload);
@@ -437,8 +445,16 @@ export default function () {
       // Apply security payload to body if available
       let requestBody;
       if (secBodyPayload && secBodyPayload.formBody) {
-        requestBody = secBodyPayload.formBody;
-        requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+        // Parse form body into object for k6's native form encoding (CRS 942432)
+        const formData = {};
+        secBodyPayload.formBody.split('&').forEach(function(pair) {
+          const eq = pair.indexOf('=');
+          if (eq >= 0) {
+            formData[decodeURIComponent(pair.substring(0, eq).replace(/\+/g, ' '))] =
+              decodeURIComponent(pair.substring(eq + 1).replace(/\+/g, ' '));
+          }
+        });
+        requestBody = formData;
       } else if (secBodyPayload && typeof applySecurityPayload === 'function') {
         payload = applySecurityPayload(payload, [], secBodyPayload);
         requestBody = JSON.stringify(payload);
@@ -468,8 +484,16 @@ export default function () {
       // Send form-encoded body if available, otherwise null
       let requestBody = null;
       if (secBodyPayload && secBodyPayload.formBody) {
-        requestBody = secBodyPayload.formBody;
-        requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+        // Parse form body into object for k6's native form encoding (CRS 942432)
+        const formData = {};
+        secBodyPayload.formBody.split('&').forEach(function(pair) {
+          const eq = pair.indexOf('=');
+          if (eq >= 0) {
+            formData[decodeURIComponent(pair.substring(0, eq).replace(/\+/g, ' '))] =
+              decodeURIComponent(pair.substring(eq + 1).replace(/\+/g, ' '));
+          }
+        });
+        requestBody = formData;
       }
       const res = http.{{this.method}}(`${BASE_URL}${path}`, requestBody, secRequestOpts);
       {{else}}

@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-bench"
-version = "0.3.58"
+version = "0.3.59"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 description = "Load and performance testing for MockForge"
