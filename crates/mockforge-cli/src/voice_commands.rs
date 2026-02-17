@@ -253,6 +253,7 @@ async fn handle_create(
             None,                      // spec_dir
             "overwrite".to_string(),   // merge_conflicts
             "none".to_string(),        // api_versioning
+            None,                      // base_path
             false,                     // tls_enabled
             None,                      // tls_cert
             None,                      // tls_key
@@ -483,6 +484,7 @@ async fn handle_interactive(
                 None,                      // spec_dir
                 "overwrite".to_string(),   // merge_conflicts
                 "none".to_string(),        // api_versioning
+                None,                      // base_path
                 false,                     // tls_enabled
                 None,                      // tls_cert
                 None,                      // tls_key

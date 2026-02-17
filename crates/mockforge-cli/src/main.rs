@@ -357,6 +357,22 @@ struct ServeCliArgs {
     #[arg(long, default_value = "none", help_heading = "Server Configuration")]
     pub api_versioning: String,
 
+    /// API base path prefix (e.g., "/api" or "/v2/api")
+    ///
+    /// Prepends this path to all API endpoint paths from the OpenAPI spec.
+    /// If not specified, the base path is extracted from the OpenAPI spec's
+    /// servers URL (e.g., "https://example.com/api" → "/api").
+    ///
+    /// The CLI option takes priority over the spec's base path.
+    /// Use empty string "" to override and disable any base path.
+    ///
+    /// Example:
+    ///   --base-path /api           (all routes served at /api/...)
+    ///   --base-path /v2            (all routes served at /v2/...)
+    ///   --base-path ""             (disable base path, use paths as-is)
+    #[arg(long, value_name = "PATH", help_heading = "Server Configuration")]
+    pub base_path: Option<String>,
+
     /// WebSocket replay file
     #[arg(long, help_heading = "Server Configuration")]
     pub ws_replay_file: Option<PathBuf>,
@@ -2733,6 +2749,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 args.spec_dir,
                 args.merge_conflicts,
                 args.api_versioning,
+                args.base_path,
                 args.tls_enabled,
                 args.tls_cert,
                 args.tls_key,
@@ -3340,6 +3357,7 @@ struct ServeArgs {
     spec_dir: Option<PathBuf>,
     merge_conflicts: String,
     api_versioning: String,
+    base_path: Option<String>,
     tls_enabled: bool,
     tls_cert: Option<PathBuf>,
     tls_key: Option<PathBuf>,
@@ -3890,6 +3908,7 @@ pub async fn handle_serve(
     spec_dir: Option<PathBuf>,
     merge_conflicts: String,
     api_versioning: String,
+    base_path: Option<String>,
     tls_enabled: bool,
     tls_cert: Option<PathBuf>,
     tls_key: Option<PathBuf>,
@@ -3983,6 +4002,7 @@ pub async fn handle_serve(
         spec_dir,
         merge_conflicts,
         api_versioning,
+        base_path,
         tls_enabled,
         tls_cert,
         tls_key,
@@ -4803,6 +4823,50 @@ pub async fn handle_serve(
         }
     } else {
         config.http.openapi_spec.clone()
+    };
+
+    // Apply --base-path override: inject base path into OpenAPI spec's servers section
+    let final_spec_path = if let Some(ref bp) = serve_args.base_path {
+        if let Some(ref spec) = final_spec_path {
+            let spec_content = tokio::fs::read_to_string(spec)
+                .await
+                .map_err(|e| format!("Failed to read spec for --base-path injection: {}", e))?;
+            let mut spec_json: serde_json::Value =
+                if spec.ends_with(".yaml") || spec.ends_with(".yml") {
+                    serde_yaml::from_str(&spec_content)
+                        .map_err(|e| format!("Failed to parse spec YAML: {}", e))?
+                } else {
+                    serde_json::from_str(&spec_content)
+                        .map_err(|e| format!("Failed to parse spec JSON: {}", e))?
+                };
+
+            // Override servers with the CLI base path
+            let server_url = if bp.is_empty() {
+                "/".to_string()
+            } else {
+                let mut p = bp.clone();
+                if !p.starts_with('/') {
+                    p.insert(0, '/');
+                }
+                p
+            };
+            spec_json["servers"] = serde_json::json!([{ "url": server_url }]);
+
+            let modified_json = serde_json::to_string_pretty(&spec_json)
+                .map_err(|e| format!("Failed to serialize spec with base path: {}", e))?;
+            let temp_dir = std::env::temp_dir();
+            let temp_path =
+                temp_dir.join(format!("mockforge_basepath_spec_{}.json", uuid::Uuid::new_v4()));
+            std::fs::write(&temp_path, modified_json.as_bytes())
+                .map_err(|e| format!("Failed to write base-path spec: {}", e))?;
+
+            tracing::info!("Applied --base-path '{}' to OpenAPI spec servers", bp);
+            Some(temp_path.to_string_lossy().to_string())
+        } else {
+            final_spec_path
+        }
+    } else {
+        final_spec_path
     };
 
     // Configure traffic shaping for HTTP middleware when enabled
