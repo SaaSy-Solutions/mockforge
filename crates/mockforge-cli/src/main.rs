@@ -4825,7 +4825,7 @@ pub async fn handle_serve(
         config.http.openapi_spec.clone()
     };
 
-    // Apply --base-path override: inject base path into OpenAPI spec's servers section
+    // Apply --base-path override: prefix all paths in the OpenAPI spec
     let final_spec_path = if let Some(ref bp) = serve_args.base_path {
         if let Some(ref spec) = final_spec_path {
             let spec_content = tokio::fs::read_to_string(spec)
@@ -4840,17 +4840,24 @@ pub async fn handle_serve(
                         .map_err(|e| format!("Failed to parse spec JSON: {}", e))?
                 };
 
-            // Override servers with the CLI base path
-            let server_url = if bp.is_empty() {
-                "/".to_string()
-            } else {
+            // Normalize base path: ensure leading slash, strip trailing slash
+            let base = {
                 let mut p = bp.clone();
                 if !p.starts_with('/') {
                     p.insert(0, '/');
                 }
-                p
+                p.trim_end_matches('/').to_string()
             };
-            spec_json["servers"] = serde_json::json!([{ "url": server_url }]);
+
+            // Rewrite the paths object: prefix every path key with the base path
+            if let Some(paths_obj) = spec_json.get("paths").and_then(|v| v.as_object()).cloned() {
+                let mut new_paths = serde_json::Map::new();
+                for (path_key, path_value) in paths_obj {
+                    let prefixed = format!("{}{}", base, path_key);
+                    new_paths.insert(prefixed, path_value);
+                }
+                spec_json["paths"] = serde_json::Value::Object(new_paths);
+            }
 
             let modified_json = serde_json::to_string_pretty(&spec_json)
                 .map_err(|e| format!("Failed to serialize spec with base path: {}", e))?;
@@ -4860,7 +4867,7 @@ pub async fn handle_serve(
             std::fs::write(&temp_path, modified_json.as_bytes())
                 .map_err(|e| format!("Failed to write base-path spec: {}", e))?;
 
-            tracing::info!("Applied --base-path '{}' to OpenAPI spec servers", bp);
+            tracing::info!("Applied --base-path '{}': prefixed all spec paths with '{}'", bp, base);
             Some(temp_path.to_string_lossy().to_string())
         } else {
             final_spec_path
