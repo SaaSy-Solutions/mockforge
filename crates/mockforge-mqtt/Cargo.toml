@@ -25,7 +25,7 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
 tokio-stream = "0.1"
-uuid = { version = "1.11", features = ["v4"] }
+uuid = { version = "1.21", features = ["v4"] }
 
 # TLS support
 tokio-rustls = "0.26"
