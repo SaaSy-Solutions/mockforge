@@ -70,21 +70,25 @@ rustls = "0.23"
 rustls-pemfile = "2.0"
 tokio-rustls = "0.26"
 axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "migrate"], optional = true }
+dashmap = { version = "6.1", optional = true }
+mockforge-pipelines = { version = "0.3.31", path = "../mockforge-pipelines", optional = true }
+mockforge-runtime-daemon = { version = "0.3.31", path = "../mockforge-runtime-daemon", optional = true }
 
 [features]
 default = []
 # Enable richer faker-backed tokens in templating via mockforge-data
 data-faker = []
 # Database-backed analytics/forecasting handlers
-database = []
+database = ["sqlx"]
 # Pipeline handler routes
-pipelines = []
+pipelines = ["mockforge-pipelines", "dashmap"]
 # Persona graph response enrichment
 persona-graph = []
 # Behavioral cloning middleware and handlers
 behavioral-cloning = []
 # Runtime daemon integration hooks
-runtime-daemon = []
+runtime-daemon = ["mockforge-runtime-daemon"]
 # Enable SMTP support
 smtp = ["mockforge-smtp"]
 # Enable MQTT integration

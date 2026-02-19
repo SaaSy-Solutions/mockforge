@@ -57,7 +57,7 @@ fn map_row_to_semantic_incident(
     let semantic_change_type = match semantic_change_type_str.as_str() {
         "description_change" => SemanticChangeType::DescriptionChange,
         "enum_narrowing" => SemanticChangeType::EnumNarrowing,
-        "nullability_change" => SemanticChangeType::NullabilityChange,
+        "nullability_change" => SemanticChangeType::NullableChange,
         "error_code_removed" => SemanticChangeType::ErrorCodeRemoved,
         "meaning_shift" => SemanticChangeType::MeaningShift,
         _ => SemanticChangeType::MeaningShift, // Default fallback

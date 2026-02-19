@@ -24,6 +24,7 @@ fn map_row_to_threat_assessment(
     use mockforge_core::contract_drift::threat_modeling::{
         AggregationLevel, RemediationSuggestion, ThreatCategory, ThreatFinding, ThreatLevel,
     };
+    use sqlx::Row;
 
     // Parse basic fields
     let workspace_id: Option<uuid::Uuid> = row.try_get("workspace_id")?;

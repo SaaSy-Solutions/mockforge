@@ -565,7 +565,7 @@ pub fn create_admin_router(
                 "/__mockforge/voice/create-workspace-confirm",
                 post(voice::create_workspace_confirm),
             )
-            .with_state(workspace_state);
+            .with_state(workspace_state.clone());
 
         router = router.merge(workspace_router);
         tracing::info!("Workspace router mounted with WorkspaceState");
@@ -585,8 +585,7 @@ pub fn create_admin_router(
             match SqlitePool::connect_lazy(&db_url) {
                 Ok(pool) => {
                     let promotion_service = Arc::new(PromotionService::new(pool));
-                    let promotion_state =
-                        PromotionState::new(promotion_service, workspace_state.clone());
+                    let promotion_state = PromotionState::new(promotion_service, workspace_state);
 
                     let promotion_router = Router::new()
                         .route("/api/v2/promotions", post(promotions::create_promotion))

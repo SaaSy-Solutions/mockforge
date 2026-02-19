@@ -7371,7 +7371,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.3.58"
+version = "0.3.59"
 dependencies = [
  "anyhow",
  "atty",
@@ -7438,7 +7438,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-cli"
-version = "0.3.58"
+version = "0.3.61"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -7804,6 +7804,7 @@ dependencies = [
  "axum-server",
  "base64 0.22.1",
  "chrono",
+ "dashmap 6.1.0",
  "futures",
  "futures-util",
  "glob",
@@ -7823,9 +7824,11 @@ dependencies = [
  "mockforge-mqtt",
  "mockforge-observability",
  "mockforge-performance",
+ "mockforge-pipelines",
  "mockforge-plugin-core",
  "mockforge-recorder",
  "mockforge-route-chaos",
+ "mockforge-runtime-daemon",
  "mockforge-scenarios",
  "mockforge-smtp",
  "mockforge-template-expansion",
@@ -7847,6 +7850,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "sqlx",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",

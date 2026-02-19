@@ -5,6 +5,8 @@
 
 use axum::extract::Request;
 use mockforge_core::consistency::UnifiedState;
+#[cfg(feature = "persona-graph")]
+use mockforge_data::apply_lifecycle_effects;
 use serde_json::Value;
 
 /// Enrich a response with persona graph data and lifecycle effects
@@ -16,7 +18,7 @@ use serde_json::Value;
 /// 4. Returns the enriched response
 pub async fn enrich_response(
     request: &Request,
-    response: Value,
+    mut response: Value,
     workspace_id: &str,
     endpoint_type: Option<&str>,
 ) -> Value {
