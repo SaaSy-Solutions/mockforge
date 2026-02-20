@@ -660,7 +660,7 @@ Provide a complete system that can bootstrap a startup backend."#,
     fn extract_metadata(
         &self,
         request: &SystemGenerationRequest,
-        artifacts: &HashMap<String, SystemArtifact>,
+        _artifacts: &HashMap<String, SystemArtifact>,
     ) -> Result<SystemMetadata> {
         // In a full implementation, we'd parse the artifacts to extract entities, relationships, etc.
         // For now, we'll use basic extraction from the description

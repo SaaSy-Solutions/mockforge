@@ -1453,6 +1453,12 @@ make fmt
 # Run lints
 make clippy
 
+# Run incremental warning gate
+make warning-gate
+
+# Preview next warning ratchet candidate
+make warning-gate-preview
+
 # Run security audit
 make audit
 

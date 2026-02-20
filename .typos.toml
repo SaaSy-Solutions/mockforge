@@ -2,7 +2,11 @@
 # Allows common technical acronyms and terms
 
 [default.extend-words]
-# Technical acronyms
+# Technical acronyms and library names
+ratatui = "ratatui"  # Rust TUI library (not ratatouille)
+Ratatui = "Ratatui"  # Rust TUI library (capitalized)
+ANDed = "ANDed"  # Past tense of AND operation
+Ded = "Ded"  # Part of ANDed (AND + ed suffix)
 RTO = "RTO"  # Recovery Time Objective
 RPO = "RPO"  # Recovery Point Objective
 HELO = "HELO"  # SMTP command (not HELLO)

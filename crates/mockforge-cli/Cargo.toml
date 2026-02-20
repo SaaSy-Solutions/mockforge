@@ -40,6 +40,7 @@ mockforge-kafka = { version = "0.3.31", path = "../mockforge-kafka", optional = 
 mockforge-amqp = { version = "0.3.31", path = "../mockforge-amqp", optional = true }
 mockforge-tcp = { version = "0.3.31", path = "../mockforge-tcp", optional = true }
 mockforge-tunnel = { version = "0.3.31", path = "../mockforge-tunnel" }
+mockforge-tui = { version = "0.3.31", path = "../mockforge-tui", optional = true }
 mockforge-vbr = { version = "0.3.31", path = "../mockforge-vbr" }
 mockforge-plugin-core = { version = "0.3.31", path = "../mockforge-plugin-core" }
 mockforge-plugin-loader = { version = "0.3.31", path = "../mockforge-plugin-loader" }
@@ -99,6 +100,7 @@ amqp = ["mockforge-amqp", "lapin", "futures-lite"]
 smtp = ["mockforge-smtp", "mockforge-http/smtp"]
 tcp = ["mockforge-tcp"]
 pipelines = ["dep:mockforge-pipelines"]
+tui = ["dep:mockforge-tui"]
 
 [dev-dependencies]
 assert_cmd = "2.0"
