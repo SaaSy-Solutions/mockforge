@@ -635,7 +635,9 @@ fn test_config_validate_auto_discovery_no_file() {
     cmd.current_dir(&temp_dir).args(["config", "validate"]);
 
     cmd.assert().failure().stderr(
-        predicate::str::contains("onfiguration file").or(predicate::str::contains("No such")),
+        predicate::str::contains("configuration file")
+            .or(predicate::str::contains("Configuration file"))
+            .or(predicate::str::contains("No such")),
     );
 
     println!("✓ Config validation correctly handles missing config during auto-discovery");
