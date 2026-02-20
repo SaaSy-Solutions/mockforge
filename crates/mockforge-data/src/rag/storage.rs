@@ -126,9 +126,10 @@ pub struct IndexStats {
 }
 
 /// Index type enumeration
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum IndexType {
     /// Flat index - brute force search
+    #[default]
     Flat,
     /// IVF (Inverted File) index - for large datasets
     IVF,
@@ -138,12 +139,6 @@ pub enum IndexType {
     PQ,
     /// Custom index type
     Custom(String),
-}
-
-impl Default for IndexType {
-    fn default() -> Self {
-        Self::Flat
-    }
 }
 
 /// Search parameters for vector search
@@ -177,9 +172,10 @@ impl Default for SearchParams {
 }
 
 /// Search method enumeration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum SearchMethod {
     /// Cosine similarity
+    #[default]
     Cosine,
     /// Euclidean distance
     Euclidean,
@@ -187,12 +183,6 @@ pub enum SearchMethod {
     DotProduct,
     /// Manhattan distance
     Manhattan,
-}
-
-impl Default for SearchMethod {
-    fn default() -> Self {
-        Self::Cosine
-    }
 }
 
 /// Storage backend trait for documents and vectors

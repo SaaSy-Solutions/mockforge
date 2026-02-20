@@ -335,7 +335,7 @@ impl TrafficPatternLearner {
     #[allow(dead_code)]
     pub async fn detect_latency_patterns_from_requests(
         &self,
-        _requests: &[serde_json::Value],
+        _requests: &[Value],
     ) -> Result<Vec<LearnedPattern>> {
         // Disabled to break circular dependency
         Ok(Vec::new())
@@ -432,13 +432,12 @@ impl TrafficPatternLearner {
     #[allow(dead_code)]
     async fn detect_error_patterns_internal(
         &self,
-        _requests: &[serde_json::Value],
+        _requests: &[Value],
     ) -> Result<Vec<LearnedPattern>> {
         use chrono::Utc;
         use std::collections::HashMap;
 
         // Disabled to break circular dependency
-        let _requests = _requests;
         let endpoint_errors: HashMap<String, (usize, usize)> = HashMap::new(); // (total, errors)
 
         // Disabled - would iterate over requests here
@@ -497,13 +496,12 @@ impl TrafficPatternLearner {
     #[allow(dead_code)]
     async fn detect_sequence_patterns_internal(
         &self,
-        _requests: &[serde_json::Value],
+        _requests: &[Value],
     ) -> Result<Vec<LearnedPattern>> {
         use chrono::Utc;
         use std::collections::HashMap;
 
         // Disabled to break circular dependency
-        let _requests = _requests;
         if _requests.len() < 50 {
             // Need sufficient data for sequence detection
             return Ok(Vec::new());
@@ -741,7 +739,7 @@ impl PersonaBehaviorLearner {
         // Analyze behavior for this persona
         if let Some(pattern) = self.analyze_persona_behavior(persona_id).await? {
             // Convert learned pattern parameters to traits
-            let mut learned_traits = std::collections::HashMap::new();
+            let mut learned_traits = HashMap::new();
             for (key, value) in &pattern.parameters {
                 let trait_key = format!("learned_{}", key);
                 let trait_value = if let Some(s) = value.as_str() {

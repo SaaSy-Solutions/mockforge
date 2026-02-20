@@ -237,7 +237,7 @@ mod tests {
 
         // Verify heart rate is a number in reasonable range
         if let Some(hr) = heart_rate.as_u64() {
-            assert!(hr >= 60 && hr <= 100, "Heart rate should be between 60 and 100");
+            assert!((60..=100).contains(&hr), "Heart rate should be between 60 and 100");
         }
     }
 

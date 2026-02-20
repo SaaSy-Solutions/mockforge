@@ -27,7 +27,7 @@ mod faker_generation_tests {
         ) {
             let mut faker = EnhancedFaker::new();
             // Should never panic, even with unknown types
-            let _ = faker.generate_by_type(&field_type);
+            let _ = faker.generate_by_type(field_type);
         }
 
         #[test]
@@ -195,11 +195,8 @@ mod schema_generation_tests {
             let result = schema.generate_row(&mut faker);
             assert!(result.is_ok());
 
-            if let Ok(value) = result {
-                // Should be an object with the expected fields
-                if let Value::Object(obj) = value {
-                    assert!(obj.len() <= field_count);
-                }
+            if let Ok(Value::Object(obj)) = result {
+                assert!(obj.len() <= field_count);
             }
         }
 
@@ -237,7 +234,7 @@ mod schema_generation_tests {
                 });
             }
 
-            let schema = SchemaDefinition::new("TestSchema".to_string())
+            let _schema = SchemaDefinition::new("TestSchema".to_string())
                 .with_fields(fields);
 
             let mut generator = MockDataGenerator::with_config(
@@ -275,7 +272,7 @@ mod consistency_tests {
             let mut faker = EnhancedFaker::new();
 
             for _ in 0..iterations {
-                let value = faker.generate_by_type(&field_type);
+                let value = faker.generate_by_type(field_type);
 
                 // Verify value matches expected type
                 match field_type {
@@ -373,7 +370,7 @@ mod edge_cases {
         fn generate_with_empty_schema(
             include_optional in any::<bool>()
         ) {
-            let schema = SchemaDefinition::new("EmptySchema".to_string());
+            let _schema = SchemaDefinition::new("EmptySchema".to_string());
 
             let mut generator = MockDataGenerator::with_config(
                 mockforge_data::MockGeneratorConfig::new()
@@ -389,11 +386,8 @@ mod edge_cases {
             // Should handle empty schema gracefully
             assert!(result.is_ok());
 
-            if let Ok(value) = result {
-                // Should be an empty object
-                if let Value::Object(obj) = value {
-                    assert!(obj.is_empty());
-                }
+            if let Ok(Value::Object(obj)) = result {
+                assert!(obj.is_empty());
             }
         }
 
@@ -434,7 +428,7 @@ mod edge_cases {
                 });
             }
 
-            let schema = SchemaDefinition::new("LargeSchema".to_string())
+            let _schema = SchemaDefinition::new("LargeSchema".to_string())
                 .with_fields(fields);
 
             let mut generator = MockDataGenerator::new();
@@ -515,7 +509,7 @@ mod complex_type_tests {
     proptest! {
         #[test]
         fn generate_array_fields(
-            array_size in 0usize..50
+            _array_size in 0usize..50
         ) {
             let field = FieldDefinition {
                 name: "items".to_string(),
@@ -539,7 +533,7 @@ mod complex_type_tests {
 
         #[test]
         fn generate_object_fields(
-            object_field_count in 1usize..20
+            _object_field_count in 1usize..20
         ) {
             let field = FieldDefinition {
                 name: "nested".to_string(),
@@ -585,7 +579,7 @@ mod complex_type_tests {
             }
 
             if !fields.is_empty() {
-                let schema = SchemaDefinition::new("NestedSchema".to_string())
+                let _schema = SchemaDefinition::new("NestedSchema".to_string())
                     .with_fields(fields);
 
             let mut generator = MockDataGenerator::new();

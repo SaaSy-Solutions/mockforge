@@ -5,8 +5,8 @@
 
 #![allow(missing_docs)]
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use mockforge_data::{resolve_tokens, Domain, DomainGenerator, TokenResolver};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use mockforge_data::{resolve_tokens, Domain, DomainGenerator};
 use serde_json::json;
 use tokio::runtime::Runtime;
 

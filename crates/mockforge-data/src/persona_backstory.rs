@@ -256,7 +256,6 @@ impl Default for BackstoryGenerator {
 mod tests {
     use super::*;
     use crate::persona::PersonaProfile;
-    use std::collections::HashMap;
 
     #[test]
     fn test_backstory_generator_new() {

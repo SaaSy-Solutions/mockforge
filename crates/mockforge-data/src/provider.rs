@@ -9,6 +9,7 @@ use crate::faker::EnhancedFaker;
 #[allow(dead_code)]
 struct DataFakerProvider(std::sync::Mutex<EnhancedFaker>);
 
+#[allow(dead_code)]
 impl DataFakerProvider {
     fn new() -> Self {
         Self(std::sync::Mutex::new(EnhancedFaker::new()))

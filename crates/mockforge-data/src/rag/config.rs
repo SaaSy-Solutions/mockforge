@@ -387,22 +387,17 @@ impl Default for RetryConfig {
 }
 
 /// Response format preferences
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum ResponseFormat {
     /// Plain text response
     Text,
     /// JSON structured response
+    #[default]
     Json,
     /// Markdown formatted response
     Markdown,
     /// Custom format with template
     Custom(String),
-}
-
-impl Default for ResponseFormat {
-    fn default() -> Self {
-        Self::Json
-    }
 }
 
 /// Logging configuration

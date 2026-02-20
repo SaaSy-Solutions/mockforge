@@ -44,7 +44,7 @@ jobs:
         components: rustfmt, clippy
 
     - name: Install system dependencies
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libglib2.0-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libglib2.0-dev
 
     - name: Install sccache
       run: |
@@ -148,7 +148,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
 
     - name: Install sccache
       run: |
@@ -197,7 +197,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
 
     - name: Install sccache
       run: |
@@ -242,7 +242,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
 
     - name: Install security tools
       run: |
@@ -276,7 +276,7 @@ jobs:
         components: llvm-tools-preview
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
 
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov
@@ -306,10 +306,10 @@ jobs:
     - name: Install Rust toolchain (MSRV)
       uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: "1.80"  # MSRV - minimum version that supports Cargo.lock v4 (GraphQL crate excluded as it requires edition2024/unstable features)
+        toolchain: "1.85"  # MSRV - minimum version that supports edition2024 (required by ignore, globwalk, base64ct deps)
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
 
     - name: Install sccache
       run: |
@@ -458,7 +458,7 @@ jobs:
 
     - name: Install protoc (protobuf compiler) on Linux
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
 
     - name: Install protoc (protobuf compiler) on macOS
       if: runner.os == 'macOS'

@@ -320,7 +320,8 @@ describe('FixturesPage', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
     // Check that dates are displayed
-    expect(screen.getByText(/Jan/)).toBeInTheDocument();
+    const dateElements = screen.getAllByText(/Jan/);
+    expect(dateElements.length).toBeGreaterThanOrEqual(1);
   });
 
   it('disables rename button when name is unchanged', () => {

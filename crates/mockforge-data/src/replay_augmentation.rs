@@ -11,21 +11,16 @@ use std::time::Duration;
 use tokio::time::interval;
 
 /// Replay augmentation mode
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReplayMode {
     /// Static replay from pre-recorded events
+    #[default]
     Static,
     /// LLM-augmented replay with scenario-based generation
     Augmented,
     /// Fully generated event stream from narrative description
     Generated,
-}
-
-impl Default for ReplayMode {
-    fn default() -> Self {
-        Self::Static
-    }
 }
 
 /// Event generation strategy

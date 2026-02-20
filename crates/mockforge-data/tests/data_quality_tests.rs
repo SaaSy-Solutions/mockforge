@@ -6,13 +6,12 @@
 //! - Relationships between entities are coherent
 //! - Data validation passes for generated data
 
-use mockforge_data::consistency::{ConsistencyStore, EntityType};
+use mockforge_data::consistency::ConsistencyStore;
 use mockforge_data::domains::Domain;
 use mockforge_data::persona::{PersonaProfile, PersonaRegistry};
 use mockforge_data::schema::{Relationship, RelationshipType, SchemaDefinition};
 use mockforge_data::{MockDataGenerator, MockGeneratorConfig};
 use serde_json::json;
-use std::collections::HashMap;
 
 #[cfg(test)]
 mod persona_consistency_tests {
@@ -80,7 +79,7 @@ mod persona_consistency_tests {
     fn persona_registry_storage() {
         let registry = PersonaRegistry::new();
 
-        let persona = PersonaProfile::new("user_123".to_string(), Domain::General);
+        let _persona = PersonaProfile::new("user_123".to_string(), Domain::General);
         // PersonaRegistry uses get_or_create_persona internally
         let _ = registry.get_or_create_persona("user_123".to_string(), Domain::General);
 
@@ -406,13 +405,13 @@ mod data_quality_tests {
         // Check constraints if values are present
         if let Some(age) = obj.get("age") {
             if let Some(age_num) = age.as_i64() {
-                assert!(age_num >= 18 && age_num <= 100);
+                assert!((18..=100).contains(&age_num));
             }
         }
 
         if let Some(score) = obj.get("score") {
             if let Some(score_num) = score.as_f64() {
-                assert!(score_num >= 0.0 && score_num <= 100.0);
+                assert!((0.0..=100.0).contains(&score_num));
             }
         }
 

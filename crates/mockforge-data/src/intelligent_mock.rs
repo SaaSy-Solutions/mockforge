@@ -10,21 +10,16 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 /// Response generation mode
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ResponseMode {
     /// Static response with templates
+    #[default]
     Static,
     /// Intelligent response using LLM
     Intelligent,
     /// Hybrid mode - use templates with LLM enhancement
     Hybrid,
-}
-
-impl Default for ResponseMode {
-    fn default() -> Self {
-        Self::Static
-    }
 }
 
 /// Intelligent mock configuration

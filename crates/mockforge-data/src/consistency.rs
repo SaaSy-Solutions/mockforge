@@ -41,7 +41,7 @@ impl EntityType {
     }
 
     /// Parse entity type from string
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "user" | "users" => EntityType::User,
             "device" | "devices" => EntityType::Device,
@@ -460,7 +460,7 @@ impl EntityIdExtractor {
             let id = segments[segments.len() - 1];
 
             // Check if resource matches known entity types
-            let entity_type = EntityType::from_str(&resource);
+            let entity_type = EntityType::parse(&resource);
 
             if entity_type != EntityType::Generic && !id.is_empty() {
                 return Some((id.to_string(), entity_type));
@@ -661,9 +661,9 @@ mod tests {
         assert_eq!(EntityType::User.as_str(), "user");
         assert_eq!(EntityType::Device.as_str(), "device");
         assert_eq!(EntityType::Organization.as_str(), "organization");
-        assert_eq!(EntityType::from_str("users"), EntityType::User);
-        assert_eq!(EntityType::from_str("devices"), EntityType::Device);
-        assert_eq!(EntityType::from_str("organizations"), EntityType::Organization);
+        assert_eq!(EntityType::parse("users"), EntityType::User);
+        assert_eq!(EntityType::parse("devices"), EntityType::Device);
+        assert_eq!(EntityType::parse("organizations"), EntityType::Organization);
     }
 
     #[test]

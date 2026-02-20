@@ -249,7 +249,7 @@ impl MockDataGenerator {
                                         if response_schema.is_none() {
                                             for (status_code, response) in resp_obj {
                                                 if let Ok(code) = status_code.parse::<u16>() {
-                                                    if code >= 200 && code < 300 {
+                                                    if (200..300).contains(&code) {
                                                         if let Some(schema) = self
                                                             .extract_response_schema_from_json(
                                                                 response,
@@ -410,7 +410,7 @@ impl MockDataGenerator {
                     // Handle $ref references
                     if let Some(ref_path) = schema.get("$ref").and_then(|r| r.as_str()) {
                         // Extract schema name from $ref (e.g., "#/components/schemas/User" -> "User")
-                        if let Some(schema_name) = ref_path.split('/').last() {
+                        if let Some(schema_name) = ref_path.split('/').next_back() {
                             // We'll need to resolve this from components, but for now return the ref
                             // The caller should handle resolving from components
                             return Ok(Some(json!({
@@ -537,10 +537,8 @@ impl MockDataGenerator {
         }
 
         // Handle nested object generation specially
-        if field.field_type == "object" {
-            if field.constraints.contains_key("properties") {
-                return self.generate_object_value(field);
-            }
+        if field.field_type == "object" && field.constraints.contains_key("properties") {
+            return self.generate_object_value(field);
         }
 
         // Generate based on determined faker type
