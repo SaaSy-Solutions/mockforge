@@ -157,12 +157,12 @@ impl GenerationResult {
     }
 
     /// Get data as JSON string
-    pub fn to_json_string(&self) -> crate::Result<String> {
+    pub fn to_json_string(&self) -> Result<String> {
         Ok(serde_json::to_string_pretty(&self.data)?)
     }
 
     /// Get data as JSON Lines string
-    pub fn to_jsonl_string(&self) -> crate::Result<String> {
+    pub fn to_jsonl_string(&self) -> Result<String> {
         let lines: Vec<String> = self
             .data
             .iter()
@@ -176,7 +176,7 @@ impl GenerationResult {
 pub async fn generate_data(
     schema: SchemaDefinition,
     config: DataConfig,
-) -> crate::Result<GenerationResult> {
+) -> Result<GenerationResult> {
     let mut generator = DataGenerator::new(schema, config)?;
     generator.generate().await
 }
@@ -185,7 +185,7 @@ pub async fn generate_data(
 pub async fn generate_from_json_schema(
     json_schema: &serde_json::Value,
     rows: usize,
-) -> crate::Result<GenerationResult> {
+) -> Result<GenerationResult> {
     let schema = SchemaDefinition::from_json_schema(json_schema)?;
     let config = DataConfig {
         rows,
@@ -198,7 +198,7 @@ pub async fn generate_from_json_schema(
 pub async fn generate_from_openapi(
     openapi_spec: &serde_json::Value,
     rows: usize,
-) -> crate::Result<GenerationResult> {
+) -> Result<GenerationResult> {
     let schema = SchemaDefinition::from_openapi_spec(openapi_spec)?;
     let config = DataConfig {
         rows,

@@ -528,7 +528,7 @@ pub mod utils {
     }
 
     /// Validate dataset size constraints
-    fn validate_dataset_size(dataset: &Dataset, schema: &SchemaDefinition) -> crate::Result<()> {
+    fn validate_dataset_size(dataset: &Dataset, schema: &SchemaDefinition) -> Result<()> {
         // Check if there are any size constraints in schema metadata
         if let Some(min_rows) = schema.metadata.get("min_rows") {
             if let Some(min_count) = min_rows.as_u64() {

@@ -44,7 +44,7 @@ jobs:
         components: rustfmt, clippy
 
     - name: Install system dependencies
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libglib2.0-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev libsoup2.4-dev
 
     - name: Install sccache
       run: |
@@ -148,7 +148,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev
 
     - name: Install sccache
       run: |
@@ -197,7 +197,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev
 
     - name: Install sccache
       run: |
@@ -242,7 +242,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev
 
     - name: Install security tools
       run: |
@@ -276,7 +276,7 @@ jobs:
         components: llvm-tools-preview
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev
 
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov
@@ -309,7 +309,7 @@ jobs:
         toolchain: "1.91"  # MSRV - matches highest requirement from dependencies (aws-sdk, async-graphql, time)
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev
 
     - name: Install sccache
       run: |
@@ -342,40 +342,9 @@ jobs:
 
     - name: Check MSRV compatibility
       run: |
-        # Temporarily remove mockforge-graphql, mockforge-ui, and mockforge-collab from workspace for MSRV check
-        # (mockforge-graphql requires async-graphql 7.0 which needs edition2024/unstable features)
-        # (mockforge-ui uses sysinfo 0.37 directly which requires edition2024)
-        # (mockforge-collab pulls in base64ct 1.8+ via argon2, which requires edition2024)
-        # This prevents Cargo from trying to parse manifests with edition2024 requirements
-        sed -i '/"crates\/mockforge-graphql",/d' Cargo.toml
-        sed -i '/"crates\/mockforge-ui",/d' Cargo.toml
-        sed -i '/"crates\/mockforge-collab",/d' Cargo.toml
-        # Also remove optional mockforge-graphql dependencies from other crates
-        sed -i '/mockforge-graphql = { version = "0.3.5", path = "..\/mockforge-graphql", optional = true }/d' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
-        # Remove mockforge-collab dependencies from other crates
-        sed -i '/mockforge-collab = { version = "0.3.5", path = "..\/mockforge-collab" }/d' crates/mockforge-ui/Cargo.toml
-        sed -i '/mockforge-collab = "\^0.3.0"/d' crates/mockforge-registry-server/Cargo.toml
-        # Remove "graphql" from default features (but keep other features)
-        sed -i 's/"graphql",//g' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
-        sed -i 's/, "graphql"//g' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
-        sed -i 's/"graphql"//g' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
-        # Remove graphql feature definitions
-        sed -i '/^graphql = \["mockforge-graphql"\]/d' crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml
-        # Disable sysinfo feature in mockforge-observability for MSRV check
-        # (sysinfo 0.37 requires edition2024 which is unstable)
-        # Remove sysinfo from default features so Cargo doesn't try to resolve it
-        sed -i 's/default = \["sysinfo"\]/default = []/' crates/mockforge-observability/Cargo.toml
-        # Temporarily remove argon2 from mockforge-core to avoid base64ct 1.8+ dependency
-        # (argon2 pulls in base64ct 1.8+ which requires edition2024)
-        sed -i '/argon2 = { workspace = true }/d' crates/mockforge-core/Cargo.toml
-        # Note: mockforge-collab is excluded above, so base64ct 1.8+ won't be pulled in
-        # No need to patch base64ct since mockforge-collab (which uses argon2 -> base64ct) is excluded
-        # Regenerate Cargo.lock without async-graphql and sysinfo dependencies
-        cargo generate-lockfile
-        # Check workspace (sysinfo feature disabled, so it won't be resolved)
+        # MSRV 1.91 supports edition2024 and all current dependency requirements
+        # No workspace member exclusions needed
         cargo check --workspace
-        # Restore files
-        git checkout Cargo.toml Cargo.lock crates/mockforge-cli/Cargo.toml crates/mockforge-sdk/Cargo.toml crates/mockforge-observability/Cargo.toml crates/mockforge-ui/Cargo.toml crates/mockforge-registry-server/Cargo.toml crates/mockforge-core/Cargo.toml
 
   typos:
     name: Spell Check
@@ -458,7 +427,7 @@ jobs:
 
     - name: Install protoc (protobuf compiler) on Linux
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev
 
     - name: Install protoc (protobuf compiler) on macOS
       if: runner.os == 'macOS'
