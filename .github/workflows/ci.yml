@@ -306,7 +306,7 @@ jobs:
     - name: Install Rust toolchain (MSRV)
       uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: "1.85"  # MSRV - minimum version that supports edition2024 (required by ignore, globwalk, base64ct deps)
+        toolchain: "1.91"  # MSRV - matches highest requirement from dependencies (aws-sdk, async-graphql, time)
 
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev
