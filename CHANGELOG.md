@@ -423,7 +423,7 @@
 - fix: exclude elasticlunr.min.js from spell check
 - fix: exclude highlight.js from spell check
 - fix: disable sysinfo feature during MSRV checks
-- fix: sync sysinfo to 0.37, fix resolveable typo, exclude ace.js from spell check
+- fix: sync sysinfo to 0.37, fix resolvable typo, exclude ace.js from spell check
 - fix: pin sysinfo to 0.36, fix typos, improve MSRV workaround
 - fix: update MSRV to 1.80 and add GraphQL exclusion workaround
 - fix: update MSRV from 1.82 to 1.75

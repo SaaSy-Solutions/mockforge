@@ -26,6 +26,7 @@ Nm = "Nm"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Minutes)
 Ns = "Ns"  # Template syntax: {{now±Nd|Nh|Nm|Ns}} (Seconds)
 abd = "abd"  # Part of git commit hashes (e.g., abd3306)
 existant = "existant"  # CSS variable name (--sidebar-non-existant) - consistently used in book CSS
+Configuracion = "Configuracion"  # Spanish translation for "Configuration" in i18n
 
 [files]
 extend-exclude = [
