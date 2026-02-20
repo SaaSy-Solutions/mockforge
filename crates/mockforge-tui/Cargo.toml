@@ -1,0 +1,40 @@
+[package]
+name = "mockforge-tui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Terminal UI dashboard for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "mockforge-tui"
+path = "src/main.rs"
+
+[lib]
+name = "mockforge_tui"
+path = "src/lib.rs"
+
+[dependencies]
+ratatui = { version = "0.29", features = ["all-widgets"] }
+crossterm = { version = "0.28", features = ["event-stream"] }
+tokio = { workspace = true, features = ["signal"] }
+tokio-stream = "0.1"
+reqwest = { workspace = true, features = ["json", "stream"] }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = "0.2"
+clap = { version = "4", features = ["derive"] }
+toml = { workspace = true }
+unicode-width = "0.2"
+
+[lints]
+workspace = true

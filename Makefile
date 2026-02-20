@@ -1,5 +1,5 @@
 # MockForge Development Makefile
-.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc load-test-marketplace
+.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc load-test-marketplace warning-gate warning-gate-preview
 
 # Default target
 help: ## Show this help message
@@ -115,6 +115,12 @@ clippy: ## Run clippy lints
 
 lint: fmt clippy ## Run all linting tools
 
+warning-gate: ## Incremental Rust warning gate (unused_must_use, private_interfaces)
+	bash scripts/lint-warning-gate.sh
+
+warning-gate-preview: ## Preview next warning ratchet (adds unused_qualifications)
+	bash scripts/lint-warning-ratchet-preview.sh
+
 # Documentation
 doc: ## Generate API documentation
 	cargo doc --workspace --no-deps --open
@@ -199,11 +205,24 @@ dev: ## Start development mode with watch
 dev-full: ## Start both Rust backend and UI dev server
 	./scripts/dev.sh
 
-check-all: fmt-check clippy audit security-deny test ## Run all checks (including security)
+check-all: fmt-check clippy warning-gate audit security-deny test ## Run all checks (including security)
 
 # Install CLI tool locally
 install: ## Install the CLI tool locally
 	cargo install --path crates/mockforge-cli
+
+# TUI
+build-tui: ## Build TUI crate
+	cargo build -p mockforge-tui
+
+clippy-tui: ## Lint TUI crate
+	cargo clippy -p mockforge-tui --all-targets -- -D warnings
+
+test-tui: ## Test TUI crate
+	cargo test -p mockforge-tui
+
+build-cli-tui: ## Build CLI with TUI feature enabled
+	cargo build -p mockforge-cli --features tui
 
 # Examples
 run-example: ## Run with example configuration

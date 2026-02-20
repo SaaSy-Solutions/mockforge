@@ -54,6 +54,7 @@ members = [
     "crates/mockforge-bench",
     "crates/mockforge-test",
     "crates/mockforge-ui",
+    "crates/mockforge-tui",
 
     # Server applications
     "crates/mockforge-k8s-operator",

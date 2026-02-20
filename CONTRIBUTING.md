@@ -110,6 +110,7 @@ make check-all
 # Or run individual checks
 make fmt          # Format code
 make clippy       # Run lints
+make warning-gate # Enforce incremental Rust warning gate
 make test         # Run tests
 make audit        # Security audit
 make spellcheck   # Spell check
@@ -175,6 +176,7 @@ The release process will automatically validate that new changelog entries have 
   - [ ] Tests pass (`make test`)
   - [ ] Code is formatted (`make fmt`)
   - [ ] Lints pass (`make clippy`)
+  - [ ] Incremental warning gate passes (`make warning-gate`)
   - [ ] Security audit passes (`make audit`)
   - [ ] Documentation is updated
   - [ ] Commit messages follow conventional format
@@ -206,6 +208,25 @@ We use `clippy` for additional linting. Configuration is in `clippy.toml`.
 ```bash
 # Run clippy
 make clippy
+```
+
+### Incremental Warning Gate
+
+We enforce an incremental warning gate in CI and locally for two warning classes:
+
+- `unused_must_use`
+- `private_interfaces`
+
+Run it locally with:
+
+```bash
+make warning-gate
+```
+
+To preview the next ratchet candidate (`unused_qualifications`) without blocking your PR:
+
+```bash
+make warning-gate-preview
 ```
 
 ### Key Guidelines
