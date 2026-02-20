@@ -1330,6 +1330,7 @@ async fn serve_with_tls(
     tls_config: &mockforge_core::config::HttpTlsConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use axum_server::tls_rustls::RustlsConfig;
+    use std::net::SocketAddr;
 
     // Initialize the rustls crypto provider (must be called before TLS operations)
     tls::init_crypto_provider();
@@ -1347,7 +1348,7 @@ async fn serve_with_tls(
 
     // Serve with TLS using axum-server
     axum_server::bind_rustls(addr, rustls_config)
-        .serve(app.into_make_service())
+        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await
         .map_err(|e| format!("HTTPS server error: {}", e).into())
 }
