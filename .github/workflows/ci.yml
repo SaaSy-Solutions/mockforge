@@ -24,7 +24,6 @@ jobs:
     continue-on-error: ${{ matrix.rust == 'nightly' }}
     env:
       CARGO_INCREMENTAL: "0"
-      RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: "2G"
     strategy:
       fail-fast: false
@@ -55,7 +54,20 @@ jobs:
         sudo mv sccache-*/sccache /usr/local/bin/
         sccache --version
 
+    - name: Verify sccache works
+      id: sccache-check
+      run: |
+        if sccache --start-server 2>/dev/null; then
+          echo "sccache_available=true" >> "$GITHUB_OUTPUT"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+        else
+          echo "sccache_available=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::sccache unavailable — building without cache"
+        fi
+      continue-on-error: true
+
     - name: Cache sccache
+      if: steps.sccache-check.outputs.sccache_available == 'true'
       uses: actions/cache@v4
       with:
         path: ~/.cache/sccache
@@ -127,7 +139,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_INCREMENTAL: "0"
-      RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
@@ -146,6 +157,16 @@ jobs:
         curl -L "$SCCACHE_URL" | tar xz
         sudo mv sccache-*/sccache /usr/local/bin/
         sccache --version
+
+    - name: Verify sccache works
+      id: sccache-check
+      run: |
+        if sccache --start-server 2>/dev/null; then
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+        else
+          echo "::warning::sccache unavailable — building without cache"
+        fi
+      continue-on-error: true
 
     - name: Cache sccache
       uses: actions/cache@v4
@@ -167,7 +188,6 @@ jobs:
     continue-on-error: true
     env:
       CARGO_INCREMENTAL: "0"
-      RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
@@ -186,6 +206,16 @@ jobs:
         curl -L "$SCCACHE_URL" | tar xz
         sudo mv sccache-*/sccache /usr/local/bin/
         sccache --version
+
+    - name: Verify sccache works
+      id: sccache-check
+      run: |
+        if sccache --start-server 2>/dev/null; then
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+        else
+          echo "::warning::sccache unavailable — building without cache"
+        fi
+      continue-on-error: true
 
     - name: Cache sccache
       uses: actions/cache@v4
@@ -268,7 +298,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_INCREMENTAL: "0"
-      RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
@@ -289,6 +318,16 @@ jobs:
         curl -L "$SCCACHE_URL" | tar xz
         sudo mv sccache-*/sccache /usr/local/bin/
         sccache --version
+
+    - name: Verify sccache works
+      id: sccache-check
+      run: |
+        if sccache --start-server 2>/dev/null; then
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+        else
+          echo "::warning::sccache unavailable — building without cache"
+        fi
+      continue-on-error: true
 
     - name: Cache sccache
       uses: actions/cache@v4
@@ -383,7 +422,6 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     env:
       CARGO_INCREMENTAL: "0"
-      RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: "2G"
       # Set reproducible build flag
       SOURCE_DATE_EPOCH: ${{ github.event.repository.updated_at }}
@@ -448,6 +486,16 @@ jobs:
           cp sccache-*/sccache.exe /usr/local/bin/
         fi
         sccache --version
+
+    - name: Verify sccache works
+      id: sccache-check
+      run: |
+        if sccache --start-server 2>/dev/null; then
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+        else
+          echo "::warning::sccache unavailable — building without cache"
+        fi
+      continue-on-error: true
 
     - name: Cache sccache
       uses: actions/cache@v4
