@@ -2,8 +2,32 @@ apiVersion: v1
 entries:
   mockforge:
   - apiVersion: v2
+    appVersion: 0.3.64
+    created: "2026-02-21T17:40:14.811023235Z"
+    description: A Helm chart for MockForge - Advanced API mocking and chaos engineering
+      platform
+    digest: 966abaa60d7c697c8833ba86d5dce0cadae2086d845105b042bc09115e97344f
+    home: https://mockforge.dev
+    icon: https://mockforge.dev/logo.png
+    keywords:
+    - mockforge
+    - api
+    - mocking
+    - chaos-engineering
+    - testing
+    maintainers:
+    - email: team@mockforge.dev
+      name: MockForge Team
+    name: mockforge
+    sources:
+    - https://github.com/mockforge/mockforge
+    type: application
+    urls:
+    - https://SaaSy-Solutions.github.io/mockforge/charts/mockforge-0.3.64.tgz
+    version: 0.3.64
+  - apiVersion: v2
     appVersion: 0.3.63
-    created: "2026-02-21T17:35:47.740607151Z"
+    created: "2026-02-21T17:40:14.809424969Z"
     description: A Helm chart for MockForge - Advanced API mocking and chaos engineering
       platform
     digest: 251d46e38a3c2663c527dc1a1c90246d6ac51e9594ea77e7759094e660903d20
@@ -27,7 +51,7 @@ entries:
     version: 0.3.63
   - apiVersion: v2
     appVersion: 0.3.62
-    created: "2026-02-21T17:35:47.739714556Z"
+    created: "2026-02-21T17:40:14.808652712Z"
     description: A Helm chart for MockForge - Advanced API mocking and chaos engineering
       platform
     digest: 8739c41e50dfbd0cf73d7be060f13fb61305a57ad0ee9cafb108303b57349b54
@@ -49,4 +73,4 @@ entries:
     urls:
     - https://SaaSy-Solutions.github.io/mockforge/charts/mockforge-0.3.62.tgz
     version: 0.3.62
-generated: "2026-02-21T17:35:47.738271985Z"
+generated: "2026-02-21T17:40:14.807542626Z"
