@@ -274,7 +274,7 @@ impl WorkspaceRegistry {
         &self.route_registry
     }
 
-    /// Get the configuration (placeholder implementation)
+    /// Get the active registry configuration
     pub fn get_config(&self) -> WorkspaceRegistryConfig {
         self.config.clone()
     }
