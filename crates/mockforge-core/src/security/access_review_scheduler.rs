@@ -185,9 +185,11 @@ impl AccessReviewScheduler {
                             }
                         }
                         ReviewType::ResourceAccess => {
-                            // Resource reviews not yet implemented
-                            warn!("Resource access reviews not yet implemented");
-                            continue;
+                            if config.resource_review.enabled {
+                                service_guard.start_resource_access_review(Vec::new()).await
+                            } else {
+                                continue;
+                            }
                         }
                     };
 
@@ -324,9 +326,12 @@ impl AccessReviewScheduler {
                 service.start_token_review().await?
             }
             ReviewType::ResourceAccess => {
-                return Err(Error::Generic(
-                    "Resource access reviews not yet implemented".to_string(),
-                ));
+                if !self.config.resource_review.enabled {
+                    return Err(Error::Generic(
+                        "Resource access review is not enabled".to_string(),
+                    ));
+                }
+                service.start_resource_access_review(Vec::new()).await?
             }
         };
 

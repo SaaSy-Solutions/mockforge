@@ -588,6 +588,90 @@ impl AccessReviewEngine {
         Ok(review)
     }
 
+    /// Start a resource access review.
+    pub async fn start_resource_access_review(
+        &mut self,
+        resources: Vec<ResourceAccessInfo>,
+    ) -> Result<AccessReview, crate::Error> {
+        if !self.config.enabled || !self.config.resource_review.enabled {
+            return Err(crate::Error::Generic(
+                "Resource access review is not enabled".to_string(),
+            ));
+        }
+
+        let now = Utc::now();
+        let review_id = self.generate_review_id(ReviewType::ResourceAccess, now);
+        let due_date = now + Duration::days(30);
+        let next_review = self.config.resource_review.frequency.next_review_date(now);
+        let stale_threshold = now - Duration::days(self.config.user_review.inactive_threshold_days as i64);
+
+        let mut findings = ReviewFindings {
+            inactive_users: 0,
+            excessive_permissions: 0,
+            no_recent_access: 0,
+            privileged_without_mfa: 0,
+            unused_tokens: 0,
+            excessive_scopes: 0,
+            expiring_soon: 0,
+            custom: HashMap::new(),
+        };
+
+        let mut sensitive_resource_count = 0u32;
+        for resource in &resources {
+            if self
+                .config
+                .resource_review
+                .sensitive_resources
+                .iter()
+                .any(|r| r == &resource.resource_type)
+            {
+                sensitive_resource_count += 1;
+            }
+
+            let stale_accesses = resource
+                .last_access
+                .values()
+                .filter_map(|d| *d)
+                .filter(|d| *d < stale_threshold)
+                .count() as u32;
+            findings.no_recent_access += stale_accesses;
+
+            if resource.users_with_access.len() > 20 {
+                findings.excessive_permissions += 1;
+            }
+        }
+
+        findings
+            .custom
+            .insert("sensitive_resources_reviewed".to_string(), sensitive_resource_count);
+
+        let review = AccessReview {
+            review_id: review_id.clone(),
+            review_type: ReviewType::ResourceAccess,
+            status: ReviewStatus::InProgress,
+            review_date: now,
+            due_date,
+            total_items: resources.len() as u32,
+            items_reviewed: 0,
+            findings,
+            actions_taken: ReviewActions {
+                users_revoked: 0,
+                permissions_reduced: 0,
+                mfa_enforced: 0,
+                tokens_revoked: 0,
+                tokens_rotated: 0,
+                scopes_reduced: 0,
+                custom: HashMap::new(),
+            },
+            pending_approvals: resources.len() as u32,
+            next_review_date: next_review,
+            metadata: HashMap::new(),
+        };
+
+        self.active_reviews.insert(review_id, review.clone());
+        Ok(review)
+    }
+
     /// Approve a user's access in a review
     pub fn approve_user_access(
         &mut self,
@@ -929,5 +1013,36 @@ mod tests {
 
         let review = engine.get_review(&review_id).unwrap();
         assert_eq!(review.actions_taken.users_revoked, 1);
+    }
+
+    #[tokio::test]
+    async fn test_start_resource_access_review() {
+        let mut config = AccessReviewConfig::default();
+        config.enabled = true;
+        config.resource_review.enabled = true;
+
+        let mut engine = AccessReviewEngine::new(config);
+        let user_id = Uuid::new_v4();
+        let mut access_levels = HashMap::new();
+        access_levels.insert(user_id, "admin".to_string());
+        let mut last_access = HashMap::new();
+        last_access.insert(user_id, Some(Utc::now() - Duration::days(120)));
+
+        let resources = vec![ResourceAccessInfo {
+            resource_type: "billing".to_string(),
+            resource_id: "res-1".to_string(),
+            users_with_access: vec![user_id],
+            access_levels,
+            last_access,
+        }];
+
+        let review = engine.start_resource_access_review(resources).await.unwrap();
+        assert_eq!(review.review_type, ReviewType::ResourceAccess);
+        assert_eq!(review.total_items, 1);
+        assert_eq!(
+            review.findings.custom.get("sensitive_resources_reviewed"),
+            Some(&1)
+        );
+        assert!(review.findings.no_recent_access >= 1);
     }
 }

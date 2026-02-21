@@ -4,7 +4,8 @@
 //! from the database, allowing the review system to work with real user information.
 
 use crate::security::access_review::{
-    AccessReviewEngine, ApiTokenInfo, PrivilegedAccessInfo, ReviewFrequency, UserAccessInfo,
+    AccessReviewEngine, ApiTokenInfo, PrivilegedAccessInfo, ResourceAccessInfo, ReviewFrequency,
+    UserAccessInfo,
 };
 use crate::Error;
 use chrono::{DateTime, Duration, Utc};
@@ -108,6 +109,15 @@ impl AccessReviewService {
     pub async fn start_token_review(&mut self) -> Result<String, Error> {
         let tokens = self.user_provider.get_api_tokens().await?;
         let review = self.engine.start_api_token_review(tokens).await?;
+        Ok(review.review_id)
+    }
+
+    /// Start a resource access review with collected resource access data.
+    pub async fn start_resource_access_review(
+        &mut self,
+        resources: Vec<ResourceAccessInfo>,
+    ) -> Result<String, Error> {
+        let review = self.engine.start_resource_access_review(resources).await?;
         Ok(review.review_id)
     }
 
