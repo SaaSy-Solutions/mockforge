@@ -36,5 +36,6 @@ extend-exclude = [
   "**/book/book/elasticlunr.min.js",       # Third-party search library (minified)
   "**/book/book/FontAwesome/**",          # Third-party FontAwesome library (CSS, fonts, SVG)
   "**/book/book/*.min.js",                 # All minified JavaScript files
-  "**/book/book/*.min.css"                 # All minified CSS files
+  "**/book/book/*.min.css",                # All minified CSS files
+  "crates/mockforge-ui/ui/dist/**"         # Vite build output (minified JS/CSS/HTML)
 ]
