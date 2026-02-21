@@ -251,11 +251,19 @@ pub fn mock_matches_request(
             }
         }
 
-        // Check XPath (placeholder - requires XML/XPath library for full implementation)
-        if let Some(_xpath) = &criteria.xpath {
-            // XPath matching would require an XML/XPath library
-            // For now, this is a placeholder that warns but doesn't fail
-            tracing::warn!("XPath matching not yet fully implemented");
+        // Check XPath (supports a focused subset)
+        if let Some(xpath) = &criteria.xpath {
+            if let Some(body_bytes) = body {
+                if let Ok(body_str) = std::str::from_utf8(body_bytes) {
+                    if !xml_xpath_exists(body_str, xpath) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            } else {
+                return false; // Body required but not present
+            }
         }
 
         // Check custom matcher
@@ -345,6 +353,151 @@ fn json_path_exists(json: &serde_json::Value, json_path: &str) -> bool {
         // For complex JSONPath expressions, would need a proper JSONPath library
         tracing::warn!("Complex JSONPath expressions not yet fully supported: {}", json_path);
         false
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct XPathSegment {
+    name: String,
+    text_equals: Option<String>,
+}
+
+fn parse_xpath_segment(segment: &str) -> Option<XPathSegment> {
+    if segment.is_empty() {
+        return None;
+    }
+
+    let trimmed = segment.trim();
+    if let Some(bracket_start) = trimmed.find('[') {
+        if !trimmed.ends_with(']') {
+            return None;
+        }
+
+        let name = trimmed[..bracket_start].trim();
+        let predicate = &trimmed[bracket_start + 1..trimmed.len() - 1];
+        let predicate = predicate.trim();
+
+        // Support simple predicate: [text()="value"] or [text()='value']
+        if let Some(raw) = predicate.strip_prefix("text()=") {
+            let raw = raw.trim();
+            if raw.len() >= 2
+                && ((raw.starts_with('"') && raw.ends_with('"'))
+                    || (raw.starts_with('\'') && raw.ends_with('\'')))
+            {
+                let text = raw[1..raw.len() - 1].to_string();
+                if !name.is_empty() {
+                    return Some(XPathSegment {
+                        name: name.to_string(),
+                        text_equals: Some(text),
+                    });
+                }
+            }
+        }
+
+        None
+    } else {
+        Some(XPathSegment {
+            name: trimmed.to_string(),
+            text_equals: None,
+        })
+    }
+}
+
+fn segment_matches(node: roxmltree::Node<'_, '_>, segment: &XPathSegment) -> bool {
+    if !node.is_element() {
+        return false;
+    }
+    if node.tag_name().name() != segment.name {
+        return false;
+    }
+    match &segment.text_equals {
+        Some(expected) => node.text().map(str::trim).unwrap_or_default() == expected,
+        None => true,
+    }
+}
+
+/// Check if an XPath expression matches an XML body.
+///
+/// Supported subset:
+/// - Absolute paths: `/root/child/item`
+/// - Descendant search: `//item` and `//parent/child`
+/// - Optional text predicate per segment: `item[text()="value"]`
+fn xml_xpath_exists(xml_body: &str, xpath: &str) -> bool {
+    let doc = match roxmltree::Document::parse(xml_body) {
+        Ok(doc) => doc,
+        Err(err) => {
+            tracing::warn!("Failed to parse XML for XPath matching: {}", err);
+            return false;
+        }
+    };
+
+    let expr = xpath.trim();
+    if expr.is_empty() {
+        return false;
+    }
+
+    let (is_descendant, path_str) = if let Some(rest) = expr.strip_prefix("//") {
+        (true, rest)
+    } else if let Some(rest) = expr.strip_prefix('/') {
+        (false, rest)
+    } else {
+        tracing::warn!("Unsupported XPath expression (must start with / or //): {}", expr);
+        return false;
+    };
+
+    let segments: Vec<XPathSegment> = path_str
+        .split('/')
+        .filter(|s| !s.trim().is_empty())
+        .filter_map(parse_xpath_segment)
+        .collect();
+
+    if segments.is_empty() {
+        return false;
+    }
+
+    if is_descendant {
+        let first = &segments[0];
+        for node in doc.descendants().filter(|n| segment_matches(*n, first)) {
+            let mut frontier = vec![node];
+            for segment in &segments[1..] {
+                let mut next_frontier = Vec::new();
+                for parent in &frontier {
+                    for child in parent.children().filter(|n| segment_matches(*n, segment)) {
+                        next_frontier.push(child);
+                    }
+                }
+                if next_frontier.is_empty() {
+                    frontier.clear();
+                    break;
+                }
+                frontier = next_frontier;
+            }
+            if !frontier.is_empty() {
+                return true;
+            }
+        }
+        false
+    } else {
+        let mut frontier = vec![doc.root_element()];
+        for (index, segment) in segments.iter().enumerate() {
+            let mut next_frontier = Vec::new();
+            for parent in &frontier {
+                if index == 0 {
+                    if segment_matches(*parent, segment) {
+                        next_frontier.push(*parent);
+                    }
+                    continue;
+                }
+                for child in parent.children().filter(|n| segment_matches(*n, segment)) {
+                    next_frontier.push(child);
+                }
+            }
+            if next_frontier.is_empty() {
+                return false;
+            }
+            frontier = next_frontier;
+        }
+        !frontier.is_empty()
     }
 }
 
@@ -3952,5 +4105,119 @@ mod tests {
         let mocks = state.mocks.read().await;
         assert_eq!(mocks.len(), 2);
         assert_eq!(mocks.iter().filter(|m| m.enabled).count(), 1);
+    }
+
+    #[test]
+    fn test_mock_matches_request_with_xpath_absolute_path() {
+        let mock = MockConfig {
+            id: "xpath-1".to_string(),
+            name: "XPath Match".to_string(),
+            method: "POST".to_string(),
+            path: "/xml".to_string(),
+            response: MockResponse {
+                body: serde_json::json!({"ok": true}),
+                headers: None,
+            },
+            enabled: true,
+            latency_ms: None,
+            status_code: Some(200),
+            request_match: Some(RequestMatchCriteria {
+                xpath: Some("/root/order/id".to_string()),
+                ..Default::default()
+            }),
+            priority: None,
+            scenario: None,
+            required_scenario_state: None,
+            new_scenario_state: None,
+        };
+
+        let body = br#"<root><order><id>123</id></order></root>"#;
+        let headers = std::collections::HashMap::new();
+        let query = std::collections::HashMap::new();
+
+        assert!(mock_matches_request(
+            &mock,
+            "POST",
+            "/xml",
+            &headers,
+            &query,
+            Some(body)
+        ));
+    }
+
+    #[test]
+    fn test_mock_matches_request_with_xpath_text_predicate() {
+        let mock = MockConfig {
+            id: "xpath-2".to_string(),
+            name: "XPath Predicate Match".to_string(),
+            method: "POST".to_string(),
+            path: "/xml".to_string(),
+            response: MockResponse {
+                body: serde_json::json!({"ok": true}),
+                headers: None,
+            },
+            enabled: true,
+            latency_ms: None,
+            status_code: Some(200),
+            request_match: Some(RequestMatchCriteria {
+                xpath: Some("//order/id[text()='123']".to_string()),
+                ..Default::default()
+            }),
+            priority: None,
+            scenario: None,
+            required_scenario_state: None,
+            new_scenario_state: None,
+        };
+
+        let body = br#"<root><order><id>123</id></order></root>"#;
+        let headers = std::collections::HashMap::new();
+        let query = std::collections::HashMap::new();
+
+        assert!(mock_matches_request(
+            &mock,
+            "POST",
+            "/xml",
+            &headers,
+            &query,
+            Some(body)
+        ));
+    }
+
+    #[test]
+    fn test_mock_matches_request_with_xpath_no_match() {
+        let mock = MockConfig {
+            id: "xpath-3".to_string(),
+            name: "XPath No Match".to_string(),
+            method: "POST".to_string(),
+            path: "/xml".to_string(),
+            response: MockResponse {
+                body: serde_json::json!({"ok": true}),
+                headers: None,
+            },
+            enabled: true,
+            latency_ms: None,
+            status_code: Some(200),
+            request_match: Some(RequestMatchCriteria {
+                xpath: Some("//order/id[text()='456']".to_string()),
+                ..Default::default()
+            }),
+            priority: None,
+            scenario: None,
+            required_scenario_state: None,
+            new_scenario_state: None,
+        };
+
+        let body = br#"<root><order><id>123</id></order></root>"#;
+        let headers = std::collections::HashMap::new();
+        let query = std::collections::HashMap::new();
+
+        assert!(!mock_matches_request(
+            &mock,
+            "POST",
+            "/xml",
+            &headers,
+            &query,
+            Some(body)
+        ));
     }
 }
