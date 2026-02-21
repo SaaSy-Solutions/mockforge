@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::consumer_groups::ConsumerGroupManager;
 use crate::metrics::KafkaMetrics;
+use crate::partitions::KafkaMessage;
 use crate::protocol::{KafkaProtocolHandler, KafkaRequest, KafkaRequestType, KafkaResponse};
 use crate::spec_registry::KafkaSpecRegistry;
 use crate::topics::Topic;
@@ -288,12 +289,32 @@ impl KafkaMockBroker {
     }
 
     async fn handle_produce(&self) -> Result<KafkaResponse> {
-        // Produce logic not yet implemented
+        let mut topics = self.topics.write().await;
+        let topic = topics
+            .entry("default-topic".to_string())
+            .or_insert_with(|| Topic::new("default-topic".to_string(), crate::topics::TopicConfig::default()));
+
+        let partition = topic.assign_partition(None);
+        let message = KafkaMessage {
+            offset: 0,
+            timestamp: chrono::Utc::now().timestamp_millis(),
+            key: None,
+            value: b"mockforge-produce".to_vec(),
+            headers: vec![],
+        };
+        let _ = topic.produce(partition, message).await?;
+
         Ok(KafkaResponse::Produce)
     }
 
     async fn handle_fetch(&self) -> Result<KafkaResponse> {
-        // Fetch logic not yet implemented
+        let topics = self.topics.read().await;
+        if let Some(topic) = topics.get("default-topic") {
+            for partition in &topic.partitions {
+                let _ = partition.fetch(0, 1024 * 1024);
+            }
+        }
+
         Ok(KafkaResponse::Fetch)
     }
 
@@ -310,14 +331,16 @@ impl KafkaMockBroker {
     }
 
     async fn handle_create_topics(&self) -> Result<KafkaResponse> {
-        // For now, create a default topic as a placeholder
-        // Protocol parsing for actual topic creation parameters is not yet implemented
-        let topic_name = "default-topic".to_string();
+        // Current wire parser does not decode topic names yet, so we create deterministic names.
+        let mut topics = self.topics.write().await;
+        let topic_name = if topics.contains_key("default-topic") {
+            format!("topic-{}", topics.len() + 1)
+        } else {
+            "default-topic".to_string()
+        };
         let topic_config = crate::topics::TopicConfig::default();
         let topic = Topic::new(topic_name.clone(), topic_config);
 
-        // Store the topic
-        let mut topics = self.topics.write().await;
         topics.insert(topic_name, topic);
 
         Ok(KafkaResponse::CreateTopics)
@@ -917,5 +940,28 @@ mod tests {
         let size_bytes = response_len.to_be_bytes();
 
         assert_eq!(size_bytes, [0, 0, 0, 0]);
+    }
+
+    #[tokio::test]
+    async fn test_handle_produce_creates_default_topic_and_record() {
+        let broker = KafkaMockBroker::new(KafkaConfig::default()).await.expect("broker");
+        let response = broker.handle_produce().await.expect("produce");
+        assert!(matches!(response, KafkaResponse::Produce));
+
+        let topics = broker.topics.read().await;
+        let topic = topics.get("default-topic").expect("default topic");
+        let record_count: usize = topic.partitions.iter().map(|p| p.messages.len()).sum();
+        assert!(record_count > 0);
+    }
+
+    #[tokio::test]
+    async fn test_handle_create_topics_creates_unique_topic_names() {
+        let broker = KafkaMockBroker::new(KafkaConfig::default()).await.expect("broker");
+        let _ = broker.handle_create_topics().await.expect("create1");
+        let _ = broker.handle_create_topics().await.expect("create2");
+
+        let topics = broker.topics.read().await;
+        assert!(topics.contains_key("default-topic"));
+        assert!(topics.keys().any(|name| name.starts_with("topic-")));
     }
 }
