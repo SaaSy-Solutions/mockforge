@@ -16,6 +16,7 @@ use mockforge_plugin_core::{
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use wasmparser::{Parser, Payload};
 use wasmtime::{Engine, Instance, Linker, Module, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
@@ -138,21 +139,53 @@ pub fn detect_runtime_type(wasm_bytes: &[u8]) -> Result<RuntimeType, PluginError
 
 /// Check if WASM binary has TinyGo signature
 fn has_tinygo_signature(wasm_bytes: &[u8]) -> bool {
-    // Look for TinyGo-specific exports or custom sections
-    // TinyGo typically exports functions like "resume" and "getsp"
-    // This is a placeholder - real implementation would use wasmparser
+    let (exports, custom_sections) = extract_wasm_signatures(wasm_bytes);
 
-    // Simple heuristic: check for "tinygo" in custom sections
-    String::from_utf8_lossy(wasm_bytes).contains("tinygo")
+    // TinyGo modules typically export these runtime helpers.
+    let has_runtime_exports = exports.contains("resume") && exports.contains("getsp");
+    let has_tinygo_custom = custom_sections.iter().any(|s| s.contains("tinygo"));
+
+    has_runtime_exports || has_tinygo_custom || String::from_utf8_lossy(wasm_bytes).contains("tinygo")
 }
 
 /// Check if WASM binary has AssemblyScript signature
 fn has_assemblyscript_signature(wasm_bytes: &[u8]) -> bool {
-    // Look for AssemblyScript-specific exports or custom sections
-    // AS typically has "__new", "__pin", "__unpin" exports
+    let (exports, custom_sections) = extract_wasm_signatures(wasm_bytes);
 
-    // Simple heuristic: check for "assemblyscript" in custom sections
-    String::from_utf8_lossy(wasm_bytes).contains("assemblyscript")
+    // AssemblyScript modules typically export allocation/pinning helpers.
+    let has_alloc_exports = exports.contains("__new")
+        && (exports.contains("__pin") || exports.contains("__unpin"));
+    let has_as_custom = custom_sections
+        .iter()
+        .any(|s| s.contains("assemblyscript") || s.contains("asc"));
+
+    has_alloc_exports
+        || has_as_custom
+        || String::from_utf8_lossy(wasm_bytes).contains("assemblyscript")
+}
+
+fn extract_wasm_signatures(wasm_bytes: &[u8]) -> (std::collections::HashSet<String>, Vec<String>) {
+    use std::collections::HashSet;
+
+    let mut exports = HashSet::new();
+    let mut custom_sections = Vec::new();
+
+    for payload in Parser::new(0).parse_all(wasm_bytes) {
+        match payload {
+            Ok(Payload::ExportSection(section)) => {
+                for export in section.into_iter().flatten() {
+                    exports.insert(export.name.to_string());
+                }
+            }
+            Ok(Payload::CustomSection(section)) => {
+                custom_sections.push(section.name().to_string());
+            }
+            Ok(_) => {}
+            Err(_) => break,
+        }
+    }
+
+    (exports, custom_sections)
 }
 
 /// Factory for creating runtime adapters
