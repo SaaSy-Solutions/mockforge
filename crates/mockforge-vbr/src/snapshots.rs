@@ -649,8 +649,8 @@ mod tests {
             .execute(
                 "INSERT INTO users (id, name) VALUES (?, ?)",
                 &[
-                    serde_json::Value::String("1".to_string()),
-                    serde_json::Value::String("Test User".to_string()),
+                    Value::String("1".to_string()),
+                    Value::String("Test User".to_string()),
                 ],
             )
             .await
@@ -795,8 +795,8 @@ mod tests {
             .execute(
                 "INSERT INTO users (id, name) VALUES (?, ?)",
                 &[
-                    serde_json::Value::String("1".to_string()),
-                    serde_json::Value::String("Original".to_string()),
+                    Value::String("1".to_string()),
+                    Value::String("Original".to_string()),
                 ],
             )
             .await
@@ -812,8 +812,8 @@ mod tests {
             .execute(
                 "UPDATE users SET name = ? WHERE id = ?",
                 &[
-                    serde_json::Value::String("Modified".to_string()),
-                    serde_json::Value::String("1".to_string()),
+                    Value::String("Modified".to_string()),
+                    Value::String("1".to_string()),
                 ],
             )
             .await
@@ -827,7 +827,7 @@ mod tests {
         let rows = database
             .query(
                 "SELECT * FROM users WHERE id = ?",
-                &[serde_json::Value::String("1".to_string())],
+                &[Value::String("1".to_string())],
             )
             .await
             .unwrap();
@@ -853,8 +853,8 @@ mod tests {
             .execute(
                 "INSERT INTO users (id, name) VALUES (?, ?)",
                 &[
-                    serde_json::Value::String("1".to_string()),
-                    serde_json::Value::String("Test".to_string()),
+                    Value::String("1".to_string()),
+                    Value::String("Test".to_string()),
                 ],
             )
             .await
@@ -916,8 +916,8 @@ mod tests {
             .execute(
                 "INSERT INTO users (id, name) VALUES (?, ?)",
                 &[
-                    serde_json::Value::String("1".to_string()),
-                    serde_json::Value::String("User1".to_string()),
+                    Value::String("1".to_string()),
+                    Value::String("User1".to_string()),
                 ],
             )
             .await
@@ -926,14 +926,14 @@ mod tests {
         database
             .execute(
                 "INSERT INTO products (id) VALUES (?)",
-                &[serde_json::Value::String("1".to_string())],
+                &[Value::String("1".to_string())],
             )
             .await
             .unwrap();
         database
             .execute(
                 "INSERT INTO products (id) VALUES (?)",
-                &[serde_json::Value::String("2".to_string())],
+                &[Value::String("2".to_string())],
             )
             .await
             .unwrap();

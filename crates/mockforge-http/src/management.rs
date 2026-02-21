@@ -5,13 +5,13 @@
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    response::{
-        sse::{Event, Sse},
-        IntoResponse, Json,
-    },
+    response::{IntoResponse, Json},
     routing::{delete, get, post, put},
     Router,
 };
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
+use axum::response::sse::{Event, Sse};
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
 use futures::stream::{self, Stream};
 use mockforge_core::openapi::OpenApiSpec;
 use mockforge_core::proxy::config::{
@@ -20,6 +20,7 @@ use mockforge_core::proxy::config::{
 #[cfg(feature = "smtp")]
 use mockforge_smtp::EmailSearchFilters;
 use serde::{Deserialize, Serialize};
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
@@ -2897,9 +2898,9 @@ async fn generate_ai_spec(
     Json(request): Json<GenerateSpecRequest>,
 ) -> impl IntoResponse {
     use mockforge_data::rag::{
-        config::{EmbeddingProvider, LlmProvider, RagConfig},
+        config::{LlmProvider, RagConfig},
         engine::RagEngine,
-        storage::{DocumentStorage, StorageFactory},
+        storage::DocumentStorage,
     };
     use std::sync::Arc;
 

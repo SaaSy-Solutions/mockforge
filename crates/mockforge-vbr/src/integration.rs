@@ -232,7 +232,7 @@ mod tests {
         let base_router = Router::new();
         let entity = create_test_entity("User");
 
-        let router = register_entity_routes(base_router, &entity.name, "/api");
+        let _router = register_entity_routes(base_router, &entity.name, "/api");
 
         // Verify the router compiles (we can't easily test route registration without a full server)
         assert!(true);
@@ -272,7 +272,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_vbr_router_with_health_endpoint() {
-        let router = create_vbr_router("/api").unwrap();
+        let _router = create_vbr_router("/api").unwrap();
         // Health endpoint is registered at /api/health
         // We can't easily test the actual route without spinning up a server
         // but we can verify the router was created successfully
@@ -281,7 +281,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_vbr_router_with_all_crud_routes() {
-        let router = create_vbr_router("/api").unwrap();
+        let _router = create_vbr_router("/api").unwrap();
         // Verifies all CRUD routes are registered:
         // - GET /api/{entity} (list)
         // - POST /api/{entity} (create)
@@ -295,7 +295,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_vbr_router_with_snapshot_routes() {
-        let router = create_vbr_router("/vbr-api").unwrap();
+        let _router = create_vbr_router("/vbr-api").unwrap();
         // Verifies snapshot routes are registered:
         // - POST /vbr-api/snapshots (create)
         // - GET /vbr-api/snapshots (list)
@@ -307,7 +307,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_vbr_router_with_cors() {
-        let router = create_vbr_router("/api").unwrap();
+        let _router = create_vbr_router("/api").unwrap();
         // Verify CORS layer is applied (permissive)
         // The router should have CorsLayer::permissive() applied
         assert!(true);
@@ -318,7 +318,7 @@ mod tests {
         let base_router = Router::new();
 
         // Entity name "User" should create routes for "user"
-        let router = register_entity_routes(base_router, "User", "/api");
+        let _router = register_entity_routes(base_router, "User", "/api");
 
         // Routes should be:
         // - /api/user

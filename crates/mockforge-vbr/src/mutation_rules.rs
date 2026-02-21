@@ -1052,14 +1052,14 @@ mod tests {
 
     #[test]
     fn test_mutation_rule_manager_new() {
-        let manager = MutationRuleManager::new();
+        let _manager = MutationRuleManager::new();
         // Manager should be created without error
         assert!(true);
     }
 
     #[test]
     fn test_mutation_rule_manager_default() {
-        let manager = MutationRuleManager::default();
+        let _manager = MutationRuleManager::default();
         // Default should work like new
         assert!(true);
     }
