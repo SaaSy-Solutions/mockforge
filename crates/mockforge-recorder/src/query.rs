@@ -82,13 +82,13 @@ fn request_matches_filter(request: &RecordedRequest, filter: &QueryFilter) -> bo
     }
 
     if let Some(method) = &filter.method {
-        if request.method.as_deref() != Some(method.as_str()) {
+        if request.method != *method {
             return false;
         }
     }
 
     if let Some(path_filter) = &filter.path {
-        let request_path = request.path.as_deref().unwrap_or_default();
+        let request_path = request.path.as_str();
         if path_filter.contains('*') {
             let pattern = path_filter.replace('*', "");
             if !request_path.contains(&pattern) {
@@ -126,7 +126,7 @@ fn request_matches_filter(request: &RecordedRequest, filter: &QueryFilter) -> bo
     }
 
     if let Some(required_tags) = &filter.tags {
-        let request_tags = request.tags.as_ref().map(|tags| tags.as_slice()).unwrap_or(&[]);
+        let request_tags = request.tags_vec();
         if required_tags
             .iter()
             .any(|required| !request_tags.iter().any(|actual| actual == required))
@@ -161,18 +161,18 @@ mod tests {
             id: "req-1".to_string(),
             protocol: Protocol::Http,
             timestamp: chrono::Utc::now(),
-            method: Some("GET".to_string()),
-            path: Some("/api/users/123".to_string()),
+            method: "GET".to_string(),
+            path: "/api/users/123".to_string(),
             query_params: None,
-            headers: None,
+            headers: "{}".to_string(),
             body: None,
-            body_encoding: None,
+            body_encoding: "utf8".to_string(),
             client_ip: None,
             trace_id: Some("trace-1".to_string()),
             span_id: None,
             duration_ms: Some(42),
             status_code: Some(200),
-            tags: Some(vec!["users".to_string(), "read".to_string()]),
+            tags: Some(r#"["users","read"]"#.to_string()),
         };
 
         let filter = QueryFilter {

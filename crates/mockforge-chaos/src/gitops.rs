@@ -7,6 +7,13 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::{fs, path::Path};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ManifestChange {
+    Create(String),
+    Update(String),
+}
 
 /// GitOps repository configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,21 +94,15 @@ impl GitOpsManager {
 
     /// Sync orchestrations from Git repository
     pub async fn sync(&mut self) -> Result<SyncStatus, String> {
-        // In a real implementation, this would:
-        // 1. Clone/pull the Git repository
-        // 2. Scan for orchestration YAML files
-        // 3. Parse and validate them
-        // 4. Apply changes (create/update/delete orchestrations)
-        // 5. Return sync status
-
         let start_time = Utc::now();
 
-        // Simulate sync process
         let manifests = self.discover_manifests().await?;
-        let _changes: Vec<()> = self.calculate_changes(&manifests)?;
+        let changes = self.calculate_changes(&manifests)?;
 
-        // Apply changes - not implemented
         let mut errors = Vec::new();
+        if let Err(e) = self.apply_changes(&manifests, &changes).await {
+            errors.push(format!("Failed to apply changes: {}", e));
+        }
 
         // Cleanup (prune) if enabled
         if self.config.prune {
@@ -110,15 +111,16 @@ impl GitOpsManager {
             }
         }
 
+        let commit_hash = self.compute_state_hash(&manifests);
         let status = SyncStatus {
             last_sync: start_time,
-            commit_hash: "abc123def456".to_string(), // Would be actual git hash
+            commit_hash,
             status: if errors.is_empty() {
                 SyncState::Synced
             } else {
                 SyncState::Failed
             },
-            orchestrations_synced: manifests.len(),
+            orchestrations_synced: changes.len(),
             errors,
         };
 
@@ -128,15 +130,84 @@ impl GitOpsManager {
 
     /// Discover orchestration manifests in repository
     async fn discover_manifests(&self) -> Result<Vec<OrchestrationManifest>, String> {
-        // In real implementation: scan repository for YAML files
-        Ok(Vec::new())
+        let mut files = Vec::new();
+        collect_manifest_files(&self.config.path, &mut files)?;
+
+        let mut manifests = Vec::new();
+        for file_path in files {
+            let content_raw = fs::read_to_string(&file_path)
+                .map_err(|e| format!("Failed to read manifest {}: {}", file_path.display(), e))?;
+            let content = parse_manifest_content(&file_path, &content_raw)?;
+            let hash = hash_content(&content_raw);
+            let last_modified = fs::metadata(&file_path)
+                .and_then(|m| m.modified())
+                .map(DateTime::<Utc>::from)
+                .unwrap_or_else(|_| Utc::now());
+
+            manifests.push(OrchestrationManifest {
+                file_path,
+                content,
+                hash,
+                last_modified,
+            });
+        }
+
+        manifests.sort_by_key(|m| m.file_path.clone());
+        Ok(manifests)
     }
 
     /// Calculate changes between current and desired state
-    fn calculate_changes(&self, _manifests: &[OrchestrationManifest]) -> Result<Vec<()>, String> {
-        // Compare manifests with currently deployed orchestrations
-        // Return list of changes (create, update, delete)
-        Ok(Vec::new())
+    fn calculate_changes(
+        &self,
+        manifests: &[OrchestrationManifest],
+    ) -> Result<Vec<ManifestChange>, String> {
+        let mut changes = Vec::new();
+        for manifest in manifests {
+            let key = manifest.file_path.to_string_lossy().to_string();
+            match self.manifests.get(&key) {
+                None => changes.push(ManifestChange::Create(key)),
+                Some(existing) if existing.hash != manifest.hash => {
+                    changes.push(ManifestChange::Update(key))
+                }
+                _ => {}
+            }
+        }
+        Ok(changes)
+    }
+
+    async fn apply_changes(
+        &mut self,
+        manifests: &[OrchestrationManifest],
+        changes: &[ManifestChange],
+    ) -> Result<(), String> {
+        let by_path: HashMap<String, OrchestrationManifest> = manifests
+            .iter()
+            .map(|m| (m.file_path.to_string_lossy().to_string(), m.clone()))
+            .collect();
+
+        for change in changes {
+            match change {
+                ManifestChange::Create(path) | ManifestChange::Update(path) => {
+                    let manifest = by_path
+                        .get(path)
+                        .ok_or_else(|| format!("Manifest not found for change: {}", path))?;
+                    self.manifests.insert(path.clone(), manifest.clone());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn compute_state_hash(&self, manifests: &[OrchestrationManifest]) -> String {
+        use sha2::{Digest, Sha256};
+
+        let mut hasher = Sha256::new();
+        for manifest in manifests {
+            hasher.update(manifest.file_path.to_string_lossy().as_bytes());
+            hasher.update(manifest.hash.as_bytes());
+        }
+        format!("{:x}", hasher.finalize())
     }
 
     /// Prune orchestrations that are no longer in Git
@@ -189,6 +260,48 @@ impl GitOpsManager {
                 .await;
         }
     }
+}
+
+fn collect_manifest_files(base: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    if !base.exists() {
+        return Ok(());
+    }
+    let entries = fs::read_dir(base)
+        .map_err(|e| format!("Failed to read directory {}: {}", base.display(), e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_manifest_files(&path, out)?;
+        } else if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+            if matches!(ext, "yaml" | "yml" | "json") {
+                out.push(path);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn parse_manifest_content(path: &Path, content: &str) -> Result<serde_json::Value, String> {
+    match path.extension().and_then(|s| s.to_str()) {
+        Some("yaml") | Some("yml") => {
+            serde_yaml::from_str(content).map_err(|e| format!("Invalid YAML manifest: {}", e))
+        }
+        Some("json") => {
+            serde_json::from_str(content).map_err(|e| format!("Invalid JSON manifest: {}", e))
+        }
+        _ => Err(format!(
+            "Unsupported manifest file extension: {}",
+            path.display()
+        )),
+    }
+}
+
+fn hash_content(content: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
 /// Flux integration
