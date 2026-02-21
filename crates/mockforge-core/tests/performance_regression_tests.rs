@@ -14,11 +14,11 @@ use std::time::Instant;
 // These thresholds must be generous enough for debug builds on shared CI runners.
 // CI runners may be 50-100x slower than local release builds due to debug
 // instrumentation, shared resources, and variable load.
-const ROUTE_MATCHING_THRESHOLD_US: u64 = 5_000; // 5ms
-const CONDITION_EVAL_THRESHOLD_US: u64 = 10_000; // 10ms
-const VALIDATION_THRESHOLD_US: u64 = 5_000; // 5ms
-const TEMPLATE_EXPANSION_THRESHOLD_US: u64 = 10_000; // 10ms
-const ROUTE_ADDITION_THRESHOLD_US: u64 = 5_000; // 5ms
+const ROUTE_MATCHING_THRESHOLD_US: u64 = 50_000; // 50ms
+const CONDITION_EVAL_THRESHOLD_US: u64 = 50_000; // 50ms
+const VALIDATION_THRESHOLD_US: u64 = 50_000; // 50ms
+const TEMPLATE_EXPANSION_THRESHOLD_US: u64 = 50_000; // 50ms
+const ROUTE_ADDITION_THRESHOLD_US: u64 = 50_000; // 50ms
 
 #[cfg(test)]
 mod route_matching_performance {

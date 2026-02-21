@@ -165,8 +165,7 @@ async fn test_image_assets_mime_types() {
         assert_eq!(content_type, "image/png", "Wrong content type for {}", icon_path);
 
         let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        // Note: Currently returns empty body as placeholder
-        assert!(body_bytes.is_empty(), "No data for {}", icon_path);
+        assert!(!body_bytes.is_empty(), "No data for {}", icon_path);
     }
 }
 
