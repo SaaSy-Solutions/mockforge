@@ -5,15 +5,18 @@
 
 use clap::Subcommand;
 use colored::Colorize;
+use mockforge_core::intelligent_behavior::session::{SessionManager, SessionTracking};
 use mockforge_data::{FieldDefinition, SchemaDefinition};
 use mockforge_vbr::{
     config::{StorageBackend, VbrConfig},
     entities::Entity,
     schema::VbrSchemaDefinition,
+    session::SessionDataManager,
     VbrEngine,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Subcommand)]
 pub enum VbrCommands {
@@ -446,17 +449,30 @@ async fn execute_serve_command(
     let mut config = VbrConfig::default();
     config.storage = storage_backend;
     config.sessions.scoped_data = session_scoped;
+    let session_timeout_secs = config.sessions.timeout;
+    let session_storage_backend = config.storage.clone();
 
     // Create VBR engine
     let engine = VbrEngine::new(config).await?;
     let database = engine.database_arc();
     let registry = engine.registry().clone();
+    let session_manager = if session_scoped {
+        let session_tracking = SessionTracking::default();
+        let core_session_manager =
+            Arc::new(SessionManager::new(session_tracking, session_timeout_secs));
+        Some(Arc::new(SessionDataManager::new(
+            core_session_manager,
+            session_storage_backend,
+        )))
+    } else {
+        None
+    };
 
     // Create handler context
     let context = mockforge_vbr::handlers::HandlerContext {
         database,
         registry,
-        session_manager: None, // TODO: Initialize session manager if needed
+        session_manager,
         snapshots_dir: None,
     };
 

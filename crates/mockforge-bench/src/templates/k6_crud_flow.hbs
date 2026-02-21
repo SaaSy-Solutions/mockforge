@@ -52,9 +52,11 @@ export const options = {
 };
 
 const BASE_URL = '{{base_url}}';
+const EXTRACTED_VALUES_OUTPUT_PATH = '{{extracted_values_output_path}}';
 
 // Common headers
 const headers = {{{headers}}};
+const globalExtractedValues = {};
 
 {{#if error_injection_enabled}}
 // Error injection configuration
@@ -524,8 +526,9 @@ export default function () {
         // Extract field: {{{this.field}}}{{#if this.match_mode}} (match: {{this.match_mode}}){{/if}}
         const extracted_{{this.store_as}} = extractValue(res, '{{{this.field}}}'{{#if this.match_mode}}, '{{this.match_mode}}'{{/if}});
         {{/if}}
-        if (extracted_{{this.store_as}}) {
+        if (extracted_{{this.store_as}} !== null && extracted_{{this.store_as}} !== undefined) {
           extractedValues['{{this.store_as}}'] = extracted_{{this.store_as}};
+          globalExtractedValues['{{this.store_as}}'] = extracted_{{this.store_as}};
         }
         {{/each}}
       }
@@ -549,6 +552,7 @@ export default function () {
 
 export function handleSummary(data) {
   return {
+    [EXTRACTED_VALUES_OUTPUT_PATH]: JSON.stringify(globalExtractedValues, null, 2),
     'stdout': textSummary(data, { indent: ' ', enableColors: true }),
   };
 }

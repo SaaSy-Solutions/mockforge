@@ -31,7 +31,7 @@ use mockforge_core::openapi::multi_spec::{
 };
 use mockforge_core::openapi::spec::OpenApiSpec;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 /// Bench command configuration
@@ -659,6 +659,27 @@ impl BenchCommand {
         Ok(headers)
     }
 
+    fn parse_extracted_values(output_dir: &Path) -> Result<ExtractedValues> {
+        let extracted_path = output_dir.join("extracted_values.json");
+        if !extracted_path.exists() {
+            return Ok(ExtractedValues::new());
+        }
+
+        let content = std::fs::read_to_string(&extracted_path)
+            .map_err(|e| BenchError::ResultsParseError(e.to_string()))?;
+        let parsed: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| BenchError::ResultsParseError(e.to_string()))?;
+
+        let mut extracted = ExtractedValues::new();
+        if let Some(values) = parsed.as_object() {
+            for (key, value) in values {
+                extracted.set(key.clone(), value.clone());
+            }
+        }
+
+        Ok(extracted)
+    }
+
     /// Resolve the effective base path for API endpoints
     ///
     /// Priority:
@@ -1172,6 +1193,7 @@ impl BenchCommand {
             ),
         );
         let template = include_str!("templates/k6_crud_flow.hbs");
+        let output_dir = self.output.join(format!("{}_results", spec_name.replace('.', "_")));
 
         let custom_headers = self.parse_headers()?;
         let config = self.build_crud_flow_config().unwrap_or_default();
@@ -1344,6 +1366,7 @@ impl BenchCommand {
             "headers": headers_json,
             "dynamic_imports": required_imports,
             "dynamic_globals": required_globals,
+            "extracted_values_output_path": output_dir.join("extracted_values.json").to_string_lossy(),
             // Security testing settings
             "security_testing_enabled": security_testing_enabled,
             "has_custom_headers": !custom_headers.is_empty(),
@@ -1367,14 +1390,19 @@ impl BenchCommand {
 
         if !self.generate_only {
             let executor = K6Executor::new()?;
-            let output_dir = self.output.join(format!("{}_results", spec_name.replace('.', "_")));
             std::fs::create_dir_all(&output_dir)?;
 
             executor.execute(&script_path, Some(&output_dir), self.verbose).await?;
+
+            let extracted = Self::parse_extracted_values(&output_dir)?;
+            TerminalReporter::print_progress(&format!(
+                "  Extracted {} value(s) from {}",
+                extracted.values.len(),
+                spec_name
+            ));
+            return Ok(extracted);
         }
 
-        // For now, return empty extracted values
-        // TODO: Parse k6 output to extract actual values
         Ok(ExtractedValues::new())
     }
 
@@ -1719,6 +1747,10 @@ impl BenchCommand {
             "headers": headers_json,
             "dynamic_imports": required_imports,
             "dynamic_globals": required_globals,
+            "extracted_values_output_path": self
+                .output
+                .join("crud_flow_extracted_values.json")
+                .to_string_lossy(),
             // Error injection settings
             "error_injection_enabled": error_injection_enabled,
             "error_rate": error_rate,
@@ -2046,6 +2078,7 @@ impl BenchCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_parse_duration() {
@@ -2254,5 +2287,37 @@ mod tests {
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");
+    }
+
+    #[test]
+    fn test_parse_extracted_values_from_output_dir() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("extracted_values.json");
+        std::fs::write(
+            &path,
+            r#"{
+  "pool_id": "abc123",
+  "count": 0,
+  "enabled": false,
+  "metadata": { "owner": "team-a" }
+}"#,
+        )
+        .unwrap();
+
+        let extracted = BenchCommand::parse_extracted_values(dir.path()).unwrap();
+        assert_eq!(extracted.get("pool_id"), Some(&serde_json::json!("abc123")));
+        assert_eq!(extracted.get("count"), Some(&serde_json::json!(0)));
+        assert_eq!(extracted.get("enabled"), Some(&serde_json::json!(false)));
+        assert_eq!(
+            extracted.get("metadata"),
+            Some(&serde_json::json!({"owner": "team-a"}))
+        );
+    }
+
+    #[test]
+    fn test_parse_extracted_values_missing_file() {
+        let dir = tempdir().unwrap();
+        let extracted = BenchCommand::parse_extracted_values(dir.path()).unwrap();
+        assert!(extracted.values.is_empty());
     }
 }
