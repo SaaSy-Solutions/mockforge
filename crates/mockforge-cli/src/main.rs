@@ -3397,23 +3397,35 @@ mod cli_tests {
 
     #[test]
     fn parses_admin_port_override() {
-        let cli = Cli::parse_from([
-            "mockforge",
-            "serve",
-            "--admin",
-            "--admin-port",
-            "3100",
-            "--http-port",
-            "3200",
-            "--ws-port",
-            "3201",
-            "--grpc-port",
-            "5200",
-        ]);
+        // Run on a thread with a larger stack to avoid stack overflow
+        // from clap parsing the large Commands enum (~50 variants)
+        let result = std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                let cli = Cli::parse_from([
+                    "mockforge",
+                    "serve",
+                    "--admin",
+                    "--admin-port",
+                    "3100",
+                    "--http-port",
+                    "3200",
+                    "--ws-port",
+                    "3201",
+                    "--grpc-port",
+                    "5200",
+                ]);
 
-        match cli.command {
-            Commands::Serve(args) => assert_eq!(args.admin_port, Some(3100)),
-            _ => panic!("expected serve command"),
+                match cli.command {
+                    Commands::Serve(args) => assert_eq!(args.admin_port, Some(3100)),
+                    _ => panic!("expected serve command"),
+                }
+            })
+            .expect("failed to spawn thread")
+            .join();
+
+        if let Err(e) = result {
+            std::panic::resume_unwind(e);
         }
     }
 }
