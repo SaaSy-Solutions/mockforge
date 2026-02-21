@@ -85,7 +85,7 @@ impl SqliteDatabase {
             })?;
         }
 
-        let db_url = format!("sqlite://{}", path.display());
+        let db_url = format!("sqlite://{}?mode=rwc", path.display());
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(10)
             .connect(&db_url)
@@ -728,25 +728,58 @@ fn matches_json_where(
     params: &[Value],
 ) -> Result<bool> {
     // Extract WHERE clause from query
-    if let Some(where_idx) = query.to_uppercase().find("WHERE") {
+    let query_upper = query.to_uppercase();
+    if let Some(where_idx) = query_upper.find("WHERE") {
         let where_clause = &query[where_idx + 5..];
 
-        // Parse simple conditions like "field = ?"
-        let parts: Vec<&str> = where_clause.split_whitespace().collect();
-        if parts.len() >= 3 && parts[1] == "=" {
-            let field = parts[0];
-            let param_idx = parts.iter().position(|&p| p == "?").unwrap_or(0);
+        // Split the WHERE clause by " AND " (case-insensitive)
+        let where_upper = where_clause.to_uppercase();
+        let mut condition_strs = Vec::new();
+        let mut last = 0;
+        for (idx, _) in where_upper.match_indices(" AND ") {
+            condition_strs.push(where_clause[last..idx].trim());
+            last = idx + 5; // skip " AND "
+        }
+        condition_strs.push(where_clause[last..].trim());
 
-            if param_idx < params.len() {
-                let expected_value = &params[0]; // Use first param for simple cases
-                let actual_value = record.get(field);
+        let mut param_idx = 0;
+        for condition in &condition_strs {
+            let parts: Vec<&str> = condition.split_whitespace().collect();
+            if parts.len() >= 3 {
+                let field = parts[0];
+                let op = parts[1];
 
-                return Ok(matches_value(actual_value, expected_value));
+                // Count ? placeholders in this condition
+                let has_placeholder = parts.iter().any(|&p| p == "?" || p.contains('?'));
+
+                if has_placeholder && param_idx < params.len() {
+                    let expected_value = &params[param_idx];
+                    let actual_value = record.get(field);
+                    param_idx += 1;
+
+                    match op {
+                        "=" => {
+                            if !matches_value(actual_value, expected_value) {
+                                return Ok(false);
+                            }
+                        }
+                        "!=" | "<>" => {
+                            if matches_value(actual_value, expected_value) {
+                                return Ok(false);
+                            }
+                        }
+                        _ => {
+                            // Unsupported operator, skip
+                        }
+                    }
+                }
             }
         }
+
+        return Ok(true); // All conditions matched
     }
 
-    Ok(true) // No WHERE clause or couldn't parse
+    Ok(true) // No WHERE clause
 }
 
 /// Check if two values match
@@ -843,7 +876,7 @@ fn parse_update_query(
     let table_name = parts[1].to_string();
 
     // Extract SET clause
-    if let Some(set_idx) = parts.iter().position(|&p| p.to_uppercase() == "SET") {
+    if let Some(_set_idx) = parts.iter().position(|&p| p.to_uppercase() == "SET") {
         let set_clause = &query[query.to_uppercase().find("SET").unwrap() + 3..];
         let where_clause = if let Some(where_idx) = set_clause.to_uppercase().find("WHERE") {
             &set_clause[..where_idx]
@@ -1533,7 +1566,7 @@ mod tests {
             path: db_path.clone(),
         };
         let result = create_database(&backend).await;
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "create_database failed: {:?}", result.err());
         let db = result.unwrap();
         assert!(db.connection_info().contains("SQLite"));
     }

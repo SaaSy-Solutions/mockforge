@@ -15,7 +15,7 @@ impl ConstraintValidator {
     pub async fn validate_foreign_key(
         &self,
         database: &dyn crate::database::VirtualDatabase,
-        table_name: &str,
+        _table_name: &str,
         field: &str,
         value: &Value,
         target_table: &str,
@@ -27,7 +27,14 @@ impl ConstraintValidator {
         let params = vec![value.clone()];
         let results = database.query(&query, &params).await?;
 
-        if results.is_empty() || results[0].get("COUNT(*)") == Some(&Value::Number(0.into())) {
+        // Check count result - column name varies by backend ("COUNT(*)" for SQLite, "count" for in-memory/JSON)
+        let count = results
+            .first()
+            .and_then(|row| row.get("COUNT(*)").or_else(|| row.get("count")))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
+        if results.is_empty() || count == 0 {
             return Err(Error::generic(format!(
                 "Foreign key constraint violation: {} = {:?} does not exist in {}.{}",
                 field, value, target_table, target_field
@@ -71,13 +78,17 @@ impl ConstraintValidator {
         let results = database.query(&query, &params).await?;
 
         if !results.is_empty() {
-            if let Some(count) = results[0].get("COUNT(*)") {
-                if count.as_u64().unwrap_or(0) > 0 {
-                    return Err(Error::generic(format!(
-                        "Unique constraint violation: combination of {:?} already exists",
-                        fields
-                    )));
-                }
+            // Column name varies by backend ("COUNT(*)" for SQLite, "count" for in-memory/JSON)
+            let count = results[0]
+                .get("COUNT(*)")
+                .or_else(|| results[0].get("count"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            if count > 0 {
+                return Err(Error::generic(format!(
+                    "Unique constraint violation: combination of {:?} already exists",
+                    fields
+                )));
             }
         }
 

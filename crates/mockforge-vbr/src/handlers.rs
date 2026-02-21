@@ -419,6 +419,14 @@ pub async fn update_handler(
     Extension(context): Extension<HandlerContext>,
     Json(body): Json<Value>,
 ) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // Validate body is a JSON object
+    if !body.is_object() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Request body must be a JSON object"})),
+        ));
+    }
+
     let (entity, table_name) = get_entity_info(&context.registry, &entity_name)?;
     let primary_key = "id";
 
