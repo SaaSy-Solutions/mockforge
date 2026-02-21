@@ -8,7 +8,7 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use mockforge_core::{
     time_travel::cron::{CronJob, CronJobAction},
-    RepeatConfig, ScheduledResponse, TimeTravelManager, VirtualClock,
+    RepeatConfig, ScheduledResponse, TimeScenario, TimeTravelManager, VirtualClock,
 };
 use mockforge_vbr::{MutationOperation, MutationRule, MutationRuleManager, MutationTrigger};
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,8 @@ use tracing::info;
 /// Global time travel manager (optional, can be set by the application)
 static TIME_TRAVEL_MANAGER: once_cell::sync::OnceCell<Arc<RwLock<Option<Arc<TimeTravelManager>>>>> =
     once_cell::sync::OnceCell::new();
+static SCENARIO_STORE: once_cell::sync::Lazy<Arc<RwLock<HashMap<String, TimeScenario>>>> =
+    once_cell::sync::Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 /// Initialize the global time travel manager
 pub fn init_time_travel_manager(manager: Arc<TimeTravelManager>) {
@@ -30,6 +32,16 @@ pub fn init_time_travel_manager(manager: Arc<TimeTravelManager>) {
 /// Get the global time travel manager
 fn get_time_travel_manager() -> Option<Arc<TimeTravelManager>> {
     TIME_TRAVEL_MANAGER.get().and_then(|cell| cell.read().unwrap().clone())
+}
+
+fn save_scenario_to_store(scenario: TimeScenario) {
+    let mut store = SCENARIO_STORE.write().unwrap();
+    store.insert(scenario.name.clone(), scenario);
+}
+
+fn load_scenario_from_store(name: &str) -> Option<TimeScenario> {
+    let store = SCENARIO_STORE.read().unwrap();
+    store.get(name).cloned()
 }
 
 /// Global mutation rule manager (optional, can be set by the application)
@@ -434,6 +446,7 @@ pub async fn save_scenario(Json(req): Json<SaveScenarioRequest>) -> impl IntoRes
         Some(manager) => {
             let mut scenario = manager.save_scenario(req.name.clone());
             scenario.description = req.description;
+            save_scenario_to_store(scenario.clone());
 
             Json(scenario).into_response()
         }
@@ -447,19 +460,26 @@ pub async fn save_scenario(Json(req): Json<SaveScenarioRequest>) -> impl IntoRes
     }
 }
 
-/// Load a scenario
+/// Load a scenario from the in-memory scenario store and apply it.
 pub async fn load_scenario(Json(req): Json<LoadScenarioRequest>) -> impl IntoResponse {
     match get_time_travel_manager() {
-        Some(_manager) => {
-            // For now, scenarios are passed in the request body
-            // In a full implementation, scenarios would be stored and loaded from disk
-            (
-                StatusCode::NOT_IMPLEMENTED,
+        Some(manager) => {
+            if let Some(scenario) = load_scenario_from_store(&req.name) {
+                manager.load_scenario(&scenario);
                 Json(serde_json::json!({
-                    "error": "Scenario loading from storage not yet implemented. Use save_scenario to get scenario JSON, then POST it back."
-                })),
-            )
+                    "success": true,
+                    "scenario": scenario,
+                }))
                 .into_response()
+            } else {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({
+                        "error": format!("Scenario '{}' not found", req.name)
+                    })),
+                )
+                    .into_response()
+            }
         }
         None => (
             StatusCode::NOT_FOUND,
@@ -1032,5 +1052,24 @@ mod tests {
 
         let past = parse_trigger_time("-30m", clock.clone()).unwrap();
         assert!((past - now + Duration::minutes(30)).num_seconds().abs() < 1);
+    }
+
+    #[test]
+    fn test_scenario_store_roundtrip() {
+        let scenario = TimeScenario {
+            name: "roundtrip".to_string(),
+            enabled: true,
+            current_time: Some(Utc::now()),
+            scale_factor: 1.5,
+            scheduled_responses: Vec::new(),
+            created_at: Utc::now(),
+            description: Some("test".to_string()),
+        };
+
+        save_scenario_to_store(scenario.clone());
+        let loaded = load_scenario_from_store("roundtrip").expect("scenario");
+        assert_eq!(loaded.name, scenario.name);
+        assert_eq!(loaded.scale_factor, scenario.scale_factor);
+        assert_eq!(loaded.description, scenario.description);
     }
 }
