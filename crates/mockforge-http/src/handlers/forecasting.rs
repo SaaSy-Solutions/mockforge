@@ -130,22 +130,22 @@ pub async fn list_forecasts(
 
     let mut bind_index = 1;
 
-    if let Some(ws_id) = &params.workspace_id {
+    if params.workspace_id.is_some() {
         query.push_str(&format!(" AND workspace_id = ${}", bind_index));
         bind_index += 1;
     }
 
-    if let Some(svc_id) = &params.service_id {
+    if params.service_id.is_some() {
         query.push_str(&format!(" AND service_id = ${}", bind_index));
         bind_index += 1;
     }
 
-    if let Some(ep) = &params.endpoint {
+    if params.endpoint.is_some() {
         query.push_str(&format!(" AND endpoint = ${}", bind_index));
         bind_index += 1;
     }
 
-    if let Some(m) = &params.method {
+    if params.method.is_some() {
         query.push_str(&format!(" AND method = ${}", bind_index));
         bind_index += 1;
     }

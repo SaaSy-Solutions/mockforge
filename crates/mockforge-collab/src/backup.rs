@@ -717,6 +717,8 @@ impl BackupService {
         backup_url: &str,
         storage_config: Option<&serde_json::Value>,
     ) -> Result<()> {
+        #[cfg(not(feature = "s3"))]
+        let _ = (backup_url, storage_config);
         #[cfg(feature = "s3")]
         {
             use aws_config::SdkConfig;

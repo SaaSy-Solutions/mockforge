@@ -405,8 +405,9 @@ pub async fn generate_gitops_pr(
         }
     } else {
         // Filter by workspace and/or status
-        // Clone workspace_id before moving it to query
         let workspace_id_str = request.workspace_id.clone();
+        #[cfg(not(feature = "pipelines"))]
+        let _ = &workspace_id_str;
         query.workspace_id = request.workspace_id;
         if let Some(status_str) = &request.status {
             query.status = match status_str.as_str() {

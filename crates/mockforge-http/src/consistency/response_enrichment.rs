@@ -16,6 +16,7 @@ use serde_json::Value;
 /// 2. Enriches the response with persona graph data if available
 /// 3. Applies lifecycle effects based on the persona's lifecycle state
 /// 4. Returns the enriched response
+#[allow(unused_mut)]
 pub async fn enrich_response(
     request: &Request,
     mut response: Value,

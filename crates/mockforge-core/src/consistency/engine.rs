@@ -282,6 +282,9 @@ impl ConsistencyEngine {
         target_entity_type: &str,
         relationship_type: Option<&str>,
     ) -> Vec<EntityState> {
+        #[cfg(not(feature = "persona-graph"))]
+        let _ = (persona_id, relationship_type);
+
         let states = self.states.read().await;
         let state = match states.get(workspace_id) {
             Some(s) => s,
