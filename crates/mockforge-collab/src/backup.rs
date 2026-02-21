@@ -196,7 +196,13 @@ impl BackupService {
                 self.save_to_local(workspace_id, &serialized, &backup_format).await?
             }
             StorageBackend::S3 => {
-                return Err(CollabError::Internal("S3 backup not yet implemented".to_string()));
+                self.save_to_s3(
+                    workspace_id,
+                    &serialized,
+                    &backup_format,
+                    storage_config.as_ref(),
+                )
+                .await?
             }
             StorageBackend::Azure => {
                 self.save_to_azure(
@@ -682,6 +688,93 @@ impl BackupService {
             .text()
             .await
             .map_err(|e| CollabError::Internal(format!("Failed to read custom backup body: {e}")))
+    }
+
+    /// Save backup to Azure Blob Storage
+    #[allow(unused_variables)]
+    async fn save_to_s3(
+        &self,
+        workspace_id: Uuid,
+        data: &str,
+        format: &str,
+        storage_config: Option<&serde_json::Value>,
+    ) -> Result<String> {
+        #[cfg(feature = "s3")]
+        {
+            use aws_config::SdkConfig;
+            use aws_sdk_s3::config::{Credentials, Region};
+            use aws_sdk_s3::primitives::ByteStream;
+            use aws_sdk_s3::Client as S3Client;
+
+            let config = storage_config
+                .ok_or_else(|| CollabError::Internal("S3 storage configuration required".to_string()))?;
+
+            let bucket_name = config
+                .get("bucket_name")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    CollabError::Internal(
+                        "S3 bucket_name not found in storage_config".to_string(),
+                    )
+                })?;
+
+            let prefix = config.get("prefix").and_then(|v| v.as_str()).unwrap_or("backups");
+            let region_str = config
+                .get("region")
+                .and_then(|v| v.as_str())
+                .unwrap_or("us-east-1");
+
+            let aws_config: SdkConfig = if let (Some(access_key_id), Some(secret_access_key)) = (
+                config.get("access_key_id").and_then(|v| v.as_str()),
+                config.get("secret_access_key").and_then(|v| v.as_str()),
+            ) {
+                let credentials = Credentials::new(
+                    access_key_id,
+                    secret_access_key,
+                    None,
+                    None,
+                    "mockforge",
+                );
+                aws_config::ConfigLoader::default()
+                    .credentials_provider(credentials)
+                    .region(Region::new(region_str.to_string()))
+                    .load()
+                    .await
+            } else {
+                aws_config::load_from_env().await
+            };
+
+            let client = S3Client::new(&aws_config);
+
+            let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
+            let object_key = format!("{}/workspace_{}_{}.{}", prefix, workspace_id, timestamp, format);
+            let content_type = match format {
+                "yaml" => "application/x-yaml",
+                "json" => "application/json",
+                _ => "application/octet-stream",
+            };
+
+            client
+                .put_object()
+                .bucket(bucket_name)
+                .key(&object_key)
+                .content_type(content_type)
+                .body(ByteStream::from(data.as_bytes().to_vec()))
+                .send()
+                .await
+                .map_err(|e| CollabError::Internal(format!("Failed to upload to S3: {}", e)))?;
+
+            let backup_url = format!("s3://{}/{}", bucket_name, object_key);
+            tracing::info!("Successfully uploaded backup to S3: {}", backup_url);
+            Ok(backup_url)
+        }
+
+        #[cfg(not(feature = "s3"))]
+        {
+            Err(CollabError::Internal(
+                "S3 backup requires 's3' feature to be enabled. Add 's3' feature to mockforge-collab in Cargo.toml.".to_string(),
+            ))
+        }
     }
 
     /// Save backup to Azure Blob Storage
