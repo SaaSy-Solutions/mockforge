@@ -14,6 +14,7 @@ use crate::loader::PluginLoader;
 use crate::metadata::{MetadataStore, PluginMetadata};
 use crate::remote::{RemotePluginConfig, RemotePluginLoader};
 use crate::signature::SignatureVerifier;
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 /// Plugin source specification
@@ -193,11 +194,8 @@ impl PluginInstaller {
             }
             PluginSource::Git(git_source) => self.git_loader.clone_from_git(git_source).await?,
             PluginSource::Registry { name, version } => {
-                return Err(PluginLoaderError::load(format!(
-                    "Registry plugin installation not yet implemented: {}@{}",
-                    name,
-                    version.as_deref().unwrap_or("latest")
-                )));
+                self.install_from_registry(name, version.as_deref(), &options)
+                    .await?
             }
         };
 
@@ -234,6 +232,79 @@ impl PluginInstaller {
 
         tracing::info!("Plugin installed successfully: {}", plugin_id);
         Ok(plugin_id)
+    }
+
+    /// Install plugin from a registry source.
+    async fn install_from_registry(
+        &self,
+        name: &str,
+        version: Option<&str>,
+        options: &InstallOptions,
+    ) -> LoaderResult<PathBuf> {
+        let base_url = std::env::var("MOCKFORGE_PLUGIN_REGISTRY_URL")
+            .unwrap_or_else(|_| "https://registry.mockforge.dev".to_string());
+        let client = reqwest::Client::new();
+
+        let (download_url, checksum) = if let Some(v) = version {
+            let version_url = format!("{}/api/v1/plugins/{}/versions/{}", base_url, name, v);
+            let response = client.get(&version_url).send().await.map_err(|e| {
+                PluginLoaderError::load(format!(
+                    "Failed to fetch registry version metadata for {}@{}: {}",
+                    name, v, e
+                ))
+            })?;
+
+            if !response.status().is_success() {
+                return Err(PluginLoaderError::load(format!(
+                    "Registry lookup failed for {}@{}: {}",
+                    name,
+                    v,
+                    response.status()
+                )));
+            }
+
+            let entry: RegistryVersionResponse = response.json().await.map_err(|e| {
+                PluginLoaderError::load(format!(
+                    "Invalid registry response for {}@{}: {}",
+                    name, v, e
+                ))
+            })?;
+            (entry.download_url, entry.checksum)
+        } else {
+            let plugin_url = format!("{}/api/v1/plugins/{}", base_url, name);
+            let response = client.get(&plugin_url).send().await.map_err(|e| {
+                PluginLoaderError::load(format!(
+                    "Failed to fetch registry plugin metadata for {}: {}",
+                    name, e
+                ))
+            })?;
+
+            if !response.status().is_success() {
+                return Err(PluginLoaderError::load(format!(
+                    "Registry lookup failed for {}: {}",
+                    name,
+                    response.status()
+                )));
+            }
+
+            let entry: RegistryPluginResponse = response.json().await.map_err(|e| {
+                PluginLoaderError::load(format!("Invalid registry response for {}: {}", name, e))
+            })?;
+
+            let selected = select_registry_version(&entry).ok_or_else(|| {
+                PluginLoaderError::load(format!("No installable versions found for plugin '{}'", name))
+            })?;
+            (selected.download_url.clone(), selected.checksum.clone())
+        };
+
+        let checksum_ref = options
+            .expected_checksum
+            .as_deref()
+            .or(checksum.as_deref());
+
+        self.remote_loader
+            .download_with_checksum(&download_url, checksum_ref)
+            .await
     }
 
     /// Verify plugin signature using cryptographic verification
@@ -403,6 +474,41 @@ impl PluginInstaller {
             .filter_map(|id| store.get(&id).map(|meta| (id, meta.clone())))
             .collect()
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct RegistryVersionResponse {
+    download_url: String,
+    #[serde(default)]
+    checksum: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RegistryPluginResponse {
+    version: String,
+    versions: Vec<RegistryVersionResponseWithVersion>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RegistryVersionResponseWithVersion {
+    version: String,
+    download_url: String,
+    #[serde(default)]
+    checksum: Option<String>,
+    #[serde(default)]
+    yanked: bool,
+}
+
+fn select_registry_version(entry: &RegistryPluginResponse) -> Option<&RegistryVersionResponseWithVersion> {
+    if let Some(preferred) = entry
+        .versions
+        .iter()
+        .find(|v| v.version == entry.version && !v.yanked)
+    {
+        return Some(preferred);
+    }
+
+    entry.versions.iter().find(|v| !v.yanked)
 }
 
 /// Cache statistics
@@ -713,5 +819,54 @@ mod tests {
     fn test_plugin_source_parse_github_dotgit_in_url() {
         let source = PluginSource::parse("https://github.com/user/repo.git").unwrap();
         assert!(matches!(source, PluginSource::Git(_)));
+    }
+
+    #[test]
+    fn test_select_registry_version_prefers_current_non_yanked() {
+        let entry = RegistryPluginResponse {
+            version: "2.0.0".to_string(),
+            versions: vec![
+                RegistryVersionResponseWithVersion {
+                    version: "1.0.0".to_string(),
+                    download_url: "https://example.com/1.0.0.wasm".to_string(),
+                    checksum: None,
+                    yanked: false,
+                },
+                RegistryVersionResponseWithVersion {
+                    version: "2.0.0".to_string(),
+                    download_url: "https://example.com/2.0.0.wasm".to_string(),
+                    checksum: Some("abc".to_string()),
+                    yanked: false,
+                },
+            ],
+        };
+
+        let selected = select_registry_version(&entry).expect("expected selected version");
+        assert_eq!(selected.version, "2.0.0");
+        assert_eq!(selected.download_url, "https://example.com/2.0.0.wasm");
+    }
+
+    #[test]
+    fn test_select_registry_version_falls_back_to_first_non_yanked() {
+        let entry = RegistryPluginResponse {
+            version: "2.0.0".to_string(),
+            versions: vec![
+                RegistryVersionResponseWithVersion {
+                    version: "2.0.0".to_string(),
+                    download_url: "https://example.com/2.0.0.wasm".to_string(),
+                    checksum: None,
+                    yanked: true,
+                },
+                RegistryVersionResponseWithVersion {
+                    version: "1.9.0".to_string(),
+                    download_url: "https://example.com/1.9.0.wasm".to_string(),
+                    checksum: None,
+                    yanked: false,
+                },
+            ],
+        };
+
+        let selected = select_registry_version(&entry).expect("expected selected version");
+        assert_eq!(selected.version, "1.9.0");
     }
 }
