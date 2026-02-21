@@ -89,15 +89,22 @@ pub async fn generate_backend_with_spec(
     backend_type: &str,
     config: &BackendGeneratorConfig,
 ) -> Result<BackendGenerationResult> {
-    let generator = get_generator(backend_type)
-        .ok_or_else(|| anyhow::anyhow!("Unknown backend type: {}", backend_type))?;
-
-    // For now, we'll use rust_axum directly since it works with core OpenApiSpec
-    // In the future, we'd convert between spec formats
-    match backend_type {
-        "rust" | "rust-axum" | "axum" => rust_axum::generate_rust_axum_backend(spec, config).await,
-        _ => Err(anyhow::anyhow!("Backend type '{}' not yet implemented", backend_type)),
+    let normalized = backend_type.trim().to_lowercase();
+    if get_generator(&normalized).is_none() {
+        let supported = list_generators()
+            .into_iter()
+            .map(|(backend, _)| backend)
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(anyhow::anyhow!(
+            "Unknown backend type '{}'. Supported backends: {}",
+            backend_type,
+            supported
+        ));
     }
+
+    // Current implementation supports all registered aliases through Rust Axum generation.
+    rust_axum::generate_rust_axum_backend(spec, config).await
 }
 
 /// Handle backend command
