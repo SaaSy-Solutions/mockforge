@@ -621,10 +621,22 @@ pub fn validate_openapi_operation(
 }
 
 /// Validate Protobuf message against schema
-pub fn validate_protobuf(_data: &[u8], _descriptor_data: &[u8]) -> ValidationResult {
-    // For now, return an error as protobuf validation is not yet fully implemented
-    // This would require proper protobuf descriptor handling
-    ValidationResult::failure(vec!["Protobuf validation is not yet fully implemented".to_string()])
+pub fn validate_protobuf(data: &[u8], descriptor_data: &[u8]) -> ValidationResult {
+    let mut pool = DescriptorPool::new();
+    if let Err(e) = pool.decode_file_descriptor_set(descriptor_data) {
+        return ValidationResult::failure(vec![format!("Invalid protobuf descriptor set: {}", e)]);
+    }
+
+    let Some(message_descriptor) = pool.all_messages().next() else {
+        return ValidationResult::failure(vec![
+            "Protobuf descriptor set does not contain any message descriptors".to_string(),
+        ]);
+    };
+
+    match DynamicMessage::decode(message_descriptor, data) {
+        Ok(_) => ValidationResult::success(),
+        Err(e) => ValidationResult::failure(vec![format!("Protobuf validation failed: {}", e)]),
+    }
 }
 
 /// Validate protobuf data against a specific message descriptor
@@ -641,13 +653,32 @@ pub fn validate_protobuf_message(
 
 /// Validate protobuf data with explicit message type name
 pub fn validate_protobuf_with_type(
-    _data: &[u8],
-    _descriptor_data: &[u8],
-    _message_type_name: &str,
+    data: &[u8],
+    descriptor_data: &[u8],
+    message_type_name: &str,
 ) -> ValidationResult {
-    // For now, return an error as protobuf validation is not fully implemented
-    // This would require proper protobuf descriptor handling
-    ValidationResult::failure(vec!["Protobuf validation is not yet fully implemented".to_string()])
+    let mut pool = DescriptorPool::new();
+    if let Err(e) = pool.decode_file_descriptor_set(descriptor_data) {
+        return ValidationResult::failure(vec![format!("Invalid protobuf descriptor set: {}", e)]);
+    }
+
+    let descriptor = pool.get_message_by_name(message_type_name).or_else(|| {
+        pool.all_messages().find(|msg| {
+            msg.name() == message_type_name || msg.full_name().ends_with(message_type_name)
+        })
+    });
+
+    let Some(message_descriptor) = descriptor else {
+        return ValidationResult::failure(vec![format!(
+            "Message type '{}' not found in descriptor set",
+            message_type_name
+        )]);
+    };
+
+    match DynamicMessage::decode(message_descriptor, data) {
+        Ok(_) => ValidationResult::success(),
+        Err(e) => ValidationResult::failure(vec![format!("Protobuf validation failed: {}", e)]),
+    }
 }
 
 /// Validate OpenAPI security requirements
@@ -1282,14 +1313,14 @@ mod tests {
     fn test_validate_protobuf() {
         let result = validate_protobuf(&[], &[]);
         assert!(!result.valid);
-        assert!(result.errors[0].contains("not yet fully implemented"));
+        assert!(!result.errors.is_empty());
     }
 
     #[test]
     fn test_validate_protobuf_with_type() {
         let result = validate_protobuf_with_type(&[], &[], "TestMessage");
         assert!(!result.valid);
-        assert!(result.errors[0].contains("not yet fully implemented"));
+        assert!(!result.errors.is_empty());
     }
 
     #[test]
