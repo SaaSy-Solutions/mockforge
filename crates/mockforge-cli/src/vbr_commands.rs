@@ -172,18 +172,37 @@ pub enum ManageCommands {
     Data {
         /// SQL query to execute
         query: String,
+        /// Database path (for SQLite/JSON backends)
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Storage backend (sqlite, json, memory)
+        #[arg(short, long, default_value = "memory")]
+        storage: String,
     },
 }
 
 #[derive(Subcommand)]
 pub enum EntitiesCommands {
     /// List all entities
-    List,
+    List {
+        /// Database path (for SQLite/JSON backends)
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Storage backend (sqlite, json, memory)
+        #[arg(short, long, default_value = "memory")]
+        storage: String,
+    },
 
     /// Show entity details
     Show {
         /// Entity name
         name: String,
+        /// Database path (for SQLite/JSON backends)
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Storage backend (sqlite, json, memory)
+        #[arg(short, long, default_value = "memory")]
+        storage: String,
     },
 }
 
@@ -461,34 +480,68 @@ async fn execute_manage_command(command: ManageCommands) -> Result<(), Box<dyn s
     match command {
         ManageCommands::Entities { entities_command } => {
             match entities_command {
-                EntitiesCommands::List => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Unsupported,
-                        "mockforge vbr manage entities list is not implemented yet; use 'mockforge vbr serve' for runtime inspection and 'mockforge vbr create entity' to define entities",
-                    )
-                    .into());
+                EntitiesCommands::List { db_path, storage } => {
+                    let config = create_config_from_storage(&storage, db_path)?;
+                    let engine = VbrEngine::new(config).await?;
+                    let entities = engine.registry().list();
+
+                    if entities.is_empty() {
+                        println!("{} No entities registered", "ℹ".bright_blue());
+                    } else {
+                        println!("{} Registered entities:", "📋".bright_cyan());
+                        for entity in entities {
+                            println!("  - {}", entity);
+                        }
+                    }
+                    Ok(())
                 }
-                EntitiesCommands::Show { name } => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Unsupported,
-                        format!(
-                            "mockforge vbr manage entities show '{}' is not implemented yet; use API endpoints exposed by 'mockforge vbr serve'",
-                            name
-                        ),
-                    )
-                    .into());
+                EntitiesCommands::Show {
+                    name,
+                    db_path,
+                    storage,
+                } => {
+                    let config = create_config_from_storage(&storage, db_path)?;
+                    let engine = VbrEngine::new(config).await?;
+                    if let Some(entity) = engine.registry().get(&name) {
+                        let schema = serde_json::to_string_pretty(&entity.schema)?;
+                        println!("{} Entity '{}':", "ℹ".bright_blue(), name.bright_cyan());
+                        println!("{}", schema);
+                        Ok(())
+                    } else {
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!("Entity '{}' not found", name),
+                        )
+                        .into())
+                    }
                 }
             }
         }
-        ManageCommands::Data { query } => {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                format!(
-                    "mockforge vbr manage data is not implemented yet (query: '{}'); run queries against the VBR HTTP API from 'mockforge vbr serve'",
-                    query
-                ),
-            )
-            .into())
+        ManageCommands::Data {
+            query,
+            db_path,
+            storage,
+        } => {
+            let config = create_config_from_storage(&storage, db_path)?;
+            let engine = VbrEngine::new(config).await?;
+            let database = engine.database_arc();
+            let normalized = query.trim().to_lowercase();
+
+            if normalized.starts_with("select")
+                || normalized.starts_with("with")
+                || normalized.starts_with("pragma")
+            {
+                let rows = database.query(&query, &[]).await?;
+                println!("{}", serde_json::to_string_pretty(&rows)?);
+            } else {
+                let affected = database.execute(&query, &[]).await?;
+                println!(
+                    "{} Query executed successfully ({} row(s) affected)",
+                    "✓".green(),
+                    affected
+                );
+            }
+            Ok(())
         }
     }
 }
@@ -1071,14 +1124,17 @@ mod tests {
     fn test_vbr_commands_manage_entities_list() {
         let cmd = VbrCommands::Manage {
             manage_command: ManageCommands::Entities {
-                entities_command: EntitiesCommands::List,
+                entities_command: EntitiesCommands::List {
+                    db_path: None,
+                    storage: "memory".to_string(),
+                },
             },
         };
 
         match cmd {
             VbrCommands::Manage { manage_command } => match manage_command {
                 ManageCommands::Entities { entities_command } => match entities_command {
-                    EntitiesCommands::List => {}
+                    EntitiesCommands::List { .. } => {}
                     _ => panic!("Expected List entities command"),
                 },
                 _ => panic!("Expected Entities command"),
@@ -1093,6 +1149,8 @@ mod tests {
             manage_command: ManageCommands::Entities {
                 entities_command: EntitiesCommands::Show {
                     name: "User".to_string(),
+                    db_path: None,
+                    storage: "memory".to_string(),
                 },
             },
         };
@@ -1100,7 +1158,7 @@ mod tests {
         match cmd {
             VbrCommands::Manage { manage_command } => match manage_command {
                 ManageCommands::Entities { entities_command } => match entities_command {
-                    EntitiesCommands::Show { name } => {
+                    EntitiesCommands::Show { name, .. } => {
                         assert_eq!(name, "User");
                     }
                     _ => panic!("Expected Show entities command"),
@@ -1116,12 +1174,14 @@ mod tests {
         let cmd = VbrCommands::Manage {
             manage_command: ManageCommands::Data {
                 query: "SELECT * FROM users".to_string(),
+                db_path: None,
+                storage: "memory".to_string(),
             },
         };
 
         match cmd {
             VbrCommands::Manage { manage_command } => match manage_command {
-                ManageCommands::Data { query } => {
+                ManageCommands::Data { query, .. } => {
                     assert_eq!(query, "SELECT * FROM users");
                 }
                 _ => panic!("Expected Data command"),
