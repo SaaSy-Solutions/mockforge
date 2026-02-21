@@ -149,24 +149,52 @@ pub trait FitnessEvaluator: Send + Sync {
         &self,
         old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
         new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
-        _diff_result: &ContractDiffResult,
+        diff_result: &ContractDiffResult,
         operation_id: &str,
-        _config: &serde_json::Value,
+        config: &serde_json::Value,
     ) -> crate::Result<FitnessTestResult> {
-        // Default implementation: extract schema from protocol contract and use basic evaluation
-        // Individual evaluators can override this for protocol-specific logic
-        let _new_schema = new_contract.get_schema(operation_id);
-        let _old_schema = old_contract.and_then(|c| c.get_schema(operation_id));
+        // Generic protocol evaluation fallback based on schema size drift.
+        let max_increase_percent =
+            config.get("max_increase_percent").and_then(|v| v.as_f64()).unwrap_or(50.0);
+        let old_size = old_contract
+            .map(|old| estimate_protocol_schema_size(old, operation_id))
+            .unwrap_or_else(|| estimate_size_from_diff(diff_result));
+        let new_size = estimate_protocol_schema_size(new_contract, operation_id);
+        let increase_percent = if old_size > 0.0 {
+            ((new_size - old_size) / old_size) * 100.0
+        } else if new_size > 0.0 {
+            100.0
+        } else {
+            0.0
+        };
+        let passed = increase_percent <= max_increase_percent;
 
-        // For protocol contracts, we'll estimate based on schema complexity
-        // This is a fallback - specific evaluators should override this method
+        let mut metrics = HashMap::new();
+        metrics.insert("old_schema_size".to_string(), old_size);
+        metrics.insert("new_schema_size".to_string(), new_size);
+        metrics.insert("increase_percent".to_string(), increase_percent);
+        metrics.insert("max_increase_percent".to_string(), max_increase_percent);
+        metrics.insert(
+            "mismatch_count".to_string(),
+            diff_result.mismatches.len() as f64,
+        );
+
         Ok(FitnessTestResult {
             function_id: String::new(),
             function_name: "Protocol Contract Evaluation".to_string(),
-            passed: true,
-            message: "Protocol contract evaluation not implemented for this fitness function type"
-                .to_string(),
-            metrics: HashMap::new(),
+            passed,
+            message: if passed {
+                format!(
+                    "Protocol schema change ({:.1}%) is within allowed limit ({:.1}%)",
+                    increase_percent, max_increase_percent
+                )
+            } else {
+                format!(
+                    "Protocol schema change ({:.1}%) exceeds allowed limit ({:.1}%)",
+                    increase_percent, max_increase_percent
+                )
+            },
+            metrics,
         })
     }
 }
@@ -1127,11 +1155,12 @@ fn matches_pattern(endpoint: &str, pattern: &str) -> bool {
 }
 
 /// Estimate response field count from OpenAPI spec
-fn estimate_response_field_count(_spec: &OpenApiSpec, _endpoint: &str, _method: &str) -> f64 {
-    // This is a simplified estimation - in a real implementation, we'd
-    // traverse the response schema and count all fields
-    // For now, return a placeholder value
-    10.0
+fn estimate_response_field_count(spec: &OpenApiSpec, endpoint: &str, method: &str) -> f64 {
+    let mut visited = std::collections::HashSet::new();
+    extract_response_schema(spec, endpoint, method)
+        .map(|schema| count_fields_in_schema_resolved(schema, spec, &mut visited))
+        .filter(|count| *count > 0.0)
+        .unwrap_or(10.0)
 }
 
 /// Estimate response field count from diff result
@@ -1167,11 +1196,124 @@ fn estimate_field_count_from_diff(
 }
 
 /// Calculate schema depth for an endpoint
-fn calculate_schema_depth(_spec: &OpenApiSpec, _endpoint: &str, _method: &str) -> u32 {
-    // This is a simplified calculation - in a real implementation, we'd
-    // traverse the response schema and calculate the maximum depth
-    // For now, return a placeholder value
-    5
+fn calculate_schema_depth(spec: &OpenApiSpec, endpoint: &str, method: &str) -> u32 {
+    let mut visited = std::collections::HashSet::new();
+    extract_response_schema(spec, endpoint, method)
+        .map(|schema| schema_depth_resolved(schema, spec, &mut visited))
+        .filter(|depth| *depth > 0)
+        .unwrap_or(5)
+}
+
+/// Resolve endpoint/method response schema from OpenAPI raw document.
+fn extract_response_schema<'a>(
+    spec: &'a OpenApiSpec,
+    endpoint: &str,
+    method: &str,
+) -> Option<&'a serde_json::Value> {
+    let raw = spec.raw_document.as_ref()?;
+    let paths = raw.get("paths")?.as_object()?;
+    let path_item = paths.get(endpoint)?;
+    let operation = path_item.get(&method.to_lowercase())?;
+    let responses = operation.get("responses")?.as_object()?;
+
+    let response = responses
+        .get("200")
+        .or_else(|| responses.get("201"))
+        .or_else(|| responses.get("default"))
+        .or_else(|| responses.values().next())?;
+
+    let content = response.get("content")?.as_object()?;
+    let media_type = content
+        .get("application/json")
+        .or_else(|| content.values().next())?;
+    media_type.get("schema")
+}
+
+/// Resolve a local JSON pointer reference from an OpenAPI raw document.
+fn resolve_local_ref<'a>(spec: &'a OpenApiSpec, reference: &str) -> Option<&'a serde_json::Value> {
+    let pointer = reference.strip_prefix('#')?;
+    spec.raw_document.as_ref()?.pointer(pointer)
+}
+
+fn count_fields_in_schema_resolved(
+    schema: &serde_json::Value,
+    spec: &OpenApiSpec,
+    visited: &mut std::collections::HashSet<String>,
+) -> f64 {
+    if let Some(reference) = schema.get("$ref").and_then(|r| r.as_str()) {
+        if !visited.insert(reference.to_string()) {
+            return 0.0;
+        }
+        return resolve_local_ref(spec, reference)
+            .map(|resolved| count_fields_in_schema_resolved(resolved, spec, visited))
+            .unwrap_or(0.0);
+    }
+
+    let mut total = 0.0;
+    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
+        total += properties.len() as f64;
+        for prop in properties.values() {
+            total += count_fields_in_schema_resolved(prop, spec, visited);
+        }
+    }
+    if let Some(fields) = schema.get("fields").and_then(|f| f.as_array()) {
+        total += fields.len() as f64;
+        for field in fields {
+            total += count_fields_in_schema_resolved(field, spec, visited);
+        }
+    }
+    if let Some(items) = schema.get("items") {
+        total += count_fields_in_schema_resolved(items, spec, visited);
+    }
+    for key in ["oneOf", "anyOf", "allOf"] {
+        if let Some(variants) = schema.get(key).and_then(|v| v.as_array()) {
+            for variant in variants {
+                total += count_fields_in_schema_resolved(variant, spec, visited);
+            }
+        }
+    }
+    total
+}
+
+fn schema_depth_resolved(
+    schema: &serde_json::Value,
+    spec: &OpenApiSpec,
+    visited: &mut std::collections::HashSet<String>,
+) -> u32 {
+    if let Some(reference) = schema.get("$ref").and_then(|r| r.as_str()) {
+        if !visited.insert(reference.to_string()) {
+            return 0;
+        }
+        return resolve_local_ref(spec, reference)
+            .map(|resolved| schema_depth_resolved(resolved, spec, visited))
+            .unwrap_or(0);
+    }
+
+    let mut max_child = 0u32;
+    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
+        for prop in properties.values() {
+            max_child = max_child.max(schema_depth_resolved(prop, spec, visited));
+        }
+    }
+    if let Some(items) = schema.get("items") {
+        max_child = max_child.max(schema_depth_resolved(items, spec, visited));
+    }
+    for key in ["oneOf", "anyOf", "allOf"] {
+        if let Some(variants) = schema.get(key).and_then(|v| v.as_array()) {
+            for variant in variants {
+                max_child = max_child.max(schema_depth_resolved(variant, spec, visited));
+            }
+        }
+    }
+
+    let is_object_like = schema.get("properties").is_some()
+        || schema
+            .get("type")
+            .and_then(|t| t.as_str())
+            .map(|t| t == "object" || t == "array")
+            .unwrap_or(false);
+
+    if is_object_like { 1 + max_child } else { max_child }
 }
 
 /// Estimate schema size for a protocol contract operation
