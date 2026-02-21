@@ -16,6 +16,8 @@ env:
   # 1 = Static Stubs, 2 = Light Simulation, 3 = Moderate Realism,
   # 4 = High Realism, 5 = Production Chaos
   MOCKFORGE_REALITY_LEVEL: 3
+  # Allow in-memory auth for integration tests (cfg!(test) is false in integration tests)
+  MOCKFORGE_ALLOW_INMEMORY_AUTH: "true"
 
 jobs:
   test:
