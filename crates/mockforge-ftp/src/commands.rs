@@ -386,10 +386,27 @@ async fn execute_fixtures_command(
             Ok(())
         }
         FixturesSubcommands::Reload => {
-            // Clear existing fixtures and reload from configured directories
-            // This is a simplified implementation
-            println!("Fixture reloading not implemented in CLI context.");
-            println!("Fixtures are typically loaded at server startup.");
+            if spec_registry.fixtures.is_empty() {
+                println!("No fixtures loaded. Use `mockforge ftp fixtures load --dir <path>` first.");
+                return Ok(());
+            }
+
+            let mut vfs_fixtures = Vec::new();
+            for fixture in &spec_registry.fixtures {
+                for virtual_file in &fixture.virtual_files {
+                    vfs_fixtures.push(virtual_file.clone().to_file_fixture());
+                }
+            }
+
+            spec_registry
+                .vfs
+                .load_fixtures(vfs_fixtures)
+                .map_err(|e| anyhow::anyhow!("Failed to reload fixtures into VFS: {}", e))?;
+
+            println!(
+                "Reloaded {} fixture(s) into virtual filesystem.",
+                spec_registry.fixtures.len()
+            );
             Ok(())
         }
     }
