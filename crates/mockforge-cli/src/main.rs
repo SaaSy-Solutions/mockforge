@@ -3940,7 +3940,7 @@ pub async fn handle_serve(
     chaos_random_delay_rate: f64,
     chaos_random_min_delay: u64,
     chaos_random_max_delay: u64,
-    chaos_profile: Option<String>,
+    _chaos_profile: Option<String>,
     ai_enabled: bool,
     reality_level: Option<u8>,
     rag_provider: Option<String>,
@@ -4255,7 +4255,7 @@ pub async fn handle_serve(
     }
 
     // Initialize access review system if enabled
-    let access_review_scheduler_handle = if config.security.monitoring.access_review.enabled {
+    let _access_review_scheduler_handle = if config.security.monitoring.access_review.enabled {
         use mockforge_core::security::{
             access_review::AccessReviewEngine,
             access_review_notifications::{AccessReviewNotificationService, NotificationConfig},
@@ -4269,11 +4269,11 @@ pub async fn handle_serve(
         use tokio::sync::RwLock;
 
         // Create storage backends (in-memory for now, can be replaced with database-backed implementations)
-        let token_storage: Arc<dyn mockforge_core::security::ApiTokenStorage> =
+        let _token_storage: Arc<dyn mockforge_core::security::ApiTokenStorage> =
             Arc::new(InMemoryApiTokenStorage::new());
-        let mfa_storage: Arc<dyn mockforge_core::security::MfaStorage> =
+        let _mfa_storage: Arc<dyn mockforge_core::security::MfaStorage> =
             Arc::new(InMemoryMfaStorage::new());
-        let justification_storage: Arc<dyn mockforge_core::security::JustificationStorage> =
+        let _justification_storage: Arc<dyn mockforge_core::security::JustificationStorage> =
             Arc::new(InMemoryJustificationStorage::new());
 
         // Create a simple user data provider (placeholder - would use CollabUserDataProvider if collab is enabled)
@@ -4382,7 +4382,7 @@ pub async fn handle_serve(
     };
 
     // Initialize privileged access manager if enabled
-    let privileged_access_manager = if config.security.monitoring.privileged_access.require_mfa {
+    let _privileged_access_manager = if config.security.monitoring.privileged_access.require_mfa {
         use mockforge_core::security::{
             justification_storage::InMemoryJustificationStorage, mfa_tracking::InMemoryMfaStorage,
             privileged_access::PrivilegedAccessManager,
@@ -4429,7 +4429,7 @@ pub async fn handle_serve(
     };
 
     // Initialize change management engine if enabled
-    let change_management_engine = if config.security.monitoring.change_management.enabled {
+    let _change_management_engine = if config.security.monitoring.change_management.enabled {
         use mockforge_core::security::change_management::ChangeManagementEngine;
         use std::sync::Arc;
 
@@ -4452,7 +4452,8 @@ pub async fn handle_serve(
     };
 
     // Initialize compliance dashboard engine if enabled
-    let compliance_dashboard_engine = if config.security.monitoring.compliance_dashboard.enabled {
+    let _compliance_dashboard_engine =
+        if config.security.monitoring.compliance_dashboard.enabled {
         use mockforge_core::security::compliance_dashboard::ComplianceDashboardEngine;
         use std::sync::Arc;
 
@@ -4744,7 +4745,8 @@ pub async fn handle_serve(
             let openapi_groups = group_specs_by_openapi_version(specs);
 
             // Process each OpenAPI version group
-            let mut merged_specs = Vec::new();
+            let mut merged_specs: Vec<(String, mockforge_core::openapi::spec::OpenApiSpec)> =
+                Vec::new();
             for (_openapi_version, version_specs) in openapi_groups {
                 // Apply API versioning grouping if enabled
                 let api_versioning = serve_args.api_versioning.as_str();
@@ -4752,10 +4754,10 @@ pub async fn handle_serve(
                     "info" | "path-prefix" => {
                         // Group by API version
                         let api_groups = group_specs_by_api_version(version_specs);
-                        for (_api_version, api_specs) in api_groups {
+                        for (api_version, api_specs) in api_groups {
                             // Merge specs in this API version group
                             match merge_specs(api_specs, conflict_strategy) {
-                                Ok(merged) => merged_specs.push(merged),
+                                Ok(merged) => merged_specs.push((api_version, merged)),
                                 Err(e) => {
                                     return Err(format!("Failed to merge specs: {}", e).into());
                                 }
@@ -4765,7 +4767,7 @@ pub async fn handle_serve(
                     _ => {
                         // Merge all specs in this OpenAPI version group
                         match merge_specs(version_specs, conflict_strategy) {
-                            Ok(merged) => merged_specs.push(merged),
+                            Ok(merged) => merged_specs.push(("default".to_string(), merged)),
                             Err(e) => {
                                 return Err(format!("Failed to merge specs: {}", e).into());
                             }
@@ -4778,7 +4780,7 @@ pub async fn handle_serve(
             // For now, merge them all into one (or we could create separate routers with path prefixes)
             if merged_specs.len() == 1 {
                 // Single merged spec - write to temp file
-                let merged = &merged_specs[0];
+                let merged = &merged_specs[0].1;
                 let raw_doc = merged
                     .raw_document
                     .as_ref()
@@ -4798,37 +4800,100 @@ pub async fn handle_serve(
                 config.http.openapi_spec.clone()
             } else {
                 if serve_args.api_versioning == "path-prefix" {
-                    return Err(
-                        "Multiple API versions detected with --api-versioning=path-prefix, but automatic route prefixing is not implemented yet. Use --api-versioning=info or provide explicit --spec selection."
-                            .into(),
-                    );
-                }
+                    let mut prefixed_specs: Vec<(PathBuf, mockforge_core::openapi::spec::OpenApiSpec)> =
+                        Vec::new();
 
-                // Multiple merged specs - for now, merge them all
-                let all_specs: Vec<_> =
-                    merged_specs.into_iter().map(|s| (PathBuf::from("merged"), s)).collect();
-                match merge_specs(all_specs, conflict_strategy) {
-                    Ok(final_merged) => {
-                        let raw_doc = final_merged
-                            .raw_document
-                            .as_ref()
-                            .ok_or_else(|| "Final merged spec has no raw document".to_string())?;
-                        let merged_json = serde_json::to_string_pretty(raw_doc)
-                            .map_err(|e| format!("Failed to serialize final merged spec: {}", e))?;
+                    for (api_version, spec) in merged_specs {
+                        let version_suffix = api_version.trim().trim_start_matches('v');
+                        let prefix = format!("/v{}", version_suffix);
+                        let mut spec_json = spec.raw_document.clone().ok_or_else(|| {
+                            format!("Merged spec for version '{}' has no raw document", api_version)
+                        })?;
 
-                        // Use persistent temp file (won't be deleted automatically)
-                        let temp_dir = std::env::temp_dir();
-                        let temp_path = temp_dir
-                            .join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
-                        std::fs::write(&temp_path, merged_json.as_bytes())
-                            .map_err(|e| format!("Failed to write merged spec: {}", e))?;
+                        if let Some(paths_obj) =
+                            spec_json.get_mut("paths").and_then(|p| p.as_object_mut())
+                        {
+                            let old_paths = std::mem::take(paths_obj);
+                            let mut new_paths = serde_json::Map::new();
+                            for (path, value) in old_paths {
+                                let normalized_path = if path.starts_with('/') {
+                                    path
+                                } else {
+                                    format!("/{}", path)
+                                };
+                                new_paths.insert(format!("{}{}", prefix, normalized_path), value);
+                            }
+                            *paths_obj = new_paths;
+                        }
 
-                        Some(temp_path.to_string_lossy().to_string())
+                        let prefixed_spec = mockforge_core::openapi::spec::OpenApiSpec::from_json(
+                            spec_json,
+                        )
+                        .map_err(|e| {
+                            format!(
+                                "Failed to build prefixed spec for API version '{}': {}",
+                                api_version, e
+                            )
+                        })?;
+
+                        prefixed_specs.push((PathBuf::from(format!("api-{}", api_version)), prefixed_spec));
                     }
-                    Err(e) => {
-                        return Err(
-                            format!("Failed to merge multiple API version specs: {}", e).into()
-                        );
+
+                    match merge_specs(prefixed_specs, conflict_strategy) {
+                        Ok(final_merged) => {
+                            let raw_doc = final_merged.raw_document.as_ref().ok_or_else(|| {
+                                "Final merged prefixed spec has no raw document".to_string()
+                            })?;
+                            let merged_json = serde_json::to_string_pretty(raw_doc).map_err(|e| {
+                                format!("Failed to serialize prefixed merged spec: {}", e)
+                            })?;
+
+                            let temp_dir = std::env::temp_dir();
+                            let temp_path = temp_dir.join(format!(
+                                "mockforge_merged_prefixed_spec_{}.json",
+                                uuid::Uuid::new_v4()
+                            ));
+                            std::fs::write(&temp_path, merged_json.as_bytes())
+                                .map_err(|e| format!("Failed to write prefixed merged spec: {}", e))?;
+
+                            Some(temp_path.to_string_lossy().to_string())
+                        }
+                        Err(e) => {
+                            return Err(
+                                format!("Failed to merge path-prefixed API version specs: {}", e)
+                                    .into(),
+                            );
+                        }
+                    }
+                } else {
+                    // Multiple merged specs - for now, merge them all
+                    let all_specs: Vec<_> = merged_specs
+                        .into_iter()
+                        .map(|(_, s)| (PathBuf::from("merged"), s))
+                        .collect();
+                    match merge_specs(all_specs, conflict_strategy) {
+                        Ok(final_merged) => {
+                            let raw_doc = final_merged
+                                .raw_document
+                                .as_ref()
+                                .ok_or_else(|| "Final merged spec has no raw document".to_string())?;
+                            let merged_json = serde_json::to_string_pretty(raw_doc)
+                                .map_err(|e| format!("Failed to serialize final merged spec: {}", e))?;
+
+                            // Use persistent temp file (won't be deleted automatically)
+                            let temp_dir = std::env::temp_dir();
+                            let temp_path = temp_dir
+                                .join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
+                            std::fs::write(&temp_path, merged_json.as_bytes())
+                                .map_err(|e| format!("Failed to write merged spec: {}", e))?;
+
+                            Some(temp_path.to_string_lossy().to_string())
+                        }
+                        Err(e) => {
+                            return Err(
+                                format!("Failed to merge multiple API version specs: {}", e).into()
+                            );
+                        }
                     }
                 }
             }
