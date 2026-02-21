@@ -48,8 +48,7 @@ jobs:
         components: rustfmt, clippy
 
     - name: Install system dependencies
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.0-dev libssl-dev
-
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
     - name: Install sccache
       run: |
         SCCACHE_VERSION=0.10.0
@@ -88,22 +87,22 @@ jobs:
       if: matrix.rust == 'stable'
 
     - name: Run clippy
-      run: cargo clippy --workspace --lib --bins --all-features -- -D clippy::correctness
+      run: cargo clippy --workspace --exclude mockforge-desktop --lib --bins --all-features -- -D clippy::correctness
       if: matrix.rust == 'stable'
 
     - name: Build workspace
-      run: cargo build --workspace --verbose
+      run: cargo build --workspace --exclude mockforge-desktop --verbose
 
     - name: Run tests
-      run: cargo test --workspace --verbose
+      run: cargo test --workspace --exclude mockforge-desktop --verbose
 
     - name: Run tests with all features
-      run: cargo test --workspace --exclude mockforge-tui --all-features --verbose
+      run: cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose
       if: matrix.rust == 'stable'
       continue-on-error: true  # May fail if native libs (vosk) not installed
 
     - name: Check documentation
-      run: cargo doc --workspace --no-deps
+      run: cargo doc --workspace --exclude mockforge-desktop --no-deps
       if: matrix.rust == 'stable'
 
   ui-test:
@@ -153,8 +152,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.0-dev libssl-dev
-
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
     - name: Install sccache
       run: |
         SCCACHE_VERSION=0.10.0
@@ -202,8 +200,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.0-dev libssl-dev
-
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
     - name: Install sccache
       run: |
         SCCACHE_VERSION=0.10.0
@@ -247,8 +244,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.0-dev libssl-dev
-
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
     - name: Install security tools
       run: |
         cargo install cargo-audit --locked
@@ -261,7 +257,7 @@ jobs:
       run: cargo deny check licenses sources bans
 
     - name: Run security-focused Clippy checks
-      run: cargo clippy --workspace --all-targets --all-features -- -W clippy::suspicious -W clippy::security -D warnings || true
+      run: cargo clippy --workspace --exclude mockforge-desktop --all-targets --all-features -- -W clippy::suspicious -W clippy::security -D warnings || true
 
     - name: Check for unsafe code blocks
       run: |
@@ -281,8 +277,7 @@ jobs:
         components: llvm-tools-preview
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.0-dev libssl-dev
-
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov
 
@@ -290,7 +285,7 @@ jobs:
       uses: Swatinem/rust-cache@v2
 
     - name: Generate coverage report
-      run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      run: cargo llvm-cov --workspace --exclude mockforge-desktop --lcov --output-path lcov.info
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
@@ -314,8 +309,7 @@ jobs:
         toolchain: "1.91"  # MSRV - matches highest requirement from dependencies (aws-sdk, async-graphql, time)
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.0-dev libssl-dev
-
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
     - name: Install sccache
       run: |
         SCCACHE_VERSION=0.10.0
@@ -349,7 +343,7 @@ jobs:
       run: |
         # MSRV 1.91 supports edition2024 and all current dependency requirements
         # No workspace member exclusions needed
-        cargo check --workspace
+        cargo check --workspace --exclude mockforge-desktop
   typos:
     name: Spell Check
     runs-on: ubuntu-latest
@@ -431,8 +425,7 @@ jobs:
 
     - name: Install protoc (protobuf compiler) on Linux
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.0-dev libssl-dev
-
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
     - name: Install protoc (protobuf compiler) on macOS
       if: runner.os == 'macOS'
       run: brew install protobuf

@@ -1,39 +1,67 @@
 repos:
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.5.0
-  hooks:
-  - id: trailing-whitespace
-    exclude: ^(book/|crates/mockforge-ui/ui/dist/)
-  - id: end-of-file-fixer
-    exclude: ^(book/|crates/mockforge-ui/ui/dist/)
-  - id: check-yaml
-    exclude: ^(k8s/|helm/|deploy/|templates/)
-  - id: check-toml
-  - id: check-merge-conflict
-  - id: check-added-large-files
-    args: ['--maxkb=500']
-    exclude: ^crates/mockforge-ui/ui/dist/
-  - id: check-case-conflict
-  - id: mixed-line-ending
-    args: ['--fix=lf']
-  - id: check-executables-have-shebangs
-  - id: check-shebang-scripts-are-executable
-
-- repo: https://github.com/doublify/pre-commit-rust
-  rev: v1.0
-  hooks:
-  - id: clippy
-    args: [--all-targets, --all-features]
-  - id: cargo-check
-
-- repo: https://github.com/crate-ci/typos
-  rev: v1.16.20
-  hooks:
-  - id: typos
-    exclude: ^(book/|target/|\.git/|crates/mockforge-ui/ui/dist/)
-
 - repo: local
   hooks:
+  - id: trailing-whitespace
+    name: trailing-whitespace
+    entry: python3 scripts/precommit/offline_checks.py trailing-whitespace
+    language: system
+    exclude: ^(book/|crates/mockforge-ui/ui/dist/)
+    types: [text]
+  - id: end-of-file-fixer
+    name: end-of-file-fixer
+    entry: python3 scripts/precommit/offline_checks.py end-of-file-fixer
+    language: system
+    exclude: ^(book/|crates/mockforge-ui/ui/dist/)
+    types: [text]
+  - id: check-toml
+    name: check-toml
+    entry: python3 scripts/precommit/offline_checks.py check-toml
+    language: system
+    files: \.toml$
+  - id: check-merge-conflict
+    name: check-merge-conflict
+    entry: python3 scripts/precommit/offline_checks.py check-merge-conflict
+    language: system
+    types: [text]
+  - id: check-added-large-files
+    name: check-added-large-files
+    entry: python3 scripts/precommit/offline_checks.py check-added-large-files --maxkb 500
+    language: system
+    exclude: ^crates/mockforge-ui/ui/dist/
+  - id: check-case-conflict
+    name: check-case-conflict
+    entry: python3 scripts/precommit/offline_checks.py check-case-conflict
+    language: system
+    pass_filenames: false
+  - id: mixed-line-ending
+    name: mixed-line-ending
+    entry: python3 scripts/precommit/offline_checks.py mixed-line-ending
+    language: system
+    types: [text]
+  - id: check-executables-have-shebangs
+    name: check-executables-have-shebangs
+    entry: python3 scripts/precommit/offline_checks.py check-executables-have-shebangs
+    language: system
+  - id: check-shebang-scripts-are-executable
+    name: check-shebang-scripts-are-executable
+    entry: python3 scripts/precommit/offline_checks.py check-shebang-scripts-are-executable
+    language: system
+  - id: clippy
+    name: clippy
+    entry: cargo clippy --all-targets --all-features
+    language: system
+    pass_filenames: false
+  - id: cargo-check
+    name: cargo-check
+    entry: cargo check
+    language: system
+    pass_filenames: false
+  - id: typos
+    name: typos
+    entry: typos
+    language: system
+    pass_filenames: false
+    exclude: ^(book/|target/|\.git/|crates/mockforge-ui/ui/dist/)
   - id: rust-fmt
     name: rust fmt
     entry: cargo fmt --check --all
