@@ -405,68 +405,85 @@ impl VirtualDatabase for JsonDatabase {
     }
 
     async fn execute(&self, query: &str, params: &[Value]) -> Result<u64> {
-        let mut data = self.data.write().await;
+        let needs_save;
+        let result;
 
-        // Parse INSERT, UPDATE, DELETE queries
-        let query_upper = query.trim().to_uppercase();
+        {
+            let mut data = self.data.write().await;
 
-        if query_upper.starts_with("INSERT") {
-            let (table_name, record) = parse_insert_query(query, params)?;
-            let records = data.entry(table_name).or_insert_with(Vec::new);
-            records.push(record);
-            self.save().await?;
-            Ok(1)
-        } else if query_upper.starts_with("UPDATE") {
-            let (table_name, updates, where_clause, where_params) =
-                parse_update_query(query, params)?;
-            if let Some(records) = data.get_mut(&table_name) {
-                let mut updated = 0;
-                for record in records.iter_mut() {
-                    if matches_json_where(record, &where_clause, &where_params)? {
-                        record.extend(updates.clone());
-                        updated += 1;
+            // Parse INSERT, UPDATE, DELETE queries
+            let query_upper = query.trim().to_uppercase();
+
+            if query_upper.starts_with("INSERT") {
+                let (table_name, record) = parse_insert_query(query, params)?;
+                let records = data.entry(table_name).or_insert_with(Vec::new);
+                records.push(record);
+                needs_save = true;
+                result = 1;
+            } else if query_upper.starts_with("UPDATE") {
+                let (table_name, updates, where_clause, where_params) =
+                    parse_update_query(query, params)?;
+                if let Some(records) = data.get_mut(&table_name) {
+                    let mut updated = 0;
+                    for record in records.iter_mut() {
+                        if matches_json_where(record, &where_clause, &where_params)? {
+                            record.extend(updates.clone());
+                            updated += 1;
+                        }
                     }
+                    needs_save = true;
+                    result = updated;
+                } else {
+                    needs_save = false;
+                    result = 0;
                 }
-                self.save().await?;
-                Ok(updated)
+            } else if query_upper.starts_with("DELETE") {
+                let (table_name, where_clause, where_params) = parse_delete_query(query, params)?;
+                if let Some(records) = data.get_mut(&table_name) {
+                    let initial_len = records.len();
+                    records.retain(|record| {
+                        !matches_json_where(record, &where_clause, &where_params).unwrap_or(false)
+                    });
+                    let deleted = initial_len - records.len();
+                    needs_save = true;
+                    result = deleted as u64;
+                } else {
+                    needs_save = false;
+                    result = 0;
+                }
             } else {
-                Ok(0)
+                needs_save = false;
+                result = 0;
             }
-        } else if query_upper.starts_with("DELETE") {
-            let (table_name, where_clause, where_params) = parse_delete_query(query, params)?;
-            if let Some(records) = data.get_mut(&table_name) {
-                let initial_len = records.len();
-                records.retain(|record| {
-                    !matches_json_where(record, &where_clause, &where_params).unwrap_or(false)
-                });
-                let deleted = initial_len - records.len();
-                self.save().await?;
-                Ok(deleted as u64)
-            } else {
-                Ok(0)
-            }
-        } else {
-            Ok(0)
+        } // write lock dropped here
+
+        if needs_save {
+            self.save().await?;
         }
+
+        Ok(result)
     }
 
     async fn execute_with_id(&self, query: &str, params: &[Value]) -> Result<String> {
-        // For INSERT, extract the ID from the inserted record
-        let mut data = self.data.write().await;
-
         if query.trim().to_uppercase().starts_with("INSERT") {
-            let (table_name, mut record) = parse_insert_query(query, params)?;
+            let id;
+            {
+                // For INSERT, extract the ID from the inserted record
+                let mut data = self.data.write().await;
+                let (table_name, mut record) = parse_insert_query(query, params)?;
 
-            // Generate ID if not present
-            if !record.contains_key("id") {
-                use uuid::Uuid;
-                record.insert("id".to_string(), Value::String(Uuid::new_v4().to_string()));
-            }
+                // Generate ID if not present
+                if !record.contains_key("id") {
+                    use uuid::Uuid;
+                    record.insert("id".to_string(), Value::String(Uuid::new_v4().to_string()));
+                }
 
-            let id = record.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                id = record.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
-            let records = data.entry(table_name).or_insert_with(Vec::new);
-            records.push(record);
+                let records = data.entry(table_name).or_insert_with(Vec::new);
+                records.push(record);
+            } // write lock dropped here
+
             self.save().await?;
             Ok(id)
         } else {
