@@ -566,6 +566,178 @@ impl LlmProviderTrait for OpenAiCompatibleProvider {
     }
 }
 
+/// Anthropic provider implementation
+pub struct AnthropicProvider {
+    api_key: String,
+    client: reqwest::Client,
+    base_url: String,
+    model: String,
+}
+
+impl AnthropicProvider {
+    /// Create a new Anthropic provider
+    pub fn new(api_key: String, base_url: String, model: String) -> Self {
+        Self {
+            api_key,
+            client: reqwest::Client::new(),
+            base_url,
+            model,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl LlmProviderTrait for AnthropicProvider {
+    async fn generate_completion(
+        &self,
+        prompt: &str,
+        max_tokens: Option<usize>,
+        temperature: Option<f32>,
+        top_p: Option<f32>,
+        stop_sequences: Option<Vec<String>>,
+    ) -> Result<String> {
+        let mut request_body = serde_json::json!({
+            "model": self.model,
+            "max_tokens": max_tokens.unwrap_or(1024),
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+        });
+
+        if let Some(temp) = temperature {
+            request_body["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(p) = top_p {
+            request_body["top_p"] = serde_json::json!(p);
+        }
+        if let Some(stop) = stop_sequences {
+            request_body["stop_sequences"] = serde_json::json!(stop);
+        }
+
+        let response = self
+            .client
+            .post(format!("{}/messages", self.base_url))
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(crate::Error::generic(format!(
+                "Anthropic API error: {}",
+                response.status()
+            )));
+        }
+
+        let json: Value = response.json().await?;
+        let content = json["content"][0]["text"]
+            .as_str()
+            .ok_or_else(|| crate::Error::generic("Invalid response format"))?;
+
+        Ok(content.to_string())
+    }
+
+    async fn generate_chat_completion(
+        &self,
+        messages: Vec<ChatMessage>,
+        max_tokens: Option<usize>,
+        temperature: Option<f32>,
+        top_p: Option<f32>,
+        stop_sequences: Option<Vec<String>>,
+    ) -> Result<String> {
+        let mut anthropic_messages = Vec::new();
+        let mut system_parts = Vec::new();
+
+        for message in messages {
+            match message.role {
+                ChatRole::System => system_parts.push(message.content),
+                ChatRole::User => anthropic_messages.push(serde_json::json!({
+                    "role": "user",
+                    "content": message.content,
+                })),
+                ChatRole::Assistant => anthropic_messages.push(serde_json::json!({
+                    "role": "assistant",
+                    "content": message.content,
+                })),
+            }
+        }
+
+        if anthropic_messages.is_empty() {
+            anthropic_messages.push(serde_json::json!({
+                "role": "user",
+                "content": "",
+            }));
+        }
+
+        let mut request_body = serde_json::json!({
+            "model": self.model,
+            "max_tokens": max_tokens.unwrap_or(1024),
+            "messages": anthropic_messages,
+        });
+
+        if !system_parts.is_empty() {
+            request_body["system"] = serde_json::json!(system_parts.join("\n"));
+        }
+        if let Some(temp) = temperature {
+            request_body["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(p) = top_p {
+            request_body["top_p"] = serde_json::json!(p);
+        }
+        if let Some(stop) = stop_sequences {
+            request_body["stop_sequences"] = serde_json::json!(stop);
+        }
+
+        let response = self
+            .client
+            .post(format!("{}/messages", self.base_url))
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(crate::Error::generic(format!(
+                "Anthropic API error: {}",
+                response.status()
+            )));
+        }
+
+        let json: Value = response.json().await?;
+        let content = json["content"][0]["text"]
+            .as_str()
+            .ok_or_else(|| crate::Error::generic("Invalid response format"))?;
+
+        Ok(content.to_string())
+    }
+
+    async fn get_available_models(&self) -> Result<Vec<String>> {
+        Ok(vec![
+            "claude-3-5-sonnet-latest".to_string(),
+            "claude-3-5-haiku-latest".to_string(),
+        ])
+    }
+
+    fn name(&self) -> &'static str {
+        "Anthropic"
+    }
+
+    fn max_context_length(&self) -> usize {
+        200_000
+    }
+
+    async fn is_available(&self) -> bool {
+        (self.get_available_models().await).is_ok()
+    }
+}
+
 /// OpenAI-compatible embedding provider implementation
 pub struct OpenAiCompatibleEmbeddingProvider {
     api_key: String,
@@ -657,16 +829,22 @@ impl ProviderFactory {
                 let base_url = base_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string());
                 Ok(Box::new(OpenAiProvider::new_with_base_url(api_key, base_url)))
             }
+            LlmProvider::Anthropic => {
+                let base_url =
+                    base_url.unwrap_or_else(|| "https://api.anthropic.com/v1".to_string());
+                Ok(Box::new(AnthropicProvider::new(api_key, base_url, model)))
+            }
+            LlmProvider::Ollama => {
+                let base_url =
+                    base_url.unwrap_or_else(|| "http://localhost:11434/v1".to_string());
+                Ok(Box::new(OpenAiCompatibleProvider::new(api_key, base_url, model)))
+            }
             LlmProvider::OpenAICompatible => {
                 let base_url = base_url.ok_or_else(|| {
                     crate::Error::generic("Base URL required for OpenAI compatible provider")
                 })?;
                 Ok(Box::new(OpenAiCompatibleProvider::new(api_key, base_url, model)))
             }
-            _ => Err(crate::Error::generic(format!(
-                "Provider type {:?} not yet implemented",
-                provider_type
-            ))),
         }
     }
 
@@ -703,9 +881,34 @@ impl ProviderFactory {
 
 #[cfg(test)]
 mod tests {
+    use super::{LlmProvider, ProviderFactory};
 
     #[test]
     fn test_module_compiles() {
         // Basic compilation test
+    }
+
+    #[test]
+    fn test_create_anthropic_provider() {
+        let provider = ProviderFactory::create_llm_provider(
+            LlmProvider::Anthropic,
+            "key".to_string(),
+            None,
+            "claude-3-5-sonnet-latest".to_string(),
+        )
+        .expect("provider");
+        assert_eq!(provider.name(), "Anthropic");
+    }
+
+    #[test]
+    fn test_create_ollama_provider() {
+        let provider = ProviderFactory::create_llm_provider(
+            LlmProvider::Ollama,
+            String::new(),
+            None,
+            "llama3.1".to_string(),
+        )
+        .expect("provider");
+        assert_eq!(provider.name(), "OpenAI Compatible");
     }
 }
