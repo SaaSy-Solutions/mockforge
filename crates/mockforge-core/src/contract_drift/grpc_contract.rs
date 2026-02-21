@@ -92,18 +92,57 @@ impl GrpcContract {
 
     /// Create a gRPC contract from a proto file path
     pub async fn from_proto_file(
-        _contract_id: String,
-        _version: String,
-        _proto_file: &str,
+        contract_id: String,
+        version: String,
+        proto_file: &str,
     ) -> Result<Self, ContractError> {
-        // This would require compiling the proto file first
-        // For now, we'll return an error indicating this needs to be implemented
-        // In a full implementation, this would:
-        // 1. Compile the proto file using protoc
-        // 2. Load the descriptor set
-        // 3. Create a DescriptorPool from it
-        // 4. Call Self::new()
-        Err(ContractError::Other("Loading from proto file not yet implemented. Use GrpcContract::from_descriptor_set() instead".to_string()))
+        let proto_path = std::path::PathBuf::from(proto_file);
+        let parent = proto_path.parent().ok_or_else(|| {
+            ContractError::Other(format!(
+                "Could not determine parent directory for proto file: {}",
+                proto_file
+            ))
+        })?;
+
+        let descriptor_file = tempfile::Builder::new()
+            .prefix("mockforge-grpc-")
+            .suffix(".desc")
+            .tempfile()
+            .map_err(|e| ContractError::Other(format!("Failed to create temp file: {}", e)))?;
+        let descriptor_path = descriptor_file.path().to_path_buf();
+
+        let output = std::process::Command::new("protoc")
+            .arg("--include_imports")
+            .arg(format!(
+                "--descriptor_set_out={}",
+                descriptor_path.to_string_lossy()
+            ))
+            .arg(format!("--proto_path={}", parent.to_string_lossy()))
+            .arg(proto_path.to_string_lossy().to_string())
+            .output()
+            .map_err(|e| {
+                ContractError::Other(format!(
+                    "Failed to execute protoc. Is it installed and in PATH? {}",
+                    e
+                ))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(ContractError::Other(format!(
+                "protoc failed for {}: {}",
+                proto_file, stderr
+            )));
+        }
+
+        let descriptor_bytes = std::fs::read(&descriptor_path).map_err(|e| {
+            ContractError::Other(format!(
+                "Failed to read generated descriptor set for {}: {}",
+                proto_file, e
+            ))
+        })?;
+
+        Self::from_descriptor_set(contract_id, version, &descriptor_bytes)
     }
 
     /// Create a gRPC contract from a compiled descriptor set (FileDescriptorSet bytes)
