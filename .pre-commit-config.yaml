@@ -3,15 +3,16 @@ repos:
   rev: v4.5.0
   hooks:
   - id: trailing-whitespace
-    exclude: ^book/
+    exclude: ^(book/|crates/mockforge-ui/ui/dist/)
   - id: end-of-file-fixer
-    exclude: ^book/
+    exclude: ^(book/|crates/mockforge-ui/ui/dist/)
   - id: check-yaml
     exclude: ^(k8s/|helm/|deploy/|templates/)
   - id: check-toml
   - id: check-merge-conflict
   - id: check-added-large-files
     args: ['--maxkb=500']
+    exclude: ^crates/mockforge-ui/ui/dist/
   - id: check-case-conflict
   - id: mixed-line-ending
     args: ['--fix=lf']
@@ -29,7 +30,7 @@ repos:
   rev: v1.16.20
   hooks:
   - id: typos
-    exclude: ^(book/|target/|\.git/)
+    exclude: ^(book/|target/|\.git/|crates/mockforge-ui/ui/dist/)
 
 - repo: local
   hooks:

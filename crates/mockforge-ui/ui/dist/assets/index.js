@@ -1,9 +1,9 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/DashboardPage.BjEaOZId.js","assets/react-vendor.MLK4p6QY.js","assets/chart-vendor.BQaWvu6O.js","assets/LoadingStates.CY8mvBQ-.js","assets/ui-vendor.DF36bhvp.js","assets/ServicesPage.B3rc9fyS.js","assets/LogsPage.CFQ6_-qV.js","assets/ResponseTraceModal.Dr3D12wY.js","assets/sparkles.BIHDU0Rt.js","assets/file-code.CuI9rqEu.js","assets/MetricsPage.BBDk25Ym.js","assets/VerificationPage.CPT3VNxW.js","assets/ContractDiffPage.JPbrgh9I.js","assets/AIStudioNav.CV-koelb.js","assets/IncidentDashboardPage.B3hq8fPV.js","assets/FitnessFunctionsPage.HtqM8qau.js","assets/tag.DvzF3Eyb.js","assets/folder.D5ZfZl3g.js","assets/FixturesPage.CupXqvaU.js","assets/TestingPage.Bj538SzJ.js","assets/ImportPage.QbO534EQ.js","assets/WorkspacesPage.aU716_Dn.js","assets/PlaygroundPage.B-htZkU8.js","assets/PluginsPage.jRfZZU2q.js","assets/ChainsPage.gACx_Ys2.js","assets/GraphPage.B4VDt8Mp.js","assets/index.D6A5GC-9.js","assets/value.CVjnIB-I.js","assets/message-square.BL5RFAEx.js","assets/graphLayouts.DrlVMor4.js","assets/WorldStatePage.2E-V0Isj.js","assets/useWebSocket.DG6qfk3m.js","assets/PerformancePage.BMhD7YPK.js","assets/square.Ba-FUup_.js","assets/ScenarioStateMachineEditor.WPpE-jxQ.js","assets/useHistory.DVy4D4gk.js","assets/ScenarioStudioPage.BHEJU3GV.js","assets/AnalyticsPage.CLP8riY5.js","assets/PillarAnalyticsPage.CeyXx1Nx.js","assets/HostedMocksPage.Dlq1SeIF.js","assets/ObservabilityPage.BNqAbjVV.js","assets/TracesPage.K6GUekvG.js","assets/TestGeneratorPage.gppaUUGf.js","assets/TestExecutionDashboard.DiB0s5f4.js","assets/IntegrationTestBuilder.MSZa9cMz.js","assets/ChaosPage.Bc1ygq40.js","assets/ResiliencePage.D5yaC0w8.js","assets/RecorderPage.3f6XdNuJ.js","assets/BehavioralCloningPage.CDm96B6i.js","assets/snowflake.Bh4TVWkL.js","assets/OrchestrationBuilder.yzeAKE-m.js","assets/OrchestrationExecutionView.AmFsrqUR.js","assets/PluginRegistryPage.DXB7-jCf.js","assets/TemplateMarketplacePage.BcUfSnm6.js","assets/ShowcasePage.iTdrNDBw.js","assets/communityApi.A5_l6I-9.js","assets/LearningHubPage.FXSo97YL.js","assets/UserManagementPage.C3QrbxNG.js","assets/user-plus.Du1coAhR.js","assets/MockAIPage.Bw6xzji8.js","assets/MockAIOpenApiGeneratorPage.CYZUEjS1.js","assets/MockAIRulesPage.BjdDVFS9.js","assets/VoicePage.C9UGz95c.js","assets/AIStudioPage.mqGF0V6M.js","assets/tauri.Dupv2dRY.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/DashboardPage.CNMptHoX.js","assets/react-vendor.i0I-mtkZ.js","assets/chart-vendor.VQ2MiRkI.js","assets/LoadingStates.-pyytTrq.js","assets/ui-vendor.B7raoZKG.js","assets/ServicesPage.CmiICeQ4.js","assets/LogsPage.CJxt3GcC.js","assets/ResponseTraceModal.BcxhNUIz.js","assets/sparkles.BIHDU0Rt.js","assets/file-code.CuI9rqEu.js","assets/MetricsPage.Cw2KF7jM.js","assets/VerificationPage.C-JPS3kd.js","assets/ContractDiffPage.Bl79VmwU.js","assets/AIStudioNav.D_Rc_Ra0.js","assets/IncidentDashboardPage.BTB6c-IS.js","assets/FitnessFunctionsPage.DI4hfpBK.js","assets/tag.DvzF3Eyb.js","assets/folder.D5ZfZl3g.js","assets/FixturesPage.B-8YdD7N.js","assets/TestingPage.De-Fcur8.js","assets/ImportPage.DpPkHDuE.js","assets/WorkspacesPage.CA4oueEK.js","assets/PlaygroundPage.GjwNBDPC.js","assets/PluginsPage.pREEuALG.js","assets/ChainsPage.Cr8o0PYP.js","assets/GraphPage.XVoJOfyW.js","assets/index.CE7kPTm3.js","assets/value.CVjnIB-I.js","assets/message-square.BL5RFAEx.js","assets/graphLayouts.DrlVMor4.js","assets/WorldStatePage.B4Uz0fNH.js","assets/useWebSocket.BQUZw17Q.js","assets/PerformancePage.QCDrGEz6.js","assets/square.Ba-FUup_.js","assets/ScenarioStateMachineEditor.c_q_v59Z.js","assets/useHistory.B447BaZ5.js","assets/ScenarioStudioPage.5sALfbGz.js","assets/AnalyticsPage.B5ytAR1q.js","assets/PillarAnalyticsPage.2cpxnFW_.js","assets/HostedMocksPage.CGb2jbHx.js","assets/ObservabilityPage.Cothqdf2.js","assets/TracesPage.BFT8tZRL.js","assets/TestGeneratorPage.DqTtvLl4.js","assets/TestExecutionDashboard.B6F-0BL5.js","assets/IntegrationTestBuilder.D6vXxWj-.js","assets/ChaosPage.TYn4CA_q.js","assets/ResiliencePage.BbdnN0sI.js","assets/RecorderPage.3kwHtLUF.js","assets/BehavioralCloningPage.CGZR3RJK.js","assets/snowflake.Bh4TVWkL.js","assets/OrchestrationBuilder.D2VUNLtZ.js","assets/OrchestrationExecutionView.BMkFSF7c.js","assets/PluginRegistryPage.BChYShpO.js","assets/TemplateMarketplacePage.0JBAO_OF.js","assets/ShowcasePage.BNPMnQ99.js","assets/communityApi.A5_l6I-9.js","assets/LearningHubPage.DH98z8lH.js","assets/UserManagementPage.VW349Hw_.js","assets/user-plus.Du1coAhR.js","assets/MockAIPage.5hxwO1jM.js","assets/MockAIOpenApiGeneratorPage.Ch-B5TAz.js","assets/MockAIRulesPage.FJlsCT58.js","assets/VoicePage.BtpGkUJl.js","assets/AIStudioPage.BPIQUcfV.js","assets/tauri.UVgQf7G2.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
-import { c as clsx, r as reactExports, j as jsxRuntimeExports, b as create, p as persist, R as React, d as reactDomExports, u as useQuery, e as useQueryClient, f as useMutation, g as ReactDOM, Q as QueryClient, h as clientExports, i as QueryClientProvider } from "./react-vendor.MLK4p6QY.js";
-import { S as Slot, R as Root, T as Thumb } from "./ui-vendor.DF36bhvp.js";
+import { c as clsx, r as reactExports, j as jsxRuntimeExports, a as create, p as persist, b as React, d as reactDomExports, u as useQuery, e as useQueryClient, f as useMutation, g as ReactDOM, Q as QueryClient, h as clientExports, i as QueryClientProvider } from "./react-vendor.i0I-mtkZ.js";
+import { S as Slot, R as Root, T as Thumb } from "./ui-vendor.B7raoZKG.js";
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) {
@@ -170,7 +170,28 @@ const __vitePreload = function preload(baseModule, deps, importerUrl) {
     return baseModule().catch(handlePreloadError);
   });
 };
+const concatArrays = (array1, array2) => {
+  const combinedArray = new Array(array1.length + array2.length);
+  for (let i = 0; i < array1.length; i++) {
+    combinedArray[i] = array1[i];
+  }
+  for (let i = 0; i < array2.length; i++) {
+    combinedArray[array1.length + i] = array2[i];
+  }
+  return combinedArray;
+};
+const createClassValidatorObject = (classGroupId, validator) => ({
+  classGroupId,
+  validator
+});
+const createClassPartObject = (nextPart = /* @__PURE__ */ new Map(), validators = null, classGroupId) => ({
+  nextPart,
+  validators,
+  classGroupId
+});
 const CLASS_PART_SEPARATOR = "-";
+const EMPTY_CONFLICTS = [];
+const ARBITRARY_PROPERTY_PREFIX = "arbitrary..";
 const createClassGroupUtils = (config) => {
   const classMap = createClassMap(config);
   const {
@@ -178,104 +199,134 @@ const createClassGroupUtils = (config) => {
     conflictingClassGroupModifiers
   } = config;
   const getClassGroupId = (className) => {
-    const classParts = className.split(CLASS_PART_SEPARATOR);
-    if (classParts[0] === "" && classParts.length !== 1) {
-      classParts.shift();
+    if (className.startsWith("[") && className.endsWith("]")) {
+      return getGroupIdForArbitraryProperty(className);
     }
-    return getGroupRecursive(classParts, classMap) || getGroupIdForArbitraryProperty(className);
+    const classParts = className.split(CLASS_PART_SEPARATOR);
+    const startIndex = classParts[0] === "" && classParts.length > 1 ? 1 : 0;
+    return getGroupRecursive(classParts, startIndex, classMap);
   };
   const getConflictingClassGroupIds = (classGroupId, hasPostfixModifier) => {
-    const conflicts = conflictingClassGroups[classGroupId] || [];
-    if (hasPostfixModifier && conflictingClassGroupModifiers[classGroupId]) {
-      return [...conflicts, ...conflictingClassGroupModifiers[classGroupId]];
+    if (hasPostfixModifier) {
+      const modifierConflicts = conflictingClassGroupModifiers[classGroupId];
+      const baseConflicts = conflictingClassGroups[classGroupId];
+      if (modifierConflicts) {
+        if (baseConflicts) {
+          return concatArrays(baseConflicts, modifierConflicts);
+        }
+        return modifierConflicts;
+      }
+      return baseConflicts || EMPTY_CONFLICTS;
     }
-    return conflicts;
+    return conflictingClassGroups[classGroupId] || EMPTY_CONFLICTS;
   };
   return {
     getClassGroupId,
     getConflictingClassGroupIds
   };
 };
-const getGroupRecursive = (classParts, classPartObject) => {
-  var _a;
-  if (classParts.length === 0) {
+const getGroupRecursive = (classParts, startIndex, classPartObject) => {
+  const classPathsLength = classParts.length - startIndex;
+  if (classPathsLength === 0) {
     return classPartObject.classGroupId;
   }
-  const currentClassPart = classParts[0];
+  const currentClassPart = classParts[startIndex];
   const nextClassPartObject = classPartObject.nextPart.get(currentClassPart);
-  const classGroupFromNextClassPart = nextClassPartObject ? getGroupRecursive(classParts.slice(1), nextClassPartObject) : void 0;
-  if (classGroupFromNextClassPart) {
-    return classGroupFromNextClassPart;
+  if (nextClassPartObject) {
+    const result = getGroupRecursive(classParts, startIndex + 1, nextClassPartObject);
+    if (result) return result;
   }
-  if (classPartObject.validators.length === 0) {
+  const validators = classPartObject.validators;
+  if (validators === null) {
     return void 0;
   }
-  const classRest = classParts.join(CLASS_PART_SEPARATOR);
-  return (_a = classPartObject.validators.find(({
-    validator
-  }) => validator(classRest))) == null ? void 0 : _a.classGroupId;
-};
-const arbitraryPropertyRegex = /^\[(.+)\]$/;
-const getGroupIdForArbitraryProperty = (className) => {
-  if (arbitraryPropertyRegex.test(className)) {
-    const arbitraryPropertyClassName = arbitraryPropertyRegex.exec(className)[1];
-    const property = arbitraryPropertyClassName == null ? void 0 : arbitraryPropertyClassName.substring(0, arbitraryPropertyClassName.indexOf(":"));
-    if (property) {
-      return "arbitrary.." + property;
+  const classRest = startIndex === 0 ? classParts.join(CLASS_PART_SEPARATOR) : classParts.slice(startIndex).join(CLASS_PART_SEPARATOR);
+  const validatorsLength = validators.length;
+  for (let i = 0; i < validatorsLength; i++) {
+    const validatorObj = validators[i];
+    if (validatorObj.validator(classRest)) {
+      return validatorObj.classGroupId;
     }
   }
+  return void 0;
 };
+const getGroupIdForArbitraryProperty = (className) => className.slice(1, -1).indexOf(":") === -1 ? void 0 : (() => {
+  const content = className.slice(1, -1);
+  const colonIndex = content.indexOf(":");
+  const property = content.slice(0, colonIndex);
+  return property ? ARBITRARY_PROPERTY_PREFIX + property : void 0;
+})();
 const createClassMap = (config) => {
   const {
     theme,
     classGroups
   } = config;
-  const classMap = {
-    nextPart: /* @__PURE__ */ new Map(),
-    validators: []
-  };
+  return processClassGroups(classGroups, theme);
+};
+const processClassGroups = (classGroups, theme) => {
+  const classMap = createClassPartObject();
   for (const classGroupId in classGroups) {
-    processClassesRecursively(classGroups[classGroupId], classMap, classGroupId, theme);
+    const group = classGroups[classGroupId];
+    processClassesRecursively(group, classMap, classGroupId, theme);
   }
   return classMap;
 };
 const processClassesRecursively = (classGroup, classPartObject, classGroupId, theme) => {
-  classGroup.forEach((classDefinition) => {
-    if (typeof classDefinition === "string") {
-      const classPartObjectToEdit = classDefinition === "" ? classPartObject : getPart(classPartObject, classDefinition);
-      classPartObjectToEdit.classGroupId = classGroupId;
-      return;
-    }
-    if (typeof classDefinition === "function") {
-      if (isThemeGetter(classDefinition)) {
-        processClassesRecursively(classDefinition(theme), classPartObject, classGroupId, theme);
-        return;
-      }
-      classPartObject.validators.push({
-        validator: classDefinition,
-        classGroupId
-      });
-      return;
-    }
-    Object.entries(classDefinition).forEach(([key, classGroup2]) => {
-      processClassesRecursively(classGroup2, getPart(classPartObject, key), classGroupId, theme);
-    });
-  });
+  const len = classGroup.length;
+  for (let i = 0; i < len; i++) {
+    const classDefinition = classGroup[i];
+    processClassDefinition(classDefinition, classPartObject, classGroupId, theme);
+  }
+};
+const processClassDefinition = (classDefinition, classPartObject, classGroupId, theme) => {
+  if (typeof classDefinition === "string") {
+    processStringDefinition(classDefinition, classPartObject, classGroupId);
+    return;
+  }
+  if (typeof classDefinition === "function") {
+    processFunctionDefinition(classDefinition, classPartObject, classGroupId, theme);
+    return;
+  }
+  processObjectDefinition(classDefinition, classPartObject, classGroupId, theme);
+};
+const processStringDefinition = (classDefinition, classPartObject, classGroupId) => {
+  const classPartObjectToEdit = classDefinition === "" ? classPartObject : getPart(classPartObject, classDefinition);
+  classPartObjectToEdit.classGroupId = classGroupId;
+};
+const processFunctionDefinition = (classDefinition, classPartObject, classGroupId, theme) => {
+  if (isThemeGetter(classDefinition)) {
+    processClassesRecursively(classDefinition(theme), classPartObject, classGroupId, theme);
+    return;
+  }
+  if (classPartObject.validators === null) {
+    classPartObject.validators = [];
+  }
+  classPartObject.validators.push(createClassValidatorObject(classGroupId, classDefinition));
+};
+const processObjectDefinition = (classDefinition, classPartObject, classGroupId, theme) => {
+  const entries = Object.entries(classDefinition);
+  const len = entries.length;
+  for (let i = 0; i < len; i++) {
+    const [key, value] = entries[i];
+    processClassesRecursively(value, getPart(classPartObject, key), classGroupId, theme);
+  }
 };
 const getPart = (classPartObject, path) => {
-  let currentClassPartObject = classPartObject;
-  path.split(CLASS_PART_SEPARATOR).forEach((pathPart) => {
-    if (!currentClassPartObject.nextPart.has(pathPart)) {
-      currentClassPartObject.nextPart.set(pathPart, {
-        nextPart: /* @__PURE__ */ new Map(),
-        validators: []
-      });
+  let current = classPartObject;
+  const parts = path.split(CLASS_PART_SEPARATOR);
+  const len = parts.length;
+  for (let i = 0; i < len; i++) {
+    const part = parts[i];
+    let next = current.nextPart.get(part);
+    if (!next) {
+      next = createClassPartObject();
+      current.nextPart.set(part, next);
     }
-    currentClassPartObject = currentClassPartObject.nextPart.get(pathPart);
-  });
-  return currentClassPartObject;
+    current = next;
+  }
+  return current;
 };
-const isThemeGetter = (func) => func.isThemeGetter;
+const isThemeGetter = (func) => "isThemeGetter" in func && func.isThemeGetter === true;
 const createLruCache = (maxCacheSize) => {
   if (maxCacheSize < 1) {
     return {
@@ -285,31 +336,31 @@ const createLruCache = (maxCacheSize) => {
     };
   }
   let cacheSize = 0;
-  let cache = /* @__PURE__ */ new Map();
-  let previousCache = /* @__PURE__ */ new Map();
+  let cache = /* @__PURE__ */ Object.create(null);
+  let previousCache = /* @__PURE__ */ Object.create(null);
   const update = (key, value) => {
-    cache.set(key, value);
+    cache[key] = value;
     cacheSize++;
     if (cacheSize > maxCacheSize) {
       cacheSize = 0;
       previousCache = cache;
-      cache = /* @__PURE__ */ new Map();
+      cache = /* @__PURE__ */ Object.create(null);
     }
   };
   return {
     get(key) {
-      let value = cache.get(key);
+      let value = cache[key];
       if (value !== void 0) {
         return value;
       }
-      if ((value = previousCache.get(key)) !== void 0) {
+      if ((value = previousCache[key]) !== void 0) {
         update(key, value);
         return value;
       }
     },
     set(key, value) {
-      if (cache.has(key)) {
-        cache.set(key, value);
+      if (key in cache) {
+        cache[key] = value;
       } else {
         update(key, value);
       }
@@ -318,7 +369,14 @@ const createLruCache = (maxCacheSize) => {
 };
 const IMPORTANT_MODIFIER = "!";
 const MODIFIER_SEPARATOR = ":";
-const MODIFIER_SEPARATOR_LENGTH = MODIFIER_SEPARATOR.length;
+const EMPTY_MODIFIERS = [];
+const createResultObject = (modifiers, hasImportantModifier, baseClassName, maybePostfixModifierPosition, isExternal) => ({
+  modifiers,
+  hasImportantModifier,
+  baseClassName,
+  maybePostfixModifierPosition,
+  isExternal
+});
 const createParseClassName = (config) => {
   const {
     prefix,
@@ -330,12 +388,13 @@ const createParseClassName = (config) => {
     let parenDepth = 0;
     let modifierStart = 0;
     let postfixModifierPosition;
-    for (let index = 0; index < className.length; index++) {
-      let currentCharacter = className[index];
+    const len = className.length;
+    for (let index = 0; index < len; index++) {
+      const currentCharacter = className[index];
       if (bracketDepth === 0 && parenDepth === 0) {
         if (currentCharacter === MODIFIER_SEPARATOR) {
           modifiers.push(className.slice(modifierStart, index));
-          modifierStart = index + MODIFIER_SEPARATOR_LENGTH;
+          modifierStart = index + 1;
           continue;
         }
         if (currentCharacter === "/") {
@@ -343,37 +402,34 @@ const createParseClassName = (config) => {
           continue;
         }
       }
-      if (currentCharacter === "[") {
-        bracketDepth++;
-      } else if (currentCharacter === "]") {
-        bracketDepth--;
-      } else if (currentCharacter === "(") {
-        parenDepth++;
-      } else if (currentCharacter === ")") {
-        parenDepth--;
-      }
+      if (currentCharacter === "[") bracketDepth++;
+      else if (currentCharacter === "]") bracketDepth--;
+      else if (currentCharacter === "(") parenDepth++;
+      else if (currentCharacter === ")") parenDepth--;
     }
-    const baseClassNameWithImportantModifier = modifiers.length === 0 ? className : className.substring(modifierStart);
-    const baseClassName = stripImportantModifier(baseClassNameWithImportantModifier);
-    const hasImportantModifier = baseClassName !== baseClassNameWithImportantModifier;
+    const baseClassNameWithImportantModifier = modifiers.length === 0 ? className : className.slice(modifierStart);
+    let baseClassName = baseClassNameWithImportantModifier;
+    let hasImportantModifier = false;
+    if (baseClassNameWithImportantModifier.endsWith(IMPORTANT_MODIFIER)) {
+      baseClassName = baseClassNameWithImportantModifier.slice(0, -1);
+      hasImportantModifier = true;
+    } else if (
+      /**
+       * In Tailwind CSS v3 the important modifier was at the start of the base class name. This is still supported for legacy reasons.
+       * @see https://github.com/dcastil/tailwind-merge/issues/513#issuecomment-2614029864
+       */
+      baseClassNameWithImportantModifier.startsWith(IMPORTANT_MODIFIER)
+    ) {
+      baseClassName = baseClassNameWithImportantModifier.slice(1);
+      hasImportantModifier = true;
+    }
     const maybePostfixModifierPosition = postfixModifierPosition && postfixModifierPosition > modifierStart ? postfixModifierPosition - modifierStart : void 0;
-    return {
-      modifiers,
-      hasImportantModifier,
-      baseClassName,
-      maybePostfixModifierPosition
-    };
+    return createResultObject(modifiers, hasImportantModifier, baseClassName, maybePostfixModifierPosition);
   };
   if (prefix) {
     const fullPrefix = prefix + MODIFIER_SEPARATOR;
     const parseClassNameOriginal = parseClassName;
-    parseClassName = (className) => className.startsWith(fullPrefix) ? parseClassNameOriginal(className.substring(fullPrefix.length)) : {
-      isExternal: true,
-      modifiers: [],
-      hasImportantModifier: false,
-      baseClassName: className,
-      maybePostfixModifierPosition: void 0
-    };
+    parseClassName = (className) => className.startsWith(fullPrefix) ? parseClassNameOriginal(className.slice(fullPrefix.length)) : createResultObject(EMPTY_MODIFIERS, false, className, void 0, true);
   }
   if (experimentalParseClassName) {
     const parseClassNameOriginal = parseClassName;
@@ -384,36 +440,35 @@ const createParseClassName = (config) => {
   }
   return parseClassName;
 };
-const stripImportantModifier = (baseClassName) => {
-  if (baseClassName.endsWith(IMPORTANT_MODIFIER)) {
-    return baseClassName.substring(0, baseClassName.length - 1);
-  }
-  if (baseClassName.startsWith(IMPORTANT_MODIFIER)) {
-    return baseClassName.substring(1);
-  }
-  return baseClassName;
-};
 const createSortModifiers = (config) => {
-  const orderSensitiveModifiers = Object.fromEntries(config.orderSensitiveModifiers.map((modifier) => [modifier, true]));
-  const sortModifiers = (modifiers) => {
-    if (modifiers.length <= 1) {
-      return modifiers;
-    }
-    const sortedModifiers = [];
-    let unsortedModifiers = [];
-    modifiers.forEach((modifier) => {
-      const isPositionSensitive = modifier[0] === "[" || orderSensitiveModifiers[modifier];
-      if (isPositionSensitive) {
-        sortedModifiers.push(...unsortedModifiers.sort(), modifier);
-        unsortedModifiers = [];
+  const modifierWeights = /* @__PURE__ */ new Map();
+  config.orderSensitiveModifiers.forEach((mod, index) => {
+    modifierWeights.set(mod, 1e6 + index);
+  });
+  return (modifiers) => {
+    const result = [];
+    let currentSegment = [];
+    for (let i = 0; i < modifiers.length; i++) {
+      const modifier = modifiers[i];
+      const isArbitrary = modifier[0] === "[";
+      const isOrderSensitive = modifierWeights.has(modifier);
+      if (isArbitrary || isOrderSensitive) {
+        if (currentSegment.length > 0) {
+          currentSegment.sort();
+          result.push(...currentSegment);
+          currentSegment = [];
+        }
+        result.push(modifier);
       } else {
-        unsortedModifiers.push(modifier);
+        currentSegment.push(modifier);
       }
-    });
-    sortedModifiers.push(...unsortedModifiers.sort());
-    return sortedModifiers;
+    }
+    if (currentSegment.length > 0) {
+      currentSegment.sort();
+      result.push(...currentSegment);
+    }
+    return result;
   };
-  return sortModifiers;
 };
 const createConfigUtils = (config) => ({
   cache: createLruCache(config.cacheSize),
@@ -459,10 +514,10 @@ const mergeClassList = (classList, configUtils) => {
       }
       hasPostfixModifier = false;
     }
-    const variantModifier = sortModifiers(modifiers).join(":");
+    const variantModifier = modifiers.length === 0 ? "" : modifiers.length === 1 ? modifiers[0] : sortModifiers(modifiers).join(":");
     const modifierId = hasImportantModifier ? variantModifier + IMPORTANT_MODIFIER : variantModifier;
     const classId = modifierId + classGroupId;
-    if (classGroupsInConflict.includes(classId)) {
+    if (classGroupsInConflict.indexOf(classId) > -1) {
       continue;
     }
     classGroupsInConflict.push(classId);
@@ -475,13 +530,13 @@ const mergeClassList = (classList, configUtils) => {
   }
   return result;
 };
-function twJoin() {
+const twJoin = (...classLists) => {
   let index = 0;
   let argument;
   let resolvedValue;
   let string = "";
-  while (index < arguments.length) {
-    if (argument = arguments[index++]) {
+  while (index < classLists.length) {
+    if (argument = classLists[index++]) {
       if (resolvedValue = toValue(argument)) {
         string && (string += " ");
         string += resolvedValue;
@@ -489,7 +544,7 @@ function twJoin() {
     }
   }
   return string;
-}
+};
 const toValue = (mix) => {
   if (typeof mix === "string") {
     return mix;
@@ -506,20 +561,20 @@ const toValue = (mix) => {
   }
   return string;
 };
-function createTailwindMerge(createConfigFirst, ...createConfigRest) {
+const createTailwindMerge = (createConfigFirst, ...createConfigRest) => {
   let configUtils;
   let cacheGet;
   let cacheSet;
-  let functionToCall = initTailwindMerge;
-  function initTailwindMerge(classList) {
+  let functionToCall;
+  const initTailwindMerge = (classList) => {
     const config = createConfigRest.reduce((previousConfig, createConfigCurrent) => createConfigCurrent(previousConfig), createConfigFirst());
     configUtils = createConfigUtils(config);
     cacheGet = configUtils.cache.get;
     cacheSet = configUtils.cache.set;
     functionToCall = tailwindMerge;
     return tailwindMerge(classList);
-  }
-  function tailwindMerge(classList) {
+  };
+  const tailwindMerge = (classList) => {
     const cachedResult = cacheGet(classList);
     if (cachedResult) {
       return cachedResult;
@@ -527,13 +582,13 @@ function createTailwindMerge(createConfigFirst, ...createConfigRest) {
     const result = mergeClassList(classList, configUtils);
     cacheSet(classList, result);
     return result;
-  }
-  return function callTailwindMerge() {
-    return functionToCall(twJoin.apply(null, arguments));
   };
-}
+  functionToCall = initTailwindMerge;
+  return (...args) => functionToCall(twJoin(...args));
+};
+const fallbackThemeArr = [];
 const fromTheme = (key) => {
-  const themeGetter = (theme) => theme[key] || [];
+  const themeGetter = (theme) => theme[key] || fallbackThemeArr;
   themeGetter.isThemeGetter = true;
   return themeGetter;
 };
@@ -9402,7 +9457,8 @@ function useErrorToast() {
 }
 var util;
 (function(util2) {
-  util2.assertEqual = (val) => val;
+  util2.assertEqual = (_) => {
+  };
   function assertIs(_arg) {
   }
   util2.assertIs = assertIs;
@@ -9446,7 +9502,7 @@ var util;
     }
     return void 0;
   };
-  util2.isInteger = typeof Number.isInteger === "function" ? (val) => Number.isInteger(val) : (val) => typeof val === "number" && isFinite(val) && Math.floor(val) === val;
+  util2.isInteger = typeof Number.isInteger === "function" ? (val) => Number.isInteger(val) : (val) => typeof val === "number" && Number.isFinite(val) && Math.floor(val) === val;
   function joinValues(array, separator = " | ") {
     return array.map((val) => typeof val === "string" ? `'${val}'` : val).join(separator);
   }
@@ -9498,7 +9554,7 @@ const getParsedType = (data) => {
     case "string":
       return ZodParsedType.string;
     case "number":
-      return isNaN(data) ? ZodParsedType.nan : ZodParsedType.number;
+      return Number.isNaN(data) ? ZodParsedType.nan : ZodParsedType.number;
     case "boolean":
       return ZodParsedType.boolean;
     case "function":
@@ -9549,11 +9605,10 @@ const ZodIssueCode = util.arrayToEnum([
   "not_multiple_of",
   "not_finite"
 ]);
-const quotelessJson = (obj) => {
-  const json = JSON.stringify(obj, null, 2);
-  return json.replace(/"([^"]+)":/g, "$1:");
-};
 class ZodError extends Error {
+  get errors() {
+    return this.issues;
+  }
   constructor(issues) {
     super();
     this.issues = [];
@@ -9571,9 +9626,6 @@ class ZodError extends Error {
     }
     this.name = "ZodError";
     this.issues = issues;
-  }
-  get errors() {
-    return this.issues;
   }
   format(_mapper) {
     const mapper = _mapper || function(issue) {
@@ -9630,8 +9682,9 @@ class ZodError extends Error {
     const formErrors = [];
     for (const sub of this.issues) {
       if (sub.path.length > 0) {
-        fieldErrors[sub.path[0]] = fieldErrors[sub.path[0]] || [];
-        fieldErrors[sub.path[0]].push(mapper(sub));
+        const firstEl = sub.path[0];
+        fieldErrors[firstEl] = fieldErrors[firstEl] || [];
+        fieldErrors[firstEl].push(mapper(sub));
       } else {
         formErrors.push(mapper(sub));
       }
@@ -9707,6 +9760,8 @@ const errorMap = (issue, _ctx) => {
         message = `String must contain ${issue.exact ? "exactly" : issue.inclusive ? `at least` : `over`} ${issue.minimum} character(s)`;
       else if (issue.type === "number")
         message = `Number must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${issue.minimum}`;
+      else if (issue.type === "bigint")
+        message = `Number must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${issue.minimum}`;
       else if (issue.type === "date")
         message = `Date must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${new Date(Number(issue.minimum))}`;
       else
@@ -9745,9 +9800,6 @@ const errorMap = (issue, _ctx) => {
   return { message };
 };
 let overrideErrorMap = errorMap;
-function setErrorMap(map) {
-  overrideErrorMap = map;
-}
 function getErrorMap() {
   return overrideErrorMap;
 }
@@ -9776,7 +9828,6 @@ const makeIssue = (params) => {
     message: errorMessage
   };
 };
-const EMPTY_PATH = [];
 function addIssueToContext(ctx, issueData) {
   const overrideMap = getErrorMap();
   const issue = makeIssue({
@@ -9785,8 +9836,11 @@ function addIssueToContext(ctx, issueData) {
     path: ctx.path,
     errorMaps: [
       ctx.common.contextualErrorMap,
+      // contextual error map is first priority
       ctx.schemaErrorMap,
+      // then schema-bound map if available
       overrideMap,
+      // then global override map
       overrideMap === errorMap ? void 0 : errorMap
       // then global default map
     ].filter((x) => !!x)
@@ -9856,24 +9910,11 @@ const isAborted = (x) => x.status === "aborted";
 const isDirty = (x) => x.status === "dirty";
 const isValid = (x) => x.status === "valid";
 const isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
-function __classPrivateFieldGet(receiver, state, kind, f) {
-  if (typeof state === "function" ? receiver !== state || true : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
-  return state.get(receiver);
-}
-function __classPrivateFieldSet(receiver, state, value, kind, f) {
-  if (typeof state === "function" ? receiver !== state || true : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
-  return state.set(receiver, value), value;
-}
-typeof SuppressedError === "function" ? SuppressedError : function(error, suppressed, message) {
-  var e = new Error(message);
-  return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
-};
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
-  errorUtil2.toString = (message) => typeof message === "string" ? message : message === null || message === void 0 ? void 0 : message.message;
+  errorUtil2.toString = (message) => typeof message === "string" ? message : message == null ? void 0 : message.message;
 })(errorUtil || (errorUtil = {}));
-var _ZodEnum_cache, _ZodNativeEnum_cache;
 class ParseInputLazyPath {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -9884,7 +9925,7 @@ class ParseInputLazyPath {
   }
   get path() {
     if (!this._cachedPath.length) {
-      if (this._key instanceof Array) {
+      if (Array.isArray(this._key)) {
         this._cachedPath.push(...this._path, ...this._key);
       } else {
         this._cachedPath.push(...this._path, this._key);
@@ -9922,49 +9963,20 @@ function processCreateParams(params) {
   if (errorMap2)
     return { errorMap: errorMap2, description };
   const customMap = (iss, ctx) => {
-    var _a, _b;
     const { message } = params;
     if (iss.code === "invalid_enum_value") {
-      return { message: message !== null && message !== void 0 ? message : ctx.defaultError };
+      return { message: message ?? ctx.defaultError };
     }
     if (typeof ctx.data === "undefined") {
-      return { message: (_a = message !== null && message !== void 0 ? message : required_error) !== null && _a !== void 0 ? _a : ctx.defaultError };
+      return { message: message ?? required_error ?? ctx.defaultError };
     }
     if (iss.code !== "invalid_type")
       return { message: ctx.defaultError };
-    return { message: (_b = message !== null && message !== void 0 ? message : invalid_type_error) !== null && _b !== void 0 ? _b : ctx.defaultError };
+    return { message: message ?? invalid_type_error ?? ctx.defaultError };
   };
   return { errorMap: customMap, description };
 }
 class ZodType {
-  constructor(def) {
-    this.spa = this.safeParseAsync;
-    this._def = def;
-    this.parse = this.parse.bind(this);
-    this.safeParse = this.safeParse.bind(this);
-    this.parseAsync = this.parseAsync.bind(this);
-    this.safeParseAsync = this.safeParseAsync.bind(this);
-    this.spa = this.spa.bind(this);
-    this.refine = this.refine.bind(this);
-    this.refinement = this.refinement.bind(this);
-    this.superRefine = this.superRefine.bind(this);
-    this.optional = this.optional.bind(this);
-    this.nullable = this.nullable.bind(this);
-    this.nullish = this.nullish.bind(this);
-    this.array = this.array.bind(this);
-    this.promise = this.promise.bind(this);
-    this.or = this.or.bind(this);
-    this.and = this.and.bind(this);
-    this.transform = this.transform.bind(this);
-    this.brand = this.brand.bind(this);
-    this.default = this.default.bind(this);
-    this.catch = this.catch.bind(this);
-    this.describe = this.describe.bind(this);
-    this.pipe = this.pipe.bind(this);
-    this.readonly = this.readonly.bind(this);
-    this.isNullable = this.isNullable.bind(this);
-    this.isOptional = this.isOptional.bind(this);
-  }
   get description() {
     return this._def.description;
   }
@@ -10012,14 +10024,13 @@ class ZodType {
     throw result.error;
   }
   safeParse(data, params) {
-    var _a;
     const ctx = {
       common: {
         issues: [],
-        async: (_a = params === null || params === void 0 ? void 0 : params.async) !== null && _a !== void 0 ? _a : false,
-        contextualErrorMap: params === null || params === void 0 ? void 0 : params.errorMap
+        async: (params == null ? void 0 : params.async) ?? false,
+        contextualErrorMap: params == null ? void 0 : params.errorMap
       },
-      path: (params === null || params === void 0 ? void 0 : params.path) || [],
+      path: (params == null ? void 0 : params.path) || [],
       schemaErrorMap: this._def.errorMap,
       parent: null,
       data,
@@ -10027,6 +10038,43 @@ class ZodType {
     };
     const result = this._parseSync({ data, path: ctx.path, parent: ctx });
     return handleResult(ctx, result);
+  }
+  "~validate"(data) {
+    var _a, _b;
+    const ctx = {
+      common: {
+        issues: [],
+        async: !!this["~standard"].async
+      },
+      path: [],
+      schemaErrorMap: this._def.errorMap,
+      parent: null,
+      data,
+      parsedType: getParsedType(data)
+    };
+    if (!this["~standard"].async) {
+      try {
+        const result = this._parseSync({ data, path: [], parent: ctx });
+        return isValid(result) ? {
+          value: result.value
+        } : {
+          issues: ctx.common.issues
+        };
+      } catch (err) {
+        if ((_b = (_a = err == null ? void 0 : err.message) == null ? void 0 : _a.toLowerCase()) == null ? void 0 : _b.includes("encountered")) {
+          this["~standard"].async = true;
+        }
+        ctx.common = {
+          issues: [],
+          async: true
+        };
+      }
+    }
+    return this._parseAsync({ data, path: [], parent: ctx }).then((result) => isValid(result) ? {
+      value: result.value
+    } : {
+      issues: ctx.common.issues
+    });
   }
   async parseAsync(data, params) {
     const result = await this.safeParseAsync(data, params);
@@ -10038,10 +10086,10 @@ class ZodType {
     const ctx = {
       common: {
         issues: [],
-        contextualErrorMap: params === null || params === void 0 ? void 0 : params.errorMap,
+        contextualErrorMap: params == null ? void 0 : params.errorMap,
         async: true
       },
-      path: (params === null || params === void 0 ? void 0 : params.path) || [],
+      path: (params == null ? void 0 : params.path) || [],
       schemaErrorMap: this._def.errorMap,
       parent: null,
       data,
@@ -10105,6 +10153,39 @@ class ZodType {
   superRefine(refinement) {
     return this._refinement(refinement);
   }
+  constructor(def) {
+    this.spa = this.safeParseAsync;
+    this._def = def;
+    this.parse = this.parse.bind(this);
+    this.safeParse = this.safeParse.bind(this);
+    this.parseAsync = this.parseAsync.bind(this);
+    this.safeParseAsync = this.safeParseAsync.bind(this);
+    this.spa = this.spa.bind(this);
+    this.refine = this.refine.bind(this);
+    this.refinement = this.refinement.bind(this);
+    this.superRefine = this.superRefine.bind(this);
+    this.optional = this.optional.bind(this);
+    this.nullable = this.nullable.bind(this);
+    this.nullish = this.nullish.bind(this);
+    this.array = this.array.bind(this);
+    this.promise = this.promise.bind(this);
+    this.or = this.or.bind(this);
+    this.and = this.and.bind(this);
+    this.transform = this.transform.bind(this);
+    this.brand = this.brand.bind(this);
+    this.default = this.default.bind(this);
+    this.catch = this.catch.bind(this);
+    this.describe = this.describe.bind(this);
+    this.pipe = this.pipe.bind(this);
+    this.readonly = this.readonly.bind(this);
+    this.isNullable = this.isNullable.bind(this);
+    this.isOptional = this.isOptional.bind(this);
+    this["~standard"] = {
+      version: 1,
+      vendor: "zod",
+      validate: (data) => this["~validate"](data)
+    };
+  }
   optional() {
     return ZodOptional.create(this, this._def);
   }
@@ -10115,7 +10196,7 @@ class ZodType {
     return this.nullable().optional();
   }
   array() {
-    return ZodArray.create(this, this._def);
+    return ZodArray.create(this);
   }
   promise() {
     return ZodPromise.create(this, this._def);
@@ -10181,26 +10262,31 @@ class ZodType {
 }
 const cuidRegex = /^c[^\s-]{8,}$/i;
 const cuid2Regex = /^[0-9a-z]+$/;
-const ulidRegex = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const ulidRegex = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 const uuidRegex = /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
 const nanoidRegex = /^[a-z0-9_-]{21}$/i;
+const jwtRegex = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/;
 const durationRegex = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
 const emailRegex = /^(?!\.)(?!.*\.\.)([A-Z0-9_'+\-\.]*)[A-Z0-9_+-]@([A-Z0-9][A-Z0-9\-]*\.)+[A-Z]{2,}$/i;
 const _emojiRegex = `^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$`;
 let emojiRegex;
 const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$/;
-const ipv6Regex = /^(([a-f0-9]{1,4}:){7}|::([a-f0-9]{1,4}:){0,6}|([a-f0-9]{1,4}:){1}:([a-f0-9]{1,4}:){0,5}|([a-f0-9]{1,4}:){2}:([a-f0-9]{1,4}:){0,4}|([a-f0-9]{1,4}:){3}:([a-f0-9]{1,4}:){0,3}|([a-f0-9]{1,4}:){4}:([a-f0-9]{1,4}:){0,2}|([a-f0-9]{1,4}:){5}:([a-f0-9]{1,4}:){0,1})([a-f0-9]{1,4}|(((25[0-5])|(2[0-4][0-9])|(1[0-9]{2})|([0-9]{1,2}))\.){3}((25[0-5])|(2[0-4][0-9])|(1[0-9]{2})|([0-9]{1,2})))$/;
+const ipv4CidrRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\/(3[0-2]|[12]?[0-9])$/;
+const ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
+const ipv6CidrRegex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\/(12[0-8]|1[01][0-9]|[1-9]?[0-9])$/;
 const base64Regex = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
+const base64urlRegex = /^([0-9a-zA-Z-_]{4})*(([0-9a-zA-Z-_]{2}(==)?)|([0-9a-zA-Z-_]{3}(=)?))?$/;
 const dateRegexSource = `((\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-((0[13578]|1[02])-(0[1-9]|[12]\\d|3[01])|(0[469]|11)-(0[1-9]|[12]\\d|30)|(02)-(0[1-9]|1\\d|2[0-8])))`;
 const dateRegex = new RegExp(`^${dateRegexSource}$`);
 function timeRegexSource(args) {
-  let regex = `([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d`;
+  let secondsRegexSource = `[0-5]\\d`;
   if (args.precision) {
-    regex = `${regex}\\.\\d{${args.precision}}`;
+    secondsRegexSource = `${secondsRegexSource}\\.\\d{${args.precision}}`;
   } else if (args.precision == null) {
-    regex = `${regex}(\\.\\d+)?`;
+    secondsRegexSource = `${secondsRegexSource}(\\.\\d+)?`;
   }
-  return regex;
+  const secondsQuantifier = args.precision ? "+" : "?";
+  return `([01]\\d|2[0-3]):[0-5]\\d(:${secondsRegexSource})${secondsQuantifier}`;
 }
 function timeRegex(args) {
   return new RegExp(`^${timeRegexSource(args)}$`);
@@ -10219,6 +10305,37 @@ function isValidIP(ip, version) {
     return true;
   }
   if ((version === "v6" || !version) && ipv6Regex.test(ip)) {
+    return true;
+  }
+  return false;
+}
+function isValidJWT(jwt, alg) {
+  if (!jwtRegex.test(jwt))
+    return false;
+  try {
+    const [header] = jwt.split(".");
+    if (!header)
+      return false;
+    const base64 = header.replace(/-/g, "+").replace(/_/g, "/").padEnd(header.length + (4 - header.length % 4) % 4, "=");
+    const decoded = JSON.parse(atob(base64));
+    if (typeof decoded !== "object" || decoded === null)
+      return false;
+    if ("typ" in decoded && (decoded == null ? void 0 : decoded.typ) !== "JWT")
+      return false;
+    if (!decoded.alg)
+      return false;
+    if (alg && decoded.alg !== alg)
+      return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+function isValidCidr(ip, version) {
+  if ((version === "v4" || !version) && ipv4CidrRegex.test(ip)) {
+    return true;
+  }
+  if ((version === "v6" || !version) && ipv6CidrRegex.test(ip)) {
     return true;
   }
   return false;
@@ -10369,7 +10486,7 @@ class ZodString extends ZodType {
       } else if (check.kind === "url") {
         try {
           new URL(input.data);
-        } catch (_a) {
+        } catch {
           ctx = this._getOrReturnCtx(input, ctx);
           addIssueToContext(ctx, {
             validation: "url",
@@ -10479,11 +10596,41 @@ class ZodString extends ZodType {
           });
           status.dirty();
         }
+      } else if (check.kind === "jwt") {
+        if (!isValidJWT(input.data, check.alg)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "jwt",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "cidr") {
+        if (!isValidCidr(input.data, check.version)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "cidr",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
       } else if (check.kind === "base64") {
         if (!base64Regex.test(input.data)) {
           ctx = this._getOrReturnCtx(input, ctx);
           addIssueToContext(ctx, {
             validation: "base64",
+            code: ZodIssueCode.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "base64url") {
+        if (!base64urlRegex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext(ctx, {
+            validation: "base64url",
             code: ZodIssueCode.invalid_string,
             message: check.message
           });
@@ -10535,11 +10682,22 @@ class ZodString extends ZodType {
   base64(message) {
     return this._addCheck({ kind: "base64", ...errorUtil.errToObj(message) });
   }
+  base64url(message) {
+    return this._addCheck({
+      kind: "base64url",
+      ...errorUtil.errToObj(message)
+    });
+  }
+  jwt(options) {
+    return this._addCheck({ kind: "jwt", ...errorUtil.errToObj(options) });
+  }
   ip(options) {
     return this._addCheck({ kind: "ip", ...errorUtil.errToObj(options) });
   }
+  cidr(options) {
+    return this._addCheck({ kind: "cidr", ...errorUtil.errToObj(options) });
+  }
   datetime(options) {
-    var _a, _b;
     if (typeof options === "string") {
       return this._addCheck({
         kind: "datetime",
@@ -10551,10 +10709,10 @@ class ZodString extends ZodType {
     }
     return this._addCheck({
       kind: "datetime",
-      precision: typeof (options === null || options === void 0 ? void 0 : options.precision) === "undefined" ? null : options === null || options === void 0 ? void 0 : options.precision,
-      offset: (_a = options === null || options === void 0 ? void 0 : options.offset) !== null && _a !== void 0 ? _a : false,
-      local: (_b = options === null || options === void 0 ? void 0 : options.local) !== null && _b !== void 0 ? _b : false,
-      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message)
+      precision: typeof (options == null ? void 0 : options.precision) === "undefined" ? null : options == null ? void 0 : options.precision,
+      offset: (options == null ? void 0 : options.offset) ?? false,
+      local: (options == null ? void 0 : options.local) ?? false,
+      ...errorUtil.errToObj(options == null ? void 0 : options.message)
     });
   }
   date(message) {
@@ -10570,8 +10728,8 @@ class ZodString extends ZodType {
     }
     return this._addCheck({
       kind: "time",
-      precision: typeof (options === null || options === void 0 ? void 0 : options.precision) === "undefined" ? null : options === null || options === void 0 ? void 0 : options.precision,
-      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message)
+      precision: typeof (options == null ? void 0 : options.precision) === "undefined" ? null : options == null ? void 0 : options.precision,
+      ...errorUtil.errToObj(options == null ? void 0 : options.message)
     });
   }
   duration(message) {
@@ -10588,8 +10746,8 @@ class ZodString extends ZodType {
     return this._addCheck({
       kind: "includes",
       value,
-      position: options === null || options === void 0 ? void 0 : options.position,
-      ...errorUtil.errToObj(options === null || options === void 0 ? void 0 : options.message)
+      position: options == null ? void 0 : options.position,
+      ...errorUtil.errToObj(options == null ? void 0 : options.message)
     });
   }
   startsWith(value, message) {
@@ -10628,8 +10786,7 @@ class ZodString extends ZodType {
     });
   }
   /**
-   * @deprecated Use z.string().min(1) instead.
-   * @see {@link ZodString.min}
+   * Equivalent to `.min(1)`
    */
   nonempty(message) {
     return this.min(1, errorUtil.errToObj(message));
@@ -10691,8 +10848,14 @@ class ZodString extends ZodType {
   get isIP() {
     return !!this._def.checks.find((ch) => ch.kind === "ip");
   }
+  get isCIDR() {
+    return !!this._def.checks.find((ch) => ch.kind === "cidr");
+  }
   get isBase64() {
     return !!this._def.checks.find((ch) => ch.kind === "base64");
+  }
+  get isBase64url() {
+    return !!this._def.checks.find((ch) => ch.kind === "base64url");
   }
   get minLength() {
     let min = null;
@@ -10716,11 +10879,10 @@ class ZodString extends ZodType {
   }
 }
 ZodString.create = (params) => {
-  var _a;
   return new ZodString({
     checks: [],
     typeName: ZodFirstPartyTypeKind.ZodString,
-    coerce: (_a = params === null || params === void 0 ? void 0 : params.coerce) !== null && _a !== void 0 ? _a : false,
+    coerce: (params == null ? void 0 : params.coerce) ?? false,
     ...processCreateParams(params)
   });
 };
@@ -10728,9 +10890,9 @@ function floatSafeRemainder(val, step) {
   const valDecCount = (val.toString().split(".")[1] || "").length;
   const stepDecCount = (step.toString().split(".")[1] || "").length;
   const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;
-  const valInt = parseInt(val.toFixed(decCount).replace(".", ""));
-  const stepInt = parseInt(step.toFixed(decCount).replace(".", ""));
-  return valInt % stepInt / Math.pow(10, decCount);
+  const valInt = Number.parseInt(val.toFixed(decCount).replace(".", ""));
+  const stepInt = Number.parseInt(step.toFixed(decCount).replace(".", ""));
+  return valInt % stepInt / 10 ** decCount;
 }
 class ZodNumber extends ZodType {
   constructor() {
@@ -10940,7 +11102,8 @@ class ZodNumber extends ZodType {
     return !!this._def.checks.find((ch) => ch.kind === "int" || ch.kind === "multipleOf" && util.isInteger(ch.value));
   }
   get isFinite() {
-    let max = null, min = null;
+    let max = null;
+    let min = null;
     for (const ch of this._def.checks) {
       if (ch.kind === "finite" || ch.kind === "int" || ch.kind === "multipleOf") {
         return true;
@@ -10959,7 +11122,7 @@ ZodNumber.create = (params) => {
   return new ZodNumber({
     checks: [],
     typeName: ZodFirstPartyTypeKind.ZodNumber,
-    coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
+    coerce: (params == null ? void 0 : params.coerce) || false,
     ...processCreateParams(params)
   });
 };
@@ -10971,17 +11134,15 @@ class ZodBigInt extends ZodType {
   }
   _parse(input) {
     if (this._def.coerce) {
-      input.data = BigInt(input.data);
+      try {
+        input.data = BigInt(input.data);
+      } catch {
+        return this._getInvalidInput(input);
+      }
     }
     const parsedType = this._getType(input);
     if (parsedType !== ZodParsedType.bigint) {
-      const ctx2 = this._getOrReturnCtx(input);
-      addIssueToContext(ctx2, {
-        code: ZodIssueCode.invalid_type,
-        expected: ZodParsedType.bigint,
-        received: ctx2.parsedType
-      });
-      return INVALID;
+      return this._getInvalidInput(input);
     }
     let ctx = void 0;
     const status = new ParseStatus();
@@ -11027,6 +11188,15 @@ class ZodBigInt extends ZodType {
       }
     }
     return { status: status.value, value: input.data };
+  }
+  _getInvalidInput(input) {
+    const ctx = this._getOrReturnCtx(input);
+    addIssueToContext(ctx, {
+      code: ZodIssueCode.invalid_type,
+      expected: ZodParsedType.bigint,
+      received: ctx.parsedType
+    });
+    return INVALID;
   }
   gte(value, message) {
     return this.setLimit("min", value, true, errorUtil.toString(message));
@@ -11121,11 +11291,10 @@ class ZodBigInt extends ZodType {
   }
 }
 ZodBigInt.create = (params) => {
-  var _a;
   return new ZodBigInt({
     checks: [],
     typeName: ZodFirstPartyTypeKind.ZodBigInt,
-    coerce: (_a = params === null || params === void 0 ? void 0 : params.coerce) !== null && _a !== void 0 ? _a : false,
+    coerce: (params == null ? void 0 : params.coerce) ?? false,
     ...processCreateParams(params)
   });
 };
@@ -11150,7 +11319,7 @@ class ZodBoolean extends ZodType {
 ZodBoolean.create = (params) => {
   return new ZodBoolean({
     typeName: ZodFirstPartyTypeKind.ZodBoolean,
-    coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
+    coerce: (params == null ? void 0 : params.coerce) || false,
     ...processCreateParams(params)
   });
 };
@@ -11169,7 +11338,7 @@ class ZodDate extends ZodType {
       });
       return INVALID;
     }
-    if (isNaN(input.data.getTime())) {
+    if (Number.isNaN(input.data.getTime())) {
       const ctx2 = this._getOrReturnCtx(input);
       addIssueToContext(ctx2, {
         code: ZodIssueCode.invalid_date
@@ -11258,7 +11427,7 @@ class ZodDate extends ZodType {
 ZodDate.create = (params) => {
   return new ZodDate({
     checks: [],
-    coerce: (params === null || params === void 0 ? void 0 : params.coerce) || false,
+    coerce: (params == null ? void 0 : params.coerce) || false,
     typeName: ZodFirstPartyTypeKind.ZodDate,
     ...processCreateParams(params)
   });
@@ -11533,7 +11702,8 @@ class ZodObject extends ZodType {
       return this._cached;
     const shape = this._def.shape();
     const keys = util.objectKeys(shape);
-    return this._cached = { shape, keys };
+    this._cached = { shape, keys };
+    return this._cached;
   }
   _parse(input) {
     const parsedType = this._getType(input);
@@ -11631,11 +11801,11 @@ class ZodObject extends ZodType {
       unknownKeys: "strict",
       ...message !== void 0 ? {
         errorMap: (issue, ctx) => {
-          var _a, _b, _c, _d;
-          const defaultError = (_c = (_b = (_a = this._def).errorMap) === null || _b === void 0 ? void 0 : _b.call(_a, issue, ctx).message) !== null && _c !== void 0 ? _c : ctx.defaultError;
+          var _a, _b;
+          const defaultError = ((_b = (_a = this._def).errorMap) == null ? void 0 : _b.call(_a, issue, ctx).message) ?? ctx.defaultError;
           if (issue.code === "unrecognized_keys")
             return {
-              message: (_d = errorUtil.errToObj(message).message) !== null && _d !== void 0 ? _d : defaultError
+              message: errorUtil.errToObj(message).message ?? defaultError
             };
           return {
             message: defaultError
@@ -11766,11 +11936,11 @@ class ZodObject extends ZodType {
   }
   pick(mask) {
     const shape = {};
-    util.objectKeys(mask).forEach((key) => {
+    for (const key of util.objectKeys(mask)) {
       if (mask[key] && this.shape[key]) {
         shape[key] = this.shape[key];
       }
-    });
+    }
     return new ZodObject({
       ...this._def,
       shape: () => shape
@@ -11778,11 +11948,11 @@ class ZodObject extends ZodType {
   }
   omit(mask) {
     const shape = {};
-    util.objectKeys(this.shape).forEach((key) => {
+    for (const key of util.objectKeys(this.shape)) {
       if (!mask[key]) {
         shape[key] = this.shape[key];
       }
-    });
+    }
     return new ZodObject({
       ...this._def,
       shape: () => shape
@@ -11796,14 +11966,14 @@ class ZodObject extends ZodType {
   }
   partial(mask) {
     const newShape = {};
-    util.objectKeys(this.shape).forEach((key) => {
+    for (const key of util.objectKeys(this.shape)) {
       const fieldSchema = this.shape[key];
       if (mask && !mask[key]) {
         newShape[key] = fieldSchema;
       } else {
         newShape[key] = fieldSchema.optional();
       }
-    });
+    }
     return new ZodObject({
       ...this._def,
       shape: () => newShape
@@ -11811,7 +11981,7 @@ class ZodObject extends ZodType {
   }
   required(mask) {
     const newShape = {};
-    util.objectKeys(this.shape).forEach((key) => {
+    for (const key of util.objectKeys(this.shape)) {
       if (mask && !mask[key]) {
         newShape[key] = this.shape[key];
       } else {
@@ -11822,7 +11992,7 @@ class ZodObject extends ZodType {
         }
         newShape[key] = newField;
       }
-    });
+    }
     return new ZodObject({
       ...this._def,
       shape: () => newShape
@@ -11950,113 +12120,6 @@ ZodUnion.create = (types, params) => {
     ...processCreateParams(params)
   });
 };
-const getDiscriminator = (type) => {
-  if (type instanceof ZodLazy) {
-    return getDiscriminator(type.schema);
-  } else if (type instanceof ZodEffects) {
-    return getDiscriminator(type.innerType());
-  } else if (type instanceof ZodLiteral) {
-    return [type.value];
-  } else if (type instanceof ZodEnum) {
-    return type.options;
-  } else if (type instanceof ZodNativeEnum) {
-    return util.objectValues(type.enum);
-  } else if (type instanceof ZodDefault) {
-    return getDiscriminator(type._def.innerType);
-  } else if (type instanceof ZodUndefined) {
-    return [void 0];
-  } else if (type instanceof ZodNull) {
-    return [null];
-  } else if (type instanceof ZodOptional) {
-    return [void 0, ...getDiscriminator(type.unwrap())];
-  } else if (type instanceof ZodNullable) {
-    return [null, ...getDiscriminator(type.unwrap())];
-  } else if (type instanceof ZodBranded) {
-    return getDiscriminator(type.unwrap());
-  } else if (type instanceof ZodReadonly) {
-    return getDiscriminator(type.unwrap());
-  } else if (type instanceof ZodCatch) {
-    return getDiscriminator(type._def.innerType);
-  } else {
-    return [];
-  }
-};
-class ZodDiscriminatedUnion extends ZodType {
-  _parse(input) {
-    const { ctx } = this._processInputParams(input);
-    if (ctx.parsedType !== ZodParsedType.object) {
-      addIssueToContext(ctx, {
-        code: ZodIssueCode.invalid_type,
-        expected: ZodParsedType.object,
-        received: ctx.parsedType
-      });
-      return INVALID;
-    }
-    const discriminator = this.discriminator;
-    const discriminatorValue = ctx.data[discriminator];
-    const option = this.optionsMap.get(discriminatorValue);
-    if (!option) {
-      addIssueToContext(ctx, {
-        code: ZodIssueCode.invalid_union_discriminator,
-        options: Array.from(this.optionsMap.keys()),
-        path: [discriminator]
-      });
-      return INVALID;
-    }
-    if (ctx.common.async) {
-      return option._parseAsync({
-        data: ctx.data,
-        path: ctx.path,
-        parent: ctx
-      });
-    } else {
-      return option._parseSync({
-        data: ctx.data,
-        path: ctx.path,
-        parent: ctx
-      });
-    }
-  }
-  get discriminator() {
-    return this._def.discriminator;
-  }
-  get options() {
-    return this._def.options;
-  }
-  get optionsMap() {
-    return this._def.optionsMap;
-  }
-  /**
-   * The constructor of the discriminated union schema. Its behaviour is very similar to that of the normal z.union() constructor.
-   * However, it only allows a union of objects, all of which need to share a discriminator property. This property must
-   * have a different value for each object in the union.
-   * @param discriminator the name of the discriminator property
-   * @param types an array of object schemas
-   * @param params
-   */
-  static create(discriminator, options, params) {
-    const optionsMap = /* @__PURE__ */ new Map();
-    for (const type of options) {
-      const discriminatorValues = getDiscriminator(type.shape[discriminator]);
-      if (!discriminatorValues.length) {
-        throw new Error(`A discriminator value for key \`${discriminator}\` could not be extracted from all schema options`);
-      }
-      for (const value of discriminatorValues) {
-        if (optionsMap.has(value)) {
-          throw new Error(`Discriminator property ${String(discriminator)} has duplicate value ${String(value)}`);
-        }
-        optionsMap.set(value, type);
-      }
-    }
-    return new ZodDiscriminatedUnion({
-      typeName: ZodFirstPartyTypeKind.ZodDiscriminatedUnion,
-      discriminator,
-      options,
-      optionsMap,
-      ...processCreateParams(params)
-    });
-  }
-}
 function mergeValues(a, b) {
   const aType = getParsedType(a);
   const bType = getParsedType(b);
@@ -12419,121 +12482,6 @@ ZodSet.create = (valueType, params) => {
     ...processCreateParams(params)
   });
 };
-class ZodFunction extends ZodType {
-  constructor() {
-    super(...arguments);
-    this.validate = this.implement;
-  }
-  _parse(input) {
-    const { ctx } = this._processInputParams(input);
-    if (ctx.parsedType !== ZodParsedType.function) {
-      addIssueToContext(ctx, {
-        code: ZodIssueCode.invalid_type,
-        expected: ZodParsedType.function,
-        received: ctx.parsedType
-      });
-      return INVALID;
-    }
-    function makeArgsIssue(args, error) {
-      return makeIssue({
-        data: args,
-        path: ctx.path,
-        errorMaps: [
-          ctx.common.contextualErrorMap,
-          ctx.schemaErrorMap,
-          getErrorMap(),
-          errorMap
-        ].filter((x) => !!x),
-        issueData: {
-          code: ZodIssueCode.invalid_arguments,
-          argumentsError: error
-        }
-      });
-    }
-    function makeReturnsIssue(returns, error) {
-      return makeIssue({
-        data: returns,
-        path: ctx.path,
-        errorMaps: [
-          ctx.common.contextualErrorMap,
-          ctx.schemaErrorMap,
-          getErrorMap(),
-          errorMap
-        ].filter((x) => !!x),
-        issueData: {
-          code: ZodIssueCode.invalid_return_type,
-          returnTypeError: error
-        }
-      });
-    }
-    const params = { errorMap: ctx.common.contextualErrorMap };
-    const fn = ctx.data;
-    if (this._def.returns instanceof ZodPromise) {
-      const me2 = this;
-      return OK(async function(...args) {
-        const error = new ZodError([]);
-        const parsedArgs = await me2._def.args.parseAsync(args, params).catch((e) => {
-          error.addIssue(makeArgsIssue(args, e));
-          throw error;
-        });
-        const result = await Reflect.apply(fn, this, parsedArgs);
-        const parsedReturns = await me2._def.returns._def.type.parseAsync(result, params).catch((e) => {
-          error.addIssue(makeReturnsIssue(result, e));
-          throw error;
-        });
-        return parsedReturns;
-      });
-    } else {
-      const me2 = this;
-      return OK(function(...args) {
-        const parsedArgs = me2._def.args.safeParse(args, params);
-        if (!parsedArgs.success) {
-          throw new ZodError([makeArgsIssue(args, parsedArgs.error)]);
-        }
-        const result = Reflect.apply(fn, this, parsedArgs.data);
-        const parsedReturns = me2._def.returns.safeParse(result, params);
-        if (!parsedReturns.success) {
-          throw new ZodError([makeReturnsIssue(result, parsedReturns.error)]);
-        }
-        return parsedReturns.data;
-      });
-    }
-  }
-  parameters() {
-    return this._def.args;
-  }
-  returnType() {
-    return this._def.returns;
-  }
-  args(...items) {
-    return new ZodFunction({
-      ...this._def,
-      args: ZodTuple.create(items).rest(ZodUnknown.create())
-    });
-  }
-  returns(returnType) {
-    return new ZodFunction({
-      ...this._def,
-      returns: returnType
-    });
-  }
-  implement(func) {
-    const validatedFunc = this.parse(func);
-    return validatedFunc;
-  }
-  strictImplement(func) {
-    const validatedFunc = this.parse(func);
-    return validatedFunc;
-  }
-  static create(args, returns, params) {
-    return new ZodFunction({
-      args: args ? args : ZodTuple.create([]).rest(ZodUnknown.create()),
-      returns: returns || ZodUnknown.create(),
-      typeName: ZodFirstPartyTypeKind.ZodFunction,
-      ...processCreateParams(params)
-    });
-  }
-}
 class ZodLazy extends ZodType {
   get schema() {
     return this._def.getter();
@@ -12583,10 +12531,6 @@ function createZodEnum(values, params) {
   });
 }
 class ZodEnum extends ZodType {
-  constructor() {
-    super(...arguments);
-    _ZodEnum_cache.set(this, void 0);
-  }
   _parse(input) {
     if (typeof input.data !== "string") {
       const ctx = this._getOrReturnCtx(input);
@@ -12598,10 +12542,10 @@ class ZodEnum extends ZodType {
       });
       return INVALID;
     }
-    if (!__classPrivateFieldGet(this, _ZodEnum_cache)) {
-      __classPrivateFieldSet(this, _ZodEnum_cache, new Set(this._def.values));
+    if (!this._cache) {
+      this._cache = new Set(this._def.values);
     }
-    if (!__classPrivateFieldGet(this, _ZodEnum_cache).has(input.data)) {
+    if (!this._cache.has(input.data)) {
       const ctx = this._getOrReturnCtx(input);
       const expectedValues = this._def.values;
       addIssueToContext(ctx, {
@@ -12650,13 +12594,8 @@ class ZodEnum extends ZodType {
     });
   }
 }
-_ZodEnum_cache = /* @__PURE__ */ new WeakMap();
 ZodEnum.create = createZodEnum;
 class ZodNativeEnum extends ZodType {
-  constructor() {
-    super(...arguments);
-    _ZodNativeEnum_cache.set(this, void 0);
-  }
   _parse(input) {
     const nativeEnumValues = util.getValidEnumValues(this._def.values);
     const ctx = this._getOrReturnCtx(input);
@@ -12669,10 +12608,10 @@ class ZodNativeEnum extends ZodType {
       });
       return INVALID;
     }
-    if (!__classPrivateFieldGet(this, _ZodNativeEnum_cache)) {
-      __classPrivateFieldSet(this, _ZodNativeEnum_cache, new Set(util.getValidEnumValues(this._def.values)));
+    if (!this._cache) {
+      this._cache = new Set(util.getValidEnumValues(this._def.values));
     }
-    if (!__classPrivateFieldGet(this, _ZodNativeEnum_cache).has(input.data)) {
+    if (!this._cache.has(input.data)) {
       const expectedValues = util.objectValues(nativeEnumValues);
       addIssueToContext(ctx, {
         received: ctx.data,
@@ -12687,7 +12626,6 @@ class ZodNativeEnum extends ZodType {
     return this._def.values;
   }
 }
-_ZodNativeEnum_cache = /* @__PURE__ */ new WeakMap();
 ZodNativeEnum.create = (values, params) => {
   return new ZodNativeEnum({
     values,
@@ -12828,7 +12766,7 @@ class ZodEffects extends ZodType {
           parent: ctx
         });
         if (!isValid(base))
-          return base;
+          return INVALID;
         const result = effect.transform(base.value, checkCtx);
         if (result instanceof Promise) {
           throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
@@ -12837,8 +12775,11 @@ class ZodEffects extends ZodType {
       } else {
         return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base) => {
           if (!isValid(base))
-            return base;
-          return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({ status: status.value, value: result }));
+            return INVALID;
+          return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({
+            status: status.value,
+            value: result
+          }));
         });
       }
     }
@@ -12998,7 +12939,6 @@ ZodNaN.create = (params) => {
     ...processCreateParams(params)
   });
 };
-const BRAND = Symbol("zod_brand");
 class ZodBranded extends ZodType {
   _parse(input) {
     const { ctx } = this._processInputParams(input);
@@ -13090,22 +13030,6 @@ ZodReadonly.create = (type, params) => {
     ...processCreateParams(params)
   });
 };
-function custom(check, params = {}, fatal) {
-  if (check)
-    return ZodAny.create().superRefine((data, ctx) => {
-      var _a, _b;
-      if (!check(data)) {
-        const p = typeof params === "function" ? params(data) : typeof params === "string" ? { message: params } : params;
-        const _fatal = (_b = (_a = p.fatal) !== null && _a !== void 0 ? _a : fatal) !== null && _b !== void 0 ? _b : true;
-        const p2 = typeof p === "string" ? { message: p } : p;
-        ctx.addIssue({ code: "custom", ...p2, fatal: _fatal });
-      }
-    });
-  return ZodAny.create();
-}
-const late = {
-  object: ZodObject.lazycreate
-};
 var ZodFirstPartyTypeKind;
 (function(ZodFirstPartyTypeKind2) {
   ZodFirstPartyTypeKind2["ZodString"] = "ZodString";
@@ -13145,321 +13069,170 @@ var ZodFirstPartyTypeKind;
   ZodFirstPartyTypeKind2["ZodPipeline"] = "ZodPipeline";
   ZodFirstPartyTypeKind2["ZodReadonly"] = "ZodReadonly";
 })(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
-const instanceOfType = (cls, params = {
-  message: `Input not instance of ${cls.name}`
-}) => custom((data) => data instanceof cls, params);
 const stringType = ZodString.create;
 const numberType = ZodNumber.create;
-const nanType = ZodNaN.create;
-const bigIntType = ZodBigInt.create;
 const booleanType = ZodBoolean.create;
-const dateType = ZodDate.create;
-const symbolType = ZodSymbol.create;
-const undefinedType = ZodUndefined.create;
-const nullType = ZodNull.create;
 const anyType = ZodAny.create;
 const unknownType = ZodUnknown.create;
-const neverType = ZodNever.create;
-const voidType = ZodVoid.create;
+ZodNever.create;
 const arrayType = ZodArray.create;
 const objectType = ZodObject.create;
-const strictObjectType = ZodObject.strictCreate;
 const unionType = ZodUnion.create;
-const discriminatedUnionType = ZodDiscriminatedUnion.create;
-const intersectionType = ZodIntersection.create;
-const tupleType = ZodTuple.create;
+ZodIntersection.create;
+ZodTuple.create;
 const recordType = ZodRecord.create;
-const mapType = ZodMap.create;
-const setType = ZodSet.create;
-const functionType = ZodFunction.create;
-const lazyType = ZodLazy.create;
-const literalType = ZodLiteral.create;
 const enumType = ZodEnum.create;
-const nativeEnumType = ZodNativeEnum.create;
-const promiseType = ZodPromise.create;
-const effectsType = ZodEffects.create;
-const optionalType = ZodOptional.create;
-const nullableType = ZodNullable.create;
-const preprocessType = ZodEffects.createWithPreprocess;
-const pipelineType = ZodPipeline.create;
-const ostring = () => stringType().optional();
-const onumber = () => numberType().optional();
-const oboolean = () => booleanType().optional();
-const coerce = {
-  string: ((arg) => ZodString.create({ ...arg, coerce: true })),
-  number: ((arg) => ZodNumber.create({ ...arg, coerce: true })),
-  boolean: ((arg) => ZodBoolean.create({
-    ...arg,
-    coerce: true
-  })),
-  bigint: ((arg) => ZodBigInt.create({ ...arg, coerce: true })),
-  date: ((arg) => ZodDate.create({ ...arg, coerce: true }))
-};
-const NEVER = INVALID;
-var z = /* @__PURE__ */ Object.freeze({
-  __proto__: null,
-  defaultErrorMap: errorMap,
-  setErrorMap,
-  getErrorMap,
-  makeIssue,
-  EMPTY_PATH,
-  addIssueToContext,
-  ParseStatus,
-  INVALID,
-  DIRTY,
-  OK,
-  isAborted,
-  isDirty,
-  isValid,
-  isAsync,
-  get util() {
-    return util;
-  },
-  get objectUtil() {
-    return objectUtil;
-  },
-  ZodParsedType,
-  getParsedType,
-  ZodType,
-  datetimeRegex,
-  ZodString,
-  ZodNumber,
-  ZodBigInt,
-  ZodBoolean,
-  ZodDate,
-  ZodSymbol,
-  ZodUndefined,
-  ZodNull,
-  ZodAny,
-  ZodUnknown,
-  ZodNever,
-  ZodVoid,
-  ZodArray,
-  ZodObject,
-  ZodUnion,
-  ZodDiscriminatedUnion,
-  ZodIntersection,
-  ZodTuple,
-  ZodRecord,
-  ZodMap,
-  ZodSet,
-  ZodFunction,
-  ZodLazy,
-  ZodLiteral,
-  ZodEnum,
-  ZodNativeEnum,
-  ZodPromise,
-  ZodEffects,
-  ZodTransformer: ZodEffects,
-  ZodOptional,
-  ZodNullable,
-  ZodDefault,
-  ZodCatch,
-  ZodNaN,
-  BRAND,
-  ZodBranded,
-  ZodPipeline,
-  ZodReadonly,
-  custom,
-  Schema: ZodType,
-  ZodSchema: ZodType,
-  late,
-  get ZodFirstPartyTypeKind() {
-    return ZodFirstPartyTypeKind;
-  },
-  coerce,
-  any: anyType,
-  array: arrayType,
-  bigint: bigIntType,
-  boolean: booleanType,
-  date: dateType,
-  discriminatedUnion: discriminatedUnionType,
-  effect: effectsType,
-  "enum": enumType,
-  "function": functionType,
-  "instanceof": instanceOfType,
-  intersection: intersectionType,
-  lazy: lazyType,
-  literal: literalType,
-  map: mapType,
-  nan: nanType,
-  nativeEnum: nativeEnumType,
-  never: neverType,
-  "null": nullType,
-  nullable: nullableType,
-  number: numberType,
-  object: objectType,
-  oboolean,
-  onumber,
-  optional: optionalType,
-  ostring,
-  pipeline: pipelineType,
-  preprocess: preprocessType,
-  promise: promiseType,
-  record: recordType,
-  set: setType,
-  strictObject: strictObjectType,
-  string: stringType,
-  symbol: symbolType,
-  transformer: effectsType,
-  tuple: tupleType,
-  "undefined": undefinedType,
-  union: unionType,
-  unknown: unknownType,
-  "void": voidType,
-  NEVER,
-  ZodIssueCode,
-  quotelessJson,
-  ZodError
+ZodPromise.create;
+ZodOptional.create;
+ZodNullable.create;
+const RequestLogSchema = objectType({
+  id: stringType(),
+  timestamp: stringType(),
+  method: stringType(),
+  path: stringType(),
+  status_code: numberType(),
+  response_time_ms: numberType(),
+  client_ip: stringType().nullable().optional(),
+  user_agent: stringType().nullable().optional(),
+  headers: recordType(stringType()).nullable().optional(),
+  response_size_bytes: numberType(),
+  request_size_bytes: numberType().nullable().optional(),
+  error_message: stringType().nullable().optional()
 });
-const RequestLogSchema = z.object({
-  id: z.string(),
-  timestamp: z.string(),
-  method: z.string(),
-  path: z.string(),
-  status_code: z.number(),
-  response_time_ms: z.number(),
-  client_ip: z.string().nullable().optional(),
-  user_agent: z.string().nullable().optional(),
-  headers: z.record(z.string()).nullable().optional(),
-  response_size_bytes: z.number(),
-  request_size_bytes: z.number().nullable().optional(),
-  error_message: z.string().nullable().optional()
+objectType({
+  timestamp: stringType(),
+  status: numberType(),
+  method: stringType(),
+  url: stringType(),
+  responseTime: numberType(),
+  size: numberType(),
+  status_code: numberType().nullable().optional(),
+  response_time_ms: numberType().nullable().optional()
 });
-z.object({
-  timestamp: z.string(),
-  status: z.number(),
-  method: z.string(),
-  url: z.string(),
-  responseTime: z.number(),
-  size: z.number(),
-  status_code: z.number().nullable().optional(),
-  response_time_ms: z.number().nullable().optional()
+const WorkspaceSummarySchema = objectType({
+  id: stringType(),
+  name: stringType(),
+  description: stringType().optional(),
+  is_active: booleanType().default(false),
+  created_at: stringType().optional(),
+  updated_at: stringType().optional(),
+  route_count: numberType().optional(),
+  fixture_count: numberType().optional()
 });
-const WorkspaceSummarySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string().optional(),
-  is_active: z.boolean().default(false),
-  created_at: z.string().optional(),
-  updated_at: z.string().optional(),
-  route_count: z.number().optional(),
-  fixture_count: z.number().optional()
+objectType({
+  id: stringType(),
+  name: stringType(),
+  description: stringType().optional(),
+  is_active: booleanType().default(false),
+  created_at: stringType().optional(),
+  updated_at: stringType().optional(),
+  fixtures: arrayType(anyType()).optional(),
+  routes: arrayType(anyType()).optional()
 });
-z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string().optional(),
-  is_active: z.boolean().default(false),
-  created_at: z.string().optional(),
-  updated_at: z.string().optional(),
-  fixtures: z.array(z.any()).optional(),
-  routes: z.array(z.any()).optional()
+const FixtureInfoSchema = objectType({
+  id: stringType(),
+  name: stringType(),
+  path: stringType(),
+  method: stringType().optional(),
+  description: stringType().optional(),
+  createdAt: stringType(),
+  updatedAt: stringType(),
+  tags: arrayType(stringType()).optional(),
+  content: unionType([stringType(), unknownType()]).optional(),
+  version: stringType().optional(),
+  size_bytes: numberType().optional(),
+  last_modified: stringType().optional(),
+  route_path: stringType().optional(),
+  protocol: stringType().optional(),
+  saved_at: stringType().optional(),
+  fingerprint: stringType().optional(),
+  metadata: recordType(unknownType()).optional(),
+  file_size: numberType().optional(),
+  file_path: stringType().optional(),
+  size: numberType().optional(),
+  created_at: stringType().optional(),
+  modified_at: stringType().optional()
 });
-const FixtureInfoSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  path: z.string(),
-  method: z.string().optional(),
-  description: z.string().optional(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  tags: z.array(z.string()).optional(),
-  content: z.union([z.string(), z.unknown()]).optional(),
-  version: z.string().optional(),
-  size_bytes: z.number().optional(),
-  last_modified: z.string().optional(),
-  route_path: z.string().optional(),
-  protocol: z.string().optional(),
-  saved_at: z.string().optional(),
-  fingerprint: z.string().optional(),
-  metadata: z.record(z.unknown()).optional(),
-  file_size: z.number().optional(),
-  file_path: z.string().optional(),
-  size: z.number().optional(),
-  created_at: z.string().optional(),
-  modified_at: z.string().optional()
+const ServiceInfoSchema = objectType({
+  id: stringType(),
+  name: stringType(),
+  status: enumType(["active", "inactive", "error"]),
+  port: numberType().optional(),
+  endpoint: stringType().optional(),
+  description: stringType().optional(),
+  uptime: numberType().optional(),
+  request_count: numberType().optional(),
+  error_rate: numberType().optional()
 });
-const ServiceInfoSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  status: z.enum(["active", "inactive", "error"]),
-  port: z.number().optional(),
-  endpoint: z.string().optional(),
-  description: z.string().optional(),
-  uptime: z.number().optional(),
-  request_count: z.number().optional(),
-  error_rate: z.number().optional()
+const ServerInfoSchema = objectType({
+  version: stringType(),
+  build_time: stringType(),
+  git_sha: stringType(),
+  http_server: stringType().nullable().optional(),
+  ws_server: stringType().nullable().optional(),
+  grpc_server: stringType().nullable().optional(),
+  graphql_server: stringType().nullable().optional(),
+  api_enabled: booleanType(),
+  admin_port: numberType()
 });
-const ServerInfoSchema = z.object({
-  version: z.string(),
-  build_time: z.string(),
-  git_sha: z.string(),
-  http_server: z.string().nullable().optional(),
-  ws_server: z.string().nullable().optional(),
-  grpc_server: z.string().nullable().optional(),
-  graphql_server: z.string().nullable().optional(),
-  api_enabled: z.boolean(),
-  admin_port: z.number()
+const DashboardSystemInfoSchema = objectType({
+  os: stringType(),
+  arch: stringType(),
+  uptime: numberType(),
+  memory_usage: numberType()
 });
-const DashboardSystemInfoSchema = z.object({
-  os: z.string(),
-  arch: z.string(),
-  uptime: z.number(),
-  memory_usage: z.number()
+const SimpleMetricsDataSchema = objectType({
+  total_requests: numberType(),
+  active_requests: numberType(),
+  average_response_time: numberType(),
+  error_rate: numberType()
 });
-const SimpleMetricsDataSchema = z.object({
-  total_requests: z.number(),
-  active_requests: z.number(),
-  average_response_time: z.number(),
-  error_rate: z.number()
+const ServerStatusSchema = objectType({
+  server_type: stringType(),
+  address: stringType().nullable().optional(),
+  running: booleanType(),
+  start_time: stringType().nullable().optional(),
+  uptime_seconds: numberType().nullable().optional(),
+  active_connections: numberType(),
+  total_requests: numberType()
 });
-const ServerStatusSchema = z.object({
-  server_type: z.string(),
-  address: z.string().nullable().optional(),
-  running: z.boolean(),
-  start_time: z.string().nullable().optional(),
-  uptime_seconds: z.number().nullable().optional(),
-  active_connections: z.number(),
-  total_requests: z.number()
+const SystemInfoSchema = objectType({
+  version: stringType(),
+  uptime_seconds: numberType(),
+  memory_usage_mb: numberType(),
+  cpu_usage_percent: numberType(),
+  active_threads: numberType(),
+  total_routes: numberType(),
+  total_fixtures: numberType()
 });
-const SystemInfoSchema = z.object({
-  version: z.string(),
-  uptime_seconds: z.number(),
-  memory_usage_mb: z.number(),
-  cpu_usage_percent: z.number(),
-  active_threads: z.number(),
-  total_routes: z.number(),
-  total_fixtures: z.number()
-});
-const DashboardDataSchema = z.object({
+const DashboardDataSchema = objectType({
   server_info: ServerInfoSchema,
   system_info: DashboardSystemInfoSchema,
   metrics: SimpleMetricsDataSchema,
-  servers: z.array(ServerStatusSchema),
-  recent_logs: z.array(RequestLogSchema),
+  servers: arrayType(ServerStatusSchema),
+  recent_logs: arrayType(RequestLogSchema),
   system: SystemInfoSchema
 }).passthrough();
-z.object({
-  service: z.string(),
-  route: z.string(),
-  avg_response_time: z.number(),
-  min_response_time: z.number(),
-  max_response_time: z.number(),
-  p50_response_time: z.number(),
-  p95_response_time: z.number(),
-  p99_response_time: z.number(),
-  total_requests: z.number(),
-  histogram: z.array(z.object({
-    range: z.string(),
-    count: z.number()
+objectType({
+  service: stringType(),
+  route: stringType(),
+  avg_response_time: numberType(),
+  min_response_time: numberType(),
+  max_response_time: numberType(),
+  p50_response_time: numberType(),
+  p95_response_time: numberType(),
+  p99_response_time: numberType(),
+  total_requests: numberType(),
+  histogram: arrayType(objectType({
+    range: stringType(),
+    count: numberType()
   })).optional()
 });
-const WorkspaceListResponseSchema = z.array(WorkspaceSummarySchema);
-const LogsResponseSchema = z.array(RequestLogSchema);
+const WorkspaceListResponseSchema = arrayType(WorkspaceSummarySchema);
+const LogsResponseSchema = arrayType(RequestLogSchema);
 const DashboardResponseSchema = DashboardDataSchema;
-const FixturesResponseSchema = z.array(FixtureInfoSchema);
-z.array(ServiceInfoSchema);
+const FixturesResponseSchema = arrayType(FixtureInfoSchema);
+arrayType(ServiceInfoSchema);
 function safeValidateApiResponse(schema, data) {
   try {
     const result = schema.safeParse(data);
@@ -16743,7 +16516,7 @@ function xe(n) {
 }
 var ve = (n) => {
   var Dt, Pt, Nt, Bt, Ct, kt, It, Mt, Ht, At, Lt;
-  let { invert: e, toast: t, unstyled: a, interacting: u, setHeights: f, visibleToasts: w, heights: S, index: g, toasts: i, expanded: D, removeToast: T, defaultRichColors: F, closeButton: et, style: ut, cancelButtonStyle: ft, actionButtonStyle: l, className: ot = "", descriptionClassName: at = "", duration: X2, position: st, gap: pt, loadingIcon: rt, expandByDefault: B, classNames: s, icons: P, closeButtonAriaLabel: nt = "Close toast", pauseWhenPageIsHidden: it } = n, [Y, C] = React.useState(null), [lt, J] = React.useState(null), [W, H] = React.useState(false), [A, mt] = React.useState(false), [L, z2] = React.useState(false), [ct, d] = React.useState(false), [h, y] = React.useState(false), [R, j] = React.useState(0), [p, _] = React.useState(0), O = React.useRef(t.duration || X2 || Wt), G = React.useRef(null), k = React.useRef(null), Vt = g === 0, Ut = g + 1 <= w, N = t.type, V = t.dismissible !== false, Kt = t.className || "", Xt = t.descriptionClassName || "", dt = React.useMemo(() => S.findIndex((r) => r.toastId === t.id) || 0, [S, t.id]), Jt = React.useMemo(() => {
+  let { invert: e, toast: t, unstyled: a, interacting: u, setHeights: f, visibleToasts: w, heights: S, index: g, toasts: i, expanded: D, removeToast: T, defaultRichColors: F, closeButton: et, style: ut, cancelButtonStyle: ft, actionButtonStyle: l, className: ot = "", descriptionClassName: at = "", duration: X2, position: st, gap: pt, loadingIcon: rt, expandByDefault: B, classNames: s, icons: P, closeButtonAriaLabel: nt = "Close toast", pauseWhenPageIsHidden: it } = n, [Y, C] = React.useState(null), [lt, J] = React.useState(null), [W, H] = React.useState(false), [A, mt] = React.useState(false), [L, z] = React.useState(false), [ct, d] = React.useState(false), [h, y] = React.useState(false), [R, j] = React.useState(0), [p, _] = React.useState(0), O = React.useRef(t.duration || X2 || Wt), G = React.useRef(null), k = React.useRef(null), Vt = g === 0, Ut = g + 1 <= w, N = t.type, V = t.dismissible !== false, Kt = t.className || "", Xt = t.descriptionClassName || "", dt = React.useMemo(() => S.findIndex((r) => r.toastId === t.id) || 0, [S, t.id]), Jt = React.useMemo(() => {
     var r;
     return (r = t.closeButton) != null ? r : et;
   }, [t.closeButton, et]), Tt = React.useMemo(() => t.duration || X2 || Wt, [t.duration, X2]), gt = React.useRef(0), U = React.useRef(0), St = React.useRef(0), K = React.useRef(null), [Gt, Qt] = st.split("-"), Rt = React.useMemo(() => S.reduce((r, m, c) => c >= dt ? r : r + m.height, 0), [S, dt]), Et = Ft(), qt = t.invert || e, ht = N === "loading";
@@ -16792,9 +16565,9 @@ var ve = (n) => {
     return P != null && P.loading ? React.createElement("div", { className: M(s == null ? void 0 : s.loader, (r = t == null ? void 0 : t.classNames) == null ? void 0 : r.loader, "sonner-loader"), "data-visible": N === "loading" }, P.loading) : rt ? React.createElement("div", { className: M(s == null ? void 0 : s.loader, (m = t == null ? void 0 : t.classNames) == null ? void 0 : m.loader, "sonner-loader"), "data-visible": N === "loading" }, rt) : React.createElement(Yt, { className: M(s == null ? void 0 : s.loader, (c = t == null ? void 0 : t.classNames) == null ? void 0 : c.loader), visible: N === "loading" });
   }
   return React.createElement("li", { tabIndex: 0, ref: k, className: M(ot, Kt, s == null ? void 0 : s.toast, (Dt = t == null ? void 0 : t.classNames) == null ? void 0 : Dt.toast, s == null ? void 0 : s.default, s == null ? void 0 : s[N], (Pt = t == null ? void 0 : t.classNames) == null ? void 0 : Pt[N]), "data-sonner-toast": "", "data-rich-colors": (Nt = t.richColors) != null ? Nt : F, "data-styled": !(t.jsx || t.unstyled || a), "data-mounted": W, "data-promise": !!t.promise, "data-swiped": h, "data-removed": A, "data-visible": Ut, "data-y-position": Gt, "data-x-position": Qt, "data-index": g, "data-front": Vt, "data-swiping": L, "data-dismissible": V, "data-type": N, "data-invert": qt, "data-swipe-out": ct, "data-swipe-direction": lt, "data-expanded": !!(D || B && W), style: { "--index": g, "--toasts-before": g, "--z-index": i.length - g, "--offset": `${A ? R : U.current}px`, "--initial-height": B ? "auto" : `${p}px`, ...ut, ...t.style }, onDragEnd: () => {
-    z2(false), C(null), K.current = null;
+    z(false), C(null), K.current = null;
   }, onPointerDown: (r) => {
-    ht || !V || (G.current = /* @__PURE__ */ new Date(), j(U.current), r.target.setPointerCapture(r.pointerId), r.target.tagName !== "BUTTON" && (z2(true), K.current = { x: r.clientX, y: r.clientY }));
+    ht || !V || (G.current = /* @__PURE__ */ new Date(), j(U.current), r.target.setPointerCapture(r.pointerId), r.target.tagName !== "BUTTON" && (z(true), K.current = { x: r.clientX, y: r.clientY }));
   }, onPointerUp: () => {
     var x, Q, q, Z;
     if (ct || !V) return;
@@ -16804,7 +16577,7 @@ var ve = (n) => {
       j(U.current), (Z = t.onDismiss) == null || Z.call(t, t), J(Y === "x" ? r > 0 ? "right" : "left" : m > 0 ? "down" : "up"), $(), d(true), y(false);
       return;
     }
-    z2(false), C(null);
+    z(false), C(null);
   }, onPointerMove: (r) => {
     var Q, q, Z, zt;
     if (!K.current || !V || ((Q = window.getSelection()) == null ? void 0 : Q.toString().length) > 0) return;
@@ -16844,7 +16617,7 @@ function Te(n, e) {
   }), t;
 }
 reactExports.forwardRef(function(e, t) {
-  let { invert: a, position: u = "bottom-right", hotkey: f = ["altKey", "KeyT"], expand: w, closeButton: S, className: g, offset: i, mobileOffset: D, theme: T = "light", richColors: F, duration: et, style: ut, visibleToasts: ft = pe, toastOptions: l, dir: ot = _t(), gap: at = be, loadingIcon: X2, icons: st, containerAriaLabel: pt = "Notifications", pauseWhenPageIsHidden: rt } = e, [B, s] = React.useState([]), P = React.useMemo(() => Array.from(new Set([u].concat(B.filter((d) => d.position).map((d) => d.position)))), [B, u]), [nt, it] = React.useState([]), [Y, C] = React.useState(false), [lt, J] = React.useState(false), [W, H] = React.useState(T !== "system" ? T : typeof window != "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"), A = React.useRef(null), mt = f.join("+").replace(/Key/g, "").replace(/Digit/g, ""), L = React.useRef(null), z2 = React.useRef(false), ct = React.useCallback((d) => {
+  let { invert: a, position: u = "bottom-right", hotkey: f = ["altKey", "KeyT"], expand: w, closeButton: S, className: g, offset: i, mobileOffset: D, theme: T = "light", richColors: F, duration: et, style: ut, visibleToasts: ft = pe, toastOptions: l, dir: ot = _t(), gap: at = be, loadingIcon: X2, icons: st, containerAriaLabel: pt = "Notifications", pauseWhenPageIsHidden: rt } = e, [B, s] = React.useState([]), P = React.useMemo(() => Array.from(new Set([u].concat(B.filter((d) => d.position).map((d) => d.position)))), [B, u]), [nt, it] = React.useState([]), [Y, C] = React.useState(false), [lt, J] = React.useState(false), [W, H] = React.useState(T !== "system" ? T : typeof window != "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"), A = React.useRef(null), mt = f.join("+").replace(/Key/g, "").replace(/Digit/g, ""), L = React.useRef(null), z = React.useRef(false), ct = React.useCallback((d) => {
     s((h) => {
       var y;
       return (y = h.find((R) => R.id === d.id)) != null && y.delete || v.dismiss(d.id), h.filter(({ id: R }) => R !== d.id);
@@ -16893,15 +16666,15 @@ reactExports.forwardRef(function(e, t) {
     return document.addEventListener("keydown", d), () => document.removeEventListener("keydown", d);
   }, [f]), React.useEffect(() => {
     if (A.current) return () => {
-      L.current && (L.current.focus({ preventScroll: true }), L.current = null, z2.current = false);
+      L.current && (L.current.focus({ preventScroll: true }), L.current = null, z.current = false);
     };
   }, [A.current]), React.createElement("section", { ref: t, "aria-label": `${pt} ${mt}`, tabIndex: -1, "aria-live": "polite", "aria-relevant": "additions text", "aria-atomic": "false", suppressHydrationWarning: true }, P.map((d, h) => {
     var j;
     let [y, R] = d.split("-");
     return B.length ? React.createElement("ol", { key: d, dir: ot === "auto" ? _t() : ot, tabIndex: -1, ref: A, className: g, "data-sonner-toaster": true, "data-theme": W, "data-y-position": y, "data-lifted": Y && B.length > 1 && !w, "data-x-position": R, style: { "--front-toast-height": `${((j = nt[0]) == null ? void 0 : j.height) || 0}px`, "--width": `${he}px`, "--gap": `${at}px`, ...ut, ...Te(i, D) }, onBlur: (p) => {
-      z2.current && !p.currentTarget.contains(p.relatedTarget) && (z2.current = false, L.current && (L.current.focus({ preventScroll: true }), L.current = null));
+      z.current && !p.currentTarget.contains(p.relatedTarget) && (z.current = false, L.current && (L.current.focus({ preventScroll: true }), L.current = null));
     }, onFocus: (p) => {
-      p.target instanceof HTMLElement && p.target.dataset.dismissible === "false" || z2.current || (z2.current = true, L.current = p.relatedTarget);
+      p.target instanceof HTMLElement && p.target.dataset.dismissible === "false" || z.current || (z.current = true, L.current = p.relatedTarget);
     }, onMouseEnter: () => C(true), onMouseMove: () => C(true), onMouseLeave: () => {
       lt || C(false);
     }, onDragEnd: () => C(false), onPointerDown: (p) => {
@@ -22930,50 +22703,50 @@ function ProxyRuleForm({ rule, onSave, onCancel }) {
 function ProxyInspectorPage() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "container mx-auto px-4 py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProxyInspector, {}) });
 }
-const DashboardPage = reactExports.lazy(() => __vitePreload(() => import("./DashboardPage.BjEaOZId.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0).then((m) => ({ default: m.DashboardPage })));
-const ServicesPage = reactExports.lazy(() => __vitePreload(() => import("./ServicesPage.B3rc9fyS.js"), true ? __vite__mapDeps([5,1,4]) : void 0).then((m) => ({ default: m.ServicesPage })));
-const LogsPage = reactExports.lazy(() => __vitePreload(() => import("./LogsPage.CFQ6_-qV.js"), true ? __vite__mapDeps([6,1,7,8,9,4]) : void 0).then((m) => ({ default: m.LogsPage })));
-const MetricsPage = reactExports.lazy(() => __vitePreload(() => import("./MetricsPage.BBDk25Ym.js"), true ? __vite__mapDeps([10,1,4]) : void 0).then((m) => ({ default: m.MetricsPage })));
-const VerificationPage = reactExports.lazy(() => __vitePreload(() => import("./VerificationPage.CPT3VNxW.js"), true ? __vite__mapDeps([11,1,4]) : void 0).then((m) => ({ default: m.VerificationPage })));
-const ContractDiffPage = reactExports.lazy(() => __vitePreload(() => import("./ContractDiffPage.JPbrgh9I.js"), true ? __vite__mapDeps([12,1,13,9,4]) : void 0).then((m) => ({ default: m.ContractDiffPage })));
-const IncidentDashboardPage = reactExports.lazy(() => __vitePreload(() => import("./IncidentDashboardPage.B3hq8fPV.js"), true ? __vite__mapDeps([14,1,4]) : void 0).then((m) => ({ default: m.IncidentDashboardPage })));
-const FitnessFunctionsPage = reactExports.lazy(() => __vitePreload(() => import("./FitnessFunctionsPage.HtqM8qau.js"), true ? __vite__mapDeps([15,1,16,17,4]) : void 0).then((m) => ({ default: m.FitnessFunctionsPage })));
-const FixturesPage = reactExports.lazy(() => __vitePreload(() => import("./FixturesPage.CupXqvaU.js"), true ? __vite__mapDeps([18,1,4]) : void 0).then((m) => ({ default: m.FixturesPage })));
-const TestingPage = reactExports.lazy(() => __vitePreload(() => import("./TestingPage.Bj538SzJ.js"), true ? __vite__mapDeps([19,1,4]) : void 0).then((m) => ({ default: m.TestingPage })));
-const ImportPage = reactExports.lazy(() => __vitePreload(() => import("./ImportPage.QbO534EQ.js"), true ? __vite__mapDeps([20,1,4]) : void 0).then((m) => ({ default: m.ImportPage })));
-const WorkspacesPage = reactExports.lazy(() => __vitePreload(() => import("./WorkspacesPage.aU716_Dn.js"), true ? __vite__mapDeps([21,1,17,4]) : void 0));
-const PlaygroundPage = reactExports.lazy(() => __vitePreload(() => import("./PlaygroundPage.B-htZkU8.js"), true ? __vite__mapDeps([22,1,7,8,9,4]) : void 0).then((m) => ({ default: m.PlaygroundPage })));
-const PluginsPage = reactExports.lazy(() => __vitePreload(() => import("./PluginsPage.jRfZZU2q.js"), true ? __vite__mapDeps([23,1,4]) : void 0).then((m) => ({ default: m.PluginsPage })));
-const ChainsPage = reactExports.lazy(() => __vitePreload(() => import("./ChainsPage.gACx_Ys2.js"), true ? __vite__mapDeps([24,1,4]) : void 0).then((m) => ({ default: m.ChainsPage })));
-const GraphPage = reactExports.lazy(() => __vitePreload(() => import("./GraphPage.B4VDt8Mp.js"), true ? __vite__mapDeps([25,1,26,27,28,29,4]) : void 0).then((m) => ({ default: m.GraphPage })));
-const WorldStatePage = reactExports.lazy(() => __vitePreload(() => import("./WorldStatePage.2E-V0Isj.js"), true ? __vite__mapDeps([30,1,26,27,29,31,3,4]) : void 0).then((m) => ({ default: m.WorldStatePage })));
-const PerformancePage = reactExports.lazy(() => __vitePreload(() => import("./PerformancePage.BMhD7YPK.js"), true ? __vite__mapDeps([32,1,33,4]) : void 0).then((m) => ({ default: m.default })));
-const ScenarioStateMachineEditor = reactExports.lazy(() => __vitePreload(() => import("./ScenarioStateMachineEditor.WPpE-jxQ.js"), true ? __vite__mapDeps([34,1,26,27,31,35,33,4]) : void 0).then((m) => ({ default: m.ScenarioStateMachineEditor })));
-const ScenarioStudioPage = reactExports.lazy(() => __vitePreload(() => import("./ScenarioStudioPage.BHEJU3GV.js"), true ? __vite__mapDeps([36,1,26,27,33,35,31,4]) : void 0).then((m) => ({ default: m.ScenarioStudioPage })));
-const AnalyticsPage = reactExports.lazy(() => __vitePreload(() => import("./AnalyticsPage.CLP8riY5.js"), true ? __vite__mapDeps([37,1,2,4]) : void 0));
-const PillarAnalyticsPage = reactExports.lazy(() => __vitePreload(() => import("./PillarAnalyticsPage.CeyXx1Nx.js"), true ? __vite__mapDeps([38,1,8,2,4]) : void 0).then((m) => ({ default: m.PillarAnalyticsPage })));
-const HostedMocksPage = reactExports.lazy(() => __vitePreload(() => import("./HostedMocksPage.Dlq1SeIF.js"), true ? __vite__mapDeps([39,1]) : void 0).then((m) => ({ default: m.HostedMocksPage })));
-const ObservabilityPage = reactExports.lazy(() => __vitePreload(() => import("./ObservabilityPage.BNqAbjVV.js"), true ? __vite__mapDeps([40,1,31,4]) : void 0).then((m) => ({ default: m.ObservabilityPage })));
-const TracesPage = reactExports.lazy(() => __vitePreload(() => import("./TracesPage.K6GUekvG.js"), true ? __vite__mapDeps([41,1,4]) : void 0).then((m) => ({ default: m.TracesPage })));
-const TestGeneratorPage = reactExports.lazy(() => __vitePreload(() => import("./TestGeneratorPage.gppaUUGf.js"), true ? __vite__mapDeps([42,1]) : void 0));
-const TestExecutionDashboard = reactExports.lazy(() => __vitePreload(() => import("./TestExecutionDashboard.DiB0s5f4.js"), true ? __vite__mapDeps([43,1,27]) : void 0));
-const IntegrationTestBuilder = reactExports.lazy(() => __vitePreload(() => import("./IntegrationTestBuilder.MSZa9cMz.js"), true ? __vite__mapDeps([44,1]) : void 0));
-const ChaosPage = reactExports.lazy(() => __vitePreload(() => import("./ChaosPage.Bc1ygq40.js"), true ? __vite__mapDeps([45,1,3,2,33,4]) : void 0).then((m) => ({ default: m.ChaosPage })));
-const ResiliencePage = reactExports.lazy(() => __vitePreload(() => import("./ResiliencePage.D5yaC0w8.js"), true ? __vite__mapDeps([46,1]) : void 0).then((m) => ({ default: m.ResiliencePage })));
-const RecorderPage = reactExports.lazy(() => __vitePreload(() => import("./RecorderPage.3f6XdNuJ.js"), true ? __vite__mapDeps([47,1,4]) : void 0).then((m) => ({ default: m.RecorderPage })));
-const BehavioralCloningPage = reactExports.lazy(() => __vitePreload(() => import("./BehavioralCloningPage.CDm96B6i.js"), true ? __vite__mapDeps([48,1,16,9,8,49,4]) : void 0).then((m) => ({ default: m.BehavioralCloningPage })));
-const OrchestrationBuilder = reactExports.lazy(() => __vitePreload(() => import("./OrchestrationBuilder.yzeAKE-m.js"), true ? __vite__mapDeps([50,1]) : void 0));
-const OrchestrationExecutionView = reactExports.lazy(() => __vitePreload(() => import("./OrchestrationExecutionView.AmFsrqUR.js"), true ? __vite__mapDeps([51,1,31,4]) : void 0));
-const PluginRegistryPage = reactExports.lazy(() => __vitePreload(() => import("./PluginRegistryPage.DXB7-jCf.js"), true ? __vite__mapDeps([52,1,4]) : void 0));
-const TemplateMarketplacePage = reactExports.lazy(() => __vitePreload(() => import("./TemplateMarketplacePage.BcUfSnm6.js"), true ? __vite__mapDeps([53,1]) : void 0));
-const ShowcasePage = reactExports.lazy(() => __vitePreload(() => import("./ShowcasePage.iTdrNDBw.js"), true ? __vite__mapDeps([54,1,55,4]) : void 0).then((m) => ({ default: m.ShowcasePage })));
-const LearningHubPage = reactExports.lazy(() => __vitePreload(() => import("./LearningHubPage.FXSo97YL.js"), true ? __vite__mapDeps([56,1,55,4]) : void 0).then((m) => ({ default: m.LearningHubPage })));
-const UserManagementPage = reactExports.lazy(() => __vitePreload(() => import("./UserManagementPage.C3QrbxNG.js"), true ? __vite__mapDeps([57,1,58,4]) : void 0).then((m) => ({ default: m.UserManagementPage })));
-const MockAIPage = reactExports.lazy(() => __vitePreload(() => import("./MockAIPage.Bw6xzji8.js"), true ? __vite__mapDeps([59,1,13,8,4]) : void 0).then((m) => ({ default: m.MockAIPage })));
-const MockAIOpenApiGeneratorPage = reactExports.lazy(() => __vitePreload(() => import("./MockAIOpenApiGeneratorPage.CYZUEjS1.js"), true ? __vite__mapDeps([60,1,4]) : void 0).then((m) => ({ default: m.MockAIOpenApiGeneratorPage })));
-const MockAIRulesPage = reactExports.lazy(() => __vitePreload(() => import("./MockAIRulesPage.BjdDVFS9.js"), true ? __vite__mapDeps([61,1,8,4]) : void 0).then((m) => ({ default: m.MockAIRulesPage })));
-const VoicePage = reactExports.lazy(() => __vitePreload(() => import("./VoicePage.C9UGz95c.js"), true ? __vite__mapDeps([62,1,13,9,8,4]) : void 0).then((m) => ({ default: m.VoicePage })));
-const AIStudioPage = reactExports.lazy(() => __vitePreload(() => import("./AIStudioPage.mqGF0V6M.js"), true ? __vite__mapDeps([63,1,13,28,8,49,58,4]) : void 0).then((m) => ({ default: m.AIStudioPage })));
+const DashboardPage = reactExports.lazy(() => __vitePreload(() => import("./DashboardPage.CNMptHoX.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0).then((m) => ({ default: m.DashboardPage })));
+const ServicesPage = reactExports.lazy(() => __vitePreload(() => import("./ServicesPage.CmiICeQ4.js"), true ? __vite__mapDeps([5,1,4]) : void 0).then((m) => ({ default: m.ServicesPage })));
+const LogsPage = reactExports.lazy(() => __vitePreload(() => import("./LogsPage.CJxt3GcC.js"), true ? __vite__mapDeps([6,1,7,8,9,4]) : void 0).then((m) => ({ default: m.LogsPage })));
+const MetricsPage = reactExports.lazy(() => __vitePreload(() => import("./MetricsPage.Cw2KF7jM.js"), true ? __vite__mapDeps([10,1,4]) : void 0).then((m) => ({ default: m.MetricsPage })));
+const VerificationPage = reactExports.lazy(() => __vitePreload(() => import("./VerificationPage.C-JPS3kd.js"), true ? __vite__mapDeps([11,1,4]) : void 0).then((m) => ({ default: m.VerificationPage })));
+const ContractDiffPage = reactExports.lazy(() => __vitePreload(() => import("./ContractDiffPage.Bl79VmwU.js"), true ? __vite__mapDeps([12,1,13,9,4]) : void 0).then((m) => ({ default: m.ContractDiffPage })));
+const IncidentDashboardPage = reactExports.lazy(() => __vitePreload(() => import("./IncidentDashboardPage.BTB6c-IS.js"), true ? __vite__mapDeps([14,1,4]) : void 0).then((m) => ({ default: m.IncidentDashboardPage })));
+const FitnessFunctionsPage = reactExports.lazy(() => __vitePreload(() => import("./FitnessFunctionsPage.DI4hfpBK.js"), true ? __vite__mapDeps([15,1,16,17,4]) : void 0).then((m) => ({ default: m.FitnessFunctionsPage })));
+const FixturesPage = reactExports.lazy(() => __vitePreload(() => import("./FixturesPage.B-8YdD7N.js"), true ? __vite__mapDeps([18,1,4]) : void 0).then((m) => ({ default: m.FixturesPage })));
+const TestingPage = reactExports.lazy(() => __vitePreload(() => import("./TestingPage.De-Fcur8.js"), true ? __vite__mapDeps([19,1,4]) : void 0).then((m) => ({ default: m.TestingPage })));
+const ImportPage = reactExports.lazy(() => __vitePreload(() => import("./ImportPage.DpPkHDuE.js"), true ? __vite__mapDeps([20,1,4]) : void 0).then((m) => ({ default: m.ImportPage })));
+const WorkspacesPage = reactExports.lazy(() => __vitePreload(() => import("./WorkspacesPage.CA4oueEK.js"), true ? __vite__mapDeps([21,1,17,4]) : void 0));
+const PlaygroundPage = reactExports.lazy(() => __vitePreload(() => import("./PlaygroundPage.GjwNBDPC.js"), true ? __vite__mapDeps([22,1,7,8,9,4]) : void 0).then((m) => ({ default: m.PlaygroundPage })));
+const PluginsPage = reactExports.lazy(() => __vitePreload(() => import("./PluginsPage.pREEuALG.js"), true ? __vite__mapDeps([23,1,4]) : void 0).then((m) => ({ default: m.PluginsPage })));
+const ChainsPage = reactExports.lazy(() => __vitePreload(() => import("./ChainsPage.Cr8o0PYP.js"), true ? __vite__mapDeps([24,1,4]) : void 0).then((m) => ({ default: m.ChainsPage })));
+const GraphPage = reactExports.lazy(() => __vitePreload(() => import("./GraphPage.XVoJOfyW.js"), true ? __vite__mapDeps([25,1,26,27,28,29,4]) : void 0).then((m) => ({ default: m.GraphPage })));
+const WorldStatePage = reactExports.lazy(() => __vitePreload(() => import("./WorldStatePage.B4Uz0fNH.js"), true ? __vite__mapDeps([30,1,26,27,29,31,3,4]) : void 0).then((m) => ({ default: m.WorldStatePage })));
+const PerformancePage = reactExports.lazy(() => __vitePreload(() => import("./PerformancePage.QCDrGEz6.js"), true ? __vite__mapDeps([32,1,33,4]) : void 0).then((m) => ({ default: m.default })));
+const ScenarioStateMachineEditor = reactExports.lazy(() => __vitePreload(() => import("./ScenarioStateMachineEditor.c_q_v59Z.js"), true ? __vite__mapDeps([34,1,26,27,31,35,33,4]) : void 0).then((m) => ({ default: m.ScenarioStateMachineEditor })));
+const ScenarioStudioPage = reactExports.lazy(() => __vitePreload(() => import("./ScenarioStudioPage.5sALfbGz.js"), true ? __vite__mapDeps([36,1,26,27,33,35,31,4]) : void 0).then((m) => ({ default: m.ScenarioStudioPage })));
+const AnalyticsPage = reactExports.lazy(() => __vitePreload(() => import("./AnalyticsPage.B5ytAR1q.js"), true ? __vite__mapDeps([37,1,2,4]) : void 0));
+const PillarAnalyticsPage = reactExports.lazy(() => __vitePreload(() => import("./PillarAnalyticsPage.2cpxnFW_.js"), true ? __vite__mapDeps([38,1,8,2,4]) : void 0).then((m) => ({ default: m.PillarAnalyticsPage })));
+const HostedMocksPage = reactExports.lazy(() => __vitePreload(() => import("./HostedMocksPage.CGb2jbHx.js"), true ? __vite__mapDeps([39,1]) : void 0).then((m) => ({ default: m.HostedMocksPage })));
+const ObservabilityPage = reactExports.lazy(() => __vitePreload(() => import("./ObservabilityPage.Cothqdf2.js"), true ? __vite__mapDeps([40,1,31,4]) : void 0).then((m) => ({ default: m.ObservabilityPage })));
+const TracesPage = reactExports.lazy(() => __vitePreload(() => import("./TracesPage.BFT8tZRL.js"), true ? __vite__mapDeps([41,1,4]) : void 0).then((m) => ({ default: m.TracesPage })));
+const TestGeneratorPage = reactExports.lazy(() => __vitePreload(() => import("./TestGeneratorPage.DqTtvLl4.js"), true ? __vite__mapDeps([42,1]) : void 0));
+const TestExecutionDashboard = reactExports.lazy(() => __vitePreload(() => import("./TestExecutionDashboard.B6F-0BL5.js"), true ? __vite__mapDeps([43,1,27]) : void 0));
+const IntegrationTestBuilder = reactExports.lazy(() => __vitePreload(() => import("./IntegrationTestBuilder.D6vXxWj-.js"), true ? __vite__mapDeps([44,1]) : void 0));
+const ChaosPage = reactExports.lazy(() => __vitePreload(() => import("./ChaosPage.TYn4CA_q.js"), true ? __vite__mapDeps([45,1,3,2,33,4]) : void 0).then((m) => ({ default: m.ChaosPage })));
+const ResiliencePage = reactExports.lazy(() => __vitePreload(() => import("./ResiliencePage.BbdnN0sI.js"), true ? __vite__mapDeps([46,1]) : void 0).then((m) => ({ default: m.ResiliencePage })));
+const RecorderPage = reactExports.lazy(() => __vitePreload(() => import("./RecorderPage.3kwHtLUF.js"), true ? __vite__mapDeps([47,1,4]) : void 0).then((m) => ({ default: m.RecorderPage })));
+const BehavioralCloningPage = reactExports.lazy(() => __vitePreload(() => import("./BehavioralCloningPage.CGZR3RJK.js"), true ? __vite__mapDeps([48,1,16,9,8,49,4]) : void 0).then((m) => ({ default: m.BehavioralCloningPage })));
+const OrchestrationBuilder = reactExports.lazy(() => __vitePreload(() => import("./OrchestrationBuilder.D2VUNLtZ.js"), true ? __vite__mapDeps([50,1]) : void 0));
+const OrchestrationExecutionView = reactExports.lazy(() => __vitePreload(() => import("./OrchestrationExecutionView.BMkFSF7c.js"), true ? __vite__mapDeps([51,1,31,4]) : void 0));
+const PluginRegistryPage = reactExports.lazy(() => __vitePreload(() => import("./PluginRegistryPage.BChYShpO.js"), true ? __vite__mapDeps([52,1,4]) : void 0));
+const TemplateMarketplacePage = reactExports.lazy(() => __vitePreload(() => import("./TemplateMarketplacePage.0JBAO_OF.js"), true ? __vite__mapDeps([53,1]) : void 0));
+const ShowcasePage = reactExports.lazy(() => __vitePreload(() => import("./ShowcasePage.BNPMnQ99.js"), true ? __vite__mapDeps([54,1,55,4]) : void 0).then((m) => ({ default: m.ShowcasePage })));
+const LearningHubPage = reactExports.lazy(() => __vitePreload(() => import("./LearningHubPage.DH98z8lH.js"), true ? __vite__mapDeps([56,1,55,4]) : void 0).then((m) => ({ default: m.LearningHubPage })));
+const UserManagementPage = reactExports.lazy(() => __vitePreload(() => import("./UserManagementPage.VW349Hw_.js"), true ? __vite__mapDeps([57,1,58,4]) : void 0).then((m) => ({ default: m.UserManagementPage })));
+const MockAIPage = reactExports.lazy(() => __vitePreload(() => import("./MockAIPage.5hxwO1jM.js"), true ? __vite__mapDeps([59,1,13,8,4]) : void 0).then((m) => ({ default: m.MockAIPage })));
+const MockAIOpenApiGeneratorPage = reactExports.lazy(() => __vitePreload(() => import("./MockAIOpenApiGeneratorPage.Ch-B5TAz.js"), true ? __vite__mapDeps([60,1,4]) : void 0).then((m) => ({ default: m.MockAIOpenApiGeneratorPage })));
+const MockAIRulesPage = reactExports.lazy(() => __vitePreload(() => import("./MockAIRulesPage.FJlsCT58.js"), true ? __vite__mapDeps([61,1,8,4]) : void 0).then((m) => ({ default: m.MockAIRulesPage })));
+const VoicePage = reactExports.lazy(() => __vitePreload(() => import("./VoicePage.BtpGkUJl.js"), true ? __vite__mapDeps([62,1,13,9,8,4]) : void 0).then((m) => ({ default: m.VoicePage })));
+const AIStudioPage = reactExports.lazy(() => __vitePreload(() => import("./AIStudioPage.BPIQUcfV.js"), true ? __vite__mapDeps([63,1,13,28,8,49,58,4]) : void 0).then((m) => ({ default: m.AIStudioPage })));
 function App() {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = reactExports.useState("dashboard");
@@ -23008,13 +22781,13 @@ function App() {
   }, []);
   reactExports.useEffect(() => {
     __vitePreload(async () => {
-      const { isTauri, listenToTauriEvent } = await import("./tauri.Dupv2dRY.js");
+      const { isTauri, listenToTauriEvent } = await import("./tauri.UVgQf7G2.js");
       return { isTauri, listenToTauriEvent };
     }, true ? __vite__mapDeps([64,1,4]) : void 0).then(({ isTauri, listenToTauriEvent }) => {
       if (isTauri) {
         const cleanup1 = listenToTauriEvent("file-opened", (filePath) => {
           __vitePreload(async () => {
-            const { handleFileOpen } = await import("./tauri.Dupv2dRY.js");
+            const { handleFileOpen } = await import("./tauri.UVgQf7G2.js");
             return { handleFileOpen };
           }, true ? __vite__mapDeps([64,1,4]) : void 0).then(({ handleFileOpen }) => {
             handleFileOpen(filePath).catch((err) => {
@@ -23024,7 +22797,7 @@ function App() {
         });
         const cleanup2 = listenToTauriEvent("file-dropped", (filePath) => {
           __vitePreload(async () => {
-            const { handleFileOpen } = await import("./tauri.Dupv2dRY.js");
+            const { handleFileOpen } = await import("./tauri.UVgQf7G2.js");
             return { handleFileOpen };
           }, true ? __vite__mapDeps([64,1,4]) : void 0).then(({ handleFileOpen }) => {
             handleFileOpen(filePath).catch((err) => {
