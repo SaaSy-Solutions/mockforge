@@ -1,10 +1,20 @@
 use axum::{body::Body, http::Request};
 use mockforge_ui::create_admin_router;
+use std::sync::Once;
 use tower::ServiceExt;
+
+static INIT: Once = Once::new();
+
+fn setup_test_env() {
+    INIT.call_once(|| {
+        std::env::set_var("MOCKFORGE_ALLOW_INMEMORY_AUTH", "true");
+    });
+}
 
 /// Test that static assets are served with correct MIME types
 #[tokio::test]
 async fn test_static_assets_mime_types() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,
@@ -88,6 +98,7 @@ async fn test_static_assets_mime_types() {
 /// Test that image assets are served with correct MIME types
 #[tokio::test]
 async fn test_image_assets_mime_types() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,
@@ -163,6 +174,7 @@ async fn test_image_assets_mime_types() {
 /// Test caching headers for static assets
 #[tokio::test]
 async fn test_static_assets_caching_headers() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,
@@ -275,6 +287,7 @@ async fn test_static_assets_caching_headers() {
 /// Test that static assets have appropriate ETags
 #[tokio::test]
 async fn test_static_assets_etags() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,
@@ -347,6 +360,7 @@ async fn test_static_assets_etags() {
 /// Test that static assets handle conditional requests
 #[tokio::test]
 async fn test_conditional_requests() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,
@@ -412,6 +426,7 @@ async fn test_conditional_requests() {
 /// Test that all static routes are accessible
 #[tokio::test]
 async fn test_all_static_routes_accessible() {
+    setup_test_env();
     let static_routes = vec![
         "/",
         "/assets/index.css",
@@ -456,6 +471,7 @@ async fn test_all_static_routes_accessible() {
 /// Test that static assets have reasonable content lengths
 #[tokio::test]
 async fn test_static_assets_content_length() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,
@@ -501,6 +517,7 @@ async fn test_static_assets_content_length() {
 #[ignore = "Requires authentication infrastructure"]
 #[tokio::test]
 async fn test_spa_fallback_routing() {
+    setup_test_env();
     let _app = create_admin_router(
         None,
         None,

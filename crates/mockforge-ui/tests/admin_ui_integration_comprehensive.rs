@@ -9,7 +9,16 @@
 use axum::{body::Body, http::Request};
 use mockforge_ui::create_admin_router;
 use serde_json::json;
+use std::sync::Once;
 use tower::ServiceExt;
+
+static INIT: Once = Once::new();
+
+fn setup_test_env() {
+    INIT.call_once(|| {
+        std::env::set_var("MOCKFORGE_ALLOW_INMEMORY_AUTH", "true");
+    });
+}
 
 /// Helper to create a test router
 fn create_test_router() -> axum::Router {
@@ -119,6 +128,7 @@ async fn test_server_info_endpoint() {
 
 #[tokio::test]
 async fn test_traffic_shaping_config_update() {
+    setup_test_env();
     let app = create_test_router();
 
     let payload = json!({
@@ -218,6 +228,7 @@ async fn test_workspaces_list_endpoint() {
 
 #[tokio::test]
 async fn test_workspace_create_endpoint() {
+    setup_test_env();
     let app = create_test_router();
 
     let payload = json!({
@@ -247,6 +258,7 @@ async fn test_workspace_create_endpoint() {
 
 #[tokio::test]
 async fn test_environments_list_endpoint() {
+    setup_test_env();
     let app = create_test_router();
     let response = app
         .oneshot(
@@ -268,6 +280,7 @@ async fn test_environments_list_endpoint() {
 
 #[tokio::test]
 async fn test_chains_list_endpoint() {
+    setup_test_env();
     let app = create_test_router();
     let response = app
         .oneshot(Request::builder().uri("/__mockforge/chains").body(Body::empty()).unwrap())
@@ -304,6 +317,7 @@ async fn test_validation_get_endpoint() {
 
 #[tokio::test]
 async fn test_validation_update_endpoint() {
+    setup_test_env();
     let app = create_test_router();
 
     let payload = json!({
@@ -363,6 +377,7 @@ async fn test_smoke_tests_list_endpoint() {
 
 #[tokio::test]
 async fn test_smoke_tests_run_endpoint() {
+    setup_test_env();
     let app = create_test_router();
     let response = app
         .oneshot(Request::builder().uri("/__mockforge/smoke/run").body(Body::empty()).unwrap())

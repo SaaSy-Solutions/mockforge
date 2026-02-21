@@ -9,7 +9,16 @@
 use axum::{body::Body, http::Request};
 use mockforge_ui::create_admin_router;
 use serde_json::json;
+use std::sync::Once;
 use tower::ServiceExt;
+
+static INIT: Once = Once::new();
+
+fn setup_test_env() {
+    INIT.call_once(|| {
+        std::env::set_var("MOCKFORGE_ALLOW_INMEMORY_AUTH", "true");
+    });
+}
 
 #[ignore = "Requires authentication infrastructure"]
 #[tokio::test]
@@ -531,6 +540,7 @@ async fn test_logs_clear_endpoint() {
 
 #[tokio::test]
 async fn test_health_endpoint() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,
@@ -567,6 +577,7 @@ async fn test_health_endpoint() {
 #[ignore = "Requires authentication infrastructure"]
 #[tokio::test]
 async fn test_error_responses() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,
@@ -624,6 +635,7 @@ async fn test_error_responses() {
 
 #[tokio::test]
 async fn test_cors_headers() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,

@@ -2,8 +2,16 @@ use axum::{body::Body, http::Request};
 use mockforge_ui::create_admin_router;
 use std::fs;
 use std::path::Path;
-// use std::process::Command; // Unused for now
+use std::sync::Once;
 use tower::ServiceExt;
+
+static INIT: Once = Once::new();
+
+fn setup_test_env() {
+    INIT.call_once(|| {
+        std::env::set_var("MOCKFORGE_ALLOW_INMEMORY_AUTH", "true");
+    });
+}
 
 /// Test that the admin UI builds successfully and serves assets correctly
 #[tokio::test]
@@ -81,6 +89,7 @@ async fn test_admin_ui_build_and_serve() {
 /// Test that the admin UI serves correctly when built assets exist
 #[tokio::test]
 async fn test_admin_ui_serves_built_assets() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,
@@ -251,6 +260,7 @@ async fn test_ui_build_file_structure() {
 /// Test that the UI can handle missing build assets gracefully
 #[tokio::test]
 async fn test_ui_handles_missing_assets() {
+    setup_test_env();
     // This test verifies that the server doesn't crash when UI assets are missing
     // and provides reasonable fallbacks
 
@@ -386,6 +396,7 @@ async fn test_ui_build_process() {
 /// Test that the UI serves proper security headers
 #[tokio::test]
 async fn test_ui_security_headers() {
+    setup_test_env();
     let app = create_admin_router(
         None,
         None,

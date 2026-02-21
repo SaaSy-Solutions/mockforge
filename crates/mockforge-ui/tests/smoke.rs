@@ -1,8 +1,18 @@
 use axum::{body::Body, http::Request};
+use std::sync::Once;
 use tower::ServiceExt; // for `oneshot`
+
+static INIT: Once = Once::new();
+
+fn setup_test_env() {
+    INIT.call_once(|| {
+        std::env::set_var("MOCKFORGE_ALLOW_INMEMORY_AUTH", "true");
+    });
+}
 
 #[tokio::test]
 async fn serves_root_and_assets_and_health() {
+    setup_test_env();
     // admin router at root
     let app = mockforge_ui::create_admin_router(
         None,
@@ -54,6 +64,7 @@ async fn serves_root_and_assets_and_health() {
 
 #[tokio::test]
 async fn works_under_mount_prefix() {
+    setup_test_env();
     // router nested under /admin
     let sub = mockforge_ui::create_admin_router(
         None,
@@ -146,6 +157,7 @@ async fn test_api_endpoints() {
 
 #[tokio::test]
 async fn test_post_endpoints() {
+    setup_test_env();
     // admin router with API enabled
     let app = mockforge_ui::create_admin_router(
         None,
