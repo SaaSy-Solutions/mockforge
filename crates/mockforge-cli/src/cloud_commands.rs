@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use colored::*;
+use dialoguer::Password;
 use mockforge_core::workspace::sync::{SyncConfig, SyncDirection, SyncProvider};
 use mockforge_core::SyncService;
 use serde_json::json;
@@ -370,62 +371,83 @@ async fn handle_login(
         None
     });
 
-    if let Some(provider_name) = provider {
-        // OAuth flow
-        println!("{}", "🔐 OAuth authentication not yet implemented".yellow());
-        println!("   Provider: {}", provider_name);
-        println!("   Service URL: {}", service_url);
-        println!();
+    let api_token = if let Some(provider_name) = provider {
         println!(
             "{}",
-            "Please use --token or set MOCKFORGE_API_KEY environment variable".yellow()
+            format!(
+                "Using '{}' provider token flow. Paste an OAuth access token for this provider.",
+                provider_name
+            )
+            .bright_blue()
         );
-        return Ok(());
-    }
+        api_token
+            .or_else(|| std::env::var("MOCKFORGE_OAUTH_ACCESS_TOKEN").ok())
+            .or_else(|| {
+                Password::new()
+                    .with_prompt(format!("{} access token", provider_name))
+                    .allow_empty_password(false)
+                    .interact()
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+            })
+    } else {
+        api_token
+    };
 
     if let Some(token) = api_token {
-        // Validate token by making a test API call
-        let client = reqwest::Client::new();
-        let response = client
-            .get(format!("{}/api/v1/auth/verify", service_url))
-            .header("Authorization", format!("Bearer {}", token))
-            .send()
-            .await
-            .context("Failed to verify token with cloud service")?;
-
-        if response.status().is_success() {
-            // Save token to config file
-            let config_dir = dirs::home_dir()
-                .map(|p| p.join(".mockforge"))
-                .unwrap_or_else(|| PathBuf::from(".mockforge"));
-
-            std::fs::create_dir_all(&config_dir).context("Failed to create config directory")?;
-
-            let config_path = config_dir.join("cloud.json");
-            let config = json!({
-                "api_key": token,
-                "service_url": service_url,
-                "authenticated_at": chrono::Utc::now().to_rfc3339(),
-            });
-
-            std::fs::write(&config_path, serde_json::to_string_pretty(&config)?)
-                .context("Failed to save authentication config")?;
-
-            println!("{}", "✅ Successfully authenticated with MockForge Cloud".green());
-            println!("   Config saved to: {}", config_path.display());
-        } else {
-            return Err(anyhow::anyhow!("Authentication failed: Invalid token"));
-        }
+        verify_and_save_token(&service_url, &token).await?;
     } else {
-        // Interactive login
-        println!("{}", "🔐 Interactive login not yet implemented".yellow());
-        println!();
-        println!("Please provide an API token:");
+        let prompted = Password::new()
+            .with_prompt("MockForge Cloud API token")
+            .allow_empty_password(false)
+            .interact()
+            .ok()
+            .filter(|s| !s.trim().is_empty());
+
+        if let Some(token) = prompted {
+            verify_and_save_token(&service_url, &token).await?;
+            return Ok(());
+        }
+
+        println!("{}", "❌ No token provided".red());
+        println!("Provide one of:");
         println!("  mockforge cloud login --token <your-token>");
-        println!();
-        println!("Or set the MOCKFORGE_API_KEY environment variable");
+        println!("  MOCKFORGE_API_KEY=<your-token>");
     }
 
+    Ok(())
+}
+
+async fn verify_and_save_token(service_url: &str, token: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("{}/api/v1/auth/verify", service_url))
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .context("Failed to verify token with cloud service")?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!("Authentication failed: Invalid token"));
+    }
+
+    let config_dir = dirs::home_dir()
+        .map(|p| p.join(".mockforge"))
+        .unwrap_or_else(|| PathBuf::from(".mockforge"));
+    std::fs::create_dir_all(&config_dir).context("Failed to create config directory")?;
+
+    let config_path = config_dir.join("cloud.json");
+    let config = json!({
+        "api_key": token,
+        "service_url": service_url,
+        "authenticated_at": chrono::Utc::now().to_rfc3339(),
+    });
+
+    std::fs::write(&config_path, serde_json::to_string_pretty(&config)?)
+        .context("Failed to save authentication config")?;
+
+    println!("{}", "✅ Successfully authenticated with MockForge Cloud".green());
+    println!("   Config saved to: {}", config_path.display());
     Ok(())
 }
 
