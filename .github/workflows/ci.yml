@@ -18,6 +18,8 @@ env:
   MOCKFORGE_REALITY_LEVEL: 3
   # Allow in-memory auth for integration tests (cfg!(test) is false in integration tests)
   MOCKFORGE_ALLOW_INMEMORY_AUTH: "true"
+  MOCKFORGE_ENABLE_DEV_AUTH: "true"
+  ENVIRONMENT: "development"
 
 jobs:
   test:

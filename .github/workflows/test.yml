@@ -20,6 +20,8 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   MOCKFORGE_ALLOW_INMEMORY_AUTH: "true"
+  MOCKFORGE_ENABLE_DEV_AUTH: "true"
+  ENVIRONMENT: "development"
 
 jobs:
   test:
