@@ -317,14 +317,68 @@ pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()
         PluginCommands::Search {
             query,
             category,
-            limit: _,
+            limit,
         } => {
             println!("🔍 Searching plugins: {}", query);
-            if let Some(cat) = category {
+            if let Some(cat) = &category {
                 println!("   Category: {}", cat);
             }
-            println!("   (Plugin search not yet implemented)");
-            println!("   Future: Will search the plugin marketplace");
+
+            let config = PluginLoaderConfig::default();
+            let installer = PluginInstaller::new(config)?;
+            let query_lower = query.to_lowercase();
+            let category_lower = category.as_ref().map(|c| c.to_lowercase());
+
+            let mut matches = installer
+                .list_plugins_with_metadata()
+                .await
+                .into_iter()
+                .filter(|(plugin_id, metadata)| {
+                    let source_kind = match &metadata.source {
+                        PluginSource::Local(_) => "local",
+                        PluginSource::Url { .. } => "url",
+                        PluginSource::Git(_) => "git",
+                        PluginSource::Registry { .. } => "registry",
+                    };
+
+                    let source_text = format!("{:?}", metadata.source).to_lowercase();
+                    let searchable = format!(
+                        "{} {} {} {}",
+                        plugin_id,
+                        metadata.version,
+                        source_kind,
+                        source_text
+                    )
+                    .to_lowercase();
+                    let query_match = searchable.contains(&query_lower);
+                    let category_match = category_lower
+                        .as_ref()
+                        .is_none_or(|cat| source_kind.contains(cat));
+
+                    query_match && category_match
+                })
+                .collect::<Vec<_>>();
+
+            matches.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+
+            if matches.is_empty() {
+                println!("   No installed plugins matched your query");
+                return Ok(());
+            }
+
+            println!("   Found {} installed plugin(s):", matches.len().min(limit));
+            for (plugin_id, metadata) in matches.into_iter().take(limit) {
+                let source_kind = match &metadata.source {
+                    PluginSource::Local(_) => "local",
+                    PluginSource::Url { .. } => "url",
+                    PluginSource::Git(_) => "git",
+                    PluginSource::Registry { .. } => "registry",
+                };
+                println!(
+                    "   - {} v{} [{}] source={:?}",
+                    plugin_id, metadata.version, source_kind, metadata.source
+                );
+            }
         }
         PluginCommands::Init {
             name,
