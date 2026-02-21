@@ -13,7 +13,7 @@ use mockforge_core::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 /// Workspace management state
 #[derive(Debug, Clone)]
@@ -215,7 +215,7 @@ pub async fn update_workspace(
     // Get existing workspace
     let mut tenant_ws = match registry.get_workspace(&workspace_id) {
         Ok(ws) => ws,
-        Err(e) => {
+        Err(_e) => {
             return Err((
                 StatusCode::NOT_FOUND,
                 Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
@@ -1312,13 +1312,96 @@ pub async fn trigger_sync(
     Ok(Json(ApiResponse::success("Sync triggered".to_string())))
 }
 
-/// Get pending sync changes (placeholder until diff engine is wired).
+#[derive(Debug, Clone, Serialize)]
+struct SyncChangeItem {
+    change_type: String,
+    path: String,
+    description: String,
+    requires_confirmation: bool,
+}
+
+fn collect_sync_changes(
+    target_directory: PathBuf,
+    last_sync: Option<chrono::DateTime<chrono::Utc>>,
+) -> Vec<SyncChangeItem> {
+    const MAX_CHANGES: usize = 250;
+
+    if !target_directory.exists() {
+        return vec![SyncChangeItem {
+            change_type: "created".to_string(),
+            path: target_directory.display().to_string(),
+            description: "Sync target directory does not exist yet and will be created during sync"
+                .to_string(),
+            requires_confirmation: false,
+        }];
+    }
+
+    let mut changes = Vec::new();
+    let mut stack = vec![target_directory.clone()];
+
+    while let Some(current_dir) = stack.pop() {
+        let entries = match std::fs::read_dir(&current_dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+
+        for entry in entries.flatten() {
+            if changes.len() >= MAX_CHANGES {
+                break;
+            }
+
+            let path = entry.path();
+            let metadata = match entry.metadata() {
+                Ok(metadata) => metadata,
+                Err(_) => continue,
+            };
+
+            if metadata.is_dir() {
+                stack.push(path);
+                continue;
+            }
+
+            let modified_after_sync = match (metadata.modified(), last_sync) {
+                (Ok(modified), Some(last_sync_ts)) => {
+                    let modified_utc = chrono::DateTime::<chrono::Utc>::from(modified);
+                    modified_utc > last_sync_ts
+                }
+                (Ok(_), None) => true,
+                (Err(_), _) => false,
+            };
+
+            if !modified_after_sync {
+                continue;
+            }
+
+            let rel_path = path
+                .strip_prefix(&target_directory)
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| path.display().to_string());
+
+            changes.push(SyncChangeItem {
+                change_type: "modified".to_string(),
+                path: rel_path.clone(),
+                description: format!("Detected filesystem change in '{}'", rel_path),
+                requires_confirmation: true,
+            });
+        }
+
+        if changes.len() >= MAX_CHANGES {
+            break;
+        }
+    }
+
+    changes
+}
+
+/// Get pending sync changes by comparing sync directory files against last sync timestamp.
 pub async fn get_sync_changes(
     State(state): State<WorkspaceState>,
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Vec<serde_json::Value>>>, Response> {
     let registry = state.registry.read().await;
-    registry.get_workspace(&workspace_id).map_err(|_| {
+    let tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
         (
             StatusCode::NOT_FOUND,
             Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
@@ -1326,7 +1409,28 @@ pub async fn get_sync_changes(
             .into_response()
     })?;
 
-    Ok(Json(ApiResponse::success(Vec::new())))
+    let sync = tenant_ws.workspace.get_sync_config().clone();
+    let changes: Vec<serde_json::Value> = if !sync.enabled {
+        Vec::new()
+    } else if let Some(target_directory) = sync.target_directory.clone() {
+        let target_directory = PathBuf::from(target_directory);
+        tokio::task::spawn_blocking(move || collect_sync_changes(target_directory, sync.last_sync))
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("Failed to inspect sync directory: {}", e)})),
+                )
+                    .into_response()
+            })?
+            .into_iter()
+            .map(|change| serde_json::to_value(change).unwrap_or_default())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    Ok(Json(ApiResponse::success(changes)))
 }
 
 /// Confirm and apply pending sync changes.
