@@ -591,15 +591,50 @@ impl HttpBridge {
 
     /// Handle streaming request (returns SSE stream)
     async fn handle_streaming_request(
-        _proxy: &MockReflectionProxy,
+        proxy: &MockReflectionProxy,
         _converter: &ProtobufJsonConverter,
-        _service_name: &str,
-        _method_name: &str,
-        _json_request: Value,
+        service_name: &str,
+        method_name: &str,
+        json_request: Value,
     ) -> Result<BridgeResponse<Value>, Box<dyn std::error::Error + Send + Sync>> {
-        // For now, return an error indicating streaming is not yet implemented via HTTP
-        // Full streaming implementation would use Server-Sent Events
-        Err("Streaming responses via HTTP bridge are not yet implemented".into())
+        // SSE/websocket streaming is not wired yet, but provide a deterministic
+        // JSON stream payload so HTTP clients can exercise streaming contracts.
+        let mut events = Vec::new();
+        for seq in 0..3 {
+            events.push(serde_json::json!({
+                "sequence": seq + 1,
+                "service": service_name,
+                "method": method_name,
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "data": {
+                    "message": format!("mock stream event {} from {}.{}", seq + 1, service_name, method_name),
+                    "request_echo": json_request.clone()
+                }
+            }));
+        }
+
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "x-mockforge-streaming-mode".to_string(),
+            "json-envelope".to_string(),
+        );
+        metadata.insert("x-mockforge-stream-count".to_string(), "3".to_string());
+        metadata.insert(
+            "x-mockforge-service-count".to_string(),
+            proxy.service_names().len().to_string(),
+        );
+
+        Ok(BridgeResponse {
+            success: true,
+            data: Some(serde_json::json!({
+                "stream_type": "server",
+                "service": service_name,
+                "method": method_name,
+                "events": events
+            })),
+            error: None,
+            metadata,
+        })
     }
 }
 

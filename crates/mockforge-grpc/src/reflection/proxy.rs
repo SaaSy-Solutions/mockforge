@@ -506,8 +506,53 @@ impl ReflectionProxy {
 
         #[cfg(not(feature = "data-faker"))]
         {
-            debug!("Data faker feature not enabled, returning unimplemented for server streaming");
-            Err(Status::unimplemented("Server streaming requires data-faker feature"))
+            debug!("Data faker feature not enabled, using built-in mock stream generation");
+
+            let service_name = method.parent_service().name().to_string();
+            let method_name = method.name().to_string();
+
+            let (tx, rx) = mpsc::channel(32);
+            let stream = Box::pin(ReceiverStream::new(rx))
+                as Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>;
+
+            let proxy = self;
+            let method_for_task = method.clone();
+            tokio::spawn(async move {
+                for _ in 0..5 {
+                    let message_result = proxy
+                        .generate_mock_response(&service_name, &method_name, &method_for_task)
+                        .await;
+                    if tx.send(message_result).await.is_err() {
+                        break;
+                    }
+                }
+            });
+
+            let mut response = Response::new(stream);
+            for entry in metadata.iter() {
+                if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
+                    if !key.as_str().starts_with(':')
+                        && !key.as_str().starts_with("grpc-")
+                        && !key.as_str().starts_with("te")
+                        && !key.as_str().starts_with("content-type")
+                    {
+                        response.metadata_mut().insert(key.clone(), value.clone());
+                    }
+                }
+            }
+
+            response
+                .metadata_mut()
+                .insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-method", method.name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
+            response.metadata_mut().insert("x-mockforge-stream-count", "5".parse().unwrap());
+
+            Ok(response)
         }
     }
 
@@ -671,8 +716,61 @@ impl ReflectionProxy {
 
         #[cfg(not(feature = "data-faker"))]
         {
-            debug!("Data faker feature not enabled, returning unimplemented for client streaming");
-            Err(Status::unimplemented("Client streaming requires data-faker feature"))
+            debug!("Data faker feature not enabled, using built-in mock client-stream response");
+
+            let request_metadata = request.metadata().clone();
+            let mut stream = request.into_inner();
+            let mut message_count = 0usize;
+
+            while let Some(message_result) = stream.next().await {
+                match message_result {
+                    Ok(_) => {
+                        message_count += 1;
+                    }
+                    Err(e) => {
+                        warn!("Error receiving client streaming message: {}", e);
+                        return Err(Status::internal(format!(
+                            "Error processing streaming request: {}",
+                            e
+                        )));
+                    }
+                }
+            }
+
+            let service_name = method.parent_service().name().to_string();
+            let method_name = method.name().to_string();
+            let mock_response = self
+                .generate_mock_response(&service_name, &method_name, &method)
+                .await?;
+            let mut response = Response::new(mock_response);
+
+            for entry in request_metadata.iter() {
+                if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
+                    if !key.as_str().starts_with(':')
+                        && !key.as_str().starts_with("grpc-")
+                        && !key.as_str().starts_with("te")
+                        && !key.as_str().starts_with("content-type")
+                    {
+                        response.metadata_mut().insert(key.clone(), value.clone());
+                    }
+                }
+            }
+
+            response
+                .metadata_mut()
+                .insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-method", method.name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
+            response.metadata_mut().insert(
+                "x-mockforge-message-count",
+                message_count.to_string().parse().unwrap(),
+            );
+
+            Ok(response)
         }
     }
 
@@ -770,8 +868,77 @@ impl ReflectionProxy {
 
         #[cfg(not(feature = "data-faker"))]
         {
-            debug!("Data faker feature not enabled, returning unimplemented for bidirectional streaming");
-            Err(Status::unimplemented("Bidirectional streaming requires data-faker feature"))
+            debug!(
+                "Data faker feature not enabled, using built-in mock bidirectional stream generation"
+            );
+
+            let metadata = request.metadata().clone();
+            let service_name = method.parent_service().name().to_string();
+            let method_name = method.name().to_string();
+            let method_for_task = method.clone();
+
+            let (tx, rx) = mpsc::channel(32);
+            let stream = Box::pin(ReceiverStream::new(rx))
+                as Pin<Box<dyn Stream<Item = Result<DynamicMessage, Status>> + Send>>;
+
+            let proxy = self;
+            tokio::spawn(async move {
+                for _ in 0..10 {
+                    let message_result = proxy
+                        .generate_mock_response(&service_name, &method_name, &method_for_task)
+                        .await;
+                    if tx.send(message_result).await.is_err() {
+                        break;
+                    }
+                }
+            });
+
+            let mut response = Response::new(stream);
+            for entry in metadata.iter() {
+                if let tonic::metadata::KeyAndValueRef::Ascii(key, value) = entry {
+                    if !key.as_str().starts_with(':')
+                        && !key.as_str().starts_with("grpc-")
+                        && !key.as_str().starts_with("te")
+                        && !key.as_str().starts_with("content-type")
+                    {
+                        response.metadata_mut().insert(key.clone(), value.clone());
+                    }
+                }
+            }
+
+            response
+                .metadata_mut()
+                .insert("x-mockforge-service", method.parent_service().name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-method", method.name().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
+            response
+                .metadata_mut()
+                .insert("x-mockforge-stream-count", "10".parse().unwrap());
+
+            let mut incoming_stream = request.into_inner();
+            let method_name_for_log = method.name().to_string();
+            tokio::spawn(async move {
+                let mut count = 0usize;
+                while let Some(message_result) = incoming_stream.next().await {
+                    match message_result {
+                        Ok(_) => count += 1,
+                        Err(e) => {
+                            warn!("Error processing bidirectional message: {}", e);
+                            break;
+                        }
+                    }
+                }
+                debug!(
+                    "Finished processing {} bidirectional request messages for method {}",
+                    count, method_name_for_log
+                );
+            });
+
+            Ok(response)
         }
     }
 

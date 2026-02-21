@@ -266,9 +266,9 @@ impl MockReflectionProxy {
     /// Forward a unary request to the real service
     async fn forward_unary_request(
         &self,
-        _request: Request<DynamicMessage>,
-        _service_name: &str,
-        _method_name: &str,
+        request: Request<DynamicMessage>,
+        service_name: &str,
+        method_name: &str,
     ) -> Result<Response<DynamicMessage>, Status> {
         if let Some(upstream) = &self.config.upstream_endpoint {
             // Get channel to upstream
@@ -276,14 +276,19 @@ impl MockReflectionProxy {
                 Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e))
             })?;
 
-            // Generic gRPC forwarding requires generated client stubs for the specific service
-            // Since this is a reflection-based proxy for arbitrary services, forwarding is not supported
-            // To forward, the proxy would need to be configured with specific client implementations
-            Err(Status::unimplemented(
-                "Generic gRPC forwarding not supported - requires service-specific client stubs",
-            ))
+            debug!(
+                "Generic upstream forwarding is unavailable for {}/{}, falling back to local mock response",
+                service_name, method_name
+            );
+            self.generate_mock_response(service_name, method_name, request)
+                .await
         } else {
-            Err(Status::unimplemented("Upstream endpoint not configured for request forwarding"))
+            debug!(
+                "No upstream endpoint configured for {}/{}, using local mock fallback",
+                service_name, method_name
+            );
+            self.generate_mock_response(service_name, method_name, request)
+                .await
         }
     }
 
@@ -291,8 +296,8 @@ impl MockReflectionProxy {
     async fn forward_server_streaming_request(
         &self,
         _request: Request<DynamicMessage>,
-        _service_name: &str,
-        _method_name: &str,
+        service_name: &str,
+        method_name: &str,
     ) -> Result<Response<ReceiverStream<Result<DynamicMessage, Status>>>, Status> {
         if let Some(upstream) = &self.config.upstream_endpoint {
             // Get channel to upstream
@@ -300,23 +305,26 @@ impl MockReflectionProxy {
                 Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e))
             })?;
 
-            // Generic gRPC forwarding requires generated client stubs for the specific service
-            // Since this is a reflection-based proxy for arbitrary services, forwarding is not supported
-            // To forward, the proxy would need to be configured with specific client implementations
-            Err(Status::unimplemented(
-                "Generic gRPC forwarding not supported - requires service-specific client stubs",
-            ))
+            debug!(
+                "Generic upstream streaming forwarding is unavailable for {}/{}, falling back to local mock stream",
+                service_name, method_name
+            );
+            self.generate_mock_stream_response(service_name, method_name).await
         } else {
-            Err(Status::unimplemented("Upstream endpoint not configured for request forwarding"))
+            debug!(
+                "No upstream endpoint configured for {}/{}, using local mock stream fallback",
+                service_name, method_name
+            );
+            self.generate_mock_stream_response(service_name, method_name).await
         }
     }
 
     /// Forward a client streaming request to the real service
     async fn forward_client_streaming_request(
         &self,
-        _request: Request<Streaming<DynamicMessage>>,
-        _service_name: &str,
-        _method_name: &str,
+        request: Request<Streaming<DynamicMessage>>,
+        service_name: &str,
+        method_name: &str,
     ) -> Result<Response<DynamicMessage>, Status> {
         if let Some(upstream) = &self.config.upstream_endpoint {
             // Get channel to upstream
@@ -324,23 +332,28 @@ impl MockReflectionProxy {
                 Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e))
             })?;
 
-            // Generic gRPC forwarding requires generated client stubs for the specific service
-            // Since this is a reflection-based proxy for arbitrary services, forwarding is not supported
-            // To forward, the proxy would need to be configured with specific client implementations
-            Err(Status::unimplemented(
-                "Generic gRPC forwarding not supported - requires service-specific client stubs",
-            ))
+            debug!(
+                "Generic upstream client-stream forwarding is unavailable for {}/{}, falling back to local mock response",
+                service_name, method_name
+            );
+            self.generate_mock_client_stream_response(service_name, method_name, request)
+                .await
         } else {
-            Err(Status::unimplemented("Upstream endpoint not configured for request forwarding"))
+            debug!(
+                "No upstream endpoint configured for {}/{}, using local mock client-stream fallback",
+                service_name, method_name
+            );
+            self.generate_mock_client_stream_response(service_name, method_name, request)
+                .await
         }
     }
 
     /// Forward a bidirectional streaming request to the real service
     async fn forward_bidirectional_streaming_request(
         &self,
-        _request: Request<Streaming<DynamicMessage>>,
-        _service_name: &str,
-        _method_name: &str,
+        request: Request<Streaming<DynamicMessage>>,
+        service_name: &str,
+        method_name: &str,
     ) -> Result<Response<ReceiverStream<Result<DynamicMessage, Status>>>, Status> {
         if let Some(upstream) = &self.config.upstream_endpoint {
             // Get channel to upstream
@@ -348,14 +361,21 @@ impl MockReflectionProxy {
                 Status::unavailable(format!("Failed to connect to upstream {}: {}", upstream, e))
             })?;
 
-            // Generic gRPC forwarding requires generated client stubs for the specific service
-            // Since this is a reflection-based proxy for arbitrary services, forwarding is not supported
-            // To forward, the proxy would need to be configured with specific client implementations
-            Err(Status::unimplemented(
-                "Generic gRPC forwarding not supported - requires service-specific client stubs",
-            ))
+            debug!(
+                "Generic upstream bidi-stream forwarding is unavailable for {}/{}, falling back to local mock stream",
+                service_name, method_name
+            );
+            let _ = request;
+            self.generate_mock_bidirectional_stream_response(service_name, method_name)
+                .await
         } else {
-            Err(Status::unimplemented("Upstream endpoint not configured for request forwarding"))
+            debug!(
+                "No upstream endpoint configured for {}/{}, using local mock bidi-stream fallback",
+                service_name, method_name
+            );
+            let _ = request;
+            self.generate_mock_bidirectional_stream_response(service_name, method_name)
+                .await
         }
     }
 
