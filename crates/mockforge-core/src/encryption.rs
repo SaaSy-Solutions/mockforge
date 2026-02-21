@@ -34,10 +34,7 @@ use std::fmt;
 use thiserror::Error;
 use tracing;
 
-#[cfg(target_os = "windows")]
-use windows::Win32::Security::Credentials::{
-    CredDeleteW, CredReadW, CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
-};
+// Windows Credential Manager types are imported locally in the platform-specific methods below.
 
 /// Errors that can occur during encryption/decryption operations
 #[derive(Error, Debug)]
@@ -554,41 +551,42 @@ impl MasterKeyManager {
 
     #[cfg(target_os = "windows")]
     fn store_in_windows_credential_manager(&self, key: &str) -> Result<()> {
-        use std::ffi::OsString;
-        use std::os::windows::ffi::OsStringExt;
-        use windows::core::PCWSTR;
-        use windows::Win32::Foundation::ERROR_NO_SUCH_LOGON_SESSION;
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PWSTR;
         use windows::Win32::Security::Credentials::{
-            CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
+            CredWriteW, CREDENTIALW, CRED_FLAGS, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
         };
 
         let target_name = "MockForge/MasterKey";
-        let target_name_wide: Vec<u16> =
-            OsString::from(target_name).encode_wide().chain(std::iter::once(0)).collect();
+        let mut target_name_wide: Vec<u16> =
+            OsStr::new(target_name).encode_wide().chain(std::iter::once(0)).collect();
 
-        let credential_blob: Vec<u16> =
-            OsString::from(key).encode_wide().chain(std::iter::once(0)).collect();
+        let mut credential_blob: Vec<u16> =
+            OsStr::new(key).encode_wide().chain(std::iter::once(0)).collect();
 
-        let mut credential = CREDENTIALW {
-            Flags: 0,
+        let credential = CREDENTIALW {
+            Flags: CRED_FLAGS::default(),
             Type: CRED_TYPE_GENERIC,
-            TargetName: PCWSTR::from_raw(target_name_wide.as_ptr()),
-            Comment: PCWSTR::null(),
+            TargetName: PWSTR::from_raw(target_name_wide.as_mut_ptr()),
+            Comment: PWSTR::null(),
             LastWritten: windows::Win32::Foundation::FILETIME::default(),
             CredentialBlobSize: (credential_blob.len() * 2) as u32,
-            CredentialBlob: credential_blob.as_ptr() as *mut u8,
+            CredentialBlob: credential_blob.as_mut_ptr() as *mut u8,
             Persist: CRED_PERSIST_LOCAL_MACHINE,
             AttributeCount: 0,
             Attributes: std::ptr::null_mut(),
-            TargetAlias: PCWSTR::null(),
-            UserName: PCWSTR::null(),
+            TargetAlias: PWSTR::null(),
+            UserName: PWSTR::null(),
         };
 
         // SAFETY: CredWriteW is a Windows API function that requires unsafe.
         // We validate all inputs before calling, and Windows guarantees
         // memory safety if the credential structure is correctly formed.
+        // The wide string buffers (target_name_wide, credential_blob) remain
+        // valid for the duration of this call.
         unsafe {
-            CredWriteW(&mut credential, 0).map_err(|e| {
+            CredWriteW(&credential, 0).map_err(|e| {
                 EncryptionError::InvalidKey(format!("Failed to store credential: {:?}", e))
             })?;
         }
@@ -644,27 +642,29 @@ impl MasterKeyManager {
     #[cfg(target_os = "windows")]
     fn retrieve_from_windows_credential_manager(&self) -> Result<String> {
         use std::ffi::OsString;
-        use std::os::windows::ffi::OsStringExt;
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
         use windows::core::PCWSTR;
         use windows::Win32::Security::Credentials::{
             CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC,
         };
 
         let target_name = "MockForge/MasterKey";
-        let target_name_wide: Vec<u16> =
-            OsString::from(target_name).encode_wide().chain(std::iter::once(0)).collect();
+        let target_name_wide: Vec<u16> = std::ffi::OsStr::new(target_name)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
 
         let mut credential_ptr: *mut CREDENTIALW = std::ptr::null_mut();
 
         // SAFETY: CredReadW is a Windows API function that requires unsafe.
-        // We pass a valid pointer from a Vec (target_name_wide.as_ptr()) which
+        // We pass a valid PCWSTR from a Vec (target_name_wide.as_ptr()) which
         // remains valid for the duration of the call. Windows manages the
         // credential_ptr allocation and we properly free it after use.
         unsafe {
             CredReadW(
                 PCWSTR::from_raw(target_name_wide.as_ptr()),
                 CRED_TYPE_GENERIC,
-                0,
+                None,
                 &mut credential_ptr,
             )
             .map_err(|e| {
@@ -691,7 +691,7 @@ impl MasterKeyManager {
                 .to_string();
 
             // Free the credential
-            CredFree(credential_ptr as *mut std::ffi::c_void);
+            CredFree(credential_ptr as *const std::ffi::c_void);
 
             Ok(credential_str)
         }
