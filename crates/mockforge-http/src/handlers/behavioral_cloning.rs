@@ -201,7 +201,7 @@ pub async fn build_probability_model(
     for (req, resp_opt) in &exchanges {
         // Parse request body if available
         if let Some(ref body) = req.body {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
+            if let Ok(json) = serde_json::from_str::<Value>(body) {
                 request_payloads.push(json);
             }
         }
@@ -209,7 +209,7 @@ pub async fn build_probability_model(
         // Parse response body if available
         if let Some(ref resp) = resp_opt {
             if let Some(ref body) = resp.body {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
+                if let Ok(json) = serde_json::from_str::<Value>(body) {
                     response_payloads.push(json);
                 }
             }
@@ -425,10 +425,35 @@ pub async fn apply_amplification(
                 return Err(format!("No probability model found for {} {}", method, endpoint));
             }
         }
-        mockforge_core::behavioral_cloning::AmplificationScope::Sequence { .. } => {
-            // For sequences, we'd need to get models for all endpoints in the sequence
-            // For now, return an error
-            return Err("Sequence-scoped amplification not yet implemented".to_string());
+        mockforge_core::behavioral_cloning::AmplificationScope::Sequence { sequence_id } => {
+            let sequences = db
+                .get_behavioral_sequences()
+                .await
+                .map_err(|e| format!("Failed to query sequences: {}", e))?;
+            let sequence = sequences
+                .into_iter()
+                .find(|s| s.id == *sequence_id)
+                .ok_or_else(|| format!("Sequence {} not found", sequence_id))?;
+
+            let mut models = Vec::new();
+            for step in sequence.steps {
+                if let Some(model) = db
+                    .get_endpoint_probability_model(&step.endpoint, &step.method)
+                    .await
+                    .map_err(|e| format!("Failed to query model: {}", e))?
+                {
+                    models.push(model);
+                }
+            }
+
+            if models.is_empty() {
+                return Err(format!(
+                    "No probability models found for sequence {}",
+                    sequence_id
+                ));
+            }
+
+            models
         }
     };
 
