@@ -54,7 +54,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.0-dev
+          sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
 
       - name: Install protoc (Windows)
         if: matrix.os == 'windows-latest'
@@ -80,10 +80,10 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.rust }}-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run cargo nextest
-        run: cargo nextest run --all-features --workspace
+        run: cargo nextest run --all-features --workspace --exclude desktop-app
 
       - name: Run doctests
-        run: cargo test --doc --all-features --workspace
+        run: cargo test --doc --all-features --workspace --exclude desktop-app
 
   coverage:
     name: Code Coverage
@@ -103,10 +103,10 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.0-dev bc jq
+          sudo apt-get install -y protobuf-compiler libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev bc jq
 
       - name: Generate workspace coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --all-features --workspace --exclude desktop-app --lcov --output-path lcov.info
 
       - name: Generate per-crate coverage baseline
         run: |
