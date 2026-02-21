@@ -2008,6 +2008,26 @@ export interface ScenarioExecutionResult {
  * API calls together, instead of manually calling individual endpoints.
  */
 export class ScenarioExecutor {
+  private scenarios = new Map<string, {
+    id: string;
+    name: string;
+    description?: string;
+    steps: Array<{
+      id: string;
+      name: string;
+      method: string;
+      path: string;
+      body?: any;
+      extract?: Record<string, string>;
+      expectedStatus?: number;
+    }>;
+    parameters?: Array<{
+      name: string;
+      type: string;
+      required?: boolean;
+    }>;
+  }>();
+
   constructor(private apiClient: ApiClient) {}
 
   /**
@@ -2017,10 +2037,49 @@ export class ScenarioExecutor {
     scenarioId: string,
     parameters?: Record<string, any>
   ): Promise<ScenarioExecutionResult> {
-    throw new Error(
-      `Scenario '${scenarioId}' not found. ` +
-      `Scenarios must be registered via the scenario registry or defined in the SDK.`
-    );
+    const scenario = this.scenarios.get(scenarioId);
+    if (!scenario) {
+      throw new Error(
+        `Scenario '${scenarioId}' not found. Register it with registerScenario() first.`
+      );
+    }
+
+    const state: Record<string, any> = { ...(parameters || {}) };
+    const completedSteps: string[] = [];
+
+    for (const step of scenario.steps) {
+      const method = (step.method || 'GET').toUpperCase();
+      let path = step.path;
+      const body = step.body !== undefined ? this.interpolate(step.body, state) : undefined;
+
+      path = path.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
+        const value = state[key.trim()];
+        return value !== undefined ? String(value) : '';
+      });
+
+      const requestOptions: RequestInit = {
+        method,
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      };
+
+      const response = await (this.apiClient as any).request<any>(path, requestOptions);
+      completedSteps.push(step.id);
+
+      if (step.extract) {
+        for (const [stateKey, responsePath] of Object.entries(step.extract)) {
+          const value = this.readPath(response, responsePath);
+          if (value !== undefined) {
+            state[stateKey] = value;
+          }
+        }
+      }
+    }
+
+    return {
+      success: true,
+      completedSteps,
+      finalState: state,
+    };
   }
 
   /**
@@ -2045,7 +2104,38 @@ export class ScenarioExecutor {
       required?: boolean;
     }>;
   }): Promise<void> {
-    console.warn('Scenario registration not yet implemented. Scenarios should be defined at SDK generation time.');
+    this.scenarios.set(scenario.id, scenario);
+  }
+
+  private interpolate(value: any, state: Record<string, any>): any {
+    if (typeof value === 'string') {
+      return value.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
+        const resolved = state[key.trim()];
+        return resolved !== undefined ? String(resolved) : '';
+      });
+    }
+
+    if (Array.isArray(value)) {
+      return value.map(v => this.interpolate(v, state));
+    }
+
+    if (value && typeof value === 'object') {
+      const result: Record<string, any> = {};
+      for (const [k, v] of Object.entries(value)) {
+        result[k] = this.interpolate(v, state);
+      }
+      return result;
+    }
+
+    return value;
+  }
+
+  private readPath(source: any, path: string): any {
+    if (!path) return undefined;
+    return path.split('.').reduce((acc, segment) => {
+      if (acc === null || acc === undefined) return undefined;
+      return acc[segment];
+    }, source);
   }
 }
 
