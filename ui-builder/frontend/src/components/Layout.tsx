@@ -10,6 +10,7 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [version, setVersion] = useState('unknown')
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
@@ -25,6 +26,39 @@ export default function Layout({ children }: LayoutProps) {
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    const fetchVersion = async () => {
+      const endpoints = ['/__mockforge/dashboard', '/__mockforge/api/config']
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, { signal: controller.signal })
+          if (!response.ok) continue
+
+          const data = await response.json()
+          const discoveredVersion =
+            (typeof data?.version === 'string' && data.version) ||
+            (typeof data?.server?.version === 'string' && data.server.version) ||
+            (typeof data?.config?.version === 'string' && data.config.version)
+
+          if (discoveredVersion) {
+            setVersion(discoveredVersion)
+            return
+          }
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') {
+            return
+          }
+        }
+      }
+    }
+
+    void fetchVersion()
+    return () => controller.abort()
   }, [])
 
   const navItems = [
@@ -114,8 +148,7 @@ export default function Layout({ children }: LayoutProps) {
 
         <div className="absolute bottom-0 left-0 right-0 border-t border-border p-4">
           <p className="text-xs text-muted-foreground">
-            {/* TODO: Fetch version from /__mockforge/dashboard endpoint */}
-            Version 0.3.17
+            Version {version}
           </p>
         </div>
       </aside>
