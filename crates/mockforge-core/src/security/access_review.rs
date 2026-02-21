@@ -511,6 +511,83 @@ impl AccessReviewEngine {
         Ok(review)
     }
 
+    /// Start an API token access review.
+    pub async fn start_api_token_review(
+        &mut self,
+        tokens: Vec<ApiTokenInfo>,
+    ) -> Result<AccessReview, crate::Error> {
+        if !self.config.enabled || !self.config.token_review.enabled {
+            return Err(crate::Error::Generic("API token review is not enabled".to_string()));
+        }
+
+        let now = Utc::now();
+        let review_id = self.generate_review_id(ReviewType::ApiToken, now);
+        let due_date = now + Duration::days(14);
+        let next_review = self.config.token_review.frequency.next_review_date(now);
+
+        let mut findings = ReviewFindings {
+            inactive_users: 0,
+            excessive_permissions: 0,
+            no_recent_access: 0,
+            privileged_without_mfa: 0,
+            unused_tokens: 0,
+            excessive_scopes: 0,
+            expiring_soon: 0,
+            custom: HashMap::new(),
+        };
+
+        for token in &tokens {
+            if token
+                .days_unused
+                .is_some_and(|days| days > self.config.token_review.unused_threshold_days)
+            {
+                findings.unused_tokens += 1;
+            }
+
+            if token.scopes.len() > 5 {
+                findings.excessive_scopes += 1;
+            }
+
+            if token.expires_at.is_some_and(|expires| {
+                expires <= now + Duration::days(self.config.token_review.rotation_threshold_days as i64)
+            }) {
+                findings.expiring_soon += 1;
+            }
+        }
+
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "token_ids".to_string(),
+            serde_json::json!(tokens.iter().map(|t| t.token_id.clone()).collect::<Vec<_>>()),
+        );
+
+        let review = AccessReview {
+            review_id: review_id.clone(),
+            review_type: ReviewType::ApiToken,
+            status: ReviewStatus::InProgress,
+            review_date: now,
+            due_date,
+            total_items: tokens.len() as u32,
+            items_reviewed: 0,
+            findings,
+            actions_taken: ReviewActions {
+                users_revoked: 0,
+                permissions_reduced: 0,
+                mfa_enforced: 0,
+                tokens_revoked: 0,
+                tokens_rotated: 0,
+                scopes_reduced: 0,
+                custom: HashMap::new(),
+            },
+            pending_approvals: tokens.len() as u32,
+            next_review_date: next_review,
+            metadata,
+        };
+
+        self.active_reviews.insert(review_id, review.clone());
+        Ok(review)
+    }
+
     /// Approve a user's access in a review
     pub fn approve_user_access(
         &mut self,

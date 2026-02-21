@@ -106,11 +106,9 @@ impl AccessReviewService {
     ///
     /// Fetches all API tokens and starts a review
     pub async fn start_token_review(&mut self) -> Result<String, Error> {
-        let _tokens = self.user_provider.get_api_tokens().await?;
-
-        // For now, token reviews are not fully implemented in the engine
-        // This is a placeholder for future implementation
-        Err(Error::Generic("Token review not yet implemented in review engine".to_string()))
+        let tokens = self.user_provider.get_api_tokens().await?;
+        let review = self.engine.start_api_token_review(tokens).await?;
+        Ok(review.review_id)
     }
 
     /// Approve user access in a review
