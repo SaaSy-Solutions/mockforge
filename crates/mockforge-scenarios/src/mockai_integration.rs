@@ -169,26 +169,55 @@ impl Default for MockAIIntegrationConfig {
 
 /// Apply MockAI configuration from a scenario
 ///
-/// This function takes a MockAI config definition and applies it.
-/// Note: This is a placeholder function. The actual implementation should be
-/// in the CLI or application code that has access to both mockforge-scenarios
-/// and mockforge-core to avoid circular dependencies.
+/// This function builds the effective MockAI config payload by combining
+/// inline config with optional behavior rules and example pairs loaded
+/// from scenario-relative files.
 pub async fn apply_mockai_config(
-    _config_def: &MockAIConfigDefinition,
-    _scenario_root: &PathBuf,
-    _integration_config: &MockAIIntegrationConfig,
+    config_def: &MockAIConfigDefinition,
+    scenario_root: &PathBuf,
+    integration_config: &MockAIIntegrationConfig,
 ) -> Result<serde_json::Value> {
-    // This function is a placeholder. The actual MockAI integration should be
-    // implemented in the CLI or application layer to avoid circular dependencies.
-    // The CLI has access to both mockforge-scenarios and mockforge-core.
-    Err(ScenarioError::Generic(
-        "MockAI config application must be implemented in the CLI or application layer".to_string(),
-    ))
+    if !integration_config.apply_config {
+        return Ok(config_def.config.clone());
+    }
+
+    let mut effective = config_def.config.clone();
+    let target = if let Some(obj) = effective.as_object_mut() {
+        obj
+    } else {
+        return Err(ScenarioError::InvalidManifest(
+            "MockAI config must be a JSON object".to_string(),
+        ));
+    };
+
+    if integration_config.load_behavior_rules {
+        if let Some(rules) = config_def.load_behavior_rules(scenario_root)? {
+            if integration_config.merge_mode != MockAIMergeMode::MergePreferExisting
+                || !target.contains_key("behavior_rules")
+            {
+                target.insert("behavior_rules".to_string(), rules);
+            }
+        }
+    }
+
+    if integration_config.load_example_pairs {
+        if let Some(pairs) = config_def.load_example_pairs(scenario_root)? {
+            if integration_config.merge_mode != MockAIMergeMode::MergePreferExisting
+                || !target.contains_key("example_pairs")
+            {
+                target.insert("example_pairs".to_string(), serde_json::json!(pairs));
+            }
+        }
+    }
+
+    Ok(effective)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_mockai_config_definition() {
@@ -203,5 +232,24 @@ mod tests {
         let config_def = MockAIConfigDefinition::new(config);
         assert!(config_def.behavior_rules_path.is_none());
         assert!(config_def.example_pairs_path.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_apply_mockai_config_loads_optional_files() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().to_path_buf();
+        fs::write(root.join("rules.json"), r#"{"strict":true}"#).unwrap();
+        fs::write(root.join("pairs.json"), r#"[{"input":"a","output":"b"}]"#).unwrap();
+
+        let config_def = MockAIConfigDefinition::new(serde_json::json!({"enabled": true}))
+            .with_behavior_rules("rules.json".to_string())
+            .with_example_pairs("pairs.json".to_string());
+
+        let result = apply_mockai_config(&config_def, &root, &MockAIIntegrationConfig::default())
+            .await
+            .unwrap();
+        assert_eq!(result["enabled"], true);
+        assert_eq!(result["behavior_rules"]["strict"], true);
+        assert_eq!(result["example_pairs"][0]["input"], "a");
     }
 }

@@ -321,15 +321,49 @@ pub fn align_openapi_specs(
 /// Align VBR entities
 ///
 /// Merges scenario VBR entities with existing entities according to the merge strategy.
-/// Note: This is a placeholder. Actual implementation should be in CLI/application layer.
 pub fn align_vbr_entities(
-    _existing_entities: &[crate::vbr_integration::VbrEntityDefinition],
-    _scenario_entities: &[crate::vbr_integration::VbrEntityDefinition],
-    _config: &SchemaAlignmentConfig,
+    existing_entities: &[crate::vbr_integration::VbrEntityDefinition],
+    scenario_entities: &[crate::vbr_integration::VbrEntityDefinition],
+    config: &SchemaAlignmentConfig,
 ) -> Result<Vec<SchemaConflict>> {
-    // This is a placeholder. Actual VBR entity alignment should be
-    // implemented in the CLI or application layer.
-    Ok(Vec::new())
+    let existing_by_name: std::collections::HashMap<_, _> =
+        existing_entities.iter().map(|e| (e.name.as_str(), e)).collect();
+
+    let mut conflicts = Vec::new();
+    for scenario_entity in scenario_entities {
+        if let Some(existing) = existing_by_name.get(scenario_entity.name.as_str()) {
+            if existing.schema != scenario_entity.schema {
+                let resolution = match config.merge_strategy {
+                    MergeStrategy::PreferExisting => Some(existing.schema.clone()),
+                    MergeStrategy::PreferScenario => Some(scenario_entity.schema.clone()),
+                    MergeStrategy::Intelligent => {
+                        if let (Some(existing_obj), Some(scenario_obj)) =
+                            (existing.schema.as_object(), scenario_entity.schema.as_object())
+                        {
+                            let mut merged = existing_obj.clone();
+                            for (k, v) in scenario_obj {
+                                merged.insert(k.clone(), v.clone());
+                            }
+                            Some(Value::Object(merged))
+                        } else {
+                            Some(scenario_entity.schema.clone())
+                        }
+                    }
+                    MergeStrategy::Interactive => None,
+                };
+
+                conflicts.push(SchemaConflict {
+                    conflict_type: ConflictType::ConflictingSchema,
+                    path: format!("entity:{}", scenario_entity.name),
+                    existing: Some(existing.schema.clone()),
+                    scenario: Some(scenario_entity.schema.clone()),
+                    resolution,
+                });
+            }
+        }
+    }
+
+    Ok(conflicts)
 }
 
 #[cfg(test)]
@@ -407,5 +441,26 @@ mod tests {
         let merged = result.merged_spec.unwrap();
         let path = merged["paths"]["/users"]["get"]["summary"].as_str().unwrap();
         assert_eq!(path, "Get users (new)");
+    }
+
+    #[test]
+    fn test_align_vbr_entities_detects_conflict() {
+        let existing = vec![crate::vbr_integration::VbrEntityDefinition::new(
+            "User".to_string(),
+            json!({"base":{"name":"User","fields":[{"name":"id"}]}}),
+        )];
+        let scenario = vec![crate::vbr_integration::VbrEntityDefinition::new(
+            "User".to_string(),
+            json!({"base":{"name":"User","fields":[{"name":"id"},{"name":"email"}]}}),
+        )];
+        let config = SchemaAlignmentConfig {
+            merge_strategy: MergeStrategy::PreferScenario,
+            ..Default::default()
+        };
+
+        let conflicts = align_vbr_entities(&existing, &scenario, &config).unwrap();
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].conflict_type, ConflictType::ConflictingSchema);
+        assert!(conflicts[0].resolution.is_some());
     }
 }
