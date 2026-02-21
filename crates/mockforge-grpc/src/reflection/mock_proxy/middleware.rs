@@ -7,6 +7,8 @@ use crate::reflection::metrics::{record_error, record_success};
 use crate::reflection::mock_proxy::proxy::MockReflectionProxy;
 use prost_reflect::{DynamicMessage, Kind, ReflectMessage};
 use std::time::Instant;
+use tokio::sync::mpsc;
+use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 use tonic::{
     metadata::{Ascii, MetadataKey, MetadataValue},
     Code, Request, Status,
@@ -272,26 +274,78 @@ impl MockReflectionProxy {
         // Apply basic postprocessing (headers only for streaming responses)
         self.postprocess_response(response, service_name, method_name).await?;
 
-        // Note: Body transformation for streaming responses is complex and not yet implemented
-        // It would require creating a new stream that transforms each message individually,
-        // which involves significant async complexity and descriptor pool management.
+        if self.config.response_transform.enabled
+            && (self.config.response_transform.overrides.is_some()
+                || self.config.response_transform.validate_responses)
+        {
+            let (placeholder_tx, placeholder_rx) = mpsc::channel(1);
+            drop(placeholder_tx);
+            let mut original_stream =
+                std::mem::replace(response.get_mut(), ReceiverStream::new(placeholder_rx));
 
-        if self.config.response_transform.enabled {
-            if self.config.response_transform.overrides.is_some() {
-                tracing::debug!(
-                    "Body transformation for streaming responses not yet implemented for {}/{}",
-                    service_name,
-                    method_name
-                );
-            }
+            let (tx, rx) = mpsc::channel(16);
+            let proxy = self.clone();
+            let service_name = service_name.to_string();
+            let method_name = method_name.to_string();
+            let overrides = self.config.response_transform.overrides.clone();
+            let validate_responses = self.config.response_transform.validate_responses;
 
-            if self.config.response_transform.validate_responses {
-                tracing::debug!(
-                    "Response validation for streaming responses not yet implemented for {}/{}",
-                    service_name,
-                    method_name
-                );
-            }
+            tokio::spawn(async move {
+                while let Some(item) = original_stream.next().await {
+                    match item {
+                        Ok(mut message) => {
+                            if let Some(ref override_config) = overrides {
+                                match proxy
+                                    .transform_dynamic_message(
+                                        &message,
+                                        &service_name,
+                                        &method_name,
+                                        override_config,
+                                    )
+                                    .await
+                                {
+                                    Ok(transformed) => {
+                                        message = transformed;
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            "Failed to transform streaming message for {}/{}: {}",
+                                            service_name,
+                                            method_name,
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+
+                            if validate_responses {
+                                if let Err(e) = proxy
+                                    .validate_dynamic_message(&message, &service_name, &method_name)
+                                    .await
+                                {
+                                    tracing::warn!(
+                                        "Streaming response validation failed for {}/{}: {}",
+                                        service_name,
+                                        method_name,
+                                        e
+                                    );
+                                }
+                            }
+
+                            if tx.send(Ok(message)).await.is_err() {
+                                break;
+                            }
+                        }
+                        Err(status) => {
+                            if tx.send(Err(status)).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+
+            *response.get_mut() = ReceiverStream::new(rx);
         }
 
         Ok(())
