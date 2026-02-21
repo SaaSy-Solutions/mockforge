@@ -4,7 +4,7 @@ use mockforge_core::config::{load_config, KafkaConfig};
 use mockforge_kafka::{KafkaFixture, KafkaMockBroker};
 use rdkafka::admin::{AdminClient, AdminOptions, NewTopic, TopicReplication};
 use rdkafka::config::ClientConfig;
-use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::message::{Header, Headers, Message, OwnedHeaders};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::topic_partition_list::TopicPartitionList;
@@ -609,11 +609,43 @@ async fn execute_groups_command(command: KafkaGroupsCommands) -> Result<()> {
             Ok(())
         }
         KafkaGroupsCommands::Offsets { group_id } => {
-            // Note: list_consumer_group_offsets is not available in rdkafka 0.38
-            // This is a stub implementation
+            let consumer: StreamConsumer = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .set("group.id", &group_id)
+                .set("enable.auto.commit", "false")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Consumer creation failed: {}", e))?;
+
+            let metadata = consumer
+                .fetch_metadata(None, Duration::from_secs(30))
+                .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
+
+            let mut tpl = TopicPartitionList::new();
+            for topic in metadata.topics() {
+                if topic.name().starts_with("__") {
+                    continue;
+                }
+                for partition in topic.partitions() {
+                    tpl.add_partition(topic.name(), partition.id());
+                }
+            }
+
+            let committed = consumer
+                .committed_offsets(tpl, Duration::from_secs(30))
+                .map_err(|e| anyhow::anyhow!("Failed to fetch committed offsets: {}", e))?;
+
             println!("Consumer group offsets for '{}':", group_id);
-            println!("  Note: Offset listing not supported in rdkafka 0.38");
-            println!("  Consider upgrading rdkafka version for full functionality");
+            for elem in committed.elements() {
+                let offset = match elem.offset() {
+                    Offset::Offset(v) => v.to_string(),
+                    Offset::Beginning => "beginning".to_string(),
+                    Offset::End => "end".to_string(),
+                    Offset::Stored => "stored".to_string(),
+                    Offset::Invalid => "invalid".to_string(),
+                    Offset::OffsetTail(v) => format!("tail({})", v),
+                };
+                println!("  {}[{}] -> {}", elem.topic(), elem.partition(), offset);
+            }
             Ok(())
         }
     }
@@ -819,24 +851,59 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
                     tpl.add_partition_offset(&topic, partition.id(), Offset::Offset(target_offset));
             }
 
-            // Create admin client to alter offsets
-            let admin: AdminClient<_> = ClientConfig::new()
+            // Create consumer for target group and commit lagged offsets
+            let group_consumer: StreamConsumer = ClientConfig::new()
                 .set("bootstrap.servers", "localhost:9092")
+                .set("group.id", &group)
+                .set("enable.auto.commit", "false")
                 .create()
-                .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("Consumer creation failed: {}", e))?;
+            group_consumer
+                .commit(&tpl, CommitMode::Sync)
+                .map_err(|e| anyhow::anyhow!("Failed to commit lagged offsets: {}", e))?;
 
-            // Note: alter_consumer_group_offsets is not available in rdkafka 0.38
-            // This is a stub implementation
-            println!("Note: Lag simulation not supported in rdkafka 0.38");
-
-            println!("Simulated lag of {} messages for group {} on topic {} (set offsets behind high watermark)", lag, group, topic);
+            println!(
+                "Simulated lag of {} messages for group {} on topic {} (set offsets behind high watermark)",
+                lag, group, topic
+            );
             Ok(())
         }
-        KafkaSimulateCommands::Rebalance { group: _group } => {
-            // Note: Consumer group operations are not available in rdkafka 0.38
-            // This is a stub implementation
-            println!("Note: Rebalance simulation not supported in rdkafka 0.38");
-            println!("Consider upgrading rdkafka version for full functionality");
+        KafkaSimulateCommands::Rebalance { group } => {
+            let consumer: StreamConsumer = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .set("group.id", &group)
+                .set("enable.auto.commit", "false")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Consumer creation failed: {}", e))?;
+
+            let metadata = consumer
+                .fetch_metadata(None, Duration::from_secs(30))
+                .map_err(|e| anyhow::anyhow!("Fetch metadata failed: {}", e))?;
+
+            let topics: Vec<&str> = metadata
+                .topics()
+                .iter()
+                .map(|t| t.name())
+                .filter(|name| !name.starts_with("__"))
+                .collect();
+
+            if topics.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "No non-internal topics available to trigger rebalance"
+                ));
+            }
+
+            consumer
+                .subscribe(&topics)
+                .map_err(|e| anyhow::anyhow!("Subscribe failed: {}", e))?;
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            consumer.unsubscribe();
+
+            println!(
+                "Triggered rebalance probe for group {} by joining/leaving topics: {}",
+                group,
+                topics.join(", ")
+            );
             Ok(())
         }
         KafkaSimulateCommands::ResetOffsets { group, topic, to } => {
@@ -844,6 +911,13 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
                 .set("bootstrap.servers", "localhost:9092")
                 .create()
                 .map_err(|e| anyhow::anyhow!("Admin client creation failed: {}", e))?;
+
+            let consumer: StreamConsumer = ClientConfig::new()
+                .set("bootstrap.servers", "localhost:9092")
+                .set("group.id", &group)
+                .set("enable.auto.commit", "false")
+                .create()
+                .map_err(|e| anyhow::anyhow!("Consumer creation failed: {}", e))?;
 
             // Get topic metadata to know partitions
             let metadata = admin
@@ -858,26 +932,37 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
 
             // Create topic partition list with reset offsets
             let mut tpl = TopicPartitionList::new();
-            let target_offset = match to.as_str() {
-                "earliest" => Offset::Beginning,
-                "latest" => Offset::End,
-                offset_str => {
-                    let offset: i64 = offset_str
-                        .parse()
-                        .map_err(|_| anyhow::anyhow!("Invalid offset: {}", offset_str))?;
-                    Offset::Offset(offset)
-                }
-            };
-
             for partition in topic_metadata.partitions() {
-                let _ = tpl.add_partition_offset(&topic, partition.id(), target_offset);
+                let (low_watermark, high_watermark) = consumer
+                    .fetch_watermarks(&topic, partition.id(), Duration::from_secs(30))
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Fetch watermarks failed for partition {}: {}",
+                            partition.id(),
+                            e
+                        )
+                    })?;
+
+                let target_offset = match to.as_str() {
+                    "earliest" => low_watermark,
+                    "latest" => high_watermark,
+                    offset_str => offset_str
+                        .parse()
+                        .map_err(|_| anyhow::anyhow!("Invalid offset: {}", offset_str))?,
+                };
+
+                let _ =
+                    tpl.add_partition_offset(&topic, partition.id(), Offset::Offset(target_offset));
             }
 
-            // Note: alter_consumer_group_offsets is not available in rdkafka 0.38
-            // This is a stub implementation
-            println!("Note: Offset reset not supported in rdkafka 0.38");
+            consumer
+                .commit(&tpl, CommitMode::Sync)
+                .map_err(|e| anyhow::anyhow!("Failed to commit offsets: {}", e))?;
 
-            println!("Successfully reset offsets for group {} on topic {} to {}", group, topic, to);
+            println!(
+                "Successfully reset offsets for group {} on topic {} to {}",
+                group, topic, to
+            );
             Ok(())
         }
     }
