@@ -271,6 +271,7 @@ async fn test_broker_startup_timeout() {
 }
 
 #[tokio::test]
+#[ignore] // Requires external Kafka broker — run with `cargo test -- --ignored`
 async fn test_full_broker_integration() {
     let config = KafkaConfig {
         port: 9094, // Use a unique port for this test

@@ -4,8 +4,8 @@ on:
   pull_request:
     branches: [ main, develop ]
     paths:
-      - 'specs/**'
-      - 'openapi.yaml'
+      - 'examples/**'
+      - 'examples/openapi-demo.json'
   push:
     branches: [ main ]
 
@@ -30,7 +30,7 @@ jobs:
         run: |
           ./target/release/mockforge serve \
             --http-port 3000 \
-            --spec specs/api.yaml &
+            --spec examples/openapi-demo.json &
           echo $! > mockforge.pid
 
       - name: Wait for server to start
@@ -41,7 +41,7 @@ jobs:
         id: validate
         run: |
           ./target/release/mockforge validate \
-            --spec specs/api.yaml \
+            --spec examples/openapi-demo.json \
             --endpoint http://localhost:3000 \
             --output report.md \
             --strict

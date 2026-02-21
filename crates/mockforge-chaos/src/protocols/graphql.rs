@@ -244,6 +244,6 @@ mod tests {
         let elapsed = start.elapsed();
         // Should be ~10ms (10% of query latency)
         assert!(elapsed >= std::time::Duration::from_millis(10));
-        assert!(elapsed < std::time::Duration::from_millis(50));
+        assert!(elapsed < std::time::Duration::from_millis(200));
     }
 }

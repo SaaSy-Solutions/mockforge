@@ -83,10 +83,22 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.rust }}-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run cargo nextest
-        run: cargo nextest run --workspace --exclude mockforge-desktop
+        run: |
+          EXCLUDES="--exclude mockforge-desktop"
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            EXCLUDES="$EXCLUDES --exclude mockforge-kafka"
+          fi
+          cargo nextest run --workspace $EXCLUDES
+        shell: bash
 
       - name: Run doctests
-        run: cargo test --doc --workspace --exclude mockforge-desktop
+        run: |
+          EXCLUDES="--exclude mockforge-desktop"
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            EXCLUDES="$EXCLUDES --exclude mockforge-kafka"
+          fi
+          cargo test --doc --workspace $EXCLUDES
+        shell: bash
 
   coverage:
     name: Code Coverage

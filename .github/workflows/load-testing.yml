@@ -60,14 +60,14 @@ jobs:
 
       - name: Start MockForge server
         run: |
-          ./target/release/mockforge serve --http-port 3000 --admin &
+          ./target/release/mockforge serve --spec examples/openapi-demo.json --http-port 3000 --admin &
           sleep 5
           curl -f http://localhost:3000/health || exit 1
 
       - name: Run standard load test
         run: |
           cd tests/load
-          k6 run --out json=load-test-results.json standard_load.js
+          k6 run --out json=load-test-results.json http_load.js
 
       - name: Upload load test results
         uses: actions/upload-artifact@v5
@@ -113,14 +113,14 @@ jobs:
 
       - name: Start MockForge server
         run: |
-          ./target/release/mockforge serve --http-port 3000 --admin &
+          ./target/release/mockforge serve --spec examples/openapi-demo.json --http-port 3000 --admin &
           sleep 5
           curl -f http://localhost:3000/health || exit 1
 
       - name: Run extended load test
         run: |
           cd tests/load
-          k6 run --out json=load-test-results-extended.json extended_load.js
+          k6 run --out json=load-test-results-extended.json http_load_high_scale.js
 
       - name: Upload load test results
         uses: actions/upload-artifact@v5

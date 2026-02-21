@@ -11,7 +11,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # Must be lowercase for Docker image references
+  IMAGE_NAME: saasy-solutions/mockforge
 
 jobs:
   build-and-push:
