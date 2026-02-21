@@ -89,6 +89,7 @@ pub struct BackupService {
     db: Pool<Sqlite>,
     version_control: VersionControl,
     local_backup_dir: Option<String>,
+    client: reqwest::Client,
     core_bridge: Arc<CoreBridge>,
     workspace_service: Arc<WorkspaceService>,
 }
@@ -106,6 +107,7 @@ impl BackupService {
             db: db.clone(),
             version_control: VersionControl::new(db),
             local_backup_dir,
+            client: reqwest::Client::new(),
             core_bridge,
             workspace_service,
         }
@@ -210,9 +212,13 @@ impl BackupService {
                     .await?
             }
             StorageBackend::Custom => {
-                return Err(CollabError::Internal(
-                    "Custom storage backend not yet implemented".to_string(),
-                ));
+                self.save_to_custom(
+                    workspace_id,
+                    &serialized,
+                    &backup_format,
+                    storage_config.as_ref(),
+                )
+                .await?
             }
         };
 
@@ -276,9 +282,13 @@ impl BackupService {
         // Load backup data
         let backup_data = match backup.storage_backend {
             StorageBackend::Local => self.load_from_local(&backup.backup_url).await?,
+            StorageBackend::Custom => {
+                self.load_from_custom(&backup.backup_url, backup.storage_config.as_ref())
+                    .await?
+            }
             _ => {
                 return Err(CollabError::Internal(
-                    "Only local backups are supported for restore".to_string(),
+                    "Only local and custom backups are supported for restore".to_string(),
                 ));
             }
         };
@@ -510,9 +520,8 @@ impl BackupService {
                 self.delete_from_gcs(&backup.backup_url, backup.storage_config.as_ref()).await?;
             }
             StorageBackend::Custom => {
-                return Err(CollabError::Internal(
-                    "Custom storage backend deletion not implemented".to_string(),
-                ));
+                self.delete_from_custom(&backup.backup_url, backup.storage_config.as_ref())
+                    .await?;
             }
         }
 
@@ -559,6 +568,120 @@ impl BackupService {
         tokio::fs::read_to_string(backup_url)
             .await
             .map_err(|e| CollabError::Internal(format!("Failed to read backup file: {e}")))
+    }
+
+    /// Save backup to a custom HTTP storage backend.
+    ///
+    /// Expected config:
+    /// - `upload_url` (required): target URL for PUT uploads.
+    ///   Supports `{filename}` placeholder.
+    /// - `backup_url_base` (optional): base URL used to build persisted backup URL.
+    /// - `headers` (optional): object map of HTTP headers.
+    async fn save_to_custom(
+        &self,
+        workspace_id: Uuid,
+        data: &str,
+        format: &str,
+        storage_config: Option<&serde_json::Value>,
+    ) -> Result<String> {
+        let config = storage_config
+            .ok_or_else(|| CollabError::Internal("Custom storage configuration required".to_string()))?;
+
+        let upload_url = config
+            .get("upload_url")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                CollabError::Internal(
+                    "Custom storage config must include 'upload_url'".to_string(),
+                )
+            })?;
+
+        let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("workspace_{workspace_id}_{timestamp}.{format}");
+        let resolved_upload_url = upload_url.replace("{filename}", &filename);
+
+        let mut request = self.client.put(&resolved_upload_url).body(data.to_string()).header(
+            "content-type",
+            match format {
+                "yaml" => "application/x-yaml",
+                "json" => "application/json",
+                _ => "application/octet-stream",
+            },
+        );
+
+        if let Some(headers) = config.get("headers").and_then(|h| h.as_object()) {
+            for (key, value) in headers {
+                if let Some(value) = value.as_str() {
+                    request = request.header(key, value);
+                }
+            }
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| CollabError::Internal(format!("Custom upload request failed: {e}")))?;
+
+        if !response.status().is_success() {
+            return Err(CollabError::Internal(format!(
+                "Custom upload failed with status {}",
+                response.status()
+            )));
+        }
+
+        if let Some(location) = response.headers().get("location").and_then(|v| v.to_str().ok()) {
+            return Ok(location.to_string());
+        }
+
+        if let Ok(body_json) = response.json::<serde_json::Value>().await {
+            if let Some(url) = body_json
+                .get("backup_url")
+                .or_else(|| body_json.get("url"))
+                .and_then(|v| v.as_str())
+            {
+                return Ok(url.to_string());
+            }
+        }
+
+        if let Some(base) = config.get("backup_url_base").and_then(|v| v.as_str()) {
+            return Ok(format!("{}/{}", base.trim_end_matches('/'), filename));
+        }
+
+        Ok(resolved_upload_url)
+    }
+
+    /// Load backup from custom HTTP storage backend.
+    async fn load_from_custom(
+        &self,
+        backup_url: &str,
+        storage_config: Option<&serde_json::Value>,
+    ) -> Result<String> {
+        let mut request = self.client.get(backup_url);
+        if let Some(config) = storage_config {
+            if let Some(headers) = config.get("headers").and_then(|h| h.as_object()) {
+                for (key, value) in headers {
+                    if let Some(value) = value.as_str() {
+                        request = request.header(key, value);
+                    }
+                }
+            }
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| CollabError::Internal(format!("Custom download request failed: {e}")))?;
+        if !response.status().is_success() {
+            return Err(CollabError::Internal(format!(
+                "Custom download failed with status {}",
+                response.status()
+            )));
+        }
+
+        response
+            .text()
+            .await
+            .map_err(|e| CollabError::Internal(format!("Failed to read custom backup body: {e}")))
     }
 
     /// Save backup to Azure Blob Storage
@@ -981,6 +1104,36 @@ impl BackupService {
                 "GCS deletion requires 'gcs' feature to be enabled. Add 'gcs' feature to mockforge-collab in Cargo.toml.".to_string(),
             ))
         }
+    }
+
+    /// Delete backup from custom HTTP storage backend.
+    async fn delete_from_custom(
+        &self,
+        backup_url: &str,
+        storage_config: Option<&serde_json::Value>,
+    ) -> Result<()> {
+        let mut request = self.client.delete(backup_url);
+        if let Some(config) = storage_config {
+            if let Some(headers) = config.get("headers").and_then(|h| h.as_object()) {
+                for (key, value) in headers {
+                    if let Some(value) = value.as_str() {
+                        request = request.header(key, value);
+                    }
+                }
+            }
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| CollabError::Internal(format!("Custom delete request failed: {e}")))?;
+        if !response.status().is_success() {
+            return Err(CollabError::Internal(format!(
+                "Custom delete failed with status {}",
+                response.status()
+            )));
+        }
+        Ok(())
     }
 
     /// Get workspace data for backup
