@@ -58,7 +58,7 @@ git2 = { version = "0.19", optional = true }
 indicatif = "0.17"
 
 # Temporary file handling
-tempfile = "3.0"
+tempfile = "3.24"
 
 # Semver parsing
 semver = "1.0"
@@ -86,5 +86,5 @@ studio-packs = []
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
-tempfile = "3.0"
+tempfile = "3.24"
 wiremock = "0.6"

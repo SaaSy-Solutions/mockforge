@@ -61,7 +61,7 @@ jsonptr = "0.7.1"
 jsonpath = "0.1"
 roxmltree = "0.21"
 globwalk = "0.9.1"
-tempfile = "3.10"
+tempfile = "3.24"
 prost = "0.14"
 prost-reflect = "0.16"
 prost-types = "0.14"
@@ -77,7 +77,7 @@ sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chron
 mockforge-data = { version = "0.3.31", path = "../mockforge-data", optional = true }
 
 [dev-dependencies]
-tempfile = "3.10"
+tempfile = "3.24"
 tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
 criterion = { workspace = true }

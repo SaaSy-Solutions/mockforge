@@ -52,4 +52,4 @@ reqwest = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
-tempfile = "3.13"
+tempfile = "3.24"
