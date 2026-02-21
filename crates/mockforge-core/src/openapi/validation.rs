@@ -113,8 +113,15 @@ impl RequestValidator {
                             &mut errors,
                         );
                     }
-                    Parameter::Cookie { .. } => {
-                        // Cookie parameter validation not implemented
+                    Parameter::Cookie { parameter_data, .. } => {
+                        let cookie_params = extract_cookie_params(headers);
+                        validate_parameter_data(
+                            parameter_data,
+                            &cookie_params,
+                            "cookie",
+                            spec,
+                            &mut errors,
+                        );
                     }
                 }
             }
@@ -148,6 +155,37 @@ impl RequestValidator {
             Ok(RequestValidationResult::invalid(errors))
         }
     }
+}
+
+/// Extract cookie parameters from the Cookie header.
+///
+/// Supports standard HTTP Cookie header format:
+/// `Cookie: key1=value1; key2=value2`
+fn extract_cookie_params(headers: &HashMap<String, String>) -> HashMap<String, String> {
+    let mut cookies = HashMap::new();
+    let cookie_header = headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("cookie"))
+        .map(|(_, value)| value);
+
+    if let Some(raw_cookie_header) = cookie_header {
+        for pair in raw_cookie_header.split(';') {
+            let pair = pair.trim();
+            if pair.is_empty() {
+                continue;
+            }
+
+            if let Some((name, value)) = pair.split_once('=') {
+                let name = name.trim();
+                let value = value.trim();
+                if !name.is_empty() {
+                    cookies.insert(name.to_string(), value.to_string());
+                }
+            }
+        }
+    }
+
+    cookies
 }
 
 /// Response validator
@@ -1211,7 +1249,7 @@ paths:
       parameters:
         - name: sessionId
           in: cookie
-          required: false
+          required: true
           schema:
             type: string
       responses:
@@ -1231,8 +1269,25 @@ paths:
             .and_then(|p| p.get.as_ref())
             .unwrap();
 
-        // Cookie params are not validated (not implemented), so should pass
-        let result = RequestValidator::validate_request(
+        let mut headers = HashMap::new();
+        headers.insert(
+            "Cookie".to_string(),
+            "sessionId=abc123; theme=dark".to_string(),
+        );
+
+        let with_cookie = RequestValidator::validate_request(
+            &spec,
+            operation,
+            &HashMap::new(),
+            &HashMap::new(),
+            &headers,
+            None,
+        )
+        .unwrap();
+
+        assert!(with_cookie.valid, "expected cookie parameter to validate");
+
+        let missing_cookie = RequestValidator::validate_request(
             &spec,
             operation,
             &HashMap::new(),
@@ -1242,8 +1297,11 @@ paths:
         )
         .unwrap();
 
-        // Should validate (cookie params are skipped)
-        assert!(result.valid || !result.errors.is_empty());
+        assert!(!missing_cookie.valid);
+        assert!(missing_cookie
+            .errors
+            .iter()
+            .any(|e| e.contains("Missing required cookie parameter: sessionId")));
     }
 
     #[test]
